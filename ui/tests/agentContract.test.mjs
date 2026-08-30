@@ -395,6 +395,7 @@ test('a stale remote snapshot does not replace a newer local Wizard turn', async
   assert.equal(raced.source, 'local')
   assert.equal(raced.messages.at(-1).id, 'asst-2')
   assert.equal(raced.messages.at(-1).cards[0].id, 'card-new')
+  assert.equal(raced.revision, 4)
 
   const reloaded = applyRemoteWizardConversation({
     localMessages: [{ id: 'fresh-welcome', role: 'assistant', text: 'Saludos', createdAt: 9 }],
@@ -416,6 +417,20 @@ test('a stale remote snapshot does not replace a newer local Wizard turn', async
     remoteRevision: 0,
   })
   assert.equal(emptyRemote.source, 'local')
+  assert.equal(emptyRemote.revision, 1)
+
+  const switchedWorkspace = applyRemoteWizardConversation({
+    localMessages: localMessages.slice(1),
+    localRevision: 0,
+    remoteMessages: [{ id: 'saved-in-b', role: 'user', text: 'mensaje remoto', createdAt: 1 }],
+    remoteRevision: 7,
+  })
+  assert.equal(switchedWorkspace.source, 'local')
+  assert.equal(switchedWorkspace.revision, 7)
+  assert.deepEqual(
+    switchedWorkspace.messages.map(message => message.id),
+    ['saved-in-b', 'user-2', 'asst-2'],
+  )
 })
 
 test('execution cards expose five controls and keep the same id on poll', async () => {

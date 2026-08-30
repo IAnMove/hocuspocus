@@ -80,16 +80,19 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
 export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistantPanelProps) {
   const [messages, setMessages] = useState<AgentMessage[]>(() => readMessages(workspace))
   const [conversationWorkspace, setConversationWorkspace] = useState(workspace)
+  const [hydratedWorkspace, setHydratedWorkspace] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [state, setState] = useState<AgentVisualState>('idle')
   const [busy, setBusy] = useState(false)
   const [busyMessage, setBusyMessage] = useState('Consultando el grimorio de HocusPocus…')
   const [expanded, setExpanded] = useState(false)
   const [errorCardId, setErrorCardId] = useState<string | null>(null)
-  const [conversationRevision, setConversationRevision] = useState(0)
   const endRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
   const conversationRevisionRef = useRef(0)
+  const skipNextConversationSaveRef = useRef(false)
+  const conversationWorkspaceRef = useRef(conversationWorkspace)
+  conversationWorkspaceRef.current = conversationWorkspace
   const messagesRef = useRef(messages)
   messagesRef.current = messages
   const activeCount = useMemo(() => tasks.filter(task => ACTIVE.has(task.status) && !task.parent_id).length, [tasks])
@@ -103,6 +106,11 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   useEffect(() => {
     writeMessages(conversationWorkspace, messages)
     endRef.current?.scrollIntoView({ block: 'end' })
+    if (hydratedWorkspace !== conversationWorkspace) return
+    if (skipNextConversationSaveRef.current) {
+      skipNextConversationSaveRef.current = false
+      return
+    }
     const cards = messages.flatMap(message => message.cards || [])
     void saveWizardConversation(conversationWorkspace, {
       version: 1,
@@ -111,11 +119,28 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       executions: cards,
     }).then(saved => {
       conversationRevisionRef.current = saved.revision
-      if (mountedRef.current) setConversationRevision(saved.revision)
-    }).catch(() => {
-      // Local storage still holds the turn if the workspace file cannot be written.
+    }).catch(async () => {
+      // A second tab may have advanced the CAS revision. Re-read and merge by
+      // message id; the resulting state triggers one save against the current
+      // backend revision. Local storage remains the fallback if this fails.
+      try {
+        const current = await fetchWizardConversation(conversationWorkspace)
+        if (!mountedRef.current || conversationWorkspaceRef.current !== conversationWorkspace) return
+        const choice = applyRemoteWizardConversation({
+          localMessages: messagesRef.current,
+          localRevision: conversationRevisionRef.current,
+          remoteMessages: current.messages,
+          remoteRevision: current.revision || 0,
+          remoteExecutions: current.executions,
+        })
+        conversationRevisionRef.current = choice.revision
+        skipNextConversationSaveRef.current = choice.source === 'remote'
+        setMessages([...choice.messages] as AgentMessage[])
+      } catch {
+        // Local storage still holds the turn while the backend is unavailable.
+      }
     })
-  }, [conversationWorkspace, messages])
+  }, [conversationWorkspace, hydratedWorkspace, messages])
 
   useEffect(() => {
     let cancelled = false
@@ -128,18 +153,25 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
         remoteRevision: payload.revision || 0,
         remoteExecutions: payload.executions,
       })
-      if (choice.source === 'local') return
       conversationRevisionRef.current = choice.revision
-      setConversationRevision(choice.revision)
-      setMessages(choice.messages as AgentMessage[])
+      skipNextConversationSaveRef.current = choice.source === 'remote'
+      // A local choice may still adopt the backend's newer CAS revision and
+      // merge remote-only messages. Use a fresh array so the persistence
+      // effect retries the canonical save with that revision.
+      setMessages([...choice.messages] as AgentMessage[])
+      setHydratedWorkspace(workspace)
     }).catch(() => {
       // Fall back to the local cache already loaded for this workspace.
+      if (!cancelled) setHydratedWorkspace(workspace)
     })
     return () => { cancelled = true }
   }, [workspace])
 
   useEffect(() => {
     if (workspace === conversationWorkspace) return
+    conversationRevisionRef.current = 0
+    skipNextConversationSaveRef.current = false
+    setHydratedWorkspace(null)
     if (busy) {
       // A Wizard action changed workspace while this turn was executing.
       // Keep the visible turn alive and persist it in the destination so its

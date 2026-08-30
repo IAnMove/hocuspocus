@@ -2824,8 +2824,8 @@ export interface StoryLibraryPayload {
 export interface WizardConversationPayload {
   version: 1
   revision: number
-  messages: Array<Record<string, unknown>>
-  executions: Array<Record<string, unknown>>
+  messages: unknown[]
+  executions: unknown[]
   requestedActions?: unknown[]
   executedActions?: unknown[]
   confirmations?: unknown[]

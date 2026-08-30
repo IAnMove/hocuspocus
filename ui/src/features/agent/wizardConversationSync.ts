@@ -69,14 +69,19 @@ export function applyRemoteWizardConversation(input: {
   const remoteMessages = normalizeRemoteWizardMessages(input.remoteMessages, input.remoteExecutions)
 
   if (!remoteMessages.length) {
-    return { source: 'local', messages: localMessages, revision: localRevision }
+    return { source: 'local', messages: localMessages, revision: Math.max(localRevision, remoteRevision) }
   }
 
   const remoteIds = new Set(remoteMessages.map(message => message.id))
   const localHasExclusiveTurn = localMessages.some(message => !remoteIds.has(message.id))
     && !isTransientWizardChat(localMessages)
   if (localHasExclusiveTurn) {
-    return { source: 'local', messages: localMessages, revision: localRevision }
+    const localById = new Map(localMessages.map(message => [message.id, message]))
+    const merged = remoteMessages.map(message => localById.get(message.id) || message)
+    for (const message of localMessages) {
+      if (!remoteIds.has(message.id)) merged.push(message)
+    }
+    return { source: 'local', messages: merged.slice(-40), revision: Math.max(localRevision, remoteRevision) }
   }
   if (localRevision > remoteRevision) {
     return { source: 'local', messages: localMessages, revision: localRevision }
