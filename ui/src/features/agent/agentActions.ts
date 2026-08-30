@@ -193,6 +193,14 @@ export interface AgentGenerateComicPanelAction {
   confirm: true
 }
 
+export interface AgentAttachStudioReferencesAction {
+  type: 'attach_studio_references'
+  outputNames: string[]
+  role: 'start_frame' | 'subject' | 'style'
+  replaceExisting: boolean
+  removeBackground: boolean
+}
+
 export interface AgentInspectQueueAction {
   type: 'inspect_queue'
   scope: 'active' | 'all'
@@ -224,6 +232,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
+  | AgentAttachStudioReferencesAction
   | AgentInspectQueueAction
   | AgentCancelTaskAction
   | AgentResumeTaskAction
@@ -266,6 +275,7 @@ export interface AgentAppSnapshot {
     installed: boolean
     enabled: boolean
   }>
+  recent_image_outputs: Array<{ name: string }>
 }
 
 const TAB_SET = new Set<string>(AGENT_TABS)
@@ -297,6 +307,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
+  attachstudioreferences: 'attach_studio_references',
   inspectqueue: 'inspect_queue',
   canceltask: 'cancel_task',
   resumetask: 'resume_task',
@@ -404,6 +415,7 @@ const CANONICAL_FIELD_NAMES = [
   'queue_scope', 'task_id', 'confirm', 'characters', 'locations', 'outline_beats',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
+  'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
   'dialogue', 'sfx', 'scene', 'actions', 'reply',
 ] as const
 
@@ -662,6 +674,23 @@ function parseAction(value: unknown): AgentAction | null {
     const panelNumber = optionalPositiveNumber(raw.panel_number, 1, 100, true)
     if (!pageNumber || !panelNumber) return null
     return { type: 'generate_comic_panel', pageNumber, panelNumber, confirm: true }
+  }
+  if (type === 'attach_studio_references') {
+    const outputNames = stringArray(raw.reference_output_names, 12, 300)
+    if (!outputNames.length) return null
+    const requestedRole = cleanString(raw.reference_role, 30)
+    const role: AgentAttachStudioReferencesAction['role'] = requestedRole === 'start_frame'
+      ? 'start_frame'
+      : requestedRole === 'style'
+        ? 'style'
+        : 'subject'
+    return {
+      type: 'attach_studio_references',
+      outputNames,
+      role,
+      replaceExisting: raw.replace_existing !== false,
+      removeBackground: raw.remove_background === true,
+    }
   }
   if (type === 'inspect_queue') {
     const scope = cleanString(raw.queue_scope, 12)
@@ -972,7 +1001,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'inspect_queue', 'cancel_task', 'resume_task'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'inspect_queue', 'cancel_task', 'resume_task'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1016,6 +1045,10 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           confirm: { type: 'boolean' },
           page_number: { type: 'integer', minimum: 0, maximum: 100 },
           panel_number: { type: 'integer', minimum: 0, maximum: 100 },
+          reference_output_names: { type: 'array', maxItems: 12, items: { type: 'string', maxLength: 300 } },
+          reference_role: { type: 'string', enum: ['', 'start_frame', 'subject', 'style'] },
+          replace_existing: { type: 'boolean' },
+          remove_background: { type: 'boolean' },
           audio_sub_mode: { type: 'string', enum: ['', 'speech', 'music', 'sfx'] },
           preset: { type: 'string', maxLength: 40 },
           sfx_clips: {
@@ -1116,6 +1149,10 @@ export function buildAgentAppSnapshot(): AgentAppSnapshot {
         installed: model.is_downloaded === true,
         enabled: state.enabledModels.has(model.model_type),
       })),
+    recent_image_outputs: state.outputs
+      .filter(output => output.type === 'image')
+      .slice(0, 40)
+      .map(output => ({ name: output.name })),
   }
 }
 
@@ -1444,6 +1481,8 @@ export async function executeAgentActions(
                 ? 'Dibujando las viñetas del cómic…'
               : action.type === 'generate_comic_panel'
                 ? `Regenerando la viñeta ${action.panelNumber} de la página ${action.pageNumber}…`
+              : action.type === 'attach_studio_references'
+                ? 'Adjuntando referencias verificadas a Studio…'
               : action.type === 'inspect_queue'
                 ? 'Consultando la cola canónica…'
                 : action.type === 'cancel_task'
@@ -1507,6 +1546,9 @@ export async function executeAgentActions(
           ok: true,
           message: await generateComicPanelArtwork(action.pageNumber, action.panelNumber, onStep),
         })
+      } else if (action.type === 'attach_studio_references') {
+        const { attachStudioReferences } = await import('./studioGuidance')
+        results.push({ action, ok: true, message: await attachStudioReferences(action) })
       } else if (action.type === 'inspect_queue') {
         const { inspectCanonicalQueue } = await import('./queueActions')
         results.push({ action, ok: true, message: await inspectCanonicalQueue(action.scope) })

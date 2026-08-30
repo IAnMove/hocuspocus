@@ -60,9 +60,30 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'inspect_queue', 'cancel_task', 'resume_task'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'inspect_queue', 'cancel_task', 'resume_task'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
+})
+
+test('parses bounded Studio references by output name and role', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Adjunto las referencias.',
+    actions: [{
+      type: 'attach_studio_references',
+      reference_output_names: ['portrait-a.png', 'wardrobe-b.webp'],
+      reference_role: 'subject',
+      replace_existing: true,
+      remove_background: true,
+    }],
+  }))
+  assert.deepEqual(turn.actions[0], {
+    type: 'attach_studio_references',
+    outputNames: ['portrait-a.png', 'wardrobe-b.webp'],
+    role: 'subject',
+    replaceExisting: true,
+    removeBackground: true,
+  })
 })
 
 test('a filled comic includes Director brief, structure, continuity and editable lettering', async () => {

@@ -131,6 +131,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['page_number', 'panel_number', 'confirm'],
   },
   {
+    type: 'attach_studio_references',
+    title: 'Attach existing image outputs to Studio',
+    purpose: 'Resolve real image output names from the active workspace and attach them as a video start frame or subject/style references.',
+    useWhen: 'The user asks to use one or more existing generated images as conditioning for Studio Image or Video.',
+    risk: 'edit',
+    parameters: ['reference_output_names', 'reference_role', 'replace_existing', 'remove_background'],
+  },
+  {
     type: 'inspect_queue',
     title: 'Inspect the canonical queue',
     purpose: 'Refresh the real task list and open Activity so the user sees current jobs.',

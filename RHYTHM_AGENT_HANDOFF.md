@@ -1030,3 +1030,20 @@ Regenera únicamente esa imagen, sustituye el asset de la viñeta y conserva las
 demás. Las reconexiones y reintentos siguen el job ya persistido; una
 regeneración explícita no recupera por error una imagen antigua con el mismo
 prompt.
+
+## 29. Referencias de Studio desde outputs (2026-08-30)
+
+`attach_studio_references` sólo acepta nombres presentes en
+`recent_image_outputs` del snapshot del workspace. Descarga esos outputs como
+`File` y los conecta mediante los setters canónicos de Studio; no admite rutas
+inventadas por el LLM.
+
+- `start_frame`: exige Studio Video y un modelo I2V.
+- `subject`: exige soporte `image_ref_choices=I`.
+- `style`: exige soporte de escenario/sujeto `KI`.
+- respeta `max_image_refs`, permite sustituir o añadir y configura eliminación
+  de fondo.
+
+En una generación compuesta el orden es `prepare_image|prepare_video` →
+`attach_studio_references` → `start_generation`. LoRAs compatibles siguen
+siendo la siguiente tarea de esta familia.
