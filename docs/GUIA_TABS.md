@@ -16,7 +16,7 @@ Guías de operador más largas (límites, APIs, recuperación):
 
 Las únicas fotos incrustadas más abajo son **de la era Maestro** (logo Maestro, pie `Video workflows`, Video Editor `From Maestro`). **No son la UI actual de HocusPocus.** Cada una lleva un aviso visible.
 
-Fotografiar HocusPocus en la máquina 4090 y subir el PNG a la ruta del enlace (GitHub devolverá 404 hasta que exista el archivo). Una frase por toma: pestaña + qué debe verse.
+Solo placeholders. No subir capturas del escritorio ni de la máquina personal (ni ningún PNG sacado ahí): contienen datos privados y no van a este repo. Las fotos de producto se harán aparte, en la 4090, cuando toque. GitHub devolverá 404 en estos enlaces hasta que exista ese archivo de producto. Una frase por toma: pestaña + qué debe verse.
 
 | Archivo (clic) | Toma |
 |---|---|
