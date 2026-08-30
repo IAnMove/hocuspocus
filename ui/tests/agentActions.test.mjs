@@ -78,7 +78,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -323,10 +323,13 @@ test('parses only confirmed exact 3D scene open and save requests', async () => 
     { type: 'open_3d_scene', scene_name: 'Concierto arcano', layer_name: 'Mago', confirm: false },
     { type: 'open_3d_scene', scene_name: 'Concierto arcano', layer_name: 'Mago', confirm: true },
     { type: 'save_3d_scene', scene_name: 'Concierto arcano', confirm: true },
+    { type: 'export_3d_scene', scene_name: 'Concierto arcano', confirm: false },
+    { type: 'export_3d_scene', scene_name: 'Concierto arcano', confirm: true },
   ] }))
   assert.deepEqual(turn.actions, [
     { type: 'open_3d_scene', sceneName: 'Concierto arcano', layerName: 'Mago', confirm: true },
     { type: 'save_3d_scene', sceneName: 'Concierto arcano', confirm: true },
+    { type: 'export_3d_scene', sceneName: 'Concierto arcano', confirm: true },
   ])
 })
 

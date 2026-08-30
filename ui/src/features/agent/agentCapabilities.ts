@@ -227,6 +227,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['scene_name', 'confirm'],
   },
   {
+    type: 'export_3d_scene',
+    title: 'Render and publish the current 3D Video scene',
+    purpose: 'Render every deterministic browser frame, encode the scene as MP4 and publish the verified result in Videos.',
+    useWhen: 'The user explicitly asks to capture, render or export the currently open 3D scene.',
+    risk: 'compute',
+    parameters: ['scene_name', 'confirm'],
+  },
+  {
     type: 'apply_3d_rhythm',
     title: 'Apply music rhythm to an editable 3D scene layer',
     purpose: 'Open Video 3D, attach an exact existing audio output when requested, analyze BPM/beats/downbeats and bake a pulse, bounce, peek or camera-punch profile into ordinary keyframes.',

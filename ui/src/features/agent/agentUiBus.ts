@@ -22,6 +22,7 @@ let requestedSeriesReviewView: AgentSeriesReviewView | null = null
 export type AgentSceneControlRequest =
   | { type: 'open_3d_scene'; sceneName: string; layerName: string }
   | { type: 'save_3d_scene'; sceneName: string }
+  | { type: 'export_3d_scene'; sceneName: string }
 
 interface PendingSceneControlRequest {
   request: AgentSceneControlRequest

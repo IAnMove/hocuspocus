@@ -313,6 +313,12 @@ export interface AgentSave3dSceneAction {
   confirm: true
 }
 
+export interface AgentExport3dSceneAction {
+  type: 'export_3d_scene'
+  sceneName: string
+  confirm: true
+}
+
 export interface AgentComicPanel {
   caption: string
   dialogue: string
@@ -420,6 +426,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentCommitSeriesCanonAction
   | AgentOpen3dSceneAction
   | AgentSave3dSceneAction
+  | AgentExport3dSceneAction
   | AgentApply3dRhythmAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
@@ -543,6 +550,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   commitseriescanon: 'commit_series_canon',
   open3dscene: 'open_3d_scene',
   save3dscene: 'save_3d_scene',
+  export3dscene: 'export_3d_scene',
   apply3drhythm: 'apply_3d_rhythm',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
@@ -1091,6 +1099,10 @@ function parseAction(value: unknown): AgentAction | null {
     if (raw.confirm !== true) return null
     return { type: 'save_3d_scene', sceneName: cleanString(raw.scene_name, 300), confirm: true }
   }
+  if (type === 'export_3d_scene') {
+    if (raw.confirm !== true) return null
+    return { type: 'export_3d_scene', sceneName: cleanString(raw.scene_name, 300), confirm: true }
+  }
   if (type === 'apply_3d_rhythm') {
     if (raw.confirm !== true) return null
     const cueSource = cleanString(raw.cue_source, 30) as AgentApply3dRhythmAction['cueSource']
@@ -1507,7 +1519,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -2070,6 +2082,8 @@ export async function executeAgentActions(
               ? `Abriendo la escena 3D ${action.sceneName}…`
             : action.type === 'save_3d_scene'
               ? 'Guardando la escena 3D editable…'
+            : action.type === 'export_3d_scene'
+              ? 'Renderizando y publicando el MP4 de la escena 3D…'
             : action.type === 'apply_3d_rhythm'
               ? 'Analizando la canción y creando keyframes rítmicos…'
               : action.type === 'create_comic'
@@ -2180,6 +2194,10 @@ export async function executeAgentActions(
         const { requestAgentSceneControl } = await import('./agentUiBus')
         results.push({ action, ok: true, message: await requestAgentSceneControl(action) })
       } else if (action.type === 'save_3d_scene') {
+        openTab('video_3d')
+        const { requestAgentSceneControl } = await import('./agentUiBus')
+        results.push({ action, ok: true, message: await requestAgentSceneControl(action) })
+      } else if (action.type === 'export_3d_scene') {
         openTab('video_3d')
         const { requestAgentSceneControl } = await import('./agentUiBus')
         results.push({ action, ok: true, message: await requestAgentSceneControl(action) })

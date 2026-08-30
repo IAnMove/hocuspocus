@@ -2404,8 +2404,14 @@ export function SceneAnimatorPanel() {
   }
   const importSceneRef = useRef(importScene)
   const persistSceneRef = useRef(persistScene)
+  const recordToBlobRef = useRef(recordToBlob)
+  const publishRecordingRef = useRef(publishRecording)
+  const waitForModelViewersRef = useRef(waitForModelViewers)
   importSceneRef.current = importScene
   persistSceneRef.current = persistScene
+  recordToBlobRef.current = recordToBlob
+  publishRecordingRef.current = publishRecording
+  waitForModelViewersRef.current = waitForModelViewers
   useEffect(() => listenForAgentSceneControl(async request => {
     const current = sceneRef.current
     if (request.type === 'save_3d_scene') {
@@ -2415,6 +2421,26 @@ export function SceneAnimatorPanel() {
       const savedName = await persistSceneRef.current()
       if (!savedName) throw new Error('HocusPocus no pudo guardar la escena 3D abierta.')
       return `He guardado “${current.name}” como ${savedName}. Sus capas y keyframes siguen siendo editables.`
+    }
+    if (request.type === 'export_3d_scene') {
+      if (request.sceneName && normalizeSceneLookupName(request.sceneName) !== normalizeSceneLookupName(current.name)) {
+        throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”; no he renderizado otra escena por error.`)
+      }
+      if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) {
+        throw new Error('Añade al menos una capa visual visible antes de exportar la escena 3D.')
+      }
+      setPublishing(true); setMessage(null)
+      try {
+        await waitForModelViewersRef.current()
+        const blob = await recordToBlobRef.current()
+        const saved = await publishRecordingRef.current(blob, sceneRef.current)
+        return `He terminado y publicado el MP4 de “${current.name}” en Videos como ${saved.name}.`
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'No se pudo exportar la escena 3D a MP4.')
+        throw error
+      } finally {
+        setPublishing(false)
+      }
     }
 
     const library = await fetchOutputs(0, 0, { mediaType: 'scene', workspace })

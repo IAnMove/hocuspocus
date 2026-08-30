@@ -1253,3 +1253,9 @@ Después llama al analizador real, verifica que existan beats solapados, constru
 `save_3d_scene` también exige `confirm=true`. Opera sobre la escena actualmente abierta y permite usar `scene_name` como guarda para no persistir la escena equivocada. Reutiliza el guardado real del editor —incluidos assets locales, preview, capas y keyframes— y devuelve el nombre concreto creado por el backend. El endpoint de escenas recibe ahora el workspace explícito, corrigiendo el comportamiento anterior que podía guardar en el workspace global mientras el usuario trabajaba en otro.
 
 Ambas órdenes viajan por una cola diferida del `agentUiBus`, de modo que no se pierden mientras Video 3D se monta de forma lazy. El snapshot del Wizard incluye también los outputs de escena visibles que conoce el store. Ninguna de estas acciones captura ni renderiza vídeo; esa operación seguirá siendo una acción de cómputo independiente y confirmada.
+
+## 48. Wizard: render y publicación confirmados de Video 3D
+
+`export_3d_scene` completa el ciclo de la escena y exige `confirm=true`. Puede validar `scene_name` contra la escena abierta, rechaza escenas sin capas visuales visibles y abre Video 3D antes de actuar. Después reutiliza exactamente la ruta del botón **Export MP4**: espera a que los `model-viewer` estén pintados, renderiza cada frame al FPS de la escena, codifica mediante WebCodecs o la compatibilidad disponible y publica el resultado mediante `/api/v1/scenes/recordings` en el workspace activo.
+
+La promesa del action bus no se resuelve hasta que el backend devuelve el output concreto. Por ello el Wizard sólo dice **terminado y publicado** con un nombre de archivo real; nunca llama “encolado” a este render local. Los estados `publishing` y `recording` mantienen los controles visibles bloqueados mientras trabaja, y cualquier fallo real se devuelve al chat. Durante el desarrollo no se ejecutó ninguna captura ni se consumió una generación GPU.
