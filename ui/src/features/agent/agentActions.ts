@@ -1,5 +1,16 @@
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
 import type { AspectRatio, MediaFilter, ModelDef, ResolutionPreset } from '../../types'
+import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
+import {
+  bindGenerateComicTarget,
+  executionKey,
+  executionReport,
+  inferExecutionState,
+  isExpensiveAction,
+  orderCompoundActions,
+  rememberExecution,
+  reuseExecution,
+} from './agentContract'
 import type { ExampleConversation } from './agentExamples'
 import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
@@ -497,6 +508,7 @@ export interface AgentActionResult {
   action: AgentAction
   ok: boolean
   message: string
+  report?: AgentExecutionReport
 }
 
 export interface AgentAppSnapshot {
@@ -1706,6 +1718,14 @@ export async function reconcileAgentTurnWithRequest(
       actions: [...navigation, prepare, { type: 'start_generation' }],
     }
   }
+  if (NEGATED_VIDEO_REQUEST.test(request)) {
+    const blocked = new Set([
+      'start_generation', 'generate_comic', 'generate_comic_panel', 'queue_sfx_pack',
+      'start_director_production', 'generate_story_visuals', 'generate_story_section',
+      'render_series_shots', 'assemble_series_episode', 'export_3d_scene',
+    ])
+    return { ...turn, actions: turn.actions.filter(action => !blocked.has(action.type)) }
+  }
   if (!isExplicitImageGenerationRequest(request)) return turn
 
   const navigation = turn.actions
@@ -2287,7 +2307,8 @@ export async function executeAgentActions(
 ): Promise<AgentActionResult[]> {
   const results: AgentActionResult[] = []
   let preparedStudio = false
-  for (const action of actions) {
+  let createdComicId = ''
+  for (const action of orderCompoundActions(actions)) {
     const working = action.type === 'open_tab'
       ? `Abriendo ${TAB_LABELS[action.tab]}…`
       : action.type === 'open_story_section'
@@ -2374,6 +2395,30 @@ export async function executeAgentActions(
                         ? `Cambiando al workspace ${action.workspaceName}…`
                         : `Creando el workspace ${action.workspaceName}…`
     onStep?.(working)
+    if (isExpensiveAction(action.type)) {
+      let targetId = createdComicId
+      if (action.type === 'generate_comic' || action.type === 'generate_comic_panel') {
+        const { useComicStore } = await import('../comics/store')
+        const project = useComicStore.getState().project
+        targetId = bindGenerateComicTarget(createdComicId, project.id, project.title)
+      }
+      const key = executionKey({
+        workspace: useStore.getState().activeWorkspace || 'default',
+        type: action.type,
+        targetId,
+        params: action,
+      })
+      const reused = reuseExecution(key)
+      if (reused) {
+        results.push({
+          action,
+          ok: true,
+          message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`,
+          report: reused,
+        })
+        continue
+      }
+    }
     try {
       if (action.type === 'open_tab') {
         results.push({ action, ok: true, message: openTab(action.tab) })
@@ -2489,7 +2534,7 @@ export async function executeAgentActions(
       } else if (action.type === 'generate_comic') {
         if (!action.confirm) throw new Error('Dibujar las viñetas requiere confirm=true.')
         const { generateFilledComicArtwork } = await import('./labActions')
-        results.push({ action, ok: true, message: await generateFilledComicArtwork(action, onStep) })
+        results.push({ action, ok: true, message: await generateFilledComicArtwork(action, onStep, createdComicId || undefined) })
       } else if (action.type === 'generate_comic_panel') {
         if (!action.confirm) throw new Error('Regenerar una viñeta requiere confirm=true.')
         const { generateComicPanelArtwork } = await import('./labActions')
@@ -2527,6 +2572,31 @@ export async function executeAgentActions(
       const message = error instanceof Error ? error.message : String(error)
       results.push({ action, ok: false, message })
       if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio' || action.type === 'prepare_3d') preparedStudio = false
+    }
+    const last = results.at(-1)
+    if (last && last.action === action && !last.report) {
+      let target: AgentExecutionTarget | undefined
+      if (action.type === 'create_comic' || action.type === 'generate_comic' || action.type === 'generate_comic_panel') {
+        const { useComicStore } = await import('../comics/store')
+        const project = useComicStore.getState().project
+        target = { kind: 'comic', id: project.id, title: project.title }
+        if (action.type === 'create_comic' && last.ok) createdComicId = project.id
+      }
+      last.report = executionReport({
+        state: inferExecutionState(action.type, last.ok),
+        message: last.message,
+        target,
+        recoverable: !last.ok,
+        executionKey: executionKey({
+          workspace: useStore.getState().activeWorkspace || 'default',
+          type: action.type,
+          targetId: target?.id || createdComicId,
+          params: action,
+        }),
+      })
+      if (last.ok && isExpensiveAction(action.type) && last.report.executionKey) {
+        rememberExecution(last.report)
+      }
     }
   }
   return results

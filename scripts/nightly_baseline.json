@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "notes": "Known historical failures. Nightly must not treat these as successes or hide new regressions.",
+  "failures": [
+    {
+      "id": "sceneToRecipe",
+      "file": "ui/tests/sceneToRecipe.test.mjs",
+      "match": "sceneToRecipe"
+    },
+    {
+      "id": "storyTimelinePolling",
+      "file": "ui/tests/storyTimelinePolling.test.tsx",
+      "match": "storyTimelinePolling"
+    },
+    {
+      "id": "videoEditorHandoff",
+      "file": "ui/tests/videoEditorHandoff.test.tsx",
+      "match": "videoEditorHandoff"
+    }
+  ],
+  "static": [
+    {
+      "id": "eslint-video-editor",
+      "file": "ui/src/features/video-editor/VideoEditorPanel.tsx",
+      "match": "react-refresh/only-export-components"
+    },
+    {
+      "id": "eslint-cylinder",
+      "file": "ui/src/components/Sidebar/CylinderPanoramaComparison.tsx",
+      "match": "react-hooks/exhaustive-deps"
+    }
+  ]
+}

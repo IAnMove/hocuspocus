@@ -556,6 +556,84 @@ test('parses a multi-page MiniMax comic and a confirmed all-images render', asyn
   assert.deepEqual(reconciled.actions.map(action => action.type), ['create_comic', 'generate_comic'])
   assert.equal(reconciled.actions[0].imageProvider, 'minimax')
   assert.equal(reconciled.actions[1].imageModel, 'image-01')
+  assert.equal(reconciled.actions[0].type === 'create_comic' && reconciled.actions[1].type === 'generate_comic', true)
+})
+
+test('como nuevo is not a launch question, how-to stays read-only, and negation does not generate', async () => {
+  const { reconcileAgentTurnWithRequest, isComicLaunchHowQuestion, isExplicitComicArtworkRequest } = await import('../src/features/agent/agentActions.ts')
+  const history = [
+    { role: 'user', text: 'hazme un comic de elon musk' },
+    { role: 'assistant', text: 'He abierto Comics con un plan listo.' },
+  ]
+  assert.equal(isComicLaunchHowQuestion('como nuevo', history), false)
+  assert.equal(isExplicitComicArtworkRequest('como nuevo', history), false)
+  const how = await reconcileAgentTurnWithRequest('como lo lanzo', { reply: 'Pulsa Render.', actions: [] }, history)
+  assert.equal(how.actions.some(action => action.type === 'generate_comic' || action.type === 'start_generation'), false)
+  const negated = await reconcileAgentTurnWithRequest('no generes las imagenes del comic', { reply: 'Vale.', actions: [{ type: 'generate_comic', imageProvider: 'minimax', imageModel: 'image-01', confirm: true }] }, history)
+  assert.equal(negated.actions.some(action => action.type === 'generate_comic'), false)
+})
+
+test('executeAgentActions reports the created comic and reuses an identical generate', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { executionKey, executionReport, rememberExecution, clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useComicStore } = await import('../src/features/comics/store.ts')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({ outputs: [], total: 0 }), {
+    status: 200, headers: { 'Content-Type': 'application/json' },
+  })
+  clearExecutionMemory()
+  try {
+    const created = await executeAgentActions([{
+      type: 'create_comic',
+      title: 'Clave reutilizable',
+      synopsis: 'Un cómic para comprobar el informe común.',
+      language: 'Español',
+      styleName: 'Tinta',
+      characters: [{
+        name: 'Nora', role: 'Guía', personality: 'Firme', desire: 'Mapa',
+        flaw: 'Prisa', appearance: 'Abrigo', voice: 'Baja',
+      }],
+      panels: [{ caption: 'Inicio.', dialogue: '', sfx: '', scene: 'Un taller.' }],
+      pages: [],
+      imageProvider: 'minimax',
+      imageModel: 'image-01',
+    }])
+    const project = useComicStore.getState().project
+    assert.equal(created[0].ok, true)
+    assert.equal(created[0].report.state, 'completed')
+    assert.equal(created[0].report.target.kind, 'comic')
+    assert.equal(created[0].report.target.id, project.id)
+    const action = { type: 'generate_comic', imageProvider: 'minimax', imageModel: 'image-01', confirm: true }
+    rememberExecution(executionReport({
+      state: 'running',
+      message: 'Dibujando 21/72.',
+      taskId: 'task-keep',
+      target: created[0].report.target,
+      executionKey: executionKey({
+        workspace: 'default',
+        type: 'generate_comic',
+        targetId: project.id,
+        params: action,
+      }),
+      recoverable: true,
+    }))
+    const reused = await executeAgentActions([action])
+    assert.match(reused[0].message, /Reutilizo/)
+    assert.equal(reused[0].report.taskId, 'task-keep')
+    assert.equal(reused[0].report.target.id, project.id)
+  } finally {
+    globalThis.fetch = originalFetch
+    clearExecutionMemory()
+  }
+})
+
+test('compute comic render without confirm is dropped', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Dibujo.',
+    actions: [{ type: 'generate_comic', image_provider: 'minimax', confirm: false }],
+  }))
+  assert.equal(turn.actions.length, 0)
 })
 
 test('drops cancel_task unless confirm is true and repairs an explicit cancel request', async () => {

@@ -2098,6 +2098,7 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
 export async function generateFilledComicArtwork(
   action: import('./agentActions').AgentGenerateComicAction,
   onProgress?: (message: string) => void,
+  expectedProjectId?: string,
 ): Promise<string> {
   showComics()
   const [{ useComicStore }, { comicId }, { generateDirectorArtwork }] = await Promise.all([
@@ -2105,7 +2106,9 @@ export async function generateFilledComicArtwork(
     import('../comics/model'),
     import('../comics/generateArtwork'),
   ])
+  const { bindGenerateComicTarget } = await import('./agentContract')
   const state = useComicStore.getState()
+  bindGenerateComicTarget(expectedProjectId, state.project.id, state.project.title)
   if (!state.project.director) {
     const project = state.project
     const characters = (project.characters.length ? project.characters : [{

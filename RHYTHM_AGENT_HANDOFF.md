@@ -1303,3 +1303,24 @@ Antes de tocar Director guarda por CAS una producción `music_video` `staged` re
 `start_director_production` acepta ahora `production_kind=music_video`. Sólo arranca el handoff exacto dejado por el Wizard, confirma Structure, obtiene el `pipelineId` real y lo enlaza al snapshot de Story. Distingue **preparado**, **en cola/en marcha** y **terminado**. Cancelar/reanudar siguen la cola canónica de pipelines (`task-director-*`). “lánzalo” no se confunde con cómic cuando el historial habla de videoclip; `Director` genérico ya no cuenta como contexto de cómic.
 
 Siguiente bloque pendiente del goal general: contexto real del Wizard, navegación fina, Character Creator/CharacterKit, Video Editor, robustez y persistencia backend del chat.
+
+## 55. Batería nocturna, baseline y contrato común (2026-08-30)
+
+Runner: `scripts/nightly_wizard_validation.sh` / `.ps1` delegan en `scripts/nightly_wizard_report.mjs`. Por defecto `NIGHTLY_LEVELS=1,2,4,6`, `RUN_EXTERNAL_PROVIDER_TESTS=0` y `RUN_GPU_TESTS=0`. Timeout global 6 h, por job 10 min, jobs pesados en serie, mata hijos al salir. Artefactos en `artifacts/nightly/<stamp>/` (`summary.md`, `results.json`, `junit.xml`, logs, `failures/`). El runner no hace commit/push ni toca workspaces reales. Nivel 8 (humo MiniMax/GPU) no está implementado y permanece apagado.
+
+Baseline explícito en `scripts/nightly_baseline.json`:
+- Fallos históricos de UI, nunca éxitos: `sceneToRecipe`, `storyTimelinePolling`, `videoEditorHandoff`.
+- Avisos estáticos conocidos, nunca regresiones nuevas: `VideoEditorPanel.tsx` (`react-refresh/only-export-components`) y `CylinderPanoramaComparison.tsx` (`react-hooks/exhaustive-deps`).
+
+Contrato común (`ui/src/features/agent/agentContract.ts`), sin reescribir todos los ejecutores:
+- Informe `prepared | queued | running | completed | partial | failed`.
+- `executionKey` determinista (`workspace + action + targetId + params`).
+- Idempotencia en memoria para acciones caras activas o terminadas.
+- Predecesores compuestos: `create_comic` antes de `generate_comic`, `stage_story_*` antes de `start_director_production`.
+- `generate_comic` en el mismo turno queda atado al `project.id` recién creado; no dibuja un cómic anterior.
+
+Primera noche L1–2 congelada: `artifacts/nightly/2026-08-30T15-10-49`, Estado PASS, ESLint como BASELINE (no éxito), GPU no, proveedores externos no.
+
+Pruebas L2 cubren parser (desconocidas/extra), cómic de 12 páginas / 72 viñetas reread del store, MiniMax `image-01`, create+generate en ese orden, confirmación, repetición exacta, los seis estados, “como nuevo” vs “cómo lo lanzo” y negación.
+
+Siguiente bloque del plan: snapshot compacto de contexto del Wizard, tarjetas de seguimiento en el chat, CharacterKit, Video Editor, robustez de lote de cómic (partial/resume/cancel) y persistencia backend. No marcar el goal general como completo.
