@@ -132,6 +132,19 @@ export function bindGenerateComicTarget(
   return createdProjectId || currentProjectId
 }
 
+export function bindDirectorProductionTarget(
+  stagedProductionId: string | undefined,
+  currentProductionId: string,
+  currentTitle: string,
+): string {
+  if (stagedProductionId && stagedProductionId !== currentProductionId) {
+    throw new Error(
+      `No inicio una producción anterior: start_director_production debe usar la producción recién preparada (${stagedProductionId}), no “${currentTitle}”.`,
+    )
+  }
+  return stagedProductionId || currentProductionId
+}
+
 export function orderCompoundActions<T extends { type: string }>(actions: T[]): T[] {
   const ordered = actions.slice()
   for (const [follower, leaders] of Object.entries(COMPOUND_DEPENDENCIES)) {

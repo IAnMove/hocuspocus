@@ -23,6 +23,7 @@ import type {
   AgentCreativeCharacter,
   AgentCreativeLocation,
 } from './agentActions'
+import { bindDirectorProductionTarget, type AgentExecutionTarget } from './agentContract'
 import { clearAgentSeriesPlanJob, notifyAgentSeriesAssemblyJob, notifyAgentSeriesPlanJob, notifyAgentSeriesRenderJob, notifyAgentStoryDraft, openAgentSeriesReviewView, openAgentSeriesSection, openAgentStorySection, requestAgentStoryVisualGeneration } from './agentUiBus'
 
 const normalizeName = (value: string): string => value
@@ -1256,7 +1257,10 @@ export async function stageStoryMusicVideo(action: AgentStageStoryMusicVideoActi
   }
 }
 
-export async function startDirectorProduction(action: AgentStartDirectorProductionAction): Promise<string> {
+export async function startDirectorProduction(
+  action: AgentStartDirectorProductionAction,
+  expectedProductionId?: string,
+): Promise<{ message: string; pipelineId?: string; target?: AgentExecutionTarget }> {
   if (!action.confirm) throw new Error('Iniciar una producción de Director requiere confirm=true porque consume cómputo.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject }, api] = await Promise.all([
@@ -1281,9 +1285,11 @@ export async function startDirectorProduction(action: AgentStartDirectorProducti
   if (!production || (production.kind !== 'film' && production.kind !== 'trailer' && production.kind !== 'music_video')) {
     throw new Error('La producción preparada ya no existe en el historial de Story Lab.')
   }
+  bindDirectorProductionTarget(expectedProductionId, production.id, production.title)
   if (action.kind && production.kind !== action.kind) {
     throw new Error(`La producción preparada es ${production.kind}, no ${action.kind}.`)
   }
+  const reportTarget = { kind: 'director_production', id: production.id, title: production.title }
   const existingPipelineId = typeof production.targetSnapshot?.pipelineId === 'string'
     ? production.targetSnapshot.pipelineId.trim() : ''
   if (existingPipelineId) {
@@ -1293,7 +1299,11 @@ export async function startDirectorProduction(action: AgentStartDirectorProducti
     director.setSidebarMode('director')
     director.setSidebarOpen(true)
     window.dispatchEvent(new Event('maestro:director-open'))
-    return `La producción “${production.title}” ya estaba iniciada en Director (pipeline ${existingPipelineId}); no la he duplicado.`
+    return {
+      pipelineId: existingPipelineId,
+      target: reportTarget,
+      message: `La producción “${production.title}” ya estaba iniciada en Director (pipeline ${existingPipelineId}); no la he duplicado.`,
+    }
   }
   if (director.pipelineId) {
     throw new Error(`Director ya está vinculado al pipeline ${director.pipelineId}; no iniciaré otro sobre el mismo borrador.`)
@@ -1363,7 +1373,11 @@ export async function startDirectorProduction(action: AgentStartDirectorProducti
     } catch (error) {
       linkWarning = ` El pipeline sí está en marcha, pero no pude enlazarlo al historial de Story Lab: ${(error as Error).message}`
     }
-    return `He iniciado “${production.title}” en Director con el pipeline real ${pipelineId}. Está en marcha; todavía no está terminado.${linkWarning}`
+    return {
+      pipelineId,
+      target: reportTarget,
+      message: `He iniciado “${production.title}” en Director con el pipeline real ${pipelineId}. Está en marcha; todavía no está terminado.${linkWarning}`,
+    }
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
   }

@@ -2,6 +2,7 @@ import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/u
 import type { AspectRatio, MediaFilter, ModelDef, ResolutionPreset } from '../../types'
 import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
 import {
+  bindDirectorProductionTarget,
   bindGenerateComicTarget,
   executionKey,
   executionReport,
@@ -2272,7 +2273,7 @@ async function prepare3d(action: AgentPrepare3dAction): Promise<string> {
   return `He preparado Studio → 3D con ${selected.name}, preset ${prepared3dPreset} y el prompt indicado. La pestaña 3D solo muestra resultados; la creación queda en Studio.`
 }
 
-async function startPreparedGeneration(): Promise<string> {
+async function startPreparedGeneration(): Promise<{ message: string; taskId?: string }> {
   const state = useStore.getState()
   if (state.generationMode === 'model3d') {
     const { startHunyuan3DJob } = await import('../../api/client')
@@ -2284,9 +2285,11 @@ async function startPreparedGeneration(): Promise<string> {
       preset: prepared3dPreset,
       seed: typeof state.params.seed === 'number' ? state.params.seed : 1234,
     })
-    return job.job_id
-      ? `He enviado el modelo 3D a Hunyuan3D (${job.job_id}). Aparecerá en la galería 3D al terminar.`
-      : 'He enviado el modelo 3D a Hunyuan3D.'
+    if (!job.job_id) throw new Error('Hunyuan3D devolvió éxito sin jobId; no considero la generación encolada.')
+    return {
+      taskId: job.job_id,
+      message: `He enviado el modelo 3D a Hunyuan3D (${job.job_id}). Aparecerá en la galería 3D al terminar.`,
+    }
   }
   const before = useStore.getState().jobs
   const knownJobs = new Set(before)
@@ -2294,11 +2297,13 @@ async function startPreparedGeneration(): Promise<string> {
   const created = useStore.getState().jobs.find(job => !knownJobs.has(job))
   if (!created) throw new Error('HocusPocus no creó una tarea; revisa los requisitos del modelo y los campos visibles.')
   if (created.status === 'failed') throw new Error(created.error || created.message || 'La generación no pudo entrar en cola.')
+  if (!created.id) throw new Error('HocusPocus devolvió éxito sin taskId; no considero la generación encolada.')
   const mode = useStore.getState().generationMode
   const kind = mode === 'image' ? 'imagen' : mode === 'audio' ? 'pista de audio' : 'vídeo'
-  return created.id
-    ? `He enviado la ${kind} a la cola (${created.id}).`
-    : `He enviado la ${kind} a la cola; HocusPocus está asignando su identificador.`
+  return {
+    taskId: created.id,
+    message: `He enviado la ${kind} a la cola (${created.id}).`,
+  }
 }
 
 export async function executeAgentActions(
@@ -2308,6 +2313,7 @@ export async function executeAgentActions(
   const results: AgentActionResult[] = []
   let preparedStudio = false
   let createdComicId = ''
+  let stagedProductionId = ''
   for (const action of orderCompoundActions(actions)) {
     const working = action.type === 'open_tab'
       ? `Abriendo ${TAB_LABELS[action.tab]}…`
@@ -2402,6 +2408,14 @@ export async function executeAgentActions(
         const project = useComicStore.getState().project
         targetId = bindGenerateComicTarget(createdComicId, project.id, project.title)
       }
+      if (action.type === 'start_director_production') {
+        const handoff = useStore.getState().directorStoryProductionHandoff
+        targetId = bindDirectorProductionTarget(
+          stagedProductionId,
+          handoff?.productionId || '',
+          handoff?.productionId || 'producción abierta',
+        )
+      }
       const key = executionKey({
         workspace: useStore.getState().activeWorkspace || 'default',
         type: action.type,
@@ -2454,7 +2468,23 @@ export async function executeAgentActions(
         results.push({ action, ok: true, message: await queueSfxPack(action) })
       } else if (action.type === 'start_generation') {
         if (!preparedStudio) throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
-        results.push({ action, ok: true, message: await startPreparedGeneration() })
+        const outcome = await startPreparedGeneration()
+        results.push({
+          action,
+          ok: true,
+          message: outcome.message,
+          report: executionReport({
+            state: 'queued',
+            message: outcome.message,
+            taskId: outcome.taskId,
+            recoverable: false,
+            executionKey: executionKey({
+              workspace: useStore.getState().activeWorkspace || 'default',
+              type: action.type,
+              params: action,
+            }),
+          }),
+        })
       } else if (action.type === 'create_story') {
         const { createFilledStory } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledStory(action) })
@@ -2481,13 +2511,35 @@ export async function executeAgentActions(
         results.push({ action, ok: true, message: await stageStoryComic(action) })
       } else if (action.type === 'stage_story_video') {
         const { stageStoryVideo } = await import('./labActions')
-        results.push({ action, ok: true, message: await stageStoryVideo(action) })
+        const message = await stageStoryVideo(action)
+        stagedProductionId = useStore.getState().directorStoryProductionHandoff?.productionId || ''
+        results.push({ action, ok: true, message })
       } else if (action.type === 'stage_story_music_video') {
         const { stageStoryMusicVideo } = await import('./labActions')
-        results.push({ action, ok: true, message: await stageStoryMusicVideo(action) })
+        const message = await stageStoryMusicVideo(action)
+        stagedProductionId = useStore.getState().directorStoryProductionHandoff?.productionId || ''
+        results.push({ action, ok: true, message })
       } else if (action.type === 'start_director_production') {
         const { startDirectorProduction } = await import('./labActions')
-        results.push({ action, ok: true, message: await startDirectorProduction(action) })
+        const outcome = await startDirectorProduction(action, stagedProductionId || undefined)
+        results.push({
+          action,
+          ok: true,
+          message: outcome.message,
+          report: executionReport({
+            state: 'running',
+            message: outcome.message,
+            pipelineId: outcome.pipelineId,
+            target: outcome.target,
+            recoverable: true,
+            executionKey: executionKey({
+              workspace: useStore.getState().activeWorkspace || 'default',
+              type: action.type,
+              targetId: outcome.target?.id || stagedProductionId,
+              params: action,
+            }),
+          }),
+        })
       } else if (action.type === 'create_series_episode') {
         const { createFilledSeriesEpisode } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledSeriesEpisode(action) })
@@ -2574,26 +2626,28 @@ export async function executeAgentActions(
       if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio' || action.type === 'prepare_3d') preparedStudio = false
     }
     const last = results.at(-1)
-    if (last && last.action === action && !last.report) {
-      let target: AgentExecutionTarget | undefined
-      if (action.type === 'create_comic' || action.type === 'generate_comic' || action.type === 'generate_comic_panel') {
-        const { useComicStore } = await import('../comics/store')
-        const project = useComicStore.getState().project
-        target = { kind: 'comic', id: project.id, title: project.title }
-        if (action.type === 'create_comic' && last.ok) createdComicId = project.id
+    if (last && last.action === action) {
+      if (!last.report) {
+        let target: AgentExecutionTarget | undefined
+        if (action.type === 'create_comic' || action.type === 'generate_comic' || action.type === 'generate_comic_panel') {
+          const { useComicStore } = await import('../comics/store')
+          const project = useComicStore.getState().project
+          target = { kind: 'comic', id: project.id, title: project.title }
+          if (action.type === 'create_comic' && last.ok) createdComicId = project.id
+        }
+        last.report = executionReport({
+          state: inferExecutionState(action.type, last.ok),
+          message: last.message,
+          target,
+          recoverable: !last.ok,
+          executionKey: executionKey({
+            workspace: useStore.getState().activeWorkspace || 'default',
+            type: action.type,
+            targetId: target?.id || createdComicId || stagedProductionId,
+            params: action,
+          }),
+        })
       }
-      last.report = executionReport({
-        state: inferExecutionState(action.type, last.ok),
-        message: last.message,
-        target,
-        recoverable: !last.ok,
-        executionKey: executionKey({
-          workspace: useStore.getState().activeWorkspace || 'default',
-          type: action.type,
-          targetId: target?.id || createdComicId,
-          params: action,
-        }),
-      })
       if (last.ok && isExpensiveAction(action.type) && last.report.executionKey) {
         rememberExecution(last.report)
       }

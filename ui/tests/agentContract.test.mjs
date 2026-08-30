@@ -106,6 +106,16 @@ test('generate_comic refuses a different comic than the one just created', async
   )
 })
 
+test('start_director_production refuses an older production than the one just staged', async () => {
+  const { bindDirectorProductionTarget } = await import('../src/features/agent/agentContract.ts')
+  assert.equal(bindDirectorProductionTarget('prod-new', 'prod-new', 'Nuevo'), 'prod-new')
+  assert.equal(bindDirectorProductionTarget('', 'prod-open', 'Abierto'), 'prod-open')
+  assert.throws(
+    () => bindDirectorProductionTarget('prod-new', 'prod-old', 'Viejo'),
+    /recién preparada/,
+  )
+})
+
 test('a 12-page comic keeps 72 ordered panels on the created project', async () => {
   const { createFilledComic } = await import('../src/features/agent/labActions.ts')
   const { useComicStore } = await import('../src/features/comics/store.ts')

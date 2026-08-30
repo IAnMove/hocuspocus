@@ -1310,7 +1310,7 @@ Runner: `scripts/nightly_wizard_validation.sh` / `.ps1` delegan en `scripts/nigh
 
 Baseline explícito en `scripts/nightly_baseline.json`:
 - Fallos históricos de UI, nunca éxitos: `sceneToRecipe`, `storyTimelinePolling`, `videoEditorHandoff`.
-- Avisos estáticos conocidos, nunca regresiones nuevas: `VideoEditorPanel.tsx` (`react-refresh/only-export-components`) y `CylinderPanoramaComparison.tsx` (`react-hooks/exhaustive-deps`).
+- ESLint ya no forma parte del baseline.
 
 Contrato común (`ui/src/features/agent/agentContract.ts`), sin reescribir todos los ejecutores:
 - Informe `prepared | queued | running | completed | partial | failed`.
@@ -1324,3 +1324,11 @@ Primera noche L1–2 congelada: `artifacts/nightly/2026-08-30T15-10-49`, Estado 
 Pruebas L2 cubren parser (desconocidas/extra), cómic de 12 páginas / 72 viñetas reread del store, MiniMax `image-01`, create+generate en ese orden, confirmación, repetición exacta, los seis estados, “como nuevo” vs “cómo lo lanzo” y negación.
 
 Siguiente bloque del plan: snapshot compacto de contexto del Wizard, tarjetas de seguimiento en el chat, CharacterKit, Video Editor, robustez de lote de cómic (partial/resume/cancel) y persistencia backend. No marcar el goal general como completo.
+
+## 56. ESLint real y contrato de cola/pipeline (2026-08-30)
+
+Los helpers de borrador del Video Editor viven en `editorDraft.ts`; el panel sólo exporta el componente. El preview cilíndrico lee rotación/FOV por refs, sin reconstruir el programa WebGL al arrastrar. La clave persistida `maestro-video-editor-draft-v1` no cambió.
+
+`start_generation` informa `queued` con el `taskId` real; `start_director_production` informa `running` con el `pipelineId` de la producción staged en el mismo turno, no una anterior. Una repetición exacta reutiliza ese informe y no encola otro job. Hunyuan/Studio sin jobId se tratan como fallo.
+
+L1–2 posterior: `artifacts/nightly/2026-08-30T15-39-45`, Estado PASS, job ESLint PASS (no BASELINE), GPU no, proveedores externos no.

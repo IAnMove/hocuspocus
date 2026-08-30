@@ -627,6 +627,246 @@ test('executeAgentActions reports the created comic and reuses an identical gene
   }
 })
 
+test('start_generation reports the real taskId and an identical repeat reuses it', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  clearExecutionMemory()
+  const original = {
+    startGeneration: useStore.getState().startGeneration,
+    loadModelOptions: useStore.getState().loadModelOptions,
+    loadOutputs: useStore.getState().loadOutputs,
+    models: useStore.getState().models,
+    families: useStore.getState().families,
+    modelsLoaded: useStore.getState().modelsLoaded,
+    enabledModels: useStore.getState().enabledModels,
+    params: useStore.getState().params,
+    jobs: useStore.getState().jobs,
+  }
+  let generationCalls = 0
+  useStore.setState({
+    modelsLoaded: true,
+    loadOutputs: async () => {},
+    families: [{ id: 'flux', label: 'Flux', order: 1 }],
+    models: [{
+      model_type: 'flux-test',
+      name: 'Flux Test',
+      family: 'flux',
+      architecture: 'flux',
+      is_i2v: false,
+      is_t2v: true,
+      guidance_max_phases: 1,
+      fps: 1,
+      is_downloaded: true,
+    }],
+    enabledModels: new Set(['flux-test']),
+    params: { ...useStore.getState().params, model_type: 'flux-test', prompt: '' },
+    jobs: [],
+    loadModelOptions: async () => {},
+    startGeneration: async () => {
+      generationCalls += 1
+      useStore.setState({
+        jobs: [{
+          id: `job-studio-${generationCalls}`,
+          status: 'queued',
+          progress: 0,
+          step: 0,
+          totalSteps: 0,
+          phase: '',
+          message: 'Queued',
+          outputFiles: [],
+          error: null,
+          oomInfo: null,
+          createdAt: Date.now(),
+        }, ...useStore.getState().jobs],
+      })
+    },
+  })
+  try {
+    const first = await executeAgentActions([
+      { type: 'prepare_image', prompt: 'un faro al anochecer', resolutionPreset: 'auto', aspectRatio: 'auto', seed: -1, outputCount: 1 },
+      { type: 'start_generation' },
+    ])
+    assert.equal(first[0].ok, true)
+    assert.equal(first[1].ok, true)
+    assert.equal(first[1].report.state, 'queued')
+    assert.equal(first[1].report.taskId, 'job-studio-1')
+    assert.equal(generationCalls, 1)
+    const second = await executeAgentActions([{ type: 'start_generation' }])
+    assert.match(second[0].message, /Reutilizo/)
+    assert.equal(second[0].report.taskId, 'job-studio-1')
+    assert.equal(generationCalls, 1)
+  } finally {
+    useStore.setState(original)
+    clearExecutionMemory()
+  }
+})
+
+test('create_comic then generate_comic reports the newly created comic id', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useComicStore } = await import('../src/features/comics/store.ts')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({ outputs: [], total: 0 }), {
+    status: 200, headers: { 'Content-Type': 'application/json' },
+  })
+  clearExecutionMemory()
+  try {
+    const created = await executeAgentActions([{
+      type: 'create_comic',
+      title: 'El mapa nuevo',
+      synopsis: 'Una cartógrafa abre un mapa que no existía.',
+      language: 'Español',
+      styleName: 'Tinta',
+      characters: [{
+        name: 'Ada', role: 'Cartógrafa', personality: '', desire: '',
+        flaw: '', appearance: 'Abrigo rojo', voice: '',
+      }],
+      panels: [{ caption: 'El mapa.', dialogue: '', sfx: '', scene: 'Un taller.' }],
+      pages: [],
+      imageProvider: 'minimax',
+      imageModel: 'image-01',
+    }])
+    const project = useComicStore.getState().project
+    assert.equal(created[0].report.target.id, project.id)
+    useComicStore.getState().patchProject({
+      director: {
+        ...project.director,
+        completedPanelIds: project.director.plan.pages.flatMap(page => page.panels.map(panel => panel.id)),
+      },
+    })
+    const generated = await executeAgentActions([{
+      type: 'generate_comic', imageProvider: 'minimax', imageModel: 'image-01', confirm: true,
+    }])
+    assert.equal(generated[0].ok, true)
+    assert.equal(generated[0].report.target.id, project.id)
+    assert.match(generated[0].message, /ya tenían dibujo|He dibujado/)
+  } finally {
+    globalThis.fetch = originalFetch
+    clearExecutionMemory()
+  }
+})
+
+test('start_director_production after same-turn stage reports that pipeline, not an older one', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const { useStoryStore } = await import('../src/features/stories/store.ts')
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  clearExecutionMemory()
+  const project = normalizeStoryProject({
+    ...createStoryProject(),
+    title: 'La torre de sal',
+    synopsis: 'Una cartógrafa busca un pueblo borrado del mapa.',
+    characters: [{ id: 'char-1', name: 'Iria', role: 'Protagonista', appearance: 'Abrigo rojo' }],
+    productions: [{
+      id: 'prod-old',
+      kind: 'film',
+      title: 'Producción vieja',
+      createdAt: new Date().toISOString(),
+      sourceVersion: 1,
+      sourceSnapshot: {},
+      targetName: 'Vieja',
+      targetSnapshot: { pipelineId: 'pipe-old' },
+      status: 'running',
+    }],
+  })
+  let library = {
+    version: 2,
+    revision: 1,
+    activeId: project.id,
+    projects: { [project.id]: project },
+  }
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(typeof input === 'string' ? input : input.url)
+    if (url.includes('/api/v1/stories/library') && (!init?.method || init.method === 'GET')) {
+      return new Response(JSON.stringify(library), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    if (url.includes('/api/v1/stories/library') && init?.method === 'PUT') {
+      const body = JSON.parse(String(init.body || '{}'))
+      library = body.library || library
+      library = { ...library, revision: (library.revision || 0) + 1 }
+      return new Response(JSON.stringify(library), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  const originalPipeline = useStore.getState().startDirectorPipeline
+  const originalLoadOptions = useStore.getState().loadModelOptions
+  const originalLoadOutputs = useStore.getState().loadOutputs
+  const originalPoll = useStore.getState().pollPipelineStatus
+  let pipelineStarts = 0
+  useStore.setState({
+    pipelineId: null,
+    pipelinePolling: false,
+    directorLoading: false,
+    directorStoryProductionHandoff: {
+      workspace: 'default',
+      projectId: project.id,
+      productionId: 'prod-old',
+    },
+    loadModelOptions: async () => {},
+    loadOutputs: async () => {},
+    pollPipelineStatus: () => {},
+    startDirectorPipeline: async () => {
+      pipelineStarts += 1
+      useStore.setState({ pipelineId: `pipe-new-${pipelineStarts}`, pipelinePolling: false })
+    },
+  })
+  useStoryStore.setState({
+    workspace: 'default',
+    project,
+    projects: { [project.id]: project },
+    libraryRevision: 1,
+    dirty: false,
+    hydrated: true,
+    loading: false,
+    saveError: null,
+    libraryConflicts: [],
+    activeProjectOperations: {},
+  })
+  try {
+    const results = await executeAgentActions([
+      { type: 'start_director_production', targetStoryTitle: '', kind: 'film', confirm: true },
+      { type: 'stage_story_video', targetStoryTitle: '', kind: 'film', direction: '', durationSeconds: 45, confirm: true },
+    ])
+    assert.deepEqual(results.map(item => item.action.type), ['stage_story_video', 'start_director_production'])
+    assert.equal(results[0].ok, true, results[0].message)
+    assert.equal(results[1].ok, true, results[1].message)
+    assert.equal(results[1].report.state, 'running')
+    assert.equal(results[1].report.pipelineId, 'pipe-new-1')
+    assert.notEqual(results[1].report.pipelineId, 'pipe-old')
+    assert.notEqual(results[1].report.target.id, 'prod-old')
+    assert.equal(pipelineStarts, 1)
+    const stagedId = results[1].report.target.id
+    const repeat = await executeAgentActions([
+      { type: 'start_director_production', targetStoryTitle: '', kind: 'film', confirm: true },
+    ])
+    assert.match(repeat[0].message, /Reutilizo/)
+    assert.equal(repeat[0].report.pipelineId, 'pipe-new-1')
+    assert.equal(repeat[0].report.target.id, stagedId)
+    assert.equal(pipelineStarts, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+    useStore.setState({
+      startDirectorPipeline: originalPipeline,
+      loadModelOptions: originalLoadOptions,
+      loadOutputs: originalLoadOutputs,
+      pollPipelineStatus: originalPoll,
+      pipelineId: null,
+      pipelinePolling: false,
+      directorStoryProductionHandoff: null,
+    })
+    useStoryStore.setState({
+      hydrated: false,
+      loading: false,
+      libraryConflicts: [],
+      activeProjectOperations: {},
+    })
+    clearExecutionMemory()
+  }
+})
+
 test('compute comic render without confirm is dropped', async () => {
   const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
   const turn = parseAgentTurn(JSON.stringify({
