@@ -271,6 +271,15 @@ export interface AgentAssembleSeriesEpisodeAction {
   confirm: true
 }
 
+export interface AgentCommitSeriesCanonAction {
+  type: 'commit_series_canon'
+  seriesTitle: string
+  targetEpisodeTitle: string
+  decision: 'accept_all' | 'reject_all' | 'accept_selected' | 'reject_selected'
+  itemIds: string[]
+  confirm: true
+}
+
 export interface AgentComicPanel {
   caption: string
   dialogue: string
@@ -374,6 +383,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentRenderSeriesShotsAction
   | AgentReviewSeriesAttemptsAction
   | AgentAssembleSeriesEpisodeAction
+  | AgentCommitSeriesCanonAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
@@ -455,6 +465,9 @@ const SERIES_RENDER_MODES = new Set<AgentRenderSeriesShotsAction['mode']>([
 ])
 const SERIES_REVIEW_DECISIONS = new Set<AgentReviewSeriesAttemptsAction['decision']>(['approve', 'reject'])
 const SERIES_REVIEW_SCOPES = new Set<AgentReviewSeriesAttemptsAction['scope']>(['selected_latest', 'all_latest'])
+const SERIES_CANON_DECISIONS = new Set<AgentCommitSeriesCanonAction['decision']>([
+  'accept_all', 'reject_all', 'accept_selected', 'reject_selected',
+])
 const STORY_SECTIONS = new Set<AgentStorySection>([
   'overview', 'world', 'characters', 'relationships', 'structure', 'productions',
 ])
@@ -486,6 +499,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   renderseriesshots: 'render_series_shots',
   reviewseriesattempts: 'review_series_attempts',
   assembleseriesepisode: 'assemble_series_episode',
+  commitseriescanon: 'commit_series_canon',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
@@ -607,7 +621,7 @@ const CANONICAL_FIELD_NAMES = [
   'series_logline', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline',
   'target_duration_seconds', 'create_if_missing', 'known_universe',
   'queue_scope', 'task_id', 'job_id', 'shot_ids', 'shot_numbers', 'attempt_id', 'render_mode',
-  'review_decision', 'review_scope', 'confirm', 'characters', 'locations', 'outline_beats',
+  'review_decision', 'review_scope', 'canon_decision', 'canon_item_ids', 'confirm', 'characters', 'locations', 'outline_beats',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
@@ -1005,6 +1019,15 @@ function parseAction(value: unknown): AgentAction | null {
       targetEpisodeTitle: cleanString(raw.target_episode_title, 300),
       confirm: true,
     }
+  }
+  if (type === 'commit_series_canon') {
+    if (raw.confirm !== true) return null
+    const decision = cleanString(raw.canon_decision, 40) as AgentCommitSeriesCanonAction['decision']
+    if (!SERIES_CANON_DECISIONS.has(decision)) return null
+    const itemIds = stringArray(raw.canon_item_ids, 200, 160)
+    const selected = decision === 'accept_selected' || decision === 'reject_selected'
+    if (selected !== Boolean(itemIds.length)) return null
+    return { type: 'commit_series_canon', seriesTitle: cleanString(raw.series_title, 300), targetEpisodeTitle: cleanString(raw.target_episode_title, 300), decision, itemIds, confirm: true }
   }
   if (type === 'create_comic') {
     const title = cleanString(raw.title, 300)
@@ -1415,7 +1438,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1471,6 +1494,8 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           attempt_id: { type: 'string', maxLength: 160 },
           review_decision: { type: 'string', enum: ['', 'approve', 'reject'] },
           review_scope: { type: 'string', enum: ['', 'selected_latest', 'all_latest'] },
+          canon_decision: { type: 'string', enum: ['', 'accept_all', 'reject_all', 'accept_selected', 'reject_selected'] },
+          canon_item_ids: { type: 'array', maxItems: 200, items: { type: 'string', maxLength: 160 } },
           confirm: { type: 'boolean' },
           page_number: { type: 'integer', minimum: 0, maximum: 100 },
           panel_number: { type: 'integer', minimum: 0, maximum: 100 },
@@ -1949,6 +1974,8 @@ export async function executeAgentActions(
               ? `${action.decision === 'approve' ? 'Aprobando' : 'Rechazando'} intentos de Series Lab…`
             : action.type === 'assemble_series_episode'
               ? 'Uniendo las tomas aprobadas del episodio…'
+            : action.type === 'commit_series_canon'
+              ? 'Registrando las decisiones de canon del episodio…'
               : action.type === 'create_comic'
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
@@ -2046,6 +2073,9 @@ export async function executeAgentActions(
       } else if (action.type === 'assemble_series_episode') {
         const { assembleSeriesEpisode } = await import('./labActions')
         results.push({ action, ok: true, message: await assembleSeriesEpisode(action) })
+      } else if (action.type === 'commit_series_canon') {
+        const { commitSeriesCanonDelta } = await import('./labActions')
+        results.push({ action, ok: true, message: await commitSeriesCanonDelta(action) })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledComic(action) })

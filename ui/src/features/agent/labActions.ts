@@ -9,6 +9,7 @@ import type {
   AgentRenderSeriesShotsAction,
   AgentReviewSeriesAttemptsAction,
   AgentAssembleSeriesEpisodeAction,
+  AgentCommitSeriesCanonAction,
   AgentStageStoryComicAction,
   AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
@@ -17,7 +18,7 @@ import type {
   AgentCreativeCharacter,
   AgentCreativeLocation,
 } from './agentActions'
-import { clearAgentSeriesPlanJob, notifyAgentSeriesAssemblyJob, notifyAgentSeriesPlanJob, notifyAgentSeriesRenderJob, notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
+import { clearAgentSeriesPlanJob, notifyAgentSeriesAssemblyJob, notifyAgentSeriesPlanJob, notifyAgentSeriesRenderJob, notifyAgentStoryDraft, openAgentSeriesReviewView, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
 
 const normalizeName = (value: string): string => value
   .normalize('NFD')
@@ -1345,6 +1346,41 @@ export async function assembleSeriesEpisode(action: AgentAssembleSeriesEpisodeAc
   showLab('series')
   openAgentSeriesSection('review')
   return `He iniciado el ensamblado ordenado de ${episode.shots.length} shots de “${episode.title}” (${job.jobId}). El progreso recuperable y la descarga están abiertos en Render & Review; no he comprometido el delta de canon.`
+}
+
+export async function commitSeriesCanonDelta(action: AgentCommitSeriesCanonAction): Promise<string> {
+  if (!action.confirm) throw new Error('Comprometer cambios de canon requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [api, { useSeriesStore }] = await Promise.all([import('../../api/client'), import('../series/store')])
+  await useSeriesStore.getState().loadWorkspace(workspace)
+  await useSeriesStore.getState().saveNow()
+  const library = await api.fetchSeriesLibrary(workspace)
+  const matches = action.seriesTitle ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle)) : []
+  if (matches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  const series = matches[0] || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
+  if (!series) throw new Error(action.seriesTitle ? `No existe la serie “${action.seriesTitle}”.` : 'No hay una serie activa.')
+  const episodeMatches = action.targetEpisodeTitle ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle)) : []
+  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”.`)
+  const activeId = useSeriesStore.getState().activeSeriesId === series.id ? useSeriesStore.getState().activeEpisodeId : ''
+  const episodes = Object.values(series.episodesById)
+  const episode = episodeMatches[0] || (!action.targetEpisodeTitle && activeId ? series.episodesById[activeId] : null) || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
+  if (!episode) throw new Error(action.targetEpisodeTitle ? `No existe el episodio “${action.targetEpisodeTitle}”.` : 'La serie necesita un episodio activo o único.')
+  const deltaIds = [...episode.proposedCanonDelta.add.map(item => item.id), ...episode.proposedCanonDelta.change.map(item => item.id), ...episode.proposedCanonDelta.retire.map(item => item.factId)]
+  if (!deltaIds.length) throw new Error(`“${episode.title}” no tiene cambios de canon propuestos.`)
+  const unknown = action.itemIds.filter(id => !deltaIds.includes(id))
+  if (unknown.length) throw new Error(`Cambios de canon desconocidos: ${unknown.join(', ')}.`)
+  const selected = action.decision.endsWith('_all') ? deltaIds : action.itemIds
+  const value = action.decision.startsWith('accept_') ? 'accepted' : 'rejected'
+  const decisions = Object.fromEntries(selected.map(id => [id, value])) as Record<string, 'accepted' | 'rejected'>
+  const updated = await api.commitSeriesCanon(workspace, series.id, episode.id, episode.proposedCanonDelta.baseRevision, decisions)
+  if (updated.id !== series.id || !updated.episodesById[episode.id]) throw new Error('Series Lab confirmó decisiones para otro destino.')
+  await useSeriesStore.getState().reload()
+  await useSeriesStore.getState().openSeries(series.id)
+  useSeriesStore.getState().openEpisode(episode.id)
+  showLab('series')
+  openAgentSeriesSection('review')
+  openAgentSeriesReviewView('finish')
+  return `He marcado ${selected.length} cambio${selected.length === 1 ? '' : 's'} de canon como ${value === 'accepted' ? 'aceptados' : 'rechazados'} en “${episode.title}”. Los demás permanecen pendientes.`
 }
 
 function showComics(): void {

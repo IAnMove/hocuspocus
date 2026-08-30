@@ -1223,3 +1223,9 @@ escenas y tomas guardadas; no renderiza y no acepta/rechaza el delta de canon.
 La acción llama a `startSeriesEpisodeAssembly`, verifica que el job devuelto pertenezca al workspace/serie/episodio solicitado y lo entrega mediante un evento cacheado a `SeriesReviewPanel`. El listener se vuelve a enlazar al cambiar de episodio para que una navegación provocada por el propio Wizard no pierda el job durante el re-render. La vista abre **Montaje ordenado**, donde continúan funcionando polling, cancelar, reanudar, descartar checkpoint y descargar el vídeo final.
 
 El ensamblado no acepta ni rechaza el delta de canon del episodio. Durante el desarrollo sólo se validó la conexión; no se arrancó FFmpeg ni una generación GPU.
+
+## 44. Wizard: decisiones de canon del episodio
+
+`commit_series_canon` separa expresamente la continuidad narrativa del render y del ensamblado. Requiere `confirm=true` y admite aceptar/rechazar todo el delta o una lista exacta de `canon_item_ids`; los elementos omitidos permanecen pendientes.
+
+La acción usa el `baseRevision` del delta para conservar el bloqueo optimista del backend, valida IDs desconocidos, verifica la serie devuelta, recarga el store y abre `Render & Review → Finalizar y canon`. Un conflicto de revisión obliga a recargar en vez de sobrescribir canon nuevo.

@@ -3,6 +3,7 @@ import type { SeriesAssemblyJob } from '../series/assemblyContract'
 
 export type AgentStorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'productions'
 export type AgentSeriesSection = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
+export type AgentSeriesReviewView = 'assembly' | 'history' | 'finish'
 
 const STORY_SECTION_EVENT = 'hocuspocus:story-section'
 const SERIES_SECTION_EVENT = 'hocuspocus:series-section'
@@ -10,11 +11,13 @@ const STORY_DRAFT_EVENT = 'hocuspocus:story-draft-ready'
 const SERIES_PLAN_JOB_EVENT = 'hocuspocus:series-plan-job'
 const SERIES_RENDER_JOB_EVENT = 'hocuspocus:series-render-job'
 const SERIES_ASSEMBLY_JOB_EVENT = 'hocuspocus:series-assembly-job'
+const SERIES_REVIEW_VIEW_EVENT = 'hocuspocus:series-review-view'
 let requestedStorySection: AgentStorySection | null = null
 let requestedSeriesSection: AgentSeriesSection | null = null
 let requestedSeriesPlanJob: SeriesJobStatus | null = null
 let requestedSeriesRenderJob: SeriesJobStatus | null = null
 let requestedSeriesAssemblyJob: SeriesAssemblyJob | null = null
+let requestedSeriesReviewView: AgentSeriesReviewView | null = null
 
 export function openAgentStorySection(section: AgentStorySection): void {
   requestedStorySection = section
@@ -113,6 +116,21 @@ export function listenForAgentSeriesAssemblyJob(listener: (job: SeriesAssemblyJo
   window.addEventListener(SERIES_ASSEMBLY_JOB_EVENT, handler)
   if (requestedSeriesAssemblyJob) listener(requestedSeriesAssemblyJob)
   return () => window.removeEventListener(SERIES_ASSEMBLY_JOB_EVENT, handler)
+}
+
+export function openAgentSeriesReviewView(view: AgentSeriesReviewView): void {
+  requestedSeriesReviewView = view
+  window.dispatchEvent(new CustomEvent(SERIES_REVIEW_VIEW_EVENT, { detail: { view } }))
+}
+
+export function listenForAgentSeriesReviewView(listener: (view: AgentSeriesReviewView) => void): () => void {
+  const handler = (event: Event) => {
+    const view = (event as CustomEvent<{ view?: AgentSeriesReviewView }>).detail?.view
+    if (view) listener(view)
+  }
+  window.addEventListener(SERIES_REVIEW_VIEW_EVENT, handler)
+  if (requestedSeriesReviewView) listener(requestedSeriesReviewView)
+  return () => window.removeEventListener(SERIES_REVIEW_VIEW_EVENT, handler)
 }
 
 const ACTIVITY_DETAILS_EVENT = 'hocuspocus:activity-details'

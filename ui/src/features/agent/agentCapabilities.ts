@@ -195,6 +195,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['series_title', 'target_episode_title', 'confirm'],
   },
   {
+    type: 'commit_series_canon',
+    title: 'Commit Series episode canon decisions',
+    purpose: 'Accept or reject all proposed continuity changes, or exact selected delta IDs, through optimistic canon locking.',
+    useWhen: 'The user explicitly decides which proposed episode facts should affect future episodes.',
+    risk: 'edit',
+    parameters: ['series_title', 'target_episode_title', 'canon_decision', 'canon_item_ids', 'confirm'],
+  },
+  {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
     purpose: 'Open Comics and fill characters, panels and lettering. Do not draw panel art unless asked.',
