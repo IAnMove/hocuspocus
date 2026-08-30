@@ -329,3 +329,71 @@ test('factual biography blocks render until review and snapshot exposes comic pr
   assert.equal(snapshot.comic.provider, 'minimax')
   assert.equal('pipeline_id' in snapshot.director, true)
 })
+
+test('wizard snapshot includes Story, Series, Video 3D, CharacterKit and Video Editor', async () => {
+  const { useStoryStore, createStoryProject } = await import('../src/features/stories/store.ts')
+  const { useSeriesStore } = await import('../src/features/series/store.ts')
+  const { rememberCharacterKitLibrary, rememberVideo3dScene } = await import('../src/features/agent/wizardLabSession.ts')
+  const { createCharacterKit } = await import('../src/lib/characterKit.ts')
+  const { persistEditorDraft, RESOLUTIONS } = await import('../src/features/video-editor/editorDraft.ts')
+  const { buildAgentAppSnapshot } = await import('../src/features/agent/agentActions.ts')
+  const story = createStoryProject()
+  story.title = 'La torre de sal'
+  story.projectType = 'full_story'
+  useStoryStore.setState({ project: story, projects: { [story.id]: story } })
+  useSeriesStore.setState({
+    activeSeriesId: 'series-1',
+    activeEpisodeId: 'ep-1',
+    library: {
+      seriesOrder: ['series-1'],
+      seriesById: {
+        'series-1': {
+          id: 'series-1', title: 'Mesa para cuatro',
+          episodesById: { 'ep-1': { id: 'ep-1', title: 'Piloto', shots: [{ approvedAttemptId: 'a1', attempts: [] }, { approvedAttemptId: '', attempts: [{ status: 'failed' }] }] } },
+        },
+      },
+    },
+    renderRecovery: [],
+  })
+  const kit = createCharacterKit('Nora')
+  rememberCharacterKitLibrary({ version: 1, revision: 1, activeId: kit.id, kits: { [kit.id]: kit } })
+  rememberVideo3dScene({ scene_id: 'concierto', title: 'Concierto', layers: 4, state: 'ready' })
+  persistEditorDraft([], 'corte-final', RESOLUTIONS[0], 30, 'default')
+  const snapshot = buildAgentAppSnapshot()
+  assert.equal(snapshot.story.title, 'La torre de sal')
+  assert.equal(snapshot.story.project_id, story.id)
+  assert.equal(snapshot.series.title, 'Mesa para cuatro')
+  assert.equal(snapshot.series.episode_title, 'Piloto')
+  assert.equal(snapshot.series.shots, 2)
+  assert.equal(snapshot.series.approved, 1)
+  assert.equal(snapshot.series.failed, 1)
+  assert.equal(snapshot.video_3d.title, 'Concierto')
+  assert.equal(snapshot.video_3d.layers, 4)
+  assert.equal(snapshot.character_kit.title, 'Nora')
+  assert.equal(snapshot.video_editor.title, 'corte-final')
+})
+
+test('execution cards expose five controls and keep the same id on poll', async () => {
+  const { cardFromReport, applyPollToCard } = await import('../src/features/agent/executionCards.ts')
+  const card = cardFromReport({
+    state: 'running',
+    message: 'En curso',
+    recoverable: true,
+    taskId: 'task-1',
+    target: { kind: 'video_editor', id: 'edit-1', title: 'edit-1' },
+    executionKey: 'default|export_video_editor|edit-1|{}',
+  })
+  assert.equal(card.controls.open, true)
+  assert.equal(card.controls.cancel, true)
+  assert.equal(card.controls.resume, false)
+  assert.equal(card.controls.viewErrors, false)
+  assert.equal(card.controls.retryPending, false)
+  const polled = applyPollToCard(card, { state: 'completed', message: 'Listo', outputNames: ['final.mp4'] })
+  assert.equal(polled.id, card.id)
+  assert.equal(polled.state, 'completed')
+  assert.deepEqual(polled.outputNames, ['final.mp4'])
+  const failed = cardFromReport({ state: 'failed', message: 'Error', recoverable: true })
+  assert.equal(failed.controls.viewErrors, true)
+  assert.equal(failed.controls.retryPending, true)
+  assert.equal(failed.controls.resume, true)
+})

@@ -1338,3 +1338,27 @@ L1–2 posterior: `artifacts/nightly/2026-08-30T15-39-45`, Estado PASS, job ESLi
 `generate_comic` admite `render_mode=missing|failed|all`, `page_numbers`, `pilot` y `biography_review`. El ejecutor persiste jobs y fallos por viñeta, reanuda desde la primera pendiente, continúa tras un fallo (estado `partial`) y cancela el lote sin borrar las terminadas. El progreso habla `página 4/12 · viñeta 21/72`. Antes de dibujar, el Wizard estima las llamadas MiniMax. `create_comic` puede marcar `factual_biography`; no se dibuja hasta la revisión factual. El snapshot del Wizard incluye el cómic activo (páginas/viñetas/completadas/fallidas) y el pipeline de Director.
 
 Siguiente: snapshots de Story/Series/Video 3D/CharacterKit/Video Editor, tarjetas en el chat, flujos CharacterKit y Video Editor, persistencia backend. No marcar el goal general como completo.
+
+## 58. Snapshot compacto de labs (2026-08-30)
+
+`buildAgentAppSnapshot()` incluye Story, Series, Video 3D, CharacterKit y Video Editor con identidad y conteos vivos (proyecto/escena/kit/timeline, título, progreso running/ready/empty). CharacterKit y Video 3D se recuerdan en `wizardLabSession.ts` porque sus paneles son lazy; Video Editor reutiliza `editorDraft.ts` y la clave `maestro-video-editor-draft-v1`.
+
+## 59. Tarjetas de ejecución en el chat (2026-08-30)
+
+Cada acción arrancada tiene una tarjeta ligada a `AgentExecutionReport` (`prepared | queued | running | completed | partial | failed`). El poll actualiza el mismo `message.id`; no se emite un mensaje extra por ciclo. Controles: abrir destino, cancelar, reanudar, ver errores y reintentar pendientes. Al terminar, la tarjeta enlaza nombres reales de outputs.
+
+## 60. CharacterKit operable (2026-08-30)
+
+Catálogo y ejecutor en `characterKitActions.ts`: create/open → identidad → referencias exactas de outputs → `build_character_kit` (promueve la pose base; no llama GPU) → Face Rig → preset viseme → `track_character_kit_job` sobre la cola canónica. Sin segunda cola.
+
+## 61. Video Editor operable (2026-08-30)
+
+Catálogo y ejecutor en `videoEditorActions.ts`: create/open proyecto → añadir outputs exactos → ordenar/trim/audio → validar → `export_video_editor` con `confirm=true` → track. Export entra en `QUEUED_ACTIONS`; una repetición idéntica reutiliza el `executionKey` y el `job_id`. La clave persistida del draft no cambia.
+
+## 62. Persistencia de conversaciones y pruebas (2026-08-30)
+
+Backend CAS `.wizard-conversation-v1.json` por workspace (`app/services/wizard_conversations.py`). `GET`/`PUT /api/v1/wizard/conversations` guarda mensajes, acciones, confirmaciones, `executionKey`, enlaces mensaje–job y último estado. Recargar el Wizard reconstruye las tarjetas desde ese registro.
+
+Pruebas de cierre de las fases 4–7: `cd ui && npx tsx --tsconfig tsconfig.app.json --test tests/agentActions.test.mjs tests/agentContract.test.mjs` → 58 pass, 0 fail. Persistencia: `PYTHONPATH=app python3 -m unittest tests.test_wizard_conversations` (este host no tiene el módulo `pytest`). No se lanzó GPU ni proveedores externos.
+
+Este bloque cierra el goal de fases 4–7. No marcar el goal general de Agent Mode como completo. Fuera de este corte siguen: runtime de turnos/stream (Corte 4), el ejemplo rítmico completo de Corte 5, nightly 3–8, y migrar ejecutores restantes al contrato común.

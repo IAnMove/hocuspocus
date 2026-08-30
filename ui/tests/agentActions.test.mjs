@@ -883,6 +883,65 @@ test('start_director_production after same-turn stage reports that pipeline, not
   }
 })
 
+test('character kit and video editor execute, reuse export id, and reject unsigned export', async () => {
+  const { executeAgentActions, parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  clearExecutionMemory()
+  let kitLibrary = { version: 1, revision: 0, activeId: '', kits: {} }
+  let exportCalls = 0
+  const originalFetch = globalThis.fetch
+  const originalLoadOutputs = useStore.getState().loadOutputs
+  useStore.setState({ loadOutputs: async () => {} })
+  globalThis.fetch = async (input, init) => {
+    const url = String(typeof input === 'string' ? input : input.url)
+    const method = init?.method || 'GET'
+    const json = body => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url.includes('/api/v1/character-kits/library/kits/') && method === 'PATCH') {
+      const body = JSON.parse(String(init.body || '{}'))
+      kitLibrary = { ...kitLibrary, revision: kitLibrary.revision + 1, activeId: body.kit.id, kits: { ...kitLibrary.kits, [body.kit.id]: body.kit } }
+      return json(kitLibrary)
+    }
+    if (url.includes('/api/v1/character-kits/library')) return json(kitLibrary)
+    if (url.includes('/api/v1/outputs')) {
+      return json({ outputs: [{ name: 'clip-a.mp4', type: 'video', url: '/outputs/clip-a.mp4' }], total: 1 })
+    }
+    if (url.includes('/api/v1/video-editor/probe')) {
+      return json({ duration: 4, width: 1280, height: 720, fps: 30, has_audio: true, pixel_format: 'yuv420p', has_alpha: false })
+    }
+    if (url.includes('/api/v1/video-editor/export') && method === 'POST') {
+      exportCalls += 1
+      return json({ job_id: 'export-77', status: 'queued', progress: 0, message: 'Queued', filename: null, url: null, error: null })
+    }
+    return json({})
+  }
+  try {
+    const createdKit = await executeAgentActions([{ type: 'create_character_kit', name: 'Nora', style: 'cutout' }])
+    assert.equal(createdKit[0].ok, true)
+    assert.equal(createdKit[0].report.target.kind, 'character_kit')
+    const unsigned = parseAgentTurn(JSON.stringify({
+      reply: 'Exporto.',
+      actions: [{ type: 'export_video_editor', confirm: false }],
+    }))
+    assert.equal(unsigned.actions.length, 0)
+    await executeAgentActions([{ type: 'create_video_editor_project', projectName: 'corte-final' }])
+    await executeAgentActions([{ type: 'add_video_editor_clips', outputNames: ['clip-a.mp4'] }])
+    const exported = await executeAgentActions([{ type: 'export_video_editor', confirm: true }])
+    assert.equal(exported[0].ok, true)
+    assert.equal(exported[0].report.state, 'queued')
+    assert.equal(exported[0].report.taskId, 'export-77')
+    assert.equal(exportCalls, 1)
+    const again = await executeAgentActions([{ type: 'export_video_editor', confirm: true }])
+    assert.match(again[0].message, /Reutilizo/)
+    assert.equal(again[0].report.taskId, 'export-77')
+    assert.equal(exportCalls, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+    useStore.setState({ loadOutputs: originalLoadOutputs })
+    clearExecutionMemory()
+  }
+})
+
 test('compute comic render without confirm is dropped', async () => {
   const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
   const turn = parseAgentTurn(JSON.stringify({
