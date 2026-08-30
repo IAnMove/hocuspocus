@@ -1045,5 +1045,16 @@ inventadas por el LLM.
   de fondo.
 
 En una generación compuesta el orden es `prepare_image|prepare_video` →
-`attach_studio_references` → `start_generation`. LoRAs compatibles siguen
-siendo la siguiente tarea de esta familia.
+`attach_studio_references` → `start_generation`.
+
+## 30. LoRAs de Studio operables (2026-08-30)
+
+`configure_studio_loras` recibe una lista `{name, weight}` y
+`replace_existing`. Después de que `prepare_image` o `prepare_video` haya
+seleccionado el modelo, vuelve a cargar su lista compatible desde
+`/api/v1/loras/<model>` y exige coincidencia exacta de filename. Los pesos se
+limitan a `0..2` y se aplican a todas las fases anunciadas por el modelo.
+
+El snapshot expone `current_studio_loras.available` y `.active`. Una lista
+vacía con `replace_existing=true` desactiva todos los LoRAs actuales. La acción
+no descarga LoRAs ni acepta que el LLM invente uno incompatible.

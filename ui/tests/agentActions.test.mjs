@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'inspect_queue', 'cancel_task', 'resume_task'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -83,6 +83,30 @@ test('parses bounded Studio references by output name and role', async () => {
     role: 'subject',
     replaceExisting: true,
     removeBackground: true,
+  })
+})
+
+test('parses bounded compatible LoRA selections and an explicit clear', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const configured = parseAgentTurn(JSON.stringify({
+    reply: 'Configuro los LoRAs.',
+    actions: [{
+      type: 'configure_studio_loras',
+      loras: [{ name: 'cinematic_style.safetensors', weight: 1.25 }],
+      replace_existing: true,
+    }],
+  }))
+  assert.deepEqual(configured.actions[0], {
+    type: 'configure_studio_loras',
+    loras: [{ name: 'cinematic_style.safetensors', weight: 1.25 }],
+    replaceExisting: true,
+  })
+  const cleared = parseAgentTurn(JSON.stringify({
+    reply: 'Quito los LoRAs.',
+    actions: [{ type: 'configure_studio_loras', loras: [], replace_existing: true }],
+  }))
+  assert.deepEqual(cleared.actions[0], {
+    type: 'configure_studio_loras', loras: [], replaceExisting: true,
   })
 })
 

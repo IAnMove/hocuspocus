@@ -1,6 +1,9 @@
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
-import type { AgentAttachStudioReferencesAction } from './agentActions'
+import type {
+  AgentAttachStudioReferencesAction,
+  AgentConfigureStudioLorasAction,
+} from './agentActions'
 
 const normalized = (value: string): string => value.trim().toLocaleLowerCase()
 
@@ -72,4 +75,43 @@ export async function attachStudioReferences(
     state.setParam('h3_reference_mode', 'references')
   }
   return `He adjuntado ${files.length} referencia${files.length === 1 ? '' : 's'} de ${action.role === 'style' ? 'estilo/escenario' : 'sujeto'} a Studio usando nombres reales del workspace.`
+}
+
+export async function configureStudioLoras(
+  action: AgentConfigureStudioLorasAction,
+): Promise<string> {
+  let state = useStore.getState()
+  if (state.generationMode !== 'image' && state.generationMode !== 'video') {
+    throw new Error('Los LoRAs sólo pueden configurarse en Studio → Image o Studio → Video.')
+  }
+  const modelType = state.params.model_type
+  if (!modelType) throw new Error('Studio no tiene un modelo seleccionado para consultar LoRAs compatibles.')
+  await state.loadLoras(modelType)
+  state = useStore.getState()
+  const availableByName = new Map(state.availableLoras.map(name => [normalized(name), name]))
+  const resolved = action.loras.map(selection => {
+    const filename = availableByName.get(normalized(selection.name))
+    if (!filename) {
+      throw new Error(`El LoRA “${selection.name}” no está instalado o no es compatible con ${modelType}; no lo he activado.`)
+    }
+    return { ...selection, name: filename }
+  })
+  const requested = new Set(resolved.map(selection => selection.name))
+  if (action.replaceExisting) {
+    for (const active of [...(useStore.getState().params.activated_loras || [])]) {
+      if (!requested.has(active)) useStore.getState().toggleLora(active)
+    }
+  }
+  for (const selection of resolved) {
+    if (!(useStore.getState().params.activated_loras || []).includes(selection.name)) {
+      useStore.getState().toggleLora(selection.name)
+    }
+    const phases = Math.max(1, useStore.getState().modelOptions?.guidance_max_phases || 1)
+    for (let phase = 0; phase < phases; phase += 1) {
+      useStore.getState().setLoraWeight(selection.name, phase, selection.weight)
+    }
+  }
+  const active = useStore.getState().params.activated_loras || []
+  if (!active.length) return 'He desactivado todos los LoRAs de Studio para el modelo actual.'
+  return `He configurado ${active.length} LoRA${active.length === 1 ? '' : 's'} compatible${active.length === 1 ? '' : 's'} en Studio: ${active.join(', ')}.`
 }

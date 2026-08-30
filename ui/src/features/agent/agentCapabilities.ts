@@ -139,6 +139,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['reference_output_names', 'reference_role', 'replace_existing', 'remove_background'],
   },
   {
+    type: 'configure_studio_loras',
+    title: 'Configure compatible Studio LoRAs',
+    purpose: 'Resolve LoRA filenames against the active model, activate them with bounded weights, and optionally replace the current set.',
+    useWhen: 'The user asks to use, change or clear LoRAs in Studio Image or Video.',
+    risk: 'edit',
+    parameters: ['loras', 'replace_existing'],
+  },
+  {
     type: 'inspect_queue',
     title: 'Inspect the canonical queue',
     purpose: 'Refresh the real task list and open Activity so the user sees current jobs.',

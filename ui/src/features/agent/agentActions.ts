@@ -201,6 +201,17 @@ export interface AgentAttachStudioReferencesAction {
   removeBackground: boolean
 }
 
+export interface AgentStudioLoraSelection {
+  name: string
+  weight: number
+}
+
+export interface AgentConfigureStudioLorasAction {
+  type: 'configure_studio_loras'
+  loras: AgentStudioLoraSelection[]
+  replaceExisting: boolean
+}
+
 export interface AgentInspectQueueAction {
   type: 'inspect_queue'
   scope: 'active' | 'all'
@@ -233,6 +244,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
   | AgentAttachStudioReferencesAction
+  | AgentConfigureStudioLorasAction
   | AgentInspectQueueAction
   | AgentCancelTaskAction
   | AgentResumeTaskAction
@@ -276,6 +288,10 @@ export interface AgentAppSnapshot {
     enabled: boolean
   }>
   recent_image_outputs: Array<{ name: string }>
+  current_studio_loras: {
+    available: string[]
+    active: string[]
+  }
 }
 
 const TAB_SET = new Set<string>(AGENT_TABS)
@@ -308,6 +324,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
   attachstudioreferences: 'attach_studio_references',
+  configurestudioloras: 'configure_studio_loras',
   inspectqueue: 'inspect_queue',
   canceltask: 'cancel_task',
   resumetask: 'resume_task',
@@ -416,6 +433,7 @@ const CANONICAL_FIELD_NAMES = [
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
+  'loras', 'weight',
   'dialogue', 'sfx', 'scene', 'actions', 'reply',
 ] as const
 
@@ -456,6 +474,13 @@ function canonicalRecord(raw: Record<string, unknown>): Record<string, unknown> 
   }
   if (Array.isArray(next.comic_panels)) {
     next.comic_panels = next.comic_panels.map(item => (
+      item && typeof item === 'object' && !Array.isArray(item)
+        ? canonicalRecord(item as Record<string, unknown>)
+        : item
+    ))
+  }
+  if (Array.isArray(next.loras)) {
+    next.loras = next.loras.map(item => (
       item && typeof item === 'object' && !Array.isArray(item)
         ? canonicalRecord(item as Record<string, unknown>)
         : item
@@ -690,6 +715,23 @@ function parseAction(value: unknown): AgentAction | null {
       role,
       replaceExisting: raw.replace_existing !== false,
       removeBackground: raw.remove_background === true,
+    }
+  }
+  if (type === 'configure_studio_loras') {
+    const loras: AgentStudioLoraSelection[] = Array.isArray(raw.loras)
+      ? raw.loras.slice(0, 12).flatMap(item => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+        const entry = item as Record<string, unknown>
+        const name = cleanString(entry.name, 300)
+        if (!name) return []
+        return [{ name, weight: optionalNumber(entry.weight, 0, 2) ?? 1 }]
+      })
+      : []
+    if (!loras.length && raw.replace_existing !== true) return null
+    return {
+      type: 'configure_studio_loras',
+      loras,
+      replaceExisting: raw.replace_existing === true,
     }
   }
   if (type === 'inspect_queue') {
@@ -1001,7 +1043,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'inspect_queue', 'cancel_task', 'resume_task'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1049,6 +1091,17 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           reference_role: { type: 'string', enum: ['', 'start_frame', 'subject', 'style'] },
           replace_existing: { type: 'boolean' },
           remove_background: { type: 'boolean' },
+          loras: {
+            type: 'array', maxItems: 12,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                name: { type: 'string', maxLength: 300 },
+                weight: { type: 'number', minimum: 0, maximum: 2 },
+              },
+              required: ['name', 'weight'],
+            },
+          },
           audio_sub_mode: { type: 'string', enum: ['', 'speech', 'music', 'sfx'] },
           preset: { type: 'string', maxLength: 40 },
           sfx_clips: {
@@ -1153,6 +1206,10 @@ export function buildAgentAppSnapshot(): AgentAppSnapshot {
       .filter(output => output.type === 'image')
       .slice(0, 40)
       .map(output => ({ name: output.name })),
+    current_studio_loras: {
+      available: state.availableLoras.slice(0, 120),
+      active: [...(state.params.activated_loras || [])],
+    },
   }
 }
 
@@ -1483,6 +1540,8 @@ export async function executeAgentActions(
                 ? `Regenerando la viñeta ${action.panelNumber} de la página ${action.pageNumber}…`
               : action.type === 'attach_studio_references'
                 ? 'Adjuntando referencias verificadas a Studio…'
+              : action.type === 'configure_studio_loras'
+                ? 'Configurando LoRAs compatibles en Studio…'
               : action.type === 'inspect_queue'
                 ? 'Consultando la cola canónica…'
                 : action.type === 'cancel_task'
@@ -1549,6 +1608,9 @@ export async function executeAgentActions(
       } else if (action.type === 'attach_studio_references') {
         const { attachStudioReferences } = await import('./studioGuidance')
         results.push({ action, ok: true, message: await attachStudioReferences(action) })
+      } else if (action.type === 'configure_studio_loras') {
+        const { configureStudioLoras } = await import('./studioGuidance')
+        results.push({ action, ok: true, message: await configureStudioLoras(action) })
       } else if (action.type === 'inspect_queue') {
         const { inspectCanonicalQueue } = await import('./queueActions')
         results.push({ action, ok: true, message: await inspectCanonicalQueue(action.scope) })
