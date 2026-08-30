@@ -4,6 +4,7 @@ import type {
   AgentApproveStorySectionAction,
   AgentCreateComicAction,
   AgentGenerateStorySectionAction,
+  AgentGenerateSeriesPlanAction,
   AgentStageStoryComicAction,
   AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
@@ -12,7 +13,7 @@ import type {
   AgentCreativeCharacter,
   AgentCreativeLocation,
 } from './agentActions'
-import { notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
+import { notifyAgentSeriesPlanJob, notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
 
 const normalizeName = (value: string): string => value
   .normalize('NFD')
@@ -997,6 +998,61 @@ export async function updateSeriesEpisode(action: AgentUpdateSeriesEpisodeAction
   showLab('series')
   openAgentSeriesSection('episode')
   return `He actualizado y guardado “${verified.title}” en la serie “${saved.title}”; conserva ${verified.script.length} escenas y ${verified.shots.length} tomas existentes.`
+}
+
+export async function generateSeriesPlan(action: AgentGenerateSeriesPlanAction): Promise<string> {
+  if (!action.confirm) throw new Error('Generar un plan de Series Lab requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [api, { useSeriesStore }] = await Promise.all([
+    import('../../api/client'),
+    import('../series/store'),
+  ])
+  await useSeriesStore.getState().loadWorkspace(workspace)
+  await useSeriesStore.getState().saveNow()
+  const library = await api.fetchSeriesLibrary(workspace)
+  const seriesMatches = action.seriesTitle
+    ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
+    : []
+  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  const series = seriesMatches[0]
+    || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
+  if (!series) throw new Error(action.seriesTitle
+    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
+    : 'No hay una serie activa que planificar.')
+  const episodeMatches = action.targetEpisodeTitle
+    ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
+    : []
+  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
+    ? useSeriesStore.getState().activeEpisodeId : ''
+  const episodes = Object.values(series.episodesById)
+  const episode = episodeMatches[0]
+    || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
+    || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
+  if (!episode) throw new Error(action.targetEpisodeTitle
+    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
+    : `“${series.title}” necesita un episodio activo o único.`)
+  if (!episode.premise.trim()) throw new Error(`“${episode.title}” necesita una premisa antes de planificarse.`)
+  if (action.scope === 'shots' && !episode.script.length) {
+    throw new Error('Regenerar shots requiere un guion existente; genera script o complete primero.')
+  }
+
+  await useSeriesStore.getState().openSeries(series.id)
+  useSeriesStore.getState().openEpisode(episode.id)
+  showLab('series')
+  openAgentSeriesSection('episode')
+  const job = await api.startSeriesPlan(workspace, series.id, episode.id, {
+    scope: action.scope,
+    instruction: action.instruction,
+    writingProvider: series.provider.writingProvider,
+    writingModel: series.provider.writingModel,
+    writingBaseUrl: series.provider.writingBaseUrl,
+  })
+  if (job.seriesId !== series.id || job.episodeId !== episode.id) {
+    throw new Error('Series Lab devolvió un job asociado a otro episodio; no lo mostraré como correcto.')
+  }
+  notifyAgentSeriesPlanJob(job)
+  return `He iniciado el plan ${action.scope} de “${episode.title}” (${job.jobId}). El progreso y la propuesta recuperable están abiertos en Series Lab → Episode room; todavía no se ha aplicado ni renderizado.`
 }
 
 function showComics(): void {

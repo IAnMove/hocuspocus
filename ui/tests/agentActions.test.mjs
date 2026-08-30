@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -173,6 +173,26 @@ test('parses a non-empty Series episode patch without destructive fields', async
   assert.equal(turn.actions[0].targetEpisodeTitle, 'El sushi del silencio')
   assert.equal(turn.actions[0].targetDurationSeconds, 1800)
   assert.deepEqual(turn.actions[0].outlineBeats, ['Descubren el local', 'Rompen las reglas', 'El silencio los delata'])
+})
+
+test('requires confirmation and a valid Series planning scope', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Convoco la sala de guion.',
+    actions: [
+      { type: 'generate_series_plan', series_plan_scope: 'render', confirm: true },
+      { type: 'generate_series_plan', series_plan_scope: 'complete', confirm: false },
+      { type: 'generate_series_plan', series_title: 'Mesa para cuatro', target_episode_title: 'El sushi del silencio', series_plan_scope: 'complete', instruction: 'Mantén tres tramas que converjan.', confirm: true },
+    ],
+  }))
+  assert.deepEqual(turn.actions, [{
+    type: 'generate_series_plan',
+    seriesTitle: 'Mesa para cuatro',
+    targetEpisodeTitle: 'El sushi del silencio',
+    scope: 'complete',
+    instruction: 'Mantén tres tramas que converjan.',
+    confirm: true,
+  }])
 })
 
 test('parses bounded Studio references by output name and role', async () => {

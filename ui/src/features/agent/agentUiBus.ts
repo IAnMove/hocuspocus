@@ -1,11 +1,15 @@
+import type { SeriesJobStatus } from '../series/types'
+
 export type AgentStorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'productions'
 export type AgentSeriesSection = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
 
 const STORY_SECTION_EVENT = 'hocuspocus:story-section'
 const SERIES_SECTION_EVENT = 'hocuspocus:series-section'
 const STORY_DRAFT_EVENT = 'hocuspocus:story-draft-ready'
+const SERIES_PLAN_JOB_EVENT = 'hocuspocus:series-plan-job'
 let requestedStorySection: AgentStorySection | null = null
 let requestedSeriesSection: AgentSeriesSection | null = null
+let requestedSeriesPlanJob: SeriesJobStatus | null = null
 
 export function openAgentStorySection(section: AgentStorySection): void {
   requestedStorySection = section
@@ -52,6 +56,21 @@ export function listenForAgentStoryDraft(listener: (projectId: string) => void):
   }
   window.addEventListener(STORY_DRAFT_EVENT, handler)
   return () => window.removeEventListener(STORY_DRAFT_EVENT, handler)
+}
+
+export function notifyAgentSeriesPlanJob(job: SeriesJobStatus): void {
+  requestedSeriesPlanJob = job
+  window.dispatchEvent(new CustomEvent(SERIES_PLAN_JOB_EVENT, { detail: { job } }))
+}
+
+export function listenForAgentSeriesPlanJob(listener: (job: SeriesJobStatus) => void): () => void {
+  const handler = (event: Event) => {
+    const job = (event as CustomEvent<{ job?: SeriesJobStatus }>).detail?.job
+    if (job) listener(job)
+  }
+  window.addEventListener(SERIES_PLAN_JOB_EVENT, handler)
+  if (requestedSeriesPlanJob) listener(requestedSeriesPlanJob)
+  return () => window.removeEventListener(SERIES_PLAN_JOB_EVENT, handler)
 }
 
 const ACTIVITY_DETAILS_EVENT = 'hocuspocus:activity-details'

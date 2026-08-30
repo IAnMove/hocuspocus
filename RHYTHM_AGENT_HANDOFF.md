@@ -1168,3 +1168,17 @@ backend cada campo solicitado. Preserva script, shots, attempts, canonSnapshot,
 delta de canon y producción existentes, igual que los inputs manuales de
 Episode room. Finalmente abre Series Lab → Episode room y cuenta las escenas y
 tomas conservadas.
+
+## 39. Planificación recuperable de Series Lab (2026-08-30)
+
+`generate_series_plan` exige `confirm=true` y soporta `outline`, `script`,
+`shots` y `complete`. Resuelve serie/episodio sin ambigüedad, fuerza el guardado
+previo del episodio y llama a `api.startSeriesPlan` con el proveedor configurado.
+`shots` se bloquea si todavía no existe guion.
+
+`agentUiBus` conserva y emite el job devuelto; `SeriesEpisodePanel` lo adopta
+cuando corresponde al episodio abierto, incluso si el panel se montó después de
+la acción. Por tanto se ven polling, cancelación, errores y la propuesta
+recuperable normales de Episode room. La acción valida `seriesId/episodeId` del
+job y sólo informa que comenzó: no aplica la propuesta, no modifica canon y no
+renderiza tomas.

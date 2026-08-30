@@ -155,6 +155,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['series_title', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline', 'outline_beats', 'target_duration_seconds'],
   },
   {
+    type: 'generate_series_plan',
+    title: 'Generate a recoverable Series episode plan',
+    purpose: 'Start the canonical Series writer for outline, script, shots or a complete plan and surface its live recoverable job in Episode room.',
+    useWhen: 'The user explicitly asks Series Lab to generate or regenerate episode planning material.',
+    risk: 'compute',
+    parameters: ['series_title', 'target_episode_title', 'series_plan_scope', 'instruction', 'confirm'],
+  },
+  {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
     purpose: 'Open Comics and fill characters, panels and lettering. Do not draw panel art unless asked.',

@@ -226,6 +226,15 @@ export interface AgentUpdateSeriesEpisodeAction {
   targetDurationSeconds?: number
 }
 
+export interface AgentGenerateSeriesPlanAction {
+  type: 'generate_series_plan'
+  seriesTitle: string
+  targetEpisodeTitle: string
+  scope: 'outline' | 'script' | 'shots' | 'complete'
+  instruction: string
+  confirm: true
+}
+
 export interface AgentComicPanel {
   caption: string
   dialogue: string
@@ -324,6 +333,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentStageStoryComicAction
   | AgentCreateSeriesEpisodeAction
   | AgentUpdateSeriesEpisodeAction
+  | AgentGenerateSeriesPlanAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
@@ -397,6 +407,9 @@ const STORY_GENERATION_SCOPES = new Set<AgentGenerateStorySectionAction['scope']
 const STORY_APPROVAL_SECTIONS = new Set<AgentApproveStorySectionAction['section']>([
   'overview', 'world', 'characters', 'relationships', 'structure',
 ])
+const SERIES_PLAN_SCOPES = new Set<AgentGenerateSeriesPlanAction['scope']>([
+  'outline', 'script', 'shots', 'complete',
+])
 const STORY_SECTIONS = new Set<AgentStorySection>([
   'overview', 'world', 'characters', 'relationships', 'structure', 'productions',
 ])
@@ -423,6 +436,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   stagestorycomic: 'stage_story_comic',
   createseriesepisode: 'create_series_episode',
   updateseriesepisode: 'update_series_episode',
+  generateseriesplan: 'generate_series_plan',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
@@ -530,7 +544,7 @@ const CANONICAL_FIELD_NAMES = [
   'type', 'tab', 'story_section', 'series_section', 'prompt', 'model_type',
   'duration_seconds', 'resolution_preset', 'resolution', 'aspect_ratio',
   'negative_prompt', 'seed', 'inference_steps', 'guidance_scale', 'output_count',
-  'audio_direction', 'turbo', 'title', 'target_story_title', 'story_generation_scope', 'instruction', 'direction', 'page_count', 'panels_per_page', 'project_type', 'creative_brief',
+  'audio_direction', 'turbo', 'title', 'target_story_title', 'story_generation_scope', 'series_plan_scope', 'instruction', 'direction', 'page_count', 'panels_per_page', 'project_type', 'creative_brief',
   'premise', 'logline', 'synopsis', 'theme', 'ending', 'genre', 'tone',
   'visual_style', 'world_summary', 'language', 'series_title', 'series_premise',
   'series_logline', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline',
@@ -863,6 +877,19 @@ function parseAction(value: unknown): AgentAction | null {
     return action.episodeTitle || action.episodePremise || action.episodeLogline
       || action.outlineBeats.length || action.targetDurationSeconds !== undefined
       ? action : null
+  }
+  if (type === 'generate_series_plan') {
+    if (raw.confirm !== true) return null
+    const scope = cleanString(raw.series_plan_scope, 40) as AgentGenerateSeriesPlanAction['scope']
+    if (!SERIES_PLAN_SCOPES.has(scope)) return null
+    return {
+      type: 'generate_series_plan',
+      seriesTitle: cleanString(raw.series_title, 300),
+      targetEpisodeTitle: cleanString(raw.target_episode_title, 300),
+      scope,
+      instruction: cleanString(raw.instruction, 4_000),
+      confirm: true,
+    }
   }
   if (type === 'create_comic') {
     const title = cleanString(raw.title, 300)
@@ -1273,7 +1300,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1293,6 +1320,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           title: { type: 'string', maxLength: 300 },
           target_story_title: { type: 'string', maxLength: 300 },
           story_generation_scope: { type: 'string', enum: ['', 'all', 'overview', 'world', 'characters', 'relationships', 'structure'] },
+          series_plan_scope: { type: 'string', enum: ['', 'outline', 'script', 'shots', 'complete'] },
           instruction: { type: 'string', maxLength: 4_000 },
           direction: { type: 'string', maxLength: 4_000 },
           page_count: { type: 'integer', minimum: 0, maximum: 100 },
@@ -1789,6 +1817,8 @@ export async function executeAgentActions(
               ? 'Preparando la serie y el nuevo episodio…'
             : action.type === 'update_series_episode'
               ? 'Actualizando y guardando el episodio…'
+            : action.type === 'generate_series_plan'
+              ? `Invocando el plan de Series Lab (${action.scope})…`
               : action.type === 'create_comic'
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
@@ -1871,6 +1901,9 @@ export async function executeAgentActions(
       } else if (action.type === 'update_series_episode') {
         const { updateSeriesEpisode } = await import('./labActions')
         results.push({ action, ok: true, message: await updateSeriesEpisode(action) })
+      } else if (action.type === 'generate_series_plan') {
+        const { generateSeriesPlan } = await import('./labActions')
+        results.push({ action, ok: true, message: await generateSeriesPlan(action) })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledComic(action) })
