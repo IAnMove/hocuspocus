@@ -1204,3 +1204,14 @@ escenas y tomas guardadas; no renderiza y no acepta/rechaza el delta de canon.
 - Llama al render recuperable canónico de Series Lab con los ajustes de vídeo guardados y la seed opcional. Después verifica que el job devuelto pertenece al workspace/serie/episodio solicitado.
 - El job se entrega al panel `Series Lab → Render & Review`, incluido cuando el panel se monta después de la acción, para que el progreso real sea visible.
 - Esta implementación sólo conecta la acción. Durante el desarrollo no se lanzó ningún render ni se consumió GPU.
+
+## 42. Wizard: revisión de intentos de Series Lab
+
+`review_series_attempts` replica las decisiones disponibles en Render & Review y exige `confirm=true`. Usa `shot_numbers` humanos en vez de obligar al usuario a conocer IDs internos.
+
+- `review_decision=approve` + `review_scope=selected_latest` aprueba el último intento completado, no rechazado y reproducible de cada número de toma solicitado.
+- `review_decision=approve` + `review_scope=all_latest` replica **Approve all latest** mediante el endpoint bulk atómico.
+- `review_decision=reject` sólo admite una toma con `selected_latest`, igual que el botón de rechazo individual de la UI.
+- `attempt_id` es opcional para seleccionar una alternativa histórica concreta y sólo se acepta con una toma.
+- Se rechazan intentos incompletos, sin asset, ya rechazados o destinos ambiguos. Tampoco se permite rechazar por esta vía el intento que ya está aprobado como montaje final.
+- Tras verificar el resultado del backend, el store se recarga y el Wizard abre `Series Lab → Render & Review`.

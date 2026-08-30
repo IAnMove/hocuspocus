@@ -179,6 +179,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['series_title', 'target_episode_title', 'render_mode', 'shot_ids', 'seed', 'confirm'],
   },
   {
+    type: 'review_series_attempts',
+    title: 'Approve or reject Series render attempts',
+    purpose: 'Approve the latest playable attempt for selected shot numbers or every eligible shot, or reject one concrete completed attempt, then open Render & Review.',
+    useWhen: 'The user explicitly accepts or rejects rendered Series episode shots after reviewing them.',
+    risk: 'edit',
+    parameters: ['series_title', 'target_episode_title', 'review_decision', 'review_scope', 'shot_numbers', 'attempt_id', 'confirm'],
+  },
+  {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
     purpose: 'Open Comics and fill characters, panels and lettering. Do not draw panel art unless asked.',

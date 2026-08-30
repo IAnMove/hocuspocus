@@ -253,6 +253,17 @@ export interface AgentRenderSeriesShotsAction {
   confirm: true
 }
 
+export interface AgentReviewSeriesAttemptsAction {
+  type: 'review_series_attempts'
+  seriesTitle: string
+  targetEpisodeTitle: string
+  decision: 'approve' | 'reject'
+  scope: 'selected_latest' | 'all_latest'
+  shotNumbers: number[]
+  attemptId: string
+  confirm: true
+}
+
 export interface AgentComicPanel {
   caption: string
   dialogue: string
@@ -354,6 +365,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateSeriesPlanAction
   | AgentApplySeriesPlanAction
   | AgentRenderSeriesShotsAction
+  | AgentReviewSeriesAttemptsAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
@@ -433,6 +445,8 @@ const SERIES_PLAN_SCOPES = new Set<AgentGenerateSeriesPlanAction['scope']>([
 const SERIES_RENDER_MODES = new Set<AgentRenderSeriesShotsAction['mode']>([
   'selected', 'missing', 'failed', 'all',
 ])
+const SERIES_REVIEW_DECISIONS = new Set<AgentReviewSeriesAttemptsAction['decision']>(['approve', 'reject'])
+const SERIES_REVIEW_SCOPES = new Set<AgentReviewSeriesAttemptsAction['scope']>(['selected_latest', 'all_latest'])
 const STORY_SECTIONS = new Set<AgentStorySection>([
   'overview', 'world', 'characters', 'relationships', 'structure', 'productions',
 ])
@@ -462,6 +476,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   generateseriesplan: 'generate_series_plan',
   applyseriesplan: 'apply_series_plan',
   renderseriesshots: 'render_series_shots',
+  reviewseriesattempts: 'review_series_attempts',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
@@ -513,6 +528,14 @@ const stringArray = (value: unknown, maxItems: number, maxLength: number): strin
       const text = cleanString(item, maxLength)
       return text ? [text] : []
     })
+    : []
+)
+
+const positiveIntegerArray = (value: unknown, maxItems: number): number[] => (
+  Array.isArray(value)
+    ? [...new Set(value.slice(0, maxItems).filter(item => (
+      typeof item === 'number' && Number.isInteger(item) && item > 0 && item <= 10_000
+    )))]
     : []
 )
 
@@ -574,7 +597,8 @@ const CANONICAL_FIELD_NAMES = [
   'visual_style', 'world_summary', 'language', 'series_title', 'series_premise',
   'series_logline', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline',
   'target_duration_seconds', 'create_if_missing', 'known_universe',
-  'queue_scope', 'task_id', 'job_id', 'shot_ids', 'render_mode', 'confirm', 'characters', 'locations', 'outline_beats',
+  'queue_scope', 'task_id', 'job_id', 'shot_ids', 'shot_numbers', 'attempt_id', 'render_mode',
+  'review_decision', 'review_scope', 'confirm', 'characters', 'locations', 'outline_beats',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
@@ -939,6 +963,28 @@ function parseAction(value: unknown): AgentAction | null {
       mode,
       shotIds,
       seed: optionalNumber(raw.seed, -1, 2_147_483_647, true),
+      confirm: true,
+    }
+  }
+  if (type === 'review_series_attempts') {
+    if (raw.confirm !== true) return null
+    const decision = cleanString(raw.review_decision, 30) as AgentReviewSeriesAttemptsAction['decision']
+    const scope = cleanString(raw.review_scope, 30) as AgentReviewSeriesAttemptsAction['scope']
+    if (!SERIES_REVIEW_DECISIONS.has(decision) || !SERIES_REVIEW_SCOPES.has(scope)) return null
+    const shotNumbers = positiveIntegerArray(raw.shot_numbers, 200)
+    const attemptId = cleanString(raw.attempt_id, 160)
+    if (scope === 'selected_latest' && !shotNumbers.length) return null
+    if (scope === 'all_latest' && (decision !== 'approve' || shotNumbers.length || attemptId)) return null
+    if (decision === 'reject' && (shotNumbers.length !== 1 || scope !== 'selected_latest')) return null
+    if (attemptId && shotNumbers.length !== 1) return null
+    return {
+      type: 'review_series_attempts',
+      seriesTitle: cleanString(raw.series_title, 300),
+      targetEpisodeTitle: cleanString(raw.target_episode_title, 300),
+      decision,
+      scope,
+      shotNumbers,
+      attemptId,
       confirm: true,
     }
   }
@@ -1351,7 +1397,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1403,6 +1449,10 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           job_id: { type: 'string', maxLength: 160 },
           render_mode: { type: 'string', enum: ['', 'selected', 'missing', 'failed', 'all'] },
           shot_ids: { type: 'array', maxItems: 200, items: { type: 'string', maxLength: 160 } },
+          shot_numbers: { type: 'array', maxItems: 200, items: { type: 'integer', minimum: 1, maximum: 10_000 } },
+          attempt_id: { type: 'string', maxLength: 160 },
+          review_decision: { type: 'string', enum: ['', 'approve', 'reject'] },
+          review_scope: { type: 'string', enum: ['', 'selected_latest', 'all_latest'] },
           confirm: { type: 'boolean' },
           page_number: { type: 'integer', minimum: 0, maximum: 100 },
           panel_number: { type: 'integer', minimum: 0, maximum: 100 },
@@ -1877,6 +1927,8 @@ export async function executeAgentActions(
               ? 'Aplicando la propuesta de Series Lab al episodio…'
             : action.type === 'render_series_shots'
               ? `Encolando render de Series Lab (${action.mode})…`
+            : action.type === 'review_series_attempts'
+              ? `${action.decision === 'approve' ? 'Aprobando' : 'Rechazando'} intentos de Series Lab…`
               : action.type === 'create_comic'
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
@@ -1968,6 +2020,9 @@ export async function executeAgentActions(
       } else if (action.type === 'render_series_shots') {
         const { renderSeriesShots } = await import('./labActions')
         results.push({ action, ok: true, message: await renderSeriesShots(action) })
+      } else if (action.type === 'review_series_attempts') {
+        const { reviewSeriesAttempts } = await import('./labActions')
+        results.push({ action, ok: true, message: await reviewSeriesAttempts(action) })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledComic(action) })

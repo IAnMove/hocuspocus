@@ -7,6 +7,7 @@ import type {
   AgentGenerateSeriesPlanAction,
   AgentApplySeriesPlanAction,
   AgentRenderSeriesShotsAction,
+  AgentReviewSeriesAttemptsAction,
   AgentStageStoryComicAction,
   AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
@@ -1182,6 +1183,113 @@ export async function renderSeriesShots(action: AgentRenderSeriesShotsAction): P
   showLab('series')
   openAgentSeriesSection('review')
   return `He encolado ${eligible.length} shots de “${episode.title}” (${job.jobId}) en modo ${action.mode}. El progreso recuperable está abierto en Series Lab → Render & review.`
+}
+
+export async function reviewSeriesAttempts(action: AgentReviewSeriesAttemptsAction): Promise<string> {
+  if (!action.confirm) throw new Error('Revisar intentos de Series Lab requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [api, { useSeriesStore }] = await Promise.all([
+    import('../../api/client'),
+    import('../series/store'),
+  ])
+  await useSeriesStore.getState().loadWorkspace(workspace)
+  await useSeriesStore.getState().saveNow()
+  const library = await api.fetchSeriesLibrary(workspace)
+  const seriesMatches = action.seriesTitle
+    ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
+    : []
+  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  const series = seriesMatches[0]
+    || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
+  if (!series) throw new Error(action.seriesTitle
+    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
+    : 'No hay una serie activa cuyos intentos revisar.')
+  const episodeMatches = action.targetEpisodeTitle
+    ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
+    : []
+  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
+    ? useSeriesStore.getState().activeEpisodeId : ''
+  const episodes = Object.values(series.episodesById)
+  const episode = episodeMatches[0]
+    || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
+    || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
+  if (!episode) throw new Error(action.targetEpisodeTitle
+    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
+    : `“${series.title}” necesita un episodio activo o único.`)
+
+  const shotsByOrder = new Map<number, typeof episode.shots[number]>()
+  for (const shot of episode.shots) {
+    if (shotsByOrder.has(shot.order)) throw new Error(`El episodio tiene más de un shot con el número ${shot.order}; no se puede resolver de forma segura.`)
+    shotsByOrder.set(shot.order, shot)
+  }
+  const selectedShots = action.scope === 'all_latest'
+    ? episode.shots
+    : action.shotNumbers.map(number => {
+        const shot = shotsByOrder.get(number)
+        if (!shot) throw new Error(`No existe el shot ${number} en “${episode.title}”.`)
+        return shot
+      })
+
+  if (action.decision === 'approve') {
+    const selections = selectedShots.flatMap(shot => {
+      const attempt = action.attemptId
+        ? shot.attempts.find(item => item.id === action.attemptId)
+        : [...shot.attempts].reverse().find(item => (
+            item.status === 'completed'
+            && item.reviewDecision !== 'rejected'
+            && item.outputAssetIds.some(id => Boolean(series.assets[id]))
+          ))
+      if (!attempt) {
+        if (action.attemptId) throw new Error(`El intento ${action.attemptId} no pertenece al shot ${shot.order}.`)
+        if (action.scope === 'selected_latest') throw new Error(`El shot ${shot.order} no tiene un intento completado y reproducible que aprobar.`)
+        return []
+      }
+      if (attempt.status !== 'completed' || attempt.reviewDecision === 'rejected') {
+        throw new Error(`El intento ${attempt.id} del shot ${shot.order} no es aprobable.`)
+      }
+      if (!attempt.outputAssetIds.some(id => Boolean(series.assets[id]))) {
+        throw new Error(`El intento ${attempt.id} del shot ${shot.order} no tiene un asset reproducible.`)
+      }
+      return attempt.id === shot.approvedAttemptId ? [] : [{ shotId: shot.id, attemptId: attempt.id }]
+    })
+    if (!selections.length) throw new Error('No hay nuevos intentos elegibles que aprobar; las tomas resueltas ya están aprobadas o no tienen vídeo válido.')
+    const result = await api.approveSeriesAttemptsBulk(workspace, series.id, episode.id, selections)
+    if (result.seriesId !== series.id || result.episodeId !== episode.id) {
+      throw new Error('Series Lab aprobó intentos para otro destino; recarga antes de continuar.')
+    }
+    await useSeriesStore.getState().reload()
+    await useSeriesStore.getState().openSeries(series.id)
+    useSeriesStore.getState().openEpisode(episode.id)
+    showLab('series')
+    openAgentSeriesSection('review')
+    return `He aprobado ${selections.length} intento${selections.length === 1 ? '' : 's'} en “${episode.title}” y he abierto Render & Review.`
+  }
+
+  const shot = selectedShots[0]
+  const attempt = action.attemptId
+    ? shot.attempts.find(item => item.id === action.attemptId)
+    : [...shot.attempts].reverse().find(item => item.status === 'completed' && item.reviewDecision !== 'rejected')
+  if (!attempt) throw new Error(action.attemptId
+    ? `El intento ${action.attemptId} no pertenece al shot ${shot.order}.`
+    : `El shot ${shot.order} no tiene un intento completado pendiente de rechazo.`)
+  if (attempt.status !== 'completed' || attempt.reviewDecision === 'rejected') {
+    throw new Error(`El intento ${attempt.id} del shot ${shot.order} no se puede rechazar.`)
+  }
+  if (shot.approvedAttemptId === attempt.id) {
+    throw new Error(`El intento ${attempt.id} ya es el aprobado del shot ${shot.order}; la UI no permite rechazar el montaje final sin elegir antes otra toma.`)
+  }
+  const rejectedShot = await api.rejectSeriesAttempt(workspace, series.id, episode.id, shot.id, attempt.id)
+  const rejectedAttempt = rejectedShot.attempts.find(item => item.id === attempt.id)
+  if (rejectedShot.id !== shot.id || rejectedAttempt?.reviewDecision !== 'rejected') {
+    throw new Error('Series Lab no confirmó el rechazo solicitado; recarga antes de continuar.')
+  }
+  await useSeriesStore.getState().reload()
+  await useSeriesStore.getState().openSeries(series.id)
+  useSeriesStore.getState().openEpisode(episode.id)
+  showLab('series')
+  openAgentSeriesSection('review')
+  return `He rechazado el intento ${attempt.id} del shot ${shot.order} en “${episode.title}” y he abierto Render & Review.`
 }
 
 function showComics(): void {
