@@ -1287,3 +1287,9 @@ La acción llama al arranque canónico de Director y no declara éxito hasta rec
 La cola canónica ya publica cada pipeline de Director como una tarea `task-director-*`. El Wizard muestra ahora también el `pipeline_id` en `inspect_queue` y acepta tanto ese ID real como el ID canónico al resolver cancelar, reanudar o reintentar. La resolución sigue siendo exacta y rechaza ambigüedades.
 
 Cancelar usa una sola vez el adaptador canónico de Director y sincroniza el panel local, evitando enviar después el mismo ID al cancelador genérico de Studio. Reanudar reconecta Director al pipeline, restaura polling y abre sus datos guardados. Así el ID devuelto por `start_director_production` sirve directamente en la conversación posterior sin obligar al usuario a traducirlo.
+
+## 53. Wizard: cómics multipágina y proveedor MiniMax
+
+`create_comic` acepta ahora `comic_pages`: hasta 30 páginas estructuradas, cada una con título/etapa y sus propias viñetas. El campo plano `comic_panels` queda como compatibilidad para cómics de una página. El ejecutor construye todas las páginas reales mediante `projectFromPlan`, guarda el recuento correcto y nunca vuelve a afirmar que creó páginas que sólo describió en prosa.
+
+Tanto `create_comic` como `generate_comic` admiten `image_provider=minimax`; seleccionan `MiniMax image-01`, que ya estaba soportado por Comic Director. Por ello el Wizard puede encadenar en un mismo turno la creación desde cero y, si el usuario pide explícitamente generar, `generate_comic confirm=true` para dibujar todas las viñetas pendientes sin clics manuales. MiniMax es remoto y no debe describirse como trabajo de la GPU local.

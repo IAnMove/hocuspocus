@@ -524,6 +524,9 @@ export function exampleActionsFor(
         voice: '',
       })),
       panels: comic.panels,
+      pages: [],
+      imageProvider: 'profile',
+      imageModel: '',
     }],
   }
 }

@@ -269,18 +269,18 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
   {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
-    purpose: 'Open Comics and fill characters, panels and lettering. Do not draw panel art unless asked.',
+    purpose: 'Create a new one- or multi-page Comics Director project with exact page stages, panels, lettering and an explicit local/MiniMax image provider. Do not draw panel art unless asked.',
     useWhen: 'The user asks for a comic, tebeo, strip or a comic example.',
     risk: 'edit',
-    parameters: ['title', 'synopsis', 'visual_style', 'language', 'characters', 'comic_panels'],
+    parameters: ['title', 'synopsis', 'visual_style', 'language', 'characters', 'comic_pages', 'comic_panels', 'image_provider', 'model_type'],
   },
   {
     type: 'generate_comic',
     title: 'Generate comic panel artwork',
-    purpose: 'Queue local/MiniMax images for every unfinished panel of the open Comics Director plan. Panels run one after another on the shared GPU. There is no Render page button.',
+    purpose: 'Generate every unfinished panel of the open Comics Director plan with its saved provider or an explicit local/MiniMax override. Local work uses the shared GPU; MiniMax uses its external API. There is no Render page button.',
     useWhen: 'The user explicitly asks to launch, draw, generate or render the open comic panels.',
     risk: 'compute',
-    parameters: ['confirm'],
+    parameters: ['image_provider', 'model_type', 'confirm'],
   },
   {
     type: 'generate_comic_panel',

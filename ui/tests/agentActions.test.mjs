@@ -446,6 +446,7 @@ test('a filled comic includes Director brief, structure, continuity and editable
         desire: 'Encontrar el pueblo borrado', flaw: 'No sabe improvisar',
         appearance: 'Abrigo rojo, pelo negro corto y cartera de mapas', voice: 'Precisa y seca',
       }],
+      pages: [], imageProvider: 'profile', imageModel: '',
       panels: [
         { caption: 'El mapa despierta.', dialogue: 'Eso no estaba ahí.', sfx: 'TIC', scene: 'Ada abre un mapa en su taller.' },
         { caption: 'Norte cambia.', dialogue: 'Entonces iremos al oeste.', sfx: 'CLAC', scene: 'La aguja gira hacia una puerta tapiada.' },
@@ -468,6 +469,21 @@ test('a filled comic includes Director brief, structure, continuity and editable
   assert.ok(project.characters[0].wardrobe)
   assert.ok(project.characters[0].visualNotes)
   assert.ok(project.pages[0].elements.some(element => element.type === 'text'))
+})
+
+test('parses a multi-page MiniMax comic and a confirmed all-images render', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({ reply: 'Creo y dibujo el grimorio.', actions: [{
+    type: 'create_comic', title: 'Vida por etapas', synopsis: 'Biografía visual.', image_provider: 'minimax', model_type: 'image-01',
+    comic_pages: [
+      { title: 'Presentación', stage: 'Quién es', comic_panels: [{ caption: 'Comienza.', dialogue: '', sfx: '', scene: 'Retrato introductorio.' }] },
+      { title: 'Infancia', stage: 'Primeros años', comic_panels: [{ caption: 'Aprende.', dialogue: '', sfx: '', scene: 'Un niño ante un ordenador.' }] },
+    ],
+  }, { type: 'generate_comic', image_provider: 'minimax', confirm: true }] }))
+  assert.equal(turn.actions[0].type, 'create_comic')
+  assert.equal(turn.actions[0].pages.length, 2)
+  assert.equal(turn.actions[0].imageProvider, 'minimax')
+  assert.deepEqual(turn.actions[1], { type: 'generate_comic', imageProvider: 'minimax', imageModel: '', confirm: true })
 })
 
 test('drops cancel_task unless confirm is true and repairs an explicit cancel request', async () => {

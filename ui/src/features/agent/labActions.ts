@@ -1775,8 +1775,10 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
   const panels = action.panels.length ? action.panels : [
     { caption: action.synopsis || action.title, dialogue: '', sfx: '', scene: action.synopsis },
   ]
-  const ending = panels.at(-1)?.dialogue
-    || panels.at(-1)?.caption
+  const requestedPages = action.pages.length ? action.pages : [{ title: 'Página 1', stage: '', panels }]
+  const allPanels = requestedPages.flatMap(page => page.panels)
+  const ending = allPanels.at(-1)?.dialogue
+    || allPanels.at(-1)?.caption
     || `El conflicto de “${action.title}” se resuelve con una consecuencia visual clara.`
   const castBible = characters.map(character => [
     `${character.name} (${character.role || 'personaje'})`,
@@ -1787,13 +1789,13 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
   const storyContext = [
     `Premisa: ${action.synopsis || action.title}`,
     `Personajes:\n${castBible}`,
-    `Progresión: ${panels.map((panel, index) => `${index + 1}. ${panel.scene || panel.caption || panel.dialogue}`).join(' → ')}`,
+    `Progresión: ${requestedPages.map((page, index) => `${index + 1}. ${page.title}: ${page.stage || page.panels[0]?.scene || page.panels[0]?.caption}`).join(' → ')}`,
     `Final: ${ending}`,
   ].join('\n\n')
   const worldContext = [
     `Universo visual de “${action.title}”.`,
     action.synopsis,
-    `Mantener localizaciones, época, escala y utilería coherentes durante las ${panels.length} viñetas.`,
+    `Mantener localizaciones, época, escala y utilería coherentes durante ${requestedPages.length} páginas y ${allPanels.length} viñetas.`,
   ].filter(Boolean).join(' ')
   const forbiddenElements = [
     'No cambiar el diseño, la edad aparente, la paleta ni el vestuario de los personajes entre viñetas.',
@@ -1810,22 +1812,21 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
     language: action.language || 'Español',
     styleBible: action.styleName || 'Tira cómica clara, 4 viñetas',
     characters,
-    storyStructure: [{
-      pageNumber: 1,
-      stage: 'Planteamiento, complicación y remate',
-      goal: action.synopsis || `Contar “${action.title}” con una progresión clara y legible.`,
-      turningPoint: ending,
-    }],
-    pages: [{
-      pageNumber: 1,
+    storyStructure: requestedPages.map((page, pageIndex) => ({
+      pageNumber: pageIndex + 1, stage: page.stage || page.title,
+      goal: `Representar con claridad la etapa “${page.title}”.`,
+      turningPoint: page.panels.at(-1)?.dialogue || page.panels.at(-1)?.caption || page.stage || page.title,
+    })),
+    pages: requestedPages.map((page, pageIndex) => ({
+      pageNumber: pageIndex + 1,
       layoutHint: 'grid' as const,
-      panels: panels.map((panel, index) => {
+      panels: page.panels.map((panel, index) => {
         const beat = panel.scene || panel.caption || panel.dialogue || action.synopsis
         const who = characters.map(character => `${character.name}: ${character.description}`).join('; ')
         return {
           id: comicId('panel-plan'),
           order: index + 1,
-          narrativeRole: `Viñeta ${index + 1}`,
+          narrativeRole: `${page.title} · viñeta ${index + 1}`,
           sceneDescription: beat,
           imagePrompt: [
             `Single comic panel for "${action.title}".`,
@@ -1842,7 +1843,7 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
           continuityNotes: `Conservar identidad, vestuario, paleta, iluminación y eje espacial respecto a la viñeta ${Math.max(1, index)}.`,
         }
       }),
-    }],
+    })),
   }
   const project = projectFromPlan(plan)
   if (action.styleName) {
@@ -1853,10 +1854,10 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
     }
   }
   const studio = useStore.getState()
-  const provider = studio.productionProfile.image.provider === 'minimax' ? 'minimax' as const : 'maestro' as const
-  const imageModel = studio.productionProfile.image.model
-    || studio.selectedModelPerMode.image
-    || ''
+  const provider = action.imageProvider === 'minimax' ? 'minimax' as const
+    : action.imageProvider === 'maestro' ? 'maestro' as const
+      : studio.productionProfile.image.provider === 'minimax' ? 'minimax' as const : 'maestro' as const
+  const imageModel = action.imageModel || (provider === 'minimax' ? 'image-01' : studio.productionProfile.image.model || studio.selectedModelPerMode.image || '')
   project.director = {
     planId,
     provider,
@@ -1866,10 +1867,10 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
       premise: action.synopsis || action.title,
       storyContext,
       productionMode: 'comic',
-      pageCount: 1,
+      pageCount: requestedPages.length,
       language: action.language || 'Español',
       format: project.format.preset,
-      panelsPerPage: panels.length,
+      panelsPerPage: Math.max(...requestedPages.map(page => page.panels.length)),
       genre: 'Comedy',
       tone: 'Warm',
       audience: 'General',
@@ -1891,10 +1892,11 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
   useComicStore.getState().setProject(project)
   useComicStore.setState({ dirty: true })
   showComics()
-  return `He abierto Comics con “${project.title}”, ${characters.length} personajes y ${panels.length} viñetas con globos. El plan de Director está listo. Dime **lánzalo** para dibujar las viñetas, o pulsa **Generate all images** en Comic Director.`
+  return `He creado desde cero “${project.title}” con ${requestedPages.length} páginas, ${characters.length} personajes y ${allPanels.length} viñetas. Comic Director usará ${provider === 'minimax' ? 'MiniMax image-01' : imageModel || 'el modelo local seleccionado'}. No he generado imágenes todavía.`
 }
 
 export async function generateFilledComicArtwork(
+  action: import('./agentActions').AgentGenerateComicAction,
   onProgress?: (message: string) => void,
 ): Promise<string> {
   showComics()
@@ -2031,13 +2033,20 @@ export async function generateFilledComicArtwork(
   if (!useComicStore.getState().project.director) {
     throw new Error('No hay un cómic con plan de Director abierto. Pide primero un cómic de ejemplo o crea uno con tema.')
   }
+  if (action.imageProvider !== 'keep' || action.imageModel) {
+    const current = useComicStore.getState().project.director!
+    const provider = action.imageProvider === 'keep' ? current.provider : action.imageProvider
+    const imageModel = action.imageModel || (provider === 'minimax' ? 'image-01' : current.imageModel)
+    useComicStore.getState().patchProject({ director: { ...current, provider, imageModel, input: { ...current.input, provider, imageModel } } })
+  }
   const result = await generateDirectorArtwork({
     onProgress: (message, current, total) => {
       onProgress?.(`${message} (${current}/${total})`)
     },
   })
   if (!result.total) return 'Todas las viñetas de este cómic ya tenían dibujo.'
-  return `He dibujado ${result.generated} viñetas en la cola local, una detrás de otra en la misma GPU. Aparecen dentro de cada recuadro al terminar.`
+  const provider = useComicStore.getState().project.director?.provider
+  return `He dibujado ${result.generated} viñetas con ${provider === 'minimax' ? 'MiniMax image-01' : 'el proveedor local configurado'}. Aparecen dentro de cada recuadro al terminar.`
 }
 
 export async function generateComicPanelArtwork(

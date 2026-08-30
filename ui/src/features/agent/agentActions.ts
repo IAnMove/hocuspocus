@@ -354,6 +354,7 @@ export interface AgentComicPanel {
   sfx: string
   scene?: string
 }
+export interface AgentComicPage { title: string; stage: string; panels: AgentComicPanel[] }
 
 export interface AgentCreateComicAction {
   type: 'create_comic'
@@ -363,10 +364,15 @@ export interface AgentCreateComicAction {
   styleName: string
   characters: AgentCreativeCharacter[]
   panels: AgentComicPanel[]
+  pages: AgentComicPage[]
+  imageProvider: 'profile' | 'maestro' | 'minimax'
+  imageModel: string
 }
 
 export interface AgentGenerateComicAction {
   type: 'generate_comic'
+  imageProvider: 'keep' | 'maestro' | 'minimax'
+  imageModel: string
   confirm: true
 }
 
@@ -714,7 +720,7 @@ const CANONICAL_FIELD_NAMES = [
   'scene_name', 'layer_name', 'audio_output_name', 'cue_source', 'rhythm_profile', 'intensity',
   'confirm', 'characters', 'locations', 'outline_beats', 'story_visual_selections', 'story_visual_scope', 'target_names',
   'target_kind', 'target_name', 'asset_name', 'primary',
-  'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
+  'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'comic_pages', 'caption', 'stage', 'image_provider',
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
   'loras', 'weight',
@@ -764,6 +770,12 @@ function canonicalRecord(raw: Record<string, unknown>): Record<string, unknown> 
         : item
     ))
   }
+  if (Array.isArray(next.comic_pages)) next.comic_pages = next.comic_pages.map(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item
+    const page = canonicalRecord(item as Record<string, unknown>)
+    if (Array.isArray(page.comic_panels)) page.comic_panels = page.comic_panels.map(panel => panel && typeof panel === 'object' && !Array.isArray(panel) ? canonicalRecord(panel as Record<string, unknown>) : panel)
+    return page
+  })
   if (Array.isArray(next.loras)) {
     next.loras = next.loras.map(item => (
       item && typeof item === 'object' && !Array.isArray(item)
@@ -804,6 +816,14 @@ function parseComicPanels(value: unknown): AgentComicPanel[] {
     const scene = cleanString(raw.scene, 800)
     if (!caption && !dialogue && !sfx && !scene) return []
     return [{ caption, dialogue, sfx, scene: scene || undefined }]
+  }) : []
+}
+function parseComicPages(value: unknown): AgentComicPage[] {
+  return Array.isArray(value) ? value.slice(0, 30).flatMap((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = canonicalRecord(item as Record<string, unknown>)
+    const panels = parseComicPanels(raw.comic_panels)
+    return panels.length ? [{ title: cleanString(raw.title, 300) || `Página ${index + 1}`, stage: cleanString(raw.stage, 600), panels }] : []
   }) : []
 }
 
@@ -1206,7 +1226,9 @@ function parseAction(value: unknown): AgentAction | null {
     const title = cleanString(raw.title, 300)
     if (!title) return null
     const panels = parseComicPanels(raw.comic_panels)
+    const pages = parseComicPages(raw.comic_pages)
     const beats = stringArray(raw.outline_beats, 12, 400)
+    const requestedProvider = cleanString(raw.image_provider, 30)
     return {
       type: 'create_comic',
       title,
@@ -1214,6 +1236,9 @@ function parseAction(value: unknown): AgentAction | null {
       language: cleanString(raw.language, 120),
       styleName: cleanString(raw.visual_style, 2_000),
       characters: creativeCharacters(raw.characters),
+      pages,
+      imageProvider: requestedProvider === 'minimax' || requestedProvider === 'maestro' ? requestedProvider : 'profile',
+      imageModel: cleanString(raw.model_type, 160),
       panels: panels.length
         ? panels
         : beats.map(beat => ({ caption: beat, dialogue: '', sfx: '' })),
@@ -1221,7 +1246,8 @@ function parseAction(value: unknown): AgentAction | null {
   }
   if (type === 'generate_comic') {
     if (raw.confirm !== true) return null
-    return { type: 'generate_comic', confirm: true }
+    const requestedProvider = cleanString(raw.image_provider, 30)
+    return { type: 'generate_comic', imageProvider: requestedProvider === 'minimax' || requestedProvider === 'maestro' ? requestedProvider : 'keep', imageModel: cleanString(raw.model_type, 160), confirm: true }
   }
   if (type === 'generate_comic_panel') {
     if (raw.confirm !== true) return null
@@ -1494,7 +1520,7 @@ export async function reconcileAgentTurnWithRequest(
   if (isExplicitComicArtworkRequest(request, history)) {
     return {
       reply: 'Voy a dibujar las viñetas del cómic abierto. Irán a la cola local, una detrás de otra, en la misma GPU. 🪄',
-      actions: [{ type: 'generate_comic', confirm: true }],
+      actions: [{ type: 'generate_comic', imageProvider: 'keep', imageModel: '', confirm: true }],
     }
   }
   if (isExplicitSfxGenerationRequest(request)) {
@@ -1766,6 +1792,25 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
               required: ['caption', 'dialogue', 'sfx'],
             },
           },
+          comic_pages: {
+            type: 'array', maxItems: 30,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                title: { type: 'string', maxLength: 300 }, stage: { type: 'string', maxLength: 600 },
+                comic_panels: {
+                  type: 'array', maxItems: 12,
+                  items: {
+                    type: 'object', additionalProperties: false,
+                    properties: { caption: { type: 'string', maxLength: 400 }, dialogue: { type: 'string', maxLength: 400 }, sfx: { type: 'string', maxLength: 80 }, scene: { type: 'string', maxLength: 800 } },
+                    required: ['caption', 'dialogue', 'sfx'],
+                  },
+                },
+              },
+              required: ['title', 'stage', 'comic_panels'],
+            },
+          },
+          image_provider: { type: 'string', enum: ['', 'profile', 'keep', 'maestro', 'minimax'] },
         },
         required: ['type'],
       },
@@ -2333,7 +2378,7 @@ export async function executeAgentActions(
       } else if (action.type === 'generate_comic') {
         if (!action.confirm) throw new Error('Dibujar las viñetas requiere confirm=true.')
         const { generateFilledComicArtwork } = await import('./labActions')
-        results.push({ action, ok: true, message: await generateFilledComicArtwork(onStep) })
+        results.push({ action, ok: true, message: await generateFilledComicArtwork(action, onStep) })
       } else if (action.type === 'generate_comic_panel') {
         if (!action.confirm) throw new Error('Regenerar una viñeta requiere confirm=true.')
         const { generateComicPanelArtwork } = await import('./labActions')
