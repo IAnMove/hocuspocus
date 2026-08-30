@@ -5,6 +5,7 @@ import type {
   AgentCreateComicAction,
   AgentGenerateStorySectionAction,
   AgentGenerateSeriesPlanAction,
+  AgentApplySeriesPlanAction,
   AgentStageStoryComicAction,
   AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
@@ -13,7 +14,7 @@ import type {
   AgentCreativeCharacter,
   AgentCreativeLocation,
 } from './agentActions'
-import { notifyAgentSeriesPlanJob, notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
+import { clearAgentSeriesPlanJob, notifyAgentSeriesPlanJob, notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
 
 const normalizeName = (value: string): string => value
   .normalize('NFD')
@@ -1053,6 +1054,62 @@ export async function generateSeriesPlan(action: AgentGenerateSeriesPlanAction):
   }
   notifyAgentSeriesPlanJob(job)
   return `He iniciado el plan ${action.scope} de “${episode.title}” (${job.jobId}). El progreso y la propuesta recuperable están abiertos en Series Lab → Episode room; todavía no se ha aplicado ni renderizado.`
+}
+
+export async function applySeriesPlan(action: AgentApplySeriesPlanAction): Promise<string> {
+  if (!action.confirm) throw new Error('Aplicar una propuesta de Series Lab requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [api, { useSeriesStore }] = await Promise.all([
+    import('../../api/client'),
+    import('../series/store'),
+  ])
+  await useSeriesStore.getState().loadWorkspace(workspace)
+  await useSeriesStore.getState().saveNow()
+  const library = await api.fetchSeriesLibrary(workspace)
+  const seriesMatches = action.seriesTitle
+    ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
+    : []
+  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  const series = seriesMatches[0]
+    || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
+  if (!series) throw new Error(action.seriesTitle
+    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
+    : 'No hay una serie activa para aplicar la propuesta.')
+  const episodeMatches = action.targetEpisodeTitle
+    ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
+    : []
+  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
+    ? useSeriesStore.getState().activeEpisodeId : ''
+  const episodes = Object.values(series.episodesById)
+  const episode = episodeMatches[0]
+    || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
+    || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
+  if (!episode) throw new Error(action.targetEpisodeTitle
+    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
+    : `“${series.title}” necesita un episodio activo o único.`)
+
+  const job = action.jobId
+    ? await api.fetchSeriesPlanJob(action.jobId)
+    : (await api.fetchSeriesPlanRecovery(workspace)).jobs
+        .filter(item => item.seriesId === series.id && item.episodeId === episode.id && item.status === 'completed' && item.episodeResult)
+        .sort((left, right) => Number(right.updatedAt || right.finishedAt || 0) - Number(left.updatedAt || left.finishedAt || 0))[0]
+  if (!job) throw new Error(`No hay una propuesta completada y recuperable para “${episode.title}”.`)
+  if (job.workspace !== workspace || job.seriesId !== series.id || job.episodeId !== episode.id) {
+    throw new Error('El job indicado pertenece a otro workspace, serie o episodio; no se aplicará.')
+  }
+  if (job.status !== 'completed' || !job.episodeResult) {
+    throw new Error(`El job ${job.jobId} está ${job.status}; sólo se puede aplicar una propuesta completada.`)
+  }
+  const applied = await api.applySeriesPlanJob(job.jobId, job.episodeResult)
+  if (applied.id !== episode.id) throw new Error('Series Lab aplicó la propuesta a un episodio inesperado; recarga antes de continuar.')
+  await useSeriesStore.getState().reload()
+  await useSeriesStore.getState().openSeries(series.id)
+  useSeriesStore.getState().openEpisode(episode.id)
+  clearAgentSeriesPlanJob(episode.id)
+  showLab('series')
+  openAgentSeriesSection('episode')
+  return `He aplicado el plan ${job.jobId} a “${applied.title}”: ${applied.outline.beats.length} beats, ${applied.script.length} escenas y ${applied.shots.length} tomas. No he renderizado ni comprometido el delta de canon.`
 }
 
 function showComics(): void {

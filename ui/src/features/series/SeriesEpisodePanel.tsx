@@ -35,8 +35,8 @@ export function SeriesEpisodePanel({
     setError(null)
   }, [episode.id])
 
-  useEffect(() => listenForAgentSeriesPlanJob(value => {
-    if (value.episodeId === episodeIdRef.current) setJob(value)
+  useEffect(() => listenForAgentSeriesPlanJob((value, episodeId) => {
+    if (episodeId === episodeIdRef.current) setJob(value)
   }), [])
 
   useSerializedPoll({

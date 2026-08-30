@@ -1182,3 +1182,16 @@ la acción. Por tanto se ven polling, cancelación, errores y la propuesta
 recuperable normales de Episode room. La acción valida `seriesId/episodeId` del
 job y sólo informa que comenzó: no aplica la propuesta, no modifica canon y no
 renderiza tomas.
+
+## 40. Aplicación confirmada del plan de Series Lab (2026-08-30)
+
+`apply_series_plan` exige `confirm=true`. Acepta un `job_id` o resuelve el job
+completado más reciente perteneciente a la serie/episodio inequívocos. Antes de
+aplicar verifica workspace, `seriesId`, `episodeId`, estado `completed` y la
+presencia de `episodeResult`.
+
+Llama al endpoint canónico `applySeriesPlanJob` con la propuesta revisable,
+comprueba el ID del episodio devuelto, recarga el store y vuelve a abrir Episode
+room. Un evento específico limpia la tarjeta del job iniciada por el Wizard para
+que el UI no siga ofreciendo aplicar el mismo resultado. Informa de beats,
+escenas y tomas guardadas; no renderiza y no acepta/rechaza el delta de canon.

@@ -60,16 +60,23 @@ export function listenForAgentStoryDraft(listener: (projectId: string) => void):
 
 export function notifyAgentSeriesPlanJob(job: SeriesJobStatus): void {
   requestedSeriesPlanJob = job
-  window.dispatchEvent(new CustomEvent(SERIES_PLAN_JOB_EVENT, { detail: { job } }))
+  window.dispatchEvent(new CustomEvent(SERIES_PLAN_JOB_EVENT, { detail: { job, episodeId: job.episodeId } }))
 }
 
-export function listenForAgentSeriesPlanJob(listener: (job: SeriesJobStatus) => void): () => void {
+export function clearAgentSeriesPlanJob(episodeId: string): void {
+  if (requestedSeriesPlanJob?.episodeId === episodeId) requestedSeriesPlanJob = null
+  window.dispatchEvent(new CustomEvent(SERIES_PLAN_JOB_EVENT, { detail: { job: null, episodeId } }))
+}
+
+export function listenForAgentSeriesPlanJob(
+  listener: (job: SeriesJobStatus | null, episodeId: string) => void,
+): () => void {
   const handler = (event: Event) => {
-    const job = (event as CustomEvent<{ job?: SeriesJobStatus }>).detail?.job
-    if (job) listener(job)
+    const detail = (event as CustomEvent<{ job?: SeriesJobStatus | null; episodeId?: string }>).detail
+    if (detail?.episodeId) listener(detail.job || null, detail.episodeId)
   }
   window.addEventListener(SERIES_PLAN_JOB_EVENT, handler)
-  if (requestedSeriesPlanJob) listener(requestedSeriesPlanJob)
+  if (requestedSeriesPlanJob) listener(requestedSeriesPlanJob, requestedSeriesPlanJob.episodeId)
   return () => window.removeEventListener(SERIES_PLAN_JOB_EVENT, handler)
 }
 

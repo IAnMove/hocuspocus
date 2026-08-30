@@ -163,6 +163,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['series_title', 'target_episode_title', 'series_plan_scope', 'instruction', 'confirm'],
   },
   {
+    type: 'apply_series_plan',
+    title: 'Apply a completed Series episode proposal',
+    purpose: 'Resolve a completed recoverable planning job for the intended episode, apply its reviewed result through the canonical endpoint, reload and verify ownership.',
+    useWhen: 'The user explicitly asks to apply or accept the completed Series Lab episode proposal.',
+    risk: 'edit',
+    parameters: ['series_title', 'target_episode_title', 'job_id', 'confirm'],
+  },
+  {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
     purpose: 'Open Comics and fill characters, panels and lettering. Do not draw panel art unless asked.',

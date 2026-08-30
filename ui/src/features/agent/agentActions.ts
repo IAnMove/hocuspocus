@@ -235,6 +235,14 @@ export interface AgentGenerateSeriesPlanAction {
   confirm: true
 }
 
+export interface AgentApplySeriesPlanAction {
+  type: 'apply_series_plan'
+  seriesTitle: string
+  targetEpisodeTitle: string
+  jobId: string
+  confirm: true
+}
+
 export interface AgentComicPanel {
   caption: string
   dialogue: string
@@ -334,6 +342,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentCreateSeriesEpisodeAction
   | AgentUpdateSeriesEpisodeAction
   | AgentGenerateSeriesPlanAction
+  | AgentApplySeriesPlanAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
@@ -437,6 +446,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   createseriesepisode: 'create_series_episode',
   updateseriesepisode: 'update_series_episode',
   generateseriesplan: 'generate_series_plan',
+  applyseriesplan: 'apply_series_plan',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
@@ -549,7 +559,7 @@ const CANONICAL_FIELD_NAMES = [
   'visual_style', 'world_summary', 'language', 'series_title', 'series_premise',
   'series_logline', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline',
   'target_duration_seconds', 'create_if_missing', 'known_universe',
-  'queue_scope', 'task_id', 'confirm', 'characters', 'locations', 'outline_beats',
+  'queue_scope', 'task_id', 'job_id', 'confirm', 'characters', 'locations', 'outline_beats',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
@@ -888,6 +898,16 @@ function parseAction(value: unknown): AgentAction | null {
       targetEpisodeTitle: cleanString(raw.target_episode_title, 300),
       scope,
       instruction: cleanString(raw.instruction, 4_000),
+      confirm: true,
+    }
+  }
+  if (type === 'apply_series_plan') {
+    if (raw.confirm !== true) return null
+    return {
+      type: 'apply_series_plan',
+      seriesTitle: cleanString(raw.series_title, 300),
+      targetEpisodeTitle: cleanString(raw.target_episode_title, 300),
+      jobId: cleanString(raw.job_id, 160),
       confirm: true,
     }
   }
@@ -1300,7 +1320,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1349,6 +1369,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           known_universe: { type: 'boolean' },
           queue_scope: { type: 'string', enum: ['', 'active', 'all'] },
           task_id: { type: 'string', maxLength: 160 },
+          job_id: { type: 'string', maxLength: 160 },
           confirm: { type: 'boolean' },
           page_number: { type: 'integer', minimum: 0, maximum: 100 },
           panel_number: { type: 'integer', minimum: 0, maximum: 100 },
@@ -1819,6 +1840,8 @@ export async function executeAgentActions(
               ? 'Actualizando y guardando el episodio…'
             : action.type === 'generate_series_plan'
               ? `Invocando el plan de Series Lab (${action.scope})…`
+            : action.type === 'apply_series_plan'
+              ? 'Aplicando la propuesta de Series Lab al episodio…'
               : action.type === 'create_comic'
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
@@ -1904,6 +1927,9 @@ export async function executeAgentActions(
       } else if (action.type === 'generate_series_plan') {
         const { generateSeriesPlan } = await import('./labActions')
         results.push({ action, ok: true, message: await generateSeriesPlan(action) })
+      } else if (action.type === 'apply_series_plan') {
+        const { applySeriesPlan } = await import('./labActions')
+        results.push({ action, ok: true, message: await applySeriesPlan(action) })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledComic(action) })
