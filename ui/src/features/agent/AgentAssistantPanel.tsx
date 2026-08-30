@@ -73,6 +73,7 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
 
 export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistantPanelProps) {
   const [messages, setMessages] = useState<AgentMessage[]>(() => readMessages(workspace))
+  const [conversationWorkspace, setConversationWorkspace] = useState(workspace)
   const [draft, setDraft] = useState('')
   const [state, setState] = useState<AgentVisualState>('idle')
   const [busy, setBusy] = useState(false)
@@ -89,9 +90,23 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   }, [])
 
   useEffect(() => {
-    writeMessages(workspace, messages)
+    writeMessages(conversationWorkspace, messages)
     endRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages, workspace])
+  }, [conversationWorkspace, messages])
+
+  useEffect(() => {
+    if (workspace === conversationWorkspace) return
+    if (busy) {
+      // A Wizard action changed workspace while this turn was executing.
+      // Keep the visible turn alive and persist it in the destination so its
+      // real action result is not lost when the footer updates.
+      setConversationWorkspace(workspace)
+      return
+    }
+    setMessages(readMessages(workspace))
+    setConversationWorkspace(workspace)
+    setState('idle')
+  }, [busy, conversationWorkspace, workspace])
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {

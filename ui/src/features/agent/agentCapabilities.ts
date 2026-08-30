@@ -178,6 +178,22 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     risk: 'compute',
     parameters: ['task_id', 'confirm'],
   },
+  {
+    type: 'select_workspace',
+    title: 'Select a workspace',
+    purpose: 'Resolve an existing workspace by exact name, switch the canonical backend/store context, and keep the Wizard turn visible.',
+    useWhen: 'The user asks to work in an existing named workspace.',
+    risk: 'edit',
+    parameters: ['workspace_name'],
+  },
+  {
+    type: 'create_workspace',
+    title: 'Create and select a workspace',
+    purpose: 'Create a new isolated workspace through the canonical API, select it, and continue the Wizard conversation there.',
+    useWhen: 'The user explicitly asks to create a new named workspace.',
+    risk: 'edit',
+    parameters: ['workspace_name'],
+  },
 ]
 
 export function buildAgentCapabilityGuide(): string {

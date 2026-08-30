@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -185,6 +185,22 @@ test('requires confirmation for retry and resolves an explicit latest failure re
   assert.deepEqual(repaired.actions[0], {
     type: 'retry_task', taskId: 'latest', confirm: true,
   })
+})
+
+test('parses only named workspace selection and creation actions', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Cambio de taller.',
+    actions: [
+      { type: 'select_workspace', workspace_name: 'Proyecto Faro' },
+      { type: 'create_workspace', workspace_name: 'Proyecto Puerto' },
+      { type: 'create_workspace', workspace_name: '' },
+    ],
+  }))
+  assert.deepEqual(turn.actions, [
+    { type: 'select_workspace', workspaceName: 'Proyecto Faro' },
+    { type: 'create_workspace', workspaceName: 'Proyecto Puerto' },
+  ])
 })
 
 test('repairs an explicit image request into prepare_image plus start_generation', async () => {

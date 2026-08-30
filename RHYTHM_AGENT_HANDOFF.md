@@ -1066,3 +1066,16 @@ no descarga LoRAs ni acepta que el LLM invente uno incompatible.
 marcadas como reanudables. Si hay varias, exige un id; `task_id="latest"` sólo
 se usa cuando el usuario pide explícitamente el último fallo. Activity se abre
 después para mostrar el estado real devuelto por backend.
+
+## 32. Workspaces sin perder el turno del Wizard (2026-08-30)
+
+`select_workspace` resuelve un nombre exacto de `workspaces.available` y
+verifica el cambio tanto en `/api/v1/workspaces` como en el store.
+`create_workspace` crea y selecciona; si ya existe, lo reutiliza. No hay acción
+de borrado.
+
+`AgentAssistantPanel` ya no se remonta con `key={activeWorkspace}`. Mantiene un
+`conversationWorkspace` separado: un cambio provocado durante una acción mueve
+el turno visible y su resultado al destino; un cambio manual cuando está idle
+carga el historial propio del nuevo workspace. Así el usuario ve la
+confirmación real en vez de perder el panel a mitad del executor.

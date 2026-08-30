@@ -235,6 +235,16 @@ export interface AgentRetryTaskAction {
   confirm: true
 }
 
+export interface AgentSelectWorkspaceAction {
+  type: 'select_workspace'
+  workspaceName: string
+}
+
+export interface AgentCreateWorkspaceAction {
+  type: 'create_workspace'
+  workspaceName: string
+}
+
 export type AgentAction = AgentOpenTabAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
@@ -255,6 +265,8 @@ export type AgentAction = AgentOpenTabAction
   | AgentCancelTaskAction
   | AgentResumeTaskAction
   | AgentRetryTaskAction
+  | AgentSelectWorkspaceAction
+  | AgentCreateWorkspaceAction
 
 export interface AgentTurn {
   reply: string
@@ -299,6 +311,10 @@ export interface AgentAppSnapshot {
     available: string[]
     active: string[]
   }
+  workspaces: {
+    active: string
+    available: Array<{ name: string; file_count: number }>
+  }
 }
 
 const TAB_SET = new Set<string>(AGENT_TABS)
@@ -336,6 +352,8 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   canceltask: 'cancel_task',
   resumetask: 'resume_task',
   retrytask: 'retry_task',
+  selectworkspace: 'select_workspace',
+  createworkspace: 'create_workspace',
 }
 
 const cleanString = (value: unknown, maxLength: number): string => (
@@ -442,6 +460,7 @@ const CANONICAL_FIELD_NAMES = [
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
   'loras', 'weight',
+  'workspace_name',
   'dialogue', 'sfx', 'scene', 'actions', 'reply',
 ] as const
 
@@ -757,6 +776,13 @@ function parseAction(value: unknown): AgentAction | null {
   if (type === 'retry_task') {
     if (raw.confirm !== true) return null
     return { type: 'retry_task', taskId: cleanString(raw.task_id, 160), confirm: true }
+  }
+  if (type === 'select_workspace' || type === 'create_workspace') {
+    const workspaceName = cleanString(raw.workspace_name, 120)
+    if (!workspaceName) return null
+    return type === 'select_workspace'
+      ? { type: 'select_workspace', workspaceName }
+      : { type: 'create_workspace', workspaceName }
   }
   return null
 }
@@ -1082,7 +1108,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1130,6 +1156,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           reference_role: { type: 'string', enum: ['', 'start_frame', 'subject', 'style'] },
           replace_existing: { type: 'boolean' },
           remove_background: { type: 'boolean' },
+          workspace_name: { type: 'string', maxLength: 120 },
           loras: {
             type: 'array', maxItems: 12,
             items: {
@@ -1248,6 +1275,13 @@ export function buildAgentAppSnapshot(): AgentAppSnapshot {
     current_studio_loras: {
       available: state.availableLoras.slice(0, 120),
       active: [...(state.params.activated_loras || [])],
+    },
+    workspaces: {
+      active: state.activeWorkspace,
+      available: state.workspaces.map(workspace => ({
+        name: workspace.name,
+        file_count: workspace.file_count || 0,
+      })),
     },
   }
 }
@@ -1587,7 +1621,11 @@ export async function executeAgentActions(
                   ? 'Cancelando la tarea en la cola…'
                   : action.type === 'resume_task'
                     ? 'Reanudando la tarea en la cola…'
-                    : 'Reintentando la tarea en la cola…'
+                    : action.type === 'retry_task'
+                      ? 'Reintentando la tarea en la cola…'
+                      : action.type === 'select_workspace'
+                        ? `Cambiando al workspace ${action.workspaceName}…`
+                        : `Creando el workspace ${action.workspaceName}…`
     onStep?.(working)
     try {
       if (action.type === 'open_tab') {
@@ -1661,9 +1699,15 @@ export async function executeAgentActions(
       } else if (action.type === 'resume_task') {
         const { resumeCanonicalQueueTask } = await import('./queueActions')
         results.push({ action, ok: true, message: await resumeCanonicalQueueTask(action.taskId, action.confirm) })
-      } else {
+      } else if (action.type === 'retry_task') {
         const { retryCanonicalQueueTask } = await import('./queueActions')
         results.push({ action, ok: true, message: await retryCanonicalQueueTask(action.taskId, action.confirm) })
+      } else if (action.type === 'select_workspace') {
+        const { selectAgentWorkspace } = await import('./workspaceActions')
+        results.push({ action, ok: true, message: await selectAgentWorkspace(action.workspaceName) })
+      } else {
+        const { createAgentWorkspace } = await import('./workspaceActions')
+        results.push({ action, ok: true, message: await createAgentWorkspace(action.workspaceName) })
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

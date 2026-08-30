@@ -413,7 +413,6 @@ export function ActivityFooter() {
       {agentOpen && (
         <Suspense fallback={null}>
           <AgentAssistantPanel
-            key={activeWorkspace}
             workspace={activeWorkspace}
             tasks={tasks}
             onClose={() => setAgentOpen(false)}
