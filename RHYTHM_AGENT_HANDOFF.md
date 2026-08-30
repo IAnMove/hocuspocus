@@ -1140,3 +1140,17 @@ guarda la marca contra la versión exacta, incrementando antes Characters si la
 aprobación direct-video cambió sus estados internos. Conflictos y operaciones
 activas bloquean el cambio; no existe una vía del Wizard para saltarse estas
 validaciones.
+
+## 37. Staging Story Lab → Comic Director (2026-08-30)
+
+`stage_story_comic` exige `confirm=true` porque sustituye el borrador actual de
+Comics. Resuelve la Story activa o un título exacto, valida que tenga base
+narrativa y llama al adaptador oficial `buildComicAdaptation` con dirección,
+páginas y viñetas por página acotadas.
+
+El orden es transaccional en lo posible: primero registra y guarda por CAS la
+producción `staged` con snapshots de fuente, cómic y request; sólo tras ese
+guardado instala el proyecto en `useComicStore`, escribe el handoff recuperable
+y abre Comic Director. No inicia el plan LLM ni dibuja imágenes. Para renderizar
+después se mantiene la acción separada `generate_comic`, que exige otra orden
+explícita y confirmada.

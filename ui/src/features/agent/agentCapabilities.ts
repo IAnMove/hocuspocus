@@ -131,6 +131,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['target_story_title', 'story_section', 'confirm'],
   },
   {
+    type: 'stage_story_comic',
+    title: 'Stage a Story as a comic chapter',
+    purpose: 'Use the official Story adaptation builder to replace the editable Comic Director draft, register a staged production, and open it without rendering images.',
+    useWhen: 'The user explicitly asks to adapt or prepare a Story Lab project as a comic chapter.',
+    risk: 'edit',
+    parameters: ['target_story_title', 'direction', 'page_count', 'panels_per_page', 'confirm'],
+  },
+  {
     type: 'create_series_episode',
     title: 'Create a filled Series Lab episode',
     purpose: 'Find or create a series, prepare the minimum canon needed, create a filled episode outline and show Episode room.',

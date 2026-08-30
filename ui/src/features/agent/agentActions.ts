@@ -183,6 +183,15 @@ export interface AgentApproveStorySectionAction {
   confirm: true
 }
 
+export interface AgentStageStoryComicAction {
+  type: 'stage_story_comic'
+  targetStoryTitle: string
+  direction: string
+  pageCount: number
+  panelsPerPage: number
+  confirm: true
+}
+
 export interface AgentCreateSeriesEpisodeAction {
   type: 'create_series_episode'
   seriesTitle: string
@@ -301,6 +310,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateStorySectionAction
   | AgentApplyStoryProposalAction
   | AgentApproveStorySectionAction
+  | AgentStageStoryComicAction
   | AgentCreateSeriesEpisodeAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
@@ -398,6 +408,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   generatestorysection: 'generate_story_section',
   applystoryproposal: 'apply_story_proposal',
   approvestorysection: 'approve_story_section',
+  stagestorycomic: 'stage_story_comic',
   createseriesepisode: 'create_series_episode',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
@@ -506,7 +517,7 @@ const CANONICAL_FIELD_NAMES = [
   'type', 'tab', 'story_section', 'series_section', 'prompt', 'model_type',
   'duration_seconds', 'resolution_preset', 'resolution', 'aspect_ratio',
   'negative_prompt', 'seed', 'inference_steps', 'guidance_scale', 'output_count',
-  'audio_direction', 'turbo', 'title', 'target_story_title', 'story_generation_scope', 'instruction', 'project_type', 'creative_brief',
+  'audio_direction', 'turbo', 'title', 'target_story_title', 'story_generation_scope', 'instruction', 'direction', 'page_count', 'panels_per_page', 'project_type', 'creative_brief',
   'premise', 'logline', 'synopsis', 'theme', 'ending', 'genre', 'tone',
   'visual_style', 'world_summary', 'language', 'series_title', 'series_premise',
   'series_logline', 'episode_title', 'episode_premise', 'episode_logline',
@@ -784,6 +795,17 @@ function parseAction(value: unknown): AgentAction | null {
       type: 'approve_story_section',
       targetStoryTitle: cleanString(raw.target_story_title, 300),
       section,
+      confirm: true,
+    }
+  }
+  if (type === 'stage_story_comic') {
+    if (raw.confirm !== true) return null
+    return {
+      type: 'stage_story_comic',
+      targetStoryTitle: cleanString(raw.target_story_title, 300),
+      direction: cleanString(raw.direction, 4_000),
+      pageCount: optionalPositiveNumber(raw.page_count, 1, 100, true) ?? 4,
+      panelsPerPage: optionalPositiveNumber(raw.panels_per_page, 1, 12, true) ?? 4,
       confirm: true,
     }
   }
@@ -1223,7 +1245,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1244,6 +1266,9 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           target_story_title: { type: 'string', maxLength: 300 },
           story_generation_scope: { type: 'string', enum: ['', 'all', 'overview', 'world', 'characters', 'relationships', 'structure'] },
           instruction: { type: 'string', maxLength: 4_000 },
+          direction: { type: 'string', maxLength: 4_000 },
+          page_count: { type: 'integer', minimum: 0, maximum: 100 },
+          panels_per_page: { type: 'integer', minimum: 0, maximum: 12 },
           project_type: { type: 'string', enum: ['', 'full_story', 'music_video', 'trailer', 'quick_video'] },
           creative_brief: { type: 'string', maxLength: 4_000 },
           premise: { type: 'string', maxLength: 2_000 },
@@ -1729,6 +1754,8 @@ export async function executeAgentActions(
               ? 'Aplicando la propuesta revisable al canon de Story Lab…'
             : action.type === 'approve_story_section'
               ? `Validando y aprobando Story Lab → ${action.section}…`
+            : action.type === 'stage_story_comic'
+              ? 'Adaptando la historia a Comic Director…'
             : action.type === 'create_series_episode'
               ? 'Preparando la serie y el nuevo episodio…'
               : action.type === 'create_comic'
@@ -1804,6 +1831,9 @@ export async function executeAgentActions(
       } else if (action.type === 'approve_story_section') {
         const { approveStorySection } = await import('./labActions')
         results.push({ action, ok: true, message: await approveStorySection(action) })
+      } else if (action.type === 'stage_story_comic') {
+        const { stageStoryComic } = await import('./labActions')
+        results.push({ action, ok: true, message: await stageStoryComic(action) })
       } else if (action.type === 'create_series_episode') {
         const { createFilledSeriesEpisode } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledSeriesEpisode(action) })

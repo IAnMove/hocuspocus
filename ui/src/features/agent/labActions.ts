@@ -4,6 +4,7 @@ import type {
   AgentApproveStorySectionAction,
   AgentCreateComicAction,
   AgentGenerateStorySectionAction,
+  AgentStageStoryComicAction,
   AgentCreateSeriesEpisodeAction,
   AgentCreateStoryAction,
   AgentUpdateStoryAction,
@@ -714,6 +715,97 @@ export async function approveStorySection(action: AgentApproveStorySectionAction
   showLab('stories')
   openAgentStorySection(action.section)
   return `He validado, aprobado y guardado Story Lab → ${action.section} para “${project.title}”.`
+}
+
+export async function stageStoryComic(action: AgentStageStoryComicAction): Promise<string> {
+  if (!action.confirm) throw new Error('Preparar una adaptación de cómic requiere confirm=true porque sustituye el borrador actual de Comics.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useStoryStore, normalizeStoryProject, storyId }, adaptations, { useComicStore }, api] = await Promise.all([
+    import('../stories/store'),
+    import('../stories/adaptations'),
+    import('../comics/store'),
+    import('../../api/client'),
+  ])
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const current = useStoryStore.getState()
+  if (current.libraryConflicts.length) {
+    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de preparar una producción.')
+  }
+  const target = action.targetStoryTitle
+    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
+    : current.project
+  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (current.activeProjectOperations[target.id]) {
+    throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+  }
+  if (!target.premise.trim() && !target.logline.trim() && !target.synopsis.trim()) {
+    throw new Error(`“${target.title}” necesita una premisa, logline o synopsis antes de adaptarse.`)
+  }
+
+  useStoryStore.getState().beginProjectOperation(target.id)
+  try {
+    const { comic, request } = adaptations.buildComicAdaptation(
+      target,
+      action.direction || adaptations.DEFAULT_COMIC_CHAPTER_DIRECTION,
+      { pageCount: action.pageCount, panelsPerPage: action.panelsPerPage },
+    )
+    const production = {
+      id: storyId('production'),
+      kind: 'comic' as const,
+      title: `${target.title} · comic chapter`,
+      createdAt: new Date().toISOString(),
+      sourceVersion: target.revision,
+      sourceSnapshot: { ...structuredClone(target), productions: [] },
+      targetId: comic.id,
+      targetName: comic.title,
+      targetSnapshot: {
+        comic: structuredClone(comic) as unknown as Record<string, unknown>,
+        request: structuredClone(request) as unknown as Record<string, unknown>,
+      },
+      status: 'staged' as const,
+    }
+    const project = normalizeStoryProject({
+      ...target,
+      revision: target.revision + 1,
+      productions: [...target.productions, production],
+      updatedAt: new Date().toISOString(),
+    })
+    const library = await api.saveStoryLibrary(workspace, {
+      version: 2,
+      revision: current.libraryRevision,
+      activeId: project.id,
+      projects: { ...current.projects, [project.id]: project },
+    })
+    useStoryStore.setState({
+      workspace,
+      project: library.projects[project.id],
+      projects: library.projects,
+      libraryRevision: library.revision,
+      dirty: false,
+      hydrated: false,
+      loading: false,
+      saveError: null,
+      libraryConflicts: [],
+    })
+    await useStoryStore.getState().loadWorkspace(workspace)
+    useComicStore.getState().setProject(comic)
+    window.localStorage.removeItem('maestro-last-comic-plan-result')
+    window.localStorage.removeItem('maestro-last-comic-plan-job')
+    window.localStorage.removeItem('maestro-story-comic-auto-start')
+    window.localStorage.setItem('maestro-story-comic-draft', JSON.stringify(request))
+    window.dispatchEvent(new CustomEvent('maestro:comic-staged', { detail: request }))
+    const app = useStore.getState()
+    app.setSettingsOpen(false)
+    app.setDashboardOpen(false)
+    app.setMediaFilter('comics')
+    app.setSidebarMode('director')
+    app.setDirectorSkill('comic')
+    app.setSidebarOpen(true)
+    window.dispatchEvent(new Event('maestro:director-open'))
+    return `He preparado “${comic.title}” como capítulo editable de ${action.pageCount} páginas × ${action.panelsPerPage} viñetas en Comic Director. No he generado imágenes.`
+  } finally {
+    useStoryStore.getState().endProjectOperation(target.id)
+  }
 }
 
 export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisodeAction): Promise<string> {
