@@ -1154,3 +1154,17 @@ guardado instala el proyecto en `useComicStore`, escribe el handoff recuperable
 y abre Comic Director. No inicia el plan LLM ni dibuja imágenes. Para renderizar
 después se mantiene la acción separada `generate_comic`, que exige otra orden
 explícita y confirmada.
+
+## 38. Edición canónica de episodios de Series Lab (2026-08-30)
+
+`update_series_episode` resuelve una serie/episodio por título exacto o usa la
+selección activa cuando el destino es inequívoco. Rechaza títulos duplicados y
+no acepta una acción vacía. Puede retocar título, premisa, logline, duración y
+outline.
+
+La implementación abre la serie/episodio mediante `useSeriesStore`, llama a
+`updateEpisode` y fuerza `saveNow`; después verifica en el objeto devuelto por
+backend cada campo solicitado. Preserva script, shots, attempts, canonSnapshot,
+delta de canon y producción existentes, igual que los inputs manuales de
+Episode room. Finalmente abre Series Lab → Episode room y cuenta las escenas y
+tomas conservadas.

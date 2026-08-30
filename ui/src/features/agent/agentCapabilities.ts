@@ -147,6 +147,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['series_title', 'series_premise', 'episode_title', 'episode_premise', 'episode_logline', 'characters', 'locations', 'outline_beats'],
   },
   {
+    type: 'update_series_episode',
+    title: 'Update an existing Series Lab episode',
+    purpose: 'Patch the active or exactly named episode through the Series store, preserve scripts/shots/attempts/canon snapshot, and verify the canonical save.',
+    useWhen: 'The user asks to revise, rename or complete an existing Series Lab episode.',
+    risk: 'edit',
+    parameters: ['series_title', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline', 'outline_beats', 'target_duration_seconds'],
+  },
+  {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
     purpose: 'Open Comics and fill characters, panels and lettering. Do not draw panel art unless asked.',

@@ -5,6 +5,7 @@ import type {
   AgentCreateComicAction,
   AgentGenerateStorySectionAction,
   AgentStageStoryComicAction,
+  AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
   AgentCreateStoryAction,
   AgentUpdateStoryAction,
@@ -937,6 +938,65 @@ export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisode
   openAgentSeriesSection('episode')
   const canonResult = approvedCanon ? 'preparado y aprobado el canon editable necesario, y ' : ''
   return `He ${createdSeries ? 'creado la serie, ' : ''}${canonResult}guardado el episodio “${createdEpisode.title}” con ${beats.length} beats; está abierto en Series Lab → Episode room.`
+}
+
+export async function updateSeriesEpisode(action: AgentUpdateSeriesEpisodeAction): Promise<string> {
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [api, { useSeriesStore }] = await Promise.all([
+    import('../../api/client'),
+    import('../series/store'),
+  ])
+  await useSeriesStore.getState().loadWorkspace(workspace)
+  await useSeriesStore.getState().saveNow()
+  const library = await api.fetchSeriesLibrary(workspace)
+  const seriesMatches = action.seriesTitle
+    ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
+    : []
+  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; renombra una para poder elegirla sin ambigüedad.`)
+  const series = seriesMatches[0]
+    || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
+  if (!series) throw new Error(action.seriesTitle
+    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
+    : 'No hay una serie activa que modificar.')
+
+  const episodeMatches = action.targetEpisodeTitle
+    ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
+    : []
+  if (episodeMatches.length > 1) {
+    throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; usa un título inequívoco antes de modificarlos.`)
+  }
+  const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
+    ? useSeriesStore.getState().activeEpisodeId : ''
+  const episodes = Object.values(series.episodesById)
+  const episode = episodeMatches[0]
+    || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
+    || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
+  if (!episode) throw new Error(action.targetEpisodeTitle
+    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
+    : `“${series.title}” necesita un episodio activo o un único episodio para poder inferir el destino.`)
+
+  await useSeriesStore.getState().openSeries(series.id)
+  useSeriesStore.getState().openEpisode(episode.id)
+  useSeriesStore.getState().updateEpisode(episode.id, current => ({
+    ...current,
+    title: action.episodeTitle || current.title,
+    premise: action.episodePremise || current.premise,
+    logline: action.episodeLogline || current.logline,
+    targetDurationSeconds: action.targetDurationSeconds ?? current.targetDurationSeconds,
+    outline: action.outlineBeats.length ? { beats: action.outlineBeats } : current.outline,
+  }))
+  const saved = await useSeriesStore.getState().saveNow()
+  const verified = saved?.episodesById[episode.id]
+  if (!verified) throw new Error(`Series Lab no devolvió el episodio “${episode.title}” tras guardarlo.`)
+  if (action.episodeTitle && verified.title !== action.episodeTitle) throw new Error('El backend no confirmó el nuevo título del episodio.')
+  if (action.episodePremise && verified.premise !== action.episodePremise) throw new Error('El backend no confirmó la nueva premisa del episodio.')
+  if (action.episodeLogline && verified.logline !== action.episodeLogline) throw new Error('El backend no confirmó la nueva logline del episodio.')
+  if (action.outlineBeats.length && JSON.stringify(verified.outline.beats) !== JSON.stringify(action.outlineBeats)) {
+    throw new Error('El backend no confirmó la nueva estructura del episodio.')
+  }
+  showLab('series')
+  openAgentSeriesSection('episode')
+  return `He actualizado y guardado “${verified.title}” en la serie “${saved.title}”; conserva ${verified.script.length} escenas y ${verified.shots.length} tomas existentes.`
 }
 
 function showComics(): void {

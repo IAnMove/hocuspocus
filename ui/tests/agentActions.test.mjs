@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -157,6 +157,22 @@ test('parses bounded Story to Comic staging only with confirmation', async () =>
     panelsPerPage: 5,
     confirm: true,
   }])
+})
+
+test('parses a non-empty Series episode patch without destructive fields', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Retoco el episodio.',
+    actions: [
+      { type: 'update_series_episode', series_title: 'Mesa para cuatro', target_episode_title: 'El sushi del silencio' },
+      { type: 'update_series_episode', series_title: 'Mesa para cuatro', target_episode_title: 'El sushi del silencio', episode_logline: 'El grupo descubre un local donde discutir está prohibido.', target_duration_seconds: 1800, outline_beats: ['Descubren el local', 'Rompen las reglas', 'El silencio los delata'] },
+    ],
+  }))
+  assert.equal(turn.actions.length, 1)
+  assert.equal(turn.actions[0].type, 'update_series_episode')
+  assert.equal(turn.actions[0].targetEpisodeTitle, 'El sushi del silencio')
+  assert.equal(turn.actions[0].targetDurationSeconds, 1800)
+  assert.deepEqual(turn.actions[0].outlineBeats, ['Descubren el local', 'Rompen las reglas', 'El silencio los delata'])
 })
 
 test('parses bounded Studio references by output name and role', async () => {
