@@ -349,11 +349,40 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
     personality: character.personality,
     motivation: character.desire,
     voice: character.voice,
+    wardrobe: character.appearance || 'Vestuario fijo y reconocible durante todo el cómic.',
+    visualNotes: [character.appearance, action.styleName, 'Silueta, escala y paleta constantes.'].filter(Boolean).join('. '),
+    negativePrompt: 'inconsistent face, changed wardrobe, duplicate character, extra limbs, unreadable silhouette',
+    referenceAssetIds: [],
     locked: false,
   }))
   const panels = action.panels.length ? action.panels : [
     { caption: action.synopsis || action.title, dialogue: '', sfx: '', scene: action.synopsis },
   ]
+  const ending = panels.at(-1)?.dialogue
+    || panels.at(-1)?.caption
+    || `El conflicto de “${action.title}” se resuelve con una consecuencia visual clara.`
+  const castBible = characters.map(character => [
+    `${character.name} (${character.role || 'personaje'})`,
+    character.description,
+    character.personality,
+    character.motivation,
+  ].filter(Boolean).join(': ')).join('\n')
+  const storyContext = [
+    `Premisa: ${action.synopsis || action.title}`,
+    `Personajes:\n${castBible}`,
+    `Progresión: ${panels.map((panel, index) => `${index + 1}. ${panel.scene || panel.caption || panel.dialogue}`).join(' → ')}`,
+    `Final: ${ending}`,
+  ].join('\n\n')
+  const worldContext = [
+    `Universo visual de “${action.title}”.`,
+    action.synopsis,
+    `Mantener localizaciones, época, escala y utilería coherentes durante las ${panels.length} viñetas.`,
+  ].filter(Boolean).join(' ')
+  const forbiddenElements = [
+    'No cambiar el diseño, la edad aparente, la paleta ni el vestuario de los personajes entre viñetas.',
+    'No añadir texto, bocadillos, marcos, cuadrículas, logotipos ni marcas de agua dentro de las imágenes generadas.',
+    'No duplicar personajes ni introducir elementos ajenos a la escena.',
+  ].join(' ')
   const planId = comicId('plan')
   const plan = {
     version: 1 as const,
@@ -364,6 +393,12 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
     language: action.language || 'Español',
     styleBible: action.styleName || 'Tira cómica clara, 4 viñetas',
     characters,
+    storyStructure: [{
+      pageNumber: 1,
+      stage: 'Planteamiento, complicación y remate',
+      goal: action.synopsis || `Contar “${action.title}” con una progresión clara y legible.`,
+      turningPoint: ending,
+    }],
     pages: [{
       pageNumber: 1,
       layoutHint: 'grid' as const,
@@ -387,14 +422,18 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
           dialogue: panel.dialogue ? [{ text: panel.dialogue, bubbleType: 'speech' as const }] : [],
           captions: panel.caption ? [panel.caption] : [],
           soundEffects: panel.sfx ? [panel.sfx] : [],
-          continuityNotes: '',
+          continuityNotes: `Conservar identidad, vestuario, paleta, iluminación y eje espacial respecto a la viñeta ${Math.max(1, index)}.`,
         }
       }),
     }],
   }
   const project = projectFromPlan(plan)
   if (action.styleName) {
-    project.style = { ...project.style, name: action.styleName }
+    project.style = {
+      ...project.style,
+      name: action.styleName,
+      promptSuffix: `${action.styleName}. Consistent character design, readable acting, coherent palette and continuity across panels.`,
+    }
   }
   const studio = useStore.getState()
   const provider = studio.productionProfile.image.provider === 'minimax' ? 'minimax' as const : 'maestro' as const
@@ -408,6 +447,7 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
     input: {
       useGlobalProfile: true,
       premise: action.synopsis || action.title,
+      storyContext,
       productionMode: 'comic',
       pageCount: 1,
       language: action.language || 'Español',
@@ -417,10 +457,13 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
       tone: 'Warm',
       audience: 'General',
       artStyle: action.styleName,
+      worldContext,
+      forbiddenElements,
       dialogueDensity: 'medium',
       provider,
       imageModel,
       characters,
+      ending,
     },
     plan,
     completedPanelIds: [],
@@ -446,12 +489,22 @@ export async function generateFilledComicArtwork(
   const state = useComicStore.getState()
   if (!state.project.director) {
     const project = state.project
-    const characters = project.characters.length ? project.characters : [{
+    const characters = (project.characters.length ? project.characters : [{
       id: comicId('character'),
       name: 'Protagonista',
       description: 'Silueta clara',
       locked: false,
-    }]
+    }]).map(character => ({
+      ...character,
+      role: character.role || 'Personaje principal',
+      personality: character.personality || 'Expresivo y coherente con el tono del cómic.',
+      motivation: character.motivation || project.synopsis || 'Resolver el conflicto de la historia.',
+      voice: character.voice || 'Voz breve, clara y diferenciada.',
+      wardrobe: character.wardrobe || character.description || 'Vestuario fijo y reconocible.',
+      visualNotes: character.visualNotes || `${character.description}. Silueta, escala y paleta constantes.`,
+      negativePrompt: character.negativePrompt || 'inconsistent face, changed wardrobe, duplicate character, extra limbs',
+      referenceAssetIds: character.referenceAssetIds || [],
+    }))
     const pages = project.pages.map((page, pageIndex) => {
       const panels = page.elements
         .filter(element => element.type === 'panel' && !element.parentId)
@@ -488,7 +541,7 @@ export async function generateFilledComicArtwork(
             dialogue: dialogue.map(text => ({ text, bubbleType: 'speech' as const })),
             captions,
             soundEffects,
-            continuityNotes: '',
+            continuityNotes: `Conservar identidad, vestuario, paleta y eje espacial respecto a la viñeta ${Math.max(1, index)}.`,
           }
         }),
       }
@@ -508,9 +561,23 @@ export async function generateFilledComicArtwork(
       language: project.language,
       styleBible: project.style.name,
       characters,
+      storyStructure: pages.map((page, index) => ({
+        pageNumber: page.pageNumber,
+        stage: index === 0 ? 'Planteamiento y complicación' : `Desarrollo ${index + 1}`,
+        goal: project.synopsis || `Hacer avanzar “${project.title}”.`,
+        turningPoint: page.panels.at(-1)?.dialogue.at(-1)?.text
+          || page.panels.at(-1)?.captions.at(-1)
+          || `Cerrar el beat de la página ${page.pageNumber}.`,
+      })),
       pages,
     }
+    const storyContext = [
+      `Premisa: ${project.synopsis || project.title}`,
+      `Personajes: ${characters.map(character => `${character.name}: ${character.description}`).join('; ')}`,
+      `Estructura: ${plan.storyStructure.map(beat => beat.turningPoint).join(' → ')}`,
+    ].join('\n\n')
     useComicStore.getState().patchProject({
+      characters,
       director: {
         planId: plan.id,
         provider,
@@ -518,6 +585,7 @@ export async function generateFilledComicArtwork(
         input: {
           useGlobalProfile: true,
           premise: project.synopsis || project.title,
+          storyContext,
           productionMode: 'comic',
           pageCount: pages.length,
           language: project.language,
@@ -527,10 +595,13 @@ export async function generateFilledComicArtwork(
           tone: 'Warm',
           audience: 'General',
           artStyle: project.style.name,
+          worldContext: `Universo visual de “${project.title}”. Mantener época, localizaciones, escala y utilería coherentes entre páginas.`,
+          forbiddenElements: 'No cambiar identidades ni vestuario. No añadir texto, cuadrículas, marcos, logos o marcas de agua dentro de la ilustración.',
           dialogueDensity: 'medium',
           provider,
           imageModel,
           characters,
+          ending: plan.storyStructure.at(-1)?.turningPoint,
         },
         plan,
         completedPanelIds: [],

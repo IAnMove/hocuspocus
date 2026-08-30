@@ -1024,6 +1024,10 @@ input[type="range"]::-webkit-slider-thumb {
 .hp-agent-avatar[data-state='error'] .hp-agent-halo { background: radial-gradient(circle, rgba(248, 113, 113, 0.34), rgba(124, 58, 237, 0.08) 55%, transparent 74%); }
 .hp-agent-trigger:hover .hp-agent-avatar img { filter: drop-shadow(0 0 10px rgba(253, 230, 138, 0.55)); }
 .hp-agent-panel { transform-origin: bottom left; animation: hp-agent-panel-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.hp-agent-panel--expanded { transform-origin: center; }
+.hp-agent-panel--expanded .hp-agent-markdown { font-size: 0.95rem; line-height: 1.55; }
+.hp-agent-panel--expanded .hp-agent-markdown h2 { font-size: 1.15rem; }
+.hp-agent-panel--expanded .hp-agent-markdown h3 { font-size: 1.02rem; }
 .hp-agent-panel-glow {
   position: absolute;
   inset: -80% -20% auto -25%;

@@ -65,6 +65,50 @@ test('capability knowledge includes every currently executable action family', a
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
 
+test('a filled comic includes Director brief, structure, continuity and editable lettering', async () => {
+  const { createFilledComic } = await import('../src/features/agent/labActions.ts')
+  const { useComicStore } = await import('../src/features/comics/store.ts')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({ outputs: [], total: 0 }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
+  try {
+    await createFilledComic({
+      type: 'create_comic',
+      title: 'La brújula dormida',
+      synopsis: 'Una cartógrafa despierta una brújula que sólo señala los lugares olvidados.',
+      language: 'Español',
+      styleName: 'Aventura europea, tinta azul y acuarela cálida',
+      characters: [{
+        name: 'Ada', role: 'Cartógrafa', personality: 'Metódica y curiosa',
+        desire: 'Encontrar el pueblo borrado', flaw: 'No sabe improvisar',
+        appearance: 'Abrigo rojo, pelo negro corto y cartera de mapas', voice: 'Precisa y seca',
+      }],
+      panels: [
+        { caption: 'El mapa despierta.', dialogue: 'Eso no estaba ahí.', sfx: 'TIC', scene: 'Ada abre un mapa en su taller.' },
+        { caption: 'Norte cambia.', dialogue: 'Entonces iremos al oeste.', sfx: 'CLAC', scene: 'La aguja gira hacia una puerta tapiada.' },
+        { caption: 'Un lugar recordado.', dialogue: 'Ya sé cómo volver.', sfx: '', scene: 'Ada cruza la puerta y ve el pueblo.' },
+      ],
+    })
+    await Promise.resolve()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  const project = useComicStore.getState().project
+  assert.equal(project.title, 'La brújula dormida')
+  assert.ok(project.director?.input.storyContext?.includes('Ada'))
+  assert.ok(project.director?.input.worldContext?.includes('Universo visual'))
+  assert.ok(project.director?.input.forbiddenElements?.includes('No cambiar'))
+  assert.ok(project.director?.input.ending)
+  assert.equal(project.director?.plan.storyStructure?.length, 1)
+  assert.ok(project.director?.plan.pages[0].panels.every(panel => panel.continuityNotes))
+  assert.ok(project.characters[0].wardrobe)
+  assert.ok(project.characters[0].visualNotes)
+  assert.ok(project.pages[0].elements.some(element => element.type === 'text'))
+})
+
 test('drops cancel_task unless confirm is true and repairs an explicit cancel request', async () => {
   const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
   const unsigned = parseAgentTurn(JSON.stringify({

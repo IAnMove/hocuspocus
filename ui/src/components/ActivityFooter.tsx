@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, Eraser, ListVideo, Loader2 } from 'lucide-react'
 import * as api from '../api/client'
 import type { CanonicalTask } from '../api/client'
 import { applyCanonicalTaskEvent, canResumeCanonicalTask, canonicalTaskVisualState, reconcileCanonicalTaskSnapshot } from '../lib/canonicalTaskEvents'
 import { formatAppAction, formatAppTimestamp } from '../lib/locale'
 import { useStore } from '../stores/useStore'
-import { AgentAssistantPanel, AgentAvatar } from '../features/agent/AgentAssistantPanel'
+import { AgentAvatar } from '../features/agent/AgentAvatar'
 import { listenForAgentActivityDetails } from '../features/agent/agentUiBus'
+
+const AgentAssistantPanel = lazy(() =>
+  import('../features/agent/AgentAssistantPanel').then(module => ({ default: module.AgentAssistantPanel })),
+)
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const CONNECTED_RECONCILE_MS = 60_000
@@ -407,12 +411,14 @@ export function ActivityFooter() {
   return (
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
       {agentOpen && (
-        <AgentAssistantPanel
-          key={activeWorkspace}
-          workspace={activeWorkspace}
-          tasks={tasks}
-          onClose={() => setAgentOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <AgentAssistantPanel
+            key={activeWorkspace}
+            workspace={activeWorkspace}
+            tasks={tasks}
+            onClose={() => setAgentOpen(false)}
+          />
+        </Suspense>
       )}
       {detailsOpen && roots.length > 0 && (
         <div className="absolute bottom-full left-3 mb-2 w-[min(48rem,calc(100vw-1.5rem))] max-h-80 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
