@@ -421,7 +421,7 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
   {
     type: 'add_video_editor_audio',
     title: 'Add audio to Video Editor',
-    purpose: 'Unmute timeline clips using an exact audio output name as the audible reference.',
+    purpose: 'Probe an exact audio workspace output and append it as a timeline clip.',
     useWhen: 'The user asks to add or enable audio on the timeline.',
     risk: 'edit',
     parameters: ['audio_output_name', 'clip_name'],

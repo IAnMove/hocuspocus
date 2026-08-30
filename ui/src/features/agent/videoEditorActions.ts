@@ -1,4 +1,4 @@
-import { fetchOutputs, fetchVideoEditorExport, getVideoEditorThumbnailUrl, probeVideoEditorClip, startVideoEditorExport } from '../../api/client'
+import { fetchOutputs, fetchVideoEditorExport, getVideoEditorThumbnailUrl, probeVideoEditorClip, startVideoEditorExport, type ApiOutput } from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { clipId, loadEditorDraft, persistEditorDraft, RESOLUTIONS } from '../video-editor/editorDraft'
 import { sequenceTotalDuration } from '../video-editor/editorTimeline'
@@ -105,12 +105,19 @@ export async function openAgentVideoEditorProject(action: AgentOpenVideoEditorPr
   return { message, report: editorReport(message) }
 }
 
-export async function addAgentVideoEditorClips(action: AgentAddVideoEditorClipsAction): Promise<{ message: string; report: AgentExecutionReport }> {
-  const draft = loadDraft()
-  const outputs = await fetchOutputs(80, 0, { workspace: workspaceName() })
+async function clipsFromNamedOutputs(
+  names: string[],
+  mediaType?: ApiOutput['type'],
+): Promise<EditorClip[]> {
+  const listed = await fetchOutputs(80, 0, { workspace: workspaceName(), mediaType })
+  let fallback: Awaited<ReturnType<typeof fetchOutputs>> | null = null
   const added: EditorClip[] = []
-  for (const name of action.outputNames) {
-    const output = outputs.outputs.find(item => item.name === name)
+  for (const name of names) {
+    let output = listed.outputs.find(item => item.name === name)
+    if (!output && mediaType) {
+      fallback = fallback || await fetchOutputs(80, 0, { workspace: workspaceName() })
+      output = fallback.outputs.find(item => item.name === name)
+    }
     if (!output) throw new Error(`No existe el output “${name}” en este workspace.`)
     const probe = await probeVideoEditorClip(output.url || output.name, workspaceName())
     added.push({
@@ -131,6 +138,12 @@ export async function addAgentVideoEditorClips(action: AgentAddVideoEditorClipsA
       transitionTextSize: 100,
     })
   }
+  return added
+}
+
+export async function addAgentVideoEditorClips(action: AgentAddVideoEditorClipsAction): Promise<{ message: string; report: AgentExecutionReport }> {
+  const draft = loadDraft()
+  const added = await clipsFromNamedOutputs(action.outputNames)
   saveDraft([...draft.clips, ...added], draft.projectName, draft.resolution, draft.fps)
   showEditor()
   const message = `He añadido ${added.length} clips exactos a “${draft.projectName}”.`
@@ -169,15 +182,20 @@ export async function trimAgentVideoEditorClip(action: AgentTrimVideoEditorClipA
 
 export async function addAgentVideoEditorAudio(action: AgentAddVideoEditorAudioAction): Promise<{ message: string; report: AgentExecutionReport }> {
   const draft = loadDraft()
-  const outputs = await fetchOutputs(80, 0, { workspace: workspaceName(), mediaType: 'audio' })
-  const audio = outputs.outputs.find(item => item.name === action.outputName)
-  if (!audio) throw new Error(`No existe el audio “${action.outputName}”.`)
-  const clips = draft.clips.map((clip, index) => {
-    if (action.clipName && clip.name !== action.clipName && clip.id !== action.clipName && index !== 0) return clip
-    return { ...clip, muted: false, volume: clip.volume || 1 }
-  })
+  const existing = draft.clips.find(clip => clip.name === action.outputName)
+  const added = existing ? [] : await clipsFromNamedOutputs([action.outputName], 'audio')
+  const clips = [
+    ...draft.clips.map(clip => {
+      if (action.clipName && clip.name !== action.clipName && clip.id !== action.clipName) return clip
+      if (action.clipName) return { ...clip, muted: false, volume: clip.volume || 1 }
+      return clip
+    }),
+    ...added,
+  ]
   saveDraft(clips, draft.projectName, draft.resolution, draft.fps)
-  const message = `He activado el audio de la línea de tiempo usando “${audio.name}” como referencia audible en los clips.`
+  showEditor()
+  const audioName = existing?.name || added[0]?.name || action.outputName
+  const message = `He añadido el audio “${audioName}” a la línea de tiempo de “${draft.projectName}”.`
   return { message, report: editorReport(message) }
 }
 

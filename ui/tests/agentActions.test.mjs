@@ -904,7 +904,10 @@ test('character kit and video editor execute, reuse export id, and reject unsign
     }
     if (url.includes('/api/v1/character-kits/library')) return json(kitLibrary)
     if (url.includes('/api/v1/outputs')) {
-      return json({ outputs: [{ name: 'clip-a.mp4', type: 'video', url: '/outputs/clip-a.mp4' }], total: 1 })
+      const audio = [{ name: 'tema.wav', type: 'audio', url: '/outputs/tema.wav' }]
+      const video = [{ name: 'clip-a.mp4', type: 'video', url: '/outputs/clip-a.mp4' }]
+      const outputs = url.includes('media_type=audio') ? audio : [...video, ...audio]
+      return json({ outputs, total: outputs.length })
     }
     if (url.includes('/api/v1/video-editor/probe')) {
       return json({ duration: 4, width: 1280, height: 720, fps: 30, has_audio: true, pixel_format: 'yuv420p', has_alpha: false })
@@ -926,6 +929,10 @@ test('character kit and video editor execute, reuse export id, and reject unsign
     assert.equal(unsigned.actions.length, 0)
     await executeAgentActions([{ type: 'create_video_editor_project', projectName: 'corte-final' }])
     await executeAgentActions([{ type: 'add_video_editor_clips', outputNames: ['clip-a.mp4'] }])
+    await executeAgentActions([{ type: 'add_video_editor_audio', outputName: 'tema.wav', clipName: '' }])
+    const { loadEditorDraft } = await import('../src/features/video-editor/editorDraft.ts')
+    const draft = loadEditorDraft(useStore.getState().activeWorkspace || 'default')
+    assert.equal(draft.clips.some(clip => clip.name === 'tema.wav'), true)
     const exported = await executeAgentActions([{ type: 'export_video_editor', confirm: true }])
     assert.equal(exported[0].ok, true)
     assert.equal(exported[0].report.state, 'queued')

@@ -1359,6 +1359,12 @@ Catálogo y ejecutor en `videoEditorActions.ts`: create/open proyecto → añadi
 
 Backend CAS `.wizard-conversation-v1.json` por workspace (`app/services/wizard_conversations.py`). `GET`/`PUT /api/v1/wizard/conversations` guarda mensajes, acciones, confirmaciones, `executionKey`, enlaces mensaje–job y último estado. Recargar el Wizard reconstruye las tarjetas desde ese registro.
 
-Pruebas de cierre de las fases 4–7: `cd ui && npx tsx --tsconfig tsconfig.app.json --test tests/agentActions.test.mjs tests/agentContract.test.mjs` → 58 pass, 0 fail. Persistencia: `PYTHONPATH=app python3 -m unittest tests.test_wizard_conversations` (este host no tiene el módulo `pytest`). No se lanzó GPU ni proveedores externos.
+Pruebas de cierre de las fases 4–7: `cd ui && npx tsx --tsconfig tsconfig.app.json --test tests/agentActions.test.mjs tests/agentContract.test.mjs` → 59 pass, 0 fail. Persistencia: `PYTHONPATH=app python3 -m unittest tests.test_wizard_conversations` (este host no tiene el módulo `pytest`). No se lanzó GPU ni proveedores externos.
 
 Este bloque cierra el goal de fases 4–7. No marcar el goal general de Agent Mode como completo. Fuera de este corte siguen: runtime de turnos/stream (Corte 4), el ejemplo rítmico completo de Corte 5, nightly 3–8, y migrar ejecutores restantes al contrato común.
+
+## 63. Hidrato sin carrera y audio real en Video Editor (2026-08-30)
+
+`applyRemoteWizardConversation` decide apply-remote vs keep-local. El GET del chat sólo corre al montar o cambiar de workspace, no cuando `busy` pasa a false. Un snapshot remoto sin los ids del turno local no sustituye las tarjetas recién escritas; un chat placeholder sí acepta el registro canónico al recargar.
+
+`add_video_editor_audio` sondea el output de audio nombrado y lo añade a la timeline por el mismo probe/persist que los clips de vídeo. `executeAgentActions` deja ese output en el draft.
