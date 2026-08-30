@@ -3,6 +3,7 @@ import type {
   AgentApplyStoryProposalAction,
   AgentApproveStorySectionAction,
   AgentApproveStoryVisualsAction,
+  AgentGenerateStoryVisualsAction,
   AgentCreateComicAction,
   AgentGenerateStorySectionAction,
   AgentGenerateSeriesPlanAction,
@@ -20,7 +21,7 @@ import type {
   AgentCreativeCharacter,
   AgentCreativeLocation,
 } from './agentActions'
-import { clearAgentSeriesPlanJob, notifyAgentSeriesAssemblyJob, notifyAgentSeriesPlanJob, notifyAgentSeriesRenderJob, notifyAgentStoryDraft, openAgentSeriesReviewView, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
+import { clearAgentSeriesPlanJob, notifyAgentSeriesAssemblyJob, notifyAgentSeriesPlanJob, notifyAgentSeriesRenderJob, notifyAgentStoryDraft, openAgentSeriesReviewView, openAgentSeriesSection, openAgentStorySection, requestAgentStoryVisualGeneration } from './agentUiBus'
 
 const normalizeName = (value: string): string => value
   .normalize('NFD')
@@ -832,6 +833,32 @@ export async function approveStoryVisuals(action: AgentApproveStoryVisualsAction
   })
   await useStoryStore.getState().loadWorkspace(workspace)
   return `He vinculado y aprobado ${labels.length} referencia${labels.length === 1 ? '' : 's'} en “${project.title}”: ${labels.join(' · ')}.`
+}
+
+export async function generateStoryVisuals(action: AgentGenerateStoryVisualsAction): Promise<string> {
+  if (!action.confirm) throw new Error('Generar referencias visuales de Story Lab requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const { useStoryStore } = await import('../stories/store')
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const current = useStoryStore.getState()
+  if (current.libraryConflicts.length) {
+    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de generar imágenes.')
+  }
+  const target = action.targetStoryTitle
+    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
+    : current.project
+  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (current.activeProjectOperations[target.id]) {
+    throw new Error(`La historia “${target.title}” ya tiene una operación visual activa.`)
+  }
+  useStoryStore.setState({ project: target, dirty: false })
+  showLab('stories')
+  openAgentStorySection('assets')
+  return requestAgentStoryVisualGeneration({
+    projectId: target.id,
+    scope: action.scope,
+    targetNames: action.targetNames,
+  })
 }
 
 export async function stageStoryComic(action: AgentStageStoryComicAction): Promise<string> {

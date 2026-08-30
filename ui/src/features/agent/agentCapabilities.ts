@@ -139,6 +139,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['target_story_title', 'story_visual_selections', 'confirm'],
   },
   {
+    type: 'generate_story_visuals',
+    title: 'Generate Story concept references',
+    purpose: 'Run the real recoverable Story image path for the world, exact locations, exact characters or all available visual prompts.',
+    useWhen: 'The user explicitly asks to generate Story Lab concept or identity images.',
+    risk: 'compute',
+    parameters: ['target_story_title', 'story_visual_scope', 'target_names', 'confirm'],
+  },
+  {
     type: 'stage_story_comic',
     title: 'Stage a Story as a comic chapter',
     purpose: 'Use the official Story adaptation builder to replace the editable Comic Director draft, register a staged production, and open it without rendering images.',

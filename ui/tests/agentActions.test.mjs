@@ -74,11 +74,19 @@ test('queues a 3D scene control request until the lazy animator mounts', async (
   unsubscribe()
 })
 
+test('queues Story visual generation until Story Lab mounts', async () => {
+  const { listenForAgentStoryVisualGeneration, requestAgentStoryVisualGeneration } = await import('../src/features/agent/agentUiBus.ts')
+  const pending = requestAgentStoryVisualGeneration({ projectId: 'story-1', scope: 'characters', targetNames: ['Iria'] })
+  const unsubscribe = listenForAgentStoryVisualGeneration(async request => `generated:${request.targetNames[0]}`)
+  assert.equal(await pending, 'generated:Iria')
+  unsubscribe()
+})
+
 test('capability knowledge includes every currently executable action family', async () => {
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -174,6 +182,17 @@ test('parses confirmed exact Story visual reference selections', async () => {
       { targetKind: 'world', targetName: '', assetName: 'Costa nocturna', primary: false },
       { targetKind: 'character', targetName: 'Iria', assetName: 'Iria frontal', primary: true },
     ],
+  }])
+})
+
+test('parses confirmed Story visual generation scope and exact targets', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({ reply: 'Pinto las identidades.', actions: [
+    { type: 'generate_story_visuals', story_visual_scope: 'sets', target_names: [], confirm: true },
+    { type: 'generate_story_visuals', target_story_title: 'La torre de sal', story_visual_scope: 'characters', target_names: ['Iria', 'Elías'], confirm: true },
+  ] }))
+  assert.deepEqual(turn.actions, [{
+    type: 'generate_story_visuals', targetStoryTitle: 'La torre de sal', scope: 'characters', targetNames: ['Iria', 'Elías'], confirm: true,
   }])
 })
 

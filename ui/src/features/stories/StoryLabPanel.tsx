@@ -48,7 +48,7 @@ import type {
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
 import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, normalizeStoryMusicModel, songWriteTarget } from './musicModel'
-import { listenForAgentStoryDraft, listenForAgentStorySection } from '../agent/agentUiBus'
+import { listenForAgentStoryDraft, listenForAgentStorySection, listenForAgentStoryVisualGeneration } from '../agent/agentUiBus'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
@@ -56,6 +56,7 @@ const panel = 'rounded-xl border border-border bg-bg-secondary p-3 md:p-4'
 const requiredInput = 'border-violet-400/70 bg-violet-500/5 shadow-[0_0_14px_rgba(139,92,246,0.22)] focus:border-violet-300 focus:shadow-[0_0_18px_rgba(139,92,246,0.32)]'
 const requiredPreparationButton = 'border-violet-400/70 bg-violet-500/10 text-violet-200 shadow-[0_0_14px_rgba(139,92,246,0.22)] hover:border-violet-300 hover:bg-violet-500/20 hover:text-violet-100 disabled:shadow-none'
 const completeGenerationButton = 'border-emerald-400/70 bg-emerald-500/10 text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.24)] hover:border-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100 disabled:shadow-none'
+const storyLookupName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
 const CHARACTER_IDENTITY_REFERENCE_LOCK = [
   'CHARACTER IDENTITY REFERENCE: show exactly one character in a clear medium close-up or chest-up portrait.',
   'The face must be large in frame, sharply readable, unobstructed and well lit, with both eyes and defining facial features clearly visible.',
@@ -2146,6 +2147,60 @@ export function StoryLabPanel() {
       endProjectOperation(sourceProjectId)
     }
   }
+  const generateVisualRef = useRef(generateVisual)
+  generateVisualRef.current = generateVisual
+  useEffect(() => listenForAgentStoryVisualGeneration(async request => {
+    const current = useStoryStore.getState().project
+    if (current.id !== request.projectId) {
+      throw new Error('La historia cambió mientras se preparaba la generación visual; no he generado imágenes en otro proyecto.')
+    }
+    const requestedNames = new Set(request.targetNames.map(storyLookupName).filter(Boolean))
+    const includeCharacters = request.scope === 'characters' || request.scope === 'all'
+    const includeLocations = request.scope === 'locations' || request.scope === 'all'
+    const characters = includeCharacters
+      ? current.characters.filter(character => !requestedNames.size || requestedNames.has(storyLookupName(character.name)))
+      : []
+    const locations = includeLocations
+      ? current.world.locations.filter(location => !requestedNames.size || requestedNames.has(storyLookupName(location.name)))
+      : []
+    const ambiguous = [...requestedNames].filter(name => (
+      characters.filter(character => storyLookupName(character.name) === name).length
+      + locations.filter(location => storyLookupName(location.name) === name).length
+    ) > 1)
+    if (ambiguous.length) throw new Error(`Estos destinos visuales no son inequívocos: ${ambiguous.join(', ')}.`)
+    const matchedNames = new Set([
+      ...characters.map(character => storyLookupName(character.name)),
+      ...locations.map(location => storyLookupName(location.name)),
+    ])
+    const unknown = [...requestedNames].filter(name => !matchedNames.has(name))
+    if (unknown.length) throw new Error(`No existen estos destinos visuales en “${current.title}”: ${unknown.join(', ')}.`)
+
+    const targets: Array<{ target: { kind: 'world' | 'character' | 'location'; id?: string }; label: string; prompt: string }> = []
+    if (request.scope === 'world' || (request.scope === 'all' && !requestedNames.size)) {
+      targets.push({ target: { kind: 'world' }, label: 'mundo', prompt: current.world.visualPrompt })
+    }
+    characters.forEach(character => targets.push({ target: { kind: 'character', id: character.id }, label: character.name, prompt: character.visualPrompt }))
+    locations.forEach(location => targets.push({ target: { kind: 'location', id: location.id }, label: location.name, prompt: location.visualPrompt }))
+    if (!targets.length) throw new Error('La selección no contiene mundos, personajes ni localizaciones que puedan generarse.')
+    const missingPrompts = targets.filter(target => !target.prompt.trim()).map(target => target.label)
+    if (missingPrompts.length) throw new Error(`Falta visualPrompt para: ${missingPrompts.join(', ')}.`)
+
+    let completed = 0
+    let failure = ''
+    for (const item of targets) {
+      const ok = await generateVisualRef.current(item.target, item.prompt, {
+        quiet: true,
+        projectId: request.projectId,
+        onError: message => { failure = message },
+      })
+      if (!ok) throw new Error(`${completed}/${targets.length} referencias terminadas. Falló “${item.label}”: ${failure || 'error de generación desconocido'}.`)
+      completed += 1
+    }
+    setTab('assets')
+    const result = `He generado y adjuntado ${completed} referencia${completed === 1 ? '' : 's'} visual${completed === 1 ? '' : 'es'} en “${current.title}”. Quedan en Draft dentro de Story Lab → Assets para que las revises y apruebes.`
+    setNotice({ kind: 'ok', text: result })
+    return result
+  }), [])
 
   const writeStyleIntoPrompts = () => {
     const style = storyRenderStyle(project)

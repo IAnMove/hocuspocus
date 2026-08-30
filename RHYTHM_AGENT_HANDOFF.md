@@ -1267,3 +1267,11 @@ La promesa del action bus no se resuelve hasta que el backend devuelve el output
 El asset queda aprobado globalmente y vinculado al mundo, localización o personaje indicado. Para personajes, la primera referencia elegida se convierte en primaria si todavía no había una; `primary=true` permite cambiarla explícitamente. Esto no aprueba automáticamente toda la sección Characters: la validación canónica sigue perteneciendo a `approve_story_section`.
 
 El guardado usa la revisión CAS de la biblioteca, incrementa las versiones de World/Characters cuando cambian sus vínculos e invalida únicamente las aprobaciones de texto afectadas. Una repetición exacta es idempotente y sólo abre `Story Lab → Assets`. La navegación del Wizard reconoce ahora también Assets, Music, Trailer y Assembly, además de las secciones que ya controlaba.
+
+## 50. Wizard: generación recuperable de imágenes de Story Lab
+
+`generate_story_visuals` exige `confirm=true` y admite `world`, `locations`, `characters` o `all`. `target_names` puede limitar personajes/localizaciones por nombre exacto; una lista vacía procesa todo el scope. La acción resuelve y abre la Story canónica y entrega una petición diferida al panel lazy.
+
+El panel valida todos los destinos y `visualPrompt` antes de gastar cómputo. Después reutiliza secuencialmente `generateVisual`/`generateImageAsset`, incluida la elección de proveedor/modelo, bloqueo de estilo, negative prompt, referencia primaria, recuperación por `visualJobs`, Activity y protección contra cambiar de historia a mitad del job. Cada resultado se adjunta al destino correcto como asset `draft`; jamás se aprueba automáticamente. Si ocurre un fallo, la respuesta indica cuántas referencias terminaron antes del error y conserva el job recuperable.
+
+Al terminar abre `Story Lab → Assets` y sólo informa el número real de imágenes adjuntadas. Durante el desarrollo se probaron parser/bus/build, pero no se lanzó ninguna generación de imagen ni se consumió GPU.

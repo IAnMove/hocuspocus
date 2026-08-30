@@ -197,6 +197,14 @@ export interface AgentApproveStoryVisualsAction {
   confirm: true
 }
 
+export interface AgentGenerateStoryVisualsAction {
+  type: 'generate_story_visuals'
+  targetStoryTitle: string
+  scope: 'world' | 'locations' | 'characters' | 'all'
+  targetNames: string[]
+  confirm: true
+}
+
 export interface AgentStageStoryComicAction {
   type: 'stage_story_comic'
   targetStoryTitle: string
@@ -429,6 +437,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentApplyStoryProposalAction
   | AgentApproveStorySectionAction
   | AgentApproveStoryVisualsAction
+  | AgentGenerateStoryVisualsAction
   | AgentStageStoryComicAction
   | AgentStageStoryVideoAction
   | AgentCreateSeriesEpisodeAction
@@ -518,6 +527,7 @@ const STORY_APPROVAL_SECTIONS = new Set<AgentApproveStorySectionAction['section'
   'overview', 'world', 'characters', 'relationships', 'structure',
 ])
 const STORY_VISUAL_TARGETS = new Set<AgentStoryVisualSelection['targetKind']>(['world', 'location', 'character'])
+const STORY_VISUAL_SCOPES = new Set<AgentGenerateStoryVisualsAction['scope']>(['world', 'locations', 'characters', 'all'])
 const SERIES_PLAN_SCOPES = new Set<AgentGenerateSeriesPlanAction['scope']>([
   'outline', 'script', 'shots', 'complete',
 ])
@@ -555,6 +565,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   applystoryproposal: 'apply_story_proposal',
   approvestorysection: 'approve_story_section',
   approvestoryvisuals: 'approve_story_visuals',
+  generatestoryvisuals: 'generate_story_visuals',
   stagestorycomic: 'stage_story_comic',
   stagestoryvideo: 'stage_story_video',
   createseriesepisode: 'create_series_episode',
@@ -692,7 +703,7 @@ const CANONICAL_FIELD_NAMES = [
   'queue_scope', 'task_id', 'job_id', 'shot_ids', 'shot_numbers', 'attempt_id', 'render_mode',
   'review_decision', 'review_scope', 'canon_decision', 'canon_item_ids', 'production_kind',
   'scene_name', 'layer_name', 'audio_output_name', 'cue_source', 'rhythm_profile', 'intensity',
-  'confirm', 'characters', 'locations', 'outline_beats', 'story_visual_selections',
+  'confirm', 'characters', 'locations', 'outline_beats', 'story_visual_selections', 'story_visual_scope', 'target_names',
   'target_kind', 'target_name', 'asset_name', 'primary',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
@@ -997,6 +1008,18 @@ function parseAction(value: unknown): AgentAction | null {
       type: 'approve_story_visuals',
       targetStoryTitle: cleanString(raw.target_story_title, 300),
       selections,
+      confirm: true,
+    }
+  }
+  if (type === 'generate_story_visuals') {
+    if (raw.confirm !== true) return null
+    const scope = cleanString(raw.story_visual_scope, 30) as AgentGenerateStoryVisualsAction['scope']
+    if (!STORY_VISUAL_SCOPES.has(scope)) return null
+    return {
+      type: 'generate_story_visuals',
+      targetStoryTitle: cleanString(raw.target_story_title, 300),
+      scope,
+      targetNames: stringArray(raw.target_names, 40, 300),
       confirm: true,
     }
   }
@@ -1568,7 +1591,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1588,6 +1611,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           title: { type: 'string', maxLength: 300 },
           target_story_title: { type: 'string', maxLength: 300 },
           story_generation_scope: { type: 'string', enum: ['', 'all', 'overview', 'world', 'characters', 'relationships', 'structure'] },
+          story_visual_scope: { type: 'string', enum: ['', 'world', 'locations', 'characters', 'all'] },
           series_plan_scope: { type: 'string', enum: ['', 'outline', 'script', 'shots', 'complete'] },
           instruction: { type: 'string', maxLength: 4_000 },
           direction: { type: 'string', maxLength: 4_000 },
@@ -1627,6 +1651,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           review_scope: { type: 'string', enum: ['', 'selected_latest', 'all_latest'] },
           canon_decision: { type: 'string', enum: ['', 'accept_all', 'reject_all', 'accept_selected', 'reject_selected'] },
           canon_item_ids: { type: 'array', maxItems: 200, items: { type: 'string', maxLength: 160 } },
+          target_names: { type: 'array', maxItems: 40, items: { type: 'string', maxLength: 300 } },
           scene_name: { type: 'string', maxLength: 300 },
           layer_name: { type: 'string', maxLength: 300 },
           audio_output_name: { type: 'string', maxLength: 300 },
@@ -2122,6 +2147,8 @@ export async function executeAgentActions(
               ? `Validando y aprobando Story Lab → ${action.section}…`
             : action.type === 'approve_story_visuals'
               ? 'Vinculando y aprobando referencias visuales de Story Lab…'
+            : action.type === 'generate_story_visuals'
+              ? `Generando referencias visuales de Story Lab (${action.scope})…`
             : action.type === 'stage_story_comic'
               ? 'Adaptando la historia a Comic Director…'
             : action.type === 'stage_story_video'
@@ -2226,6 +2253,9 @@ export async function executeAgentActions(
       } else if (action.type === 'approve_story_visuals') {
         const { approveStoryVisuals } = await import('./labActions')
         results.push({ action, ok: true, message: await approveStoryVisuals(action) })
+      } else if (action.type === 'generate_story_visuals') {
+        const { generateStoryVisuals } = await import('./labActions')
+        results.push({ action, ok: true, message: await generateStoryVisuals(action) })
       } else if (action.type === 'stage_story_comic') {
         const { stageStoryComic } = await import('./labActions')
         results.push({ action, ok: true, message: await stageStoryComic(action) })

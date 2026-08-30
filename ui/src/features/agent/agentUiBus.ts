@@ -19,6 +19,46 @@ let requestedSeriesRenderJob: SeriesJobStatus | null = null
 let requestedSeriesAssemblyJob: SeriesAssemblyJob | null = null
 let requestedSeriesReviewView: AgentSeriesReviewView | null = null
 
+export interface AgentStoryVisualGenerationRequest {
+  projectId: string
+  scope: 'world' | 'locations' | 'characters' | 'all'
+  targetNames: string[]
+}
+
+interface PendingStoryVisualGenerationRequest {
+  request: AgentStoryVisualGenerationRequest
+  resolve: (message: string) => void
+  reject: (error: Error) => void
+}
+
+const STORY_VISUAL_GENERATION_EVENT = 'hocuspocus:story-visual-generation'
+const pendingStoryVisualGenerationRequests: PendingStoryVisualGenerationRequest[] = []
+
+export function requestAgentStoryVisualGeneration(request: AgentStoryVisualGenerationRequest): Promise<string> {
+  return new Promise((resolve, reject) => {
+    pendingStoryVisualGenerationRequests.push({ request, resolve, reject })
+    window.dispatchEvent(new CustomEvent(STORY_VISUAL_GENERATION_EVENT))
+  })
+}
+
+export function listenForAgentStoryVisualGeneration(
+  listener: (request: AgentStoryVisualGenerationRequest) => Promise<string>,
+): () => void {
+  let active = true
+  const drain = async () => {
+    while (active && pendingStoryVisualGenerationRequests.length) {
+      const pending = pendingStoryVisualGenerationRequests.shift()
+      if (!pending) continue
+      try { pending.resolve(await listener(pending.request)) }
+      catch (error) { pending.reject(error instanceof Error ? error : new Error(String(error))) }
+    }
+  }
+  const handler = () => { void drain() }
+  window.addEventListener(STORY_VISUAL_GENERATION_EVENT, handler)
+  void drain()
+  return () => { active = false; window.removeEventListener(STORY_VISUAL_GENERATION_EVENT, handler) }
+}
+
 export type AgentSceneControlRequest =
   | { type: 'open_3d_scene'; sceneName: string; layerName: string }
   | { type: 'save_3d_scene'; sceneName: string }
