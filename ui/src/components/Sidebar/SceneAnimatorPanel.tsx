@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, typ
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { useStore } from '../../stores/useStore'
-import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
+import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, fetchOutputs, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 import { SceneRecipePanel } from './SceneRecipePanel'
 import type { SceneRecipe } from '../../lib/sceneRecipe'
@@ -10,6 +10,7 @@ import { sceneToRecipe } from '../../lib/sceneToRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
 import { SceneLibraryDialog } from './SceneLibraryDialog'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
+import { normalizeSceneLookupName, sceneFromLibraryPayload, sceneLibraryTitle, sceneOutputMatchesName } from '../../lib/sceneLibrary'
 import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
@@ -26,7 +27,7 @@ import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
 import { CharacterKitLibraryPanel } from '../../features/characters/CharacterKitLibraryPanel'
 import type { CharacterKitEditorTab } from '../../features/characters/characterKitGuide'
-import { listenForAgentSceneRhythm } from '../../features/agent/agentUiBus'
+import { listenForAgentSceneControl, listenForAgentSceneRhythm } from '../../features/agent/agentUiBus'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 type AnimatorLayerType = SceneLayerType
@@ -1592,7 +1593,7 @@ export function SceneAnimatorPanel() {
       setMessage(localAssets > 0 ? `Scene JSON exported. ${localAssets} local asset${localAssets === 1 ? '' : 's'} will require reassignment when imported.` : 'Scene JSON exported.')
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Scene JSON could not be exported.') }
   }
-  const importScene = (text: string, successMessage?: string) => {
+  const importScene = (text: string, successMessage?: string): boolean => {
     try {
       const incoming = parseSceneFile(text) as AnimatorScene
       const incomingIds = incoming.layers.map((layer, index) => {
@@ -1692,7 +1693,8 @@ export function SceneAnimatorPanel() {
       previousObjectUrls.forEach(url => URL.revokeObjectURL(url))
       const missingAssets = layers.filter(layer => layer.type !== 'camera' && layer.missingAsset).length
       localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(successMessage ?? `Scene imported: ${layers.length} layer${layers.length === 1 ? '' : 's'}.${missingAssets ? ` Reassign ${missingAssets} missing asset${missingAssets === 1 ? '' : 's'}.` : ''}`); setJsonOpen(false)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
+      return true
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.'); return false }
   }
   const importSceneFile = async (file: File) => {
     try {
@@ -2167,9 +2169,9 @@ export function SceneAnimatorPanel() {
       await persistScene()
     }
   }
-  const persistScene = async () => {
+  const persistScene = async (): Promise<string | null> => {
     const current = sceneRef.current
-    if (!current.layers.length) { setMessage('Add at least one layer before saving.'); return }
+    if (!current.layers.length) { setMessage('Add at least one layer before saving.'); return null }
     setSaving(true); setMessage(null)
     try {
       const preview = document.createElement('canvas')
@@ -2185,11 +2187,13 @@ export function SceneAnimatorPanel() {
         return { ...layer, source: uploaded.url, missingAsset: false }
       }))
       const persisted = { ...current, layers }
-      const saved = await saveSceneOutput(persisted, preview.toDataURL('image/png'))
+      const saved = await saveSceneOutput(persisted, preview.toDataURL('image/png'), workspace)
       replaceScene(persisted); localFilesRef.current = {}; await loadOutputs()
       setMessage(`Scene saved to HocusPocus as ${saved.name}`)
+      return saved.name
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to save scene.')
+      return null
     } finally {
       setSaving(false)
     }
@@ -2398,8 +2402,49 @@ export function SceneAnimatorPanel() {
       setRhythmError(error instanceof Error ? error.message : 'Could not turn this rhythm into scene keyframes.')
     }
   }
+  const importSceneRef = useRef(importScene)
+  const persistSceneRef = useRef(persistScene)
+  importSceneRef.current = importScene
+  persistSceneRef.current = persistScene
+  useEffect(() => listenForAgentSceneControl(async request => {
+    const current = sceneRef.current
+    if (request.type === 'save_3d_scene') {
+      if (request.sceneName && normalizeSceneLookupName(request.sceneName) !== normalizeSceneLookupName(current.name)) {
+        throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”; no he guardado otra escena por error.`)
+      }
+      const savedName = await persistSceneRef.current()
+      if (!savedName) throw new Error('HocusPocus no pudo guardar la escena 3D abierta.')
+      return `He guardado “${current.name}” como ${savedName}. Sus capas y keyframes siguen siendo editables.`
+    }
+
+    const library = await fetchOutputs(0, 0, { mediaType: 'scene', workspace })
+    const matches = library.outputs.filter(file => sceneOutputMatchesName(file, request.sceneName))
+    if (!matches.length) {
+      const available = library.outputs.slice(0, 8).map(file => `“${sceneLibraryTitle(file.name)}”`).join(', ')
+      throw new Error(`No existe una escena guardada llamada “${request.sceneName}” en este workspace.${available ? ` Disponibles: ${available}.` : ''}`)
+    }
+    if (matches.length > 1) throw new Error(`Hay varias escenas guardadas llamadas “${request.sceneName}”; indica el nombre completo del archivo.`)
+    const response = await fetch(matches[0].url)
+    if (!response.ok) throw new Error(`No se pudo cargar la escena guardada “${request.sceneName}”.`)
+    const next = sceneFromLibraryPayload(await response.json()) as AnimatorScene
+    const layerMatches = request.layerName
+      ? next.layers.filter(layer => normalizeSceneLookupName(layer.name) === normalizeSceneLookupName(request.layerName))
+      : []
+    if (layerMatches.length > 1) throw new Error(`La escena contiene varias capas llamadas “${request.layerName}”; renómbralas antes de seleccionarlas con el Wizard.`)
+    if (request.layerName && !layerMatches.length) throw new Error(`La escena “${next.name}” no contiene una capa llamada “${request.layerName}”.`)
+    if (!importSceneRef.current(JSON.stringify(next), `Opened ${sceneLibraryTitle(matches[0].name)}`)) {
+      throw new Error(`La escena guardada “${request.sceneName}” no se pudo abrir en Video 3D.`)
+    }
+    const target = layerMatches[0] ?? next.layers[0]
+    setSelectedId(target?.id ?? null)
+    const result = target
+      ? `He abierto “${next.name}” y seleccionado la capa “${target.name}”.`
+      : `He abierto “${next.name}”; la escena no contiene capas.`
+    setMessage(result)
+    return result
+  }), [workspace])
   useEffect(() => listenForAgentSceneRhythm(async request => {
-    const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
+    const normalize = normalizeSceneLookupName
     const current = sceneRef.current
     if (request.sceneName && normalize(request.sceneName) !== normalize(current.name)) {
       throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”. Abre primero la escena correcta.`)

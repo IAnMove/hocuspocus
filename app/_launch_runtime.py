@@ -26397,7 +26397,7 @@ def save_scene_output(body: dict):
     safe_name = _re_scene.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "scene"
     stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
     stem = f"{stamp}_{safe_name}_{uuid.uuid4().hex[:6]}.scene"
-    out_dir = _workspace_dir()
+    out_dir = _workspace_dir(body.get("workspace") or None)
     os.makedirs(out_dir, exist_ok=True)
     scene_name = f"{stem}.json"
     preview_name = f"{stem}.preview.png"

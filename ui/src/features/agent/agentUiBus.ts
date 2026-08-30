@@ -19,6 +19,44 @@ let requestedSeriesRenderJob: SeriesJobStatus | null = null
 let requestedSeriesAssemblyJob: SeriesAssemblyJob | null = null
 let requestedSeriesReviewView: AgentSeriesReviewView | null = null
 
+export type AgentSceneControlRequest =
+  | { type: 'open_3d_scene'; sceneName: string; layerName: string }
+  | { type: 'save_3d_scene'; sceneName: string }
+
+interface PendingSceneControlRequest {
+  request: AgentSceneControlRequest
+  resolve: (message: string) => void
+  reject: (error: Error) => void
+}
+
+const SCENE_CONTROL_REQUEST_EVENT = 'hocuspocus:scene-control-request'
+const pendingSceneControlRequests: PendingSceneControlRequest[] = []
+
+export function requestAgentSceneControl(request: AgentSceneControlRequest): Promise<string> {
+  return new Promise((resolve, reject) => {
+    pendingSceneControlRequests.push({ request, resolve, reject })
+    window.dispatchEvent(new CustomEvent(SCENE_CONTROL_REQUEST_EVENT))
+  })
+}
+
+export function listenForAgentSceneControl(
+  listener: (request: AgentSceneControlRequest) => Promise<string>,
+): () => void {
+  let active = true
+  const drain = async () => {
+    while (active && pendingSceneControlRequests.length) {
+      const pending = pendingSceneControlRequests.shift()
+      if (!pending) continue
+      try { pending.resolve(await listener(pending.request)) }
+      catch (error) { pending.reject(error instanceof Error ? error : new Error(String(error))) }
+    }
+  }
+  const handler = () => { void drain() }
+  window.addEventListener(SCENE_CONTROL_REQUEST_EVENT, handler)
+  void drain()
+  return () => { active = false; window.removeEventListener(SCENE_CONTROL_REQUEST_EVENT, handler) }
+}
+
 export interface AgentSceneRhythmRequest {
   sceneName: string
   layerName: string

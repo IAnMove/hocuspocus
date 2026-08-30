@@ -1245,3 +1245,11 @@ La acción termina en el paso editable de estilo y declara expresamente que no h
 La acción opera sobre la escena actualmente abierta y valida `scene_name` cuando se proporciona. Resuelve una capa por nombre exacto normalizado, selección actual o única capa visible; rechaza duplicados, capas bloqueadas y selecciones ambiguas. Puede adjuntar por nombre exacto un output de audio existente o reutilizar la pista musical inequívoca de la escena.
 
 Después llama al analizador real, verifica que existan beats solapados, construye el mapa con el offset de pista y aplica `pulse`, `bounce`, `peek` o `camera-punch` usando beats o downbeats. El resultado se guarda como keyframes ordinarios editables en el historial de la escena; la UI conserva pista, análisis, perfil, intensidad y primer cue seleccionados. La respuesta informa BPM y conteos reales. No captura ni renderiza.
+
+## 47. Wizard: abrir, seleccionar y guardar escenas Video 3D
+
+`open_3d_scene` exige `confirm=true` porque sustituye el estado actual del editor. Busca únicamente escenas reales del workspace activo y sólo acepta una coincidencia exacta con el nombre de archivo o el título visible normalizado. Rechaza ausencias y duplicados, descarga y valida el JSON con el mismo contrato de la biblioteca de escenas, abre Video 3D y puede seleccionar una capa por nombre exacto. Nunca informa éxito si la importación falla.
+
+`save_3d_scene` también exige `confirm=true`. Opera sobre la escena actualmente abierta y permite usar `scene_name` como guarda para no persistir la escena equivocada. Reutiliza el guardado real del editor —incluidos assets locales, preview, capas y keyframes— y devuelve el nombre concreto creado por el backend. El endpoint de escenas recibe ahora el workspace explícito, corrigiendo el comportamiento anterior que podía guardar en el workspace global mientras el usuario trabajaba en otro.
+
+Ambas órdenes viajan por una cola diferida del `agentUiBus`, de modo que no se pierden mientras Video 3D se monta de forma lazy. El snapshot del Wizard incluye también los outputs de escena visibles que conoce el store. Ninguna de estas acciones captura ni renderiza vídeo; esa operación seguirá siendo una acción de cómputo independiente y confirmada.

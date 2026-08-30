@@ -211,6 +211,22 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['series_title', 'target_episode_title', 'canon_decision', 'canon_item_ids', 'confirm'],
   },
   {
+    type: 'open_3d_scene',
+    title: 'Open an editable 3D Video scene',
+    purpose: 'Resolve an exact saved scene in the active workspace, open it in Video 3D and optionally select one exact layer.',
+    useWhen: 'The user explicitly asks to open a named saved 3D scene or work on one of its layers.',
+    risk: 'edit',
+    parameters: ['scene_name', 'layer_name', 'confirm'],
+  },
+  {
+    type: 'save_3d_scene',
+    title: 'Save the current editable 3D Video scene',
+    purpose: 'Persist the currently open scene and its ordinary editable keyframes in the active workspace.',
+    useWhen: 'The user explicitly asks to save the current 3D scene after editing or applying rhythm.',
+    risk: 'edit',
+    parameters: ['scene_name', 'confirm'],
+  },
+  {
     type: 'apply_3d_rhythm',
     title: 'Apply music rhythm to an editable 3D scene layer',
     purpose: 'Open Video 3D, attach an exact existing audio output when requested, analyze BPM/beats/downbeats and bake a pulse, bounce, peek or camera-punch profile into ordinary keyframes.',

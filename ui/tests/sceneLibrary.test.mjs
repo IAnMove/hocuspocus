@@ -27,3 +27,15 @@ test('a saved scene JSON and a 3D clip sidecar both open as Scene Animator scene
   assert.equal(sceneFromLibraryPayload({ params: { scene } }).name, 'Station loop runner')
   assert.throws(() => sceneFromLibraryPayload({ params: { prompt: 'no scene' } }))
 })
+
+test('saved scene lookup accepts only an exact filename or visible title', async () => {
+  const { sceneOutputMatchesName } = await import('../src/lib/sceneLibrary.ts')
+  const file = { name: '2026-08-30-14h05m02s_Concierto-arcano_a1b2c3.scene.json' }
+
+  assert.equal(sceneLibraryTitle(file.name), 'Concierto arcano')
+  assert.equal(sceneOutputMatchesName(file, file.name), true)
+  assert.equal(sceneOutputMatchesName(file, 'Concierto arcano'), true)
+  assert.equal(sceneOutputMatchesName(file, 'concierto-ÁRCANO'), true)
+  assert.equal(sceneOutputMatchesName(file, 'Concierto'), false)
+  assert.equal(sceneOutputMatchesName(file, ''), false)
+})
