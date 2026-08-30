@@ -1110,3 +1110,18 @@ montaje recupera el resultado de `localStorage`. La acción deja la propuesta
 seleccionable en el UI y **no** la aplica, aprueba ni genera imágenes. Así se
 mantiene separado el coste autorizado de escribir del cambio de canon que el
 usuario todavía debe revisar.
+
+## 35. Aplicar una propuesta de Story Lab (2026-08-30)
+
+`apply_story_proposal` exige `confirm=true`, lee únicamente el resultado
+recuperable de la historia activa o de un título exacto y rechaza borradores
+ausentes, incompletos, corruptos o que no cambien nada. Aplica overview, mundo,
+localizaciones, personajes, relaciones y estructura; remapea identidades por
+ID/nombre y conserva referencias visuales y selecciones primarias existentes.
+
+Después calcula las secciones cambiadas, incrementa sus versiones, elimina sus
+aprobaciones obsoletas y guarda la biblioteca con CAS. Sólo tras confirmarse el
+guardado elimina el checkpoint de propuesta/job y refresca el panel mediante el
+bus. No aprueba secciones ni lanza imágenes. La acción aplica la propuesta
+completa; la selección granular de campos sigue siendo una operación manual del
+panel en este corte.

@@ -1,5 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type {
+  AgentApplyStoryProposalAction,
   AgentCreateComicAction,
   AgentGenerateStorySectionAction,
   AgentCreateSeriesEpisodeAction,
@@ -420,6 +421,188 @@ export async function generateStorySectionDraft(
   } finally {
     useStoryStore.getState().endProjectOperation(project.id)
   }
+}
+
+export async function applyStoredStoryProposal(action: AgentApplyStoryProposalAction): Promise<string> {
+  if (!action.confirm) throw new Error('Aplicar una propuesta de Story Lab requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useStoryStore, normalizeStoryProject, storyId }, { changedSections, normalizeStoryCharacter }, api] = await Promise.all([
+    import('../stories/store'),
+    import('../stories/model'),
+    import('../../api/client'),
+  ])
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const current = useStoryStore.getState()
+  if (current.libraryConflicts.length) {
+    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de aplicar la propuesta.')
+  }
+  const target = action.targetStoryTitle
+    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
+    : current.project
+  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (current.activeProjectOperations[target.id]) {
+    throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+  }
+  const resultKey = `maestro-story-plan-result:${workspace}:${target.id}`
+  const jobKey = `maestro-story-plan-job:${workspace}:${target.id}`
+  let saved: { scope?: unknown; result?: unknown } | null = null
+  try {
+    saved = JSON.parse(window.localStorage.getItem(resultKey) || 'null')
+  } catch {
+    throw new Error(`La propuesta guardada de “${target.title}” está dañada; vuelve a generarla.`)
+  }
+  if (!saved?.result || typeof saved.result !== 'object' || Array.isArray(saved.result)) {
+    throw new Error(`No hay una propuesta terminada para “${target.title}”. Genera una sección y revísala primero.`)
+  }
+  const result = saved.result as Record<string, unknown>
+  const candidate = structuredClone(target)
+  const overview = result.overview && typeof result.overview === 'object' && !Array.isArray(result.overview)
+    ? result.overview as Record<string, unknown>
+    : null
+  if (overview) {
+    const overviewFields = [
+      'title', 'language', 'spokenLanguage', 'genre', 'tone', 'audience',
+      'visualStyle', 'characterVisualStyle', 'premise', 'logline', 'synopsis', 'theme', 'ending',
+    ] as const
+    overviewFields.forEach(field => {
+      const value = overview[field]
+      if (typeof value === 'string') {
+        ;(candidate as unknown as Record<string, unknown>)[field] = value
+      }
+    })
+    if (overview.creativeBrief && typeof overview.creativeBrief === 'object' && !Array.isArray(overview.creativeBrief)) {
+      const brief = overview.creativeBrief as Record<string, unknown>
+      Object.keys(candidate.creativeBrief).forEach(field => {
+        const value = brief[field]
+        if (typeof value === 'string' || typeof value === 'number') {
+          ;(candidate.creativeBrief as unknown as Record<string, unknown>)[field] = value
+        }
+      })
+    }
+  }
+
+  const generatedWorld = result.world && typeof result.world === 'object' && !Array.isArray(result.world)
+    ? result.world as Record<string, unknown>
+    : null
+  if (generatedWorld) {
+    const worldFields = ['summary', 'period', 'geography', 'society', 'technology', 'visualLanguage', 'visualPrompt', 'negativePrompt'] as const
+    worldFields.forEach(field => {
+      if (typeof generatedWorld[field] === 'string') candidate.world[field] = generatedWorld[field]
+    })
+    if (Array.isArray(generatedWorld.rules)) {
+      candidate.world.rules = generatedWorld.rules.filter((item): item is string => typeof item === 'string')
+    }
+    if (Array.isArray(generatedWorld.locations)) {
+      candidate.world.locations = generatedWorld.locations.map((value, index) => {
+        const raw = value && typeof value === 'object' && !Array.isArray(value)
+          ? value as Record<string, unknown> : {}
+        const name = typeof raw.name === 'string' ? raw.name : `Localización ${index + 1}`
+        const existing = target.world.locations.find(item => (
+          item.id === raw.id || normalizeName(item.name) === normalizeName(name)
+        ))
+        return {
+          id: existing?.id || (typeof raw.id === 'string' && raw.id ? raw.id : storyId('location')),
+          name,
+          purpose: typeof raw.purpose === 'string' ? raw.purpose : '',
+          description: typeof raw.description === 'string' ? raw.description : '',
+          visualPrompt: typeof raw.visualPrompt === 'string' ? raw.visualPrompt : '',
+          negativePrompt: typeof raw.negativePrompt === 'string' ? raw.negativePrompt : '',
+          referenceAssetIds: existing?.referenceAssetIds || [],
+        }
+      })
+    }
+  }
+
+  const characterIdMap = new Map<string, string>()
+  if (Array.isArray(result.characters)) {
+    candidate.characters = result.characters.map((value, index) => {
+      const generated = normalizeStoryCharacter(value, index)
+      const existing = target.characters.find(item => (
+        item.id === generated.id || normalizeName(item.name) === normalizeName(generated.name)
+      ))
+      if (generated.id) characterIdMap.set(generated.id, existing?.id || generated.id)
+      return {
+        ...generated,
+        id: existing?.id || generated.id || storyId('character'),
+        referenceAssetIds: existing?.referenceAssetIds || [],
+        primaryReferenceAssetId: existing?.primaryReferenceAssetId,
+        approval: 'draft' as const,
+      }
+    })
+  }
+  if (Array.isArray(result.relationships)) {
+    candidate.relationships = result.relationships.flatMap((value, index) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+      const raw = value as Record<string, unknown>
+      const generatedId = typeof raw.id === 'string' ? raw.id : ''
+      const existing = target.relationships.find(item => item.id === generatedId)
+      return [{
+        id: existing?.id || generatedId || storyId(`relationship-${index + 1}`),
+        fromCharacterId: characterIdMap.get(String(raw.fromCharacterId || '')) || String(raw.fromCharacterId || ''),
+        toCharacterId: characterIdMap.get(String(raw.toCharacterId || '')) || String(raw.toCharacterId || ''),
+        label: typeof raw.label === 'string' ? raw.label : '',
+        dynamic: typeof raw.dynamic === 'string' ? raw.dynamic : '',
+        evolution: typeof raw.evolution === 'string' ? raw.evolution : '',
+      }]
+    })
+  }
+  const generatedStructure = Array.isArray(result.structure)
+    ? result.structure
+    : Array.isArray(result.beats) ? result.beats : null
+  if (generatedStructure) {
+    const normalizedStructure = normalizeStoryProject({ ...candidate, beats: generatedStructure }).beats
+    candidate.beats = normalizedStructure.map(beat => {
+      const existing = target.beats.find(item => (
+        item.id === beat.id || (item.title && item.title === beat.title)
+      ))
+      return { ...beat, id: existing?.id || beat.id || storyId('beat') }
+    })
+  }
+
+  const normalized = normalizeStoryProject(candidate)
+  const sections = changedSections(target, normalized)
+  if (!sections.length) throw new Error(`La propuesta no cambia ningún campo de “${target.title}”.`)
+  const sectionVersions = { ...target.sectionVersions }
+  const approvals = { ...normalized.approvals }
+  sections.forEach(section => {
+    sectionVersions[section] += 1
+    delete approvals[section]
+  })
+  const project = normalizeStoryProject({
+    ...normalized,
+    revision: target.revision + 1,
+    sectionVersions,
+    approvals,
+    updatedAt: new Date().toISOString(),
+  })
+  const library = await api.saveStoryLibrary(workspace, {
+    version: 2,
+    revision: current.libraryRevision,
+    activeId: project.id,
+    projects: { ...current.projects, [project.id]: project },
+  })
+  useStoryStore.setState({
+    workspace,
+    project: library.projects[project.id],
+    projects: library.projects,
+    libraryRevision: library.revision,
+    dirty: false,
+    hydrated: false,
+    loading: false,
+    saveError: null,
+    libraryConflicts: [],
+  })
+  window.localStorage.removeItem(resultKey)
+  window.localStorage.removeItem(jobKey)
+  await useStoryStore.getState().loadWorkspace(workspace)
+  showLab('stories')
+  const reviewSections = new Set(['overview', 'world', 'characters', 'relationships', 'structure'])
+  const visibleSection = typeof saved.scope === 'string' && reviewSections.has(saved.scope)
+    ? saved.scope as 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
+    : 'overview'
+  openAgentStorySection(visibleSection)
+  notifyAgentStoryDraft(project.id)
+  return `He aplicado y guardado la propuesta de “${project.title}” en: ${sections.join(', ')}. Sus aprobaciones afectadas vuelven a borrador.`
 }
 
 export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisodeAction): Promise<string> {

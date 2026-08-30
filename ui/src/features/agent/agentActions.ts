@@ -170,6 +170,12 @@ export interface AgentGenerateStorySectionAction {
   confirm: true
 }
 
+export interface AgentApplyStoryProposalAction {
+  type: 'apply_story_proposal'
+  targetStoryTitle: string
+  confirm: true
+}
+
 export interface AgentCreateSeriesEpisodeAction {
   type: 'create_series_episode'
   seriesTitle: string
@@ -286,6 +292,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentCreateStoryAction
   | AgentUpdateStoryAction
   | AgentGenerateStorySectionAction
+  | AgentApplyStoryProposalAction
   | AgentCreateSeriesEpisodeAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
@@ -378,6 +385,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   createstory: 'create_story',
   updatestory: 'update_story',
   generatestorysection: 'generate_story_section',
+  applystoryproposal: 'apply_story_proposal',
   createseriesepisode: 'create_series_episode',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
@@ -745,6 +753,14 @@ function parseAction(value: unknown): AgentAction | null {
       targetStoryTitle: cleanString(raw.target_story_title, 300),
       scope,
       instruction: cleanString(raw.instruction, 4_000),
+      confirm: true,
+    }
+  }
+  if (type === 'apply_story_proposal') {
+    if (raw.confirm !== true) return null
+    return {
+      type: 'apply_story_proposal',
+      targetStoryTitle: cleanString(raw.target_story_title, 300),
       confirm: true,
     }
   }
@@ -1184,7 +1200,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1686,6 +1702,8 @@ export async function executeAgentActions(
               ? 'Actualizando y guardando la historia…'
             : action.type === 'generate_story_section'
               ? `Invocando una propuesta de Story Lab (${action.scope})…`
+            : action.type === 'apply_story_proposal'
+              ? 'Aplicando la propuesta revisable al canon de Story Lab…'
             : action.type === 'create_series_episode'
               ? 'Preparando la serie y el nuevo episodio…'
               : action.type === 'create_comic'
@@ -1755,6 +1773,9 @@ export async function executeAgentActions(
       } else if (action.type === 'generate_story_section') {
         const { generateStorySectionDraft } = await import('./labActions')
         results.push({ action, ok: true, message: await generateStorySectionDraft(action, onStep) })
+      } else if (action.type === 'apply_story_proposal') {
+        const { applyStoredStoryProposal } = await import('./labActions')
+        results.push({ action, ok: true, message: await applyStoredStoryProposal(action) })
       } else if (action.type === 'create_series_episode') {
         const { createFilledSeriesEpisode } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledSeriesEpisode(action) })

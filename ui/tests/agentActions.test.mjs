@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -102,6 +102,22 @@ test('requires confirmation and a valid scope for Story Lab generation', async (
     targetStoryTitle: 'La torre de sal',
     scope: 'world',
     instruction: 'Haz más concretas sus reglas.',
+    confirm: true,
+  }])
+})
+
+test('requires confirmation before applying a Story Lab proposal', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Sello los cambios.',
+    actions: [
+      { type: 'apply_story_proposal', target_story_title: 'La torre de sal', confirm: false },
+      { type: 'apply_story_proposal', target_story_title: 'La torre de sal', confirm: true },
+    ],
+  }))
+  assert.deepEqual(turn.actions, [{
+    type: 'apply_story_proposal',
+    targetStoryTitle: 'La torre de sal',
     confirm: true,
   }])
 })

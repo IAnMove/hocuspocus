@@ -115,6 +115,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['target_story_title', 'story_generation_scope', 'instruction', 'confirm'],
   },
   {
+    type: 'apply_story_proposal',
+    title: 'Apply the saved Story Lab proposal',
+    purpose: 'Apply the complete recoverable proposal for the active or exactly named story, preserve visual identity references, version changed sections, and save canonical canon.',
+    useWhen: 'The user explicitly asks to apply or accept the currently reviewed Story Lab proposal.',
+    risk: 'edit',
+    parameters: ['target_story_title', 'confirm'],
+  },
+  {
     type: 'create_series_episode',
     title: 'Create a filled Series Lab episode',
     purpose: 'Find or create a series, prepare the minimum canon needed, create a filled episode outline and show Episode room.',
