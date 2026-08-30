@@ -13,6 +13,7 @@ import {
   reconcileAgentTurnWithRequest,
   type AgentActionResult,
 } from './agentActions'
+import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
 import { AgentMarkdown } from './AgentMarkdown'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -20,6 +21,7 @@ export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 interface AgentMessage extends AgentConversationEntry {
   id: string
   createdAt: number
+  cards?: WizardExecutionCard[]
 }
 
 interface AgentAssistantPanelProps {
@@ -56,7 +58,10 @@ function readMessages(workspace: string): AgentMessage[] {
       && (message.role === 'user' || message.role === 'assistant')
       && typeof message.text === 'string'
       && typeof message.createdAt === 'number'
-    )).slice(-40)
+    )).map(message => ({
+      ...message,
+      cards: Array.isArray(message.cards) ? message.cards : undefined,
+    })).slice(-40)
     return messages.length ? messages : [welcomeMessage()]
   } catch {
     return [welcomeMessage()]
@@ -79,6 +84,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   const [busy, setBusy] = useState(false)
   const [busyMessage, setBusyMessage] = useState('Consultando el grimorio de HocusPocus…')
   const [expanded, setExpanded] = useState(false)
+  const [errorCardId, setErrorCardId] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
   const activeCount = useMemo(() => tasks.filter(task => ACTIVE.has(task.status) && !task.parent_id).length, [tasks])
@@ -107,6 +113,37 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
     setConversationWorkspace(workspace)
     setState('idle')
   }, [busy, conversationWorkspace, workspace])
+
+  useEffect(() => {
+    setMessages(current => current.map(message => {
+      if (!message.cards?.length) return message
+      let changed = false
+      const cards = message.cards.map(card => {
+        const task = tasks.find(item => (
+          (card.taskId && (item.id === card.taskId || item.root_id === card.taskId || item.backend_job_id === card.taskId))
+          || (card.pipelineId && item.pipeline_id === card.pipelineId)
+        ))
+        if (!task) return card
+        const state = task.status === 'completed' ? 'completed'
+          : task.status === 'failed' || task.status === 'cancelled' ? 'failed'
+            : task.status === 'queued' || task.status === 'waiting_resource' ? 'queued'
+              : 'running'
+        const outputNames = task.result_refs?.length ? task.result_refs : card.outputNames
+        if (state === card.state && (task.message || card.message) === card.message && outputNames === card.outputNames) {
+          return card
+        }
+        changed = true
+        return applyPollToCard(card, {
+          state,
+          message: task.message || card.message,
+          outputNames,
+          taskId: task.id || card.taskId,
+          recoverable: state === 'failed' || card.recoverable,
+        })
+      })
+      return changed ? { ...message, cards } : message
+    }))
+  }, [tasks])
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -160,6 +197,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
         })
       }
       if (!mountedRef.current) return
+      const cards = cardsFromResults(results)
       const actionReport = formatActionResults(results)
       const assistantMessage: AgentMessage = {
         id: newId(),
@@ -168,6 +206,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
           .filter(Boolean)
           .join('\n\n'),
         createdAt: Date.now(),
+        cards: cards.length ? cards : undefined,
       }
       setMessages(current => [...current, assistantMessage].slice(-40))
       setState(results.some(result => !result.ok) ? 'error' : 'success')
@@ -247,6 +286,38 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
               ? `${expanded ? 'max-w-[min(42rem,70%)]' : 'max-w-[88%]'} whitespace-pre-wrap rounded-2xl rounded-br-sm bg-blue-500/20 px-3 py-2 leading-relaxed text-blue-50`
               : `${expanded ? 'max-w-[min(56rem,86%)]' : 'max-w-[92%]'} rounded-2xl rounded-bl-sm border border-amber-200/10 bg-amber-100/[.045] px-3 py-2 leading-relaxed text-amber-50/85`}>
               {message.role === 'assistant' ? <AgentMarkdown text={message.text} /> : message.text}
+              {message.cards?.map(card => (
+                <div key={card.id} className="mt-2 rounded-xl border border-amber-200/15 bg-black/20 p-2">
+                  <div className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="font-medium uppercase tracking-wide text-amber-100/80">{card.state}</span>
+                    {card.target?.title && <span className="min-w-0 truncate text-white/50">{card.target.title}</span>}
+                  </div>
+                  <p className="mt-1 text-[10px] leading-relaxed text-amber-50/80">{card.message}</p>
+                  {card.outputNames?.length ? (
+                    <p className="mt-1 truncate text-[9px] text-emerald-200/80">Outputs: {card.outputNames.join(', ')}</p>
+                  ) : null}
+                  {errorCardId === card.id && card.controls.viewErrors && (
+                    <p className="mt-1 text-[9px] text-rose-200/80">{card.message}</p>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {card.controls.open && (
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'open_tab', tab: tabForExecutionTarget(card.target?.kind) }])}>Abrir destino</button>
+                    )}
+                    {card.controls.cancel && (
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'cancel_task', taskId: card.taskId || 'latest', confirm: true }])}>Cancelar</button>
+                    )}
+                    {card.controls.resume && (
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'resume_task', taskId: card.taskId || 'latest', confirm: true }])}>Reanudar</button>
+                    )}
+                    {card.controls.viewErrors && (
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => setErrorCardId(card.id)}>Ver errores</button>
+                    )}
+                    {card.controls.retryPending && (
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'retry_task', taskId: card.taskId || 'latest', confirm: true }])}>Reintentar pendientes</button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ))}
