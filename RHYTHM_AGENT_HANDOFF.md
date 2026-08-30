@@ -1195,3 +1195,12 @@ comprueba el ID del episodio devuelto, recarga el store y vuelve a abrir Episode
 room. Un evento específico limpia la tarjeta del job iniciada por el Wizard para
 que el UI no siga ofreciendo aplicar el mismo resultado. Informa de beats,
 escenas y tomas guardadas; no renderiza y no acepta/rechaza el delta de canon.
+## 41. Wizard: render confirmado de tomas en Series Lab
+
+- Nueva acción `render_series_shots`, clasificada como cómputo y protegida por `confirm=true`.
+- Puede actuar sobre `selected`, `missing`, `failed` o `all`; `selected` exige IDs exactos de shot.
+- Resuelve workspace, serie y episodio reales, rechaza destinos ambiguos y nunca vuelve a renderizar una toma aprobada.
+- Si hay diálogo, conserva la misma barrera de seguridad de la UI: el usuario debe haber marcado antes `I understand lip sync is best-effort`; el Wizard no inventa ese consentimiento.
+- Llama al render recuperable canónico de Series Lab con los ajustes de vídeo guardados y la seed opcional. Después verifica que el job devuelto pertenece al workspace/serie/episodio solicitado.
+- El job se entrega al panel `Series Lab → Render & Review`, incluido cuando el panel se monta después de la acción, para que el progreso real sea visible.
+- Esta implementación sólo conecta la acción. Durante el desarrollo no se lanzó ningún render ni se consumió GPU.

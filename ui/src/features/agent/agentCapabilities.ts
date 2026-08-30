@@ -171,6 +171,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['series_title', 'target_episode_title', 'job_id', 'confirm'],
   },
   {
+    type: 'render_series_shots',
+    title: 'Render Series episode shots',
+    purpose: 'Start the canonical recoverable render for selected, missing, failed or all unapproved shots and open live Render & Review.',
+    useWhen: 'The user explicitly asks to render or retry episode shots after applying a shot plan.',
+    risk: 'compute',
+    parameters: ['series_title', 'target_episode_title', 'render_mode', 'shot_ids', 'seed', 'confirm'],
+  },
+  {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
     purpose: 'Open Comics and fill characters, panels and lettering. Do not draw panel art unless asked.',

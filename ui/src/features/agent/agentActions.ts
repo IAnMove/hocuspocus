@@ -243,6 +243,16 @@ export interface AgentApplySeriesPlanAction {
   confirm: true
 }
 
+export interface AgentRenderSeriesShotsAction {
+  type: 'render_series_shots'
+  seriesTitle: string
+  targetEpisodeTitle: string
+  mode: 'selected' | 'missing' | 'failed' | 'all'
+  shotIds: string[]
+  seed?: number
+  confirm: true
+}
+
 export interface AgentComicPanel {
   caption: string
   dialogue: string
@@ -343,6 +353,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentUpdateSeriesEpisodeAction
   | AgentGenerateSeriesPlanAction
   | AgentApplySeriesPlanAction
+  | AgentRenderSeriesShotsAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
@@ -419,6 +430,9 @@ const STORY_APPROVAL_SECTIONS = new Set<AgentApproveStorySectionAction['section'
 const SERIES_PLAN_SCOPES = new Set<AgentGenerateSeriesPlanAction['scope']>([
   'outline', 'script', 'shots', 'complete',
 ])
+const SERIES_RENDER_MODES = new Set<AgentRenderSeriesShotsAction['mode']>([
+  'selected', 'missing', 'failed', 'all',
+])
 const STORY_SECTIONS = new Set<AgentStorySection>([
   'overview', 'world', 'characters', 'relationships', 'structure', 'productions',
 ])
@@ -447,6 +461,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   updateseriesepisode: 'update_series_episode',
   generateseriesplan: 'generate_series_plan',
   applyseriesplan: 'apply_series_plan',
+  renderseriesshots: 'render_series_shots',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
@@ -559,7 +574,7 @@ const CANONICAL_FIELD_NAMES = [
   'visual_style', 'world_summary', 'language', 'series_title', 'series_premise',
   'series_logline', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline',
   'target_duration_seconds', 'create_if_missing', 'known_universe',
-  'queue_scope', 'task_id', 'job_id', 'confirm', 'characters', 'locations', 'outline_beats',
+  'queue_scope', 'task_id', 'job_id', 'shot_ids', 'render_mode', 'confirm', 'characters', 'locations', 'outline_beats',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
@@ -908,6 +923,22 @@ function parseAction(value: unknown): AgentAction | null {
       seriesTitle: cleanString(raw.series_title, 300),
       targetEpisodeTitle: cleanString(raw.target_episode_title, 300),
       jobId: cleanString(raw.job_id, 160),
+      confirm: true,
+    }
+  }
+  if (type === 'render_series_shots') {
+    if (raw.confirm !== true) return null
+    const mode = cleanString(raw.render_mode, 30) as AgentRenderSeriesShotsAction['mode']
+    if (!SERIES_RENDER_MODES.has(mode)) return null
+    const shotIds = stringArray(raw.shot_ids, 200, 160)
+    if (mode === 'selected' && !shotIds.length) return null
+    return {
+      type: 'render_series_shots',
+      seriesTitle: cleanString(raw.series_title, 300),
+      targetEpisodeTitle: cleanString(raw.target_episode_title, 300),
+      mode,
+      shotIds,
+      seed: optionalNumber(raw.seed, -1, 2_147_483_647, true),
       confirm: true,
     }
   }
@@ -1320,7 +1351,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1370,6 +1401,8 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           queue_scope: { type: 'string', enum: ['', 'active', 'all'] },
           task_id: { type: 'string', maxLength: 160 },
           job_id: { type: 'string', maxLength: 160 },
+          render_mode: { type: 'string', enum: ['', 'selected', 'missing', 'failed', 'all'] },
+          shot_ids: { type: 'array', maxItems: 200, items: { type: 'string', maxLength: 160 } },
           confirm: { type: 'boolean' },
           page_number: { type: 'integer', minimum: 0, maximum: 100 },
           panel_number: { type: 'integer', minimum: 0, maximum: 100 },
@@ -1842,6 +1875,8 @@ export async function executeAgentActions(
               ? `Invocando el plan de Series Lab (${action.scope})…`
             : action.type === 'apply_series_plan'
               ? 'Aplicando la propuesta de Series Lab al episodio…'
+            : action.type === 'render_series_shots'
+              ? `Encolando render de Series Lab (${action.mode})…`
               : action.type === 'create_comic'
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
@@ -1930,6 +1965,9 @@ export async function executeAgentActions(
       } else if (action.type === 'apply_series_plan') {
         const { applySeriesPlan } = await import('./labActions')
         results.push({ action, ok: true, message: await applySeriesPlan(action) })
+      } else if (action.type === 'render_series_shots') {
+        const { renderSeriesShots } = await import('./labActions')
+        results.push({ action, ok: true, message: await renderSeriesShots(action) })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledComic(action) })

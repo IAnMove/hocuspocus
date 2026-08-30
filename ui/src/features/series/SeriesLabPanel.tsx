@@ -11,7 +11,7 @@ import { SeriesReviewPanel } from './SeriesReviewPanel'
 import { Pill } from './components'
 import { primaryButton, secondaryButton } from './styles'
 import type { SeriesJobStatus } from './types'
-import { listenForAgentSeriesSection } from '../agent/agentUiBus'
+import { listenForAgentSeriesRenderJob, listenForAgentSeriesSection } from '../agent/agentUiBus'
 
 type LabTab = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
 const tabs: Array<{ id: LabTab; label: string }> = [
@@ -37,6 +37,10 @@ export function SeriesLabPanel() {
   const [actionBusy, setActionBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [renderJob, setRenderJob] = useState<SeriesJobStatus | null>(null)
+  useEffect(() => listenForAgentSeriesRenderJob(job => {
+    setRenderJob(job)
+    setTab('review')
+  }), [])
   const [canonJob, setCanonJob] = useState<SeriesJobStatus | null>(null)
 
   useEffect(() => { void loadWorkspace(activeWorkspace || 'default') }, [activeWorkspace, loadWorkspace])

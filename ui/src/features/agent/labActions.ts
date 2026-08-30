@@ -6,6 +6,7 @@ import type {
   AgentGenerateStorySectionAction,
   AgentGenerateSeriesPlanAction,
   AgentApplySeriesPlanAction,
+  AgentRenderSeriesShotsAction,
   AgentStageStoryComicAction,
   AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
@@ -14,7 +15,7 @@ import type {
   AgentCreativeCharacter,
   AgentCreativeLocation,
 } from './agentActions'
-import { clearAgentSeriesPlanJob, notifyAgentSeriesPlanJob, notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
+import { clearAgentSeriesPlanJob, notifyAgentSeriesPlanJob, notifyAgentSeriesRenderJob, notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
 
 const normalizeName = (value: string): string => value
   .normalize('NFD')
@@ -1110,6 +1111,77 @@ export async function applySeriesPlan(action: AgentApplySeriesPlanAction): Promi
   showLab('series')
   openAgentSeriesSection('episode')
   return `He aplicado el plan ${job.jobId} a “${applied.title}”: ${applied.outline.beats.length} beats, ${applied.script.length} escenas y ${applied.shots.length} tomas. No he renderizado ni comprometido el delta de canon.`
+}
+
+export async function renderSeriesShots(action: AgentRenderSeriesShotsAction): Promise<string> {
+  if (!action.confirm) throw new Error('Renderizar tomas de Series Lab requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [api, { useSeriesStore }] = await Promise.all([
+    import('../../api/client'),
+    import('../series/store'),
+  ])
+  await useSeriesStore.getState().loadWorkspace(workspace)
+  await useSeriesStore.getState().saveNow()
+  const library = await api.fetchSeriesLibrary(workspace)
+  const seriesMatches = action.seriesTitle
+    ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
+    : []
+  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  const series = seriesMatches[0]
+    || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
+  if (!series) throw new Error(action.seriesTitle
+    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
+    : 'No hay una serie activa que renderizar.')
+  const episodeMatches = action.targetEpisodeTitle
+    ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
+    : []
+  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
+    ? useSeriesStore.getState().activeEpisodeId : ''
+  const episodes = Object.values(series.episodesById)
+  const episode = episodeMatches[0]
+    || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
+    || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
+  if (!episode) throw new Error(action.targetEpisodeTitle
+    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
+    : `“${series.title}” necesita un episodio activo o único.`)
+  if (!episode.shots.length) throw new Error(`“${episode.title}” no tiene shots; genera y aplica un plan complete primero.`)
+  if (episode.shots.some(shot => shot.dialogueBeats.length > 0) && !series.bestEffortLipSyncAcknowledged) {
+    throw new Error('Este episodio tiene diálogo. Marca primero “I understand lip sync is best-effort” en Series Lab; el Wizard no puede inferir ese consentimiento.')
+  }
+
+  const byId = new Map(episode.shots.map(shot => [shot.id, shot]))
+  if (action.mode === 'selected') {
+    const unknown = action.shotIds.filter(id => !byId.has(id))
+    if (unknown.length) throw new Error(`Shots desconocidos: ${unknown.join(', ')}.`)
+    const approved = action.shotIds.filter(id => Boolean(byId.get(id)?.approvedAttemptId))
+    if (approved.length) throw new Error(`Los shots ya aprobados no se vuelven a renderizar: ${approved.join(', ')}.`)
+  }
+  const eligible = episode.shots.filter(shot => {
+    if (shot.approvedAttemptId) return false
+    if (action.mode === 'selected') return action.shotIds.includes(shot.id)
+    if (action.mode === 'missing') return !shot.attempts.some(attempt => attempt.status === 'completed')
+    if (action.mode === 'failed') return shot.attempts.some(attempt => attempt.status === 'failed')
+    return true
+  })
+  if (!eligible.length) throw new Error(`No hay shots elegibles para el modo ${action.mode}.`)
+
+  await useSeriesStore.getState().openSeries(series.id)
+  useSeriesStore.getState().openEpisode(episode.id)
+  const current = useSeriesStore.getState().library.seriesById[series.id] || series
+  const job = await api.startSeriesRender(workspace, series.id, episode.id, {
+    mode: action.mode,
+    shotIds: action.mode === 'selected' ? eligible.map(shot => shot.id) : undefined,
+    seed: action.seed === -1 ? undefined : action.seed,
+    settings: current.provider.videoSettings,
+  })
+  if (job.workspace !== workspace || job.seriesId !== series.id || job.episodeId !== episode.id) {
+    throw new Error('Series Lab devolvió un render job para otro destino; no se mostrará como correcto.')
+  }
+  notifyAgentSeriesRenderJob(job)
+  showLab('series')
+  openAgentSeriesSection('review')
+  return `He encolado ${eligible.length} shots de “${episode.title}” (${job.jobId}) en modo ${action.mode}. El progreso recuperable está abierto en Series Lab → Render & review.`
 }
 
 function showComics(): void {
