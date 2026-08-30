@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowUp, Loader2, Maximize2, Minimize2, Sparkles, Trash2, X } from 'lucide-react'
-import { fetchWizardConversation, generateLlmText, saveWizardConversation, type CanonicalTask } from '../../api/client'
+import { fetchWizardConversation, generateLlmText, saveWizardConversation, subscribeCanonicalTaskEvents, type CanonicalTask } from '../../api/client'
 import { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 import { buildAgentTurnPrompt, HOCUSPOCUS_AGENT_SYSTEM_PROMPT, type AgentConversationEntry } from './agentKnowledge'
 import {
@@ -16,6 +16,7 @@ import {
 import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
 import { applyRemoteWizardConversation, WIZARD_WELCOME_TEXT } from './wizardConversationSync'
 import { AgentMarkdown } from './AgentMarkdown'
+import { defaultWizardWorkflowRuntime } from './wizardWorkflowRuntime'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 
@@ -102,6 +103,46 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
     mountedRef.current = true
     return () => { mountedRef.current = false }
   }, [])
+
+  useEffect(() => {
+    let active = true
+    const unsubscribe = defaultWizardWorkflowRuntime.subscribe(({ workflow, card }) => {
+      if (!active || workflow.workspace !== workspace) return
+      setMessages(current => {
+        let found = false
+        const updated = current.map(message => {
+          if (!message.cards?.some(existing => existing.id === card.id)) return message
+          found = true
+          return {
+            ...message,
+            text: `El hechizo duradero **${workflow.type}** está ahora en estado **${workflow.state}**.`,
+            cards: message.cards.map(existing => existing.id === card.id ? card : existing),
+          }
+        })
+        if (found) return updated
+        return [...updated, {
+          id: `wizard-workflow-${workflow.workflowId}`,
+          role: 'assistant' as const,
+          text: `El hechizo duradero **${workflow.type}** está ahora en estado **${workflow.state}**.`,
+          createdAt: Date.now(),
+          cards: [card],
+        }].slice(-40)
+      })
+    })
+    void defaultWizardWorkflowRuntime.open(workspace).catch(() => {
+      // Existing immediate actions remain available if workflow storage is offline.
+    })
+    const closeEvents = subscribeCanonicalTaskEvents(workspace, event => {
+      void defaultWizardWorkflowRuntime.handleTaskEvent(event).catch(() => {
+        // The checkpoint stays recoverable; a reconnect replays the same event.
+      })
+    })
+    return () => {
+      active = false
+      unsubscribe()
+      closeEvents()
+    }
+  }, [workspace])
 
   useEffect(() => {
     writeMessages(conversationWorkspace, messages)

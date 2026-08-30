@@ -31319,6 +31319,60 @@ def put_wizard_conversation(body: dict):
         ) from exc
 
 
+@api.get("/api/v1/wizard/workflows")
+def get_wizard_workflows(workspace: str | None = None):
+    """Load durable Wizard workflow checkpoints for one workspace."""
+    from services.wizard_workflows import read_workflows
+
+    target_workspace = _story_library_workspace(workspace)
+    try:
+        with _story_library_lock:
+            return read_workflows(_workspace_dir(target_workspace))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not read Wizard workflows: {exc}",
+        ) from exc
+
+
+@api.put("/api/v1/wizard/workflows")
+def put_wizard_workflows(body: dict):
+    """Atomically checkpoint all Wizard workflows in one workspace."""
+    from services.wizard_workflows import (
+        WizardWorkflowRevisionConflict,
+        write_workflows,
+    )
+
+    target_workspace = _story_library_workspace(body.get("workspace"))
+    try:
+        with _story_library_lock:
+            base_revision = body.get("baseRevision")
+            if type(base_revision) is not int:
+                base_revision = 0
+            return write_workflows(
+                _workspace_dir(target_workspace),
+                body.get("collection"),
+                base_revision=base_revision,
+            )
+    except WizardWorkflowRevisionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "wizard_workflow_revision_conflict",
+                "message": str(exc),
+                "expectedRevision": exc.expected,
+                "currentRevision": exc.current,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not save Wizard workflows: {exc}",
+        ) from exc
+
+
 @api.get("/api/v1/stories/library")
 def get_story_library(workspace: str | None = None):
     """Load the durable Story Lab library for one workspace."""

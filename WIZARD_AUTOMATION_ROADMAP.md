@@ -258,6 +258,13 @@ Acceptance:
 - Reloading between steps resumes exactly once.
 - Duplicate completion events do not duplicate the next action.
 
+Status: **implemented**. Workflow checkpoints are stored atomically per
+workspace behind CAS revisions. The UI runtime serializes transitions, wakes
+exact waits from the canonical task event stream, remembers processed event
+IDs, resumes explicitly and updates one stable chat card. Mock coverage proves
+reload and duplicate completion events execute the next step once. See
+[`docs/development/WIZARD_WORKFLOW_RUNTIME.md`](docs/development/WIZARD_WORKFLOW_RUNTIME.md).
+
 ---
 
 ## Phase 5 — Complete rhythmic Video3D workflow
@@ -432,13 +439,14 @@ Agent Mode complete prematurely.
   workspace revision reset and CAS merge/retry); final UI smoke pending.
 - Video Editor named audio: corrected and behavior-tested through the export payload.
 - Basic Video3D beat keyframes: implemented and unit-tested.
-- Durable multi-step workflow runtime: pending.
+- Durable multi-step workflow runtime: implemented with backend checkpoints,
+  canonical-event wakeup, retry/cancel state and stable chat cards.
 - Autonomous song -> Video3D -> MP4: pending.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished block **3 — common action runner and adapters**. Begin block **4 —
-durable workflow runtime** next. Keep Decision gate A open: presentation
-metadata stays optional and no speed, Wizard visibility, auto-scroll, sound or
-animation behavior is frozen while the non-visual workflow core is built.
+Finished block **4 — durable workflow runtime**. Begin block **5 — complete
+rhythmic Video3D workflow** next, using the runtime as the first real vertical
+slice. Keep Decision gate A open; the workflow remains correct without visual
+magic effects.
