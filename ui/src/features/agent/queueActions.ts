@@ -15,7 +15,8 @@ function formatTaskLine(task: CanonicalTask): string {
     ? ` Esperando ${((task.resource_requirements || []).join(', ') || 'recurso')}.`
     : ''
   const using = task.acquired_resources?.length ? ` Usa ${task.acquired_resources.join(', ')}.` : ''
-  return `• ${task.title || task.kind} [${task.status}${percent ? ` ${percent}%` : ''}] ${task.id}.${waiting}${using}`
+  const pipeline = task.pipeline_id ? ` Pipeline ${task.pipeline_id}.` : ''
+  return `• ${task.title || task.kind} [${task.status}${percent ? ` ${percent}%` : ''}] ${task.id}.${pipeline}${waiting}${using}`
 }
 
 function resolveTask(tasks: CanonicalTask[], requestedId: string): CanonicalTask {
@@ -34,6 +35,9 @@ function resolveTask(tasks: CanonicalTask[], requestedId: string): CanonicalTask
   }
   const exact = tasks.find(task => task.id === needle)
   if (exact) return exact
+  const exactBackend = tasks.filter(task => task.pipeline_id === needle || task.backend_job_id === needle)
+  if (exactBackend.length === 1) return exactBackend[0]
+  if (exactBackend.length > 1) throw new Error(`El identificador “${needle}” pertenece a varias tareas; usa el id canónico.`)
   const prefix = tasks.filter(task => task.id.startsWith(needle))
   if (prefix.length === 1) return prefix[0]
   throw new Error(`No encontré la tarea “${needle}” en la cola canónica.`)
@@ -95,7 +99,15 @@ export async function cancelCanonicalQueueTask(taskId: string, confirm: boolean)
   }
   const cancelled = await cancelCanonicalTask(task.id, workspaceId())
   const backendJobId = cancelled.backend_job_id || task.backend_job_id
-  if (backendJobId) useStore.getState().stopGeneration(backendJobId)
+  const adapter = String(cancelled.metadata?.adapter || task.metadata?.adapter || '')
+  if (backendJobId && adapter !== 'director') useStore.getState().stopGeneration(backendJobId)
+  if (adapter === 'director') {
+    const pipelineId = cancelled.pipeline_id || task.pipeline_id || backendJobId
+    if (pipelineId && useStore.getState().pipelineId === pipelineId) {
+      useStore.setState({ pipelineId: null, pipelineStatus: null, pipelinePolling: false, directorLoading: false })
+    }
+    void useStore.getState().loadPipelineList(pipelineId || undefined)
+  }
   openAgentActivityDetails()
   return `He pedido cancelar “${cancelled.title || task.title}” (${cancelled.id}); Activity muestra el estado ${cancelled.status}.`
 }
@@ -108,6 +120,20 @@ export async function resumeCanonicalQueueTask(taskId: string, confirm: boolean)
     throw new Error(`La tarea ${task.id} no es reanudable ahora (${task.status}).`)
   }
   const resumed = await resumeCanonicalTask(task.id, workspaceId())
+  const adapter = String(resumed.metadata?.adapter || task.metadata?.adapter || '')
+  const pipelineId = resumed.pipeline_id || task.pipeline_id || resumed.backend_job_id || task.backend_job_id
+  if (adapter === 'director' && pipelineId) {
+    useStore.setState({
+      pipelineId,
+      pipelineStatus: null,
+      pipelinePolling: true,
+      directorLoading: true,
+      directorError: null,
+    })
+    useStore.getState().pollPipelineStatus()
+    void useStore.getState().loadSavedPipeline(pipelineId)
+    void useStore.getState().loadPipelineList(pipelineId)
+  }
   openAgentActivityDetails()
   return `He reanudado “${resumed.title || task.title}” (${resumed.id}); el estado actual es ${resumed.status}.`
 }

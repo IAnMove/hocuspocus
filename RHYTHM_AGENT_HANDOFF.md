@@ -1281,3 +1281,9 @@ Al terminar abre `Story Lab → Assets` y sólo informa el número real de imág
 `start_director_production` completa el paso separado posterior a `stage_story_video`. Exige `confirm=true` y sólo acepta la producción exacta que el propio Wizard dejó cargada en Short Film Director para el workspace y la Story actuales; un reset u otro borrador invalida ese handoff. También rechaza un Director ocupado, un pipeline previo o un borrador que ya no esté listo en Style.
 
 La acción llama al arranque canónico de Director y no declara éxito hasta recibir un `pipelineId` real. Después enlaza ese ID con la producción `staged` mediante la biblioteca Story del backend y su revisión CAS, con un reintento ante concurrencia. Repetir la orden sobre una producción ya enlazada es idempotente y devuelve el ID existente sin duplicar cómputo. La respuesta distingue explícitamente **en marcha** de **terminado**, abre Director para mostrar el progreso y deja cancelación/reanudación en la infraestructura canónica de pipelines. Durante el desarrollo no se arrancó ninguna producción.
+
+## 52. Wizard: seguimiento y control de pipelines de Director
+
+La cola canónica ya publica cada pipeline de Director como una tarea `task-director-*`. El Wizard muestra ahora también el `pipeline_id` en `inspect_queue` y acepta tanto ese ID real como el ID canónico al resolver cancelar, reanudar o reintentar. La resolución sigue siendo exacta y rechaza ambigüedades.
+
+Cancelar usa una sola vez el adaptador canónico de Director y sincroniza el panel local, evitando enviar después el mismo ID al cancelador genérico de Studio. Reanudar reconecta Director al pipeline, restaura polling y abre sus datos guardados. Así el ID devuelto por `start_director_production` sirve directamente en la conversación posterior sin obligar al usuario a traducirlo.
