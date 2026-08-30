@@ -8,6 +8,7 @@ import { Pill, SectionCard } from './components'
 import { SeriesShotDurationControl } from './SeriesShotDurationControl'
 import { greenButton, primaryButton, secondaryButton } from './styles'
 import type { SeriesAssemblyJob, SeriesEpisode, SeriesJobStatus, SeriesProject, SeriesRenderAttempt, SeriesShot } from './types'
+import { listenForAgentSeriesAssemblyJob } from '../agent/agentUiBus'
 
 function AttemptPreview({ series, attempt, approved, onApprove, onReject }: {
   series: SeriesProject; attempt: SeriesRenderAttempt; approved: boolean; onApprove: () => void; onReject: () => void
@@ -86,6 +87,11 @@ export function SeriesReviewPanel({
     setReviewView('assembly')
     lastRenderCurrentRef.current = null
   }, [episode.id, episode.shots, episodeChanged])
+  useEffect(() => listenForAgentSeriesAssemblyJob(value => {
+    if (value.workspace !== workspace || value.seriesId !== series.id || value.episodeId !== episode.id) return
+    setAssemblyJob(value)
+    setReviewView('assembly')
+  }), [episode.id, series.id, workspace])
   useSerializedPoll({
     enabled: Boolean(activeJobId && activeJobStatus && ['queued', 'running', 'cancelling'].includes(activeJobStatus)),
     intervalMs: 1000,

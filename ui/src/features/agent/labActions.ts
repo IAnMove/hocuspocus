@@ -8,6 +8,7 @@ import type {
   AgentApplySeriesPlanAction,
   AgentRenderSeriesShotsAction,
   AgentReviewSeriesAttemptsAction,
+  AgentAssembleSeriesEpisodeAction,
   AgentStageStoryComicAction,
   AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
@@ -16,7 +17,7 @@ import type {
   AgentCreativeCharacter,
   AgentCreativeLocation,
 } from './agentActions'
-import { clearAgentSeriesPlanJob, notifyAgentSeriesPlanJob, notifyAgentSeriesRenderJob, notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
+import { clearAgentSeriesPlanJob, notifyAgentSeriesAssemblyJob, notifyAgentSeriesPlanJob, notifyAgentSeriesRenderJob, notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
 
 const normalizeName = (value: string): string => value
   .normalize('NFD')
@@ -1290,6 +1291,60 @@ export async function reviewSeriesAttempts(action: AgentReviewSeriesAttemptsActi
   showLab('series')
   openAgentSeriesSection('review')
   return `He rechazado el intento ${attempt.id} del shot ${shot.order} en “${episode.title}” y he abierto Render & Review.`
+}
+
+export async function assembleSeriesEpisode(action: AgentAssembleSeriesEpisodeAction): Promise<string> {
+  if (!action.confirm) throw new Error('Ensamblar un episodio de Series Lab requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [api, { useSeriesStore }] = await Promise.all([
+    import('../../api/client'),
+    import('../series/store'),
+  ])
+  await useSeriesStore.getState().loadWorkspace(workspace)
+  await useSeriesStore.getState().saveNow()
+  const library = await api.fetchSeriesLibrary(workspace)
+  const seriesMatches = action.seriesTitle
+    ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
+    : []
+  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  const series = seriesMatches[0]
+    || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
+  if (!series) throw new Error(action.seriesTitle
+    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
+    : 'No hay una serie activa que ensamblar.')
+  const episodeMatches = action.targetEpisodeTitle
+    ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
+    : []
+  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
+    ? useSeriesStore.getState().activeEpisodeId : ''
+  const episodes = Object.values(series.episodesById)
+  const episode = episodeMatches[0]
+    || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
+    || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
+  if (!episode) throw new Error(action.targetEpisodeTitle
+    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
+    : `“${series.title}” necesita un episodio activo o único.`)
+  if (!episode.shots.length) throw new Error(`“${episode.title}” no tiene shots que ensamblar.`)
+  const incomplete = episode.shots.filter(shot => {
+    const approved = shot.attempts.find(attempt => attempt.id === shot.approvedAttemptId)
+    return !approved || approved.status !== 'completed'
+      || !approved.outputAssetIds.some(id => Boolean(series.assets[id]))
+  })
+  if (incomplete.length) {
+    throw new Error(`Aprueba primero un vídeo reproducible para todos los shots. Faltan: ${incomplete.map(shot => shot.order).join(', ')}.`)
+  }
+
+  await useSeriesStore.getState().openSeries(series.id)
+  useSeriesStore.getState().openEpisode(episode.id)
+  const job = await api.startSeriesEpisodeAssembly(workspace, series.id, episode.id)
+  if (job.workspace !== workspace || job.seriesId !== series.id || job.episodeId !== episode.id) {
+    throw new Error('Series Lab devolvió un ensamblado para otro destino; no se mostrará como correcto.')
+  }
+  notifyAgentSeriesAssemblyJob(job)
+  showLab('series')
+  openAgentSeriesSection('review')
+  return `He iniciado el ensamblado ordenado de ${episode.shots.length} shots de “${episode.title}” (${job.jobId}). El progreso recuperable y la descarga están abiertos en Render & Review; no he comprometido el delta de canon.`
 }
 
 function showComics(): void {

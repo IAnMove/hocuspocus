@@ -187,6 +187,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['series_title', 'target_episode_title', 'review_decision', 'review_scope', 'shot_numbers', 'attempt_id', 'confirm'],
   },
   {
+    type: 'assemble_series_episode',
+    title: 'Join an approved Series episode',
+    purpose: 'Start the recoverable ordered assembly after every shot has an approved playable output, then expose progress and download in Render & Review.',
+    useWhen: 'The user explicitly asks to join, assemble or export the approved episode clips.',
+    risk: 'compute',
+    parameters: ['series_title', 'target_episode_title', 'confirm'],
+  },
+  {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
     purpose: 'Open Comics and fill characters, panels and lettering. Do not draw panel art unless asked.',

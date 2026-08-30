@@ -1,4 +1,5 @@
 import type { SeriesJobStatus } from '../series/types'
+import type { SeriesAssemblyJob } from '../series/assemblyContract'
 
 export type AgentStorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'productions'
 export type AgentSeriesSection = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
@@ -8,10 +9,12 @@ const SERIES_SECTION_EVENT = 'hocuspocus:series-section'
 const STORY_DRAFT_EVENT = 'hocuspocus:story-draft-ready'
 const SERIES_PLAN_JOB_EVENT = 'hocuspocus:series-plan-job'
 const SERIES_RENDER_JOB_EVENT = 'hocuspocus:series-render-job'
+const SERIES_ASSEMBLY_JOB_EVENT = 'hocuspocus:series-assembly-job'
 let requestedStorySection: AgentStorySection | null = null
 let requestedSeriesSection: AgentSeriesSection | null = null
 let requestedSeriesPlanJob: SeriesJobStatus | null = null
 let requestedSeriesRenderJob: SeriesJobStatus | null = null
+let requestedSeriesAssemblyJob: SeriesAssemblyJob | null = null
 
 export function openAgentStorySection(section: AgentStorySection): void {
   requestedStorySection = section
@@ -95,6 +98,21 @@ export function listenForAgentSeriesRenderJob(listener: (job: SeriesJobStatus) =
   window.addEventListener(SERIES_RENDER_JOB_EVENT, handler)
   if (requestedSeriesRenderJob) listener(requestedSeriesRenderJob)
   return () => window.removeEventListener(SERIES_RENDER_JOB_EVENT, handler)
+}
+
+export function notifyAgentSeriesAssemblyJob(job: SeriesAssemblyJob): void {
+  requestedSeriesAssemblyJob = job
+  window.dispatchEvent(new CustomEvent(SERIES_ASSEMBLY_JOB_EVENT, { detail: { job } }))
+}
+
+export function listenForAgentSeriesAssemblyJob(listener: (job: SeriesAssemblyJob) => void): () => void {
+  const handler = (event: Event) => {
+    const job = (event as CustomEvent<{ job?: SeriesAssemblyJob }>).detail?.job
+    if (job) listener(job)
+  }
+  window.addEventListener(SERIES_ASSEMBLY_JOB_EVENT, handler)
+  if (requestedSeriesAssemblyJob) listener(requestedSeriesAssemblyJob)
+  return () => window.removeEventListener(SERIES_ASSEMBLY_JOB_EVENT, handler)
 }
 
 const ACTIVITY_DETAILS_EVENT = 'hocuspocus:activity-details'

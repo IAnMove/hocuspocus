@@ -264,6 +264,13 @@ export interface AgentReviewSeriesAttemptsAction {
   confirm: true
 }
 
+export interface AgentAssembleSeriesEpisodeAction {
+  type: 'assemble_series_episode'
+  seriesTitle: string
+  targetEpisodeTitle: string
+  confirm: true
+}
+
 export interface AgentComicPanel {
   caption: string
   dialogue: string
@@ -366,6 +373,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentApplySeriesPlanAction
   | AgentRenderSeriesShotsAction
   | AgentReviewSeriesAttemptsAction
+  | AgentAssembleSeriesEpisodeAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
@@ -477,6 +485,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   applyseriesplan: 'apply_series_plan',
   renderseriesshots: 'render_series_shots',
   reviewseriesattempts: 'review_series_attempts',
+  assembleseriesepisode: 'assemble_series_episode',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
@@ -988,6 +997,15 @@ function parseAction(value: unknown): AgentAction | null {
       confirm: true,
     }
   }
+  if (type === 'assemble_series_episode') {
+    if (raw.confirm !== true) return null
+    return {
+      type: 'assemble_series_episode',
+      seriesTitle: cleanString(raw.series_title, 300),
+      targetEpisodeTitle: cleanString(raw.target_episode_title, 300),
+      confirm: true,
+    }
+  }
   if (type === 'create_comic') {
     const title = cleanString(raw.title, 300)
     if (!title) return null
@@ -1397,7 +1415,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1929,6 +1947,8 @@ export async function executeAgentActions(
               ? `Encolando render de Series Lab (${action.mode})…`
             : action.type === 'review_series_attempts'
               ? `${action.decision === 'approve' ? 'Aprobando' : 'Rechazando'} intentos de Series Lab…`
+            : action.type === 'assemble_series_episode'
+              ? 'Uniendo las tomas aprobadas del episodio…'
               : action.type === 'create_comic'
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
@@ -2023,6 +2043,9 @@ export async function executeAgentActions(
       } else if (action.type === 'review_series_attempts') {
         const { reviewSeriesAttempts } = await import('./labActions')
         results.push({ action, ok: true, message: await reviewSeriesAttempts(action) })
+      } else if (action.type === 'assemble_series_episode') {
+        const { assembleSeriesEpisode } = await import('./labActions')
+        results.push({ action, ok: true, message: await assembleSeriesEpisode(action) })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledComic(action) })

@@ -1215,3 +1215,11 @@ escenas y tomas guardadas; no renderiza y no acepta/rechaza el delta de canon.
 - `attempt_id` es opcional para seleccionar una alternativa histórica concreta y sólo se acepta con una toma.
 - Se rechazan intentos incompletos, sin asset, ya rechazados o destinos ambiguos. Tampoco se permite rechazar por esta vía el intento que ya está aprobado como montaje final.
 - Tras verificar el resultado del backend, el store se recarga y el Wizard abre `Series Lab → Render & Review`.
+
+## 43. Wizard: ensamblado recuperable del episodio
+
+`assemble_series_episode` exige una petición explícita y `confirm=true`. Resuelve serie y episodio sin ambigüedad y aplica la misma precondición que **Join clips**: todos los shots deben tener un intento aprobado, completado y respaldado por un asset real.
+
+La acción llama a `startSeriesEpisodeAssembly`, verifica que el job devuelto pertenezca al workspace/serie/episodio solicitado y lo entrega mediante un evento cacheado a `SeriesReviewPanel`. El listener se vuelve a enlazar al cambiar de episodio para que una navegación provocada por el propio Wizard no pierda el job durante el re-render. La vista abre **Montaje ordenado**, donde continúan funcionando polling, cancelar, reanudar, descartar checkpoint y descargar el vídeo final.
+
+El ensamblado no acepta ni rechaza el delta de canon del episodio. Durante el desarrollo sólo se validó la conexión; no se arrancó FFmpeg ni una generación GPU.
