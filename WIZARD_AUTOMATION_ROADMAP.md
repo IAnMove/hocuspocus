@@ -115,6 +115,13 @@ Acceptance:
 - Default nightly exits zero only when there are no new regressions.
 - It never starts GPU generation or an external provider unless opted in.
 
+Status: **implemented**. The runner preserves raw non-zero exits as
+`expected_failure`, matches baselines by exact test title and file, emits
+truthful JUnit skips, reports requested/executed/missing levels, and treats an
+explicitly requested but unavailable level as `INCOMPLETE`. Its safe default
+remains levels 1, 2, 4 and 6 with GPU and providers disabled. See
+[`docs/development/WIZARD_NIGHTLY.md`](docs/development/WIZARD_NIGHTLY.md).
+
 ---
 
 ## Phase 2 — Capability registry foundation
@@ -402,8 +409,15 @@ Agent Mode complete prematurely.
 - Chat execution cards: implemented.
 - Backend chat persistence: stabilized (typed payloads, guarded hydration,
   workspace revision reset and CAS merge/retry); final UI smoke pending.
-- Video Editor named audio: corrected; behavior validation pending.
+- Video Editor named audio: corrected and behavior-tested through the export payload.
 - Basic Video3D beat keyframes: implemented and unit-tested.
 - Durable multi-step workflow runtime: pending.
 - Autonomous song -> Video3D -> MP4: pending.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
+
+## Continuity note
+
+Finished block **1C — trustworthy nightly reporting**. Begin block **2 —
+capability registry foundation** next. Preserve the existing action catalog
+while introducing the registry beside it; do not start the broad UI magic
+animation layer yet.

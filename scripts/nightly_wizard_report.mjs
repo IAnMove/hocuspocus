@@ -6,7 +6,7 @@
  */
 import { spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,20 +14,54 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const GLOBAL_TIMEOUT_MS = Number(process.env.NIGHTLY_TIMEOUT_MS || 6 * 60 * 60 * 1000)
 const JOB_TIMEOUT_MS = Number(process.env.NIGHTLY_JOB_TIMEOUT_MS || 10 * 60 * 1000)
+const PYTEST_FILE_TIMEOUT_MS = Number(process.env.NIGHTLY_PYTEST_FILE_TIMEOUT_MS || 3 * 60 * 1000)
 const RUN_EXTERNAL = process.env.RUN_EXTERNAL_PROVIDER_TESTS === '1'
 const RUN_GPU = process.env.RUN_GPU_TESTS === '1'
-const LEVELS = new Set(
-  String(process.env.NIGHTLY_LEVELS || '1,2,4,6')
-    .split(',')
-    .map(value => value.trim())
-    .filter(Boolean),
-)
+const LEVEL_CATALOG = Object.freeze({
+  '1': { title: 'Static contracts and build', implemented: true },
+  '2': { title: 'Wizard unit and schema tests', implemented: true },
+  '3': { title: 'Browser interaction tests', implemented: false },
+  '4': { title: 'Full UI test suite', implemented: true },
+  '5': { title: 'Workflow recovery and persistence tests', implemented: false },
+  '6': { title: 'Python backend test suite', implemented: true },
+  '7': { title: 'Presentation and reduced-motion tests', implemented: false },
+  '8': { title: 'Real GPU/provider smoke', implemented: false, optional: true },
+})
+
+export function parseLevels(raw = '1,2,4,6') {
+  const levels = [...new Set(String(raw).split(',').map(value => value.trim()).filter(Boolean))]
+  const unknown = levels.filter(level => !LEVEL_CATALOG[level])
+  if (unknown.length) throw new Error(`Unknown NIGHTLY_LEVELS: ${unknown.join(', ')}`)
+  if (!levels.length) throw new Error('NIGHTLY_LEVELS must select at least one level')
+  return levels
+}
+
+export function selectPythonTestFiles(raw, available) {
+  if (!raw) return available
+  const selected = [...new Set(String(raw).split(',').map(value => value.trim()).filter(Boolean))]
+  const unknown = selected.filter(file => !available.includes(file))
+  if (unknown.length) throw new Error(`Unknown NIGHTLY_PYTEST_FILES: ${unknown.join(', ')}`)
+  if (!selected.length) throw new Error('NIGHTLY_PYTEST_FILES must select at least one file')
+  return selected
+}
+
+let levelConfigurationError = null
+let REQUESTED_LEVELS = []
+try {
+  REQUESTED_LEVELS = parseLevels(process.env.NIGHTLY_LEVELS || '1,2,4,6')
+} catch (error) {
+  levelConfigurationError = error
+}
+const LEVELS = new Set(REQUESTED_LEVELS)
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
 const outDir = path.join(ROOT, 'artifacts', 'nightly', stamp)
 const startedAt = Date.now()
 const results = []
 const children = new Set()
+let abortRequested = false
+let globalTimedOut = false
+let interrupted = false
 
 function pythonBin() {
   const local = process.platform === 'win32'
@@ -70,7 +104,9 @@ function runCaptured(command, args, options = {}) {
     let stdout = ''
     let stderr = ''
     const log = options.logPath ? createWriteStream(options.logPath) : null
+    let timedOut = false
     const timer = setTimeout(() => {
+      timedOut = true
       child.killed = true
       child.kill('SIGTERM')
       setTimeout(() => child.kill('SIGKILL'), 2_000)
@@ -83,17 +119,21 @@ function runCaptured(command, args, options = {}) {
       stderr += chunk
       log?.write(chunk)
     })
-    child.on('error', error => {
+    const closeLog = () => new Promise(done => {
+      if (!log) return done()
+      log.end(done)
+    })
+    child.on('error', async error => {
       clearTimeout(timer)
       children.delete(child)
-      log?.end()
+      await closeLog()
       reject(error)
     })
-    child.on('close', code => {
+    child.on('close', async (code, signal) => {
       clearTimeout(timer)
       children.delete(child)
-      log?.end()
-      resolve({ code: code ?? 1, stdout, stderr, timedOut: Boolean(child.killed) })
+      await closeLog()
+      resolve({ code: code ?? 1, stdout, stderr, timedOut, signal: signal || null })
     })
   })
 }
@@ -111,24 +151,34 @@ async function recordJob(job) {
     level: job.level,
     title: job.title,
     code: outcome.code,
+    classification: outcome.classification || (
+      outcome.code === 0 ? 'pass'
+        : outcome.timedOut ? 'timeout'
+          : outcome.signal ? 'infrastructure_failure' : 'failure'
+    ),
+    baselineMatches: outcome.baselineMatches || [],
+    reason: outcome.reason || null,
     timedOut: outcome.timedOut === true,
+    signal: outcome.signal || null,
     classifiedAsBaseline: outcome.classifiedAsBaseline === true,
     durationMs: Date.now() - started,
     log: job.logName || null,
   }
   results.push(record)
-  if (job.logName && (record.code !== 0 || record.classifiedAsBaseline)) {
+  if (job.logName && record.classification !== 'pass') {
     try {
       const source = path.join(outDir, job.logName)
-      const destName = record.classifiedAsBaseline ? `${job.id}.baseline.log` : `${job.id}.log`
+      const destName = `${job.id}.${record.classification.replace(/_/g, '-')}.log`
       await writeFile(path.join(outDir, 'failures', destName), await readFile(source, 'utf8').catch(() => outcome.stderr || outcome.stdout || ''))
     } catch {
       // Keep the run going even if a failure copy cannot be written.
     }
   }
-  const status = record.code === 0
-    ? (record.classifiedAsBaseline ? 'BASELINE' : 'PASS')
-    : record.timedOut ? 'TIMEOUT' : 'FAIL'
+  const status = record.classification === 'pass' ? 'PASS'
+    : record.classification === 'expected_failure' ? 'EXPECTED-FAILURE'
+      : record.classification === 'skipped' ? 'SKIP'
+        : record.classification === 'timeout' ? 'TIMEOUT'
+          : ['infrastructure_failure', 'configuration_error'].includes(record.classification) ? 'INFRA' : 'FAIL'
   process.stdout.write(`[${status}] L${job.level} ${job.id} (${record.durationMs}ms)\n`)
   return record
 }
@@ -141,56 +191,99 @@ function xmlEscape(value) {
     .replace(/"/g, '&quot;')
 }
 
-function junitXml(rows) {
-  const failed = rows.filter(row => row.code !== 0)
+export function junitXml(rows, durationMs = Date.now() - startedAt) {
+  const failed = rows.filter(row => ['failure', 'timeout', 'infrastructure_failure', 'configuration_error'].includes(row.classification))
+  const skipped = rows.filter(row => ['expected_failure', 'skipped'].includes(row.classification))
   const cases = rows.map(row => {
-    const body = row.code === 0
-      ? ''
-      : `<failure message="${xmlEscape(row.id)}">${xmlEscape(row.log || row.title)}</failure>`
+    const body = row.classification === 'pass' ? ''
+      : row.classification === 'expected_failure'
+        ? `<skipped message="known baseline failure">${xmlEscape(row.baselineMatches?.join(', ') || row.reason || '')}</skipped>`
+        : row.classification === 'skipped'
+          ? `<skipped message="not implemented">${xmlEscape(row.reason || '')}</skipped>`
+          : `<failure message="${xmlEscape(row.id)}">${xmlEscape(row.reason || row.log || row.title)}</failure>`
     return `<testcase name="${xmlEscape(row.id)}" classname="nightly.L${row.level}" time="${(row.durationMs / 1000).toFixed(3)}">${body}</testcase>`
   }).join('\n')
-  return `<?xml version="1.0" encoding="UTF-8"?><testsuite name="nightly-wizard" tests="${rows.length}" failures="${failed.length}" time="${((Date.now() - startedAt) / 1000).toFixed(3)}">${cases}</testsuite>`
+  return `<?xml version="1.0" encoding="UTF-8"?><testsuite name="nightly-wizard" tests="${rows.length}" failures="${failed.length}" skipped="${skipped.length}" time="${(durationMs / 1000).toFixed(3)}">${cases}</testsuite>`
 }
 
-function eslintFailingFiles(logText) {
-  const matches = [
-    ...logText.matchAll(/(?:^|\n)((?:[A-Za-z]:)?[^\s:]+\.(?:tsx|ts|jsx|js))\s*$/gm),
-  ].map(match => path.basename(match[1].replace(/\\/g, '/')))
-  return [...new Set(matches.filter(name => /\.(?:tsx|ts|jsx|js)$/.test(name)))]
+function normalizedTestTitle(value) {
+  return String(value || '').replace(/\s+\([\d.]+ms\)\s*$/, '').trim().toLowerCase()
 }
 
-function onlyKnownStaticFailures(logText, baseline) {
-  const known = new Set((baseline.static || []).map(item => path.basename(item.file)))
-  if (!known.size) return false
-  const failingFiles = eslintFailingFiles(logText)
-  if (!failingFiles.length) return false
-  return failingFiles.every(name => known.has(name))
+function normalizedTestFile(value) {
+  return String(value || '').replace(/\\/g, '/').replace(/^.*?ui\//, '').replace(/^ui\//, '')
 }
 
-function classifyFrontendFailures(logText, baseline) {
-  const ids = baseline.failures.map(item => item.id)
+export function classifyFrontendFailures(logText, baseline) {
   const newFailures = []
   const baselineHits = []
-  for (const item of baseline.failures) {
-    if (logText.includes(item.file) || logText.includes(item.match) || logText.includes(item.id)) {
-      baselineHits.push(item.id)
+  const summaryEntries = [...logText.matchAll(/(?:^|\n)test at ([^\n]+)\n✖\s+([^\n]+)\s*/gm)]
+    .map(match => ({ file: match[1].trim(), title: match[2].trim() }))
+  const failBlocks = summaryEntries.length
+    ? summaryEntries
+    : [...new Set(
+        [...logText.matchAll(/(?:^|\n)✖\s+(.+?)\s*$/gm)].map(match => match[1].trim()),
+      )].map(title => ({ file: '', title }))
+  for (const entry of failBlocks) {
+    const { title } = entry
+    const normalized = normalizedTestTitle(title)
+    const known = baseline.failures.find(item => (
+      normalizedTestTitle(item.test) === normalized
+      && entry.file
+      && normalizedTestFile(entry.file).includes(normalizedTestFile(item.file))
+    ))
+    if (known) baselineHits.push(known.id)
+    else newFailures.push(title.replace(/\s+\([\d.]+ms\)\s*$/, ''))
+  }
+  if (!failBlocks.length && /(?:^|\n)(?:npm ERR!|Error:|not ok|failed)/im.test(logText)) {
+    newFailures.push('unclassified test runner failure')
+  }
+  return { baselineHits: [...new Set(baselineHits)], newFailures: [...new Set(newFailures)] }
+}
+
+export function deriveRunStatus(rows) {
+  if (rows.some(row => ['timeout', 'infrastructure_failure', 'configuration_error'].includes(row.classification))) return 'INFRASTRUCTURE FAILURE'
+  if (rows.some(row => ['failure', 'configuration_error'].includes(row.classification))) return 'REGRESSION'
+  if (rows.some(row => row.classification === 'skipped')) return 'INCOMPLETE'
+  if (rows.some(row => row.classification === 'expected_failure')) return 'PASS_WITH_BASELINE'
+  return 'PASS'
+}
+
+export function requireTestDiagnostics(outcome, label) {
+  const logText = `${outcome.stdout || ''}\n${outcome.stderr || ''}`
+  if (/listen EPERM:[\s\S]*tsx-/i.test(logText)) {
+    return {
+      ...outcome,
+      classification: 'infrastructure_failure',
+      reason: `${label} could not start because the environment blocks the tsx IPC socket`,
     }
   }
-  const failBlocks = [...logText.matchAll(/✖\s+(.+?)(?:\s+\([\d.]+ms\))?$/gm)].map(match => match[1])
-  for (const title of failBlocks) {
-    const known = ids.some(id => title.toLowerCase().includes(id.toLowerCase()))
-    if (!known) newFailures.push(title)
+  if (!logText.trim()) {
+    return {
+      ...outcome,
+      code: outcome.code || 1,
+      classification: 'infrastructure_failure',
+      reason: `${label} exited without test diagnostics`,
+    }
   }
-  return { baselineHits, newFailures }
+  return outcome
 }
 
 async function main() {
   await mkdir(outDir, { recursive: true })
   await mkdir(path.join(outDir, 'failures'), { recursive: true })
+  if (levelConfigurationError) throw levelConfigurationError
   const head = await gitHead()
   const before = snapshotResources()
   const baseline = JSON.parse(await readFile(path.join(ROOT, 'scripts', 'nightly_baseline.json'), 'utf8'))
   const ui = path.join(ROOT, 'ui')
+  const availablePythonTestFiles = (await readdir(path.join(ROOT, 'tests')))
+    .filter(name => /^test_.+\.py$/.test(name))
+    .sort()
+    .map(name => `tests/${name}`)
+  const pythonTestFiles = selectPythonTestFiles(
+    process.env.NIGHTLY_PYTEST_FILES || '', availablePythonTestFiles,
+  )
   const jobs = []
 
   if (LEVELS.has('1')) {
@@ -200,14 +293,9 @@ async function main() {
     })
     jobs.push({
       id: 'eslint', level: 1, title: 'ESLint', logName: 'eslint.log',
-      run: async () => {
-        const outcome = await runCaptured(npmCmd(), ['run', 'lint', '--', '--max-warnings=0'], { cwd: ui, logPath: path.join(outDir, 'eslint.log') })
-        const logText = `${outcome.stdout}\n${outcome.stderr}`
-        if (outcome.code !== 0 && onlyKnownStaticFailures(logText, baseline)) {
-          return { ...outcome, code: 0, classifiedAsBaseline: true }
-        }
-        return outcome
-      },
+      run: () => runCaptured(npmCmd(), ['run', 'lint', '--', '--max-warnings=0'], {
+        cwd: ui, logPath: path.join(outDir, 'eslint.log'),
+      }),
     })
     jobs.push({
       id: 'tsc', level: 1, title: 'TypeScript', logName: 'tsc.log',
@@ -230,23 +318,27 @@ async function main() {
       run: () => runCaptured(pythonBin(), ['scripts/check_brand_contract.py'], { logPath: path.join(outDir, 'brand.log'), timeoutMs: 60_000 }),
     })
     jobs.push({
+      id: 'nightly-runner-unit', level: 1, title: 'Nightly runner contracts', logName: 'nightly-runner-unit.log',
+      run: async () => requireTestDiagnostics(await runCaptured(process.execPath, ['scripts/tests/nightly_wizard_report.test.mjs'], {
+        logPath: path.join(outDir, 'nightly-runner-unit.log'), timeoutMs: 60_000,
+      }), 'Nightly runner contract tests'),
+    })
+    jobs.push({
       id: 'agent-contract', level: 1, title: 'Wizard schema and capabilities', logName: 'agent-contract.log',
-      run: () => runCaptured(
-        path.join(ui, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx'),
-        ['--tsconfig', 'tsconfig.app.json', '--test', 'tests/agentContract.test.mjs'],
+      run: async () => requireTestDiagnostics(await runCaptured(
+        process.execPath, ['--import', 'tsx', '--test', 'tests/agentContract.test.mjs'],
         { cwd: ui, logPath: path.join(outDir, 'agent-contract.log') },
-      ),
+      ), 'Wizard contract tests'),
     })
   }
 
   if (LEVELS.has('2')) {
     jobs.push({
       id: 'agent-unit', level: 2, title: 'Wizard unit tests', logName: 'frontend-tests.log',
-      run: () => runCaptured(
-        path.join(ui, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx'),
-        ['--tsconfig', 'tsconfig.app.json', '--test', 'tests/agentActions.test.mjs', 'tests/agentContract.test.mjs'],
+      run: async () => requireTestDiagnostics(await runCaptured(
+        process.execPath, ['--import', 'tsx', '--test', 'tests/agentActions.test.mjs', 'tests/agentContract.test.mjs'],
         { cwd: ui, logPath: path.join(outDir, 'frontend-tests.log') },
-      ),
+      ), 'Wizard unit tests'),
     })
   }
 
@@ -254,12 +346,26 @@ async function main() {
     jobs.push({
       id: 'frontend-suite', level: 4, title: 'Full UI test suite', logName: 'frontend-suite.log',
       run: async () => {
-        const outcome = await runCaptured(npmCmd(), ['test'], { cwd: ui, logPath: path.join(outDir, 'frontend-suite.log') })
+        let outcome = await runCaptured(npmCmd(), ['test'], {
+          cwd: ui,
+          logPath: path.join(outDir, 'frontend-suite.log'),
+        })
+        outcome = requireTestDiagnostics(outcome, 'Full UI tests')
+        if (outcome.classification === 'infrastructure_failure') return outcome
         const logText = `${outcome.stdout}\n${outcome.stderr}`
         const classified = classifyFrontendFailures(logText, baseline)
+        if (outcome.code !== 0 && !classified.baselineHits.length && !classified.newFailures.length) {
+          classified.newFailures.push('frontend test process exited without diagnostics')
+        }
         await writeFile(path.join(outDir, 'frontend-classification.json'), JSON.stringify(classified, null, 2))
         const onlyBaseline = outcome.code !== 0 && classified.newFailures.length === 0 && classified.baselineHits.length > 0
-        return { ...outcome, code: onlyBaseline ? 0 : outcome.code, classified }
+        return {
+          ...outcome,
+          classification: onlyBaseline ? 'expected_failure' : undefined,
+          classifiedAsBaseline: onlyBaseline,
+          baselineMatches: classified.baselineHits,
+          reason: classified.newFailures.join('; ') || null,
+        }
       },
     })
   }
@@ -267,76 +373,196 @@ async function main() {
   if (LEVELS.has('6')) {
     jobs.push({
       id: 'backend-pytest', level: 6, title: 'Python tests', logName: 'backend-tests.log',
-      run: () => runCaptured(pythonBin(), ['-m', 'pytest', '-q', '--maxfail=20'], {
-        logPath: path.join(outDir, 'backend-tests.log'),
-        timeoutMs: Math.min(JOB_TIMEOUT_MS * 3, 30 * 60 * 1000),
+      run: async () => {
+        const logPath = path.join(outDir, 'backend-tests.log')
+        await writeFile(logPath, '')
+        let code = 0
+        let timedOut = false
+        let signal = null
+        const failedFiles = []
+        const timedOutFiles = []
+        let executedFiles = 0
+        for (const [index, file] of pythonTestFiles.entries()) {
+          if (abortRequested) break
+          process.stdout.write(`[RUN] L6 ${index + 1}/${pythonTestFiles.length} ${file}\n`)
+          const part = await runCaptured(
+            pythonBin(), ['-m', 'pytest', '-q', '--maxfail=20', file],
+            { timeoutMs: PYTEST_FILE_TIMEOUT_MS },
+          )
+          executedFiles += 1
+          await appendFile(
+            logPath,
+            `\n===== ${file} (${part.code === 0 ? 'PASS' : part.timedOut ? 'TIMEOUT' : 'FAIL'}) =====\n${part.stdout}${part.stderr}`,
+          )
+          if (part.code !== 0) {
+            code = 1
+            failedFiles.push(file)
+          }
+          if (part.timedOut) {
+            timedOut = true
+            timedOutFiles.push(file)
+          }
+          signal ||= part.signal
+        }
+        return {
+          code,
+          stdout: `Executed ${executedFiles}/${pythonTestFiles.length} Python test files; failed: ${failedFiles.join(', ') || 'none'}\n`,
+          stderr: '',
+          timedOut,
+          signal,
+          reason: timedOutFiles.length
+            ? `Python test files timed out: ${timedOutFiles.join(', ')}`
+            : failedFiles.length ? `Python test files failed: ${failedFiles.join(', ')}` : null,
+        }
+      },
+    })
+  }
+
+  for (const level of ['3', '5', '7']) {
+    if (!LEVELS.has(level)) continue
+    jobs.push({
+      id: `level-${level}-not-implemented`,
+      level: Number(level),
+      title: LEVEL_CATALOG[level].title,
+      run: async () => ({
+        code: 0,
+        stdout: '',
+        stderr: '',
+        timedOut: false,
+        classification: 'skipped',
+        reason: `Level ${level} is intentionally not implemented yet`,
       }),
     })
   }
 
-  if (LEVELS.has('8') && (RUN_EXTERNAL || RUN_GPU)) {
+  if (LEVELS.has('8')) {
     jobs.push({
       id: 'optional-smoke', level: 8, title: 'Optional real smoke (explicit)', logName: 'smoke.log',
-      run: async () => ({ code: 1, stdout: '', stderr: 'Optional smoke is not implemented; keep RUN_*_TESTS=0.\n', timedOut: false }),
+      run: async () => (RUN_EXTERNAL || RUN_GPU)
+        ? {
+            code: 1,
+            stdout: '',
+            stderr: 'Optional real smoke is not implemented.\n',
+            timedOut: false,
+            classification: 'failure',
+            reason: 'Level 8 was enabled but its real smoke workflow is not implemented',
+          }
+        : {
+            code: 0,
+            stdout: '',
+            stderr: '',
+            timedOut: false,
+            classification: 'skipped',
+            reason: 'Level 8 requires RUN_GPU_TESTS=1 and/or RUN_EXTERNAL_PROVIDER_TESTS=1',
+          },
     })
   }
 
   const watchdog = setTimeout(() => {
+    globalTimedOut = true
+    abortRequested = true
     for (const child of children) {
       child.kill('SIGTERM')
     }
   }, GLOBAL_TIMEOUT_MS)
 
   for (const job of jobs) {
+    if (abortRequested) break
     await recordJob(job)
   }
   clearTimeout(watchdog)
 
   const after = snapshotResources()
-  const failed = results.filter(row => row.code !== 0)
-  const status = failed.length === 0
-    ? 'PASS'
-    : failed.some(row => row.timedOut) ? 'INFRASTRUCTURE FAILURE'
-      : 'REGRESSION'
+  if (globalTimedOut && deriveRunStatus(results) !== 'INFRASTRUCTURE FAILURE') {
+    results.push({
+      id: 'global-timeout', level: 0, title: 'Global nightly timeout', code: 1,
+      classification: 'timeout', baselineMatches: [], reason: 'The global nightly timeout elapsed',
+      timedOut: true, signal: null, classifiedAsBaseline: false,
+      durationMs: Date.now() - startedAt, log: null,
+    })
+  }
+  if (interrupted && deriveRunStatus(results) !== 'INFRASTRUCTURE FAILURE') {
+    results.push({
+      id: 'interrupted', level: 0, title: 'Nightly interrupted', code: 1,
+      classification: 'infrastructure_failure', baselineMatches: [], reason: 'The nightly run received SIGINT',
+      timedOut: false, signal: 'SIGINT', classifiedAsBaseline: false,
+      durationMs: Date.now() - startedAt, log: null,
+    })
+  }
+  const finalStatus = deriveRunStatus(results)
+  const regressions = results.filter(row => row.classification === 'failure')
+  const infrastructureFailures = results.filter(row => ['timeout', 'infrastructure_failure', 'configuration_error'].includes(row.classification))
+  const expected = results.filter(row => row.classification === 'expected_failure')
   const durationMs = Date.now() - startedAt
-  const staticHits = results.filter(row => row.classifiedAsBaseline).map(row => row.id)
+  const baselineJobs = results.filter(row => row.classifiedAsBaseline).map(row => row.id)
+  const executedLevels = [...new Set(results.filter(row => row.classification !== 'skipped').map(row => String(row.level)))].sort()
+  const missingLevels = REQUESTED_LEVELS.filter(level => !executedLevels.includes(level))
   const payload = {
-    status,
+    status: finalStatus,
     commit: head,
     durationMs,
     gpuUsed: RUN_GPU,
     externalProvidersUsed: RUN_EXTERNAL,
+    requestedLevels: REQUESTED_LEVELS,
+    executedLevels,
+    missingLevels,
+    levelCatalog: LEVEL_CATALOG,
     resources: { before, after },
     results,
     baseline: baseline.failures.map(item => item.id),
-    staticBaseline: (baseline.static || []).map(item => item.id),
-    classifiedStatic: staticHits,
+    classifiedBaselineJobs: baselineJobs,
   }
   await writeFile(path.join(outDir, 'results.json'), JSON.stringify(payload, null, 2))
-  await writeFile(path.join(outDir, 'junit.xml'), junitXml(results))
+  await writeFile(path.join(outDir, 'junit.xml'), junitXml(results, durationMs))
   const summary = [
-    `Estado: ${status}`,
+    `Estado: ${finalStatus}`,
     `Commit probado: ${head}`,
     `Duración: ${(durationMs / 1000).toFixed(1)}s`,
-    `Tests pasados: ${results.filter(row => row.code === 0 && !row.classifiedAsBaseline).length}`,
-    `Fallos nuevos: ${failed.map(row => row.id).join(', ') || 'ninguno'}`,
-    `Fallos baseline: ${baseline.failures.map(item => item.id).join(', ')}`,
-    `Avisos estáticos conocidos: ${(baseline.static || []).map(item => item.id).join(', ') || 'ninguno'}`,
+    `Jobs pasados: ${results.filter(row => row.classification === 'pass').length}`,
+    `Fallos esperados observados: ${expected.flatMap(row => row.baselineMatches).join(', ') || 'ninguno'}`,
+    `Regresiones: ${regressions.map(row => row.id).join(', ') || 'ninguna'}`,
+    `Fallos de infraestructura: ${infrastructureFailures.map(row => row.id).join(', ') || 'ninguno'}`,
+    `Niveles solicitados: ${REQUESTED_LEVELS.join(', ')}`,
+    `Niveles ejecutados: ${executedLevels.join(', ') || 'ninguno'}`,
+    `Niveles sin implementar/omitidos: ${missingLevels.join(', ') || 'ninguno'}`,
     `GPU utilizada: ${RUN_GPU ? 'sí' : 'no'}`,
     `Proveedores externos utilizados: ${RUN_EXTERNAL ? 'sí' : 'no'}`,
     `Artefactos: ${path.relative(ROOT, outDir)}`,
     '',
     'Jobs:',
-    ...results.map(row => `- L${row.level} ${row.id}: ${row.code === 0 ? (row.classifiedAsBaseline ? 'BASELINE' : 'PASS') : 'FAIL'} (${row.durationMs}ms)`),
+    ...results.map(row => `- L${row.level} ${row.id}: ${row.classification.toUpperCase()} (${row.durationMs}ms)${row.reason ? ` — ${row.reason}` : ''}`),
   ].join('\n')
   await writeFile(path.join(outDir, 'summary.md'), `${summary}\n`)
   process.stdout.write(`\n${summary}\n`)
-  process.exitCode = status === 'PASS' ? 0 : 1
+  process.exitCode = finalStatus === 'PASS' || finalStatus === 'PASS_WITH_BASELINE' ? 0 : 1
 }
 
 process.on('SIGINT', () => {
+  interrupted = true
+  abortRequested = true
   for (const child of children) child.kill('SIGTERM')
-  process.exit(130)
 })
 
-await main()
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : ''
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  try {
+    await main()
+  } catch (error) {
+    await mkdir(outDir, { recursive: true })
+    await mkdir(path.join(outDir, 'failures'), { recursive: true })
+    const detail = String(error?.stack || error)
+    const row = {
+      id: 'nightly-runner', level: 0, title: 'Nightly runner', code: 1,
+      classification: 'configuration_error', baselineMatches: [], reason: detail,
+      timedOut: false, classifiedAsBaseline: false, durationMs: Date.now() - startedAt, log: 'runner-error.log',
+    }
+    await writeFile(path.join(outDir, 'runner-error.log'), `${detail}\n`)
+    await writeFile(path.join(outDir, 'results.json'), JSON.stringify({
+      status: 'INFRASTRUCTURE FAILURE', requestedLevels: REQUESTED_LEVELS, results: [row],
+    }, null, 2))
+    await writeFile(path.join(outDir, 'junit.xml'), junitXml([row]))
+    await writeFile(path.join(outDir, 'summary.md'), `Estado: INFRASTRUCTURE FAILURE\n\n${detail}\n`)
+    process.stderr.write(`${detail}\n`)
+    process.exitCode = 1
+  }
+}
