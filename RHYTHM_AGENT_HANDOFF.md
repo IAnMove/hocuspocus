@@ -1332,3 +1332,9 @@ Los helpers de borrador del Video Editor viven en `editorDraft.ts`; el panel só
 `start_generation` informa `queued` con el `taskId` real; `start_director_production` informa `running` con el `pipelineId` de la producción staged en el mismo turno, no una anterior. Una repetición exacta reutiliza ese informe y no encola otro job. Hunyuan/Studio sin jobId se tratan como fallo.
 
 L1–2 posterior: `artifacts/nightly/2026-08-30T15-39-45`, Estado PASS, job ESLint PASS (no BASELINE), GPU no, proveedores externos no.
+
+## 57. Lote de cómic robusto (2026-08-30)
+
+`generate_comic` admite `render_mode=missing|failed|all`, `page_numbers`, `pilot` y `biography_review`. El ejecutor persiste jobs y fallos por viñeta, reanuda desde la primera pendiente, continúa tras un fallo (estado `partial`) y cancela el lote sin borrar las terminadas. El progreso habla `página 4/12 · viñeta 21/72`. Antes de dibujar, el Wizard estima las llamadas MiniMax. `create_comic` puede marcar `factual_biography`; no se dibuja hasta la revisión factual. El snapshot del Wizard incluye el cómic activo (páginas/viñetas/completadas/fallidas) y el pipeline de Director.
+
+Siguiente: snapshots de Story/Series/Video 3D/CharacterKit/Video Editor, tarjetas en el chat, flujos CharacterKit y Video Editor, persistencia backend. No marcar el goal general como completo.

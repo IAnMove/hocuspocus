@@ -2099,13 +2099,22 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
     },
     plan,
     completedPanelIds: [],
+    failedPanelIds: [],
     panelJobs: {},
+    factualBiography: action.factualBiography === true,
     scriptVersion: 1,
     scriptApprovedAt: new Date().toISOString(),
   }
   useComicStore.getState().setProject(project)
   useComicStore.setState({ dirty: true })
   showComics()
+  const stored = useComicStore.getState().project
+  const storedPanels = stored.pages.reduce((sum, page) => (
+    sum + page.elements.filter(element => element.type === 'panel' && !element.parentId).length
+  ), 0)
+  if (stored.pages.length !== requestedPages.length || storedPanels !== allPanels.length) {
+    throw new Error(`El cómic guardado tiene ${stored.pages.length} páginas y ${storedPanels} viñetas; pediste ${requestedPages.length} páginas y ${allPanels.length} viñetas.`)
+  }
   return `He creado desde cero “${project.title}” con ${requestedPages.length} páginas, ${characters.length} personajes y ${allPanels.length} viñetas. Comic Director usará ${provider === 'minimax' ? 'MiniMax image-01' : imageModel || 'el modelo local seleccionado'}. No he generado imágenes todavía.`
 }
 
@@ -2113,7 +2122,7 @@ export async function generateFilledComicArtwork(
   action: import('./agentActions').AgentGenerateComicAction,
   onProgress?: (message: string) => void,
   expectedProjectId?: string,
-): Promise<string> {
+): Promise<{ message: string; state: 'completed' | 'partial' | 'failed'; generated: number; failed: number; cancelled: boolean }> {
   showComics()
   const [{ useComicStore }, { comicId }, { generateDirectorArtwork }] = await Promise.all([
     import('../comics/store'),
@@ -2241,6 +2250,7 @@ export async function generateFilledComicArtwork(
         },
         plan,
         completedPanelIds: [],
+        failedPanelIds: [],
         panelJobs: {},
         scriptVersion: 1,
         scriptApprovedAt: new Date().toISOString(),
@@ -2250,20 +2260,60 @@ export async function generateFilledComicArtwork(
   if (!useComicStore.getState().project.director) {
     throw new Error('No hay un cómic con plan de Director abierto. Pide primero un cómic de ejemplo o crea uno con tema.')
   }
-  if (action.imageProvider !== 'keep' || action.imageModel) {
-    const current = useComicStore.getState().project.director!
-    const provider = action.imageProvider === 'keep' ? current.provider : action.imageProvider
-    const imageModel = action.imageModel || (provider === 'minimax' ? 'image-01' : current.imageModel)
-    useComicStore.getState().patchProject({ director: { ...current, provider, imageModel, input: { ...current.input, provider, imageModel } } })
+  const current = useComicStore.getState().project.director!
+  if (current.factualBiography && !current.biographyReviewedAt && !action.biographyReview) {
+    throw new Error('Este cómic es una biografía factual. Confirma hechos, inferencias y dramatización (biography_review=true) antes de dibujar; no inventaré familiares, citas ni acontecimientos.')
   }
+  if (action.biographyReview && !current.biographyReviewedAt) {
+    useComicStore.getState().patchProject({
+      director: { ...current, biographyReviewedAt: new Date().toISOString() },
+    })
+  }
+  if (action.imageProvider !== 'keep' || action.imageModel) {
+    const latest = useComicStore.getState().project.director!
+    const provider = action.imageProvider === 'keep' ? latest.provider : action.imageProvider
+    const imageModel = action.imageModel || (provider === 'minimax' ? 'image-01' : latest.imageModel)
+    useComicStore.getState().patchProject({ director: { ...latest, provider, imageModel, input: { ...latest.input, provider, imageModel } } })
+  }
+  const pages = action.pilot ? [1] : (action.pages || [])
   const result = await generateDirectorArtwork({
+    scope: action.scope || 'missing',
+    pages: pages.length ? pages : undefined,
+    force: action.scope === 'all',
     onProgress: (message, current, total) => {
       onProgress?.(`${message} (${current}/${total})`)
     },
   })
-  if (!result.total) return 'Todas las viñetas de este cómic ya tenían dibujo.'
   const provider = useComicStore.getState().project.director?.provider
-  return `He dibujado ${result.generated} viñetas con ${provider === 'minimax' ? 'MiniMax image-01' : 'el proveedor local configurado'}. Aparecen dentro de cada recuadro al terminar.`
+  const providerLabel = provider === 'minimax' ? 'MiniMax image-01' : 'el proveedor local configurado'
+  if (!result.total) {
+    return { message: 'Todas las viñetas de este cómic ya tenían dibujo.', state: 'completed', generated: 0, failed: 0, cancelled: false }
+  }
+  if (result.cancelled) {
+    return {
+      message: `He cancelado el lote con ${result.generated} viñetas terminadas y ${result.failed} fallidas; no he perdido lo ya dibujado.`,
+      state: result.generated > 0 ? 'partial' : 'failed',
+      generated: result.generated,
+      failed: result.failed,
+      cancelled: true,
+    }
+  }
+  if (result.failed) {
+    return {
+      message: `He dibujado ${result.generated} viñetas con ${providerLabel} y han fallado ${result.failed}. Puedo reanudar desde la primera pendiente o reintentar las fallidas.`,
+      state: result.generated > 0 ? 'partial' : 'failed',
+      generated: result.generated,
+      failed: result.failed,
+      cancelled: false,
+    }
+  }
+  return {
+    message: `He dibujado ${result.generated} viñetas con ${providerLabel}. Aparecen dentro de cada recuadro al terminar.`,
+    state: 'completed',
+    generated: result.generated,
+    failed: 0,
+    cancelled: false,
+  }
 }
 
 export async function generateComicPanelArtwork(
@@ -2284,5 +2334,6 @@ export async function generateComicPanelArtwork(
     target: { pageNumber, panelNumber },
     onProgress: (message, current, total) => onProgress?.(`${message} (${current}/${total})`),
   })
+  if (result.failed) throw new Error(`No pude regenerar la viñeta ${panelNumber} de la página ${pageNumber}.`)
   return `He regenerado únicamente la viñeta ${panelNumber} de la página ${pageNumber}; las demás imágenes permanecen intactas (${result.generated}/${result.total}).`
 }

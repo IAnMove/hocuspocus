@@ -151,12 +151,15 @@ export interface ComicProject {
     input: ComicDirectorRequest
     plan: ComicPlan
     completedPanelIds: string[]
+    failedPanelIds?: string[]
     scriptApprovedAt?: string
     scriptVersion?: number
     /** Maestro generation jobs keyed by planned panel ID.
      *  Kept until the resulting image has been attached so a dropped browser
      *  request can resume the same backend job instead of generating twice. */
     panelJobs?: Record<string, string>
+    factualBiography?: boolean
+    biographyReviewedAt?: string
   }
   createdAt: string
   updatedAt: string

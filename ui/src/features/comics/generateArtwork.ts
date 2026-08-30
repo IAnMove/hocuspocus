@@ -135,141 +135,277 @@ function rememberPanelJob(panelId: string, jobId?: string): void {
   state.patchProject({ director: { ...director, panelJobs } })
 }
 
-export async function generateDirectorArtwork(options: {
-  force?: boolean
-  target?: { pageNumber: number; panelNumber: number }
-  onProgress?: (message: string, current: number, total: number) => void
-}): Promise<{ generated: number; total: number }> {
-  const state = useComicStore.getState()
-  const director = state.project.director
-  if (!director) throw new Error('Este cómic no tiene plan de Director; no puedo dibujar las viñetas.')
-  const tasks: Array<{ pageId: string; panel: ComicPanelElement; plan: ComicPlanPanel }> = []
-  let targetExists = false
+export type ComicArtworkScope = 'all' | 'missing' | 'failed'
+
+export interface ComicArtworkInventory {
+  projectId: string
+  title: string
+  pages: number
+  panels: number
+  completed: number
+  failed: number
+  pending: number
+  provider: 'maestro' | 'minimax' | ''
+  activePage: number
+}
+
+export interface ComicArtworkTask {
+  pageIndex: number
+  panelIndex: number
+  pageNumber: number
+  panelNumber: number
+  globalIndex: number
+  pageId: string
+  panel: ComicPanelElement
+  plan: ComicPlanPanel
+}
+
+export interface ComicArtworkBatchResult {
+  generated: number
+  failed: number
+  total: number
+  cancelled: boolean
+}
+
+let comicBatchDepth = 0
+let comicBatchCancel = false
+
+export function requestComicArtworkCancel(): boolean {
+  if (comicBatchDepth < 1) return false
+  comicBatchCancel = true
+  return true
+}
+
+export function comicArtworkInventory(project = useComicStore.getState().project): ComicArtworkInventory {
+  const director = project.director
+  const pages = director?.plan.pages.length || project.pages.length
+  const panels = director?.plan.pages.reduce((sum, page) => sum + page.panels.length, 0) || 0
+  const completed = director?.completedPanelIds.length || 0
+  const failed = director?.failedPanelIds?.length || 0
+  const firstPendingPage = director?.plan.pages.findIndex((page, pageIndex) =>
+    page.panels.some(panel => !director.completedPanelIds.includes(panel.id)
+      && (project.pages[pageIndex]?.elements.some(element => element.type === 'panel') ?? false)))
+  return {
+    projectId: project.id,
+    title: project.title,
+    pages,
+    panels,
+    completed,
+    failed,
+    pending: Math.max(0, panels - completed),
+    provider: director?.provider || '',
+    activePage: (firstPendingPage ?? 0) + 1,
+  }
+}
+
+export function formatComicArtworkProgress(task: ComicArtworkTask, pages: number, panels: number): string {
+  return `página ${task.pageNumber}/${pages} · viñeta ${task.globalIndex}/${panels}`
+}
+
+export function selectComicArtworkTasks(
+  project: ComicProject,
+  options: {
+    force?: boolean
+    target?: { pageNumber: number; panelNumber: number }
+    scope?: ComicArtworkScope
+    pages?: number[]
+  } = {},
+): ComicArtworkTask[] {
+  const director = project.director
+  if (!director) return []
+  const completed = new Set(director.completedPanelIds)
+  const failed = new Set(director.failedPanelIds || [])
+  const pageFilter = options.pages?.length ? new Set(options.pages) : null
+  const scope: ComicArtworkScope = options.scope
+    || (options.force || options.target ? 'all' : 'missing')
+  const tasks: ComicArtworkTask[] = []
+  let globalIndex = 0
   director.plan.pages.forEach((planPage, pageIndex) => {
-    const page = state.project.pages[pageIndex]
+    const page = project.pages[pageIndex]
     const panels = page?.elements.filter((element): element is ComicPanelElement => element.type === 'panel' && !element.parentId)
-      .sort((a, b) => a.zIndex - b.zIndex) || []
+      .sort((left, right) => left.zIndex - right.zIndex) || []
     planPage.panels.forEach((planned, index) => {
-      const targeted = !options.target || (
-        options.target.pageNumber === pageIndex + 1
-        && options.target.panelNumber === index + 1
-      )
-      if (targeted && panels[index]) targetExists = true
-      if (targeted && (options.force || options.target || !director.completedPanelIds.includes(planned.id)) && panels[index]) {
-        tasks.push({ pageId: page.id, panel: panels[index], plan: planned })
+      globalIndex += 1
+      const pageNumber = pageIndex + 1
+      const panelNumber = index + 1
+      if (pageFilter && !pageFilter.has(pageNumber)) return
+      if (options.target && (options.target.pageNumber !== pageNumber || options.target.panelNumber !== panelNumber)) return
+      const include = options.target
+        || scope === 'all'
+        || (scope === 'failed' ? failed.has(planned.id) : !completed.has(planned.id))
+      if (include && panels[index]) {
+        tasks.push({
+          pageIndex,
+          panelIndex: index,
+          pageNumber,
+          panelNumber,
+          globalIndex,
+          pageId: page.id,
+          panel: panels[index],
+          plan: planned,
+        })
       }
     })
   })
-  if (options.target && !targetExists) {
+  return tasks
+}
+
+export async function generateDirectorArtwork(options: {
+  force?: boolean
+  target?: { pageNumber: number; panelNumber: number }
+  scope?: ComicArtworkScope
+  pages?: number[]
+  onProgress?: (message: string, current: number, total: number) => void
+  drawPanel?: (task: ComicArtworkTask) => Promise<import('./types').ComicAsset>
+}): Promise<ComicArtworkBatchResult> {
+  const state = useComicStore.getState()
+  const director = state.project.director
+  if (!director) throw new Error('Este cómic no tiene plan de Director; no puedo dibujar las viñetas.')
+  const inventory = comicArtworkInventory(state.project)
+  const tasks = selectComicArtworkTasks(state.project, options)
+  if (options.target && !tasks.length) {
     throw new Error(`No existe la viñeta ${options.target.panelNumber} en la página ${options.target.pageNumber}.`)
   }
-  if (!tasks.length) return { generated: 0, total: 0 }
+  if (!tasks.length) return { generated: 0, failed: 0, total: 0, cancelled: false }
 
-  for (let index = 0; index < tasks.length; index += 1) {
-    const task = tasks[index]
-    options.onProgress?.(
-      `Generando la viñeta ${index + 1} de ${tasks.length}…`,
-      index + 1,
-      tasks.length,
-    )
-    const currentDirector = useComicStore.getState().project.director!
-    const identityReference = panelIdentityReference(
-      currentDirector,
-      task.plan,
-      useComicStore.getState().project.assets,
-    )
-    const maestroState = useStore.getState()
-    const selectedImageModel = maestroState.models.find(model =>
-      model.model_type === currentDirector.imageModel)
-    const localSupportsReferences = currentDirector.provider === 'maestro'
-      && Boolean(
-        selectedImageModel?.supports_ref_images
-        || (currentDirector.imageModel === maestroState.params.model_type
-          && maestroState.modelOptions?.image_ref_choices),
+  comicBatchDepth += 1
+  comicBatchCancel = false
+  let generated = 0
+  let failed = 0
+  try {
+    for (let index = 0; index < tasks.length; index += 1) {
+      if (comicBatchCancel) {
+        return { generated, failed, total: tasks.length, cancelled: true }
+      }
+      const task = tasks[index]
+      options.onProgress?.(
+        `Generando ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}…`,
+        index + 1,
+        tasks.length,
       )
-    const worldReferenceId = currentDirector.input.worldReferenceAssetIds?.[0]
-    const reference = identityReference.source || (localSupportsReferences && worldReferenceId
-      ? useComicStore.getState().project.assets[worldReferenceId]?.source
-      : undefined)
-    const prompt = buildDirectorImagePrompt(
-      currentDirector,
-      task.plan.imagePrompt,
-      state.project.style.promptSuffix,
-      task.plan,
-    )
-    const existingJobId = currentDirector.panelJobs?.[task.plan.id]
-    let asset = null
-    if (
-      currentDirector.provider === 'maestro'
-      && !options.force
-      && !options.target
-      && !existingJobId
-      && currentDirector.completedPanelIds.length > 0
-      && currentDirector.imageModel
-    ) {
-      const assignedNames = new Set(
-        Object.values(useComicStore.getState().project.assets).map(item => item.name),
-      )
-      asset = await findCompletedLocalImage(prompt, currentDirector.imageModel, assignedNames)
-      if (asset) {
+      try {
+        const currentDirector = useComicStore.getState().project.director!
+        const identityReference = panelIdentityReference(
+          currentDirector,
+          task.plan,
+          useComicStore.getState().project.assets,
+        )
+        let asset = options.drawPanel ? await options.drawPanel(task) : null
+        if (!asset && !options.drawPanel) {
+          const maestroState = useStore.getState()
+          const selectedImageModel = maestroState.models.find(model =>
+            model.model_type === currentDirector.imageModel)
+          const localSupportsReferences = currentDirector.provider === 'maestro'
+            && Boolean(
+              selectedImageModel?.supports_ref_images
+              || (currentDirector.imageModel === maestroState.params.model_type
+                && maestroState.modelOptions?.image_ref_choices),
+            )
+          const worldReferenceId = currentDirector.input.worldReferenceAssetIds?.[0]
+          const reference = identityReference.source || (localSupportsReferences && worldReferenceId
+            ? useComicStore.getState().project.assets[worldReferenceId]?.source
+            : undefined)
+          const prompt = buildDirectorImagePrompt(
+            currentDirector,
+            task.plan.imagePrompt,
+            state.project.style.promptSuffix,
+            task.plan,
+          )
+          const existingJobId = currentDirector.panelJobs?.[task.plan.id]
+          if (
+            currentDirector.provider === 'maestro'
+            && !options.force
+            && !options.target
+            && !existingJobId
+            && currentDirector.completedPanelIds.length > 0
+            && currentDirector.imageModel
+          ) {
+            const assignedNames = new Set(
+              Object.values(useComicStore.getState().project.assets).map(item => item.name),
+            )
+            asset = await findCompletedLocalImage(prompt, currentDirector.imageModel, assignedNames)
+            if (asset) {
+              options.onProgress?.(
+                `Recuperada ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}.`,
+                index + 1,
+                tasks.length,
+              )
+            }
+          }
+          if (!asset) {
+            asset = await generateImageAsset(
+              currentDirector.provider,
+              prompt,
+              currentDirector.imageModel,
+              reference,
+              '',
+              {
+                panelId: task.plan.id,
+                existingJobId,
+                onJobSubmitted: jobId => rememberPanelJob(task.plan.id, jobId),
+                onPollRetry: attempt => options.onProgress?.(
+                  `Conexión interrumpida en ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}; reintentando (${attempt}/20)…`,
+                  index + 1,
+                  tasks.length,
+                ),
+                onProviderRetry: attempt => options.onProgress?.(
+                  `El proveedor falló temporalmente en ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}; reintentando (${attempt}/2)…`,
+                  index + 1,
+                  tasks.length,
+                ),
+                aspectRatio: miniMaxAspectRatio(task.panel.width, task.panel.height),
+              },
+            )
+          }
+        }
+        if (!asset) throw new Error('El proveedor no devolvió una ilustración.')
+        if (identityReference.characterId) asset.characterIds = [identityReference.characterId]
+        const latest = useComicStore.getState()
+        const latestPage = latest.project.pages.find(page => page.id === task.pageId)
+        latestPage?.elements
+          .filter(element => element.parentId === task.panel.id && element.type === 'image')
+          .forEach(element => latest.removeElement(task.pageId, element.id))
+        latest.addAsset(asset)
+        latest.addElement(task.pageId, {
+          id: comicId('image'), type: 'image', assetId: asset.id, parentId: task.panel.id,
+          x: 0, y: 0, width: task.panel.width, height: task.panel.height,
+          rotation: 0, zIndex: 2, objectFit: 'cover', filter: 'none', opacity: 1, visible: true,
+        })
+        const after = useComicStore.getState().project.director!
+        latest.patchProject({
+          director: {
+            ...after,
+            completedPanelIds: Array.from(new Set([...after.completedPanelIds, task.plan.id])),
+            failedPanelIds: (after.failedPanelIds || []).filter(id => id !== task.plan.id),
+            panelJobs: Object.fromEntries(
+              Object.entries(after.panelJobs || {}).filter(([panelId]) => panelId !== task.plan.id),
+            ),
+          },
+        })
+        generated += 1
+        if (!options.drawPanel) await useStore.getState().loadOutputs()
+      } catch (error) {
+        failed += 1
+        const latest = useComicStore.getState()
+        const after = latest.project.director
+        if (after) {
+          latest.patchProject({
+            director: {
+              ...after,
+              failedPanelIds: Array.from(new Set([...(after.failedPanelIds || []), task.plan.id])),
+            },
+          })
+        }
         options.onProgress?.(
-          `Recuperada la ilustración terminada para la viñeta ${index + 1}.`,
+          `Falló ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}: ${error instanceof Error ? error.message : String(error)}`,
           index + 1,
           tasks.length,
         )
       }
     }
-    if (!asset) {
-      asset = await generateImageAsset(
-        currentDirector.provider,
-        prompt,
-        currentDirector.imageModel,
-        reference,
-        '',
-        {
-          panelId: task.plan.id,
-          existingJobId,
-          onJobSubmitted: jobId => rememberPanelJob(task.plan.id, jobId),
-          onPollRetry: attempt => options.onProgress?.(
-            `Conexión interrumpida al comprobar la viñeta ${index + 1}; reintentando (${attempt}/20)…`,
-            index + 1,
-            tasks.length,
-          ),
-          onProviderRetry: attempt => options.onProgress?.(
-            `El proveedor falló temporalmente en la viñeta ${index + 1}; reintentando (${attempt}/2)…`,
-            index + 1,
-            tasks.length,
-          ),
-          aspectRatio: miniMaxAspectRatio(task.panel.width, task.panel.height),
-        },
-      )
-    }
-    if (identityReference.characterId) asset.characterIds = [identityReference.characterId]
-    const latest = useComicStore.getState()
-    const latestPage = latest.project.pages.find(page => page.id === task.pageId)
-    latestPage?.elements
-      .filter(element => element.parentId === task.panel.id && element.type === 'image')
-      .forEach(element => latest.removeElement(task.pageId, element.id))
-    latest.addAsset(asset)
-    latest.addElement(task.pageId, {
-      id: comicId('image'), type: 'image', assetId: asset.id, parentId: task.panel.id,
-      x: 0, y: 0, width: task.panel.width, height: task.panel.height,
-      rotation: 0, zIndex: 2, objectFit: 'cover', filter: 'none', opacity: 1, visible: true,
-    })
-    latest.patchProject({
-      director: {
-        ...latest.project.director!,
-        completedPanelIds: Array.from(new Set([
-          ...latest.project.director!.completedPanelIds,
-          task.plan.id,
-        ])),
-        panelJobs: Object.fromEntries(
-          Object.entries(latest.project.director!.panelJobs || {})
-            .filter(([panelId]) => panelId !== task.plan.id),
-        ),
-      },
-    })
-    await useStore.getState().loadOutputs()
+    return { generated, failed, total: tasks.length, cancelled: false }
+  } finally {
+    comicBatchDepth = Math.max(0, comicBatchDepth - 1)
+    comicBatchCancel = false
   }
-  return { generated: tasks.length, total: tasks.length }
 }

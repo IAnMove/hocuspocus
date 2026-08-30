@@ -171,3 +171,161 @@ test('a 12-page comic keeps 72 ordered panels on the created project', async () 
   assert.equal(project.director.imageModel, 'image-01')
   assert.equal(project.director.planId, project.director.plan.id)
 })
+
+test('comic artwork inventory and task selection cover missing failed pages and progress labels', async () => {
+  const { createFilledComic } = await import('../src/features/agent/labActions.ts')
+  const { useComicStore } = await import('../src/features/comics/store.ts')
+  const {
+    comicArtworkInventory, selectComicArtworkTasks, formatComicArtworkProgress,
+    generateDirectorArtwork, requestComicArtworkCancel,
+  } = await import('../src/features/comics/generateArtwork.ts')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({ outputs: [], total: 0 }), {
+    status: 200, headers: { 'Content-Type': 'application/json' },
+  })
+  const pages = Array.from({ length: 12 }, (_, page) => ({
+    title: `Página ${page + 1}`,
+    stage: `Etapa ${page + 1}`,
+    panels: Array.from({ length: 6 }, (_, panel) => ({
+      caption: `P${page + 1}C${panel + 1}`,
+      dialogue: '', sfx: '', scene: `Escena ${page + 1}.${panel + 1}`,
+    })),
+  }))
+  try {
+    await createFilledComic({
+      type: 'create_comic',
+      title: 'Doce estaciones',
+      synopsis: 'Doce páginas.',
+      language: 'Español',
+      styleName: 'Tinta',
+      characters: [{
+        name: 'Nora', role: 'Guía', personality: '', desire: '',
+        flaw: '', appearance: 'Abrigo', voice: '',
+      }],
+      panels: [],
+      pages,
+      imageProvider: 'minimax',
+      imageModel: 'image-01',
+      factualBiography: false,
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  const project = useComicStore.getState().project
+  const inventory = comicArtworkInventory(project)
+  assert.equal(inventory.pages, 12)
+  assert.equal(inventory.panels, 72)
+  assert.equal(inventory.pending, 72)
+  assert.equal(inventory.provider, 'minimax')
+  const missing = selectComicArtworkTasks(project, { scope: 'missing' })
+  assert.equal(missing.length, 72)
+  assert.equal(formatComicArtworkProgress(missing[20], 12, 72), 'página 4/12 · viñeta 21/72')
+  const firstPage = selectComicArtworkTasks(project, { pages: [1] })
+  assert.equal(firstPage.length, 6)
+  const completedIds = project.director.plan.pages[0].panels.map(panel => panel.id)
+  const failedId = project.director.plan.pages[6].panels[0].id
+  useComicStore.getState().patchProject({
+    director: {
+      ...useComicStore.getState().project.director,
+      completedPanelIds: completedIds,
+      failedPanelIds: [failedId],
+    },
+  })
+  const after = useComicStore.getState().project
+  assert.equal(selectComicArtworkTasks(after, { scope: 'missing' }).length, 66)
+  assert.equal(selectComicArtworkTasks(after, { scope: 'failed' })[0].plan.id, failedId)
+  assert.equal(selectComicArtworkTasks(after, { scope: 'failed' })[0].globalIndex, 37)
+
+  const progress = []
+  const drawn = []
+  const fakeAsset = index => ({
+    id: `asset-${index}`,
+    name: `panel-${index}.png`,
+    kind: 'minimax',
+    source: `blob:panel-${index}`,
+    createdAt: new Date().toISOString(),
+  })
+  const first = await generateDirectorArtwork({
+    scope: 'missing',
+    onProgress: message => progress.push(message),
+    drawPanel: async task => {
+      if (task.globalIndex === 37) throw new Error('proveedor caído')
+      drawn.push(task.globalIndex)
+      return fakeAsset(task.globalIndex)
+    },
+  })
+  assert.equal(first.generated, 65)
+  assert.equal(first.failed, 1)
+  assert.equal(first.cancelled, false)
+  assert.ok(progress.some(message => message.includes('página 4/12 · viñeta 21/72')))
+  const mid = useComicStore.getState().project
+  assert.equal(mid.director.completedPanelIds.length, 71)
+  assert.deepEqual(mid.director.failedPanelIds, [failedId])
+
+  const resume = await generateDirectorArtwork({
+    scope: 'failed',
+    drawPanel: async task => {
+      assert.equal(task.globalIndex, 37)
+      return fakeAsset(37)
+    },
+  })
+  assert.equal(resume.generated, 1)
+  assert.equal(resume.failed, 0)
+  assert.equal(useComicStore.getState().project.director.failedPanelIds.length, 0)
+
+  useComicStore.getState().patchProject({
+    director: { ...useComicStore.getState().project.director, completedPanelIds: [], failedPanelIds: [] },
+  })
+  const cancelPromise = generateDirectorArtwork({
+    scope: 'missing',
+    drawPanel: async task => {
+      if (task.globalIndex === 20) requestComicArtworkCancel()
+      return fakeAsset(task.globalIndex)
+    },
+  })
+  const cancelled = await cancelPromise
+  assert.equal(cancelled.cancelled, true)
+  assert.equal(cancelled.generated, 20)
+  assert.equal(useComicStore.getState().project.director.completedPanelIds.length, 20)
+})
+
+test('factual biography blocks render until review and snapshot exposes comic progress', async () => {
+  const { createFilledComic, generateFilledComicArtwork } = await import('../src/features/agent/labActions.ts')
+  const { buildAgentAppSnapshot } = await import('../src/features/agent/agentActions.ts')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({ outputs: [], total: 0 }), {
+    status: 200, headers: { 'Content-Type': 'application/json' },
+  })
+  try {
+    await createFilledComic({
+      type: 'create_comic',
+      title: 'Vida de Ada',
+      synopsis: 'Biografía.',
+      language: 'Español',
+      styleName: 'Tinta',
+      characters: [{
+        name: 'Ada', role: 'Protagonista', personality: '', desire: '',
+        flaw: '', appearance: 'Abrigo', voice: '',
+      }],
+      panels: [{ caption: 'Hecho.', dialogue: '', sfx: '', scene: 'Un dato confirmado.' }],
+      pages: [],
+      imageProvider: 'minimax',
+      imageModel: 'image-01',
+      factualBiography: true,
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  await assert.rejects(
+    () => generateFilledComicArtwork({
+      type: 'generate_comic', imageProvider: 'minimax', imageModel: 'image-01',
+      scope: 'missing', pages: [], pilot: false, biographyReview: false, confirm: true,
+    }),
+    /biografía factual/,
+  )
+  const snapshot = buildAgentAppSnapshot()
+  assert.equal(snapshot.comic.title, 'Vida de Ada')
+  assert.equal(snapshot.comic.pages, 1)
+  assert.equal(snapshot.comic.provider, 'minimax')
+  assert.equal('pipeline_id' in snapshot.director, true)
+})

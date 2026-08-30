@@ -551,12 +551,27 @@ test('parses a multi-page MiniMax comic and a confirmed all-images render', asyn
   assert.equal(turn.actions[0].type, 'create_comic')
   assert.equal(turn.actions[0].pages.length, 2)
   assert.equal(turn.actions[0].imageProvider, 'minimax')
-  assert.deepEqual(turn.actions[1], { type: 'generate_comic', imageProvider: 'minimax', imageModel: '', confirm: true })
+  assert.deepEqual(turn.actions[1], {
+    type: 'generate_comic', imageProvider: 'minimax', imageModel: '',
+    scope: 'missing', pages: [], pilot: false, biographyReview: false, confirm: true,
+  })
   const reconciled = await reconcileAgentTurnWithRequest('créalo de cero como nuevo cómic y genera las imágenes con MiniMax', { reply: 'Lo preparo.', actions: [turn.actions[0]] })
   assert.deepEqual(reconciled.actions.map(action => action.type), ['create_comic', 'generate_comic'])
   assert.equal(reconciled.actions[0].imageProvider, 'minimax')
   assert.equal(reconciled.actions[1].imageModel, 'image-01')
+  assert.equal(reconciled.actions[1].scope, 'missing')
+  assert.match(reconciled.reply, /Estimación: 2 llamadas MiniMax/)
   assert.equal(reconciled.actions[0].type === 'create_comic' && reconciled.actions[1].type === 'generate_comic', true)
+  const failed = await reconcileAgentTurnWithRequest('reintenta las fallidas del comic', { reply: 'Vale.', actions: [] }, [
+    { role: 'user', text: 'hazme un comic' },
+    { role: 'assistant', text: 'He abierto Comics con un plan listo.' },
+  ])
+  assert.equal(failed.actions[0].scope, 'failed')
+  const pilot = await reconcileAgentTurnWithRequest('dibuja la pagina piloto', { reply: 'Vale.', actions: [] }, [
+    { role: 'user', text: 'hazme un comic' },
+    { role: 'assistant', text: 'He abierto Comics con un plan listo.' },
+  ])
+  assert.equal(pilot.actions[0].pilot, true)
 })
 
 test('como nuevo is not a launch question, how-to stays read-only, and negation does not generate', async () => {
@@ -726,6 +741,7 @@ test('create_comic then generate_comic reports the newly created comic id', asyn
       pages: [],
       imageProvider: 'minimax',
       imageModel: 'image-01',
+      factualBiography: false,
     }])
     const project = useComicStore.getState().project
     assert.equal(created[0].report.target.id, project.id)

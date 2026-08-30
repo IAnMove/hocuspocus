@@ -1,4 +1,6 @@
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
+import { comicArtworkInventory } from '../comics/generateArtwork'
+import { useComicStore } from '../comics/store'
 import type { AspectRatio, MediaFilter, ModelDef, ResolutionPreset } from '../../types'
 import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
 import {
@@ -388,12 +390,17 @@ export interface AgentCreateComicAction {
   pages: AgentComicPage[]
   imageProvider: 'profile' | 'maestro' | 'minimax'
   imageModel: string
+  factualBiography: boolean
 }
 
 export interface AgentGenerateComicAction {
   type: 'generate_comic'
   imageProvider: 'keep' | 'maestro' | 'minimax'
   imageModel: string
+  scope: 'all' | 'missing' | 'failed'
+  pages: number[]
+  pilot: boolean
+  biographyReview: boolean
   confirm: true
 }
 
@@ -548,6 +555,20 @@ export interface AgentAppSnapshot {
   workspaces: {
     active: string
     available: Array<{ name: string; file_count: number }>
+  }
+  comic?: {
+    project_id: string
+    title: string
+    pages: number
+    panels: number
+    completed: number
+    failed: number
+    provider: string
+    active_page: number
+  }
+  director?: {
+    pipeline_id: string
+    state: string
   }
 }
 
@@ -746,7 +767,8 @@ const CANONICAL_FIELD_NAMES = [
   'confirm', 'characters', 'locations', 'outline_beats', 'story_visual_selections', 'story_visual_scope', 'target_names',
   'target_kind', 'target_name', 'asset_name', 'primary',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'comic_pages', 'caption', 'stage', 'image_provider',
-  'page_number', 'panel_number',
+  'page_number', 'panel_number', 'page_numbers', 'pilot',
+  'factual_biography', 'biography_review',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
   'loras', 'weight',
   'workspace_name',
@@ -1276,6 +1298,7 @@ function parseAction(value: unknown): AgentAction | null {
       pages,
       imageProvider: requestedProvider === 'minimax' || requestedProvider === 'maestro' ? requestedProvider : 'profile',
       imageModel: cleanString(raw.model_type, 160),
+      factualBiography: raw.factual_biography === true,
       panels: panels.length
         ? panels
         : beats.map(beat => ({ caption: beat, dialogue: '', sfx: '' })),
@@ -1284,7 +1307,19 @@ function parseAction(value: unknown): AgentAction | null {
   if (type === 'generate_comic') {
     if (raw.confirm !== true) return null
     const requestedProvider = cleanString(raw.image_provider, 30)
-    return { type: 'generate_comic', imageProvider: requestedProvider === 'minimax' || requestedProvider === 'maestro' ? requestedProvider : 'keep', imageModel: cleanString(raw.model_type, 160), confirm: true }
+    const renderMode = cleanString(raw.render_mode, 20)
+    const scope = renderMode === 'all' || renderMode === 'failed' ? renderMode : 'missing'
+    const pages = positiveIntegerArray(raw.page_numbers, 30)
+    return {
+      type: 'generate_comic',
+      imageProvider: requestedProvider === 'minimax' || requestedProvider === 'maestro' ? requestedProvider : 'keep',
+      imageModel: cleanString(raw.model_type, 160),
+      scope,
+      pages,
+      pilot: raw.pilot === true,
+      biographyReview: raw.biography_review === true,
+      confirm: true,
+    }
   }
   if (type === 'generate_comic_panel') {
     if (raw.confirm !== true) return null
@@ -1505,7 +1540,8 @@ const COMIC_LAUNCH_HOW = /\b(?:c[oó]mo\s+(?:lo|la|las|los|puedo|se|lanz\w*|gene
 const COMIC_LAUNCH_COMMAND = [
   /\b(?:l[aá]nzalo|dib[uú]jalo|p[ií]ntalo|generalo|regeneralo|render[ií]zalo)\b/i,
   /\b(?:l[aá]nza|dibuja|pinta|genera|regenera|render(?:iza)?)\b[^.!?\n]*\b(?:c[oó]mic|vi[nñ]etas?|paneles?|p[aá]gina|artwork|dibujos?)\b/i,
-  /\b(?:generate|regenerate|draw|render|launch)\b[^.!?\n]*\b(?:comic|panels?|page|artwork)\b/i,
+  /\b(?:reintenta|reanuda|contin[uú]a)\b[^.!?\n]*\b(?:c[oó]mic|vi[nñ]etas?|fallid|pendientes|lote)\b/i,
+  /\b(?:generate|regenerate|draw|render|launch|retry|resume)\b[^.!?\n]*\b(?:comic|panels?|page|artwork|failed)\b/i,
 ]
 
 function comicPanelTarget(
@@ -1528,6 +1564,23 @@ export function isComicLaunchHowQuestion(request: string, history: ExampleConver
   if (!text || !COMIC_LAUNCH_HOW.test(text)) return false
   if (!/\b(?:l[aá]nz|dibuj|pint|genera|render|launch|draw)/i.test(text)) return false
   return inferComicContext(text, history)
+}
+
+function comicGenerateIntent(request: string): Pick<AgentGenerateComicAction, 'scope' | 'pages' | 'pilot' | 'biographyReview'> {
+  const text = request.trim()
+  const pilot = /\b(?:piloto|p[aá]gina\s+piloto|s[oó]lo\s+la\s+primera\s+p[aá]gina)\b/i.test(text)
+  const failed = /\b(?:fallidas?|reintenta(?:r)?\s+las\s+fallidas?|errores\s+del\s+c[oó]mic)\b/i.test(text)
+  const all = /\b(?:regenera|desde\s+cero|de\s+nuevo)\b[^.!?\n]{0,40}\b(?:todas|im[aá]genes|vi[nñ]etas)\b/i.test(text)
+  const pageMatch = text.match(/\bp[aá]ginas?\s+(\d+(?:\s*(?:,|y|and)\s*\d+)*)/i)
+  const pages = pageMatch
+    ? [...pageMatch[1].matchAll(/\d+/g)].map(match => Number(match[0])).filter(value => value >= 1)
+    : (pilot ? [1] : [])
+  return {
+    scope: all ? 'all' : failed ? 'failed' : 'missing',
+    pages,
+    pilot,
+    biographyReview: /\b(?:revisi[oó]n\s+factual|hechos\s+confirmados|biography_review)\b/i.test(text),
+  }
 }
 
 export function isExplicitComicArtworkRequest(request: string, history: ExampleConversation[] = []): boolean {
@@ -1587,25 +1640,36 @@ export async function reconcileAgentTurnWithRequest(
   if (isExplicitComicArtworkRequest(request, history) || compoundComicRender) {
     const create = plannedComic
     const requestedMiniMax = /\bminimax\b/i.test(request)
+    const intent = comicGenerateIntent(request)
+    const generate: AgentGenerateComicAction = {
+      type: 'generate_comic',
+      imageProvider: requestedMiniMax ? 'minimax' : 'keep',
+      imageModel: requestedMiniMax ? 'image-01' : '',
+      scope: intent.scope,
+      pages: intent.pages,
+      pilot: intent.pilot,
+      biographyReview: intent.biographyReview,
+      confirm: true,
+    }
     if (create) {
       const prepared = requestedMiniMax
         ? { ...create, imageProvider: 'minimax' as const, imageModel: 'image-01' }
         : create
+      const panels = (prepared.pages.length ? prepared.pages : [{ panels: prepared.panels }])
+        .reduce((sum, page) => sum + page.panels.length, 0)
+      const estimate = intent.pilot ? (prepared.pages[0]?.panels.length || prepared.panels.length) : panels
       return {
-        reply: `Crearé “${prepared.title}” con sus ${prepared.pages.length || 1} páginas reales y después dibujaré todas las viñetas con ${requestedMiniMax ? 'MiniMax image-01' : 'el proveedor elegido'}. 🪄`,
-        actions: [prepared, {
-          type: 'generate_comic',
-          imageProvider: requestedMiniMax ? 'minimax' : 'keep',
-          imageModel: requestedMiniMax ? 'image-01' : '',
-          confirm: true,
-        }],
+        reply: `Crearé “${prepared.title}” con ${prepared.pages.length || 1} páginas reales y después dibujaré ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} con ${requestedMiniMax ? 'MiniMax image-01' : 'el proveedor elegido'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''}. 🪄`,
+        actions: [prepared, generate],
       }
     }
+    const inventory = comicArtworkInventory()
+    const estimate = intent.pilot
+      ? Math.max(1, Math.ceil(inventory.panels / Math.max(1, inventory.pages)))
+      : intent.scope === 'failed' ? inventory.failed : inventory.pending
     return {
-      reply: requestedMiniMax
-        ? 'Voy a dibujar todas las viñetas pendientes del cómic abierto con MiniMax image-01. 🪄'
-        : 'Voy a dibujar las viñetas del cómic abierto con su proveedor configurado. 🪄',
-      actions: [{ type: 'generate_comic', imageProvider: requestedMiniMax ? 'minimax' : 'keep', imageModel: requestedMiniMax ? 'image-01' : '', confirm: true }],
+      reply: `Voy a dibujar ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} del cómic abierto con ${requestedMiniMax ? 'MiniMax image-01' : 'su proveedor configurado'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''} (${inventory.completed}/${inventory.panels} ya listas). 🪄`,
+      actions: [generate],
     }
   }
   const musicVideoStage = isExplicitMusicVideoStageRequest(request)
@@ -1938,6 +2002,10 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
             },
           },
           image_provider: { type: 'string', enum: ['', 'profile', 'keep', 'maestro', 'minimax'] },
+          page_numbers: { type: 'array', maxItems: 30, items: { type: 'integer', minimum: 1, maximum: 100 } },
+          pilot: { type: 'boolean' },
+          factual_biography: { type: 'boolean' },
+          biography_review: { type: 'boolean' },
         },
         required: ['type'],
       },
@@ -2009,6 +2077,26 @@ export function buildAgentAppSnapshot(): AgentAppSnapshot {
         file_count: workspace.file_count || 0,
       })),
     },
+    comic: comicContextSnapshot(),
+    director: {
+      pipeline_id: state.pipelineId || '',
+      state: state.pipelineStatus?.status || (state.pipelineId ? 'running' : ''),
+    },
+  }
+}
+
+function comicContextSnapshot(): AgentAppSnapshot['comic'] | undefined {
+  const inventory = comicArtworkInventory(useComicStore.getState().project)
+  if (!inventory.projectId) return undefined
+  return {
+    project_id: inventory.projectId,
+    title: inventory.title,
+    pages: inventory.pages,
+    panels: inventory.panels,
+    completed: inventory.completed,
+    failed: inventory.failed,
+    provider: inventory.provider,
+    active_page: inventory.activePage,
   }
 }
 
@@ -2586,7 +2674,26 @@ export async function executeAgentActions(
       } else if (action.type === 'generate_comic') {
         if (!action.confirm) throw new Error('Dibujar las viñetas requiere confirm=true.')
         const { generateFilledComicArtwork } = await import('./labActions')
-        results.push({ action, ok: true, message: await generateFilledComicArtwork(action, onStep, createdComicId || undefined) })
+        const outcome = await generateFilledComicArtwork(action, onStep, createdComicId || undefined)
+        const { useComicStore } = await import('../comics/store')
+        const project = useComicStore.getState().project
+        results.push({
+          action,
+          ok: outcome.state !== 'failed',
+          message: outcome.message,
+          report: executionReport({
+            state: outcome.state,
+            message: outcome.message,
+            recoverable: outcome.state === 'partial' || outcome.state === 'failed',
+            target: { kind: 'comic', id: project.id, title: project.title },
+            executionKey: executionKey({
+              workspace: useStore.getState().activeWorkspace || 'default',
+              type: action.type,
+              targetId: project.id,
+              params: action,
+            }),
+          }),
+        })
       } else if (action.type === 'generate_comic_panel') {
         if (!action.confirm) throw new Error('Regenerar una viñeta requiere confirm=true.')
         const { generateComicPanelArtwork } = await import('./labActions')
@@ -2605,8 +2712,26 @@ export async function executeAgentActions(
         const { inspectCanonicalQueue } = await import('./queueActions')
         results.push({ action, ok: true, message: await inspectCanonicalQueue(action.scope) })
       } else if (action.type === 'cancel_task') {
-        const { cancelCanonicalQueueTask } = await import('./queueActions')
-        results.push({ action, ok: true, message: await cancelCanonicalQueueTask(action.taskId, action.confirm) })
+        const { requestComicArtworkCancel } = await import('../comics/generateArtwork')
+        const cancelledBatch = requestComicArtworkCancel()
+        try {
+          const { cancelCanonicalQueueTask } = await import('./queueActions')
+          const message = await cancelCanonicalQueueTask(action.taskId, action.confirm)
+          results.push({
+            action,
+            ok: true,
+            message: cancelledBatch
+              ? `${message} También he pedido cancelar el lote de viñetas; las terminadas se conservan.`
+              : message,
+          })
+        } catch (error) {
+          if (!cancelledBatch) throw error
+          results.push({
+            action,
+            ok: true,
+            message: 'He pedido cancelar el lote de viñetas; las ilustraciones terminadas se conservan.',
+          })
+        }
       } else if (action.type === 'resume_task') {
         const { resumeCanonicalQueueTask } = await import('./queueActions')
         results.push({ action, ok: true, message: await resumeCanonicalQueueTask(action.taskId, action.confirm) })

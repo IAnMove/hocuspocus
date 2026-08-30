@@ -527,6 +527,7 @@ export function exampleActionsFor(
       pages: [],
       imageProvider: 'profile',
       imageModel: '',
+      factualBiography: false,
     }],
   }
 }
