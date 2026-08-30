@@ -14,6 +14,7 @@ import type {
   AgentCommitSeriesCanonAction,
   AgentStageStoryComicAction,
   AgentStageStoryVideoAction,
+  AgentStageStoryMusicVideoAction,
   AgentStartDirectorProductionAction,
   AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
@@ -1063,6 +1064,198 @@ export async function stageStoryVideo(action: AgentStageStoryVideoAction): Promi
   }
 }
 
+export async function stageStoryMusicVideo(action: AgentStageStoryMusicVideoAction): Promise<string> {
+  if (!action.confirm) throw new Error('Preparar un videoclip requiere confirm=true porque sustituye el borrador actual de Director.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useStoryStore, normalizeStoryProject, storyId }, adaptations, api, selection] = await Promise.all([
+    import('../stories/store'),
+    import('../stories/adaptations'),
+    import('../../api/client'),
+    import('../stories/musicVideoSelection'),
+  ])
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const current = useStoryStore.getState()
+  if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de preparar el videoclip.')
+  const target = action.targetStoryTitle
+    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
+    : current.project
+  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+  const { cue, candidate } = selection.resolveStoryMusicSelection(target, action.songName, action.cueTitle)
+  const resolvedCue = selection.effectiveStoryMusicCue(target, cue, candidate)
+  const directVideo = target.musicVideoGenerationMode === 'direct_video'
+  const directReferences = target.musicVideoGenerationMode === 'direct_references'
+  if (directReferences && !String(target.videoOverride.model || '').startsWith('minimax_h3')) {
+    throw new Error('Las referencias directas de este videoclip requieren un modelo MiniMax H3 con Ref2VA.')
+  }
+  const adaptation = adaptations.buildMusicVideoAdaptation(target, resolvedCue, {
+    generationMode: target.musicVideoGenerationMode,
+  })
+  if (directReferences && !adaptation.characterReferences.length && !adaptation.locationReferences.length) {
+    throw new Error('No hay referencias aprobadas para este cue. Aprueba una imagen de mundo, localización o personaje antes de preparar el videoclip.')
+  }
+  const production = {
+    id: storyId('production'),
+    kind: 'music_video' as const,
+    title: `${adaptation.focusLabel} · music video`,
+    createdAt: new Date().toISOString(),
+    sourceVersion: target.revision,
+    sourceSnapshot: { ...structuredClone(target), productions: [] },
+    targetId: adaptation.focusTargetId,
+    targetName: adaptation.focusLabel,
+    targetSnapshot: {
+      cueId: resolvedCue.id,
+      cueTitle: resolvedCue.title,
+      candidateId: candidate.id,
+      candidateName: candidate.name,
+      candidateSource: candidate.source,
+      provider: candidate.provider,
+      model: candidate.model,
+      lyrics: resolvedCue.lyrics,
+      focusKind: adaptation.focusKind,
+      focusTargetId: adaptation.focusTargetId,
+      sceneDescription: adaptation.sceneDescription,
+      pacing: action.pacing,
+      mode: 'full',
+      imageModel: target.provider.imageModel,
+      videoModel: target.videoOverride.model,
+      resolution: target.videoOverride.resolution,
+      aspectRatio: target.videoOverride.aspectRatio,
+      generationMode: target.musicVideoGenerationMode,
+      directVideoMasterPrompt: target.directVideoMasterPrompt,
+      writingProvider: target.provider.writingProvider,
+      writingModel: target.provider.writingModel,
+      writingBaseUrl: target.provider.writingBaseUrl,
+    },
+    status: 'staged' as const,
+  }
+
+  useStoryStore.getState().beginProjectOperation(target.id)
+  try {
+    const project = normalizeStoryProject({
+      ...target,
+      revision: target.revision + 1,
+      productions: [...target.productions, production],
+      updatedAt: new Date().toISOString(),
+    })
+    const library = await api.saveStoryLibrary(workspace, {
+      version: 2,
+      revision: current.libraryRevision,
+      activeId: project.id,
+      projects: { ...current.projects, [project.id]: project },
+    })
+    useStoryStore.setState({
+      workspace,
+      project: library.projects[project.id],
+      projects: library.projects,
+      libraryRevision: library.revision,
+      dirty: false,
+      hydrated: false,
+      loading: false,
+      saveError: null,
+      libraryConflicts: [],
+    })
+    await useStoryStore.getState().loadWorkspace(workspace)
+
+    const director = useStore.getState()
+    director.directorReset()
+    director.setGenerationMode('video')
+    if (!directVideo && !directReferences && target.provider.imageModel) director.selectDirectorImageModel(target.provider.imageModel)
+    if (target.videoOverride.model) {
+      await director.selectDirectorVideoModel(target.videoOverride.model)
+      const selected = useStore.getState().selectedModelPerMode.video
+      if (selected !== target.videoOverride.model) {
+        throw new Error(`Director no aplicó el modelo de vídeo ${target.videoOverride.model}; quedó ${selected || 'vacío'}.`)
+      }
+    }
+    director.setDirectorResolution(target.videoOverride.resolution)
+    director.setDirectorAspectRatio(target.videoOverride.aspectRatio)
+    director.setSidebarMode('director')
+    director.setDirectorSkill('music_video')
+    director.setDirectorAutoMode(false)
+    director.setDirectorShotImageGuidance(directReferences ? 'prompt_only' : 'auto')
+    if (String(target.videoOverride.model || '').startsWith('minimax_h3')) {
+      director.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
+    }
+    director.setDirectorMusicVideoTreatment({
+      generation_mode: directVideo ? 'direct_video' : 'image_guided',
+      direct_video_master_prompt: target.directVideoMasterPrompt,
+    })
+    director.directorSetSceneDescription(adaptation.sceneDescription)
+    director.shortFilmSetVisualStyle(directVideo ? '' : target.visualStyle)
+    director.shortFilmSetPreserveVisualStyle(directVideo ? false : target.enforceVisualStyle)
+    director.setDirectorCharacterVisualStyle(directVideo ? '' : target.characterVisualStyle)
+    director.setDirectorAllowClipText(target.allowClipText)
+    director.setDirectorSpokenLanguage(target.spokenLanguage)
+    useStore.setState({
+      directorMusicSource: 'upload',
+      directorSongDescription: resolvedCue.brief,
+      directorSongStyle: resolvedCue.style,
+      directorSongLyrics: resolvedCue.lyrics,
+      directorSongDuration: resolvedCue.durationSeconds,
+      directorPacingProfile: action.pacing,
+      directorStep: 'upload',
+      directorWritingProvider: target.provider.writingProvider,
+      directorWritingModel: target.provider.writingModel,
+      directorWritingBaseUrl: target.provider.writingBaseUrl,
+    })
+
+    for (const reference of directVideo ? [] : adaptation.characterReferences) {
+      const asset = target.assets[reference.assetId]
+      if (!asset) continue
+      try {
+        const response = await fetch(asset.source)
+        if (!response.ok) continue
+        const blob = await response.blob()
+        director.directorAddCharacterRef(new File([blob], asset.name || `${reference.assetId}.png`, { type: blob.type || 'image/png' }))
+        director.directorSetCharacterRefLabel(useStore.getState().directorCharacterRefs.length - 1, reference.label)
+      } catch { /* The written identity remains available in the visual brief. */ }
+    }
+    for (const reference of directVideo ? [] : adaptation.locationReferences) {
+      const asset = target.assets[reference.assetId]
+      if (!asset) continue
+      try {
+        const response = await fetch(asset.source)
+        if (!response.ok) continue
+        const blob = await response.blob()
+        director.directorAddLocationRef(new File([blob], asset.name || `${reference.assetId}.png`, { type: blob.type || 'image/png' }))
+        director.directorSetLocationRefLabel(useStore.getState().directorLocationRefs.length - 1, reference.label)
+      } catch { /* The written world bible remains available in the visual brief. */ }
+    }
+
+    const audioSource = /^https?:\/\//i.test(candidate.source) || candidate.source.startsWith('/')
+      ? candidate.source
+      : api.getFileUrl(candidate.source, workspace)
+    const audioResponse = await fetch(audioSource)
+    if (!audioResponse.ok) throw new Error(`No pude leer el audio de “${candidate.displayName || candidate.title || candidate.name}”.`)
+    const audioBlob = await audioResponse.blob()
+    await useStore.getState().directorUploadAndAnalyze(new File(
+      [audioBlob], candidate.name, { type: audioBlob.type || 'audio/mpeg' },
+    ), { lyricsHint: resolvedCue.lyrics || undefined })
+    const afterAnalyze = useStore.getState()
+    if (afterAnalyze.directorError) throw new Error(afterAnalyze.directorError)
+    if (afterAnalyze.directorStep !== 'structure') {
+      throw new Error('La canción no quedó analizada en el paso Structure; el videoclip no está preparado.')
+    }
+
+    useStore.setState({
+      directorStoryProductionHandoff: {
+        workspace,
+        projectId: target.id,
+        productionId: production.id,
+      },
+    })
+    director.setSettingsOpen(false)
+    director.setDashboardOpen(false)
+    director.setMediaFilter('all')
+    director.setSidebarOpen(true)
+    window.dispatchEvent(new Event('maestro:director-open'))
+    return `He preparado “${production.title}” en Music Video Director con la canción “${candidate.displayName || candidate.title || candidate.name}” y el cue “${resolvedCue.title}”. Estado: preparado. No lo he encolado ni iniciado.`
+  } finally {
+    useStoryStore.getState().endProjectOperation(target.id)
+  }
+}
+
 export async function startDirectorProduction(action: AgentStartDirectorProductionAction): Promise<string> {
   if (!action.confirm) throw new Error('Iniciar una producción de Director requiere confirm=true porque consume cómputo.')
   const workspace = useStore.getState().activeWorkspace || 'default'
@@ -1082,14 +1275,14 @@ export async function startDirectorProduction(action: AgentStartDirectorProducti
   const director = useStore.getState()
   const handoff = director.directorStoryProductionHandoff
   if (!handoff || handoff.workspace !== workspace || handoff.projectId !== target.id) {
-    throw new Error(`No hay una producción de “${target.title}” preparada por el Wizard en Director. Usa stage_story_video primero.`)
+    throw new Error(`No hay una producción de “${target.title}” preparada por el Wizard en Director. Usa stage_story_video o stage_story_music_video primero.`)
   }
   const production = target.productions.find(item => item.id === handoff.productionId)
-  if (!production || (production.kind !== 'film' && production.kind !== 'trailer')) {
+  if (!production || (production.kind !== 'film' && production.kind !== 'trailer' && production.kind !== 'music_video')) {
     throw new Error('La producción preparada ya no existe en el historial de Story Lab.')
   }
   if (action.kind && production.kind !== action.kind) {
-    throw new Error(`La producción preparada es ${production.kind === 'trailer' ? 'un tráiler' : 'una película'}, no ${action.kind}.`)
+    throw new Error(`La producción preparada es ${production.kind}, no ${action.kind}.`)
   }
   const existingPipelineId = typeof production.targetSnapshot?.pipelineId === 'string'
     ? production.targetSnapshot.pipelineId.trim() : ''
@@ -1105,7 +1298,11 @@ export async function startDirectorProduction(action: AgentStartDirectorProducti
   if (director.pipelineId) {
     throw new Error(`Director ya está vinculado al pipeline ${director.pipelineId}; no iniciaré otro sobre el mismo borrador.`)
   }
-  if (director.directorSkill !== 'short_film' || director.directorStep !== 'style' || !director.directorSceneDescription.trim()) {
+  if (production.kind === 'music_video') {
+    if (director.directorSkill !== 'music_video' || director.directorStep !== 'structure' || !director.directorSceneDescription.trim()) {
+      throw new Error('El videoclip preparado ya no está listo en el paso Structure de Music Video Director. Vuelve a prepararlo antes de lanzarlo.')
+    }
+  } else if (director.directorSkill !== 'short_film' || director.directorStep !== 'style' || !director.directorSceneDescription.trim()) {
     throw new Error('El borrador exacto de Story ya no está listo en el paso Style de Short Film Director. Vuelve a prepararlo antes de lanzarlo.')
   }
   if (director.directorLoading) throw new Error('Director ya está procesando otra operación; espera a que termine antes de iniciar.')
@@ -1118,7 +1315,10 @@ export async function startDirectorProduction(action: AgentStartDirectorProducti
     director.setSidebarMode('director')
     director.setSidebarOpen(true)
     window.dispatchEvent(new Event('maestro:director-open'))
-    await director.startDirectorPipeline()
+    if (production.kind === 'music_video' && useStore.getState().directorStep === 'structure') {
+      useStore.getState().directorConfirmStructure()
+    }
+    await useStore.getState().startDirectorPipeline()
     const pipelineId = useStore.getState().pipelineId
     if (!pipelineId) throw new Error('Director no devolvió un pipelineId; la producción no se inició.')
 

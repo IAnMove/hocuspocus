@@ -86,7 +86,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -233,6 +233,74 @@ test('parses only a confirmed Director production start', async () => {
     { type: 'start_director_production', target_story_title: 'La torre de sal', production_kind: 'trailer', confirm: true },
   ] }))
   assert.deepEqual(turn.actions, [{ type: 'start_director_production', targetStoryTitle: 'La torre de sal', kind: 'trailer', confirm: true }])
+})
+
+test('parses a confirmed Story music-video staging and start', async () => {
+  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const unsigned = parseAgentTurn(JSON.stringify({
+    reply: 'Preparo el clip.',
+    actions: [{ type: 'stage_story_music_video', song_name: 'Marea', confirm: false }],
+  }))
+  assert.equal(unsigned.actions.length, 0)
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Preparo el clip.',
+    actions: [{
+      type: 'stage_story_music_video',
+      target_story_title: 'La torre de sal',
+      song_name: 'Marea de faro',
+      cue_title: 'Tema de Iria',
+      pacing: 'rhythmic',
+      confirm: true,
+    }],
+  }))
+  assert.deepEqual(turn.actions, [{
+    type: 'stage_story_music_video',
+    targetStoryTitle: 'La torre de sal',
+    songName: 'Marea de faro',
+    cueTitle: 'Tema de Iria',
+    pacing: 'rhythmic',
+    confirm: true,
+  }])
+  const start = parseAgentTurn(JSON.stringify({
+    reply: 'Lanzo.',
+    actions: [{ type: 'start_director_production', production_kind: 'music_video', confirm: true }],
+  }))
+  assert.deepEqual(start.actions, [{ type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true }])
+
+  const prepared = await reconcileAgentTurnWithRequest('prepara el videoclip', { reply: '¿Cuál?', actions: [] })
+  assert.deepEqual(prepared.actions.map(action => action.type), ['stage_story_music_video'])
+  assert.equal(prepared.actions[0].confirm, true)
+  const launched = await reconcileAgentTurnWithRequest('inicia el videoclip', { reply: 'Vale.', actions: [] }, [
+    { role: 'user', text: 'prepara el videoclip' },
+    { role: 'assistant', text: prepared.reply },
+  ])
+  assert.deepEqual(launched.actions, [{ type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true }])
+})
+
+test('resolves an exact Story song and cue, and rejects ambiguous names', async () => {
+  const { createStoryProject } = await import('../src/features/stories/model.ts')
+  const { resolveStoryMusicSelection } = await import('../src/features/stories/musicVideoSelection.ts')
+  const project = createStoryProject('music_video')
+  project.title = 'La torre de sal'
+  project.music.candidates = [{
+    id: 'cand-1', displayName: 'Marea de faro', title: 'Marea de faro', name: 'marea.mp3',
+    source: '/outputs/marea.mp3', prompt: 'coastal hymn', lyrics: 'Sal',
+    provider: 'local', model: 'ace_step_v1_5_xl_sft_lm_4b', durationSeconds: 90, createdAt: project.createdAt,
+  }]
+  project.music.cues = [{
+    id: 'cue-1', kind: 'character', targetId: 'char-1', title: 'Tema de Iria', purpose: 'Identidad',
+    referenceSong: '', brief: 'faro', style: 'hymn', lyrics: 'Sal', lyriaPrompt: '',
+    instrumental: false, durationSeconds: 90, candidates: project.music.candidates, selectedCandidateId: 'cand-1',
+  }]
+  const exact = resolveStoryMusicSelection(project, 'Marea de faro', 'Tema de Iria')
+  assert.equal(exact.candidate.id, 'cand-1')
+  assert.equal(exact.cue?.title, 'Tema de Iria')
+  const unique = resolveStoryMusicSelection(project, '', '')
+  assert.equal(unique.candidate.id, 'cand-1')
+  project.music.candidates.push({
+    ...project.music.candidates[0], id: 'cand-2', displayName: 'Marea de faro', name: 'marea-2.mp3',
+  })
+  assert.throws(() => resolveStoryMusicSelection(project, 'Marea de faro', ''), /varias canciones/)
 })
 
 test('parses a non-empty Series episode patch without destructive fields', async () => {

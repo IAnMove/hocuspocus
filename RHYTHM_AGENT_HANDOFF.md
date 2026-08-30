@@ -1293,3 +1293,13 @@ Cancelar usa una sola vez el adaptador canónico de Director y sincroniza el pan
 `create_comic` acepta ahora `comic_pages`: hasta 30 páginas estructuradas, cada una con título/etapa y sus propias viñetas. El campo plano `comic_panels` queda como compatibilidad para cómics de una página. El ejecutor construye todas las páginas reales mediante `projectFromPlan`, guarda el recuento correcto y nunca vuelve a afirmar que creó páginas que sólo describió en prosa.
 
 Tanto `create_comic` como `generate_comic` admiten `image_provider=minimax`; seleccionan `MiniMax image-01`, que ya estaba soportado por Comic Director. Por ello el Wizard puede encadenar en un mismo turno la creación desde cero y, si el usuario pide explícitamente generar, `generate_comic confirm=true` para dibujar todas las viñetas pendientes sin clics manuales. MiniMax es remoto y no debe describirse como trabajo de la GPU local.
+
+## 54. Wizard: videoclip musical desde Story Lab
+
+`stage_story_music_video` exige `confirm=true` y es independiente de `stage_story_video` (film/tráiler). Resuelve la Story activa o un título exacto, después la canción/candidate y el cue por nombre exacto y único. Si hay una sola canción, puede omitirse el nombre. Rechaza ambigüedades, cues inexistentes y candidatos sin archivo de audio.
+
+Antes de tocar Director guarda por CAS una producción `music_video` `staged` reabrible con cue, candidate, letra, pacing, modelos y formato. Después carga Music Video Director (`directorSkill=music_video`), adjunta referencias aprobadas, sube la canción y la analiza hasta el paso **Structure**. No llama a `startDirectorPipeline`. El análisis de audio no es generación de vídeo; durante el desarrollo no se lanzó GPU ni MiniMax vídeo.
+
+`start_director_production` acepta ahora `production_kind=music_video`. Sólo arranca el handoff exacto dejado por el Wizard, confirma Structure, obtiene el `pipelineId` real y lo enlaza al snapshot de Story. Distingue **preparado**, **en cola/en marcha** y **terminado**. Cancelar/reanudar siguen la cola canónica de pipelines (`task-director-*`). “lánzalo” no se confunde con cómic cuando el historial habla de videoclip; `Director` genérico ya no cuenta como contexto de cómic.
+
+Siguiente bloque pendiente del goal general: contexto real del Wizard, navegación fina, Character Creator/CharacterKit, Video Editor, robustez y persistencia backend del chat.

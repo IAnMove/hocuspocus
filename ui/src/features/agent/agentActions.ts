@@ -226,7 +226,16 @@ export interface AgentStageStoryVideoAction {
 export interface AgentStartDirectorProductionAction {
   type: 'start_director_production'
   targetStoryTitle: string
-  kind?: 'film' | 'trailer'
+  kind?: 'film' | 'trailer' | 'music_video'
+  confirm: true
+}
+
+export interface AgentStageStoryMusicVideoAction {
+  type: 'stage_story_music_video'
+  targetStoryTitle: string
+  songName: string
+  cueTitle: string
+  pacing: 'cinematic' | 'balanced' | 'rhythmic'
   confirm: true
 }
 
@@ -453,6 +462,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateStoryVisualsAction
   | AgentStageStoryComicAction
   | AgentStageStoryVideoAction
+  | AgentStageStoryMusicVideoAction
   | AgentStartDirectorProductionAction
   | AgentCreateSeriesEpisodeAction
   | AgentUpdateSeriesEpisodeAction
@@ -582,6 +592,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   generatestoryvisuals: 'generate_story_visuals',
   stagestorycomic: 'stage_story_comic',
   stagestoryvideo: 'stage_story_video',
+  stagestorymusicvideo: 'stage_story_music_video',
   startdirectorproduction: 'start_director_production',
   createseriesepisode: 'create_series_episode',
   updateseriesepisode: 'update_series_episode',
@@ -717,6 +728,7 @@ const CANONICAL_FIELD_NAMES = [
   'target_duration_seconds', 'create_if_missing', 'known_universe',
   'queue_scope', 'task_id', 'job_id', 'shot_ids', 'shot_numbers', 'attempt_id', 'render_mode',
   'review_decision', 'review_scope', 'canon_decision', 'canon_item_ids', 'production_kind',
+  'song_name', 'cue_title', 'pacing',
   'scene_name', 'layer_name', 'audio_output_name', 'cue_source', 'rhythm_profile', 'intensity',
   'confirm', 'characters', 'locations', 'outline_beats', 'story_visual_selections', 'story_visual_scope', 'target_names',
   'target_kind', 'target_name', 'asset_name', 'primary',
@@ -1069,10 +1081,22 @@ function parseAction(value: unknown): AgentAction | null {
     if (kind !== 'film' && kind !== 'trailer') return null
     return { type: 'stage_story_video', targetStoryTitle: cleanString(raw.target_story_title, 300), kind, direction: cleanString(raw.direction, 4_000), durationSeconds: optionalPositiveNumber(raw.duration_seconds, 15, 3_600, true), confirm: true }
   }
+  if (type === 'stage_story_music_video') {
+    if (raw.confirm !== true) return null
+    const pacing = cleanString(raw.pacing, 20) as AgentStageStoryMusicVideoAction['pacing']
+    return {
+      type: 'stage_story_music_video',
+      targetStoryTitle: cleanString(raw.target_story_title, 300),
+      songName: cleanString(raw.song_name, 300),
+      cueTitle: cleanString(raw.cue_title, 300),
+      pacing: pacing === 'cinematic' || pacing === 'rhythmic' ? pacing : 'balanced',
+      confirm: true,
+    }
+  }
   if (type === 'start_director_production') {
     if (raw.confirm !== true) return null
     const rawKind = cleanString(raw.production_kind, 30)
-    if (rawKind && rawKind !== 'film' && rawKind !== 'trailer') return null
+    if (rawKind && rawKind !== 'film' && rawKind !== 'trailer' && rawKind !== 'music_video') return null
     return {
       type: 'start_director_production',
       targetStoryTitle: cleanString(raw.target_story_title, 300),
@@ -1429,6 +1453,34 @@ export function isExplicit3dGenerationRequest(request: string): boolean {
   return EXPLICIT_3D_REQUESTS.some(pattern => pattern.test(text))
 }
 
+const MUSIC_VIDEO_CONTEXT = /\b(?:videoclip|videoclips|music\s*videos?|clip\s+musical|canci[oó]n\s+visual)\b/i
+const MUSIC_VIDEO_STAGE_REQUESTS = [
+  /\b(?:prepara|preparad|abre|abrid|carga|cargad|monta|montad)\b[^.!?\n]*\b(?:videoclip|videoclips|music\s*videos?|clip\s+musical)\b/i,
+  /\b(?:hazme|hacedme|crea|cread|creame|créame)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical)\b/i,
+]
+const MUSIC_VIDEO_START_REQUESTS = [
+  /\b(?:l[aá]nzalo|in[ií]cialo|arr[aá]ncalo)\b/i,
+  /\b(?:l[aá]nza|inicia|arranca|genera|encola)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical|producci[oó]n\s+musical)\b/i,
+]
+
+function inferMusicVideoContext(text: string, history: ExampleConversation[]): boolean {
+  if (MUSIC_VIDEO_CONTEXT.test(text)) return true
+  return [...history].reverse().some(entry => MUSIC_VIDEO_CONTEXT.test(entry.text))
+}
+
+export function isExplicitMusicVideoStageRequest(request: string): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_VIDEO_REQUEST.test(text) || COMIC_LAUNCH_HOW.test(text)) return false
+  return MUSIC_VIDEO_STAGE_REQUESTS.some(pattern => pattern.test(text))
+}
+
+export function isExplicitMusicVideoStartRequest(request: string, history: ExampleConversation[] = []): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_VIDEO_REQUEST.test(text) || COMIC_LAUNCH_HOW.test(text)) return false
+  if (!MUSIC_VIDEO_START_REQUESTS.some(pattern => pattern.test(text))) return false
+  return inferMusicVideoContext(text, history)
+}
+
 export function isExplicitSfxGenerationRequest(request: string): boolean {
   const text = request.trim()
   if (!text || NEGATED_VIDEO_REQUEST.test(text)) return false
@@ -1477,7 +1529,7 @@ function inferComicContext(text: string, history: ExampleConversation[]): boolea
   return [...history].reverse().some(entry => (
     entry.role === 'user' && /\b(?:c[oó]mics?|vi[nñ]etas?|tebeo)\b/i.test(entry.text)
   )) || [...history].reverse().some(entry => (
-    /\b(?:c[oó]mics?|vi[nñ]etas?|Comics Lab|Director)\b/i.test(entry.text)
+    /\b(?:c[oó]mics?|vi[nñ]etas?|Comics Lab|Comic Director)\b/i.test(entry.text)
   ))
 }
 
@@ -1541,6 +1593,37 @@ export async function reconcileAgentTurnWithRequest(
         ? 'Voy a dibujar todas las viñetas pendientes del cómic abierto con MiniMax image-01. 🪄'
         : 'Voy a dibujar las viñetas del cómic abierto con su proveedor configurado. 🪄',
       actions: [{ type: 'generate_comic', imageProvider: requestedMiniMax ? 'minimax' : 'keep', imageModel: requestedMiniMax ? 'image-01' : '', confirm: true }],
+    }
+  }
+  const musicVideoStage = isExplicitMusicVideoStageRequest(request)
+  const musicVideoStart = isExplicitMusicVideoStartRequest(request, history)
+  if (musicVideoStage || musicVideoStart) {
+    const existingStage = turn.actions.find(
+      (action): action is AgentStageStoryMusicVideoAction => action.type === 'stage_story_music_video',
+    )
+    const stage: AgentStageStoryMusicVideoAction = existingStage || {
+      type: 'stage_story_music_video',
+      targetStoryTitle: '',
+      songName: '',
+      cueTitle: '',
+      pacing: 'balanced',
+      confirm: true,
+    }
+    if (musicVideoStage && musicVideoStart) {
+      return {
+        reply: 'Prepararé el videoclip en Music Video Director y, si el plan queda listo, lo iniciaré. Preparado no es en cola; en marcha no es terminado. 🪄',
+        actions: [stage, { type: 'start_director_production', targetStoryTitle: stage.targetStoryTitle, kind: 'music_video', confirm: true }],
+      }
+    }
+    if (musicVideoStart) {
+      return {
+        reply: 'Iniciaré la producción de videoclip ya preparada en Director y devolveré el pipelineId real. En marcha no es terminado. 🪄',
+        actions: [{ type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true }],
+      }
+    }
+    return {
+      reply: 'Prepararé el videoclip en Music Video Director con la historia, la canción y el cue exactos. No iniciaré generación. 🪄',
+      actions: [stage],
     }
   }
   if (isExplicitSfxGenerationRequest(request)) {
@@ -1657,7 +1740,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1684,7 +1767,10 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           page_count: { type: 'integer', minimum: 0, maximum: 100 },
           panels_per_page: { type: 'integer', minimum: 0, maximum: 12 },
           project_type: { type: 'string', enum: ['', 'full_story', 'music_video', 'trailer', 'quick_video'] },
-          production_kind: { type: 'string', enum: ['', 'film', 'trailer'] },
+          production_kind: { type: 'string', enum: ['', 'film', 'trailer', 'music_video'] },
+          song_name: { type: 'string', maxLength: 300 },
+          cue_title: { type: 'string', maxLength: 300 },
+          pacing: { type: 'string', enum: ['', 'cinematic', 'balanced', 'rhythmic'] },
           creative_brief: { type: 'string', maxLength: 4_000 },
           premise: { type: 'string', maxLength: 2_000 },
           logline: { type: 'string', maxLength: 2_000 },
@@ -2238,6 +2324,8 @@ export async function executeAgentActions(
               ? 'Adaptando la historia a Comic Director…'
             : action.type === 'stage_story_video'
               ? `Adaptando la historia como ${action.kind === 'trailer' ? 'tráiler' : 'cortometraje'}…`
+            : action.type === 'stage_story_music_video'
+              ? 'Preparando el videoclip en Music Video Director…'
             : action.type === 'start_director_production'
               ? 'Abriendo el portal de producción en Director…'
             : action.type === 'create_series_episode'
@@ -2349,6 +2437,9 @@ export async function executeAgentActions(
       } else if (action.type === 'stage_story_video') {
         const { stageStoryVideo } = await import('./labActions')
         results.push({ action, ok: true, message: await stageStoryVideo(action) })
+      } else if (action.type === 'stage_story_music_video') {
+        const { stageStoryMusicVideo } = await import('./labActions')
+        results.push({ action, ok: true, message: await stageStoryMusicVideo(action) })
       } else if (action.type === 'start_director_production') {
         const { startDirectorProduction } = await import('./labActions')
         results.push({ action, ok: true, message: await startDirectorProduction(action) })
