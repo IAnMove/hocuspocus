@@ -99,6 +99,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['title', 'project_type', 'creative_brief', 'premise', 'logline', 'synopsis', 'theme', 'ending', 'characters', 'locations', 'outline_beats'],
   },
   {
+    type: 'update_story',
+    title: 'Update the active Story Lab draft',
+    purpose: 'Patch the active or exactly named story, upsert named cast/locations, optionally replace its beats, preserve visual assets, and save the canonical library revision.',
+    useWhen: 'The user asks to fill, revise, rename or expand an existing Story Lab project.',
+    risk: 'edit',
+    parameters: ['target_story_title', 'title', 'creative_brief', 'premise', 'logline', 'synopsis', 'theme', 'ending', 'genre', 'tone', 'visual_style', 'world_summary', 'language', 'characters', 'locations', 'outline_beats'],
+  },
+  {
     type: 'create_series_episode',
     title: 'Create a filled Series Lab episode',
     purpose: 'Find or create a series, prepare the minimum canon needed, create a filled episode outline and show Episode room.',

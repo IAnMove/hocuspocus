@@ -1079,3 +1079,18 @@ de borrado.
 el turno visible y su resultado al destino; un cambio manual cuando está idle
 carga el historial propio del nuevo workspace. Así el usuario ve la
 confirmación real en vez de perder el panel a mitad del executor.
+
+## 33. Edición canónica de Story Lab (2026-08-30)
+
+`update_story` modifica la historia abierta o resuelve otra por título exacto.
+Puede completar/retocar overview, resumen de mundo, personajes, localizaciones y
+estructura. Los personajes y localizaciones se actualizan por nombre sin perder
+IDs, imágenes ni referencias; una lista nueva de `outline_beats` sí sustituye la
+estructura completa.
+
+La acción se niega a escribir cuando hay un conflicto de biblioteca o una
+operación activa sobre la historia. Calcula las secciones realmente cambiadas,
+incrementa sus versiones, invalida sólo sus aprobaciones y persiste la biblioteca
+con su revisión CAS. Después abre la sección afectada. En este corte no genera
+propuestas LLM de Story Lab, no aprueba secciones ni genera imágenes: son las
+siguientes capacidades independientes del punto 6 del relevo.

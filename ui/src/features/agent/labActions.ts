@@ -3,6 +3,7 @@ import type {
   AgentCreateComicAction,
   AgentCreateSeriesEpisodeAction,
   AgentCreateStoryAction,
+  AgentUpdateStoryAction,
   AgentCreativeCharacter,
   AgentCreativeLocation,
 } from './agentActions'
@@ -187,6 +188,152 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
   showLab('stories')
   openAgentStorySection('overview')
   return `He creado y guardado “${project.title}” con ${characters.length} personajes, ${locations.length} localizaciones y ${beats.length} beats; está abierto en Story Lab → Overview.`
+}
+
+export async function updateFilledStory(action: AgentUpdateStoryAction): Promise<string> {
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useStoryStore, normalizeStoryProject, storyId }, { changedSections }, api] = await Promise.all([
+    import('../stories/store'),
+    import('../stories/model'),
+    import('../../api/client'),
+  ])
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const current = useStoryStore.getState()
+  if (current.libraryConflicts.length) {
+    throw new Error('Story Lab tiene un conflicto pendiente entre la copia local y la del workspace; resuélvelo antes de editar la historia.')
+  }
+  const target = action.targetStoryTitle
+    ? Object.values(current.projects).find(project => normalizeName(project.title) === normalizeName(action.targetStoryTitle))
+    : current.project
+  if (!target) {
+    throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  }
+  if (current.activeProjectOperations[target.id]) {
+    throw new Error(`La historia “${target.title}” tiene una operación activa; espera a que termine antes de modificar su canon.`)
+  }
+
+  const candidate = structuredClone(target)
+  if (action.title) candidate.title = action.title
+  if (action.creativeBrief) candidate.creativeBrief.generalIdea = action.creativeBrief
+  if (action.durationSeconds !== undefined) candidate.creativeBrief.durationSeconds = action.durationSeconds
+  if (action.premise) candidate.premise = action.premise
+  if (action.logline) candidate.logline = action.logline
+  if (action.synopsis) candidate.synopsis = action.synopsis
+  if (action.theme) candidate.theme = action.theme
+  if (action.ending) candidate.ending = action.ending
+  if (action.genre) candidate.genre = action.genre
+  if (action.tone) candidate.tone = action.tone
+  if (action.visualStyle) candidate.visualStyle = action.visualStyle
+  if (action.worldSummary) candidate.world.summary = action.worldSummary
+  if (action.language) {
+    candidate.language = action.language
+    candidate.spokenLanguage = action.language
+  }
+
+  action.characters.forEach(character => {
+    const index = candidate.characters.findIndex(item => normalizeName(item.name) === normalizeName(character.name))
+    const existing = index >= 0 ? candidate.characters[index] : null
+    const patched = {
+      id: existing?.id || storyId('character'),
+      name: character.name,
+      role: character.role || existing?.role || 'Personaje',
+      age: existing?.age || '',
+      pronouns: existing?.pronouns || '',
+      personality: character.personality || existing?.personality || '',
+      desire: character.desire || existing?.desire || '',
+      need: existing?.need || '',
+      flaw: character.flaw || existing?.flaw || '',
+      conflict: existing?.conflict || candidate.premise,
+      arc: existing?.arc || candidate.ending,
+      voice: character.voice || existing?.voice || '',
+      appearance: character.appearance || existing?.appearance || '',
+      wardrobe: existing?.wardrobe || '',
+      visualPrompt: character.appearance
+        ? `${character.appearance}. ${candidate.visualStyle}`.trim()
+        : existing?.visualPrompt || '',
+      negativePrompt: existing?.negativePrompt || 'inconsistent identity, duplicate character, unreadable face',
+      referenceAssetIds: existing?.referenceAssetIds || [],
+      primaryReferenceAssetId: existing?.primaryReferenceAssetId,
+      approval: 'draft' as const,
+    }
+    if (index >= 0) candidate.characters[index] = patched
+    else candidate.characters.push(patched)
+  })
+
+  action.locations.forEach(location => {
+    const index = candidate.world.locations.findIndex(item => normalizeName(item.name) === normalizeName(location.name))
+    const existing = index >= 0 ? candidate.world.locations[index] : null
+    const patched = {
+      id: existing?.id || storyId('location'),
+      name: location.name,
+      purpose: location.purpose || existing?.purpose || '',
+      description: location.description || existing?.description || '',
+      visualPrompt: location.description
+        ? `${location.description}. ${candidate.visualStyle}`.trim()
+        : existing?.visualPrompt || '',
+      negativePrompt: existing?.negativePrompt || 'inconsistent layout, unreadable signage, visual clutter',
+      referenceAssetIds: existing?.referenceAssetIds || [],
+    }
+    if (index >= 0) candidate.world.locations[index] = patched
+    else candidate.world.locations.push(patched)
+  })
+
+  if (action.outlineBeats.length) {
+    candidate.beats = action.outlineBeats.map((summary, index, all) => ({
+      id: storyId('beat'),
+      stage: index === 0 ? 'Inicio' : index === all.length - 1 ? 'Resolución' : `Desarrollo ${index}`,
+      title: `Beat ${index + 1}`,
+      summary,
+      goal: index === all.length - 1 ? 'Cerrar el arco y mostrar la consecuencia.' : 'Hacer avanzar el objetivo dramático.',
+      conflict: index === 0 ? candidate.premise : 'Una complicación obliga a cambiar de estrategia.',
+      turn: index === all.length - 1 ? candidate.ending || summary : 'La consecuencia cambia el rumbo de la historia.',
+    }))
+  }
+
+  const normalized = normalizeStoryProject(candidate)
+  const sections = changedSections(target, normalized)
+  if (!sections.length) throw new Error(`La petición no cambia ningún campo de “${target.title}”.`)
+  const approvals = { ...normalized.approvals }
+  const sectionVersions = { ...target.sectionVersions }
+  sections.forEach(section => {
+    sectionVersions[section] += 1
+    delete approvals[section]
+  })
+  const project = normalizeStoryProject({
+    ...normalized,
+    revision: target.revision + 1,
+    sectionVersions,
+    approvals,
+    updatedAt: new Date().toISOString(),
+  })
+  const library = await api.saveStoryLibrary(workspace, {
+    version: 2,
+    revision: current.libraryRevision,
+    activeId: project.id,
+    projects: { ...current.projects, [project.id]: project },
+  })
+  useStoryStore.setState({
+    workspace,
+    project: library.projects[project.id],
+    projects: library.projects,
+    libraryRevision: library.revision,
+    dirty: false,
+    hydrated: false,
+    loading: false,
+    saveError: null,
+    libraryConflicts: [],
+  })
+  await useStoryStore.getState().loadWorkspace(workspace)
+  showLab('stories')
+  const section = sections.includes('structure')
+    ? 'structure'
+    : sections.includes('characters')
+      ? 'characters'
+      : sections.includes('world')
+        ? 'world'
+        : 'overview'
+  openAgentStorySection(section)
+  return `He actualizado y guardado “${project.title}”: ${sections.join(', ')}. Está abierto en Story Lab → ${section}.`
 }
 
 export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisodeAction): Promise<string> {

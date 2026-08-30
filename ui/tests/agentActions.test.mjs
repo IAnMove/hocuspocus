@@ -60,9 +60,31 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
+})
+
+test('parses a bounded Story Lab patch and drops an empty one', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Completo el grimorio.',
+    actions: [
+      {
+        type: 'update_story',
+        target_story_title: 'La torre de sal',
+        synopsis: 'Una cartógrafa descubre que el faro dibuja rutas hacia recuerdos perdidos.',
+        characters: [{ name: 'Iria', role: 'Cartógrafa', personality: 'Metódica', desire: 'Encontrar a su hermana', flaw: 'Desconfía de todos', appearance: 'Abrigo azul', voice: 'Serena' }],
+        outline_beats: ['El mapa cambia', 'La ruta exige un recuerdo', 'Iria elige qué conservar'],
+      },
+      { type: 'update_story', target_story_title: 'La torre de sal' },
+    ],
+  }))
+  assert.equal(turn.actions.length, 1)
+  assert.equal(turn.actions[0].type, 'update_story')
+  assert.equal(turn.actions[0].targetStoryTitle, 'La torre de sal')
+  assert.equal(turn.actions[0].characters[0].name, 'Iria')
+  assert.deepEqual(turn.actions[0].outlineBeats, ['El mapa cambia', 'La ruta exige un recuerdo', 'Iria elige qué conservar'])
 })
 
 test('parses bounded Studio references by output name and role', async () => {
