@@ -1237,3 +1237,11 @@ La acción usa el `baseRevision` del delta para conservar el bloqueo optimista d
 Antes de sustituir el borrador de Director guarda por CAS una producción `staged` reabrible con dirección, narrativa, estilo, duración, modelos y formato. Después configura Short Film Director con el canon escrito, proveedor, idioma, política de texto y modo visual de la Story; también recupera las referencias aprobadas de personajes/localizaciones que sigan disponibles. Los assets históricos ausentes no falsifican un fallo de staging: quedan visibles desde la producción guardada.
 
 La acción termina en el paso editable de estilo y declara expresamente que no ha lanzado imágenes ni vídeo. El arranque completo seguirá siendo una acción de cómputo separada y confirmada.
+
+## 46. Wizard: audio → beats → keyframes en Video 3D
+
+`apply_3d_rhythm` conecta el Wizard con el flujo rítmico existente sin duplicar `sceneRhythm.ts`. Exige `confirm=true`, abre Video 3D y envía una petición durable en memoria: si el panel lazy todavía no está montado, la orden queda pendiente y se consume al montar.
+
+La acción opera sobre la escena actualmente abierta y valida `scene_name` cuando se proporciona. Resuelve una capa por nombre exacto normalizado, selección actual o única capa visible; rechaza duplicados, capas bloqueadas y selecciones ambiguas. Puede adjuntar por nombre exacto un output de audio existente o reutilizar la pista musical inequívoca de la escena.
+
+Después llama al analizador real, verifica que existan beats solapados, construye el mapa con el offset de pista y aplica `pulse`, `bounce`, `peek` o `camera-punch` usando beats o downbeats. El resultado se guarda como keyframes ordinarios editables en el historial de la escena; la UI conserva pista, análisis, perfil, intensidad y primer cue seleccionados. La respuesta informa BPM y conteos reales. No captura ni renderiza.

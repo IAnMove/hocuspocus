@@ -26,6 +26,7 @@ import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
 import { CharacterKitLibraryPanel } from '../../features/characters/CharacterKitLibraryPanel'
 import type { CharacterKitEditorTab } from '../../features/characters/characterKitGuide'
+import { listenForAgentSceneRhythm } from '../../features/agent/agentUiBus'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 type AnimatorLayerType = SceneLayerType
@@ -2397,6 +2398,73 @@ export function SceneAnimatorPanel() {
       setRhythmError(error instanceof Error ? error.message : 'Could not turn this rhythm into scene keyframes.')
     }
   }
+  useEffect(() => listenForAgentSceneRhythm(async request => {
+    const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
+    const current = sceneRef.current
+    if (request.sceneName && normalize(request.sceneName) !== normalize(current.name)) {
+      throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”. Abre primero la escena correcta.`)
+    }
+    const layerMatches = request.layerName
+      ? current.layers.filter(layer => normalize(layer.name) === normalize(request.layerName))
+      : []
+    if (layerMatches.length > 1) throw new Error(`Hay varias capas llamadas “${request.layerName}”; renómbralas o selecciona una manualmente.`)
+    const eligibleLayers = current.layers.filter(layer => layer.visible)
+    const target = layerMatches[0]
+      ?? (!request.layerName && selectedId ? current.layers.find(layer => layer.id === selectedId) : undefined)
+      ?? (!request.layerName && eligibleLayers.length === 1 ? eligibleLayers[0] : undefined)
+    if (!target) throw new Error(request.layerName
+      ? `No existe la capa “${request.layerName}” en “${current.name}”.`
+      : 'Selecciona una capa inequívoca en Video 3D o indica su nombre al Wizard.')
+    if (target.locked) throw new Error(`Desbloquea “${target.name}” antes de generar keyframes rítmicos.`)
+
+    const attachedMatches = request.audioOutputName
+      ? (current.audioTracks ?? []).filter(track => normalize(track.name) === normalize(request.audioOutputName) || normalize(track.filename) === normalize(request.audioOutputName))
+      : []
+    const outputMatches = request.audioOutputName
+      ? outputs.filter(output => output.type === 'audio' && normalize(output.name) === normalize(request.audioOutputName))
+      : []
+    if (attachedMatches.length > 1 || outputMatches.length > 1) throw new Error(`El audio “${request.audioOutputName}” no es inequívoco.`)
+    let track: NonNullable<AnimatorScene['audioTracks']>[number] | undefined = attachedMatches[0]
+    if (!track && outputMatches[0]) {
+      track = { id: uid(), filename: outputMatches[0].name, name: outputMatches[0].name.replace(/\.[^.]+$/, ''), kind: 'music' as const, startTime: 0, volume: 1 }
+    }
+    if (!track && !request.audioOutputName) {
+      const tracks = current.audioTracks ?? []
+      track = tracks.find(item => item.kind === 'music') ?? (tracks.length === 1 ? tracks[0] : undefined)
+    }
+    if (!track) throw new Error(request.audioOutputName
+      ? `No existe el output de audio “${request.audioOutputName}” ni está adjunto a la escena.`
+      : 'Adjunta o indica un MP3/WAV de la galería antes de aplicar ritmo.')
+
+    setRhythmBusy(true); setRhythmError(null)
+    try {
+      const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
+      if (!analysis.beats.length) throw new Error('No se detectó una rejilla estable de beats en esta pista.')
+      const map = buildSceneRhythmMap(analysis, track.startTime, current.duration, request.cueSource)
+      if (!map.cues.length) throw new Error('Los beats detectados no coinciden con la duración actual de la escena.')
+      const profile = target.type === 'camera' && request.profile === 'peek' ? 'camera-punch' : request.profile
+      updateScene(sceneValue => ({
+        ...sceneValue,
+        audioTracks: (sceneValue.audioTracks ?? []).some(item => item.id === track!.id)
+          ? sceneValue.audioTracks : [...(sceneValue.audioTracks ?? []), track!],
+        layers: sceneValue.layers.map(layer => layer.id === target.id
+          ? applySceneRhythmToLayer(layer, map, { profile, sceneDuration: sceneValue.duration, intensity: request.intensity }) as AnimatorLayer
+          : layer),
+      }))
+      setSelectedId(target.id); setSelectedKeyframeId(null); setSelectedEventId(null)
+      setRhythmTrackId(track.id); setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
+      setRhythmCueSource(request.cueSource); setRhythmProfile(profile); setRhythmIntensity(request.intensity)
+      setProgress(map.cues[0].time / current.duration)
+      const result = `He analizado ${track.name}: ${analysis.bpm.toFixed(1)} BPM, ${analysis.beats.length} beats y ${analysis.downbeats.length} downbeats. Apliqué ${map.cues.length} ${request.cueSource} con perfil ${profile} a “${target.name}” como keyframes editables.`
+      setMessage(result)
+      return result
+    } catch (error) {
+      setRhythmError(error instanceof Error ? error.message : 'No se pudo aplicar el ritmo solicitado por el Wizard.')
+      throw error
+    } finally {
+      setRhythmBusy(false)
+    }
+  }), [outputs, selectedId])
   const animateCutoutDialogue = () => {
     const text = cutoutDialogueText.trim()
     if (!text) { setMessage('Write the dialogue line before animating the mouth.'); return }

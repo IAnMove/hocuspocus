@@ -211,6 +211,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['series_title', 'target_episode_title', 'canon_decision', 'canon_item_ids', 'confirm'],
   },
   {
+    type: 'apply_3d_rhythm',
+    title: 'Apply music rhythm to an editable 3D scene layer',
+    purpose: 'Open Video 3D, attach an exact existing audio output when requested, analyze BPM/beats/downbeats and bake a pulse, bounce, peek or camera-punch profile into ordinary keyframes.',
+    useWhen: 'The user explicitly asks a current scene layer or camera to react to music.',
+    risk: 'edit',
+    parameters: ['scene_name', 'layer_name', 'audio_output_name', 'cue_source', 'rhythm_profile', 'intensity', 'confirm'],
+  },
+  {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
     purpose: 'Open Comics and fill characters, panels and lettering. Do not draw panel art unless asked.',

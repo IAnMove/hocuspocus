@@ -19,6 +19,50 @@ let requestedSeriesRenderJob: SeriesJobStatus | null = null
 let requestedSeriesAssemblyJob: SeriesAssemblyJob | null = null
 let requestedSeriesReviewView: AgentSeriesReviewView | null = null
 
+export interface AgentSceneRhythmRequest {
+  sceneName: string
+  layerName: string
+  audioOutputName: string
+  cueSource: 'beats' | 'downbeats'
+  profile: 'pulse' | 'bounce' | 'peek' | 'camera-punch'
+  intensity: number
+}
+
+interface PendingSceneRhythmRequest {
+  request: AgentSceneRhythmRequest
+  resolve: (message: string) => void
+  reject: (error: Error) => void
+}
+
+const SCENE_RHYTHM_REQUEST_EVENT = 'hocuspocus:scene-rhythm-request'
+const pendingSceneRhythmRequests: PendingSceneRhythmRequest[] = []
+
+export function requestAgentSceneRhythm(request: AgentSceneRhythmRequest): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const pending = { request, resolve, reject }
+    pendingSceneRhythmRequests.push(pending)
+    window.dispatchEvent(new CustomEvent(SCENE_RHYTHM_REQUEST_EVENT))
+  })
+}
+
+export function listenForAgentSceneRhythm(
+  listener: (request: AgentSceneRhythmRequest) => Promise<string>,
+): () => void {
+  let active = true
+  const drain = async () => {
+    while (active && pendingSceneRhythmRequests.length) {
+      const pending = pendingSceneRhythmRequests.shift()
+      if (!pending) continue
+      try { pending.resolve(await listener(pending.request)) }
+      catch (error) { pending.reject(error instanceof Error ? error : new Error(String(error))) }
+    }
+  }
+  const handler = () => { void drain() }
+  window.addEventListener(SCENE_RHYTHM_REQUEST_EVENT, handler)
+  void drain()
+  return () => { active = false; window.removeEventListener(SCENE_RHYTHM_REQUEST_EVENT, handler) }
+}
+
 export function openAgentStorySection(section: AgentStorySection): void {
   requestedStorySection = section
   window.dispatchEvent(new CustomEvent(STORY_SECTION_EVENT, { detail: { section } }))

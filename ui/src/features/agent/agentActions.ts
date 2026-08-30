@@ -289,6 +289,17 @@ export interface AgentCommitSeriesCanonAction {
   confirm: true
 }
 
+export interface AgentApply3dRhythmAction {
+  type: 'apply_3d_rhythm'
+  sceneName: string
+  layerName: string
+  audioOutputName: string
+  cueSource: 'beats' | 'downbeats'
+  profile: 'pulse' | 'bounce' | 'peek' | 'camera-punch'
+  intensity: number
+  confirm: true
+}
+
 export interface AgentComicPanel {
   caption: string
   dialogue: string
@@ -394,6 +405,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentReviewSeriesAttemptsAction
   | AgentAssembleSeriesEpisodeAction
   | AgentCommitSeriesCanonAction
+  | AgentApply3dRhythmAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
@@ -478,6 +490,8 @@ const SERIES_REVIEW_SCOPES = new Set<AgentReviewSeriesAttemptsAction['scope']>([
 const SERIES_CANON_DECISIONS = new Set<AgentCommitSeriesCanonAction['decision']>([
   'accept_all', 'reject_all', 'accept_selected', 'reject_selected',
 ])
+const RHYTHM_CUE_SOURCES = new Set<AgentApply3dRhythmAction['cueSource']>(['beats', 'downbeats'])
+const RHYTHM_PROFILES = new Set<AgentApply3dRhythmAction['profile']>(['pulse', 'bounce', 'peek', 'camera-punch'])
 const STORY_SECTIONS = new Set<AgentStorySection>([
   'overview', 'world', 'characters', 'relationships', 'structure', 'productions',
 ])
@@ -511,6 +525,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   reviewseriesattempts: 'review_series_attempts',
   assembleseriesepisode: 'assemble_series_episode',
   commitseriescanon: 'commit_series_canon',
+  apply3drhythm: 'apply_3d_rhythm',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
@@ -632,7 +647,9 @@ const CANONICAL_FIELD_NAMES = [
   'series_logline', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline',
   'target_duration_seconds', 'create_if_missing', 'known_universe',
   'queue_scope', 'task_id', 'job_id', 'shot_ids', 'shot_numbers', 'attempt_id', 'render_mode',
-  'review_decision', 'review_scope', 'canon_decision', 'canon_item_ids', 'production_kind', 'confirm', 'characters', 'locations', 'outline_beats',
+  'review_decision', 'review_scope', 'canon_decision', 'canon_item_ids', 'production_kind',
+  'scene_name', 'layer_name', 'audio_output_name', 'cue_source', 'rhythm_profile', 'intensity',
+  'confirm', 'characters', 'locations', 'outline_beats',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
@@ -1046,6 +1063,13 @@ function parseAction(value: unknown): AgentAction | null {
     if (selected !== Boolean(itemIds.length)) return null
     return { type: 'commit_series_canon', seriesTitle: cleanString(raw.series_title, 300), targetEpisodeTitle: cleanString(raw.target_episode_title, 300), decision, itemIds, confirm: true }
   }
+  if (type === 'apply_3d_rhythm') {
+    if (raw.confirm !== true) return null
+    const cueSource = cleanString(raw.cue_source, 30) as AgentApply3dRhythmAction['cueSource']
+    const profile = cleanString(raw.rhythm_profile, 30) as AgentApply3dRhythmAction['profile']
+    if (!RHYTHM_CUE_SOURCES.has(cueSource) || !RHYTHM_PROFILES.has(profile)) return null
+    return { type: 'apply_3d_rhythm', sceneName: cleanString(raw.scene_name, 300), layerName: cleanString(raw.layer_name, 300), audioOutputName: cleanString(raw.audio_output_name, 300), cueSource, profile, intensity: optionalNumber(raw.intensity, 0, 1) ?? .65, confirm: true }
+  }
   if (type === 'create_comic') {
     const title = cleanString(raw.title, 300)
     if (!title) return null
@@ -1455,7 +1479,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1514,6 +1538,12 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           review_scope: { type: 'string', enum: ['', 'selected_latest', 'all_latest'] },
           canon_decision: { type: 'string', enum: ['', 'accept_all', 'reject_all', 'accept_selected', 'reject_selected'] },
           canon_item_ids: { type: 'array', maxItems: 200, items: { type: 'string', maxLength: 160 } },
+          scene_name: { type: 'string', maxLength: 300 },
+          layer_name: { type: 'string', maxLength: 300 },
+          audio_output_name: { type: 'string', maxLength: 300 },
+          cue_source: { type: 'string', enum: ['', 'beats', 'downbeats'] },
+          rhythm_profile: { type: 'string', enum: ['', 'pulse', 'bounce', 'peek', 'camera-punch'] },
+          intensity: { type: 'number', minimum: 0, maximum: 1 },
           confirm: { type: 'boolean' },
           page_number: { type: 'integer', minimum: 0, maximum: 100 },
           panel_number: { type: 'integer', minimum: 0, maximum: 100 },
@@ -1996,6 +2026,8 @@ export async function executeAgentActions(
               ? 'Uniendo las tomas aprobadas del episodio…'
             : action.type === 'commit_series_canon'
               ? 'Registrando las decisiones de canon del episodio…'
+            : action.type === 'apply_3d_rhythm'
+              ? 'Analizando la canción y creando keyframes rítmicos…'
               : action.type === 'create_comic'
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
@@ -2099,6 +2131,10 @@ export async function executeAgentActions(
       } else if (action.type === 'commit_series_canon') {
         const { commitSeriesCanonDelta } = await import('./labActions')
         results.push({ action, ok: true, message: await commitSeriesCanonDelta(action) })
+      } else if (action.type === 'apply_3d_rhythm') {
+        openTab('video_3d')
+        const { requestAgentSceneRhythm } = await import('./agentUiBus')
+        results.push({ action, ok: true, message: await requestAgentSceneRhythm(action) })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledComic(action) })
