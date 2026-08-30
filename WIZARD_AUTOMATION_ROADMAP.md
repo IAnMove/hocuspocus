@@ -176,6 +176,13 @@ Acceptance:
 - One existing read action and one mutation run entirely through the registry.
 - Existing non-migrated actions still work unchanged.
 
+Status: **implemented**. `open_tab` and `apply_3d_rhythm` now obtain their LLM
+description, input schema, runtime resolver/validator, risk and confirmation,
+execution dispatch, tracking metadata, summary and presentation hints from one
+typed registry. The previous action chain remains as the explicit compatibility
+adapter for every action not migrated yet. Decision gate A remains open before
+the presentation hints become a UI animation contract.
+
 ---
 
 ## Phase 3 — Common action runner and adapters
@@ -406,6 +413,8 @@ Update this section after each accepted block rather than marking the entire
 Agent Mode complete prematurely.
 
 - Existing action catalog: implemented, partially on the common report contract.
+- Typed capability registry: implemented for `open_tab` and
+  `apply_3d_rhythm`; legacy actions remain operational through the adapter.
 - Chat execution cards: implemented.
 - Backend chat persistence: stabilized (typed payloads, guarded hydration,
   workspace revision reset and CAS merge/retry); final UI smoke pending.
@@ -417,7 +426,8 @@ Agent Mode complete prematurely.
 
 ## Continuity note
 
-Finished block **1C — trustworthy nightly reporting**. Begin block **2 —
-capability registry foundation** next. Preserve the existing action catalog
-while introducing the registry beside it; do not start the broad UI magic
-animation layer yet.
+Finished block **2 — capability registry foundation**. Before block **3 —
+common action runner and adapters**, resolve Decision gate A with the user:
+magic speed, Wizard visibility, auto-scroll, atomic visual replay,
+accessibility and sound. The registry deliberately reserves presentation
+metadata but no broad UI magic animation has been built yet.

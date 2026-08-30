@@ -38,30 +38,19 @@ import type {
 import type { ExampleConversation } from './agentExamples'
 import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
+import {
+  AGENT_TABS,
+  executeRegisteredCapability,
+  getCapability,
+  listCapabilities,
+  parseRegisteredCapability,
+  registeredCapabilitySchemas,
+  type AgentTab,
+} from './capabilityRegistry'
 
 export type { ExampleConversation }
-
-export const AGENT_TABS = [
-  'studio',
-  'director',
-  'productions',
-  'images',
-  'videos',
-  'audio',
-  '3d',
-  'story_lab',
-  'series_lab',
-  'comics',
-  'video_editor',
-  'video_3d',
-  'animate_3d',
-  'character_creator',
-  'character_kit',
-  'workspaces',
-  'settings',
-] as const
-
-export type AgentTab = typeof AGENT_TABS[number]
+export { AGENT_TABS }
+export type { AgentTab }
 
 export interface AgentOpenTabAction {
   type: 'open_tab'
@@ -651,7 +640,6 @@ export interface AgentAppSnapshot {
   }
 }
 
-const TAB_SET = new Set<string>(AGENT_TABS)
 const RESOLUTION_PRESETS = new Set<ResolutionPreset>(['auto', '480p', '540p', '720p', '768p', '1080p'])
 const ASPECT_RATIOS = new Set<AspectRatio>(['auto', '21:9', '16:9', '9:16', '1:1', '4:3', '3:4'])
 const STORY_PROJECT_TYPES = new Set<AgentCreateStoryAction['projectType']>([
@@ -676,8 +664,6 @@ const SERIES_REVIEW_SCOPES = new Set<AgentReviewSeriesAttemptsAction['scope']>([
 const SERIES_CANON_DECISIONS = new Set<AgentCommitSeriesCanonAction['decision']>([
   'accept_all', 'reject_all', 'accept_selected', 'reject_selected',
 ])
-const RHYTHM_CUE_SOURCES = new Set<AgentApply3dRhythmAction['cueSource']>(['beats', 'downbeats'])
-const RHYTHM_PROFILES = new Set<AgentApply3dRhythmAction['profile']>(['pulse', 'bounce', 'peek', 'camera-punch'])
 const STORY_SECTIONS = new Set<AgentStorySection>([
   'overview', 'world', 'characters', 'relationships', 'structure', 'productions',
 ])
@@ -991,10 +977,8 @@ function parseAction(value: unknown): AgentAction | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const raw = canonicalRecord(value as Record<string, unknown>)
   const type = canonicalActionType(raw.type)
-  if (type === 'open_tab') {
-    const tab = cleanString(raw.tab, 40)
-    return TAB_SET.has(tab) ? { type: 'open_tab', tab: tab as AgentTab } : null
-  }
+  const registered = parseRegisteredCapability(type, raw)
+  if (registered !== undefined) return registered
   if (type === 'open_story_section') {
     const section = cleanString(raw.story_section, 40) as AgentStorySection
     return STORY_SECTIONS.has(section) ? { type: 'open_story_section', section } : null
@@ -1371,13 +1355,6 @@ function parseAction(value: unknown): AgentAction | null {
   if (type === 'export_3d_scene') {
     if (raw.confirm !== true) return null
     return { type: 'export_3d_scene', sceneName: cleanString(raw.scene_name, 300), confirm: true }
-  }
-  if (type === 'apply_3d_rhythm') {
-    if (raw.confirm !== true) return null
-    const cueSource = cleanString(raw.cue_source, 30) as AgentApply3dRhythmAction['cueSource']
-    const profile = cleanString(raw.rhythm_profile, 30) as AgentApply3dRhythmAction['profile']
-    if (!RHYTHM_CUE_SOURCES.has(cueSource) || !RHYTHM_PROFILES.has(profile)) return null
-    return { type: 'apply_3d_rhythm', sceneName: cleanString(raw.scene_name, 300), layerName: cleanString(raw.layer_name, 300), audioOutputName: cleanString(raw.audio_output_name, 300), cueSource, profile, intensity: optionalNumber(raw.intensity, 0, 1) ?? .65, confirm: true }
   }
   if (type === 'create_comic') {
     const title = cleanString(raw.title, 300)
@@ -1995,6 +1972,10 @@ export async function reconcileAgentTurnWithRequest(
   }
 }
 
+const LEGACY_ACTION_TYPES = ['open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export'] as const
+
+export const HOCUSPOCUS_REGISTERED_ACTION_SCHEMAS = registeredCapabilitySchemas()
+
 export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
@@ -2007,7 +1988,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export'] },
+          type: { type: 'string', enum: [...listCapabilities().map(item => item.name), ...LEGACY_ACTION_TYPES] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -2579,7 +2560,8 @@ export async function executeAgentActions(
   let createdComicId = ''
   let stagedProductionId = ''
   for (const action of orderCompoundActions(actions)) {
-    const working = action.type === 'open_tab'
+    const registeredProgress = getCapability(action.type)?.progress
+    const working = registeredProgress || (action.type === 'open_tab'
       ? `Abriendo ${TAB_LABELS[action.tab]}…`
       : action.type === 'open_story_section'
         ? `Abriendo Story Lab → ${action.section}…`
@@ -2697,7 +2679,7 @@ export async function executeAgentActions(
                       ? 'Reintentando la tarea en la cola…'
                       : action.type === 'select_workspace'
                         ? `Cambiando al workspace ${action.workspaceName}…`
-                        : `Creando el workspace ${action.workspaceName}…`
+                        : `Creando el workspace ${String((action as { workspaceName?: string }).workspaceName || '')}…`)
     onStep?.(working)
     if (isExpensiveAction(action.type)) {
       let targetId = createdComicId
@@ -2732,8 +2714,15 @@ export async function executeAgentActions(
       }
     }
     try {
-      if (action.type === 'open_tab') {
-        results.push({ action, ok: true, message: openTab(action.tab) })
+      const registeredOutcome = await executeRegisteredCapability(action, {
+        openTab,
+        async apply3dRhythm(rhythmAction) {
+          const { requestAgentSceneRhythm } = await import('./agentUiBus')
+          return requestAgentSceneRhythm(rhythmAction)
+        },
+      })
+      if (registeredOutcome) {
+        results.push({ action, ok: true, ...registeredOutcome })
       } else if (action.type === 'open_story_section') {
         openTab('story_lab')
         const { openAgentStorySection } = await import('./agentUiBus')
@@ -2874,10 +2863,6 @@ export async function executeAgentActions(
         openTab('video_3d')
         const { requestAgentSceneControl } = await import('./agentUiBus')
         results.push({ action, ok: true, message: await requestAgentSceneControl(action) })
-      } else if (action.type === 'apply_3d_rhythm') {
-        openTab('video_3d')
-        const { requestAgentSceneRhythm } = await import('./agentUiBus')
-        results.push({ action, ok: true, message: await requestAgentSceneRhythm(action) })
       } else if (action.type === 'create_character_kit') {
         const { createAgentCharacterKit } = await import('./characterKitActions')
         const outcome = await createAgentCharacterKit(action)
@@ -3020,9 +3005,11 @@ export async function executeAgentActions(
       } else if (action.type === 'select_workspace') {
         const { selectAgentWorkspace } = await import('./workspaceActions')
         results.push({ action, ok: true, message: await selectAgentWorkspace(action.workspaceName) })
-      } else {
+      } else if (action.type === 'create_workspace') {
         const { createAgentWorkspace } = await import('./workspaceActions')
         results.push({ action, ok: true, message: await createAgentWorkspace(action.workspaceName) })
+      } else {
+        throw new Error(`No hay ejecutor para ${action.type}.`)
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

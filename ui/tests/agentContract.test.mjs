@@ -28,6 +28,50 @@ test('every capability has parser coverage, docs and a schema enum entry', async
   }
 })
 
+test('registered capabilities supply one contract for prompt schema parser execution and docs', async () => {
+  const {
+    executeRegisteredCapability,
+    listCapabilities,
+    parseRegisteredCapability,
+    registeredCapabilityDocumentationRows,
+    registeredCapabilitySchemas,
+  } = await import('../src/features/agent/capabilityRegistry.ts')
+  const registered = listCapabilities()
+  assert.deepEqual(registered.map(item => item.name), ['open_tab', 'apply_3d_rhythm'])
+  assert.deepEqual(registered.map(item => item.risk), ['read', 'compute'])
+  assert.deepEqual(registered.map(item => item.confirmation), ['none', 'required'])
+  assert.equal(registeredCapabilitySchemas().length, registered.length)
+  assert.equal(registeredCapabilityDocumentationRows().length, registered.length)
+  for (const capability of registered) {
+    assert.equal(typeof capability.resolve, 'function')
+    assert.equal(typeof capability.validate, 'function')
+    assert.equal(typeof capability.execute, 'function')
+    assert.equal(typeof capability.summarize, 'function')
+    assert.ok(capability.track.targetKind)
+    assert.equal(capability.presentation.replay, 'atomic')
+  }
+
+  const open = parseRegisteredCapability('open_tab', { type: 'open_tab', tab: 'series_lab' })
+  assert.deepEqual(open, { type: 'open_tab', tab: 'series_lab' })
+  const rhythm = parseRegisteredCapability('apply_3d_rhythm', {
+    type: 'apply_3d_rhythm', cue_source: 'downbeats', rhythm_profile: 'peek', intensity: 2, confirm: true,
+  })
+  assert.equal(rhythm?.type, 'apply_3d_rhythm')
+  assert.equal(rhythm?.intensity, 1)
+  assert.equal(parseRegisteredCapability('apply_3d_rhythm', {
+    type: 'apply_3d_rhythm', cue_source: 'beats', rhythm_profile: 'pulse', confirm: false,
+  }), null)
+
+  const calls = []
+  const context = {
+    openTab(tab) { calls.push(`open:${tab}`); return `Opened ${tab}` },
+    async apply3dRhythm(action) { calls.push(`rhythm:${action.profile}`); return 'Rhythm baked' },
+  }
+  assert.equal((await executeRegisteredCapability(open, context)).message, 'Opened series_lab')
+  assert.equal((await executeRegisteredCapability(rhythm, context)).message, 'Rhythm baked')
+  assert.deepEqual(calls, ['open:series_lab', 'open:video_3d', 'rhythm:peek'])
+})
+
 test('unknown actions and extra fields never survive the parser', async () => {
   const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
   const turn = parseAgentTurn(JSON.stringify({

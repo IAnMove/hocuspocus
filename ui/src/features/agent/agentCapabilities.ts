@@ -1,4 +1,5 @@
 import type { AgentAction } from './agentActions'
+import { getCapability } from './capabilityRegistry'
 
 export type AgentCapabilityRisk = 'read' | 'edit' | 'compute'
 
@@ -11,6 +12,19 @@ export interface AgentCapabilityDescriptor {
   parameters: string[]
 }
 
+function registeredDescriptor(name: AgentAction['type']): AgentCapabilityDescriptor {
+  const capability = getCapability(name)
+  if (!capability) throw new Error(`Registered capability ${name} is missing`)
+  return {
+    type: capability.name,
+    title: capability.title,
+    purpose: capability.description,
+    useWhen: capability.useWhen,
+    risk: capability.risk === 'external_cost' ? 'compute' : capability.risk,
+    parameters: capability.parameters,
+  }
+}
+
 /**
  * Canonical knowledge catalog for the embedded Wizard. Add a capability here
  * when its parser and executor become available. The system prompt and the
@@ -18,14 +32,7 @@ export interface AgentCapabilityDescriptor {
  * the model a second, contradictory version of it.
  */
 export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
-  {
-    type: 'open_tab',
-    title: 'Open an application section',
-    purpose: 'Navigate to a real HocusPocus section through its store state.',
-    useWhen: 'The user asks to go somewhere or opening a section materially helps the answer.',
-    risk: 'read',
-    parameters: ['tab'],
-  },
+  registeredDescriptor('open_tab'),
   {
     type: 'prepare_video',
     title: 'Prepare Studio video',
@@ -266,14 +273,7 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     risk: 'compute',
     parameters: ['scene_name', 'confirm'],
   },
-  {
-    type: 'apply_3d_rhythm',
-    title: 'Apply music rhythm to an editable 3D scene layer',
-    purpose: 'Open Video 3D, attach an exact existing audio output when requested, analyze BPM/beats/downbeats and bake a pulse, bounce, peek or camera-punch profile into ordinary keyframes.',
-    useWhen: 'The user explicitly asks a current scene layer or camera to react to music.',
-    risk: 'edit',
-    parameters: ['scene_name', 'layer_name', 'audio_output_name', 'cue_source', 'rhythm_profile', 'intensity', 'confirm'],
-  },
+  registeredDescriptor('apply_3d_rhythm'),
   {
     type: 'create_comic',
     title: 'Create a filled Comics draft',
