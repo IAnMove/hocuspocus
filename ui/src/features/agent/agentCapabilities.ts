@@ -107,6 +107,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['target_story_title', 'title', 'creative_brief', 'premise', 'logline', 'synopsis', 'theme', 'ending', 'genre', 'tone', 'visual_style', 'world_summary', 'language', 'characters', 'locations', 'outline_beats'],
   },
   {
+    type: 'generate_story_section',
+    title: 'Generate a Story Lab section proposal',
+    purpose: 'Run the canonical recoverable Story Lab writer for one section or the full plan and leave its result ready for review without applying it.',
+    useWhen: 'The user explicitly asks the Story Lab LLM to generate, rewrite or propose story material.',
+    risk: 'compute',
+    parameters: ['target_story_title', 'story_generation_scope', 'instruction', 'confirm'],
+  },
+  {
     type: 'create_series_episode',
     title: 'Create a filled Series Lab episode',
     purpose: 'Find or create a series, prepare the minimum canon needed, create a filled episode outline and show Episode room.',

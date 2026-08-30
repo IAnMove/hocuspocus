@@ -1094,3 +1094,19 @@ incrementa sus versiones, invalida sólo sus aprobaciones y persiste la bibliote
 con su revisión CAS. Después abre la sección afectada. En este corte no genera
 propuestas LLM de Story Lab, no aprueba secciones ni genera imágenes: son las
 siguientes capacidades independientes del punto 6 del relevo.
+
+## 34. Propuestas recuperables de Story Lab (2026-08-30)
+
+`generate_story_section` admite `overview`, `world`, `characters`,
+`relationships`, `structure` o `all`, exige `confirm=true` y usa exactamente
+`api.generateStorySection` con el proveedor de escritura resuelto por el perfil
+global o el override del proyecto. La historia activa puede indicarse por título
+exacto; una historia sin premisa/briefing o con otra operación activa se rechaza.
+
+El job y su resultado se guardan bajo las mismas claves recuperables que usa el
+panel (`maestro-story-plan-job/result:<workspace>:<projectId>`). Un pequeño bus
+notifica a Story Lab cuando ya está montado; si aún no lo está, el efecto de
+montaje recupera el resultado de `localStorage`. La acción deja la propuesta
+seleccionable en el UI y **no** la aplica, aprueba ni genera imágenes. Así se
+mantiene separado el coste autorizado de escribir del cambio de canon que el
+usuario todavía debe revisar.

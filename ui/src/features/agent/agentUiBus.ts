@@ -3,6 +3,7 @@ export type AgentSeriesSection = 'setup' | 'canon' | 'episode' | 'shots' | 'revi
 
 const STORY_SECTION_EVENT = 'hocuspocus:story-section'
 const SERIES_SECTION_EVENT = 'hocuspocus:series-section'
+const STORY_DRAFT_EVENT = 'hocuspocus:story-draft-ready'
 let requestedStorySection: AgentStorySection | null = null
 let requestedSeriesSection: AgentSeriesSection | null = null
 
@@ -38,6 +39,19 @@ export function listenForAgentSeriesSection(
   window.addEventListener(SERIES_SECTION_EVENT, handler)
   if (requestedSeriesSection) listener(requestedSeriesSection)
   return () => window.removeEventListener(SERIES_SECTION_EVENT, handler)
+}
+
+export function notifyAgentStoryDraft(projectId: string): void {
+  window.dispatchEvent(new CustomEvent(STORY_DRAFT_EVENT, { detail: { projectId } }))
+}
+
+export function listenForAgentStoryDraft(listener: (projectId: string) => void): () => void {
+  const handler = (event: Event) => {
+    const projectId = (event as CustomEvent<{ projectId?: string }>).detail?.projectId
+    if (projectId) listener(projectId)
+  }
+  window.addEventListener(STORY_DRAFT_EVENT, handler)
+  return () => window.removeEventListener(STORY_DRAFT_EVENT, handler)
 }
 
 const ACTIVITY_DETAILS_EVENT = 'hocuspocus:activity-details'

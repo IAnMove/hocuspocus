@@ -1,13 +1,14 @@
 import { useStore } from '../../stores/useStore'
 import type {
   AgentCreateComicAction,
+  AgentGenerateStorySectionAction,
   AgentCreateSeriesEpisodeAction,
   AgentCreateStoryAction,
   AgentUpdateStoryAction,
   AgentCreativeCharacter,
   AgentCreativeLocation,
 } from './agentActions'
-import { openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
+import { notifyAgentStoryDraft, openAgentSeriesSection, openAgentStorySection } from './agentUiBus'
 
 const normalizeName = (value: string): string => value
   .normalize('NFD')
@@ -334,6 +335,91 @@ export async function updateFilledStory(action: AgentUpdateStoryAction): Promise
         : 'overview'
   openAgentStorySection(section)
   return `He actualizado y guardado “${project.title}”: ${sections.join(', ')}. Está abierto en Story Lab → ${section}.`
+}
+
+export async function generateStorySectionDraft(
+  action: AgentGenerateStorySectionAction,
+  onStep?: (message: string) => void,
+): Promise<string> {
+  if (!action.confirm) throw new Error('Generar una propuesta de Story Lab requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useStoryStore }, { resolveStoryWritingProvider }, api] = await Promise.all([
+    import('../stories/store'),
+    import('../stories/provider'),
+    import('../../api/client'),
+  ])
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const current = useStoryStore.getState()
+  if (current.libraryConflicts.length) {
+    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de generar otra propuesta.')
+  }
+  const project = action.targetStoryTitle
+    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
+    : current.project
+  if (!project) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (current.activeProjectOperations[project.id]) {
+    throw new Error(`La historia “${project.title}” ya tiene una operación activa.`)
+  }
+  const premise = project.premise.trim()
+    || project.creativeBrief.generalIdea.trim()
+    || project.logline.trim()
+    || project.synopsis.trim()
+  if (!premise) throw new Error(`“${project.title}” necesita una premisa o briefing antes de invocar al escritor.`)
+
+  useStoryStore.setState({ project, dirty: false })
+  showLab('stories')
+  const visibleSection = action.scope === 'all' ? 'overview' : action.scope
+  openAgentStorySection(visibleSection)
+  const resultKey = `maestro-story-plan-result:${workspace}:${project.id}`
+  const jobKey = `maestro-story-plan-job:${workspace}:${project.id}`
+  window.localStorage.setItem(resultKey, JSON.stringify({
+    scope: action.scope,
+    generateImagesAfterApply: false,
+  }))
+  useStoryStore.getState().beginProjectOperation(project.id)
+  try {
+    const resolvedWriting = resolveStoryWritingProvider(useStore.getState().productionProfile, project)
+    const effectiveProvider = project.provider.useGlobalProfile
+      ? {
+          ...project.provider,
+          writingProvider: resolvedWriting.provider,
+          writingModel: resolvedWriting.model,
+          writingBaseUrl: resolvedWriting.baseUrl,
+          imageProvider: useStore.getState().productionProfile.image.provider === 'minimax' ? 'minimax' as const : 'maestro' as const,
+          imageModel: useStore.getState().productionProfile.image.model,
+        }
+      : project.provider
+    let jobId = ''
+    const { result } = await api.generateStorySection({
+      scope: action.scope,
+      premise,
+      language: project.language,
+      genre: project.genre,
+      tone: project.tone,
+      audience: project.audience,
+      instruction: action.instruction,
+      project: { ...project, provider: effectiveProvider },
+      writingProvider: effectiveProvider.writingProvider,
+      writingModel: effectiveProvider.writingModel,
+      writingBaseUrl: effectiveProvider.writingBaseUrl,
+      workspace,
+    }, progress => {
+      jobId = progress.jobId
+      window.localStorage.setItem(jobKey, progress.jobId)
+      const count = progress.total ? ` ${progress.current}/${progress.total}` : ''
+      onStep?.(`${progress.message}${count}`)
+    })
+    window.localStorage.setItem(resultKey, JSON.stringify({
+      jobId,
+      scope: action.scope,
+      result,
+      generateImagesAfterApply: false,
+    }))
+    notifyAgentStoryDraft(project.id)
+    return `La propuesta de ${action.scope} para “${project.title}” está lista en Story Lab. Revísala y elige qué cambios aplicar; todavía no he modificado ni aprobado el canon.`
+  } finally {
+    useStoryStore.getState().endProjectOperation(project.id)
+  }
 }
 
 export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisodeAction): Promise<string> {
