@@ -14,6 +14,16 @@ import {
   rememberExecution,
   reuseExecution,
 } from './agentContract'
+import type {
+  AgentApplyCharacterKitPresetAction,
+  AgentAttachCharacterKitReferencesAction,
+  AgentBuildCharacterKitAction,
+  AgentCreateCharacterKitAction,
+  AgentOpenCharacterKitAction,
+  AgentOpenCharacterKitRigAction,
+  AgentTrackCharacterKitJobAction,
+  AgentUpdateCharacterKitAction,
+} from './characterKitActions'
 import type { ExampleConversation } from './agentExamples'
 import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
@@ -506,6 +516,14 @@ export type AgentAction = AgentOpenTabAction
   | AgentRetryTaskAction
   | AgentSelectWorkspaceAction
   | AgentCreateWorkspaceAction
+  | AgentCreateCharacterKitAction
+  | AgentOpenCharacterKitAction
+  | AgentUpdateCharacterKitAction
+  | AgentAttachCharacterKitReferencesAction
+  | AgentBuildCharacterKitAction
+  | AgentOpenCharacterKitRigAction
+  | AgentApplyCharacterKitPresetAction
+  | AgentTrackCharacterKitJobAction
 
 export interface AgentTurn {
   reply: string
@@ -684,6 +702,14 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
   generatecomicpanel: 'generate_comic_panel',
+  createcharacterkit: 'create_character_kit',
+  opencharacterkit: 'open_character_kit',
+  updatecharacterkit: 'update_character_kit',
+  attachcharacterkitreferences: 'attach_character_kit_references',
+  buildcharacterkit: 'build_character_kit',
+  opencharacterkitrig: 'open_character_kit_rig',
+  applycharacterkitpreset: 'apply_character_kit_preset',
+  trackcharacterkitjob: 'track_character_kit_job',
   attachstudioreferences: 'attach_studio_references',
   configurestudioloras: 'configure_studio_loras',
   inspectqueue: 'inspect_queue',
@@ -810,6 +836,7 @@ const CANONICAL_FIELD_NAMES = [
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'comic_pages', 'caption', 'stage', 'image_provider',
   'page_number', 'panel_number', 'page_numbers', 'pilot',
   'factual_biography', 'biography_review',
+  'kit_name', 'look_notes', 'preset_id',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
   'loras', 'weight',
   'workspace_name',
@@ -1426,6 +1453,50 @@ function parseAction(value: unknown): AgentAction | null {
       ? { type: 'select_workspace', workspaceName }
       : { type: 'create_workspace', workspaceName }
   }
+  if (type === 'create_character_kit') {
+    const name = cleanString(raw.title, 160) || cleanString(raw.kit_name, 160)
+    if (!name) return null
+    const style = cleanString(raw.visual_style, 40)
+    return {
+      type: 'create_character_kit',
+      name,
+      style: style === 'children-illustration' || style === 'anime-2d' ? style : 'cutout',
+    }
+  }
+  if (type === 'open_character_kit') {
+    const kitName = cleanString(raw.kit_name, 160) || cleanString(raw.title, 160)
+    if (!kitName) return null
+    return { type: 'open_character_kit', kitName }
+  }
+  if (type === 'update_character_kit') {
+    const style = cleanString(raw.visual_style, 40)
+    return {
+      type: 'update_character_kit',
+      kitName: cleanString(raw.kit_name, 160),
+      name: cleanString(raw.title, 160),
+      lookNotes: cleanString(raw.look_notes, 4_000),
+      style: style === 'children-illustration' || style === 'anime-2d' || style === 'cutout' ? style : '',
+    }
+  }
+  if (type === 'attach_character_kit_references') {
+    const outputNames = stringArray(raw.reference_output_names, 8, 300)
+    if (!outputNames.length) return null
+    return { type: 'attach_character_kit_references', kitName: cleanString(raw.kit_name, 160), outputNames }
+  }
+  if (type === 'build_character_kit') {
+    return { type: 'build_character_kit', kitName: cleanString(raw.kit_name, 160) }
+  }
+  if (type === 'open_character_kit_rig') {
+    return { type: 'open_character_kit_rig', kitName: cleanString(raw.kit_name, 160) }
+  }
+  if (type === 'apply_character_kit_preset') {
+    const presetId = cleanString(raw.preset_id, 160)
+    if (!presetId) return null
+    return { type: 'apply_character_kit_preset', kitName: cleanString(raw.kit_name, 160), presetId }
+  }
+  if (type === 'track_character_kit_job') {
+    return { type: 'track_character_kit_job', kitName: cleanString(raw.kit_name, 160) }
+  }
   return null
 }
 
@@ -1866,7 +1937,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -2047,6 +2118,9 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           pilot: { type: 'boolean' },
           factual_biography: { type: 'boolean' },
           biography_review: { type: 'boolean' },
+          kit_name: { type: 'string', maxLength: 160 },
+          look_notes: { type: 'string', maxLength: 4_000 },
+          preset_id: { type: 'string', maxLength: 160 },
         },
         required: ['type'],
       },
@@ -2494,6 +2568,22 @@ export async function executeAgentActions(
               ? 'Renderizando y publicando el MP4 de la escena 3D…'
             : action.type === 'apply_3d_rhythm'
               ? 'Analizando la canción y creando keyframes rítmicos…'
+              : action.type === 'create_character_kit'
+                ? `Creando el Character Kit ${action.name}…`
+              : action.type === 'open_character_kit'
+                ? `Abriendo Character Kit ${action.kitName}…`
+              : action.type === 'update_character_kit'
+                ? 'Actualizando la identidad del Character Kit…'
+              : action.type === 'attach_character_kit_references'
+                ? 'Adjuntando referencias al Character Kit…'
+              : action.type === 'build_character_kit'
+                ? 'Montando el kit de personaje…'
+              : action.type === 'open_character_kit_rig'
+                ? 'Abriendo el Face Rig…'
+              : action.type === 'apply_character_kit_preset'
+                ? `Aplicando el preset ${action.presetId}…`
+              : action.type === 'track_character_kit_job'
+                ? 'Consultando el trabajo del Character Kit…'
               : action.type === 'create_comic'
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
@@ -2695,6 +2785,38 @@ export async function executeAgentActions(
         openTab('video_3d')
         const { requestAgentSceneRhythm } = await import('./agentUiBus')
         results.push({ action, ok: true, message: await requestAgentSceneRhythm(action) })
+      } else if (action.type === 'create_character_kit') {
+        const { createAgentCharacterKit } = await import('./characterKitActions')
+        const outcome = await createAgentCharacterKit(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'open_character_kit') {
+        const { openAgentCharacterKit } = await import('./characterKitActions')
+        const outcome = await openAgentCharacterKit(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'update_character_kit') {
+        const { updateAgentCharacterKit } = await import('./characterKitActions')
+        const outcome = await updateAgentCharacterKit(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'attach_character_kit_references') {
+        const { attachAgentCharacterKitReferences } = await import('./characterKitActions')
+        const outcome = await attachAgentCharacterKitReferences(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'build_character_kit') {
+        const { buildAgentCharacterKit } = await import('./characterKitActions')
+        const outcome = await buildAgentCharacterKit(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'open_character_kit_rig') {
+        const { openAgentCharacterKitRig } = await import('./characterKitActions')
+        const outcome = await openAgentCharacterKitRig(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'apply_character_kit_preset') {
+        const { applyAgentCharacterKitPreset } = await import('./characterKitActions')
+        const outcome = await applyAgentCharacterKitPreset(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'track_character_kit_job') {
+        const { trackAgentCharacterKitJob } = await import('./characterKitActions')
+        const outcome = await trackAgentCharacterKitJob(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledComic(action) })

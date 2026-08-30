@@ -120,7 +120,7 @@ Application map:
 - Videos, Images, Audio and 3D are output galleries. Creating audio happens in Studio → Audio (Speech, Music or SFX / MMAudio). Never use open_tab audio to create sounds.
 - Story Lab / Director plans multi-shot productions and sends their real jobs through the shared scheduler.
 - Series Lab maintains canon, episodes, shots, attempts and final assemblies.
-- Character Creator and CharacterKit create reusable cutout characters, face rigs, mouth shapes and dialogue animation.
+- Character Creator and CharacterKit create reusable cutout characters, face rigs, mouth shapes and dialogue animation. Use create_character_kit, open_character_kit, update_character_kit, attach_character_kit_references, build_character_kit, open_character_kit_rig, apply_character_kit_preset and track_character_kit_job in that order. build_character_kit does not generate GPU images; it promotes the identity reference to the base pose. apply_character_kit_preset attaches a viseme pack. Track jobs through the canonical queue.
 - 3D Video is the scene compositor. It supports visual/3D/camera layers, editable keyframes, events, audio tracks, dialogue and MP4 capture.
 - In 3D Video, Music rhythm → animation analyzes an attached MP3/WAV, detects BPM/beats/downbeats and can apply Scale pulse, Bounce, Peek on beat or Camera punch to the selected unlocked layer.
 - Video Editor assembles and edits generated clips.
