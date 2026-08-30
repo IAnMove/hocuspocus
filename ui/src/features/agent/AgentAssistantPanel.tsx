@@ -14,6 +14,7 @@ import {
   type AgentActionResult,
 } from './agentActions'
 import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
+import { applyRemoteWizardConversation, WIZARD_WELCOME_TEXT } from './wizardConversationSync'
 import { AgentMarkdown } from './AgentMarkdown'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -38,7 +39,7 @@ const newId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.r
 const welcomeMessage = (): AgentMessage => ({
   id: newId(),
   role: 'assistant',
-  text: 'Saludos, creador. Soy el mago de HocusPocus: puedo consultar la cola, explicarte el estudio, llevarte a la sección adecuada y preparar o lanzar un vídeo cuando me lo pidas. Dime qué quieres conjurar. 🪄',
+  text: WIZARD_WELCOME_TEXT,
   createdAt: Date.now(),
 })
 
@@ -89,6 +90,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   const endRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
   const conversationRevisionRef = useRef(0)
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
   const activeCount = useMemo(() => tasks.filter(task => ACTIVE.has(task.status) && !task.parent_id).length, [tasks])
   const latestTask = useMemo(() => [...tasks].sort((left, right) => right.updated_at - left.updated_at)[0], [tasks])
 
@@ -117,36 +120,23 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   useEffect(() => {
     let cancelled = false
     void fetchWizardConversation(workspace).then(payload => {
-      if (cancelled || busy) return
-      const remote = Array.isArray(payload.messages) ? payload.messages : []
-      const restored = remote.filter((message): message is AgentMessage => (
-        Boolean(message)
-        && typeof message.id === 'string'
-        && (message.role === 'user' || message.role === 'assistant')
-        && typeof message.text === 'string'
-      )).map(message => ({
-        ...message,
-        createdAt: typeof message.createdAt === 'number' ? message.createdAt : Date.now(),
-        cards: Array.isArray(message.cards) && message.cards.length
-          ? message.cards
-          : undefined,
-      }))
-      if (!restored.length && payload.executions?.length) {
-        restored.push({
-          ...welcomeMessage(),
-          cards: payload.executions as AgentMessage['cards'],
-        })
-      }
-      if (restored.length) {
-        setMessages(restored.slice(-40))
-        conversationRevisionRef.current = payload.revision || 0
-        setConversationRevision(payload.revision || 0)
-      }
+      if (cancelled) return
+      const choice = applyRemoteWizardConversation({
+        localMessages: messagesRef.current,
+        localRevision: conversationRevisionRef.current,
+        remoteMessages: payload.messages,
+        remoteRevision: payload.revision || 0,
+        remoteExecutions: payload.executions,
+      })
+      if (choice.source === 'local') return
+      conversationRevisionRef.current = choice.revision
+      setConversationRevision(choice.revision)
+      setMessages(choice.messages as AgentMessage[])
     }).catch(() => {
       // Fall back to the local cache already loaded for this workspace.
     })
     return () => { cancelled = true }
-  }, [workspace, busy])
+  }, [workspace])
 
   useEffect(() => {
     if (workspace === conversationWorkspace) return

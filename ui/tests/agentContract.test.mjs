@@ -373,6 +373,51 @@ test('wizard snapshot includes Story, Series, Video 3D, CharacterKit and Video E
   assert.equal(snapshot.video_editor.title, 'corte-final')
 })
 
+test('a stale remote snapshot does not replace a newer local Wizard turn', async () => {
+  const { applyRemoteWizardConversation } = await import('../src/features/agent/wizardConversationSync.ts')
+  const localMessages = [
+    { id: 'welcome', role: 'assistant', text: 'Hola', createdAt: 1 },
+    { id: 'user-2', role: 'user', text: 'exporta el corte', createdAt: 2 },
+    {
+      id: 'asst-2', role: 'assistant', text: 'He encolado la exportación.', createdAt: 3,
+      cards: [{ id: 'card-new', state: 'queued', message: 'Exportando', executionKey: 'k-new' }],
+    },
+  ]
+  const staleRemote = [
+    { id: 'welcome', role: 'assistant', text: 'Hola', createdAt: 1 },
+  ]
+  const raced = applyRemoteWizardConversation({
+    localMessages,
+    localRevision: 0,
+    remoteMessages: staleRemote,
+    remoteRevision: 4,
+  })
+  assert.equal(raced.source, 'local')
+  assert.equal(raced.messages.at(-1).id, 'asst-2')
+  assert.equal(raced.messages.at(-1).cards[0].id, 'card-new')
+
+  const reloaded = applyRemoteWizardConversation({
+    localMessages: [{ id: 'fresh-welcome', role: 'assistant', text: 'Saludos', createdAt: 9 }],
+    localRevision: 0,
+    remoteMessages: [{
+      id: 'asst-saved', role: 'assistant', text: 'He encolado la exportación.', createdAt: 3,
+      cards: [{ id: 'card-saved', state: 'queued', taskId: 'export-99', executionKey: 'k-saved' }],
+    }],
+    remoteRevision: 4,
+  })
+  assert.equal(reloaded.source, 'remote')
+  assert.equal(reloaded.messages[0].cards[0].taskId, 'export-99')
+  assert.equal(reloaded.revision, 4)
+
+  const emptyRemote = applyRemoteWizardConversation({
+    localMessages,
+    localRevision: 1,
+    remoteMessages: [],
+    remoteRevision: 0,
+  })
+  assert.equal(emptyRemote.source, 'local')
+})
+
 test('execution cards expose five controls and keep the same id on poll', async () => {
   const { cardFromReport, applyPollToCard } = await import('../src/features/agent/executionCards.ts')
   const card = cardFromReport({
