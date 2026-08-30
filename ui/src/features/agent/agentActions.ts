@@ -1436,7 +1436,7 @@ export function isExplicitSfxGenerationRequest(request: string): boolean {
     && EXPLICIT_SFX_GENERATE.some(pattern => pattern.test(text))
 }
 
-const COMIC_LAUNCH_HOW = /\b(?:c[oó]mo|how(?:\s+do(?:\s+i)?)?)\b/i
+const COMIC_LAUNCH_HOW = /\b(?:c[oó]mo\s+(?:lo|la|las|los|puedo|se|lanz\w*|gener\w*|dibuj\w*|render\w*)\b|how(?:\s+do(?:\s+i)?)?)\b/i
 const COMIC_LAUNCH_COMMAND = [
   /\b(?:l[aá]nzalo|dib[uú]jalo|p[ií]ntalo|generalo|regeneralo|render[ií]zalo)\b/i,
   /\b(?:l[aá]nza|dibuja|pinta|genera|regenera|render(?:iza)?)\b[^.!?\n]*\b(?:c[oó]mic|vi[nñ]etas?|paneles?|p[aá]gina|artwork|dibujos?)\b/i,
@@ -1517,10 +1517,30 @@ export async function reconcileAgentTurnWithRequest(
       }],
     }
   }
-  if (isExplicitComicArtworkRequest(request, history)) {
+  const plannedComic = turn.actions.find((action): action is AgentCreateComicAction => action.type === 'create_comic')
+  const compoundComicRender = Boolean(plannedComic) && /\b(?:genera|dibuja|pinta|render(?:iza)?|generate|draw|render)\b[^.!?\n]*\b(?:im[aá]genes|artwork|vi[nñ]etas?|paneles?)\b/i.test(request)
+  if (isExplicitComicArtworkRequest(request, history) || compoundComicRender) {
+    const create = plannedComic
+    const requestedMiniMax = /\bminimax\b/i.test(request)
+    if (create) {
+      const prepared = requestedMiniMax
+        ? { ...create, imageProvider: 'minimax' as const, imageModel: 'image-01' }
+        : create
+      return {
+        reply: `Crearé “${prepared.title}” con sus ${prepared.pages.length || 1} páginas reales y después dibujaré todas las viñetas con ${requestedMiniMax ? 'MiniMax image-01' : 'el proveedor elegido'}. 🪄`,
+        actions: [prepared, {
+          type: 'generate_comic',
+          imageProvider: requestedMiniMax ? 'minimax' : 'keep',
+          imageModel: requestedMiniMax ? 'image-01' : '',
+          confirm: true,
+        }],
+      }
+    }
     return {
-      reply: 'Voy a dibujar las viñetas del cómic abierto. Irán a la cola local, una detrás de otra, en la misma GPU. 🪄',
-      actions: [{ type: 'generate_comic', imageProvider: 'keep', imageModel: '', confirm: true }],
+      reply: requestedMiniMax
+        ? 'Voy a dibujar todas las viñetas pendientes del cómic abierto con MiniMax image-01. 🪄'
+        : 'Voy a dibujar las viñetas del cómic abierto con su proveedor configurado. 🪄',
+      actions: [{ type: 'generate_comic', imageProvider: requestedMiniMax ? 'minimax' : 'keep', imageModel: requestedMiniMax ? 'image-01' : '', confirm: true }],
     }
   }
   if (isExplicitSfxGenerationRequest(request)) {

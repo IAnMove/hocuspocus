@@ -472,7 +472,7 @@ test('a filled comic includes Director brief, structure, continuity and editable
 })
 
 test('parses a multi-page MiniMax comic and a confirmed all-images render', async () => {
-  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
   const turn = parseAgentTurn(JSON.stringify({ reply: 'Creo y dibujo el grimorio.', actions: [{
     type: 'create_comic', title: 'Vida por etapas', synopsis: 'Biografía visual.', image_provider: 'minimax', model_type: 'image-01',
     comic_pages: [
@@ -484,6 +484,10 @@ test('parses a multi-page MiniMax comic and a confirmed all-images render', asyn
   assert.equal(turn.actions[0].pages.length, 2)
   assert.equal(turn.actions[0].imageProvider, 'minimax')
   assert.deepEqual(turn.actions[1], { type: 'generate_comic', imageProvider: 'minimax', imageModel: '', confirm: true })
+  const reconciled = await reconcileAgentTurnWithRequest('créalo de cero como nuevo cómic y genera las imágenes con MiniMax', { reply: 'Lo preparo.', actions: [turn.actions[0]] })
+  assert.deepEqual(reconciled.actions.map(action => action.type), ['create_comic', 'generate_comic'])
+  assert.equal(reconciled.actions[0].imageProvider, 'minimax')
+  assert.equal(reconciled.actions[1].imageModel, 'image-01')
 })
 
 test('drops cancel_task unless confirm is true and repairs an explicit cancel request', async () => {
