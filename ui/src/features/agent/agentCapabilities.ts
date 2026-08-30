@@ -123,6 +123,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['confirm'],
   },
   {
+    type: 'generate_comic_panel',
+    title: 'Regenerate one comic panel',
+    purpose: 'Generate only one addressed page/panel of the open comic and replace its current artwork without touching the rest.',
+    useWhen: 'The user explicitly asks to generate or regenerate a numbered panel or viñeta.',
+    risk: 'compute',
+    parameters: ['page_number', 'panel_number', 'confirm'],
+  },
+  {
     type: 'inspect_queue',
     title: 'Inspect the canonical queue',
     purpose: 'Refresh the real task list and open Activity so the user sees current jobs.',

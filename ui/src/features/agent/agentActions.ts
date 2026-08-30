@@ -186,6 +186,13 @@ export interface AgentGenerateComicAction {
   confirm: true
 }
 
+export interface AgentGenerateComicPanelAction {
+  type: 'generate_comic_panel'
+  pageNumber: number
+  panelNumber: number
+  confirm: true
+}
+
 export interface AgentInspectQueueAction {
   type: 'inspect_queue'
   scope: 'active' | 'all'
@@ -216,6 +223,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentCreateSeriesEpisodeAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
+  | AgentGenerateComicPanelAction
   | AgentInspectQueueAction
   | AgentCancelTaskAction
   | AgentResumeTaskAction
@@ -288,6 +296,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   createseriesepisode: 'create_series_episode',
   createcomic: 'create_comic',
   generatecomic: 'generate_comic',
+  generatecomicpanel: 'generate_comic_panel',
   inspectqueue: 'inspect_queue',
   canceltask: 'cancel_task',
   resumetask: 'resume_task',
@@ -394,6 +403,7 @@ const CANONICAL_FIELD_NAMES = [
   'target_duration_seconds', 'create_if_missing', 'known_universe',
   'queue_scope', 'task_id', 'confirm', 'characters', 'locations', 'outline_beats',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
+  'page_number', 'panel_number',
   'dialogue', 'sfx', 'scene', 'actions', 'reply',
 ] as const
 
@@ -646,6 +656,13 @@ function parseAction(value: unknown): AgentAction | null {
     if (raw.confirm !== true) return null
     return { type: 'generate_comic', confirm: true }
   }
+  if (type === 'generate_comic_panel') {
+    if (raw.confirm !== true) return null
+    const pageNumber = optionalPositiveNumber(raw.page_number, 1, 100, true)
+    const panelNumber = optionalPositiveNumber(raw.panel_number, 1, 100, true)
+    if (!pageNumber || !panelNumber) return null
+    return { type: 'generate_comic_panel', pageNumber, panelNumber, confirm: true }
+  }
   if (type === 'inspect_queue') {
     const scope = cleanString(raw.queue_scope, 12)
     return { type: 'inspect_queue', scope: scope === 'all' ? 'all' : 'active' }
@@ -770,10 +787,25 @@ export function isExplicitSfxGenerationRequest(request: string): boolean {
 
 const COMIC_LAUNCH_HOW = /\b(?:c[oó]mo|how(?:\s+do(?:\s+i)?)?)\b/i
 const COMIC_LAUNCH_COMMAND = [
-  /\b(?:l[aá]nzalo|dib[uú]jalo|p[ií]ntalo|generalo|render[ií]zalo)\b/i,
-  /\b(?:l[aá]nza|dibuja|pinta|genera|render(?:iza)?)\b[^.!?\n]*\b(?:c[oó]mic|vi[nñ]etas?|paneles?|p[aá]gina|artwork|dibujos?)\b/i,
-  /\b(?:generate|draw|render|launch)\b[^.!?\n]*\b(?:comic|panels?|page|artwork)\b/i,
+  /\b(?:l[aá]nzalo|dib[uú]jalo|p[ií]ntalo|generalo|regeneralo|render[ií]zalo)\b/i,
+  /\b(?:l[aá]nza|dibuja|pinta|genera|regenera|render(?:iza)?)\b[^.!?\n]*\b(?:c[oó]mic|vi[nñ]etas?|paneles?|p[aá]gina|artwork|dibujos?)\b/i,
+  /\b(?:generate|regenerate|draw|render|launch)\b[^.!?\n]*\b(?:comic|panels?|page|artwork)\b/i,
 ]
+
+function comicPanelTarget(
+  request: string,
+  history: ExampleConversation[],
+): { pageNumber: number; panelNumber: number } | null {
+  if (NEGATED_VIDEO_REQUEST.test(request) || COMIC_LAUNCH_HOW.test(request)) return null
+  if (!/\b(?:genera|regenera|dibuja|pinta|render(?:iza)?|generate|regenerate|draw|render)\b/i.test(request)) return null
+  const panel = request.match(/\b(?:vi[nñ]eta|panel)\s*(?:n(?:[úu]mero|[º°])?\s*)?#?\s*(\d{1,2})\b/i)
+  if (!panel || !inferComicContext(request, history)) return null
+  const page = request.match(/\bp[aá]gina\s*(?:n(?:[úu]mero|[º°])?\s*)?#?\s*(\d{1,2})\b/i)
+  return {
+    pageNumber: Math.max(1, Number(page?.[1] || 1)),
+    panelNumber: Math.max(1, Number(panel[1])),
+  }
+}
 
 export function isComicLaunchHowQuestion(request: string, history: ExampleConversation[] = []): boolean {
   const text = request.trim()
@@ -820,6 +852,18 @@ export async function reconcileAgentTurnWithRequest(
         'Las viñetas entran en la **misma GPU**, una detrás de otra, no en paralelo. No es un segundo motor.',
       ].join('\n\n'),
       actions: [{ type: 'open_tab', tab: 'comics' }],
+    }
+  }
+  const targetedComicPanel = comicPanelTarget(request, history)
+  if (targetedComicPanel) {
+    return {
+      reply: `Regeneraré sólo la viñeta ${targetedComicPanel.panelNumber} de la página ${targetedComicPanel.pageNumber}; las demás quedan intactas. 🪄`,
+      actions: [{
+        type: 'generate_comic_panel',
+        pageNumber: targetedComicPanel.pageNumber,
+        panelNumber: targetedComicPanel.panelNumber,
+        confirm: true,
+      }],
     }
   }
   if (isExplicitComicArtworkRequest(request, history)) {
@@ -928,7 +972,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'inspect_queue', 'cancel_task', 'resume_task'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'inspect_queue', 'cancel_task', 'resume_task'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -970,6 +1014,8 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           queue_scope: { type: 'string', enum: ['', 'active', 'all'] },
           task_id: { type: 'string', maxLength: 160 },
           confirm: { type: 'boolean' },
+          page_number: { type: 'integer', minimum: 0, maximum: 100 },
+          panel_number: { type: 'integer', minimum: 0, maximum: 100 },
           audio_sub_mode: { type: 'string', enum: ['', 'speech', 'music', 'sfx'] },
           preset: { type: 'string', maxLength: 40 },
           sfx_clips: {
@@ -1396,6 +1442,8 @@ export async function executeAgentActions(
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
                 ? 'Dibujando las viñetas del cómic…'
+              : action.type === 'generate_comic_panel'
+                ? `Regenerando la viñeta ${action.panelNumber} de la página ${action.pageNumber}…`
               : action.type === 'inspect_queue'
                 ? 'Consultando la cola canónica…'
                 : action.type === 'cancel_task'
@@ -1451,6 +1499,14 @@ export async function executeAgentActions(
         if (!action.confirm) throw new Error('Dibujar las viñetas requiere confirm=true.')
         const { generateFilledComicArtwork } = await import('./labActions')
         results.push({ action, ok: true, message: await generateFilledComicArtwork(onStep) })
+      } else if (action.type === 'generate_comic_panel') {
+        if (!action.confirm) throw new Error('Regenerar una viñeta requiere confirm=true.')
+        const { generateComicPanelArtwork } = await import('./labActions')
+        results.push({
+          action,
+          ok: true,
+          message: await generateComicPanelArtwork(action.pageNumber, action.panelNumber, onStep),
+        })
       } else if (action.type === 'inspect_queue') {
         const { inspectCanonicalQueue } = await import('./queueActions')
         results.push({ action, ok: true, message: await inspectCanonicalQueue(action.scope) })

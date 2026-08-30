@@ -989,7 +989,9 @@ ampliación.
 `prepare_image` abre Studio → Image, elige un modelo de familia imagen
 instalado/habilitado y rellena prompt, resolución y recuento. `start_generation`
 acepta esa preparación en el mismo turno. Una orden inequívoca (“hazme una
-imagen de X”) se repara en cliente como el vídeo. ## 27. Studio 3D (2026-08-30)
+imagen de X”) se repara en cliente como el vídeo.
+
+## 27. Studio 3D (2026-08-30)
 
 `prepare_3d` abre Studio → 3D (Hunyuan3D), elige un modelo de la familia
 `hunyuan3d` y rellena el prompt. `start_generation` llama a
@@ -1010,3 +1012,21 @@ schema ahora solo exige `type`; el parser acepta alias (`opentab`).
 - `queue_sfx_pack` encola varios one-shots MMAudio. Una petición explícita
   de efectos para un juego tipo Vampire Survivors rellena un pack de 10
   clips si el modelo no los mandó.
+
+## 28. Comics completos y generación operable (2026-08-30)
+
+`create_comic` crea un proyecto editable con premisa, biblia narrativa,
+estructura de página, mundo, reglas visuales, final, personajes completos,
+continuidad por viñeta, prompts, bocadillos, captions y efectos. También deja
+un plan Director aprobado y listo para generar.
+
+La pestaña Comics tiene ahora un botón principal **Generate comic**; no es
+necesario descubrir primero la subpestaña Director. Tanto ese botón como
+`generate_comic` llaman al mismo generador secuencial y a la misma cola. El
+botón avanzado **Generate all images** se conserva dentro de Director.
+
+`generate_comic_panel` recibe `page_number`, `panel_number` y `confirm=true`.
+Regenera únicamente esa imagen, sustituye el asset de la viñeta y conserva las
+demás. Las reconexiones y reintentos siguen el job ya persistido; una
+regeneración explícita no recupera por error una imagen antigua con el mismo
+prompt.

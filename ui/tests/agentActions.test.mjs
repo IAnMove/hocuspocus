@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'inspect_queue', 'cancel_task', 'resume_task'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'inspect_queue', 'cancel_task', 'resume_task'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -243,6 +243,24 @@ test('bare create asks instead of inventing, then an example follow-up fills a d
   ])
   assert.equal(launch.actions[0].type, 'generate_comic')
   assert.equal(launch.actions[0].confirm, true)
+
+  const single = await reconcileAgentTurnWithRequest('regenera la viñeta 2', { reply: 'Vale.', actions: [] }, [
+    { role: 'user', text: 'hazme un comic de ejemplo' },
+    { role: 'assistant', text: first.reply },
+  ])
+  assert.deepEqual(single.actions[0], {
+    type: 'generate_comic_panel', pageNumber: 1, panelNumber: 2, confirm: true,
+  })
+
+  const parsedSingle = parseAgentTurn(JSON.stringify({
+    reply: 'Regenero una viñeta.',
+    actions: [{
+      type: 'generate_comic_panel', page_number: 2, panel_number: 3, confirm: true,
+    }],
+  }))
+  assert.deepEqual(parsedSingle.actions[0], {
+    type: 'generate_comic_panel', pageNumber: 2, panelNumber: 3, confirm: true,
+  })
 })
 
 test('a video example fills a real prompt instead of asking, and a topical video still generates', async () => {

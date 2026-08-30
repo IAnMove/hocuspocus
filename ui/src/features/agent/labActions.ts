@@ -622,3 +622,24 @@ export async function generateFilledComicArtwork(
   if (!result.total) return 'Todas las viñetas de este cómic ya tenían dibujo.'
   return `He dibujado ${result.generated} viñetas en la cola local, una detrás de otra en la misma GPU. Aparecen dentro de cada recuadro al terminar.`
 }
+
+export async function generateComicPanelArtwork(
+  pageNumber: number,
+  panelNumber: number,
+  onProgress?: (message: string) => void,
+): Promise<string> {
+  showComics()
+  const [{ useComicStore }, { generateDirectorArtwork }] = await Promise.all([
+    import('../comics/store'),
+    import('../comics/generateArtwork'),
+  ])
+  if (!useComicStore.getState().project.director) {
+    throw new Error('El cómic abierto no tiene un plan de Director. Crea primero el borrador completo antes de regenerar una viñeta.')
+  }
+  const result = await generateDirectorArtwork({
+    force: true,
+    target: { pageNumber, panelNumber },
+    onProgress: (message, current, total) => onProgress?.(`${message} (${current}/${total})`),
+  })
+  return `He regenerado únicamente la viñeta ${panelNumber} de la página ${pageNumber}; las demás imágenes permanecen intactas (${result.generated}/${result.total}).`
+}

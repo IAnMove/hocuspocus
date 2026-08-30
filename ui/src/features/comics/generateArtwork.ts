@@ -137,22 +137,32 @@ function rememberPanelJob(panelId: string, jobId?: string): void {
 
 export async function generateDirectorArtwork(options: {
   force?: boolean
+  target?: { pageNumber: number; panelNumber: number }
   onProgress?: (message: string, current: number, total: number) => void
 }): Promise<{ generated: number; total: number }> {
   const state = useComicStore.getState()
   const director = state.project.director
   if (!director) throw new Error('Este cómic no tiene plan de Director; no puedo dibujar las viñetas.')
   const tasks: Array<{ pageId: string; panel: ComicPanelElement; plan: ComicPlanPanel }> = []
+  let targetExists = false
   director.plan.pages.forEach((planPage, pageIndex) => {
     const page = state.project.pages[pageIndex]
     const panels = page?.elements.filter((element): element is ComicPanelElement => element.type === 'panel' && !element.parentId)
       .sort((a, b) => a.zIndex - b.zIndex) || []
     planPage.panels.forEach((planned, index) => {
-      if ((options.force || !director.completedPanelIds.includes(planned.id)) && panels[index]) {
+      const targeted = !options.target || (
+        options.target.pageNumber === pageIndex + 1
+        && options.target.panelNumber === index + 1
+      )
+      if (targeted && panels[index]) targetExists = true
+      if (targeted && (options.force || options.target || !director.completedPanelIds.includes(planned.id)) && panels[index]) {
         tasks.push({ pageId: page.id, panel: panels[index], plan: planned })
       }
     })
   })
+  if (options.target && !targetExists) {
+    throw new Error(`No existe la viñeta ${options.target.panelNumber} en la página ${options.target.pageNumber}.`)
+  }
   if (!tasks.length) return { generated: 0, total: 0 }
 
   for (let index = 0; index < tasks.length; index += 1) {
@@ -191,6 +201,8 @@ export async function generateDirectorArtwork(options: {
     let asset = null
     if (
       currentDirector.provider === 'maestro'
+      && !options.force
+      && !options.target
       && !existingJobId
       && currentDirector.completedPanelIds.length > 0
       && currentDirector.imageModel
