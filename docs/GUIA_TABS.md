@@ -61,7 +61,7 @@ Dos botones arriba a la izquierda. `Studio` = un asset a mano. `Director` = un f
 
 ![Studio y galería All — era Maestro, no HocusPocus actual](../Maestro_UI_02.jpg)
 
-Foto HocusPocus pendiente: [director.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/director.png).
+![director](images/tabs/director.png)
 
 ---
 
@@ -113,7 +113,7 @@ No es la pestaña de galería `3D`. Aquí se **crea** el mesh.
 
 Si sale `Hunyuan3D runtime is not installed`, el runtime no está en esta máquina.
 
-Foto HocusPocus pendiente: [studio-3d.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/studio-3d.png).
+![studio-3d](images/tabs/studio-3d.png)
 
 ### `Edit`
 
@@ -188,7 +188,7 @@ Cómo usarlas:
 
 ![Galería All — era Maestro, no HocusPocus actual](../Maestro_UI_02.jpg)
 
-Foto HocusPocus pendiente: [gallery-all.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/gallery-all.png).
+![gallery-all](images/tabs/gallery-all.png)
 
 ---
 
@@ -202,7 +202,7 @@ Filtros de **montajes ya ensamblados** (Director / Series / Story Lab), no el ed
 
 Para montar a mano: `Video Editor`. Detalle de mezclas: [video-editor/HOWUSEIT.md](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/video-editor/HOWUSEIT.md).
 
-Foto HocusPocus pendiente: [videoclips-trailers-capitulos.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/videoclips-trailers-capitulos.png).
+![videoclips-trailers-capitulos](images/tabs/videoclips-trailers-capitulos.png)
 
 ---
 
@@ -220,7 +220,7 @@ Escenas JSON + preview PNG guardadas desde `3D Video` (`Save scene`). No es el c
 
 Vacío: «Save a scene from the 3D Video compositor.»
 
-Foto HocusPocus pendiente: [scenes.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/scenes.png).
+![scenes](images/tabs/scenes.png)
 
 ---
 
@@ -280,7 +280,7 @@ Canon que tiene que aguantar varios episodios.
 
 Los capítulos unidos aparecen en `Capítulos`.
 
-Foto HocusPocus pendiente: [series-lab.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/series-lab.png).
+![series-lab](images/tabs/series-lab.png)
 
 ---
 
@@ -296,7 +296,7 @@ Foto HocusPocus pendiente: [series-lab.png](https://github.com/IAnMove/loreframe
 
 El desplegable de la esquina (también titulado `Workspaces`) cambia la carpeta (`default`, `Create`, papelera salvo `default`) o entra en `Uploads` (solo lectura; las generaciones siguen yendo al workspace real).
 
-Foto HocusPocus pendiente: [workspaces.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/workspaces.png).
+![workspaces](images/tabs/workspaces.png)
 
 ---
 
@@ -313,7 +313,7 @@ De una foto a órbita 360 y, si quieres, mesh Hunyuan.
 7. `Generar Hunyuan3D` cuando hay 4 vistas.
 8. El GLB sale en la galería `3D`. `Create / open CharacterKit Face Rig` salta a `3D Video` (puppet 2D; no es este flujo).
 
-Foto HocusPocus pendiente: [character-creator.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/character-creator.png).
+![character-creator](images/tabs/character-creator.png)
 
 ---
 
@@ -327,7 +327,7 @@ Biblioteca de prompts visuales (fuente MiniMax) para copiar, no un editor de CSS
 
 El selector de workspace de la barra superior **no** se muestra en esta pestaña.
 
-Foto HocusPocus pendiente: [hoja-de-estilos.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/hoja-de-estilos.png).
+![hoja-de-estilos](images/tabs/hoja-de-estilos.png)
 
 ---
 
@@ -390,7 +390,7 @@ Compositor por capas (imágenes, vídeos, GLB, cámara, atmósfera). No es MiniM
 5. Elige assets (`Character / subject`, `Background`, `Choose asset…`).
 6. `Save scene` deja un JSON en `Scenes`. `Export MP4` graba el canvas del navegador (deja la pestaña abierta) y el MP4 va a `Videos`.
 
-Foto HocusPocus pendiente: [3d-video.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/3d-video.png).
+![3d-video](images/tabs/3d-video.png)
 
 ---
 
@@ -405,7 +405,7 @@ Rig procedural de un GLB estático. Cabecera: `Rig & Animate`.
 5. `Rig & animate`. Cancela con `Cancel rigging`.
 6. `Export animated GLB`. Luego puedes llevarlo a `3D Video`.
 
-Foto HocusPocus pendiente: [animate.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/animate.png).
+![animate](images/tabs/animate.png)
 
 ---
 
@@ -413,7 +413,7 @@ Foto HocusPocus pendiente: [animate.png](https://github.com/IAnMove/loreframe-st
 
 Filtro de salidas de Studio → `Edit` (`Retake`, `Outpaint`, `Repaint`, etc.). Para **hacer** un edit, usa Studio → `Edit`.
 
-Foto HocusPocus pendiente: [edits.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/edits.png).
+![edits](images/tabs/edits.png)
 
 ---
 
@@ -421,7 +421,7 @@ Foto HocusPocus pendiente: [edits.png](https://github.com/IAnMove/loreframe-stud
 
 Filtro de secuencias multi-clip ya ensambladas. Para **generar** varias tomas a mano: Studio → `Video` → `Multi-Shot`.
 
-Foto HocusPocus pendiente: [multi-clip.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/multi-clip.png).
+![multi-clip](images/tabs/multi-clip.png)
 
 ---
 
@@ -429,7 +429,7 @@ Foto HocusPocus pendiente: [multi-clip.png](https://github.com/IAnMove/loreframe
 
 Ítems marcados con el corazón (`Add to favorites` / `Remove from favorites`). Los favoritos son **por carpeta de workspace**.
 
-Foto HocusPocus pendiente: [favorites.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/favorites.png).
+![favorites](images/tabs/favorites.png)
 
 ---
 
@@ -451,7 +451,7 @@ Barra inferior izquierda.
 
 El overlay `Director video workflows` / `Video workflows` sigue en el código (selector `Select an independent creation...`, `Resume`). **No hay un botón visible en el pie que lo abra hoy.** Para pipelines usa la pestaña `Workspaces`. `Productions` como nombre de UI es la sección de Story Lab.
 
-Foto HocusPocus pendiente: [activity-footer.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/activity-footer.png).
+![activity-footer](images/tabs/activity-footer.png)
 
 ---
 
@@ -474,4 +474,4 @@ Dos pestañas:
 - `Voice Reference (ID-LoRA)`.
 - `Beta Features` → `Show in-development features` (APIs externas de escritura, Prompt Enhancer, `Inpaint`).
 
-Foto HocusPocus pendiente: [settings.png](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/images/tabs/settings.png).
+![settings](images/tabs/settings.png)
