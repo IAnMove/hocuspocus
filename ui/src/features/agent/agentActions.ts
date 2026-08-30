@@ -1,6 +1,6 @@
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
 import { comicArtworkInventory } from '../comics/generateArtwork'
-import { useComicStore } from '../comics/store'
+import { buildWizardLabSnapshots, comicLabSnapshot } from './wizardContext'
 import type { AspectRatio, MediaFilter, ModelDef, ResolutionPreset } from '../../types'
 import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
 import {
@@ -568,6 +568,47 @@ export interface AgentAppSnapshot {
   }
   director?: {
     pipeline_id: string
+    state: string
+  }
+  story?: {
+    project_id: string
+    title: string
+    project_type: string
+    characters: number
+    productions: number
+    visual_jobs: number
+    state: string
+  }
+  series?: {
+    series_id: string
+    title: string
+    episode_id: string
+    episode_title: string
+    shots: number
+    approved: number
+    failed: number
+    state: string
+  }
+  video_3d?: {
+    scene_id: string
+    title: string
+    layers: number
+    state: string
+  }
+  character_kit?: {
+    kit_id: string
+    title: string
+    poses: number
+    mouth: number
+    eyes: number
+    state: string
+  }
+  video_editor?: {
+    project_id: string
+    title: string
+    clips: number
+    duration: number
+    export_job: string
     state: string
   }
 }
@@ -2077,26 +2118,12 @@ export function buildAgentAppSnapshot(): AgentAppSnapshot {
         file_count: workspace.file_count || 0,
       })),
     },
-    comic: comicContextSnapshot(),
+    comic: comicLabSnapshot(),
     director: {
       pipeline_id: state.pipelineId || '',
       state: state.pipelineStatus?.status || (state.pipelineId ? 'running' : ''),
     },
-  }
-}
-
-function comicContextSnapshot(): AgentAppSnapshot['comic'] | undefined {
-  const inventory = comicArtworkInventory(useComicStore.getState().project)
-  if (!inventory.projectId) return undefined
-  return {
-    project_id: inventory.projectId,
-    title: inventory.title,
-    pages: inventory.pages,
-    panels: inventory.panels,
-    completed: inventory.completed,
-    failed: inventory.failed,
-    provider: inventory.provider,
-    active_page: inventory.activePage,
+    ...buildWizardLabSnapshots(),
   }
 }
 
