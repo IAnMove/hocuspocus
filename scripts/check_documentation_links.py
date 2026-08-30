@@ -48,9 +48,9 @@ def main() -> int:
     issue_config = (ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml").read_text(
         encoding="utf-8"
     )
-    expected_discussions = "https://github.com/IAnMove/loreframe-studio/discussions"
+    expected_discussions = "https://github.com/IAnMove/hocuspocus/discussions"
     if expected_discussions not in issue_config:
-        errors.append("issue template: Loreframe Lab Discussions URL is missing")
+        errors.append("issue template: HocusPocus Discussions URL is missing")
     if "https://github.com/Blizaine/Maestro/discussions" in issue_config:
         errors.append("issue template: stale upstream Discussions URL remains")
 

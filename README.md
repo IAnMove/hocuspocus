@@ -413,7 +413,7 @@ The first video is always the slow one: install is ~10–20 min, then the first 
 ## Install
 
 1. Install [Pinokio](https://pinokio.computer).
-2. In Pinokio, open the **Discover** tab and paste `https://github.com/IAnMove/loreframe-studio` — or click the **Download** button on the [HocusPocus Studio repo page](https://github.com/IAnMove/loreframe-studio).
+2. In Pinokio, open the **Discover** tab and paste `https://github.com/IAnMove/hocuspocus` — or click the **Download** button on the [HocusPocus Studio repo page](https://github.com/IAnMove/hocuspocus).
 3. Click **Install**. The launcher will:
    - Create a Python virtual environment in `app/env/`
    - Install all Python dependencies (torch, xformers, transformers, fastapi, …)
@@ -483,4 +483,4 @@ Third-party models, weights, and components keep their own licenses — review t
 
 ## Issues
 
-Bug reports and feature requests: [github.com/IAnMove/loreframe-studio/issues](https://github.com/IAnMove/loreframe-studio/issues).
+Bug reports and feature requests: [github.com/IAnMove/hocuspocus/issues](https://github.com/IAnMove/hocuspocus/issues).
