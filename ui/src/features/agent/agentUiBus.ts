@@ -1,7 +1,7 @@
 import type { SeriesJobStatus } from '../series/types'
 import type { SeriesAssemblyJob } from '../series/assemblyContract'
 
-export type AgentStorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'productions'
+export type AgentStorySection = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'trailer' | 'productions' | 'assembly'
 export type AgentSeriesSection = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
 export type AgentSeriesReviewView = 'assembly' | 'history' | 'finish'
 

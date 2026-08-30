@@ -1259,3 +1259,11 @@ Ambas órdenes viajan por una cola diferida del `agentUiBus`, de modo que no se 
 `export_3d_scene` completa el ciclo de la escena y exige `confirm=true`. Puede validar `scene_name` contra la escena abierta, rechaza escenas sin capas visuales visibles y abre Video 3D antes de actuar. Después reutiliza exactamente la ruta del botón **Export MP4**: espera a que los `model-viewer` estén pintados, renderiza cada frame al FPS de la escena, codifica mediante WebCodecs o la compatibilidad disponible y publica el resultado mediante `/api/v1/scenes/recordings` en el workspace activo.
 
 La promesa del action bus no se resuelve hasta que el backend devuelve el output concreto. Por ello el Wizard sólo dice **terminado y publicado** con un nombre de archivo real; nunca llama “encolado” a este render local. Los estados `publishing` y `recording` mantienen los controles visibles bloqueados mientras trabaja, y cualquier fallo real se devuelve al chat. Durante el desarrollo no se ejecutó ninguna captura ni se consumió una generación GPU.
+
+## 49. Wizard: selección y aprobación de referencias de Story Lab
+
+`approve_story_visuals` permite escoger assets visuales ya existentes mediante una lista estructurada. Cada elemento contiene `target_kind` (`world`, `location` o `character`), el nombre exacto del destino, el nombre exacto del asset y si debe ser la identidad `primary` de un personaje. La acción exige `confirm=true`, resuelve historia, assets y destinos sin coincidencias parciales, y rechaza ausencias o nombres duplicados antes de guardar nada.
+
+El asset queda aprobado globalmente y vinculado al mundo, localización o personaje indicado. Para personajes, la primera referencia elegida se convierte en primaria si todavía no había una; `primary=true` permite cambiarla explícitamente. Esto no aprueba automáticamente toda la sección Characters: la validación canónica sigue perteneciendo a `approve_story_section`.
+
+El guardado usa la revisión CAS de la biblioteca, incrementa las versiones de World/Characters cuando cambian sus vínculos e invalida únicamente las aprobaciones de texto afectadas. Una repetición exacta es idempotente y sólo abre `Story Lab → Assets`. La navegación del Wizard reconoce ahora también Assets, Music, Trailer y Assembly, además de las secciones que ya controlaba.

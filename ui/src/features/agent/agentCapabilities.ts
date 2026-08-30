@@ -69,7 +69,7 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
   {
     type: 'open_story_section',
     title: 'Open a Story Lab section',
-    purpose: 'Open Story Lab and select Overview, World, Characters, Relationships, Structure or Productions.',
+    purpose: 'Open any real Story Lab section, including its visual assets, music, production and assembly views.',
     useWhen: 'The user asks for a specific part of Story Lab or that section helps explain the next step.',
     risk: 'read',
     parameters: ['story_section'],
@@ -129,6 +129,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     useWhen: 'The user explicitly asks to approve overview, world, characters, relationships or structure after review.',
     risk: 'edit',
     parameters: ['target_story_title', 'story_section', 'confirm'],
+  },
+  {
+    type: 'approve_story_visuals',
+    title: 'Attach and approve Story visual references',
+    purpose: 'Resolve existing Story assets and bind approved references to the world, exact locations or exact characters, including a primary identity choice.',
+    useWhen: 'The user explicitly chooses which existing images should become production references.',
+    risk: 'edit',
+    parameters: ['target_story_title', 'story_visual_selections', 'confirm'],
   },
   {
     type: 'stage_story_comic',

@@ -78,7 +78,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -155,6 +155,25 @@ test('requires confirmation and an approvable Story Lab section', async () => {
     targetStoryTitle: 'La torre de sal',
     section: 'world',
     confirm: true,
+  }])
+})
+
+test('parses confirmed exact Story visual reference selections', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({ reply: 'Elijo las referencias.', actions: [{
+    type: 'approve_story_visuals', target_story_title: 'La torre de sal', confirm: true,
+    story_visual_selections: [
+      { target_kind: 'world', target_name: '', asset_name: 'Costa nocturna', primary: false },
+      { target_kind: 'character', target_name: 'Iria', asset_name: 'Iria frontal', primary: true },
+      { target_kind: 'location', target_name: '', asset_name: 'Faro', primary: false },
+    ],
+  }] }))
+  assert.deepEqual(turn.actions, [{
+    type: 'approve_story_visuals', targetStoryTitle: 'La torre de sal', confirm: true,
+    selections: [
+      { targetKind: 'world', targetName: '', assetName: 'Costa nocturna', primary: false },
+      { targetKind: 'character', targetName: 'Iria', assetName: 'Iria frontal', primary: true },
+    ],
   }])
 })
 

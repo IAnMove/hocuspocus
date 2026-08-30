@@ -2,6 +2,7 @@ import { useStore } from '../../stores/useStore'
 import type {
   AgentApplyStoryProposalAction,
   AgentApproveStorySectionAction,
+  AgentApproveStoryVisualsAction,
   AgentCreateComicAction,
   AgentGenerateStorySectionAction,
   AgentGenerateSeriesPlanAction,
@@ -723,6 +724,114 @@ export async function approveStorySection(action: AgentApproveStorySectionAction
   showLab('stories')
   openAgentStorySection(action.section)
   return `He validado, aprobado y guardado Story Lab → ${action.section} para “${project.title}”.`
+}
+
+export async function approveStoryVisuals(action: AgentApproveStoryVisualsAction): Promise<string> {
+  if (!action.confirm) throw new Error('Aprobar referencias visuales requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useStoryStore, normalizeStoryProject }, { changedSections }, api] = await Promise.all([
+    import('../stories/store'),
+    import('../stories/model'),
+    import('../../api/client'),
+  ])
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const current = useStoryStore.getState()
+  if (current.libraryConflicts.length) {
+    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de aprobar referencias visuales.')
+  }
+  const target = action.targetStoryTitle
+    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
+    : current.project
+  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (current.activeProjectOperations[target.id]) {
+    throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+  }
+
+  const candidate = structuredClone(target)
+  let changed = false
+  const labels: string[] = []
+  for (const selection of action.selections) {
+    const assetMatches = Object.values(candidate.assets).filter(asset => normalizeName(asset.name) === normalizeName(selection.assetName))
+    if (!assetMatches.length) throw new Error(`No existe el asset visual “${selection.assetName}” en “${target.title}”.`)
+    if (assetMatches.length > 1) throw new Error(`Hay varios assets llamados “${selection.assetName}”; renómbralos para elegir uno sin ambigüedad.`)
+    const asset = assetMatches[0]
+    if (asset.approval !== 'approved') { asset.approval = 'approved'; changed = true }
+
+    if (selection.targetKind === 'world') {
+      if (selection.primary) throw new Error('primary sólo puede usarse con una referencia de personaje.')
+      if (!candidate.world.referenceAssetIds.includes(asset.id)) {
+        candidate.world.referenceAssetIds.push(asset.id); changed = true
+      }
+      labels.push(`${asset.name} → mundo`)
+      continue
+    }
+
+    if (selection.targetKind === 'location') {
+      if (selection.primary) throw new Error('primary sólo puede usarse con una referencia de personaje.')
+      const matches = candidate.world.locations.filter(location => normalizeName(location.name) === normalizeName(selection.targetName))
+      if (!matches.length) throw new Error(`No existe la localización “${selection.targetName}” en “${target.title}”.`)
+      if (matches.length > 1) throw new Error(`Hay varias localizaciones llamadas “${selection.targetName}”; renómbralas antes de elegir referencias.`)
+      if (!matches[0].referenceAssetIds.includes(asset.id)) {
+        matches[0].referenceAssetIds.push(asset.id); changed = true
+      }
+      labels.push(`${asset.name} → ${matches[0].name}`)
+      continue
+    }
+
+    const matches = candidate.characters.filter(character => normalizeName(character.name) === normalizeName(selection.targetName))
+    if (!matches.length) throw new Error(`No existe el personaje “${selection.targetName}” en “${target.title}”.`)
+    if (matches.length > 1) throw new Error(`Hay varios personajes llamados “${selection.targetName}”; renómbralos antes de elegir su identidad.`)
+    const character = matches[0]
+    if (!character.referenceAssetIds.includes(asset.id)) {
+      character.referenceAssetIds.push(asset.id); changed = true
+    }
+    if (selection.primary || !character.primaryReferenceAssetId) {
+      if (character.primaryReferenceAssetId !== asset.id) { character.primaryReferenceAssetId = asset.id; changed = true }
+    }
+    labels.push(`${asset.name} → ${character.name}${character.primaryReferenceAssetId === asset.id ? ' (primaria)' : ''}`)
+  }
+
+  showLab('stories')
+  openAgentStorySection('assets')
+  if (!changed) {
+    useStoryStore.setState({ project: target, dirty: false })
+    return `Las referencias solicitadas de “${target.title}” ya estaban vinculadas y aprobadas; he abierto Story Lab → Assets.`
+  }
+
+  const normalized = normalizeStoryProject(candidate)
+  const changedCanonSections = changedSections(target, normalized)
+  const sectionVersions = { ...target.sectionVersions }
+  const approvals = { ...normalized.approvals }
+  changedCanonSections.forEach(section => {
+    sectionVersions[section] += 1
+    delete approvals[section]
+  })
+  const project = normalizeStoryProject({
+    ...normalized,
+    revision: target.revision + 1,
+    sectionVersions,
+    approvals,
+    updatedAt: new Date().toISOString(),
+  })
+  const library = await api.saveStoryLibrary(workspace, {
+    version: 2,
+    revision: current.libraryRevision,
+    activeId: project.id,
+    projects: { ...current.projects, [project.id]: project },
+  })
+  useStoryStore.setState({
+    workspace,
+    project: library.projects[project.id],
+    projects: library.projects,
+    libraryRevision: library.revision,
+    dirty: false,
+    hydrated: false,
+    loading: false,
+    saveError: null,
+    libraryConflicts: [],
+  })
+  await useStoryStore.getState().loadWorkspace(workspace)
+  return `He vinculado y aprobado ${labels.length} referencia${labels.length === 1 ? '' : 's'} en “${project.title}”: ${labels.join(' · ')}.`
 }
 
 export async function stageStoryComic(action: AgentStageStoryComicAction): Promise<string> {

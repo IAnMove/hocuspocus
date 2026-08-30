@@ -183,6 +183,20 @@ export interface AgentApproveStorySectionAction {
   confirm: true
 }
 
+export interface AgentStoryVisualSelection {
+  targetKind: 'world' | 'location' | 'character'
+  targetName: string
+  assetName: string
+  primary: boolean
+}
+
+export interface AgentApproveStoryVisualsAction {
+  type: 'approve_story_visuals'
+  targetStoryTitle: string
+  selections: AgentStoryVisualSelection[]
+  confirm: true
+}
+
 export interface AgentStageStoryComicAction {
   type: 'stage_story_comic'
   targetStoryTitle: string
@@ -414,6 +428,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateStorySectionAction
   | AgentApplyStoryProposalAction
   | AgentApproveStorySectionAction
+  | AgentApproveStoryVisualsAction
   | AgentStageStoryComicAction
   | AgentStageStoryVideoAction
   | AgentCreateSeriesEpisodeAction
@@ -502,6 +517,7 @@ const STORY_GENERATION_SCOPES = new Set<AgentGenerateStorySectionAction['scope']
 const STORY_APPROVAL_SECTIONS = new Set<AgentApproveStorySectionAction['section']>([
   'overview', 'world', 'characters', 'relationships', 'structure',
 ])
+const STORY_VISUAL_TARGETS = new Set<AgentStoryVisualSelection['targetKind']>(['world', 'location', 'character'])
 const SERIES_PLAN_SCOPES = new Set<AgentGenerateSeriesPlanAction['scope']>([
   'outline', 'script', 'shots', 'complete',
 ])
@@ -538,6 +554,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   generatestorysection: 'generate_story_section',
   applystoryproposal: 'apply_story_proposal',
   approvestorysection: 'approve_story_section',
+  approvestoryvisuals: 'approve_story_visuals',
   stagestorycomic: 'stage_story_comic',
   stagestoryvideo: 'stage_story_video',
   createseriesepisode: 'create_series_episode',
@@ -675,7 +692,8 @@ const CANONICAL_FIELD_NAMES = [
   'queue_scope', 'task_id', 'job_id', 'shot_ids', 'shot_numbers', 'attempt_id', 'render_mode',
   'review_decision', 'review_scope', 'canon_decision', 'canon_item_ids', 'production_kind',
   'scene_name', 'layer_name', 'audio_output_name', 'cue_source', 'rhythm_profile', 'intensity',
-  'confirm', 'characters', 'locations', 'outline_beats',
+  'confirm', 'characters', 'locations', 'outline_beats', 'story_visual_selections',
+  'target_kind', 'target_name', 'asset_name', 'primary',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
@@ -733,7 +751,27 @@ function canonicalRecord(raw: Record<string, unknown>): Record<string, unknown> 
         : item
     ))
   }
+  if (Array.isArray(next.story_visual_selections)) {
+    next.story_visual_selections = next.story_visual_selections.map(item => (
+      item && typeof item === 'object' && !Array.isArray(item)
+        ? canonicalRecord(item as Record<string, unknown>)
+        : item
+    ))
+  }
   return next
+}
+
+function parseStoryVisualSelections(value: unknown): AgentStoryVisualSelection[] {
+  return Array.isArray(value) ? value.slice(0, 40).flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = canonicalRecord(item as Record<string, unknown>)
+    const targetKind = cleanString(raw.target_kind, 30) as AgentStoryVisualSelection['targetKind']
+    const assetName = cleanString(raw.asset_name, 300)
+    if (!STORY_VISUAL_TARGETS.has(targetKind) || !assetName) return []
+    const targetName = cleanString(raw.target_name, 300)
+    if (targetKind !== 'world' && !targetName) return []
+    return [{ targetKind, targetName, assetName, primary: raw.primary === true }]
+  }) : []
 }
 
 function parseComicPanels(value: unknown): AgentComicPanel[] {
@@ -948,6 +986,17 @@ function parseAction(value: unknown): AgentAction | null {
       type: 'approve_story_section',
       targetStoryTitle: cleanString(raw.target_story_title, 300),
       section,
+      confirm: true,
+    }
+  }
+  if (type === 'approve_story_visuals') {
+    if (raw.confirm !== true) return null
+    const selections = parseStoryVisualSelections(raw.story_visual_selections)
+    if (!selections.length) return null
+    return {
+      type: 'approve_story_visuals',
+      targetStoryTitle: cleanString(raw.target_story_title, 300),
+      selections,
       confirm: true,
     }
   }
@@ -1519,7 +1568,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1615,6 +1664,19 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
                 duration_seconds: { type: 'number', minimum: 0, maximum: 20 },
               },
               required: ['name', 'prompt', 'duration_seconds'],
+            },
+          },
+          story_visual_selections: {
+            type: 'array', maxItems: 40,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                target_kind: { type: 'string', enum: ['world', 'location', 'character'] },
+                target_name: { type: 'string', maxLength: 300 },
+                asset_name: { type: 'string', maxLength: 300 },
+                primary: { type: 'boolean' },
+              },
+              required: ['target_kind', 'target_name', 'asset_name', 'primary'],
             },
           },
           characters: {
@@ -2058,6 +2120,8 @@ export async function executeAgentActions(
               ? 'Aplicando la propuesta revisable al canon de Story Lab…'
             : action.type === 'approve_story_section'
               ? `Validando y aprobando Story Lab → ${action.section}…`
+            : action.type === 'approve_story_visuals'
+              ? 'Vinculando y aprobando referencias visuales de Story Lab…'
             : action.type === 'stage_story_comic'
               ? 'Adaptando la historia a Comic Director…'
             : action.type === 'stage_story_video'
@@ -2159,6 +2223,9 @@ export async function executeAgentActions(
       } else if (action.type === 'approve_story_section') {
         const { approveStorySection } = await import('./labActions')
         results.push({ action, ok: true, message: await approveStorySection(action) })
+      } else if (action.type === 'approve_story_visuals') {
+        const { approveStoryVisuals } = await import('./labActions')
+        results.push({ action, ok: true, message: await approveStoryVisuals(action) })
       } else if (action.type === 'stage_story_comic') {
         const { stageStoryComic } = await import('./labActions')
         results.push({ action, ok: true, message: await stageStoryComic(action) })
