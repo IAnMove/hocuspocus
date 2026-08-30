@@ -8,7 +8,7 @@ HocusPocus exists for creators who do not want a one-off prompt machine. It is a
 
 ## First steps: guide to every section
 
-Guía de usuario tab a tab (español de España, capturas y huecos para fotos nuevas): **[docs/GUIA_TABS.md](docs/GUIA_TABS.md)**.
+Guía de usuario tab a tab (español de España, capturas y huecos para fotos nuevas): **[docs/GUIA_TABS.md](https://github.com/IAnMove/loreframe-studio/blob/cursor/guia-tabs-usuario-3905/docs/GUIA_TABS.md)**.
 
 1. **Studio (sidebar)** — choose an image, video or audio model; write the prompt; add references/LoRAs; then generate. Use it when you want direct, manual control over one asset. The output appears in the gallery and is reusable everywhere else.
 2. **Director (sidebar)** — select Music Video, Short Film, Trailer or a story-driven workflow and describe the outcome. The LLM turns the brief into reviewable shots, prompts and references. Choose manual review for control or automatic mode for a complete recoverable pipeline.
