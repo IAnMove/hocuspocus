@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowUp, Loader2, Maximize2, Minimize2, Sparkles, Trash2, X } from 'lucide-react'
-import { generateLlmText, type CanonicalTask } from '../../api/client'
+import { fetchWizardConversation, generateLlmText, saveWizardConversation, type CanonicalTask } from '../../api/client'
 import { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 import { buildAgentTurnPrompt, HOCUSPOCUS_AGENT_SYSTEM_PROMPT, type AgentConversationEntry } from './agentKnowledge'
 import {
@@ -85,8 +85,10 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   const [busyMessage, setBusyMessage] = useState('Consultando el grimorio de HocusPocus…')
   const [expanded, setExpanded] = useState(false)
   const [errorCardId, setErrorCardId] = useState<string | null>(null)
+  const [conversationRevision, setConversationRevision] = useState(0)
   const endRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
+  const conversationRevisionRef = useRef(0)
   const activeCount = useMemo(() => tasks.filter(task => ACTIVE.has(task.status) && !task.parent_id).length, [tasks])
   const latestTask = useMemo(() => [...tasks].sort((left, right) => right.updated_at - left.updated_at)[0], [tasks])
 
@@ -98,7 +100,53 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   useEffect(() => {
     writeMessages(conversationWorkspace, messages)
     endRef.current?.scrollIntoView({ block: 'end' })
+    const cards = messages.flatMap(message => message.cards || [])
+    void saveWizardConversation(conversationWorkspace, {
+      version: 1,
+      revision: conversationRevisionRef.current,
+      messages,
+      executions: cards,
+    }).then(saved => {
+      conversationRevisionRef.current = saved.revision
+      if (mountedRef.current) setConversationRevision(saved.revision)
+    }).catch(() => {
+      // Local storage still holds the turn if the workspace file cannot be written.
+    })
   }, [conversationWorkspace, messages])
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchWizardConversation(workspace).then(payload => {
+      if (cancelled || busy) return
+      const remote = Array.isArray(payload.messages) ? payload.messages : []
+      const restored = remote.filter((message): message is AgentMessage => (
+        Boolean(message)
+        && typeof message.id === 'string'
+        && (message.role === 'user' || message.role === 'assistant')
+        && typeof message.text === 'string'
+      )).map(message => ({
+        ...message,
+        createdAt: typeof message.createdAt === 'number' ? message.createdAt : Date.now(),
+        cards: Array.isArray(message.cards) && message.cards.length
+          ? message.cards
+          : undefined,
+      }))
+      if (!restored.length && payload.executions?.length) {
+        restored.push({
+          ...welcomeMessage(),
+          cards: payload.executions as AgentMessage['cards'],
+        })
+      }
+      if (restored.length) {
+        setMessages(restored.slice(-40))
+        conversationRevisionRef.current = payload.revision || 0
+        setConversationRevision(payload.revision || 0)
+      }
+    }).catch(() => {
+      // Fall back to the local cache already loaded for this workspace.
+    })
+    return () => { cancelled = true }
+  }, [workspace, busy])
 
   useEffect(() => {
     if (workspace === conversationWorkspace) return

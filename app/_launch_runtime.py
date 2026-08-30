@@ -31265,6 +31265,60 @@ def _story_library_revision_conflict(exc) -> HTTPException:
     )
 
 
+@api.get("/api/v1/wizard/conversations")
+def get_wizard_conversation(workspace: str | None = None):
+    """Load the durable Wizard conversation for one workspace."""
+    from services.wizard_conversations import read_conversation
+
+    target_workspace = _story_library_workspace(workspace)
+    try:
+        with _story_library_lock:
+            return read_conversation(_workspace_dir(target_workspace))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not read the Wizard conversation: {exc}",
+        ) from exc
+
+
+@api.put("/api/v1/wizard/conversations")
+def put_wizard_conversation(body: dict):
+    """Atomically replace a workspace Wizard conversation."""
+    from services.wizard_conversations import (
+        WizardConversationRevisionConflict,
+        write_conversation,
+    )
+
+    target_workspace = _story_library_workspace(body.get("workspace"))
+    try:
+        with _story_library_lock:
+            base_revision = body.get("baseRevision")
+            if type(base_revision) is not int:
+                base_revision = 0
+            return write_conversation(
+                _workspace_dir(target_workspace),
+                body.get("conversation"),
+                base_revision=base_revision,
+            )
+    except WizardConversationRevisionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "wizard_conversation_revision_conflict",
+                "message": str(exc),
+                "expectedRevision": exc.expected,
+                "currentRevision": exc.current,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not save the Wizard conversation: {exc}",
+        ) from exc
+
+
 @api.get("/api/v1/stories/library")
 def get_story_library(workspace: str | None = None):
     """Load the durable Story Lab library for one workspace."""

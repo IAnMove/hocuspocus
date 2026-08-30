@@ -2821,6 +2821,47 @@ export interface StoryLibraryPayload {
   projects: Record<string, import('../features/stories/types').StoryProject>
 }
 
+export interface WizardConversationPayload {
+  version: 1
+  revision: number
+  messages: Array<Record<string, unknown>>
+  executions: Array<Record<string, unknown>>
+  requestedActions?: unknown[]
+  executedActions?: unknown[]
+  confirmations?: unknown[]
+}
+
+export async function fetchWizardConversation(workspace: string): Promise<WizardConversationPayload> {
+  const response = await fetch(
+    `${BASE}/api/v1/wizard/conversations?workspace=${encodeURIComponent(workspace)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not load Wizard conversation' }))
+    throw new Error(error.detail || 'Could not load Wizard conversation')
+  }
+  return response.json()
+}
+
+export async function saveWizardConversation(
+  workspace: string,
+  conversation: WizardConversationPayload,
+): Promise<WizardConversationPayload> {
+  const response = await fetch(`${BASE}/api/v1/wizard/conversations`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, baseRevision: conversation.revision, conversation }),
+  })
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    if (error && typeof error === 'object') {
+      const detail = (error as Record<string, unknown>).detail
+      if (typeof detail === 'string') throw new Error(detail)
+    }
+    throw new Error('Could not save Wizard conversation')
+  }
+  return response.json()
+}
+
 export async function fetchStoryLibrary(workspace: string): Promise<StoryLibraryPayload> {
   const response = await fetch(
     `${BASE}/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`,
