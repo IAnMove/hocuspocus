@@ -1,6 +1,6 @@
-import { fetchOutputs, fetchVideoEditorExport, getVideoEditorThumbnailUrl, probeVideoEditorClip, startVideoEditorExport, type ApiOutput } from '../../api/client'
+import { fetchOutputs, fetchVideoEditorExport, getVideoEditorThumbnailUrl, probeVideoEditorAudio, probeVideoEditorClip, startVideoEditorExport, type ApiOutput } from '../../api/client'
 import { useStore } from '../../stores/useStore'
-import { clipId, loadEditorDraft, persistEditorDraft, RESOLUTIONS } from '../video-editor/editorDraft'
+import { clipId, loadEditorDraft, persistEditorDraft, RESOLUTIONS, type EditorSoundtrack } from '../video-editor/editorDraft'
 import { sequenceTotalDuration } from '../video-editor/editorTimeline'
 import type { EditorClip } from '../video-editor/editorClipNormalization'
 import { executionKey, executionReport, rememberExecution, reuseExecution, type AgentExecutionReport } from './agentContract'
@@ -69,8 +69,14 @@ function loadDraft() {
   return loadEditorDraft(workspaceName())
 }
 
-function saveDraft(clips: EditorClip[], projectName: string, resolution = loadDraft().resolution, fps = loadDraft().fps): void {
-  persistEditorDraft(clips, projectName, resolution, fps, workspaceName())
+function saveDraft(
+  clips: EditorClip[],
+  projectName: string,
+  resolution = loadDraft().resolution,
+  fps = loadDraft().fps,
+  soundtrack: EditorSoundtrack | null | undefined = undefined,
+): void {
+  persistEditorDraft(clips, projectName, resolution, fps, workspaceName(), soundtrack)
 }
 
 function editorReport(message: string, extra: Partial<AgentExecutionReport> = {}): AgentExecutionReport {
@@ -88,7 +94,7 @@ function editorReport(message: string, extra: Partial<AgentExecutionReport> = {}
 
 export async function createAgentVideoEditorProject(action: AgentCreateVideoEditorProjectAction): Promise<{ message: string; report: AgentExecutionReport }> {
   const name = action.projectName.trim() || 'my_video'
-  saveDraft([], name, RESOLUTIONS[0], 30)
+  saveDraft([], name, RESOLUTIONS[0], 30, null)
   showEditor()
   const message = `He creado el proyecto de Video Editor “${name}”.`
   return { message, report: editorReport(message) }
@@ -97,7 +103,10 @@ export async function createAgentVideoEditorProject(action: AgentCreateVideoEdit
 export async function openAgentVideoEditorProject(action: AgentOpenVideoEditorProjectAction): Promise<{ message: string; report: AgentExecutionReport }> {
   const draft = loadDraft()
   if (action.projectName.trim() && draft.projectName !== action.projectName.trim()) {
-    saveDraft(draft.clips, action.projectName.trim(), draft.resolution, draft.fps)
+    throw new Error(
+      `Solo existe un borrador de Video Editor por workspace: “${draft.projectName}”. `
+      + 'Pide explícitamente crear otro proyecto para reemplazar el borrador actual.',
+    )
   }
   showEditor()
   const next = loadDraft()
@@ -182,20 +191,25 @@ export async function trimAgentVideoEditorClip(action: AgentTrimVideoEditorClipA
 
 export async function addAgentVideoEditorAudio(action: AgentAddVideoEditorAudioAction): Promise<{ message: string; report: AgentExecutionReport }> {
   const draft = loadDraft()
-  const existing = draft.clips.find(clip => clip.name === action.outputName)
-  const added = existing ? [] : await clipsFromNamedOutputs([action.outputName], 'audio')
-  const clips = [
-    ...draft.clips.map(clip => {
-      if (action.clipName && clip.name !== action.clipName && clip.id !== action.clipName) return clip
-      if (action.clipName) return { ...clip, muted: false, volume: clip.volume || 1 }
-      return clip
-    }),
-    ...added,
-  ]
-  saveDraft(clips, draft.projectName, draft.resolution, draft.fps)
+  const wanted = action.outputName.trim()
+  if (!wanted) throw new Error('Indica el nombre exacto del output de audio.')
+  const outputs = await fetchOutputs(80, 0, { workspace: workspaceName(), mediaType: 'audio' })
+  const output = outputs.outputs.find(item => item.name === wanted)
+  if (!output) throw new Error(`No existe el output de audio “${wanted}” en este workspace.`)
+  const source = output.url || output.name
+  const probe = await probeVideoEditorAudio(source, workspaceName())
+  const soundtrack: EditorSoundtrack = {
+    name: output.name,
+    source,
+    duration: probe.duration,
+    trimStart: 0,
+    trimEnd: probe.duration,
+    volume: 1,
+    loop: probe.duration < sequenceTotalDuration(draft.clips),
+  }
+  saveDraft(draft.clips, draft.projectName, draft.resolution, draft.fps, soundtrack)
   showEditor()
-  const audioName = existing?.name || added[0]?.name || action.outputName
-  const message = `He añadido el audio “${audioName}” a la línea de tiempo de “${draft.projectName}”.`
+  const message = `He configurado “${soundtrack.name}” como banda sonora de “${draft.projectName}”.`
   return { message, report: editorReport(message) }
 }
 
@@ -216,7 +230,18 @@ export async function exportAgentVideoEditor(action: AgentExportVideoEditorActio
     workspace: workspaceName(),
     type: 'export_video_editor',
     targetId: draft.projectName,
-    params: { clips: draft.clips.map(clip => clip.name), duration: sequenceTotalDuration(draft.clips) },
+    params: {
+      clips: draft.clips.map(clip => clip.name),
+      duration: sequenceTotalDuration(draft.clips),
+      soundtrack: draft.soundtrack ? {
+        name: draft.soundtrack.name,
+        source: draft.soundtrack.source,
+        trimStart: draft.soundtrack.trimStart,
+        trimEnd: draft.soundtrack.trimEnd,
+        volume: draft.soundtrack.volume,
+        loop: draft.soundtrack.loop,
+      } : null,
+    },
   })
   const reused = reuseExecution(key)
   if (reused) return { message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`, report: reused }
@@ -226,6 +251,14 @@ export async function exportAgentVideoEditor(action: AgentExportVideoEditorActio
     height: draft.resolution.height,
     fps: draft.fps,
     workspace: workspaceName(),
+    soundtrack: draft.soundtrack ? {
+      name: draft.soundtrack.name,
+      source: draft.soundtrack.source,
+      trim_start: draft.soundtrack.trimStart,
+      trim_end: draft.soundtrack.trimEnd,
+      volume: draft.soundtrack.volume,
+      loop: draft.soundtrack.loop,
+    } : null,
     clips: draft.clips.map(clip => ({
       name: clip.name,
       source: clip.source,

@@ -175,6 +175,69 @@ def probe_media(path: str) -> dict[str, Any]:
     }
 
 
+def probe_audio(path: str) -> dict[str, Any]:
+    """Return duration for an audio source, rejecting files without audio."""
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration:stream=codec_type",
+            "-of", "json", path,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError((result.stderr or "ffprobe could not read this audio file").strip()[-600:])
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError("ffprobe returned invalid audio information") from exc
+    streams = payload.get("streams") if isinstance(payload.get("streams"), list) else []
+    if not any(stream.get("codec_type") == "audio" for stream in streams):
+        raise ValueError("The selected file does not contain an audio stream")
+    duration = float((payload.get("format") or {}).get("duration") or 0)
+    if duration <= 0:
+        raise ValueError("The selected audio has no readable duration")
+    return {"duration": round(duration, 4), "has_audio": True}
+
+
+def _mix_soundtrack(
+    video_path: str,
+    output_path: str,
+    soundtrack: dict[str, Any],
+    duration: float,
+) -> None:
+    """Mix one validated soundtrack over the assembled video's own audio."""
+    source = str(soundtrack["resolved_path"])
+    trim_start = max(0.0, float(soundtrack.get("trim_start") or 0))
+    trim_end = float(soundtrack.get("trim_end") or 0)
+    available = max(0.05, trim_end - trim_start) if trim_end > trim_start else duration
+    mix_duration = duration if bool(soundtrack.get("loop")) else min(available, duration)
+    raw_volume = soundtrack.get("volume")
+    volume = max(0.0, min(2.0, float(1 if raw_volume is None else raw_volume)))
+    command = ["ffmpeg", "-y", "-i", video_path]
+    if bool(soundtrack.get("loop")):
+        command.extend(["-stream_loop", "-1"])
+    if trim_start:
+        command.extend(["-ss", f"{trim_start:.6f}"])
+    command.extend([
+        "-i", source,
+        "-filter_complex",
+        (
+            f"[1:a:0]atrim=duration={mix_duration:.6f},"
+            f"asetpts=PTS-STARTPTS,volume={volume:.4f}[music];"
+            "[0:a:0][music]amix=inputs=2:duration=first:dropout_transition=0[mixed]"
+        ),
+        "-map", "0:v:0", "-map", "[mixed]",
+        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart", output_path,
+    ])
+    _run(command, timeout=1800, label="Mixing editor soundtrack")
+
+
 def extract_frame(
     source: str,
     destination: str,
@@ -797,6 +860,7 @@ def render_project(
     width: int,
     height: int,
     fps: int,
+    soundtrack: dict[str, Any] | None = None,
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     """Normalise, trim and assemble clips into a shareable H.264 MP4."""
@@ -872,29 +936,32 @@ def render_project(
         else:
             render_segments, render_durations, render_transitions = segments, durations, transitions
 
+        assembled_path = os.path.join(temp_dir, "assembled.mp4") if soundtrack else output_path
         if not any(item["type"] != "none" for item in render_transitions) or len(render_segments) == 1:
-            _concat_without_transition(render_segments, output_path)
+            _concat_without_transition(render_segments, assembled_path)
         else:
             _concat_with_transitions(
                 render_segments,
                 render_durations,
-                output_path,
+                assembled_path,
                 render_transitions,
             )
+
+        duration = sum(durations) + sum(
+            float(item["duration"])
+            if is_interstitial_transition(item["type"])
+            else -float(item["duration"])
+            for item in transitions
+        )
+        if soundtrack:
+            if progress:
+                progress(96, "Mixing external soundtrack…")
+            _mix_soundtrack(assembled_path, output_path, soundtrack, duration)
 
     if progress:
         progress(100, "Video export complete")
     return {
-        "duration": round(
-            sum(durations)
-            + sum(
-                float(item["duration"])
-                if is_interstitial_transition(item["type"])
-                else -float(item["duration"])
-                for item in transitions
-            ),
-            3,
-        ),
+        "duration": round(duration, 3),
         "clip_count": len(clips),
         "transitions": transitions,
     }

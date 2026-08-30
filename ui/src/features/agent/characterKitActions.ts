@@ -153,9 +153,11 @@ export async function attachAgentCharacterKitReferences(action: AgentAttachChara
   const current = findKit(library, action.kitName)
   const outputs = await fetchOutputs(80, 0, { workspace: workspaceName(), mediaType: 'image' })
   const wanted = action.outputNames.map(name => name.trim()).filter(Boolean)
-  const matches = outputs.outputs.filter(output => wanted.includes(output.name))
-  if (!matches.length) throw new Error('Ninguna referencia coincide con un output de imagen del workspace.')
-  const identity = matches[0]
+  if (wanted.length !== 1) {
+    throw new Error('Character Kit admite una única referencia de identidad. Indica un solo output exacto.')
+  }
+  const identity = outputs.outputs.find(output => output.name === wanted[0])
+  if (!identity) throw new Error(`No existe el output de imagen “${wanted[0]}” en este workspace.`)
   const kit: CharacterKit = {
     ...current,
     identityReference: {
@@ -170,7 +172,7 @@ export async function attachAgentCharacterKitReferences(action: AgentAttachChara
     updatedAt: new Date().toISOString(),
   }
   await persist(library, kit)
-  const message = `He adjuntado ${matches.length} referencias a “${kit.name}”.`
+  const message = `He adjuntado “${identity.name}” como referencia de identidad de “${kit.name}”.`
   return { message, report: kitReport(kit, message) }
 }
 

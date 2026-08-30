@@ -34742,6 +34742,7 @@ _video_editor_jobs_lock = threading.RLock()
 _VIDEO_EDITOR_TERMINAL = frozenset({"completed", "failed", "cancelled"})
 _VIDEO_EDITOR_FFMPEG_LANE = resource_scheduler.cpu_lane("ffmpeg")
 _VIDEO_EDITOR_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"}
+_VIDEO_EDITOR_AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"}
 _COMIC_ANIMATIC_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
@@ -34905,6 +34906,21 @@ def _resolve_video_editor_source(source: str, workspace: str | None = None) -> s
     return resolved
 
 
+def _resolve_video_editor_audio_source(source: str, workspace: str | None = None) -> str:
+    """Resolve a soundtrack reference using the same workspace boundary."""
+    from services.media_refs import parse_media_ref
+
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("Audio source is missing")
+    path, workspace = parse_media_ref(source, workspace)
+    resolved = _resolve_model3d_input_path(path, workspace)
+    if not resolved or not os.path.isfile(resolved):
+        raise ValueError(f"Audio source could not be found: {os.path.basename(path) or path}")
+    if os.path.splitext(resolved)[1].lower() not in _VIDEO_EDITOR_AUDIO_EXTENSIONS:
+        raise ValueError(f"Unsupported audio format: {os.path.splitext(resolved)[1] or 'unknown'}")
+    return resolved
+
+
 def _resolve_comic_animatic_image(source: str, workspace: str | None = None) -> str:
     """Resolve a captured panel image using Maestro's existing safe path rules."""
     from urllib.parse import unquote
@@ -34933,6 +34949,22 @@ def probe_video_editor_source(body: dict):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not inspect video: {exc}") from exc
+
+
+@api.post("/api/v1/video-editor/probe-audio")
+def probe_video_editor_audio_source(body: dict):
+    """Read duration for one workspace soundtrack without requiring video."""
+    from services.video_editor import probe_audio
+
+    try:
+        resolved = _resolve_video_editor_audio_source(
+            body.get("source", ""), body.get("workspace"),
+        )
+        return probe_audio(resolved)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not inspect audio: {exc}") from exc
 
 
 @api.get("/api/v1/video-editor/thumbnail")
@@ -35109,6 +35141,15 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
             )
             resolved_clips.append(resolved)
 
+        resolved_soundtrack = None
+        if body.get("soundtrack") is not None:
+            if not isinstance(body["soundtrack"], dict):
+                raise ValueError("The soundtrack must be an object")
+            resolved_soundtrack = dict(body["soundtrack"])
+            resolved_soundtrack["resolved_path"] = _resolve_video_editor_audio_source(
+                str(body["soundtrack"].get("source") or ""), workspace,
+            )
+
         if _video_editor_cancel_requested(job_id):
             _finish_video_editor_cancelled(job_id, output_path)
             return
@@ -35148,6 +35189,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                     width=int(body["width"]),
                     height=int(body["height"]),
                     fps=int(body["fps"]),
+                    soundtrack=resolved_soundtrack,
                     progress=report,
                 )
         except resource_scheduler.ResourceAcquireCancelled:
@@ -35226,6 +35268,11 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                         for clip in body["clips"]
                     ],
                     "source_manifest": build_source_provenance_manifest(resolved_clips),
+                    "soundtrack": {
+                        key: value
+                        for key, value in (body.get("soundtrack") or {}).items()
+                        if key in {"name", "source", "trim_start", "trim_end", "volume", "loop"}
+                    } or None,
                 },
                 "source": "video_editor",
             },
@@ -35355,6 +35402,32 @@ def start_video_editor_export(body: dict):
         })
         clean_clips.append(clean_clip)
 
+    soundtrack = body.get("soundtrack")
+    clean_soundtrack = None
+    if soundtrack is not None:
+        if not isinstance(soundtrack, dict):
+            raise HTTPException(status_code=400, detail="The soundtrack must be an object")
+        try:
+            trim_start = max(0.0, float(soundtrack.get("trim_start") or 0))
+            trim_end = max(0.0, float(soundtrack.get("trim_end") or 0))
+            volume = float(soundtrack.get("volume") if soundtrack.get("volume") is not None else 1)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Invalid soundtrack settings") from exc
+        if trim_end and trim_end <= trim_start:
+            raise HTTPException(status_code=400, detail="Soundtrack trim_end must be after trim_start")
+        if volume < 0 or volume > 2:
+            raise HTTPException(status_code=400, detail="Soundtrack volume must be between 0 and 2")
+        clean_soundtrack = {
+            "name": str(soundtrack.get("name") or "soundtrack")[:300],
+            "source": str(soundtrack.get("source") or ""),
+            "trim_start": trim_start,
+            "trim_end": trim_end,
+            "volume": volume,
+            "loop": bool(soundtrack.get("loop")),
+        }
+        if not clean_soundtrack["source"].strip():
+            raise HTTPException(status_code=400, detail="Soundtrack source is missing")
+
     workspace = body.get("workspace") if body.get("workspace") is not None else _get_active_workspace()
     out_dir = _workspace_dir(workspace)
     safe_project_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("name") or "edited_video")).strip("_")
@@ -35370,7 +35443,13 @@ def start_video_editor_export(body: dict):
         suffix += 1
 
     clean_body = dict(body)
-    clean_body.update({"width": width, "height": height, "fps": fps, "clips": clean_clips})
+    clean_body.update({
+        "width": width,
+        "height": height,
+        "fps": fps,
+        "clips": clean_clips,
+        "soundtrack": clean_soundtrack,
+    })
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
     now = time.time()

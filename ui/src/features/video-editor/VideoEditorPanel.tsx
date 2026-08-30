@@ -50,6 +50,8 @@ import {
   loadEditorDraft,
   persistEditorDraft,
   RESOLUTIONS,
+  VIDEO_EDITOR_DRAFT_UPDATED_EVENT,
+  type EditorSoundtrack,
   type ResolutionOption,
 } from './editorDraft'
 import {
@@ -702,6 +704,7 @@ export function VideoEditorPanel() {
   const [projectName, setProjectName] = useState(draft.projectName)
   const [resolution, setResolution] = useState(draft.resolution)
   const [fps, setFps] = useState(draft.fps)
+  const [soundtrack, setSoundtrack] = useState<EditorSoundtrack | null>(draft.soundtrack)
   const [previewTime, setPreviewTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [sequenceMode, setSequenceMode] = useState(false)
@@ -760,6 +763,7 @@ export function VideoEditorPanel() {
     setProjectName(next.projectName)
     setResolution(next.resolution)
     setFps(next.fps)
+    setSoundtrack(next.soundtrack)
     setSelectedId(next.clips[0]?.id || null)
     setError(next.warning)
     setPreviewTime(0)
@@ -769,6 +773,16 @@ export function VideoEditorPanel() {
     // then replace state. Clips/name/fps are intentionally read from this
     // render rather than listed as deps so a local edit cannot retrigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace])
+
+  useEffect(() => {
+    const handleDraftUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspace?: string }>).detail
+      if ((detail?.workspace || 'default') !== (activeWorkspace || 'default')) return
+      setSoundtrack(loadEditorDraft(activeWorkspace).soundtrack)
+    }
+    window.addEventListener(VIDEO_EDITOR_DRAFT_UPDATED_EVENT, handleDraftUpdate)
+    return () => window.removeEventListener(VIDEO_EDITOR_DRAFT_UPDATED_EVENT, handleDraftUpdate)
   }, [activeWorkspace])
 
   useEffect(() => {
@@ -1898,6 +1912,14 @@ export function VideoEditorPanel() {
         height: resolution.height,
         fps,
         workspace: activeWorkspace,
+        soundtrack: soundtrack ? {
+          name: soundtrack.name,
+          source: soundtrack.source,
+          trim_start: soundtrack.trimStart,
+          trim_end: soundtrack.trimEnd,
+          volume: soundtrack.volume,
+          loop: soundtrack.loop,
+        } : null,
         clips: normalized.clips.map(clip => ({
           name: clip.name,
           source: clip.source,
@@ -2665,6 +2687,14 @@ export function VideoEditorPanel() {
       <div role="region" aria-label="Video editor timeline" className="h-40 shrink-0 border-t border-border bg-bg-tertiary/30 flex flex-col">
         <div className="flex h-9 items-center gap-2 px-3 border-b border-border text-[10px] text-text-muted">
           <span>Timeline · {clips.length} {clips.length === 1 ? 'clip' : 'clips'} · {formatTime(totalDuration)}</span>
+          {soundtrack && (
+            <span
+              className="flex max-w-56 items-center gap-1 truncate rounded border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-purple-200"
+              title={`Soundtrack: ${soundtrack.name}`}
+            >
+              <Volume2 size={10} /> {soundtrack.name}{soundtrack.loop ? ' · loop' : ''}
+            </span>
+          )}
           <label className="ml-auto flex items-center gap-1.5">
             <span>All gaps</span>
             <select

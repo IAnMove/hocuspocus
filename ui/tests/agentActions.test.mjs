@@ -890,6 +890,7 @@ test('character kit and video editor execute, reuse export id, and reject unsign
   clearExecutionMemory()
   let kitLibrary = { version: 1, revision: 0, activeId: '', kits: {} }
   let exportCalls = 0
+  let exportPayload = null
   const originalFetch = globalThis.fetch
   const originalLoadOutputs = useStore.getState().loadOutputs
   useStore.setState({ loadOutputs: async () => {} })
@@ -906,14 +907,24 @@ test('character kit and video editor execute, reuse export id, and reject unsign
     if (url.includes('/api/v1/outputs')) {
       const audio = [{ name: 'tema.wav', type: 'audio', url: '/outputs/tema.wav' }]
       const video = [{ name: 'clip-a.mp4', type: 'video', url: '/outputs/clip-a.mp4' }]
-      const outputs = url.includes('media_type=audio') ? audio : [...video, ...audio]
+      const images = [
+        { name: 'nora-a.png', type: 'image', url: '/outputs/nora-a.png' },
+        { name: 'nora-b.png', type: 'image', url: '/outputs/nora-b.png' },
+      ]
+      const outputs = url.includes('media_type=audio') ? audio
+        : url.includes('media_type=image') ? images
+          : [...video, ...audio, ...images]
       return json({ outputs, total: outputs.length })
+    }
+    if (url.includes('/api/v1/video-editor/probe-audio')) {
+      return json({ duration: 4, has_audio: true })
     }
     if (url.includes('/api/v1/video-editor/probe')) {
       return json({ duration: 4, width: 1280, height: 720, fps: 30, has_audio: true, pixel_format: 'yuv420p', has_alpha: false })
     }
     if (url.includes('/api/v1/video-editor/export') && method === 'POST') {
       exportCalls += 1
+      exportPayload = JSON.parse(String(init.body || '{}'))
       return json({ job_id: 'export-77', status: 'queued', progress: 0, message: 'Queued', filename: null, url: null, error: null })
     }
     return json({})
@@ -922,22 +933,37 @@ test('character kit and video editor execute, reuse export id, and reject unsign
     const createdKit = await executeAgentActions([{ type: 'create_character_kit', name: 'Nora', style: 'cutout' }])
     assert.equal(createdKit[0].ok, true)
     assert.equal(createdKit[0].report.target.kind, 'character_kit')
+    const ambiguousReference = await executeAgentActions([{
+      type: 'attach_character_kit_references', kitName: 'Nora', outputNames: ['nora-a.png', 'nora-b.png'],
+    }])
+    assert.equal(ambiguousReference[0].ok, false)
+    const attachedReference = await executeAgentActions([{
+      type: 'attach_character_kit_references', kitName: 'Nora', outputNames: ['nora-a.png'],
+    }])
+    assert.equal(attachedReference[0].ok, true)
+    assert.equal(kitLibrary.kits[kitLibrary.activeId].identityReference.name, 'nora-a.png')
     const unsigned = parseAgentTurn(JSON.stringify({
       reply: 'Exporto.',
       actions: [{ type: 'export_video_editor', confirm: false }],
     }))
     assert.equal(unsigned.actions.length, 0)
     await executeAgentActions([{ type: 'create_video_editor_project', projectName: 'corte-final' }])
+    const wrongProject = await executeAgentActions([{ type: 'open_video_editor_project', projectName: 'otro-corte' }])
+    assert.equal(wrongProject[0].ok, false)
     await executeAgentActions([{ type: 'add_video_editor_clips', outputNames: ['clip-a.mp4'] }])
     await executeAgentActions([{ type: 'add_video_editor_audio', outputName: 'tema.wav', clipName: '' }])
     const { loadEditorDraft } = await import('../src/features/video-editor/editorDraft.ts')
     const draft = loadEditorDraft(useStore.getState().activeWorkspace || 'default')
-    assert.equal(draft.clips.some(clip => clip.name === 'tema.wav'), true)
+    assert.equal(draft.clips.some(clip => clip.name === 'tema.wav'), false)
+    assert.equal(draft.soundtrack?.name, 'tema.wav')
     const exported = await executeAgentActions([{ type: 'export_video_editor', confirm: true }])
     assert.equal(exported[0].ok, true)
     assert.equal(exported[0].report.state, 'queued')
     assert.equal(exported[0].report.taskId, 'export-77')
     assert.equal(exportCalls, 1)
+    assert.deepEqual(exportPayload.soundtrack, {
+      name: 'tema.wav', source: '/outputs/tema.wav', trim_start: 0, trim_end: 4, volume: 1, loop: false,
+    })
     const again = await executeAgentActions([{ type: 'export_video_editor', confirm: true }])
     assert.match(again[0].message, /Reutilizo/)
     assert.equal(again[0].report.taskId, 'export-77')

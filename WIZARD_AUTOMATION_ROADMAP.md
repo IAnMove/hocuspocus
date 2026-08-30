@@ -82,8 +82,8 @@ Acceptance:
 
 ### 1B. Correct misleading existing actions
 
-- Video Editor external audio must become a real timeline item and reach the
-  exporter.
+- Video Editor external audio must become a real project soundtrack and reach
+  the exporter as a separately validated audio source.
 - CharacterKit must either persist all named references or expose a singular
   action and report exactly one.
 - `open_video_editor_project` must not pretend multiple projects exist if it
@@ -95,6 +95,13 @@ Acceptance:
 
 - Action reports describe exactly what the stores and backend contain.
 - Repeating each action is idempotent or explicitly additive as documented.
+
+Status: **implemented**. Video Editor now persists one soundtrack per
+workspace draft, displays it in the timeline, validates audio-only outputs and
+mixes the track during export. Repeating `add_video_editor_audio` replaces that
+single soundtrack. CharacterKit now accepts and reports exactly one identity
+reference. `open_video_editor_project` opens only the current workspace draft
+and refuses to disguise a rename as opening another project.
 
 ### 1C. Nightly runner correctness
 

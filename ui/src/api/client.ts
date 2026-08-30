@@ -1261,6 +1261,19 @@ export async function probeVideoEditorClip(source: string, workspace?: string): 
   return res.json()
 }
 
+export async function probeVideoEditorAudio(source: string, workspace?: string): Promise<{ duration: number; has_audio: boolean }> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/probe-audio`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, workspace }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not inspect audio' }))
+    throw new Error(error.detail || 'Could not inspect audio')
+  }
+  return res.json()
+}
+
 export function getVideoEditorThumbnailUrl(source: string): string {
   const params = new URLSearchParams({ source })
   return `${BASE}/api/v1/video-editor/thumbnail?${params.toString()}`
@@ -1298,6 +1311,14 @@ export async function startVideoEditorExport(payload: {
   height: number
   fps: number
   workspace?: string
+  soundtrack?: {
+    name: string
+    source: string
+    trim_start: number
+    trim_end: number
+    volume: number
+    loop: boolean
+  } | null
   clips: Array<{
     name: string
     source: string
