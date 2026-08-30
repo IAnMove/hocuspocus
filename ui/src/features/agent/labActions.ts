@@ -1,5 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type {
+  AgentCreateComicAction,
   AgentCreateSeriesEpisodeAction,
   AgentCreateStoryAction,
   AgentCreativeCharacter,
@@ -317,4 +318,236 @@ export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisode
   openAgentSeriesSection('episode')
   const canonResult = approvedCanon ? 'preparado y aprobado el canon editable necesario, y ' : ''
   return `He ${createdSeries ? 'creado la serie, ' : ''}${canonResult}guardado el episodio “${createdEpisode.title}” con ${beats.length} beats; está abierto en Series Lab → Episode room.`
+}
+
+function showComics(): void {
+  const state = useStore.getState()
+  state.setSettingsOpen(false)
+  state.setDashboardOpen(false)
+  state.setMediaFilter('comics')
+  state.setSidebarOpen(false)
+}
+
+export async function createFilledComic(action: AgentCreateComicAction): Promise<string> {
+  const [{ useComicStore }, { comicId, projectFromPlan }] = await Promise.all([
+    import('../comics/store'),
+    import('../comics/model'),
+  ])
+  const characters = (action.characters.length ? action.characters : [{
+    name: 'Protagonista',
+    role: 'Protagonista',
+    personality: '',
+    desire: '',
+    flaw: '',
+    appearance: 'Silueta clara y reconocible',
+    voice: '',
+  }]).map((character, index) => ({
+    id: comicId('character'),
+    name: character.name || `Personaje ${index + 1}`,
+    description: character.appearance || character.role || character.name,
+    role: character.role || (index ? 'Secundario' : 'Protagonista'),
+    personality: character.personality,
+    motivation: character.desire,
+    voice: character.voice,
+    locked: false,
+  }))
+  const panels = action.panels.length ? action.panels : [
+    { caption: action.synopsis || action.title, dialogue: '', sfx: '', scene: action.synopsis },
+  ]
+  const planId = comicId('plan')
+  const plan = {
+    version: 1 as const,
+    id: planId,
+    title: action.title,
+    logline: action.synopsis,
+    synopsis: action.synopsis || action.title,
+    language: action.language || 'Español',
+    styleBible: action.styleName || 'Tira cómica clara, 4 viñetas',
+    characters,
+    pages: [{
+      pageNumber: 1,
+      layoutHint: 'grid' as const,
+      panels: panels.map((panel, index) => {
+        const beat = panel.scene || panel.caption || panel.dialogue || action.synopsis
+        const who = characters.map(character => `${character.name}: ${character.description}`).join('; ')
+        return {
+          id: comicId('panel-plan'),
+          order: index + 1,
+          narrativeRole: `Viñeta ${index + 1}`,
+          sceneDescription: beat,
+          imagePrompt: [
+            `Single comic panel for "${action.title}".`,
+            action.styleName,
+            beat ? `Scene: ${beat}.` : '',
+            who ? `Characters: ${who}.` : '',
+            'Clear acting, readable silhouette, no lettering, no balloons, no captions.',
+          ].filter(Boolean).join(' '),
+          characters: characters.map(character => character.id),
+          framing: 'medium',
+          dialogue: panel.dialogue ? [{ text: panel.dialogue, bubbleType: 'speech' as const }] : [],
+          captions: panel.caption ? [panel.caption] : [],
+          soundEffects: panel.sfx ? [panel.sfx] : [],
+          continuityNotes: '',
+        }
+      }),
+    }],
+  }
+  const project = projectFromPlan(plan)
+  if (action.styleName) {
+    project.style = { ...project.style, name: action.styleName }
+  }
+  const studio = useStore.getState()
+  const provider = studio.productionProfile.image.provider === 'minimax' ? 'minimax' as const : 'maestro' as const
+  const imageModel = studio.productionProfile.image.model
+    || studio.selectedModelPerMode.image
+    || ''
+  project.director = {
+    planId,
+    provider,
+    imageModel,
+    input: {
+      useGlobalProfile: true,
+      premise: action.synopsis || action.title,
+      productionMode: 'comic',
+      pageCount: 1,
+      language: action.language || 'Español',
+      format: project.format.preset,
+      panelsPerPage: panels.length,
+      genre: 'Comedy',
+      tone: 'Warm',
+      audience: 'General',
+      artStyle: action.styleName,
+      dialogueDensity: 'medium',
+      provider,
+      imageModel,
+      characters,
+    },
+    plan,
+    completedPanelIds: [],
+    panelJobs: {},
+    scriptVersion: 1,
+    scriptApprovedAt: new Date().toISOString(),
+  }
+  useComicStore.getState().setProject(project)
+  useComicStore.setState({ dirty: true })
+  showComics()
+  return `He abierto Comics con “${project.title}”, ${characters.length} personajes y ${panels.length} viñetas con globos. El plan de Director está listo. Dime **lánzalo** para dibujar las viñetas, o pulsa **Generate all images** en Comic Director.`
+}
+
+export async function generateFilledComicArtwork(
+  onProgress?: (message: string) => void,
+): Promise<string> {
+  showComics()
+  const [{ useComicStore }, { comicId }, { generateDirectorArtwork }] = await Promise.all([
+    import('../comics/store'),
+    import('../comics/model'),
+    import('../comics/generateArtwork'),
+  ])
+  const state = useComicStore.getState()
+  if (!state.project.director) {
+    const project = state.project
+    const characters = project.characters.length ? project.characters : [{
+      id: comicId('character'),
+      name: 'Protagonista',
+      description: 'Silueta clara',
+      locked: false,
+    }]
+    const pages = project.pages.map((page, pageIndex) => {
+      const panels = page.elements
+        .filter(element => element.type === 'panel' && !element.parentId)
+        .sort((left, right) => left.zIndex - right.zIndex)
+      return {
+        pageNumber: pageIndex + 1,
+        layoutHint: 'grid' as const,
+        panels: panels.map((panel, index) => {
+          const texts = page.elements.filter(element => element.type === 'text' && element.parentId === panel.id)
+          const captions = texts
+            .filter(text => text.type === 'text' && (text.letteringType === 'caption' || text.bubble === 'caption'))
+            .map(text => text.type === 'text' ? text.content : '')
+          const soundEffects = texts
+            .filter(text => text.type === 'text' && (text.letteringType === 'sound-effect' || text.bubble === 'burst'))
+            .map(text => text.type === 'text' ? text.content : '')
+          const dialogue = texts
+            .filter(text => text.type === 'text' && (text.letteringType === 'dialogue' || text.bubble === 'speech'))
+            .map(text => text.type === 'text' ? text.content : '')
+            .filter(content => !captions.includes(content) && !soundEffects.includes(content))
+          const beat = captions[0] || dialogue[0] || project.synopsis || project.title
+          return {
+            id: comicId('panel-plan'),
+            order: index + 1,
+            narrativeRole: `Viñeta ${index + 1}`,
+            sceneDescription: beat,
+            imagePrompt: [
+              `Single comic panel for "${project.title}".`,
+              project.style.name,
+              beat ? `Scene: ${beat}.` : '',
+              'Clear acting, readable silhouette, no lettering, no balloons, no captions.',
+            ].filter(Boolean).join(' '),
+            characters: characters.map(character => character.id),
+            framing: 'medium',
+            dialogue: dialogue.map(text => ({ text, bubbleType: 'speech' as const })),
+            captions,
+            soundEffects,
+            continuityNotes: '',
+          }
+        }),
+      }
+    })
+    if (!pages.some(page => page.panels.length)) {
+      throw new Error('El cómic abierto no tiene viñetas que dibujar.')
+    }
+    const studio = useStore.getState()
+    const provider = studio.productionProfile.image.provider === 'minimax' ? 'minimax' as const : 'maestro' as const
+    const imageModel = studio.productionProfile.image.model || studio.selectedModelPerMode.image || ''
+    const plan = {
+      version: 1 as const,
+      id: comicId('plan'),
+      title: project.title,
+      logline: project.synopsis,
+      synopsis: project.synopsis || project.title,
+      language: project.language,
+      styleBible: project.style.name,
+      characters,
+      pages,
+    }
+    useComicStore.getState().patchProject({
+      director: {
+        planId: plan.id,
+        provider,
+        imageModel,
+        input: {
+          useGlobalProfile: true,
+          premise: project.synopsis || project.title,
+          productionMode: 'comic',
+          pageCount: pages.length,
+          language: project.language,
+          format: project.format.preset,
+          panelsPerPage: Math.max(1, pages[0]?.panels.length || 4),
+          genre: 'Comedy',
+          tone: 'Warm',
+          audience: 'General',
+          artStyle: project.style.name,
+          dialogueDensity: 'medium',
+          provider,
+          imageModel,
+          characters,
+        },
+        plan,
+        completedPanelIds: [],
+        panelJobs: {},
+        scriptVersion: 1,
+        scriptApprovedAt: new Date().toISOString(),
+      },
+    })
+  }
+  if (!useComicStore.getState().project.director) {
+    throw new Error('No hay un cómic con plan de Director abierto. Pide primero un cómic de ejemplo o crea uno con tema.')
+  }
+  const result = await generateDirectorArtwork({
+    onProgress: (message, current, total) => {
+      onProgress?.(`${message} (${current}/${total})`)
+    },
+  })
+  if (!result.total) return 'Todas las viñetas de este cómic ya tenían dibujo.'
+  return `He dibujado ${result.generated} viñetas en la cola local, una detrás de otra en la misma GPU. Aparecen dentro de cada recuadro al terminar.`
 }

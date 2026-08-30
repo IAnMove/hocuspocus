@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { ArrowUp, Loader2, Sparkles, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { ArrowUp, Loader2, Maximize2, Minimize2, Sparkles, Trash2, X } from 'lucide-react'
 import { generateLlmText, type CanonicalTask } from '../../api/client'
+import { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 import { buildAgentTurnPrompt, HOCUSPOCUS_AGENT_SYSTEM_PROMPT, type AgentConversationEntry } from './agentKnowledge'
 import {
   buildAgentAppSnapshot,
@@ -13,7 +15,7 @@ import {
 } from './agentActions'
 import { AgentMarkdown } from './AgentMarkdown'
 
-export type AgentVisualState = 'idle' | 'listening' | 'thinking' | 'acting' | 'success' | 'error'
+export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 
 interface AgentMessage extends AgentConversationEntry {
   id: string
@@ -24,11 +26,6 @@ interface AgentAssistantPanelProps {
   workspace: string
   tasks: CanonicalTask[]
   onClose: () => void
-}
-
-interface AgentAvatarProps {
-  state?: AgentVisualState
-  size?: number
 }
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
@@ -74,29 +71,13 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
   }
 }
 
-export function AgentAvatar({ state = 'idle', size = 32 }: AgentAvatarProps) {
-  return (
-    <span
-      className="hp-agent-avatar"
-      data-state={state}
-      style={{ '--hp-agent-size': `${size}px` } as CSSProperties}
-      aria-hidden="true"
-    >
-      <span className="hp-agent-halo" />
-      <img src="/hocuspocus-icon.png" alt="" draggable={false} />
-      <span className="hp-agent-mote hp-agent-mote-a" />
-      <span className="hp-agent-mote hp-agent-mote-b" />
-      <span className="hp-agent-mote hp-agent-mote-c" />
-    </span>
-  )
-}
-
 export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistantPanelProps) {
   const [messages, setMessages] = useState<AgentMessage[]>(() => readMessages(workspace))
   const [draft, setDraft] = useState('')
   const [state, setState] = useState<AgentVisualState>('idle')
   const [busy, setBusy] = useState(false)
   const [busyMessage, setBusyMessage] = useState('Consultando el grimorio de HocusPocus…')
+  const [expanded, setExpanded] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
   const activeCount = useMemo(() => tasks.filter(task => ACTIVE.has(task.status) && !task.parent_id).length, [tasks])
@@ -114,11 +95,17 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Escape') return
+      if (expanded) {
+        event.preventDefault()
+        setExpanded(false)
+        return
+      }
+      onClose()
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [onClose])
+  }, [expanded, onClose])
 
   const clearConversation = () => {
     const next = [welcomeMessage()]
@@ -145,7 +132,11 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
         json_schema: HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
       })
       if (!mountedRef.current) return
-      const turn = reconcileAgentTurnWithRequest(question, parseAgentTurn(answer))
+      const turn = await reconcileAgentTurnWithRequest(
+        question,
+        parseAgentTurn(answer),
+        nextMessages.map(message => ({ role: message.role, text: message.text })),
+      )
       let results: AgentActionResult[] = []
       if (turn.actions.length) {
         setState('acting')
@@ -193,11 +184,15 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
     }
   }
 
-  return (
+  const panel = (
     <section
       role="dialog"
+      aria-modal="true"
       aria-label="Ask to the Wizard"
-      className="hp-agent-panel absolute bottom-full left-2 mb-2 flex h-[min(34rem,calc(100vh-5rem))] w-[min(25rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-amber-200/20 bg-[#0d0b13]/95 text-xs shadow-2xl backdrop-blur-xl"
+      data-expanded={expanded ? 'true' : 'false'}
+      className={`hp-agent-panel z-[100] flex flex-col overflow-hidden border border-amber-200/20 bg-[#0d0b13]/95 shadow-2xl backdrop-blur-xl ${expanded
+        ? 'hp-agent-panel--expanded fixed inset-0 rounded-none text-sm sm:inset-2 sm:rounded-2xl'
+        : 'fixed bottom-12 left-2 h-[min(34rem,calc(100vh-5rem))] w-[min(25rem,calc(100vw-1rem))] rounded-2xl text-xs'}`}
     >
       <div className="relative overflow-hidden border-b border-white/10 px-3 py-3">
         <div className="hp-agent-panel-glow" aria-hidden="true" />
@@ -210,6 +205,16 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
             </div>
             <p className="truncate text-[10px] text-white/45">Workspace: {workspace}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setExpanded(current => !current)}
+            className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white"
+            title={expanded ? 'Restore chat size' : 'Maximize chat'}
+            aria-label={expanded ? 'Restore Ask to the Wizard size' : 'Maximize Ask to the Wizard'}
+            aria-pressed={expanded}
+          >
+            {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
           <button type="button" onClick={clearConversation} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title="Clear conversation" aria-label="Clear Ask to the Wizard conversation"><Trash2 size={13} /></button>
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title="Close" aria-label="Close Ask to the Wizard"><X size={14} /></button>
         </div>
@@ -224,8 +229,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
         {messages.map(message => (
           <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={message.role === 'user'
-              ? 'max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-blue-500/20 px-3 py-2 leading-relaxed text-blue-50'
-              : 'max-w-[92%] rounded-2xl rounded-bl-sm border border-amber-200/10 bg-amber-100/[.045] px-3 py-2 leading-relaxed text-amber-50/85'}>
+              ? `${expanded ? 'max-w-[min(42rem,70%)]' : 'max-w-[88%]'} whitespace-pre-wrap rounded-2xl rounded-br-sm bg-blue-500/20 px-3 py-2 leading-relaxed text-blue-50`
+              : `${expanded ? 'max-w-[min(56rem,86%)]' : 'max-w-[92%]'} rounded-2xl rounded-bl-sm border border-amber-200/10 bg-amber-100/[.045] px-3 py-2 leading-relaxed text-amber-50/85`}>
               {message.role === 'assistant' ? <AgentMarkdown text={message.text} /> : message.text}
             </div>
           </div>
@@ -241,7 +246,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
 
       {messages.length <= 1 && (
         <div className="flex flex-wrap gap-1.5 border-t border-white/5 px-3 pt-2">
-          {['¿Qué hay en cola?', 'Abre 3D Video', 'Prepara un vídeo de ejemplo'].map(suggestion => (
+          {['¿Qué hay en cola?', 'Abre 3D Video', 'Hazme un cómic de ejemplo'].map(suggestion => (
             <button key={suggestion} type="button" disabled={busy} onClick={() => void ask(suggestion)} className="rounded-full border border-amber-200/15 bg-amber-200/5 px-2 py-1 text-[9px] text-amber-100/65 hover:border-amber-200/35 hover:text-amber-50 disabled:opacity-40">{suggestion}</button>
           ))}
         </div>
@@ -258,7 +263,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
             onChange={event => { setDraft(event.target.value); if (!busy) setState(event.target.value ? 'listening' : 'idle') }}
             onKeyDown={handleKeyDown}
             placeholder="Pide un hechizo en HocusPocus…"
-            className="max-h-24 min-h-9 flex-1 resize-none bg-transparent text-[11px] leading-relaxed text-white outline-none placeholder:text-white/30 disabled:opacity-50"
+            className={`${expanded ? 'max-h-40' : 'max-h-24'} min-h-9 flex-1 resize-none bg-transparent text-[11px] leading-relaxed text-white outline-none placeholder:text-white/30 disabled:opacity-50`}
           />
           <button type="submit" disabled={busy || !draft.trim()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-200 text-[#1a1208] transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Ask to the Wizard">
             {busy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUp size={14} />}
@@ -267,5 +272,19 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
         <p className="mt-1.5 text-center text-[8px] text-white/30">Consulta, navega y prepara. Las órdenes explícitas de generación entran en la cola real.</p>
       </form>
     </section>
+  )
+
+  return createPortal(
+    <>
+      {expanded && (
+        <div
+          className="fixed inset-0 z-[99] bg-black/70"
+          onClick={() => setExpanded(false)}
+          aria-hidden="true"
+        />
+      )}
+      {panel}
+    </>,
+    document.body,
   )
 }

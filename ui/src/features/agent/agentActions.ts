@@ -1,7 +1,10 @@
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
 import type { AspectRatio, MediaFilter, ModelDef, ResolutionPreset } from '../../types'
+import type { ExampleConversation } from './agentExamples'
 import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
+
+export type { ExampleConversation }
 
 export const AGENT_TABS = [
   'studio',
@@ -161,6 +164,28 @@ export interface AgentCreateSeriesEpisodeAction {
   knownUniverse: boolean
 }
 
+export interface AgentComicPanel {
+  caption: string
+  dialogue: string
+  sfx: string
+  scene?: string
+}
+
+export interface AgentCreateComicAction {
+  type: 'create_comic'
+  title: string
+  synopsis: string
+  language: string
+  styleName: string
+  characters: AgentCreativeCharacter[]
+  panels: AgentComicPanel[]
+}
+
+export interface AgentGenerateComicAction {
+  type: 'generate_comic'
+  confirm: true
+}
+
 export interface AgentInspectQueueAction {
   type: 'inspect_queue'
   scope: 'active' | 'all'
@@ -189,6 +214,8 @@ export type AgentAction = AgentOpenTabAction
   | AgentStartGenerationAction
   | AgentCreateStoryAction
   | AgentCreateSeriesEpisodeAction
+  | AgentCreateComicAction
+  | AgentGenerateComicAction
   | AgentInspectQueueAction
   | AgentCancelTaskAction
   | AgentResumeTaskAction
@@ -259,6 +286,8 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   startgeneration: 'start_generation',
   createstory: 'create_story',
   createseriesepisode: 'create_series_episode',
+  createcomic: 'create_comic',
+  generatecomic: 'generate_comic',
   inspectqueue: 'inspect_queue',
   canceltask: 'cancel_task',
   resumetask: 'resume_task',
@@ -364,7 +393,8 @@ const CANONICAL_FIELD_NAMES = [
   'series_logline', 'episode_title', 'episode_premise', 'episode_logline',
   'target_duration_seconds', 'create_if_missing', 'known_universe',
   'queue_scope', 'task_id', 'confirm', 'characters', 'locations', 'outline_beats',
-  'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'actions', 'reply',
+  'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
+  'dialogue', 'sfx', 'scene', 'actions', 'reply',
 ] as const
 
 function collapsedKey(name: string): string {
@@ -402,7 +432,27 @@ function canonicalRecord(raw: Record<string, unknown>): Record<string, unknown> 
         : item
     ))
   }
+  if (Array.isArray(next.comic_panels)) {
+    next.comic_panels = next.comic_panels.map(item => (
+      item && typeof item === 'object' && !Array.isArray(item)
+        ? canonicalRecord(item as Record<string, unknown>)
+        : item
+    ))
+  }
   return next
+}
+
+function parseComicPanels(value: unknown): AgentComicPanel[] {
+  return Array.isArray(value) ? value.slice(0, 12).flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = canonicalRecord(item as Record<string, unknown>)
+    const caption = cleanString(raw.caption, 400)
+    const dialogue = cleanString(raw.dialogue, 400)
+    const sfx = cleanString(raw.sfx, 80)
+    const scene = cleanString(raw.scene, 800)
+    if (!caption && !dialogue && !sfx && !scene) return []
+    return [{ caption, dialogue, sfx, scene: scene || undefined }]
+  }) : []
 }
 
 function parseSfxClips(value: unknown): AgentSfxClip[] {
@@ -575,6 +625,27 @@ function parseAction(value: unknown): AgentAction | null {
       knownUniverse: raw.known_universe === true,
     }
   }
+  if (type === 'create_comic') {
+    const title = cleanString(raw.title, 300)
+    if (!title) return null
+    const panels = parseComicPanels(raw.comic_panels)
+    const beats = stringArray(raw.outline_beats, 12, 400)
+    return {
+      type: 'create_comic',
+      title,
+      synopsis: cleanString(raw.synopsis, 6_000) || cleanString(raw.premise, 2_000),
+      language: cleanString(raw.language, 120),
+      styleName: cleanString(raw.visual_style, 2_000),
+      characters: creativeCharacters(raw.characters),
+      panels: panels.length
+        ? panels
+        : beats.map(beat => ({ caption: beat, dialogue: '', sfx: '' })),
+    }
+  }
+  if (type === 'generate_comic') {
+    if (raw.confirm !== true) return null
+    return { type: 'generate_comic', confirm: true }
+  }
   if (type === 'inspect_queue') {
     const scope = cleanString(raw.queue_scope, 12)
     return { type: 'inspect_queue', scope: scope === 'all' ? 'all' : 'active' }
@@ -697,13 +768,66 @@ export function isExplicitSfxGenerationRequest(request: string): boolean {
     && EXPLICIT_SFX_GENERATE.some(pattern => pattern.test(text))
 }
 
+const COMIC_LAUNCH_HOW = /\b(?:c[oó]mo|how(?:\s+do(?:\s+i)?)?)\b/i
+const COMIC_LAUNCH_COMMAND = [
+  /\b(?:l[aá]nzalo|dib[uú]jalo|p[ií]ntalo|generalo|render[ií]zalo)\b/i,
+  /\b(?:l[aá]nza|dibuja|pinta|genera|render(?:iza)?)\b[^.!?\n]*\b(?:c[oó]mic|vi[nñ]etas?|paneles?|p[aá]gina|artwork|dibujos?)\b/i,
+  /\b(?:generate|draw|render|launch)\b[^.!?\n]*\b(?:comic|panels?|page|artwork)\b/i,
+]
+
+export function isComicLaunchHowQuestion(request: string, history: ExampleConversation[] = []): boolean {
+  const text = request.trim()
+  if (!text || !COMIC_LAUNCH_HOW.test(text)) return false
+  if (!/\b(?:l[aá]nz|dibuj|pint|genera|render|launch|draw)/i.test(text)) return false
+  return inferComicContext(text, history)
+}
+
+export function isExplicitComicArtworkRequest(request: string, history: ExampleConversation[] = []): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_VIDEO_REQUEST.test(text) || COMIC_LAUNCH_HOW.test(text)) return false
+  if (!COMIC_LAUNCH_COMMAND.some(pattern => pattern.test(text))) return false
+  return inferComicContext(text, history)
+}
+
+function inferComicContext(text: string, history: ExampleConversation[]): boolean {
+  if (/\b(?:c[oó]mics?|vi[nñ]etas?|tebeo)\b/i.test(text)) return true
+  return [...history].reverse().some(entry => (
+    entry.role === 'user' && /\b(?:c[oó]mics?|vi[nñ]etas?|tebeo)\b/i.test(entry.text)
+  )) || [...history].reverse().some(entry => (
+    /\b(?:c[oó]mics?|vi[nñ]etas?|Comics Lab|Director)\b/i.test(entry.text)
+  ))
+}
+
 /**
  * The LLM remains the planner, but an unmistakable user command must not turn
  * into a clarification loop. Repair that one high-value intent locally with
  * conservative defaults. This is deliberately narrow: questions such as
  * “how do I generate a video?” and negated requests remain read-only.
  */
-export function reconcileAgentTurnWithRequest(request: string, turn: AgentTurn): AgentTurn {
+export async function reconcileAgentTurnWithRequest(
+  request: string,
+  turn: AgentTurn,
+  history: ExampleConversation[] = [],
+): Promise<AgentTurn> {
+  const { maybeExampleTurn } = await import('./agentExamples')
+  const exampleTurn = maybeExampleTurn(request, turn, history)
+  if (exampleTurn) return exampleTurn
+  if (isComicLaunchHowQuestion(request, history)) {
+    return {
+      reply: [
+        'No hay un botón llamado **Render page**.',
+        'El dibujo de las viñetas es **Generate all images** en Comic Director (barra de Comics), o dímelo aquí: **lánzalo**.',
+        'Las viñetas entran en la **misma GPU**, una detrás de otra, no en paralelo. No es un segundo motor.',
+      ].join('\n\n'),
+      actions: [{ type: 'open_tab', tab: 'comics' }],
+    }
+  }
+  if (isExplicitComicArtworkRequest(request, history)) {
+    return {
+      reply: 'Voy a dibujar las viñetas del cómic abierto. Irán a la cola local, una detrás de otra, en la misma GPU. 🪄',
+      actions: [{ type: 'generate_comic', confirm: true }],
+    }
+  }
   if (isExplicitSfxGenerationRequest(request)) {
     const existing = turn.actions.find(
       (action): action is AgentQueueSfxPackAction => action.type === 'queue_sfx_pack',
@@ -804,7 +928,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'inspect_queue', 'cancel_task', 'resume_task'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -889,6 +1013,19 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
             },
           },
           outline_beats: { type: 'array', maxItems: 24, items: { type: 'string', maxLength: 1_500 } },
+          comic_panels: {
+            type: 'array', maxItems: 12,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                caption: { type: 'string', maxLength: 400 },
+                dialogue: { type: 'string', maxLength: 400 },
+                sfx: { type: 'string', maxLength: 80 },
+                scene: { type: 'string', maxLength: 800 },
+              },
+              required: ['caption', 'dialogue', 'sfx'],
+            },
+          },
         },
         required: ['type'],
       },
@@ -1255,6 +1392,10 @@ export async function executeAgentActions(
             ? 'Escribiendo y guardando la nueva historia…'
             : action.type === 'create_series_episode'
               ? 'Preparando la serie y el nuevo episodio…'
+              : action.type === 'create_comic'
+                ? 'Montando el cómic de ejemplo…'
+              : action.type === 'generate_comic'
+                ? 'Dibujando las viñetas del cómic…'
               : action.type === 'inspect_queue'
                 ? 'Consultando la cola canónica…'
                 : action.type === 'cancel_task'
@@ -1303,6 +1444,13 @@ export async function executeAgentActions(
       } else if (action.type === 'create_series_episode') {
         const { createFilledSeriesEpisode } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledSeriesEpisode(action) })
+      } else if (action.type === 'create_comic') {
+        const { createFilledComic } = await import('./labActions')
+        results.push({ action, ok: true, message: await createFilledComic(action) })
+      } else if (action.type === 'generate_comic') {
+        if (!action.confirm) throw new Error('Dibujar las viñetas requiere confirm=true.')
+        const { generateFilledComicArtwork } = await import('./labActions')
+        results.push({ action, ok: true, message: await generateFilledComicArtwork(onStep) })
       } else if (action.type === 'inspect_queue') {
         const { inspectCanonicalQueue } = await import('./queueActions')
         results.push({ action, ok: true, message: await inspectCanonicalQueue(action.scope) })
