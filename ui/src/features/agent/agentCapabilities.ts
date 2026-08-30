@@ -123,6 +123,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['target_story_title', 'confirm'],
   },
   {
+    type: 'approve_story_section',
+    title: 'Approve a valid Story Lab section',
+    purpose: 'Run the same completeness and identity checks as Story Lab, then approve the current section version and persist it canonically.',
+    useWhen: 'The user explicitly asks to approve overview, world, characters, relationships or structure after review.',
+    risk: 'edit',
+    parameters: ['target_story_title', 'story_section', 'confirm'],
+  },
+  {
     type: 'create_series_episode',
     title: 'Create a filled Series Lab episode',
     purpose: 'Find or create a series, prepare the minimum canon needed, create a filled episode outline and show Episode room.',

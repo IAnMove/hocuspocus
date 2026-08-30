@@ -1,6 +1,7 @@
 import { useStore } from '../../stores/useStore'
 import type {
   AgentApplyStoryProposalAction,
+  AgentApproveStorySectionAction,
   AgentCreateComicAction,
   AgentGenerateStorySectionAction,
   AgentCreateSeriesEpisodeAction,
@@ -603,6 +604,116 @@ export async function applyStoredStoryProposal(action: AgentApplyStoryProposalAc
   openAgentStorySection(visibleSection)
   notifyAgentStoryDraft(project.id)
   return `He aplicado y guardado la propuesta de “${project.title}” en: ${sections.join(', ')}. Sus aprobaciones afectadas vuelven a borrador.`
+}
+
+export async function approveStorySection(action: AgentApproveStorySectionAction): Promise<string> {
+  if (!action.confirm) throw new Error('Aprobar una sección de Story Lab requiere confirm=true.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useStoryStore, normalizeStoryProject }, { changedSections }, api] = await Promise.all([
+    import('../stories/store'),
+    import('../stories/model'),
+    import('../../api/client'),
+  ])
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const current = useStoryStore.getState()
+  if (current.libraryConflicts.length) {
+    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de aprobar canon.')
+  }
+  const target = action.targetStoryTitle
+    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
+    : current.project
+  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (current.activeProjectOperations[target.id]) {
+    throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+  }
+
+  if (action.section === 'overview' && (!target.premise.trim() || !target.logline.trim() || !target.synopsis.trim())) {
+    throw new Error('Overview necesita premise, logline y synopsis antes de aprobarse.')
+  }
+  if (action.section === 'world' && (!target.world.summary.trim() || !target.world.visualLanguage.trim())) {
+    throw new Error('World necesita un resumen y un lenguaje visual antes de aprobarse.')
+  }
+  const directVideo = target.musicVideoGenerationMode === 'direct_video'
+  if (action.section === 'characters') {
+    if (!target.characters.length) throw new Error('Añade al menos un personaje antes de aprobar el reparto.')
+    if (!directVideo) {
+      const incomplete = target.characters.flatMap(character => {
+        const reasons = [
+          character.approval !== 'approved' ? 'sigue en borrador' : '',
+          !character.primaryReferenceAssetId ? 'no tiene identidad primaria' : '',
+          character.primaryReferenceAssetId
+            && target.assets[character.primaryReferenceAssetId]?.approval !== 'approved'
+            ? 'su identidad primaria falta o no está aprobada' : '',
+        ].filter(Boolean)
+        return reasons.length ? [`${character.name || 'Personaje sin nombre'} (${reasons.join(', ')})`] : []
+      })
+      if (incomplete.length) {
+        throw new Error(`No se puede aprobar Characters: ${incomplete.join(' · ')}.`)
+      }
+    }
+  }
+  if (action.section === 'relationships' && target.relationships.some(relationship => (
+    !relationship.fromCharacterId
+    || !relationship.toCharacterId
+    || relationship.fromCharacterId === relationship.toCharacterId
+    || !relationship.dynamic.trim()
+  ))) {
+    throw new Error('Cada relación necesita dos personajes distintos y una dinámica actual.')
+  }
+  if (action.section === 'structure' && (
+    target.beats.length < 3
+    || target.beats.some(beat => !beat.summary.trim() || !beat.conflict.trim() || !beat.turn.trim())
+  )) {
+    throw new Error('Structure necesita al menos tres beats causales con acción, conflicto y consecuencia.')
+  }
+
+  if (target.approvals[action.section]?.version === target.sectionVersions[action.section]) {
+    showLab('stories')
+    openAgentStorySection(action.section)
+    return `Story Lab → ${action.section} ya estaba aprobado en la versión actual de “${target.title}”.`
+  }
+  const candidate = structuredClone(target)
+  if (action.section === 'characters' && directVideo) {
+    candidate.characters = candidate.characters.map(character => ({ ...character, approval: 'approved' as const }))
+  }
+  const normalized = normalizeStoryProject(candidate)
+  const changed = changedSections(target, normalized)
+  const sectionVersions = { ...target.sectionVersions }
+  changed.forEach(section => { sectionVersions[section] += 1 })
+  const project = normalizeStoryProject({
+    ...normalized,
+    revision: target.revision + 1,
+    sectionVersions,
+    approvals: {
+      ...normalized.approvals,
+      [action.section]: {
+        approvedAt: new Date().toISOString(),
+        version: sectionVersions[action.section],
+      },
+    },
+    updatedAt: new Date().toISOString(),
+  })
+  const library = await api.saveStoryLibrary(workspace, {
+    version: 2,
+    revision: current.libraryRevision,
+    activeId: project.id,
+    projects: { ...current.projects, [project.id]: project },
+  })
+  useStoryStore.setState({
+    workspace,
+    project: library.projects[project.id],
+    projects: library.projects,
+    libraryRevision: library.revision,
+    dirty: false,
+    hydrated: false,
+    loading: false,
+    saveError: null,
+    libraryConflicts: [],
+  })
+  await useStoryStore.getState().loadWorkspace(workspace)
+  showLab('stories')
+  openAgentStorySection(action.section)
+  return `He validado, aprobado y guardado Story Lab → ${action.section} para “${project.title}”.`
 }
 
 export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisodeAction): Promise<string> {

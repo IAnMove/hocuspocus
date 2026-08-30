@@ -1125,3 +1125,18 @@ guardado elimina el checkpoint de propuesta/job y refresca el panel mediante el
 bus. No aprueba secciones ni lanza imágenes. La acción aplica la propuesta
 completa; la selección granular de campos sigue siendo una operación manual del
 panel en este corte.
+
+## 36. Aprobación validada de Story Lab (2026-08-30)
+
+`approve_story_section` exige `confirm=true` y acepta `overview`, `world`,
+`characters`, `relationships` o `structure`. Repite las condiciones del botón
+real: textos nucleares en Overview; resumen/lenguaje visual en World; relaciones
+con dos IDs y dinámica; tres beats causales completos en Structure; y reparto
+con identidad primaria aprobada cuando no se usa vídeo directo. En direct-video
+aprueba las descripciones de personaje sin inventar la exigencia de imágenes.
+
+Si la sección ya está aprobada en su versión actual sólo la abre. En otro caso
+guarda la marca contra la versión exacta, incrementando antes Characters si la
+aprobación direct-video cambió sus estados internos. Conflictos y operaciones
+activas bloquean el cambio; no existe una vía del Wizard para saltarse estas
+validaciones.
