@@ -4,6 +4,8 @@ import type {
   AgentOpenTabAction,
 } from './agentActions'
 import type { AgentExecutionReport } from './agentContract'
+import type { AgentExecutionTarget } from './agentContract'
+import type { WizardApplicationAdapters } from './applicationAdapters'
 
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
@@ -16,19 +18,22 @@ export type CapabilityRisk = 'read' | 'edit' | 'compute' | 'external_cost'
 export type CapabilityConfirmation = 'none' | 'required'
 
 export interface CapabilityPresentation {
-  destination: AgentTab
+  destination: AgentTab | 'action'
   anchors: string[]
-  replay: 'atomic'
+  replay?: 'atomic'
 }
 
 export interface CapabilityExecutionOutcome {
   message: string
   report?: AgentExecutionReport
+  target?: AgentExecutionTarget
+  taskId?: string
+  pipelineId?: string
+  outputNames?: string[]
 }
 
 export interface CapabilityExecutionContext {
-  openTab(tab: AgentTab): string | Promise<string>
-  apply3dRhythm(action: AgentApply3dRhythmAction): Promise<string>
+  adapters: WizardApplicationAdapters
 }
 
 export interface CapabilityDefinition<TAction extends AgentAction = AgentAction> {
@@ -43,8 +48,15 @@ export interface CapabilityDefinition<TAction extends AgentAction = AgentAction>
   progress: string
   resolve(raw: Record<string, unknown>): TAction | null
   validate(action: TAction): string[]
+  prepare(action: TAction, context: CapabilityExecutionContext): Promise<TAction>
   execute(action: TAction, context: CapabilityExecutionContext): Promise<CapabilityExecutionOutcome>
-  track: {
+  correlate(action: TAction, outcome: CapabilityExecutionOutcome): AgentExecutionTarget | undefined
+  track(
+    action: TAction,
+    outcome: CapabilityExecutionOutcome,
+    context: CapabilityExecutionContext,
+  ): Promise<CapabilityExecutionOutcome>
+  report: {
     targetKind: string
     successState: 'prepared' | 'completed'
   }
@@ -99,12 +111,15 @@ defineCapability<AgentOpenTabAction>({
   validate(action) {
     return tabSet.has(action.tab) ? [] : ['tab must identify a HocusPocus section']
   },
+  async prepare(action) { return action },
   async execute(action, context) {
-    return { message: await context.openTab(action.tab) }
+    return context.adapters.openTab(action.tab)
   },
-  track: { targetKind: 'application_section', successState: 'completed' },
+  correlate(_action, outcome) { return outcome.target },
+  async track(_action, outcome) { return outcome },
+  report: { targetKind: 'application_section', successState: 'completed' },
   summarize(_action, outcome) { return outcome.message },
-  presentation: { destination: 'studio', anchors: [], replay: 'atomic' },
+  presentation: { destination: 'action', anchors: [] },
 })
 
 defineCapability<AgentApply3dRhythmAction>({
@@ -153,11 +168,13 @@ defineCapability<AgentApply3dRhythmAction>({
     if (action.confirm !== true) errors.push('confirmation is required')
     return errors
   },
+  async prepare(action) { return action },
   async execute(action, context) {
-    await context.openTab('video_3d')
-    return { message: await context.apply3dRhythm(action) }
+    return context.adapters.video3d.applyRhythm(action)
   },
-  track: { targetKind: 'video_3d_scene', successState: 'prepared' },
+  correlate(_action, outcome) { return outcome.target },
+  async track(_action, outcome) { return outcome },
+  report: { targetKind: 'video_3d_scene', successState: 'prepared' },
   summarize(_action, outcome) { return outcome.message },
   presentation: {
     destination: 'video_3d',
@@ -192,8 +209,10 @@ export async function executeRegisteredCapability(
   if (!definition) return undefined
   const errors = definition.validate(action)
   if (errors.length) throw new Error(errors.join('; '))
-  const outcome = await definition.execute(action, context)
-  return { ...outcome, message: definition.summarize(action, outcome) }
+  const prepared = await definition.prepare(action, context)
+  const outcome = await definition.execute(prepared, context)
+  const tracked = await definition.track(prepared, outcome, context)
+  return { ...tracked, message: definition.summarize(prepared, tracked) }
 }
 
 export function registeredCapabilitySchemas(): Record<string, unknown>[] {

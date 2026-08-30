@@ -1,7 +1,7 @@
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
 import { comicArtworkInventory } from '../comics/generateArtwork'
 import { buildWizardLabSnapshots, comicLabSnapshot } from './wizardContext'
-import type { AspectRatio, MediaFilter, ModelDef, ResolutionPreset } from '../../types'
+import type { AspectRatio, ModelDef, ResolutionPreset } from '../../types'
 import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
 import {
   bindDirectorProductionTarget,
@@ -40,13 +40,14 @@ import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
 import {
   AGENT_TABS,
-  executeRegisteredCapability,
   getCapability,
   listCapabilities,
   parseRegisteredCapability,
   registeredCapabilitySchemas,
   type AgentTab,
 } from './capabilityRegistry'
+import { defaultApplicationAdapters } from './applicationAdapters'
+import { runRegisteredCapability } from './capabilityRunner'
 
 export type { ExampleConversation }
 export { AGENT_TABS }
@@ -2257,22 +2258,6 @@ export function buildAgentAppSnapshot(): AgentAppSnapshot {
   }
 }
 
-const TAB_TARGETS: Partial<Record<AgentTab, MediaFilter>> = {
-  images: 'images',
-  videos: 'videos',
-  audio: 'audio',
-  '3d': 'model3d',
-  story_lab: 'stories',
-  series_lab: 'series',
-  comics: 'comics',
-  video_editor: 'videoeditor',
-  video_3d: 'scene3d',
-  animate_3d: 'animate3d',
-  character_creator: 'characters',
-  character_kit: 'characters',
-  workspaces: 'workspaces',
-}
-
 const TAB_LABELS: Record<AgentTab, string> = {
   studio: 'Studio',
   director: 'Director',
@@ -2291,52 +2276,6 @@ const TAB_LABELS: Record<AgentTab, string> = {
   character_kit: 'CharacterKit',
   workspaces: 'Workspaces',
   settings: 'Settings',
-}
-
-function openTab(tab: AgentTab): string {
-  const state = useStore.getState()
-  const overlayWasVisible = state.settingsOpen || state.dashboardOpen
-  const mobile = window.matchMedia('(max-width: 767px)').matches
-  const sidebarWasVisible = !mobile || state.sidebarOpen
-  if (tab === 'settings') {
-    const alreadyVisible = state.settingsOpen
-    state.setDashboardOpen(false)
-    state.setSidebarOpen(false)
-    state.setSettingsOpen(true)
-    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
-  }
-  state.setSettingsOpen(false)
-  if (tab === 'productions') {
-    const alreadyVisible = state.dashboardOpen
-    state.setSidebarOpen(false)
-    state.setDashboardOpen(true)
-    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
-  }
-  state.setDashboardOpen(false)
-  if (tab === 'director') {
-    const directorWasCollapsed = window.localStorage.getItem('maestro-director-sidebar-collapsed') === 'true'
-    const alreadyVisible = state.sidebarMode === 'director'
-      && sidebarWasVisible
-      && !directorWasCollapsed
-      && !overlayWasVisible
-    state.setSidebarMode('director')
-    state.setSidebarOpen(true)
-    window.dispatchEvent(new Event('maestro:director-open'))
-    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
-  } else if (tab === 'studio') {
-    const alreadyVisible = state.sidebarMode === 'studio' && sidebarWasVisible && !overlayWasVisible
-    state.setSidebarMode('studio')
-    state.setSidebarOpen(true)
-    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
-  } else {
-    const mediaFilter = TAB_TARGETS[tab]
-    const alreadyVisible = mediaFilter === state.mediaFilter && !overlayWasVisible
-    if (mediaFilter) {
-      state.setMediaFilter(mediaFilter)
-      state.setSidebarOpen(false)
-    }
-    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
-  }
 }
 
 function visibleT2vModels(models: ModelDef[]): ModelDef[] {
@@ -2714,22 +2653,19 @@ export async function executeAgentActions(
       }
     }
     try {
-      const registeredOutcome = await executeRegisteredCapability(action, {
-        openTab,
-        async apply3dRhythm(rhythmAction) {
-          const { requestAgentSceneRhythm } = await import('./agentUiBus')
-          return requestAgentSceneRhythm(rhythmAction)
-        },
+      const registeredResult = await runRegisteredCapability(action, {
+        adapters: defaultApplicationAdapters,
+        workspace: useStore.getState().activeWorkspace || 'default',
       })
-      if (registeredOutcome) {
-        results.push({ action, ok: true, ...registeredOutcome })
+      if (registeredResult) {
+        results.push(registeredResult)
       } else if (action.type === 'open_story_section') {
-        openTab('story_lab')
+        await defaultApplicationAdapters.storyLab.open()
         const { openAgentStorySection } = await import('./agentUiBus')
         openAgentStorySection(action.section)
         results.push({ action, ok: true, message: `He abierto Story Lab → ${action.section}.` })
       } else if (action.type === 'open_series_section') {
-        openTab('series_lab')
+        await defaultApplicationAdapters.seriesLab.open()
         const { openAgentSeriesSection } = await import('./agentUiBus')
         openAgentSeriesSection(action.section)
         results.push({ action, ok: true, message: `He abierto Series Lab → ${action.section}.` })
@@ -2852,15 +2788,15 @@ export async function executeAgentActions(
         const { commitSeriesCanonDelta } = await import('./labActions')
         results.push({ action, ok: true, message: await commitSeriesCanonDelta(action) })
       } else if (action.type === 'open_3d_scene') {
-        openTab('video_3d')
+        await defaultApplicationAdapters.video3d.open()
         const { requestAgentSceneControl } = await import('./agentUiBus')
         results.push({ action, ok: true, message: await requestAgentSceneControl(action) })
       } else if (action.type === 'save_3d_scene') {
-        openTab('video_3d')
+        await defaultApplicationAdapters.video3d.open()
         const { requestAgentSceneControl } = await import('./agentUiBus')
         results.push({ action, ok: true, message: await requestAgentSceneControl(action) })
       } else if (action.type === 'export_3d_scene') {
-        openTab('video_3d')
+        await defaultApplicationAdapters.video3d.open()
         const { requestAgentSceneControl } = await import('./agentUiBus')
         results.push({ action, ok: true, message: await requestAgentSceneControl(action) })
       } else if (action.type === 'create_character_kit') {

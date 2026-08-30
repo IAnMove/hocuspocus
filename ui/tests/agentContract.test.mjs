@@ -45,10 +45,12 @@ test('registered capabilities supply one contract for prompt schema parser execu
   for (const capability of registered) {
     assert.equal(typeof capability.resolve, 'function')
     assert.equal(typeof capability.validate, 'function')
+    assert.equal(typeof capability.prepare, 'function')
     assert.equal(typeof capability.execute, 'function')
+    assert.equal(typeof capability.correlate, 'function')
+    assert.equal(typeof capability.track, 'function')
     assert.equal(typeof capability.summarize, 'function')
-    assert.ok(capability.track.targetKind)
-    assert.equal(capability.presentation.replay, 'atomic')
+    assert.ok(capability.report.targetKind)
   }
 
   const open = parseRegisteredCapability('open_tab', { type: 'open_tab', tab: 'series_lab' })
@@ -63,13 +65,81 @@ test('registered capabilities supply one contract for prompt schema parser execu
   }), null)
 
   const calls = []
-  const context = {
-    openTab(tab) { calls.push(`open:${tab}`); return `Opened ${tab}` },
-    async apply3dRhythm(action) { calls.push(`rhythm:${action.profile}`); return 'Rhythm baked' },
-  }
+  const context = { adapters: {
+    async openTab(tab) {
+      calls.push(`open:${tab}`)
+      return { message: `Opened ${tab}`, target: { kind: 'application_section', id: tab, title: tab } }
+    },
+    video3d: {
+      async applyRhythm(action) {
+        calls.push('open:video_3d', `rhythm:${action.profile}`)
+        return { message: 'Rhythm baked', target: { kind: 'application_section', id: 'video_3d', title: '3D Video' } }
+      },
+    },
+  } }
   assert.equal((await executeRegisteredCapability(open, context)).message, 'Opened series_lab')
   assert.equal((await executeRegisteredCapability(rhythm, context)).message, 'Rhythm baked')
   assert.deepEqual(calls, ['open:series_lab', 'open:video_3d', 'rhythm:peek'])
+})
+
+test('common capability runner follows every stage and reports the verified adapter target', async () => {
+  const { resolveAndRunRegisteredCapability } = await import('../src/features/agent/capabilityRunner.ts')
+  const stages = []
+  const result = await resolveAndRunRegisteredCapability('open_tab', {
+    type: 'open_tab', tab: 'series_lab',
+  }, {
+    workspace: 'demo',
+    adapters: {
+      async openTab(tab) {
+        return {
+          message: `Opened ${tab}`,
+          target: { kind: 'application_section', id: tab, title: 'Series Lab' },
+        }
+      },
+    },
+    onStage: current => stages.push(current),
+  })
+  assert.deepEqual(stages, [
+    'resolve', 'validate', 'prepare', 'confirm', 'execute', 'correlate', 'track', 'report',
+  ])
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.report.target, {
+    kind: 'application_section', id: 'series_lab', title: 'Series Lab',
+  })
+  assert.match(result.report.executionKey, /^demo\|open_tab\|series_lab\|/)
+})
+
+test('application adapters navigate and verify targets without rendering React', async () => {
+  const { createDefaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const before = {
+    mediaFilter: useStore.getState().mediaFilter,
+    sidebarMode: useStore.getState().sidebarMode,
+    sidebarOpen: useStore.getState().sidebarOpen,
+    settingsOpen: useStore.getState().settingsOpen,
+    dashboardOpen: useStore.getState().dashboardOpen,
+  }
+  try {
+    const adapters = createDefaultApplicationAdapters()
+    assert.deepEqual(Object.keys(adapters).sort(), [
+      'characterKit', 'comic', 'openTab', 'queue', 'seriesLab', 'storyLab', 'studio', 'video3d', 'videoEditor',
+    ])
+    const story = await adapters.storyLab.open()
+    assert.equal(useStore.getState().mediaFilter, 'stories')
+    assert.equal(story.target.id, 'story_lab')
+    const studio = await adapters.studio.open()
+    assert.equal(useStore.getState().sidebarMode, 'studio')
+    assert.equal(useStore.getState().sidebarOpen, true)
+    assert.equal(studio.target.id, 'studio')
+    const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+    const [executed] = await executeAgentActions([{ type: 'open_tab', tab: 'series_lab' }])
+    assert.equal(executed.ok, true)
+    assert.deepEqual(executed.report.target, {
+      kind: 'application_section', id: 'series_lab', title: 'Series Lab',
+    })
+  } finally {
+    useStore.setState(before)
+  }
 })
 
 test('unknown actions and extra fields never survive the parser', async () => {

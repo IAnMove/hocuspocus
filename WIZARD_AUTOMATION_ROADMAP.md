@@ -213,6 +213,15 @@ Acceptance:
 - Action outcomes contain real task/pipeline/output IDs.
 - Navigation is emitted as a verified result target, not guessed separately.
 
+Status: **implemented** for the registered-capability path. The common runner
+executes all eight lifecycle stages and preserves real IDs supplied by an
+operation. Eight application adapter ports isolate navigation and business
+requests from React; navigation is verified against canonical store state and
+returned as the report target. `open_tab` and `apply_3d_rhythm` are the first
+end-to-end users. The legacy action dispatcher remains the compatibility
+adapter while actions migrate domain by domain. See
+[`docs/development/WIZARD_ACTION_RUNNER.md`](docs/development/WIZARD_ACTION_RUNNER.md).
+
 ---
 
 ## Phase 4 — Durable workflow runtime
@@ -415,6 +424,9 @@ Agent Mode complete prematurely.
 - Existing action catalog: implemented, partially on the common report contract.
 - Typed capability registry: implemented for `open_tab` and
   `apply_3d_rhythm`; legacy actions remain operational through the adapter.
+- Common capability runner and application adapters: implemented for the
+  registered path; navigation targets are verified and report correlation is
+  centralized.
 - Chat execution cards: implemented.
 - Backend chat persistence: stabilized (typed payloads, guarded hydration,
   workspace revision reset and CAS merge/retry); final UI smoke pending.
@@ -426,8 +438,7 @@ Agent Mode complete prematurely.
 
 ## Continuity note
 
-Finished block **2 — capability registry foundation**. Before block **3 —
-common action runner and adapters**, resolve Decision gate A with the user:
-magic speed, Wizard visibility, auto-scroll, atomic visual replay,
-accessibility and sound. The registry deliberately reserves presentation
-metadata but no broad UI magic animation has been built yet.
+Finished block **3 — common action runner and adapters**. Begin block **4 —
+durable workflow runtime** next. Keep Decision gate A open: presentation
+metadata stays optional and no speed, Wizard visibility, auto-scroll, sound or
+animation behavior is frozen while the non-visual workflow core is built.
