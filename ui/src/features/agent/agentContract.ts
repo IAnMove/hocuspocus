@@ -33,6 +33,7 @@ export interface AgentActionDefinitionMeta {
 const COMPOUND_DEPENDENCIES: Record<string, readonly string[]> = {
   generate_comic: ['create_comic'],
   start_director_production: ['stage_story_video', 'stage_story_music_video'],
+  export_video_editor: ['validate_video_editor_timeline'],
 }
 
 const EXPENSIVE_ACTIONS = new Set([
@@ -45,9 +46,10 @@ const EXPENSIVE_ACTIONS = new Set([
   'render_series_shots',
   'assemble_series_episode',
   'export_3d_scene',
+  'export_video_editor',
 ])
 
-const QUEUED_ACTIONS = new Set(['start_generation', 'queue_sfx_pack', 'render_series_shots'])
+const QUEUED_ACTIONS = new Set(['start_generation', 'queue_sfx_pack', 'render_series_shots', 'export_video_editor'])
 const RUNNING_ACTIONS = new Set(['start_director_production', 'export_3d_scene', 'generate_story_visuals'])
 const REUSABLE_STATES = new Set<AgentExecutionState>(['prepared', 'queued', 'running', 'completed'])
 

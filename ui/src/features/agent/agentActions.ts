@@ -24,6 +24,17 @@ import type {
   AgentTrackCharacterKitJobAction,
   AgentUpdateCharacterKitAction,
 } from './characterKitActions'
+import type {
+  AgentAddVideoEditorAudioAction,
+  AgentAddVideoEditorClipsAction,
+  AgentCreateVideoEditorProjectAction,
+  AgentExportVideoEditorAction,
+  AgentOpenVideoEditorProjectAction,
+  AgentOrderVideoEditorClipsAction,
+  AgentTrackVideoEditorExportAction,
+  AgentTrimVideoEditorClipAction,
+  AgentValidateVideoEditorTimelineAction,
+} from './videoEditorActions'
 import type { ExampleConversation } from './agentExamples'
 import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
@@ -524,6 +535,15 @@ export type AgentAction = AgentOpenTabAction
   | AgentOpenCharacterKitRigAction
   | AgentApplyCharacterKitPresetAction
   | AgentTrackCharacterKitJobAction
+  | AgentCreateVideoEditorProjectAction
+  | AgentOpenVideoEditorProjectAction
+  | AgentAddVideoEditorClipsAction
+  | AgentOrderVideoEditorClipsAction
+  | AgentTrimVideoEditorClipAction
+  | AgentAddVideoEditorAudioAction
+  | AgentValidateVideoEditorTimelineAction
+  | AgentExportVideoEditorAction
+  | AgentTrackVideoEditorExportAction
 
 export interface AgentTurn {
   reply: string
@@ -710,6 +730,15 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   opencharacterkitrig: 'open_character_kit_rig',
   applycharacterkitpreset: 'apply_character_kit_preset',
   trackcharacterkitjob: 'track_character_kit_job',
+  createvideoeditorproject: 'create_video_editor_project',
+  openvideoeditorproject: 'open_video_editor_project',
+  addvideoeditorclips: 'add_video_editor_clips',
+  ordervideoeditorclips: 'order_video_editor_clips',
+  trimvideoeditorclip: 'trim_video_editor_clip',
+  addvideoeditoraudio: 'add_video_editor_audio',
+  validatevideoeditortimeline: 'validate_video_editor_timeline',
+  exportvideoeditor: 'export_video_editor',
+  trackvideoeditorexport: 'track_video_editor_export',
   attachstudioreferences: 'attach_studio_references',
   configurestudioloras: 'configure_studio_loras',
   inspectqueue: 'inspect_queue',
@@ -837,6 +866,7 @@ const CANONICAL_FIELD_NAMES = [
   'page_number', 'panel_number', 'page_numbers', 'pilot',
   'factual_biography', 'biography_review',
   'kit_name', 'look_notes', 'preset_id',
+  'clip_names', 'clip_name', 'trim_start', 'trim_end', 'project_name',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
   'loras', 'weight',
   'workspace_name',
@@ -1497,6 +1527,46 @@ function parseAction(value: unknown): AgentAction | null {
   if (type === 'track_character_kit_job') {
     return { type: 'track_character_kit_job', kitName: cleanString(raw.kit_name, 160) }
   }
+  if (type === 'create_video_editor_project') {
+    const projectName = cleanString(raw.project_name, 160) || cleanString(raw.title, 160)
+    if (!projectName) return null
+    return { type: 'create_video_editor_project', projectName }
+  }
+  if (type === 'open_video_editor_project') {
+    return { type: 'open_video_editor_project', projectName: cleanString(raw.project_name, 160) || cleanString(raw.title, 160) }
+  }
+  if (type === 'add_video_editor_clips') {
+    const outputNames = stringArray(raw.reference_output_names, 24, 300)
+    if (!outputNames.length) return null
+    return { type: 'add_video_editor_clips', outputNames }
+  }
+  if (type === 'order_video_editor_clips') {
+    const clipNames = stringArray(raw.clip_names, 40, 300)
+    if (!clipNames.length) return null
+    return { type: 'order_video_editor_clips', clipNames }
+  }
+  if (type === 'trim_video_editor_clip') {
+    const clipName = cleanString(raw.clip_name, 300)
+    const trimStart = optionalNumber(raw.trim_start, 0, 86_400) ?? 0
+    const trimEnd = optionalNumber(raw.trim_end, 0, 86_400)
+    if (!clipName || trimEnd == null) return null
+    return { type: 'trim_video_editor_clip', clipName, trimStart, trimEnd }
+  }
+  if (type === 'add_video_editor_audio') {
+    const outputName = cleanString(raw.audio_output_name, 300)
+    if (!outputName) return null
+    return { type: 'add_video_editor_audio', clipName: cleanString(raw.clip_name, 300), outputName }
+  }
+  if (type === 'validate_video_editor_timeline') {
+    return { type: 'validate_video_editor_timeline' }
+  }
+  if (type === 'export_video_editor') {
+    if (raw.confirm !== true) return null
+    return { type: 'export_video_editor', confirm: true }
+  }
+  if (type === 'track_video_editor_export') {
+    return { type: 'track_video_editor_export' }
+  }
   return null
 }
 
@@ -1937,7 +2007,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -2121,6 +2191,11 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           kit_name: { type: 'string', maxLength: 160 },
           look_notes: { type: 'string', maxLength: 4_000 },
           preset_id: { type: 'string', maxLength: 160 },
+          project_name: { type: 'string', maxLength: 160 },
+          clip_names: { type: 'array', maxItems: 40, items: { type: 'string', maxLength: 300 } },
+          clip_name: { type: 'string', maxLength: 300 },
+          trim_start: { type: 'number', minimum: 0, maximum: 86_400 },
+          trim_end: { type: 'number', minimum: 0, maximum: 86_400 },
         },
         required: ['type'],
       },
@@ -2584,6 +2659,24 @@ export async function executeAgentActions(
                 ? `Aplicando el preset ${action.presetId}…`
               : action.type === 'track_character_kit_job'
                 ? 'Consultando el trabajo del Character Kit…'
+              : action.type === 'create_video_editor_project'
+                ? `Creando el proyecto de Video Editor ${action.projectName}…`
+              : action.type === 'open_video_editor_project'
+                ? 'Abriendo Video Editor…'
+              : action.type === 'add_video_editor_clips'
+                ? 'Añadiendo clips exactos a Video Editor…'
+              : action.type === 'order_video_editor_clips'
+                ? 'Reordenando la línea de tiempo…'
+              : action.type === 'trim_video_editor_clip'
+                ? `Recortando ${action.clipName}…`
+              : action.type === 'add_video_editor_audio'
+                ? 'Añadiendo audio a la línea de tiempo…'
+              : action.type === 'validate_video_editor_timeline'
+                ? 'Validando la línea de tiempo…'
+              : action.type === 'export_video_editor'
+                ? 'Encolando la exportación de Video Editor…'
+              : action.type === 'track_video_editor_export'
+                ? 'Consultando la exportación de Video Editor…'
               : action.type === 'create_comic'
                 ? 'Montando el cómic de ejemplo…'
               : action.type === 'generate_comic'
@@ -2816,6 +2909,43 @@ export async function executeAgentActions(
       } else if (action.type === 'track_character_kit_job') {
         const { trackAgentCharacterKitJob } = await import('./characterKitActions')
         const outcome = await trackAgentCharacterKitJob(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'create_video_editor_project') {
+        const { createAgentVideoEditorProject } = await import('./videoEditorActions')
+        const outcome = await createAgentVideoEditorProject(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'open_video_editor_project') {
+        const { openAgentVideoEditorProject } = await import('./videoEditorActions')
+        const outcome = await openAgentVideoEditorProject(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'add_video_editor_clips') {
+        const { addAgentVideoEditorClips } = await import('./videoEditorActions')
+        const outcome = await addAgentVideoEditorClips(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'order_video_editor_clips') {
+        const { orderAgentVideoEditorClips } = await import('./videoEditorActions')
+        const outcome = await orderAgentVideoEditorClips(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'trim_video_editor_clip') {
+        const { trimAgentVideoEditorClip } = await import('./videoEditorActions')
+        const outcome = await trimAgentVideoEditorClip(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'add_video_editor_audio') {
+        const { addAgentVideoEditorAudio } = await import('./videoEditorActions')
+        const outcome = await addAgentVideoEditorAudio(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'validate_video_editor_timeline') {
+        const { validateAgentVideoEditorTimeline } = await import('./videoEditorActions')
+        const outcome = await validateAgentVideoEditorTimeline()
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'export_video_editor') {
+        if (!action.confirm) throw new Error('Exportar Video Editor requiere confirm=true.')
+        const { exportAgentVideoEditor } = await import('./videoEditorActions')
+        const outcome = await exportAgentVideoEditor(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
+      } else if (action.type === 'track_video_editor_export') {
+        const { trackAgentVideoEditorExport } = await import('./videoEditorActions')
+        const outcome = await trackAgentVideoEditorExport()
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')
