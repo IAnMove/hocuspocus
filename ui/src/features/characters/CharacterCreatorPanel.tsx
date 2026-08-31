@@ -76,6 +76,7 @@ function newId(): string {
 export function CharacterCreatorPanel() {
   const models = useStore(s => s.models)
   const activeWorkspace = useStore(s => s.activeWorkspace)
+  const llmProvider = useStore(s => s.productionProfile.text.provider)
   const outputFiles = useStore(s => s.outputs)
   const loadOutputs = useStore(s => s.loadOutputs)
   const setMediaFilter = useStore(s => s.setMediaFilter)
@@ -162,7 +163,10 @@ export function CharacterCreatorPanel() {
       setRefs(current => current.map(ref => uploaded.find(item => item.id === ref.id) || ref))
       let resolvedAPrompt = aPrompt.trim()
       if (needsVisionDescribe(resolvedAPrompt)) {
-        setJobMessage('MiniMax está describiendo la imagen…')
+        if (llmProvider !== 'minimax' && llmProvider !== 'local') {
+          throw new Error('Auto-describe only works with MiniMax or the internal LLM. Type an A Prompt, or switch Settings → LLM.')
+        }
+        setJobMessage(llmProvider === 'minimax' ? 'MiniMax está describiendo la imagen…' : 'El LLM interno está describiendo la imagen…')
         const described = await api.describeCharacterRefs({
           kind,
           image_paths: uploaded.map(ref => ref.path).filter((path): path is string => Boolean(path)),
@@ -475,7 +479,7 @@ export function CharacterCreatorPanel() {
       <header className="border-b border-border bg-bg-secondary px-3 py-2">
         <h2 className="text-sm font-semibold text-text-primary">Character Creator</h2>
         <p className="text-[10px] text-text-muted">
-          Turnaround 3D: sube una foto, MiniMax describe el sujeto y arma el prompt de órbita. Sale un vídeo 360 y, si quieres, un mesh Hunyuan. No es el puppet 2D de Face Rig.
+          Turnaround 3D: sube una foto. MiniMax o el LLM interno describen el sujeto si dejas el A Prompt vacío. Sale un vídeo 360 y, si quieres, un mesh Hunyuan. No es el puppet 2D de Face Rig.
         </p>
         {kind === 'character' && (
           <button
@@ -577,7 +581,7 @@ export function CharacterCreatorPanel() {
                   value={aPrompt}
                   onChange={event => setAPrompt(event.target.value)}
                   rows={5}
-                  placeholder="Vacío = MiniMax describe las fotos al generar."
+                  placeholder="Vacío = MiniMax o el LLM interno describen las fotos. Otros proveedores requieren un A Prompt."
                   className="w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[11px] text-text-primary"
                 />
               )}

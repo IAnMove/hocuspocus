@@ -1,4 +1,5 @@
 import * as api from '../api/client'
+import { useStore } from '../stores/useStore'
 import { generateImageAsset } from './imageGeneration'
 import type { SceneRecipe, SceneRecipeAsset, SceneRecipeAudio } from './sceneRecipe'
 import { aspectRatioForScene, h3FramesForDuration, h3ResolutionForScene, recipeAssetDuration } from './sceneRecipe'
@@ -81,7 +82,10 @@ async function resolveImage(asset: SceneRecipeAsset, recipe: SceneRecipe, onStat
   onStatus?.(`Generating image plate “${asset.id}”…`)
   const width = recipe.scene.width || 1280
   const height = recipe.scene.height || 720
-  const result = await withTimeout(generateImageAsset('minimax', asset.prompt || asset.id, asset.model, undefined, '', {
+  const profile = useStore.getState().productionProfile
+  const imageProvider = profile.image.provider === 'minimax' ? 'minimax' : 'maestro'
+  const imageModel = profile.image.model || asset.model
+  const result = await withTimeout(generateImageAsset(imageProvider, asset.prompt || asset.id, imageModel, undefined, '', {
     aspectRatio: aspectRatioForScene(width, height),
   }), 8 * 60 * 1000, `Image “${asset.id}”`)
   return result.source || result.name

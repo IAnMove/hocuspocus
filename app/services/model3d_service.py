@@ -523,9 +523,34 @@ def _prune_finished_jobs_locked() -> None:
 def _minimax_api_key() -> str:
     try:
         import wgp
-        return str((wgp.server_config.get("services") or {}).get("minimax_api_key") or "").strip()
+        from .provider_profile import resolve_minimax_key
+        return resolve_minimax_key(wgp.server_config.get("services") or {}, "image")
     except Exception:
         return ""
+
+
+def _services() -> dict:
+    try:
+        import wgp
+        return wgp.server_config.get("services") or {}
+    except Exception:
+        return {}
+
+
+def _active_profile() -> dict:
+    try:
+        import wgp
+        from .provider_profile import alias_model3d_provider
+        raw = wgp.server_config.get("maestro_production_profile") or {}
+        image = raw.get("image") if isinstance(raw.get("image"), dict) else {}
+        model3d = raw.get("model3d") if isinstance(raw.get("model3d"), dict) else {}
+        return {
+            "image_provider": str(image.get("provider") or "local").lower(),
+            "model3d_provider": alias_model3d_provider(str(model3d.get("provider") or "local")),
+            "model3d_model": str(model3d.get("model") or "").strip(),
+        }
+    except Exception:
+        return {"image_provider": "local", "model3d_provider": "local", "model3d_model": ""}
 
 
 def _condition_text_job_with_minimax(request_data: dict[str, Any], output_dir: str, job_id: str) -> str | None:
@@ -533,6 +558,8 @@ def _condition_text_job_with_minimax(request_data: dict[str, Any], output_dir: s
         return None
     prompt = str((request_data.get("settings") or {}).get("prompt") or "").strip()
     if not prompt:
+        return None
+    if _active_profile().get("image_provider") != "minimax":
         return None
     api_key = _minimax_api_key()
     if not api_key:
@@ -557,6 +584,134 @@ def _purge_truncated_dit_cache() -> list[Path]:
     return truncated
 
 
+def _start_remote_job(
+    *,
+    provider: str,
+    body: dict[str, Any],
+    image_paths: dict[str, str],
+    output_dir: str,
+    workspace: str,
+) -> dict[str, Any]:
+    job_id = uuid.uuid4().hex
+    task_id = _canonical_task_id(job_id)
+    prompt = str((body.get("prompt") or body.get("settings", {}).get("prompt") if isinstance(body.get("settings"), dict) else "") or "").strip()
+    model_id = str(body.get("model_id") or _active_profile().get("model3d_model") or provider)
+    image_path = image_paths.get("front") or next(iter(image_paths.values()), None)
+    job = {
+        "job_id": job_id,
+        "task_id": task_id,
+        "root_task_id": task_id,
+        "status": "queued",
+        "progress": 0.0,
+        "phase": "queued",
+        "message": f"Queued {provider} generation",
+        "error": None,
+        "filename": None,
+        "url": None,
+        "operation": "generate",
+        "model_id": model_id,
+        "provider": provider,
+        "workspace": str(workspace or "default"),
+        "created_at": time.time(),
+        "updated_at": time.time(),
+        "request": {
+            "provider": provider,
+            "prompt": prompt,
+            "image_path": image_path,
+            "model": model_id,
+        },
+    }
+    with _lock:
+        _jobs[job_id] = job
+        initial = _public_job(dict(job))
+    thread = threading.Thread(
+        target=_run_remote_job,
+        args=(job_id, os.path.abspath(output_dir)),
+        daemon=True,
+    )
+    thread.start()
+    return initial
+
+
+def _run_remote_job(job_id: str, output_dir: str) -> None:
+    def cancelled() -> bool:
+        with _lock:
+            job = _jobs.get(job_id, {})
+            return bool(job.get("cancel_requested")) or job.get("status") in {
+                "cancelling", "cancelled",
+            }
+
+    with _lock:
+        job = _jobs.get(job_id) or {}
+        request_data = dict(job.get("request") or {})
+        provider = str(job.get("provider") or request_data.get("provider") or "")
+    services = _services()
+    stem = f"{provider}-{job_id[:8]}"
+    try:
+        _update_job(job_id, status="running", phase="running", progress=0.1, message=f"Calling {provider}")
+        if cancelled():
+            _settle_cancelled_job(job_id)
+            return
+        if provider == "meshy":
+            from .meshy_3d_service import generate_model as generate_meshy
+            result = generate_meshy(
+                api_key=str(services.get("meshy_api_key") or ""),
+                output_dir=output_dir,
+                prompt=str(request_data.get("prompt") or ""),
+                image_path=request_data.get("image_path"),
+                model=str(request_data.get("model") or "latest"),
+                cancelled=cancelled,
+                filename_stem=stem,
+            )
+        elif provider == "hi3d":
+            from .hi3d_service import generate_model as generate_hi3d
+            image_path = request_data.get("image_path")
+            if not image_path:
+                if _active_profile().get("image_provider") != "minimax":
+                    raise RuntimeError(
+                        "Hi3D needs a photo. Add a reference image, or set MiniMax Image as the default image generator."
+                    )
+                still = _condition_text_job_with_minimax(
+                    {"images": {}, "settings": {"prompt": request_data.get("prompt") or "3D object, white background"}},
+                    output_dir,
+                    job_id,
+                )
+                if not still:
+                    raise RuntimeError("Hi3D needs a photo. Add a reference image or configure MiniMax Image.")
+                image_path = still
+            result = generate_hi3d(
+                api_key=str(services.get("hi3d_api_key") or ""),
+                image_path=str(image_path),
+                output_dir=output_dir,
+                model=str(request_data.get("model") or "hitem3dv2.1"),
+                cancelled=cancelled,
+                filename_stem=stem,
+            )
+        else:
+            raise RuntimeError(f"Unknown 3D provider: {provider}")
+        filename = result["filename"]
+        _update_job(
+            job_id,
+            status="completed",
+            phase="completed",
+            progress=1.0,
+            message="3D model ready",
+            filename=filename,
+            url=f"/api/v1/file/{filename}",
+        )
+    except Exception as exc:
+        if cancelled():
+            _settle_cancelled_job(job_id)
+            return
+        _update_job(
+            job_id,
+            status="failed",
+            phase="failed",
+            message=str(exc),
+            error=str(exc),
+        )
+
+
 def start_job(
     *,
     body: dict[str, Any],
@@ -565,6 +720,16 @@ def start_job(
     source_mesh_path: str | None = None,
     workspace: str = "default",
 ) -> dict[str, Any]:
+    profile = _active_profile()
+    provider = str(body.get("provider") or profile.get("model3d_provider") or "local").strip().lower()
+    if provider in {"meshy", "hi3d"}:
+        return _start_remote_job(
+            provider=provider,
+            body=body,
+            image_paths=image_paths,
+            output_dir=output_dir,
+            workspace=workspace,
+        )
     runtime = installation_status()
     if not runtime["installed"]:
         raise RuntimeError(runtime["install_hint"])
@@ -794,10 +959,12 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                     job["request"] = request_data
             _update_job(job_id, message="Reference still ready; starting Hunyuan3D mesh")
         else:
-            extra = f" MiniMax image failed ({minimax_error})." if minimax_error else " Set the MiniMax API key in Settings → Services."
+            extra = f" MiniMax image failed ({minimax_error})." if minimax_error else (
+                " Set MiniMax Image as the default image generator in Settings, or add a photo."
+            )
             raise RuntimeError(
-                "HunyuanDiT is disabled: it froze the GPU and the local weights were truncated."
-                f"{extra} Provide a reference image and retry."
+                "Hunyuan3D text-to-3D needs a reference still."
+                f"{extra}"
             )
     request_path = JOBS_DIR / f"{job_id}.json"
     request_path.write_text(json.dumps(request_data, indent=2), encoding="utf-8")

@@ -1,6 +1,10 @@
 import { AlertTriangle, Loader2, RotateCcw } from 'lucide-react'
 import type { DirectorV2PlanJob } from '../../types'
 
+function formatTokenCount(value: number): string {
+  return new Intl.NumberFormat('es-ES').format(value)
+}
+
 function formatIndexRanges(indices: number[]): string {
   const sorted = [...new Set(indices)].sort((left, right) => left - right)
   if (sorted.length === 0) return 'none'
@@ -56,7 +60,7 @@ export function DirectorPlanRecoveryCard({ job, loading, onResume }: DirectorPla
         {typeof tokenTotal === 'number' && (
           <>
             <dt className="text-text-muted">Tokens</dt>
-            <dd className="text-text-primary">{tokenTotal.toLocaleString()}</dd>
+            <dd className="text-text-primary">{formatTokenCount(tokenTotal)}</dd>
           </>
         )}
       </dl>

@@ -78,6 +78,8 @@ export function Hunyuan3DPanel() {
   const toggleModelEnabled = useStore(state => state.toggleModelEnabled)
   const modelId = useStore(state => state.params.model_type)
   const prompt = useStore(state => state.params.prompt)
+  const model3dProvider = useStore(state => state.productionProfile.model3d?.provider || 'local')
+  const model3dModel = useStore(state => state.productionProfile.model3d?.model || '')
   const setParam = useStore(state => state.setParam)
   const selectMaestroModel = useStore(state => state.selectModel)
   const [capabilities, setCapabilities] = useState<Hunyuan3DCapabilities | null>(null)
@@ -124,7 +126,8 @@ export function Hunyuan3DPanel() {
   const selectedModel = useMemo(() => capabilities?.models.find(model => model.id === modelId), [capabilities, modelId])
   const isMultiview = operation === 'generate' && !!selectedModel?.multiview
   const isRunning = !!job && ACTIVE_3D_JOB_STATUSES.has(job.status)
-  const installed = !!capabilities?.runtime.installed
+  const remote3d = model3dProvider === 'meshy' || model3dProvider === 'hi3d'
+  const installed = remote3d || !!capabilities?.runtime.installed
   const hasTextureReference = !!views.front || !!prompt.trim()
   const hasInput = operation === 'retexture'
     ? !!sourceModel && hasTextureReference && textureMode !== 'none'
@@ -311,7 +314,8 @@ export function Hunyuan3DPanel() {
         operation,
         source_model: operation === 'retexture' ? sourceModel?.path : undefined,
         preset,
-        model_id: modelId,
+        provider: model3dProvider === 'local' ? undefined : model3dProvider,
+        model_id: model3dProvider === 'local' ? modelId : (model3dModel || modelId),
         prompt: prompt.trim(),
         workspace: activeWorkspace,
         images,
@@ -350,14 +354,14 @@ export function Hunyuan3DPanel() {
     }
   }
 
-  if (capabilityError) return <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{capabilityError}</div>
+  if (capabilityError && !remote3d) return <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{capabilityError}</div>
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary"><Box size={15} className="text-accent-blue" /> Hunyuan3D Studio</div>
-          <p className="text-[10px] text-text-muted mt-1">Native geometry, multi-view reconstruction and PBR materials.</p>
+          <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary"><Box size={15} className="text-accent-blue" /> {remote3d ? `${model3dProvider === 'meshy' ? 'Meshy' : 'Hi3D'} Studio` : 'Hunyuan3D Studio'}</div>
+          <p className="text-[10px] text-text-muted mt-1">{remote3d ? 'Remote image/text to 3D. Change the default in Settings → Integrations.' : 'Native geometry, multi-view reconstruction and PBR materials.'}</p>
         </div>
         <div className="flex items-center gap-1 text-[9px] text-accent-green bg-accent-green/10 border border-accent-green/20 rounded-full px-2 py-1 whitespace-nowrap"><Cpu size={10} /> VRAM released after each job</div>
       </div>
@@ -366,7 +370,7 @@ export function Hunyuan3DPanel() {
         <button type="button" disabled={isRunning} onClick={() => setOperation('retexture')} className={`rounded-md px-2 py-1.5 text-[10px] transition-colors disabled:opacity-50 ${operation === 'retexture' ? 'bg-purple-500/15 text-purple-300' : 'text-text-muted hover:text-text-primary'}`}><span className="flex items-center justify-center gap-1"><Palette size={11} /> Retexture GLB</span></button>
       </div>
 
-      {!capabilities ? (
+      {!remote3d && !capabilities ? (
         <div className="flex items-center justify-center py-8 text-xs text-text-muted"><Loader2 size={15} className="animate-spin mr-2" /> Loading models...</div>
       ) : !installed ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
@@ -391,7 +395,7 @@ export function Hunyuan3DPanel() {
           <div>
             <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Performance profile</label>
             <div className="grid grid-cols-2 gap-1.5">
-              {capabilities.presets.map(item => (
+              {(capabilities?.presets || []).map(item => (
                 <button key={item.id} onClick={() => applyPreset(item.id)} className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${preset === item.id ? 'border-accent-blue bg-accent-blue/10' : 'border-border bg-bg-tertiary hover:border-border-light'}`}>
                   <div className="text-[11px] font-medium text-text-primary">{item.label}</div>
                   <div className="text-[9px] text-text-muted mt-0.5 line-clamp-2">{item.description}</div>
@@ -400,11 +404,11 @@ export function Hunyuan3DPanel() {
             </div>
           </div>
 
-          <div>
+          {!remote3d && <div>
             <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Hunyuan model</label>
             <ModelSelector />
             {selectedModel && <p className="text-[9px] text-text-muted mt-1">{selectedModel.description} Recommended: {selectedModel.recommended_vram_gb}GB+ VRAM.</p>}
-          </div>
+          </div>}
 
           {!isMultiview && (
             <div>
@@ -463,12 +467,12 @@ export function Hunyuan3DPanel() {
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-[10px] text-text-muted">Texture
                   <select value={textureMode} onChange={event => setTextureMode(event.target.value)} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary">
-                    {capabilities.texture_modes.filter(mode => mode.id !== 'pbr' || selectedModel?.engine === 'v21').map(mode => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                    {(capabilities?.texture_modes || []).filter(mode => mode.id !== 'pbr' || selectedModel?.engine === 'v21').map(mode => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
                   </select>
                 </label>
                 <label className="text-[10px] text-text-muted">Output
                   <select value={outputFormat} disabled={operation === 'retexture'} onChange={event => setOutputFormat(event.target.value)} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary disabled:opacity-60">
-                    {capabilities.output_formats.map(format => <option key={format} value={format} disabled={textureMode === 'pbr' && format !== 'glb'}>{format.toUpperCase()}{textureMode === 'pbr' && format !== 'glb' ? ' (PBR requires GLB)' : ''}</option>)}
+                    {(capabilities?.output_formats || ['glb']).map(format => <option key={format} value={format} disabled={textureMode === 'pbr' && format !== 'glb'}>{format.toUpperCase()}{textureMode === 'pbr' && format !== 'glb' ? ' (PBR requires GLB)' : ''}</option>)}
                   </select>
                 </label>
                 <label className="text-[10px] text-text-muted">Steps<input type="number" min={1} max={100} value={steps} onChange={event => setSteps(Number(event.target.value))} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary" /></label>

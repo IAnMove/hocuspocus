@@ -3,9 +3,12 @@ import { useEffect, useState } from 'react'
 import * as api from '../api/client'
 import { useStore } from '../stores/useStore'
 
+const LIVE_JOB_STATUSES = new Set(['queued', 'running', 'waiting_resource', 'cancelling'])
+
 export function QueueRecoveryDialog() {
   const reconnectJobs = useStore(state => state.reconnectJobs)
   const [jobs, setJobs] = useState<api.RecoverableGenerationJob[]>([])
+  const [liveBusyCount, setLiveBusyCount] = useState(0)
   const [checking, setChecking] = useState(true)
   const [action, setAction] = useState<'resume' | 'discard' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -14,12 +17,19 @@ export function QueueRecoveryDialog() {
     setChecking(true)
     setError(null)
     try {
-      const result = await api.fetchGenerationQueueRecovery()
+      const [result, active] = await Promise.all([
+        api.fetchGenerationQueueRecovery(),
+        api.fetchActiveJobs().catch(() => ({ jobs: [] as Array<{ status: string }> })),
+      ])
       setJobs(result.jobs)
+      setLiveBusyCount(
+        (active.jobs || []).filter(job => LIVE_JOB_STATUSES.has(job.status)).length,
+      )
     } catch {
       // Supports opening a new UI build momentarily against an older backend
       // during updates without presenting a false recovery failure.
       setJobs([])
+      setLiveBusyCount(0)
     } finally {
       setChecking(false)
     }
@@ -59,6 +69,7 @@ export function QueueRecoveryDialog() {
   }
 
   const hadRunningJob = jobs.some(job => job.previous_status === 'running')
+  const resumeWouldDuplicate = liveBusyCount > 0
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
@@ -72,10 +83,14 @@ export function QueueRecoveryDialog() {
           <div className="mt-0.5 rounded-xl bg-amber-400/10 p-2 text-amber-300"><RotateCcw size={20} /></div>
           <div>
             <h2 id="queue-recovery-title" className="text-base font-semibold text-text-primary">
-              Hay una cola de generación por recuperar
+              {resumeWouldDuplicate
+                ? 'Hay restos antiguos además de la generación actual'
+                : 'Hay una cola de generación por recuperar'}
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-text-muted">
-              HocusPocus guardó {jobs.length} {jobs.length === 1 ? 'trabajo' : 'trabajos'} antes de cerrarse. Puedes retomarlos en el mismo orden o descartarlos y arrancar con la cola vacía.
+              {resumeWouldDuplicate
+                ? `Ya hay ${liveBusyCount} ${liveBusyCount === 1 ? 'generación en curso' : 'generaciones en curso'}. Estos ${jobs.length} ${jobs.length === 1 ? 'trabajo son un resto' : 'trabajos son restos'} de un cierre anterior, no el clip que se está decodeando ahora. Retomarlos los pondrá en cola detrás y los rehará desde cero.`
+                : `HocusPocus guardó ${jobs.length} ${jobs.length === 1 ? 'trabajo' : 'trabajos'} antes de cerrarse. Puedes retomarlos en el mismo orden o descartarlos y arrancar con la cola vacía.`}
             </p>
           </div>
         </div>
@@ -100,10 +115,12 @@ export function QueueRecoveryDialog() {
           ))}
         </div>
 
-        {hadRunningJob && (
+        {(hadRunningJob || resumeWouldDuplicate) && (
           <div className="mx-4 mb-3 flex gap-2 rounded-lg border border-amber-400/25 bg-amber-400/5 px-3 py-2 text-[10px] leading-relaxed text-amber-200/90">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-            El clip que estaba ejecutándose volverá a empezar desde el principio; los clips que estaban esperando conservarán su orden.
+            {resumeWouldDuplicate
+              ? 'No pulses Retomar si el Activity ya muestra un H3 en sampling/decode: eso duplica GPU. Descarta los restos y deja terminar el trabajo vivo.'
+              : 'El clip que estaba ejecutándose volverá a empezar desde el principio; los clips que estaban esperando conservarán su orden.'}
           </div>
         )}
 
@@ -114,7 +131,9 @@ export function QueueRecoveryDialog() {
             type="button"
             onClick={() => void discard()}
             disabled={action !== null}
-            className="flex items-center justify-center gap-2 rounded-lg border border-red-400/30 px-4 py-2.5 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+            className={resumeWouldDuplicate
+              ? 'flex items-center justify-center gap-2 rounded-lg bg-accent-blue px-4 py-2.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50'
+              : 'flex items-center justify-center gap-2 rounded-lg border border-red-400/30 px-4 py-2.5 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50'}
           >
             {action === 'discard' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
             Descartar y empezar limpio
@@ -123,10 +142,12 @@ export function QueueRecoveryDialog() {
             type="button"
             onClick={() => void resume()}
             disabled={action !== null}
-            className="flex items-center justify-center gap-2 rounded-lg bg-accent-blue px-4 py-2.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            className={resumeWouldDuplicate
+              ? 'flex items-center justify-center gap-2 rounded-lg border border-amber-400/30 px-4 py-2.5 text-xs text-amber-200 transition-colors hover:bg-amber-400/10 disabled:opacity-50'
+              : 'flex items-center justify-center gap-2 rounded-lg bg-accent-blue px-4 py-2.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50'}
           >
             {action === 'resume' ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-            Retomar cola
+            {resumeWouldDuplicate ? 'Aun así retomar restos antiguos' : 'Retomar cola'}
           </button>
         </div>
       </div>

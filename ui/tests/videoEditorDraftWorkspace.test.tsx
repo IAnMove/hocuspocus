@@ -28,6 +28,13 @@ test('Video Editor drafts are isolated per workspace and migrate the legacy key 
     assert.equal(draftB.projectName, 'project-b')
     assert.equal(draftB.clips[0].name, 'Workspace B')
     assert.equal(draftB.fps, 24)
+    assert.equal(draftA.soundtrack, null)
+    persistEditorDraft(draftA.clips, draftA.projectName, resolution, 30, 'client-a', {
+      name: 'score.mp3', source: '/outputs/score.mp3', duration: 9, trimStart: 1, trimEnd: 8, volume: 0.7, loop: true,
+    })
+    assert.equal(loadEditorDraft('client-a').soundtrack?.name, 'score.mp3')
+    persistEditorDraft(draftA.clips, draftA.projectName, resolution, 30, 'client-a')
+    assert.equal(loadEditorDraft('client-a').soundtrack?.loop, true)
     assert.equal(dom.window.localStorage.getItem(videoEditorDraftStorageKey('client-a'))?.includes('project-a'), true)
     assert.equal(dom.window.localStorage.getItem(videoEditorDraftStorageKey('client-b'))?.includes('project-b'), true)
 

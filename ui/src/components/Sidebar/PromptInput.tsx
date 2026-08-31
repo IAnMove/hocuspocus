@@ -271,7 +271,11 @@ export function PromptInput() {
   // `flex-1 min-h-0` stops the wrapper from collapsing under the textarea
   // (which made it overflow and overlap the section below).
   return (
-    <div className="relative grow shrink-0 flex flex-col">
+    <div
+      className="relative grow shrink-0 flex flex-col"
+      data-wizard-anchor="prompt"
+      data-wizard-commit="atomic"
+    >
       <div
         ref={historyRef}
         className={`absolute right-2 z-40 ${isEnhancing ? 'top-8' : 'top-2'}`}

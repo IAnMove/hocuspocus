@@ -20,16 +20,24 @@ def _load_functions(*names: str):
     return tuple(namespace[name] for name in names)
 
 
-_minimax_song_request_prompt, _normalize_minimax_song_output, _parse_song_output, _parse_lyria_output, _optional_lyria_warning = _load_functions(
+_minimax_song_request_prompt, _normalize_minimax_song_output, _parse_song_output, _parse_lyria_output, _optional_lyria_warning, _ace_song_request_prompt = _load_functions(
     "_minimax_song_request_prompt",
     "_normalize_minimax_song_output",
     "_parse_song_output",
     "_parse_lyria_output",
     "_optional_lyria_warning",
+    "_ace_song_request_prompt",
 )
 
 
 class TestMiniMaxSongWriterPrompt(unittest.TestCase):
+    def test_ace_style_and_lyrics_follow_the_selected_language(self):
+        vocal = _ace_song_request_prompt("Write a sysadmin anthem", "Español", False)
+        self.assertIn("visible STYLE prompt and all lyrics in Español", vocal)
+        self.assertIn("[Verse]", vocal)
+        instrumental = _ace_song_request_prompt("Write an overture", "Français", True)
+        self.assertIn("visible STYLE prompt in Français", instrumental)
+
     def test_builds_labelled_reference_style_lyrics_and_story_inputs(self):
         prompt = _minimax_song_request_prompt({
             "model": "music-3.0",
@@ -45,7 +53,8 @@ class TestMiniMaxSongWriterPrompt(unittest.TestCase):
         self.assertIn("DESIRED STYLE", prompt)
         self.assertIn("DESIRED LYRICS OR STRUCTURE", prompt)
         self.assertIn("STORY CONTEXT", prompt)
-        self.assertIn("LYRICS LANGUAGE: Spanish", prompt)
+        self.assertIn("STYLE AND LYRICS LANGUAGE: Spanish", prompt)
+        self.assertIn("visible STYLE prompt", prompt)
         self.assertIn("TARGET DURATION: approximately 120 seconds", prompt)
         self.assertIn("MiniMax Music has no exact duration API parameter", prompt)
 

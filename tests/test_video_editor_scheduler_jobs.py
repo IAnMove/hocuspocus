@@ -98,6 +98,7 @@ def _animatic_body(workspace: str = "captured-animatic") -> dict:
 def _harness(monkeypatch, tmp_path: Path) -> dict:
     events: list[tuple] = []
     render_calls: list[str] = []
+    render_settings: list[dict] = []
     workspace_calls: list[str] = []
     jobs: dict[str, dict] = {}
     lane = SimpleNamespace(key=LANE_KEY)
@@ -131,8 +132,9 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
             finally:
                 events.append(("lane_release", requested_lane.key, task_id))
 
-    def default_render_project(_clips, output_path, *, progress, **_settings):
+    def default_render_project(_clips, output_path, *, progress, **settings):
         render_calls.append("export")
+        render_settings.append(settings)
         progress(37, "Encoding editor timeline…")
         Path(output_path).write_bytes(b"fake editor mp4")
         return {"duration": 1.0}
@@ -217,6 +219,9 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
     namespace["_resolve_video_editor_source"] = (
         lambda source, workspace=None: str(tmp_path / str(workspace) / os.path.basename(source))
     )
+    namespace["_resolve_video_editor_audio_source"] = (
+        lambda source, workspace=None: str(tmp_path / str(workspace) / os.path.basename(source))
+    )
     namespace["_resolve_comic_animatic_image"] = (
         lambda source, workspace=None: str(tmp_path / str(workspace) / os.path.basename(source))
     )
@@ -225,10 +230,34 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
         "events": events,
         "jobs": jobs,
         "render_calls": render_calls,
+        "render_settings": render_settings,
         "video_editor_module": video_editor_module,
         "workspace_calls": workspace_calls,
     })
     return namespace
+
+
+def test_editor_soundtrack_is_resolved_and_reaches_renderer(monkeypatch, tmp_path):
+    harness = _harness(monkeypatch, tmp_path)
+    body = _editor_body("music-workspace")
+    body["soundtrack"] = {
+        "name": "score.mp3",
+        "source": "/api/v1/file/score.mp3",
+        "trim_start": 1,
+        "trim_end": 8,
+        "volume": 0.6,
+        "loop": True,
+    }
+
+    response = harness["start_video_editor_export"](body)
+    harness["DeferredThread"].instances[-1].run_now()
+
+    soundtrack = harness["render_settings"][0]["soundtrack"]
+    assert soundtrack["resolved_path"].endswith("music-workspace/score.mp3")
+    assert soundtrack["volume"] == 0.6
+    assert soundtrack["loop"] is True
+    job = harness["jobs"][response["job_id"]]
+    assert job["status"] == "completed"
 
 
 @pytest.mark.parametrize(

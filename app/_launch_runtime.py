@@ -43,6 +43,7 @@ import hashlib
 import json
 import re
 import math
+import random
 import time
 import uuid
 import asyncio
@@ -675,11 +676,12 @@ _PUBLIC_MODEL_LABELS = {
 
 
 def _public_generation_details(params: dict | None) -> dict:
-    """Return non-sensitive frozen settings suitable for job status UIs.
+    """Return frozen settings suitable for the canonical Activity UI.
 
-    Prompts, local paths and reference media are deliberately excluded.  This
-    summary comes from the submitted job params, so it keeps describing the
-    real run even if the user changes the current Studio selection afterward.
+    Local paths and reference media stay private.  The authored prompt is
+    intentionally retained: Activity is the user's durable audit trail and
+    must identify what a model is actually generating after the editable form
+    has changed.  It is bounded before persistence and never treated as HTML.
     """
     if not isinstance(params, dict):
         return {}
@@ -742,6 +744,16 @@ def _public_generation_details(params: dict | None) -> dict:
     for key, value in public_values.items():
         if value is not None and value != "":
             details[key] = value
+
+    prompt = str(params.get("prompt") or "").replace("\x00", "").strip()
+    style_prompt = str(params.get("alt_prompt") or "").replace("\x00", "").strip()
+    if prompt or style_prompt:
+        details["prompt"] = (
+            f"{style_prompt}\n\n{prompt}" if style_prompt and prompt else style_prompt or prompt
+        )[:32_000]
+    initiator = str(params.get("_initiator") or "").replace("\x00", "").strip()
+    if initiator:
+        details["initiator"] = initiator[:200]
 
     cache_type = str(params.get("skip_steps_cache_type") or "").strip()
     if cache_type or model_type.startswith("minimax_h3"):
@@ -1379,7 +1391,7 @@ _PRODUCTION_PROFILE_CONFIG_KEY = "maestro_production_profile"
 _PRODUCTION_PROFILE_VERSION = 1
 _DEFAULT_PRODUCTION_PROFILE = {
     "version": _PRODUCTION_PROFILE_VERSION,
-    "text": {"provider": "minimax", "model": "MiniMax-M3"},
+    "text": {"provider": "minimax", "model": "MiniMax-M3", "base_url": "https://api.minimax.io"},
     "image": {"provider": "minimax", "model": "image-01"},
     "music": {"provider": "local", "model": "ace_step_v1_5_xl_sft_lm_4b"},
     "video": {
@@ -1397,6 +1409,7 @@ _DEFAULT_PRODUCTION_PROFILE = {
             "aspectRatio": "16:9",
         },
     },
+    "model3d": {"provider": "local", "model": "hunyuan3d-2mini-turbo"},
 }
 
 
@@ -1413,35 +1426,52 @@ def _bounded_profile_text(value, label: str, *, maximum: int = 200) -> str:
 
 def _normalize_production_profile(value) -> dict:
     """Validate the credential-free defaults shared by every production UI."""
+    from services.provider_profile import (
+        IMAGE_PROVIDERS,
+        MODEL3D_PROVIDERS,
+        MUSIC_PROVIDERS,
+        TEXT_PROVIDERS,
+        alias_model3d_provider,
+        alias_text_provider,
+        canonicalize_remote_url,
+        default_url_for_provider,
+    )
+
     if not isinstance(value, dict):
         raise ValueError("Production profile must be an object.")
     text_profile = value.get("text")
     image_profile = value.get("image")
     music_profile = value.get("music")
     video_profile = value.get("video")
+    model3d_profile = value.get("model3d") if isinstance(value.get("model3d"), dict) else {
+        "provider": "local",
+        "model": "hunyuan3d-2mini-turbo",
+    }
     if not all(isinstance(item, dict) for item in (
         text_profile, image_profile, music_profile, video_profile,
     )):
         raise ValueError("Production profile needs text, image, music and video sections.")
 
-    text_provider = _bounded_profile_text(
+    text_provider = alias_text_provider(_bounded_profile_text(
         text_profile.get("provider"), "Text provider",
-    ).lower()
-    if text_provider not in {
-        "local", "remote", "openai", "anthropic", "deepseek", "minimax",
-        "openai-compatible",
-    }:
+    ).lower(), str(text_profile.get("base_url") or ""))
+    if text_provider not in TEXT_PROVIDERS:
         raise ValueError("Unsupported production text provider.")
     image_provider = _bounded_profile_text(
         image_profile.get("provider"), "Image provider",
     ).lower()
-    if image_provider not in {"maestro", "local", "minimax"}:
+    if image_provider not in IMAGE_PROVIDERS:
         raise ValueError("Unsupported production image provider.")
     music_provider = _bounded_profile_text(
         music_profile.get("provider"), "Music provider",
     ).lower()
-    if music_provider not in {"maestro", "local", "minimax"}:
+    if music_provider not in MUSIC_PROVIDERS:
         raise ValueError("Unsupported production music provider.")
+    model3d_provider = alias_model3d_provider(_bounded_profile_text(
+        model3d_profile.get("provider"), "3D provider",
+    ).lower())
+    if model3d_provider not in MODEL3D_PROVIDERS:
+        raise ValueError("Unsupported production 3D provider.")
     music_model = _bounded_profile_text(music_profile.get("model"), "Music model")
     video_provider = _bounded_profile_text(
         video_profile.get("provider"), "Video provider",
@@ -1482,11 +1512,16 @@ def _normalize_production_profile(value) -> dict:
     if aspect_ratio not in {"auto", "21:9", "16:9", "9:16", "1:1", "4:3", "3:4"}:
         raise ValueError("Unsupported production video aspect ratio.")
 
+    text_base_url = canonicalize_remote_url(str(text_profile.get("base_url") or ""))
+    if text_provider in {"ollama", "remote", "openai-compatible", "grok", "openai", "minimax"}:
+        text_base_url = default_url_for_provider(text_provider, text_base_url)
+
     return {
         "version": _PRODUCTION_PROFILE_VERSION,
         "text": {
             "provider": text_provider,
             "model": _bounded_profile_text(text_profile.get("model"), "Text model"),
+            "base_url": text_base_url,
         },
         "image": {
             "provider": image_provider,
@@ -1495,6 +1530,13 @@ def _normalize_production_profile(value) -> dict:
         "music": {
             "provider": music_provider,
             "model": music_model,
+        },
+        "model3d": {
+            "provider": model3d_provider,
+            "model": _bounded_profile_text(
+                model3d_profile.get("model") or "hunyuan3d-2mini-turbo",
+                "3D model",
+            ),
         },
         "video": {
             "provider": video_provider,
@@ -1531,16 +1573,39 @@ def _effective_llm_routing(services: dict | None = None) -> tuple[str, str, str]
     what prevents Director/prompt tools from downloading a local model while a
     new or migrated install already advertises MiniMax in its global profile.
     """
+    from services.provider_profile import alias_text_provider, default_url_for_provider
+
     service_values = services if isinstance(services, dict) else {}
     text_profile = _active_production_profile().get("text", {})
-    provider = str(text_profile.get("provider") or "local").strip().lower()
+    remote_url = str(
+        text_profile.get("base_url")
+        or service_values.get("llm_remote_url")
+        or ""
+    ).strip()
+    provider = alias_text_provider(
+        str(text_profile.get("provider") or "local").strip().lower(),
+        remote_url,
+    )
     model = str(text_profile.get("model") or "").strip()
-    remote_url = str(service_values.get("llm_remote_url") or "").strip()
-    if provider == "minimax":
-        remote_url = "https://api.minimax.io"
-    elif provider == "openai" and not remote_url:
-        remote_url = "https://api.openai.com"
+    remote_url = default_url_for_provider(provider, remote_url)
     return provider, model, remote_url
+
+
+def _llm_provider_credentials(provider: str, services: dict, remote_url: str = "") -> tuple[str, str]:
+    from services.provider_profile import default_url_for_provider, resolve_minimax_key
+
+    api_key = ""
+    if provider == "openai":
+        api_key = str(services.get("openai_api_key") or "")
+    elif provider == "anthropic":
+        api_key = str(services.get("anthropic_api_key") or "")
+    elif provider == "minimax":
+        api_key = resolve_minimax_key(services, "llm")
+    elif provider == "grok":
+        api_key = str(services.get("grok_api_key") or "")
+    elif provider == "deepseek":
+        api_key = str(services.get("deepseek_api_key") or "")
+    return api_key, default_url_for_provider(provider, remote_url)
 
 
 def _production_profile_response() -> dict:
@@ -1586,8 +1651,14 @@ async def update_production_profile(request: Request):
         services = wgp.server_config.setdefault("services", {})
         services["llm_provider"] = profile["text"]["provider"]
         services["llm_model_id"] = profile["text"]["model"]
-        if profile["text"]["provider"] == "minimax":
+        if profile["text"].get("base_url"):
+            services["llm_remote_url"] = profile["text"]["base_url"]
+        elif profile["text"]["provider"] == "minimax":
             services["llm_remote_url"] = "https://api.minimax.io"
+        elif profile["text"]["provider"] == "grok":
+            services["llm_remote_url"] = "https://api.x.ai"
+        elif profile["text"]["provider"] == "ollama" and not services.get("llm_remote_url"):
+            services["llm_remote_url"] = "http://127.0.0.1:11434"
         # Saving the global profile is an explicit request to make Studio and
         # Director inherit it. Later manual model choices are persisted again
         # as ordinary per-mode overrides.
@@ -7197,7 +7268,7 @@ def _mask_key(key: str) -> str:
     return key[:4] + "..." + key[-4:]
 
 
-_PUBLIC_LLM_PROVIDERS = {"openai", "anthropic", "minimax"}
+_PUBLIC_LLM_PROVIDERS = {"openai", "anthropic", "minimax", "grok", "deepseek"}
 
 
 def _llm_default_device() -> str:
@@ -7253,6 +7324,18 @@ def get_services_config():
         "anthropic_api_key_set": bool(services.get("anthropic_api_key", "")),
         "minimax_api_key": _mask_key(services.get("minimax_api_key", "")),
         "minimax_api_key_set": bool(services.get("minimax_api_key", "")),
+        "minimax_llm_api_key": _mask_key(services.get("minimax_llm_api_key", "")),
+        "minimax_llm_api_key_set": bool(services.get("minimax_llm_api_key") or services.get("minimax_api_key")),
+        "minimax_image_api_key": _mask_key(services.get("minimax_image_api_key", "")),
+        "minimax_image_api_key_set": bool(services.get("minimax_image_api_key") or services.get("minimax_api_key")),
+        "minimax_music_api_key": _mask_key(services.get("minimax_music_api_key", "")),
+        "minimax_music_api_key_set": bool(services.get("minimax_music_api_key") or services.get("minimax_api_key")),
+        "grok_api_key": _mask_key(services.get("grok_api_key", "")),
+        "grok_api_key_set": bool(services.get("grok_api_key", "")),
+        "meshy_api_key": _mask_key(services.get("meshy_api_key", "")),
+        "meshy_api_key_set": bool(services.get("meshy_api_key", "")),
+        "hi3d_api_key": _mask_key(services.get("hi3d_api_key", "")),
+        "hi3d_api_key_set": bool(services.get("hi3d_api_key", "")),
         # Director v2 (layered architecture: structured shot planning,
         # mode-specific renderers, prompt validation) is now the default
         # as of 2026-05-03 after weeks of real-world validation. v1 had
@@ -7339,6 +7422,8 @@ async def update_services_config(request: Request):
         "enhance_llm_model_id", "enhance_llm_device",
         "google_api_key", "openai_api_key", "deepseek_api_key", "compatible_api_key",
         "compatible_base_url", "anthropic_api_key", "minimax_api_key",
+        "minimax_llm_api_key", "minimax_image_api_key", "minimax_music_api_key",
+        "grok_api_key", "meshy_api_key", "hi3d_api_key",
         "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
         "debug_trace_enabled", "workflow_parallelism_enabled",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
@@ -7389,6 +7474,8 @@ async def update_services_config(request: Request):
             profile["text"]["model"] = str(
                 services.get("llm_model_id") or profile["text"]["model"]
             )
+            if services.get("llm_remote_url"):
+                profile["text"]["base_url"] = str(services.get("llm_remote_url") or "")
             wgp.server_config[_PRODUCTION_PROFILE_CONFIG_KEY] = _normalize_production_profile(profile)
         except ValueError:
             pass
@@ -8144,14 +8231,7 @@ async def llm_load(request: Request):
     device = body.get("device", services.get("llm_device", _llm_default_device()))
     provider = body.get("provider", profile_provider)
     remote_url = body.get("remote_url", profile_remote_url)
-    api_key = ""
-    if provider == "openai":
-        api_key = services.get("openai_api_key", "")
-    elif provider == "anthropic":
-        api_key = services.get("anthropic_api_key", "")
-    elif provider == "minimax":
-        api_key = services.get("minimax_api_key", "")
-        remote_url = remote_url or "https://api.minimax.io"
+    api_key, remote_url = _llm_provider_credentials(provider, services, remote_url)
 
     try:
         llm_service.load_model(model_id=model_id, device=device, provider=provider, remote_url=remote_url, api_key=api_key)
@@ -8176,15 +8256,7 @@ def list_llm_models(provider: str = ""):
     services = wgp.server_config.get("services", {})
     profile_provider, _profile_model, profile_remote_url = _effective_llm_routing(services)
     p = provider or profile_provider
-    remote_url = profile_remote_url
-    api_key = ""
-    if p == "openai":
-        api_key = services.get("openai_api_key", "")
-    elif p == "anthropic":
-        api_key = services.get("anthropic_api_key", "")
-    elif p == "minimax":
-        api_key = services.get("minimax_api_key", "")
-        remote_url = remote_url or "https://api.minimax.io"
+    api_key, remote_url = _llm_provider_credentials(p, services, profile_remote_url)
     return {"models": llm_service.get_available_models(provider=p, remote_url=remote_url, api_key=api_key)}
 
 
@@ -8202,19 +8274,14 @@ def _ensure_llm_loaded():
     desired_provider, profile_model, desired_remote_url = _effective_llm_routing(services)
     desired = profile_model or _DEFAULT_LLM_REPO
     desired_device = services.get("llm_device", _llm_default_device())
-    desired_api_key = ""
-    if desired_provider == "openai":
-        desired_api_key = services.get("openai_api_key", "")
-    elif desired_provider == "anthropic":
-        desired_api_key = services.get("anthropic_api_key", "")
-    elif desired_provider == "minimax":
-        desired_api_key = services.get("minimax_api_key", "")
-        desired_remote_url = desired_remote_url or "https://api.minimax.io"
+    desired_api_key, desired_remote_url = _llm_provider_credentials(
+        desired_provider, services, desired_remote_url,
+    )
 
     if llm_service.is_loaded():
         status = llm_service.get_status()
         remote_changed = (
-            desired_provider in ("remote", "openai", "minimax")
+            desired_provider in ("remote", "ollama", "openai", "minimax", "grok")
             and status.get("remote_url", "") != desired_remote_url
         )
         if (
@@ -8275,7 +8342,7 @@ async def llm_test():
         # so a just-edited URL or API key is what this explicit test validates.
         services = wgp.server_config.get("services", {})
         provider = _effective_llm_routing(services)[0]
-        if provider in ("remote", "openai", "anthropic", "minimax") and llm_service.is_loaded():
+        if provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok") and llm_service.is_loaded():
             llm_service.unload_model()
         _ensure_llm_loaded()
         response = llm_service.generate(
@@ -8317,7 +8384,8 @@ _SONG_WRITER_FALLBACK_INSTRUMENTAL = (
 )
 _SONG_WRITER_FALLBACK_MINIMAX = (
     "You write prompts for MiniMax Music. Output exactly [STYLE] and [LYRICS]. "
-    "STYLE is one English comma-separated line of 10-300 characters containing "
+    "Write both STYLE and LYRICS in the language requested by the user. STYLE is one "
+    "comma-separated line of 10-300 characters containing "
     "genre, mood, instruments, vocal direction, tempo and production. Never put "
     "reference song or artist names in STYLE. LYRICS use supported tags such as "
     "[Verse], [Pre Chorus], [Chorus], [Bridge], [Inst], [Solo] and [Outro], each "
@@ -8370,7 +8438,9 @@ def _minimax_song_request_prompt(body: dict, description: str, instrumental: boo
     sections = [
         f"MODE: {'instrumental' if instrumental else 'vocal song'}",
         f"TARGET MODEL: {model}",
-        f"LYRICS LANGUAGE: {language}",
+        f"STYLE AND LYRICS LANGUAGE: {language}",
+        f"LANGUAGE RULE: Write the visible STYLE prompt and all sung words in {language}. "
+        "Keep only provider structural tags such as [Verse] and [Chorus] in English.",
         f"TARGET DURATION: approximately {duration} seconds",
         "DURATION NOTE: MiniMax Music has no exact duration API parameter. Treat the target "
         "as a strict lyric and arrangement budget: keep the section count and sung lines "
@@ -8408,6 +8478,19 @@ def _normalize_minimax_song_output(style: str, lyrics: str, instrumental: bool, 
     return style, lyrics
 
 
+def _ace_song_request_prompt(description: str, language: str, instrumental: bool) -> str:
+    """Keep the editable ACE-Step prompt in the language selected by the user."""
+    target = str(language or "English").strip()[:80] or "English"
+    if instrumental:
+        rule = f"Write the visible STYLE prompt in {target}."
+    else:
+        rule = (
+            f"Write both the visible STYLE prompt and all lyrics in {target}; "
+            "keep structural tags such as [Verse] and [Chorus] in English."
+        )
+    return f"OUTPUT LANGUAGE: {target}. {rule}\n\n{str(description or '').strip()}"
+
+
 @api.post("/api/v1/llm/write-song")
 async def llm_write_song(request: Request):
     """Produce a provider-ready style prompt and structured lyrics.
@@ -8424,6 +8507,7 @@ async def llm_write_song(request: Request):
     instrumental = bool(body.get("instrumental"))
     target = str(body.get("target") or "ace-step").strip().lower()
     model = str(body.get("model") or "music-3.0").strip()
+    language = str(body.get("language") or "English").strip()[:80]
 
     # Optional reference image → the vision LLM lets the visuals inform the
     # STYLE (e.g. neon cityscape → synthwave). Degrades gracefully: if the
@@ -8445,10 +8529,10 @@ async def llm_write_song(request: Request):
         user_prompt = _minimax_song_request_prompt(body, description, instrumental)
     elif instrumental:
         system_prompt = load_guide("music", "song_writer_instrumental") or _SONG_WRITER_FALLBACK_INSTRUMENTAL
-        user_prompt = description
+        user_prompt = _ace_song_request_prompt(description, language, True)
     else:
         system_prompt = load_guide("music", "song_writer") or _SONG_WRITER_FALLBACK
-        user_prompt = description
+        user_prompt = _ace_song_request_prompt(description, language, False)
     llm_override = _comic_writing_llm(body) if body.get("writingProvider") else None
     try:
         if llm_override:
@@ -8592,6 +8676,7 @@ async def director_generate_music(request: Request):
         raise HTTPException(status_code=400, detail="Provide a description, or style + lyrics")
 
     gen_params = _build_music_gen_params(model_type, lyrics, style, duration_seconds, seed)
+    gen_params["_initiator"] = str(body.get("initiator") or "Director · Music video")[:200]
 
     out_dir = _workspace_dir(workspace)
     os.makedirs(out_dir, exist_ok=True)
@@ -8965,7 +9050,7 @@ async def llm_describe_image(request: Request):
 
 @api.post("/api/v1/characters/describe-refs")
 async def describe_character_refs(request: Request):
-    """MiniMax-M3 vision → PoopMan333 A Prompt. Does not load the local LLM."""
+    """Build an A Prompt with MiniMax vision or the configured internal LLM."""
     from services import llm_service
     from services.character_sheet import DESCRIBE_SCHEMA, describe_character_sheet
 
@@ -8982,20 +9067,35 @@ async def describe_character_refs(request: Request):
         image_paths.append(resolved)
 
     services = wgp.server_config.get("services", {})
-    api_key = str(services.get("minimax_api_key") or "")
-    if not api_key:
+    from services.provider_profile import character_describe_backend, resolve_minimax_key
+
+    backend = character_describe_backend(_effective_llm_routing(services)[0])
+    if backend == "unavailable":
         raise HTTPException(
             status_code=400,
-            detail="Configure the MiniMax API key in Settings → Services first",
+            detail="Auto-describe only works with MiniMax or the internal LLM. Type an A Prompt, or switch Settings → LLM.",
         )
 
     def complete(system_prompt: str, user_prompt: str, paths: list[str]) -> str:
-        return llm_service.generate_openai_compatible(
+        if backend == "minimax":
+            api_key = resolve_minimax_key(services, "llm")
+            if not api_key:
+                raise ValueError("Configure the MiniMax LLM API key in Settings → Services first")
+            return llm_service.generate_openai_compatible(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                model_id="MiniMax-M3",
+                base_url="https://api.minimax.io/v1",
+                api_key=api_key,
+                max_new_tokens=1200,
+                temperature=0.2,
+                json_schema=DESCRIBE_SCHEMA,
+                image_paths=paths,
+            )
+        _ensure_llm_loaded()
+        return llm_service.generate(
             prompt=user_prompt,
             system_prompt=system_prompt,
-            model_id="MiniMax-M3",
-            base_url="https://api.minimax.io/v1",
-            api_key=api_key,
             max_new_tokens=1200,
             temperature=0.2,
             json_schema=DESCRIBE_SCHEMA,
@@ -26397,7 +26497,7 @@ def save_scene_output(body: dict):
     safe_name = _re_scene.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "scene"
     stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
     stem = f"{stamp}_{safe_name}_{uuid.uuid4().hex[:6]}.scene"
-    out_dir = _workspace_dir()
+    out_dir = _workspace_dir(body.get("workspace") or None)
     os.makedirs(out_dir, exist_ok=True)
     scene_name = f"{stem}.json"
     preview_name = f"{stem}.preview.png"
@@ -27117,8 +27217,9 @@ def _run_minimax_image_job(job_id: str) -> None:
                 )
             generated = minimax_image_service.generate_image(
                 api_key=str(
-                    (wgp.server_config.get("services") or {}).get("minimax_api_key")
-                    or ""
+                    __import__("services.provider_profile", fromlist=["resolve_minimax_key"]).resolve_minimax_key(
+                        wgp.server_config.get("services") or {}, "image",
+                    )
                 ),
                 prompt=str(request_body.get("prompt") or ""),
                 aspect_ratio=str(request_body.get("aspect_ratio") or "1:1"),
@@ -27292,7 +27393,8 @@ def generate_comic_minimax(body: dict):
     """Generate one comic panel with MiniMax image-01 and persist it."""
     prompt = str(body.get("prompt") or "").strip()
     services = wgp.server_config.get("services", {})
-    api_key = services.get("minimax_api_key", "")
+    from services.provider_profile import resolve_minimax_key
+    api_key = resolve_minimax_key(services, "image")
     aspect_ratio = str(body.get("aspect_ratio") or "1:1")
     subject = body.get("subject_reference")
     try:
@@ -27834,92 +27936,18 @@ def _generate_comic_director_json(
 
 def _comic_writing_llm(body: dict) -> dict | None:
     """Resolve a comic-only LLM override without changing global LLM state."""
-    provider = str(body.get("writingProvider") or "maestro").strip().lower()
-    if provider in ("", "maestro", "internal", "local"):
-        return None
-    if provider not in ("deepseek", "minimax", "openai", "openai-compatible"):
-        raise HTTPException(status_code=400, detail="Unsupported comic writing provider")
+    from services.provider_profile import resolve_writing_override
 
-    services = wgp.server_config.get("services", {})
-    requested_url = str(body.get("writingBaseUrl") or "").strip()[:1000]
-    # Projects created before provider profiles existed stored DeepSeek/OpenAI
-    # as a generic compatible endpoint. Route those projects to the matching
-    # named profile, but never migrate or copy credentials between providers.
-    if provider == "openai-compatible":
-        from urllib.parse import urlparse
-        legacy_host = (urlparse(requested_url).hostname or "").lower()
-        if legacy_host == "api.deepseek.com":
-            provider = "deepseek"
-        elif legacy_host == "api.openai.com":
-            provider = "openai"
-
-    if provider == "deepseek":
-        model = str(body.get("writingModel") or "deepseek-v4-pro").strip()[:200]
-        if model in ("", "deepseek-chat", "deepseek-reasoner"):
-            model = "deepseek-v4-pro"
-        if str(body.get("mode") or "").lower() == "translate":
-            model = "deepseek-v4-flash"
-        if model not in {"deepseek-v4-pro", "deepseek-v4-flash"}:
-            raise HTTPException(status_code=400, detail="Choose DeepSeek V4 Pro or V4 Flash")
-        base_url = "https://api.deepseek.com"
-        api_key = str(services.get("deepseek_api_key") or "")
-        if not api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="Configure the DeepSeek API key in Settings → Services first",
-            )
-    elif provider == "minimax":
-        model = str(body.get("writingModel") or "MiniMax-M3").strip()[:200]
-        allowed_models = {"MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"}
-        if model not in allowed_models:
-            raise HTTPException(
-                status_code=400,
-                detail="Choose MiniMax M3, M2.7, or M2.7 Highspeed",
-            )
-        base_url = "https://api.minimax.io/v1"
-        api_key = str(services.get("minimax_api_key") or "")
-        if not api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="Configure the MiniMax API key in Settings → Services first",
-            )
-    elif provider == "openai":
-        model = str(body.get("writingModel") or "gpt-4.1").strip()[:200]
-        base_url = "https://api.openai.com"
-        api_key = str(services.get("openai_api_key") or "")
-        if not api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="Configure the OpenAI API key in Settings → Services first",
-            )
-    else:
-        model = str(body.get("writingModel") or "").strip()[:200]
-        base_url = str(services.get("compatible_base_url") or "").strip()[:1000].rstrip("/")
-        if not base_url:
-            raise HTTPException(
-                status_code=400,
-                detail="Configure the custom compatible URL in Settings → Services first",
-            )
-        if requested_url and requested_url.rstrip("/") != base_url:
-            raise HTTPException(
-                status_code=400,
-                detail="The comic's custom URL does not match the trusted compatible profile",
-            )
-        api_key = str(services.get("compatible_api_key") or "")
-
-    if not base_url.startswith(("http://", "https://")):
-        raise HTTPException(
-            status_code=400,
-            detail="OpenAI-compatible URL must start with http:// or https://",
+    try:
+        return resolve_writing_override(
+            provider=str(body.get("writingProvider") or "maestro"),
+            model=str(body.get("writingModel") or ""),
+            requested_url=str(body.get("writingBaseUrl") or ""),
+            services=wgp.server_config.get("services", {}),
+            mode=str(body.get("mode") or ""),
         )
-    if not model:
-        raise HTTPException(status_code=400, detail="Choose an OpenAI-compatible model")
-    return {
-        "provider": provider,
-        "model": model,
-        "base_url": base_url.rstrip("/"),
-        "api_key": api_key,
-    }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
@@ -31265,6 +31293,114 @@ def _story_library_revision_conflict(exc) -> HTTPException:
     )
 
 
+@api.get("/api/v1/wizard/conversations")
+def get_wizard_conversation(workspace: str | None = None):
+    """Load the durable Wizard conversation for one workspace."""
+    from services.wizard_conversations import read_conversation
+
+    target_workspace = _story_library_workspace(workspace)
+    try:
+        with _story_library_lock:
+            return read_conversation(_workspace_dir(target_workspace))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not read the Wizard conversation: {exc}",
+        ) from exc
+
+
+@api.put("/api/v1/wizard/conversations")
+def put_wizard_conversation(body: dict):
+    """Atomically replace a workspace Wizard conversation."""
+    from services.wizard_conversations import (
+        WizardConversationRevisionConflict,
+        write_conversation,
+    )
+
+    target_workspace = _story_library_workspace(body.get("workspace"))
+    try:
+        with _story_library_lock:
+            base_revision = body.get("baseRevision")
+            if type(base_revision) is not int:
+                base_revision = 0
+            return write_conversation(
+                _workspace_dir(target_workspace),
+                body.get("conversation"),
+                base_revision=base_revision,
+            )
+    except WizardConversationRevisionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "wizard_conversation_revision_conflict",
+                "message": str(exc),
+                "expectedRevision": exc.expected,
+                "currentRevision": exc.current,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not save the Wizard conversation: {exc}",
+        ) from exc
+
+
+@api.get("/api/v1/wizard/workflows")
+def get_wizard_workflows(workspace: str | None = None):
+    """Load durable Wizard workflow checkpoints for one workspace."""
+    from services.wizard_workflows import read_workflows
+
+    target_workspace = _story_library_workspace(workspace)
+    try:
+        with _story_library_lock:
+            return read_workflows(_workspace_dir(target_workspace))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not read Wizard workflows: {exc}",
+        ) from exc
+
+
+@api.put("/api/v1/wizard/workflows")
+def put_wizard_workflows(body: dict):
+    """Atomically checkpoint all Wizard workflows in one workspace."""
+    from services.wizard_workflows import (
+        WizardWorkflowRevisionConflict,
+        write_workflows,
+    )
+
+    target_workspace = _story_library_workspace(body.get("workspace"))
+    try:
+        with _story_library_lock:
+            base_revision = body.get("baseRevision")
+            if type(base_revision) is not int:
+                base_revision = 0
+            return write_workflows(
+                _workspace_dir(target_workspace),
+                body.get("collection"),
+                base_revision=base_revision,
+            )
+    except WizardWorkflowRevisionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "wizard_workflow_revision_conflict",
+                "message": str(exc),
+                "expectedRevision": exc.expected,
+                "currentRevision": exc.current,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not save Wizard workflows: {exc}",
+        ) from exc
+
+
 @api.get("/api/v1/stories/library")
 def get_story_library(workspace: str | None = None):
     """Load the durable Story Lab library for one workspace."""
@@ -31513,7 +31649,7 @@ Music-video contract:
 - Target duration: {max(20, min(360, brief_duration or 90))} seconds.
 - referenceSong is an editable inspiration example in "Title — Artist" form. Use it only
   for broad tempo, instrumentation or emotional architecture; never copy melody or lyrics.
-- style is the final MiniMax Music prompt: one concise English comma-separated line,
+- style is the final MiniMax Music prompt: one concise {language} comma-separated line,
   10–300 characters, covering genre, mood, instruments, vocals, tempo and production.
 - Write lyrics in {language}, maximum 3500 characters, with a recurring hook and a clear
   narrative progression. Use supported English tags on their own lines: [Intro], [Verse],
@@ -31532,7 +31668,7 @@ Music-specific contract:
   reproduce the reference song's melody, lyrics, title phrases or distinctive arrangement.
 - Treat referenceSong, brief, the Story canon and requested lyric theme as INPUTS to transform.
   The final style field must never contain the reference title or artist name.
-- style is the final MiniMax Music prompt. Write one concise English comma-separated line,
+- style is the final MiniMax Music prompt. Write one concise {language} comma-separated line,
   10–300 characters, ordered as applicable: primary genre/subgenre, secondary influence,
   mood/atmosphere, key instruments, vocal direction, tempo or BPM, dynamics, production.
   Prefer concrete compatible traits; avoid contradictions, filler and narrative synopsis.
@@ -32249,8 +32385,9 @@ def _run_minimax_music_job(job_id: str) -> None:
                     )
                 result = minimax_music_service.generate_candidates(
                     api_key=str(
-                        (wgp.server_config.get("services") or {}).get("minimax_api_key")
-                        or ""
+                        __import__("services.provider_profile", fromlist=["resolve_minimax_key"]).resolve_minimax_key(
+                            wgp.server_config.get("services") or {}, "music",
+                        )
                     ),
                     prompt=str(request_body.get("prompt") or ""),
                     lyrics=str(request_body.get("lyrics") or ""),
@@ -32527,7 +32664,7 @@ async def generate_story_music_candidates(body: dict):
     try:
         candidates = await asyncio.to_thread(
             minimax_music_service.generate_candidates,
-            api_key=str(services.get("minimax_api_key") or ""),
+            api_key=str(__import__("services.provider_profile", fromlist=["resolve_minimax_key"]).resolve_minimax_key(services, "music") or ""),
             prompt=str(body.get("prompt") or ""),
             lyrics=str(body.get("lyrics") or ""),
             count=int(body.get("count") or 2),
@@ -34385,6 +34522,423 @@ def get_output_metadata(name: str, workspace: str | None = None):
     return {"source": "none", "params": None}
 
 
+_alternative_song_sidecar_lock = threading.RLock()
+
+
+def _alternative_song_parent(name: str, workspace: str | None = None) -> tuple[str, str, str, dict]:
+    """Return workspace dir, video path, basename and sidecar for one mix."""
+    from services.alternative_songs import load_sidecar
+
+    out_dir = _workspace_dir(workspace)
+    filepath = _safe_join(out_dir, name)
+    if filepath is None or not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="Videoclip not found")
+    if os.path.splitext(filepath)[1].lower() not in {".mp4", ".mkv", ".webm", ".mov"}:
+        raise HTTPException(status_code=400, detail="Alternative songs are for video mixes")
+    return out_dir, filepath, os.path.basename(filepath), load_sidecar(filepath)
+
+
+def _alternative_song_sources(out_dir: str, video_name: str, sidecar: dict) -> list[dict]:
+    from services.alternative_songs import resolve_remount_sources
+
+    sources = resolve_remount_sources(sidecar, video_name, out_dir)
+    if not sources:
+        raise HTTPException(
+            status_code=400,
+            detail="This videoclip has no reusable shots on disk to remount",
+        )
+    return sources
+
+
+def _alternative_song_job_is_active(job_id: str) -> bool:
+    """Only an in-process editor worker can finish a persisted remount."""
+    snapshot = _video_editor_job_snapshot(job_id)
+    return bool(
+        snapshot
+        and str(snapshot.get("status") or "") not in {"completed", "failed", "cancelled"}
+        and snapshot.get("_worker_active")
+    )
+
+
+def _recover_stale_alternative_song_mounts(video_path: str, sidecar: dict) -> bool:
+    from services.alternative_songs import recover_stale_mounts, save_sidecar
+
+    changed = recover_stale_mounts(sidecar, _alternative_song_job_is_active)
+    if changed:
+        save_sidecar(video_path, sidecar)
+    return changed
+
+
+def _run_alternative_song_mount(
+    job_id: str,
+    *,
+    out_dir: str,
+    video_path: str,
+    video_name: str,
+    audio_path: str,
+    output_path: str,
+    song_id: str,
+    workspace: str,
+    seed: int,
+) -> None:
+    from services.alternative_songs import (
+        find_song,
+        load_sidecar,
+        plan_timeline,
+        remount_clips,
+        resolve_remount_sources,
+        save_sidecar,
+        write_mounted_sidecar,
+    )
+
+    def fail(message: str) -> None:
+        with _alternative_song_sidecar_lock:
+            sidecar = load_sidecar(video_path)
+            song = find_song(sidecar, song_id=song_id)
+            if song is not None:
+                song["status"] = "failed"
+                song["job_id"] = job_id
+                save_sidecar(video_path, sidecar)
+        _video_editor_job_update(
+            job_id,
+            status="failed",
+            phase="failed",
+            error=message,
+            message=message,
+            output_files=[],
+            acquired_resources=[],
+            finished_at=time.time(),
+            _resource_acquired=False,
+            _worker_active=False,
+        )
+
+    try:
+        _video_editor_job_update(
+            job_id,
+            status="waiting_resource",
+            phase="waiting_resource",
+            message="Waiting for the local FFmpeg lane…",
+            acquired_resources=[],
+        )
+        with _alternative_song_sidecar_lock:
+            sidecar = load_sidecar(video_path)
+            sources = resolve_remount_sources(sidecar, video_name, out_dir)
+            song = find_song(sidecar, song_id=song_id)
+            if song is None:
+                raise ValueError("The alternative song disappeared before remount")
+            target = float(song.get("duration_seconds") or 0)
+        planned = plan_timeline(sources, target, rng=random.Random(seed))
+        try:
+            with resource_scheduler.coordinator.acquire(
+                _VIDEO_EDITOR_FFMPEG_LANE,
+                task_id=str((_video_editor_job_snapshot(job_id) or {}).get("task_id") or job_id),
+                description="Alternative song remount",
+                cancelled=lambda: _video_editor_cancel_requested(job_id),
+            ):
+                started = _video_editor_job_update(
+                    job_id,
+                    status="running",
+                    phase="rendering",
+                    message="Remounting videoclip with the alternative song…",
+                    started_at=time.time(),
+                    acquired_resources=[_VIDEO_EDITOR_FFMPEG_LANE.key],
+                    _resource_acquired=True,
+                )
+                if (
+                    _video_editor_cancel_requested(job_id)
+                    or str(started.get("status") or "") in _VIDEO_EDITOR_TERMINAL
+                ):
+                    raise resource_scheduler.ResourceAcquireCancelled(
+                        f"Alternative song remount {job_id} was cancelled before FFmpeg started"
+                    )
+                remount_clips(
+                    planned,
+                    audio_path,
+                    output_path,
+                    abort_callback=lambda: _video_editor_cancel_requested(job_id),
+                )
+        except resource_scheduler.ResourceAcquireCancelled:
+            current = _video_editor_job_snapshot(job_id) or {}
+            deferred = bool(current.get("started_at"))
+            with _alternative_song_sidecar_lock:
+                sidecar = load_sidecar(video_path)
+                song = find_song(sidecar, song_id=song_id)
+                if song is not None and str(song.get("status") or "") == "mounting":
+                    song["status"] = "attached"
+                    song["job_id"] = None
+                    save_sidecar(video_path, sidecar)
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message=(
+                    "Cancelled after FFmpeg reached a safe boundary"
+                    if deferred else "Cancelled before FFmpeg started"
+                ),
+                cancel_mode="deferred" if deferred else "immediate",
+                safe_boundary=(
+                    "after_current_ffmpeg_render" if deferred else "before_ffmpeg"
+                ),
+            )
+            return
+
+        if _video_editor_cancel_requested(job_id):
+            with _alternative_song_sidecar_lock:
+                sidecar = load_sidecar(video_path)
+                song = find_song(sidecar, song_id=song_id)
+                if song is not None:
+                    song["status"] = "attached"
+                    song["job_id"] = None
+                    save_sidecar(video_path, sidecar)
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message="Cancelled after FFmpeg reached a safe boundary",
+                cancel_mode="deferred",
+                safe_boundary="after_current_ffmpeg_render",
+            )
+            return
+
+        with _alternative_song_sidecar_lock:
+            sidecar = load_sidecar(video_path)
+            song = find_song(sidecar, song_id=song_id)
+            if song is None:
+                raise ValueError("The alternative song disappeared after remount")
+            write_mounted_sidecar(
+                output_path=output_path,
+                parent_name=video_name,
+                parent_sidecar=sidecar,
+                song=song,
+                planned=planned,
+                job_id=job_id,
+                workspace=workspace,
+            )
+            save_sidecar(video_path, sidecar)
+        output_name = os.path.basename(output_path)
+        _video_editor_job_update(
+            job_id,
+            status="completed",
+            phase="completed",
+            progress=100,
+            current=100,
+            message="Alternative song remount complete",
+            filename=output_name,
+            url=f"/api/v1/file/{output_name}",
+            output_files=[output_name],
+            acquired_resources=[],
+            finished_at=time.time(),
+            _resource_acquired=False,
+            _worker_active=False,
+        )
+    except Exception as exc:
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+        _remove_video_editor_output_bundle(output_path)
+        fail(str(exc))
+
+
+@api.get("/api/v1/outputs/{name}/alternative-songs")
+def list_alternative_songs(name: str, workspace: str | None = None):
+    """List songs attached to an assembled videoclip without remounting."""
+    from services.alternative_songs import describe_parent
+
+    with _alternative_song_sidecar_lock:
+        out_dir, filepath, video_name, sidecar = _alternative_song_parent(name, workspace)
+        _recover_stale_alternative_song_mounts(filepath, sidecar)
+        sources = _alternative_song_sources(out_dir, video_name, sidecar)
+        return describe_parent(
+            video_name=video_name,
+            video_path=filepath,
+            sidecar=sidecar,
+            source_files=sources,
+        )
+
+
+@api.post("/api/v1/outputs/{name}/alternative-songs")
+def attach_alternative_song(name: str, body: dict, workspace: str | None = None):
+    """Attach an existing audio output as an alternative song. No GPU work."""
+    with _alternative_song_sidecar_lock:
+        return _attach_alternative_song_locked(name, body, workspace)
+
+
+def _attach_alternative_song_locked(name: str, body: dict, workspace: str | None = None):
+    from services.alternative_songs import attach_song, describe_parent, public_song, save_sidecar
+
+    audio_name = str((body or {}).get("audio_name") or "").strip()
+    if not audio_name:
+        raise HTTPException(status_code=400, detail="audio_name is required")
+    ws = workspace if workspace is not None else (body or {}).get("workspace")
+    out_dir, filepath, video_name, sidecar = _alternative_song_parent(name, ws)
+    sources = _alternative_song_sources(out_dir, video_name, sidecar)
+    try:
+        audio_path = _resolve_video_editor_audio_source(audio_name, ws)
+        from services.alternative_songs import probe_song_duration
+        duration = probe_song_duration(audio_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    record = attach_song(sidecar, audio_name=os.path.basename(audio_path), duration_seconds=duration)
+    save_sidecar(filepath, sidecar)
+    parent = describe_parent(
+        video_name=video_name, video_path=filepath, sidecar=sidecar, source_files=sources,
+    )
+    return {"song": public_song(record), **parent}
+
+
+@api.delete("/api/v1/outputs/{name}/alternative-songs/{song_id}")
+def delete_alternative_song(name: str, song_id: str, workspace: str | None = None):
+    with _alternative_song_sidecar_lock:
+        return _delete_alternative_song_locked(name, song_id, workspace)
+
+
+def _delete_alternative_song_locked(name: str, song_id: str, workspace: str | None = None):
+    from services.alternative_songs import public_song, remove_song, save_sidecar
+
+    _out_dir, filepath, _video_name, sidecar = _alternative_song_parent(name, workspace)
+    _recover_stale_alternative_song_mounts(filepath, sidecar)
+    try:
+        removed = remove_song(sidecar, song_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    save_sidecar(filepath, sidecar)
+    return {"removed": public_song(removed)}
+
+
+@api.post("/api/v1/outputs/{name}/alternative-songs/{song_id}/mount", status_code=202)
+def mount_alternative_song(name: str, song_id: str, body: dict | None = None, workspace: str | None = None):
+    """Remount the videoclip with an attached alternative song using FFmpeg only."""
+    with _alternative_song_sidecar_lock:
+        return _mount_alternative_song_locked(name, song_id, body, workspace)
+
+
+def _mount_alternative_song_locked(
+    name: str,
+    song_id: str,
+    body: dict | None = None,
+    workspace: str | None = None,
+):
+    from services.alternative_songs import (
+        attach_song,
+        find_song,
+        public_song,
+        save_sidecar,
+        unique_mounted_name,
+        probe_song_duration,
+    )
+
+    payload = body if isinstance(body, dict) else {}
+    ws = workspace if workspace is not None else payload.get("workspace")
+    out_dir, filepath, video_name, sidecar = _alternative_song_parent(name, ws)
+    _recover_stale_alternative_song_mounts(filepath, sidecar)
+    _alternative_song_sources(out_dir, video_name, sidecar)
+    record = find_song(sidecar, song_id=song_id)
+    if record is None:
+        audio_name = str(payload.get("audio_name") or "").strip()
+        if not audio_name:
+            raise HTTPException(status_code=404, detail="Alternative song not found")
+        try:
+            audio_path = _resolve_video_editor_audio_source(audio_name, ws)
+            record = attach_song(
+                sidecar,
+                audio_name=os.path.basename(audio_path),
+                duration_seconds=probe_song_duration(audio_path),
+            )
+            song_id = str(record["id"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if str(record.get("status") or "") == "mounting":
+        raise HTTPException(status_code=409, detail="That song is already remounting")
+    try:
+        audio_path = _resolve_video_editor_audio_source(str(record.get("audio_name") or ""), ws)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        seed = int(payload.get("seed") if payload.get("seed") is not None else 1)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="seed must be an integer") from exc
+    output_name = unique_mounted_name(out_dir, video_name, str(record.get("audio_name") or "song"))
+    output_path = os.path.join(out_dir, output_name)
+    job_id = f"alt-song-{uuid.uuid4().hex[:12]}"
+    task_id, root_task_id, parent_task_id = _video_editor_task_identity(payload, job_id)
+    now = time.time()
+    job = {
+        "job_id": job_id,
+        "task_id": task_id,
+        "root_task_id": root_task_id,
+        "parent_task_id": parent_task_id,
+        "workspace": ws or _get_active_workspace(),
+        "status": "queued",
+        "phase": "queued",
+        "progress": 0,
+        "current": 0,
+        "total": 100,
+        "message": "Waiting to remount the alternative song…",
+        "filename": None,
+        "url": None,
+        "output_files": [],
+        "result": None,
+        "error": None,
+        "provider": "local",
+        "model": "FFmpeg",
+        "server_origin": "local",
+        "resource_lane": _VIDEO_EDITOR_FFMPEG_LANE.key,
+        "resource_requirements": [_VIDEO_EDITOR_FFMPEG_LANE.key],
+        "acquired_resources": [],
+        "created_at": now,
+        "queued_at": now,
+        "updated_at": now,
+        "_cancel_requested": False,
+        "_resource_acquired": False,
+        "_worker_active": True,
+    }
+    record["status"] = "mounting"
+    record["job_id"] = job_id
+    save_sidecar(filepath, sidecar)
+    try:
+        snapshot = _register_video_editor_job(job)
+    except Exception as exc:
+        record["status"] = "attached"
+        record["job_id"] = None
+        save_sidecar(filepath, sidecar)
+        raise HTTPException(status_code=500, detail=f"Could not queue remount: {exc}") from exc
+    worker = threading.Thread(
+        target=_run_alternative_song_mount,
+        kwargs={
+            "job_id": job_id,
+            "out_dir": out_dir,
+            "video_path": filepath,
+            "video_name": video_name,
+            "audio_path": audio_path,
+            "output_path": output_path,
+            "song_id": song_id,
+            "workspace": str(job["workspace"]),
+            "seed": seed,
+        },
+        daemon=True,
+        name=f"maestro-{job_id}",
+    )
+    try:
+        worker.start()
+    except Exception as exc:
+        record["status"] = "attached"
+        record["job_id"] = None
+        save_sidecar(filepath, sidecar)
+        _video_editor_job_update(
+            job_id,
+            status="failed",
+            phase="failed",
+            error=str(exc),
+            message=f"Could not start remount: {exc}",
+            finished_at=time.time(),
+            _worker_active=False,
+        )
+        raise HTTPException(status_code=500, detail=f"Could not start remount: {exc}") from exc
+    return {
+        "job_id": job_id,
+        "task_id": snapshot.get("task_id"),
+        "status": snapshot.get("status"),
+        "song": public_song(record),
+        "output_name": output_name,
+    }
+
+
 def _saved_video_context_for_extra_info(name: str):
     """Load sidecar/pipeline context without reading the media itself."""
     out_dir = _workspace_dir()
@@ -34688,6 +35242,7 @@ _video_editor_jobs_lock = threading.RLock()
 _VIDEO_EDITOR_TERMINAL = frozenset({"completed", "failed", "cancelled"})
 _VIDEO_EDITOR_FFMPEG_LANE = resource_scheduler.cpu_lane("ffmpeg")
 _VIDEO_EDITOR_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"}
+_VIDEO_EDITOR_AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"}
 _COMIC_ANIMATIC_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
@@ -34851,6 +35406,21 @@ def _resolve_video_editor_source(source: str, workspace: str | None = None) -> s
     return resolved
 
 
+def _resolve_video_editor_audio_source(source: str, workspace: str | None = None) -> str:
+    """Resolve a soundtrack reference using the same workspace boundary."""
+    from services.media_refs import parse_media_ref
+
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("Audio source is missing")
+    path, workspace = parse_media_ref(source, workspace)
+    resolved = _resolve_model3d_input_path(path, workspace)
+    if not resolved or not os.path.isfile(resolved):
+        raise ValueError(f"Audio source could not be found: {os.path.basename(path) or path}")
+    if os.path.splitext(resolved)[1].lower() not in _VIDEO_EDITOR_AUDIO_EXTENSIONS:
+        raise ValueError(f"Unsupported audio format: {os.path.splitext(resolved)[1] or 'unknown'}")
+    return resolved
+
+
 def _resolve_comic_animatic_image(source: str, workspace: str | None = None) -> str:
     """Resolve a captured panel image using Maestro's existing safe path rules."""
     from urllib.parse import unquote
@@ -34879,6 +35449,22 @@ def probe_video_editor_source(body: dict):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not inspect video: {exc}") from exc
+
+
+@api.post("/api/v1/video-editor/probe-audio")
+def probe_video_editor_audio_source(body: dict):
+    """Read duration for one workspace soundtrack without requiring video."""
+    from services.video_editor import probe_audio
+
+    try:
+        resolved = _resolve_video_editor_audio_source(
+            body.get("source", ""), body.get("workspace"),
+        )
+        return probe_audio(resolved)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not inspect audio: {exc}") from exc
 
 
 @api.get("/api/v1/video-editor/thumbnail")
@@ -35055,6 +35641,15 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
             )
             resolved_clips.append(resolved)
 
+        resolved_soundtrack = None
+        if body.get("soundtrack") is not None:
+            if not isinstance(body["soundtrack"], dict):
+                raise ValueError("The soundtrack must be an object")
+            resolved_soundtrack = dict(body["soundtrack"])
+            resolved_soundtrack["resolved_path"] = _resolve_video_editor_audio_source(
+                str(body["soundtrack"].get("source") or ""), workspace,
+            )
+
         if _video_editor_cancel_requested(job_id):
             _finish_video_editor_cancelled(job_id, output_path)
             return
@@ -35094,6 +35689,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                     width=int(body["width"]),
                     height=int(body["height"]),
                     fps=int(body["fps"]),
+                    soundtrack=resolved_soundtrack,
                     progress=report,
                 )
         except resource_scheduler.ResourceAcquireCancelled:
@@ -35172,6 +35768,11 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                         for clip in body["clips"]
                     ],
                     "source_manifest": build_source_provenance_manifest(resolved_clips),
+                    "soundtrack": {
+                        key: value
+                        for key, value in (body.get("soundtrack") or {}).items()
+                        if key in {"name", "source", "trim_start", "trim_end", "volume", "loop"}
+                    } or None,
                 },
                 "source": "video_editor",
             },
@@ -35301,6 +35902,32 @@ def start_video_editor_export(body: dict):
         })
         clean_clips.append(clean_clip)
 
+    soundtrack = body.get("soundtrack")
+    clean_soundtrack = None
+    if soundtrack is not None:
+        if not isinstance(soundtrack, dict):
+            raise HTTPException(status_code=400, detail="The soundtrack must be an object")
+        try:
+            trim_start = max(0.0, float(soundtrack.get("trim_start") or 0))
+            trim_end = max(0.0, float(soundtrack.get("trim_end") or 0))
+            volume = float(soundtrack.get("volume") if soundtrack.get("volume") is not None else 1)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Invalid soundtrack settings") from exc
+        if trim_end and trim_end <= trim_start:
+            raise HTTPException(status_code=400, detail="Soundtrack trim_end must be after trim_start")
+        if volume < 0 or volume > 2:
+            raise HTTPException(status_code=400, detail="Soundtrack volume must be between 0 and 2")
+        clean_soundtrack = {
+            "name": str(soundtrack.get("name") or "soundtrack")[:300],
+            "source": str(soundtrack.get("source") or ""),
+            "trim_start": trim_start,
+            "trim_end": trim_end,
+            "volume": volume,
+            "loop": bool(soundtrack.get("loop")),
+        }
+        if not clean_soundtrack["source"].strip():
+            raise HTTPException(status_code=400, detail="Soundtrack source is missing")
+
     workspace = body.get("workspace") if body.get("workspace") is not None else _get_active_workspace()
     out_dir = _workspace_dir(workspace)
     safe_project_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("name") or "edited_video")).strip("_")
@@ -35316,7 +35943,13 @@ def start_video_editor_export(body: dict):
         suffix += 1
 
     clean_body = dict(body)
-    clean_body.update({"width": width, "height": height, "fps": fps, "clips": clean_clips})
+    clean_body.update({
+        "width": width,
+        "height": height,
+        "fps": fps,
+        "clips": clean_clips,
+        "soundtrack": clean_soundtrack,
+    })
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
     now = time.time()

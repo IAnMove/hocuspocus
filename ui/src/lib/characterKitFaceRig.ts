@@ -9,7 +9,7 @@ import {
   type CharacterMouthState,
 } from './characterKit'
 
-export const CHARACTER_FACE_RIG_STATES = ['closed', 'small', 'wide', 'round', 'blink'] as const
+export const CHARACTER_FACE_RIG_STATES = ['closed', 'small', 'wide', 'round', 'open-eyes', 'blink'] as const
 export type CharacterKitFaceRigState = typeof CHARACTER_FACE_RIG_STATES[number]
 
 export interface FaceRigGenerationRequest {
@@ -41,7 +41,6 @@ export interface FaceRigProvenance {
   [key: string]: unknown
 }
 
-const MOUTH_STATES = new Set<CharacterMouthState>(['closed', 'small', 'wide', 'round'])
 const MATERIAL_ALPHA_RATIO = .01
 export const DEFAULT_FACE_RIG_ANCHOR: CharacterFaceAnchor = DEFAULT_CHARACTER_MOUTH_ANCHOR
 export const DEFAULT_FACE_RIG_BLINK_ANCHOR: CharacterFaceAnchor = DEFAULT_CHARACTER_BLINK_ANCHOR
@@ -131,8 +130,10 @@ export function faceRigPrompt(kit: CharacterKit, state: CharacterKitFaceRigState
   if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
   const identity = description.trim() || kit.lookNotes?.trim() || `${kit.name} character`
   const expression = state === 'blink'
-    ? 'an eyes overlay sprite with closed eyelids only'
-    : `a ${state} mouth overlay sprite only`
+    ? 'an eyes overlay sprite with both eyelids fully closed'
+    : state === 'open-eyes'
+      ? 'an eyes overlay sprite with both eyes open, irises visible, eyelids up'
+      : `a ${state} mouth overlay sprite only`
   return `Generate ONLY ${expression} for ${identity}; use the pose as identity and art-style reference; preserve the facial proportions and colors; isolated transparent PNG/WebP overlay, tightly cropped to the facial piece, aligned to the reference; no full character, no head, no body, no skin rectangle, no background, no text, no glow, no shadow, no extra objects.`
 }
 
@@ -146,10 +147,20 @@ export function faceRigGenerationRequests(kit: CharacterKit, poseId = 'base', de
   }))
 }
 
+export function isFaceRigEyeState(state: CharacterKitFaceRigState): boolean {
+  return state === 'blink' || state === 'open-eyes'
+}
+
 function assetForState(kit: CharacterKit, state: CharacterKitFaceRigState): CharacterKitAsset | undefined {
-  return MOUTH_STATES.has(state as CharacterMouthState)
-    ? kit.mouth[state as CharacterMouthState]
-    : kit.eyes.blink
+  if (state === 'open-eyes') return kit.eyes.open
+  if (state === 'blink') return kit.eyes.blink
+  return kit.mouth[state as CharacterMouthState]
+}
+
+function withFaceRigAsset(kit: CharacterKit, state: CharacterKitFaceRigState, asset: CharacterKitAsset): CharacterKit {
+  if (state === 'open-eyes') return { ...kit, eyes: { ...kit.eyes, open: asset } }
+  if (state === 'blink') return { ...kit, eyes: { ...kit.eyes, blink: asset } }
+  return { ...kit, mouth: { ...kit.mouth, [state]: asset } }
 }
 
 /** Return a new kit with one generated state attached as pending and provenance recorded. */
@@ -164,9 +175,7 @@ export function registerGeneratedFaceRigAsset(
   const nextAsset: CharacterKitAsset = { ...asset, reviewState: 'pending', kind: 'overlay' }
   const nextProvenance: FaceRigProvenance = { ...provenance, method: 'character-kit-face-rig', state }
   return {
-    ...kit,
-    mouth: MOUTH_STATES.has(state as CharacterMouthState) ? { ...kit.mouth, [state]: nextAsset } : kit.mouth,
-    eyes: state === 'blink' ? { ...kit.eyes, blink: nextAsset } : kit.eyes,
+    ...withFaceRigAsset(kit, state, nextAsset),
     provenance: [...kit.provenance, nextProvenance],
     updatedAt: new Date().toISOString(),
   }
@@ -202,9 +211,7 @@ export function registerCleanedFaceRigAsset(
     reviewState: 'pending',
   }
   return {
-    ...kit,
-    mouth: MOUTH_STATES.has(state as CharacterMouthState) ? { ...kit.mouth, [state]: nextAsset } : kit.mouth,
-    eyes: state === 'blink' ? { ...kit.eyes, blink: nextAsset } : kit.eyes,
+    ...withFaceRigAsset(kit, state, nextAsset),
     provenance: [...kit.provenance, {
       method: 'character-kit-face-rig-cleanup',
       state,
@@ -237,7 +244,7 @@ export function normalizeFaceRigAnchor(value?: Partial<CharacterFaceAnchor> | nu
 export function faceRigAnchorFor(kit: CharacterKit, poseId: string, state: CharacterKitFaceRigState): CharacterFaceAnchor {
   if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
   const poseAnchors = kit.anchors[poseId.trim() || 'base'] ?? kit.anchors.base
-  if (state === 'blink') return normalizeFaceRigAnchor(poseAnchors?.eyes ?? DEFAULT_FACE_RIG_BLINK_ANCHOR)
+  if (isFaceRigEyeState(state)) return normalizeFaceRigAnchor(poseAnchors?.eyes ?? DEFAULT_FACE_RIG_BLINK_ANCHOR)
   return normalizeFaceRigAnchor(poseAnchors?.mouthStates?.[state as CharacterMouthState] ?? poseAnchors?.mouth ?? DEFAULT_FACE_RIG_ANCHOR)
 }
 
@@ -246,6 +253,7 @@ export function lockFaceRigMouthPlacement(
   kit: CharacterKit,
   poseId: string,
   anchor: Partial<CharacterFaceAnchor>,
+  record = true,
 ): CharacterKit {
   const normalizedPoseId = poseId.trim() || 'base'
   const nextAnchor = normalizeFaceRigAnchor(anchor)
@@ -262,11 +270,40 @@ export function lockFaceRigMouthPlacement(
       ...kit.anchors,
       [normalizedPoseId]: { mouth: nextAnchor, mouthStates, eyes: current.eyes },
     },
-    provenance: [...kit.provenance, {
-      method: 'character-kit-face-rig-lock-mouths',
-      poseId: normalizedPoseId,
-      anchor: nextAnchor,
-    }],
+    ...(record ? {
+      provenance: [...kit.provenance, {
+        method: 'character-kit-face-rig-lock-mouths',
+        poseId: normalizedPoseId,
+        anchor: nextAnchor,
+      }],
+    } : {}),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+/** Copy one eye box onto open eyes and blink for this pose. */
+export function lockFaceRigEyePlacement(
+  kit: CharacterKit,
+  poseId: string,
+  anchor: Partial<CharacterFaceAnchor>,
+  record = true,
+): CharacterKit {
+  const normalizedPoseId = poseId.trim() || 'base'
+  const nextAnchor = normalizeFaceRigAnchor(anchor)
+  const current = kit.anchors[normalizedPoseId] ?? kit.anchors.base ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
+  return {
+    ...kit,
+    anchors: {
+      ...kit.anchors,
+      [normalizedPoseId]: { mouth: normalizeFaceRigAnchor(current.mouth), mouthStates: current.mouthStates, eyes: nextAnchor },
+    },
+    ...(record ? {
+      provenance: [...kit.provenance, {
+        method: 'character-kit-face-rig-lock-eyes',
+        poseId: normalizedPoseId,
+        anchor: nextAnchor,
+      }],
+    } : {}),
     updatedAt: new Date().toISOString(),
   }
 }
@@ -282,7 +319,7 @@ export function setFaceRigAnchor(
   const normalizedPoseId = poseId.trim() || 'base'
   const nextAnchor = normalizeFaceRigAnchor(anchor)
   const current = kit.anchors[normalizedPoseId] ?? kit.anchors.base ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
-  const nextPoseAnchors = state === 'blink'
+  const nextPoseAnchors = isFaceRigEyeState(state)
     ? { mouth: normalizeFaceRigAnchor(current.mouth), mouthStates: current.mouthStates, eyes: nextAnchor }
     : {
       mouth: normalizeFaceRigAnchor(current.mouth ?? nextAnchor),
@@ -574,12 +611,12 @@ export function assessFaceRigPlacement(anchor: CharacterFaceAnchor, state: Chara
     warnings.push('This overlay sits far from the pose center and may miss the face.')
   }
   if (next.scale < .012) warnings.push('This overlay is unusually small compared with the pose.')
-  if (state === 'blink' ? next.scale > .2 : next.scale > .12) {
-    warnings.push(state === 'blink'
-      ? 'This blink overlay is larger than a typical eye mask. Scale it down until it only covers the eyes.'
+  if (isFaceRigEyeState(state) ? next.scale > .2 : next.scale > .12) {
+    warnings.push(isFaceRigEyeState(state)
+      ? 'This eye overlay is larger than a typical eye mask. Scale it down until it only covers the eyes.'
       : 'This mouth overlay is larger than a typical viseme. Scale it down until it sits on the lips.')
   }
-  if (state !== 'blink' && next.offsetY > -8) {
+  if (!isFaceRigEyeState(state) && next.offsetY > -8) {
     warnings.push('Mouths on a full-body cutout usually sit above the chest. Nudge Down/Up until the overlay covers the lips, then lock all mouths.')
   }
   return { ok: warnings.length === 0, warnings }
@@ -591,9 +628,7 @@ export function setFaceRigReviewState(kit: CharacterKit, state: CharacterKitFace
   if (!current) throw new Error(`Character Kit “${kit.name}” has no generated ${state} asset.`)
   const next = { ...current, reviewState }
   return {
-    ...kit,
-    mouth: MOUTH_STATES.has(state as CharacterMouthState) ? { ...kit.mouth, [state]: next } : kit.mouth,
-    eyes: state === 'blink' ? { ...kit.eyes, blink: next } : kit.eyes,
+    ...withFaceRigAsset(kit, state, next),
     updatedAt: new Date().toISOString(),
   }
 }

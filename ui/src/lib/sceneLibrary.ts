@@ -22,6 +22,21 @@ export const sceneLibraryTitle = (name: string) => {
   return stem.replace(/[-_]+/g, ' ').trim() || name
 }
 
+export const normalizeSceneLookupName = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-zA-Z0-9]+/g, ' ')
+  .trim()
+  .toLowerCase()
+
+export const sceneOutputMatchesName = (file: Pick<ApiOutput, 'name'>, requestedName: string) => {
+  const requested = normalizeSceneLookupName(requestedName)
+  return Boolean(requested) && (
+    normalizeSceneLookupName(file.name) === requested
+    || normalizeSceneLookupName(sceneLibraryTitle(file.name)) === requested
+  )
+}
+
 export const sceneFromLibraryPayload = (payload: unknown): Scene => {
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
     const record = payload as Record<string, unknown>

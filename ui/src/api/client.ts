@@ -219,6 +219,16 @@ export async function resumeCanonicalTask(taskId: string, workspace: string): Pr
   return payload.task
 }
 
+export async function retryCanonicalTask(taskId: string, workspace: string): Promise<CanonicalTask> {
+  const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}/retry?workspace=${encodeURIComponent(workspace)}`, { method: 'POST' })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Task retry failed' }))
+    throw new Error(error.detail || 'Task retry failed')
+  }
+  const payload = await res.json()
+  return payload.task
+}
+
 export async function dismissCanonicalTask(taskId: string, workspace: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}?workspace=${encodeURIComponent(workspace)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to dismiss HocusPocus task')
@@ -605,6 +615,7 @@ export async function generateMusic(params: {
   model_type?: string
   seed?: number
   workspace?: string
+  initiator?: string
 }): Promise<{ audio_path: string; filename: string; style: string; lyrics: string }> {
   const res = await fetch(`${BASE}/api/v1/director/generate-music`, {
     method: 'POST',
@@ -800,11 +811,11 @@ export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly
   return { outputs: data.outputs, total: data.total ?? data.outputs.length }
 }
 
-export async function saveScene(scene: import('../types').Scene, preview: string): Promise<{ name: string; type: 'scene'; url: string; thumbnail_url: string }> {
+export async function saveScene(scene: import('../types').Scene, preview: string, workspace?: string): Promise<{ name: string; type: 'scene'; url: string; thumbnail_url: string }> {
   const res = await fetch(`${BASE}/api/v1/scenes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scene, preview }),
+    body: JSON.stringify({ scene, preview, workspace }),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to save scene' }))
@@ -907,6 +918,20 @@ export async function saveSceneRecording(
 export function getFileUrl(filename: string, workspace?: string): string {
   const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
   return `${BASE}/api/v1/file/${encodeURIComponent(filename)}${query}`
+}
+
+/** Convert persisted media references into a URL the browser can actually play.
+ * Older/local generation responses contain an absolute filesystem path. That
+ * path is useful to the backend but is not an HTTP route, so use the canonical
+ * workspace file endpoint and the separately persisted filename instead.
+ */
+export function getPlayableFileUrl(source: string, filename: string, workspace?: string): string {
+  const value = String(source || '').trim()
+  if (/^(?:https?:|blob:|data:)/i.test(value) || value.startsWith('/api/')) return value
+  if (!value || value.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(value)) {
+    return getFileUrl(filename, workspace)
+  }
+  return value
 }
 
 export function getOutputThumbnailUrl(filename: string, workspace?: string): string {
@@ -1195,6 +1220,90 @@ export async function generateVideoExtraInfo(
   return res.json()
 }
 
+export interface AlternativeSong {
+  id: string
+  audio_name: string
+  duration_seconds: number
+  created_at: number
+  status: 'attached' | 'mounting' | 'mounted' | 'failed' | string
+  mounted_output: string | null
+  job_id: string | null
+  extra_clip_count: number
+  planned_clip_count: number
+}
+
+export interface AlternativeSongList {
+  parent: string
+  duration_seconds: number
+  source_clip_count: number
+  adaptation: 'random_extras' | 'loop_assembled' | string
+  songs: AlternativeSong[]
+  song?: AlternativeSong
+}
+
+export async function fetchAlternativeSongs(name: string, workspace?: string): Promise<AlternativeSongList> {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}/alternative-songs${query}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not read alternative songs' }))
+    throw new Error(error.detail || 'Could not read alternative songs')
+  }
+  return res.json()
+}
+
+export async function attachAlternativeSong(
+  name: string,
+  audioName: string,
+  workspace?: string,
+): Promise<AlternativeSongList> {
+  const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}/alternative-songs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audio_name: audioName, workspace }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not attach the song' }))
+    throw new Error(error.detail || 'Could not attach the song')
+  }
+  return res.json()
+}
+
+export async function deleteAlternativeSong(name: string, songId: string, workspace?: string): Promise<void> {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  const res = await fetch(
+    `${BASE}/api/v1/outputs/${encodeURIComponent(name)}/alternative-songs/${encodeURIComponent(songId)}${query}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not remove the song' }))
+    throw new Error(error.detail || 'Could not remove the song')
+  }
+}
+
+export async function mountAlternativeSong(
+  name: string,
+  songId: string,
+  details?: { audioName?: string; workspace?: string; seed?: number },
+): Promise<{ job_id: string; task_id?: string; status: string; song: AlternativeSong; output_name: string }> {
+  const res = await fetch(
+    `${BASE}/api/v1/outputs/${encodeURIComponent(name)}/alternative-songs/${encodeURIComponent(songId)}/mount`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audio_name: details?.audioName,
+        workspace: details?.workspace,
+        seed: details?.seed,
+      }),
+    },
+  )
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not remount the videoclip' }))
+    throw new Error(error.detail || 'Could not remount the videoclip')
+  }
+  return res.json()
+}
+
 export async function deleteOutput(name: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete output')
@@ -1251,6 +1360,19 @@ export async function probeVideoEditorClip(source: string, workspace?: string): 
   return res.json()
 }
 
+export async function probeVideoEditorAudio(source: string, workspace?: string): Promise<{ duration: number; has_audio: boolean }> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/probe-audio`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, workspace }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not inspect audio' }))
+    throw new Error(error.detail || 'Could not inspect audio')
+  }
+  return res.json()
+}
+
 export function getVideoEditorThumbnailUrl(source: string): string {
   const params = new URLSearchParams({ source })
   return `${BASE}/api/v1/video-editor/thumbnail?${params.toString()}`
@@ -1288,6 +1410,14 @@ export async function startVideoEditorExport(payload: {
   height: number
   fps: number
   workspace?: string
+  soundtrack?: {
+    name: string
+    source: string
+    trim_start: number
+    trim_end: number
+    volume: number
+    loop: boolean
+  } | null
   clips: Array<{
     name: string
     source: string
@@ -2811,6 +2941,88 @@ export interface StoryLibraryPayload {
   projects: Record<string, import('../features/stories/types').StoryProject>
 }
 
+export interface WizardConversationPayload {
+  version: 1
+  revision: number
+  messages: unknown[]
+  executions: unknown[]
+  requestedActions?: unknown[]
+  executedActions?: unknown[]
+  confirmations?: unknown[]
+}
+
+export interface WizardWorkflowCollectionPayload {
+  version: 1
+  revision: number
+  workflows: unknown[]
+}
+
+export async function fetchWizardConversation(workspace: string): Promise<WizardConversationPayload> {
+  const response = await fetch(
+    `${BASE}/api/v1/wizard/conversations?workspace=${encodeURIComponent(workspace)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not load Wizard conversation' }))
+    throw new Error(error.detail || 'Could not load Wizard conversation')
+  }
+  return response.json()
+}
+
+export async function saveWizardConversation(
+  workspace: string,
+  conversation: WizardConversationPayload,
+): Promise<WizardConversationPayload> {
+  const response = await fetch(`${BASE}/api/v1/wizard/conversations`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, baseRevision: conversation.revision, conversation }),
+  })
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    if (error && typeof error === 'object') {
+      const detail = (error as Record<string, unknown>).detail
+      if (typeof detail === 'string') throw new Error(detail)
+    }
+    throw new Error('Could not save Wizard conversation')
+  }
+  return response.json()
+}
+
+export async function fetchWizardWorkflows(workspace: string): Promise<WizardWorkflowCollectionPayload> {
+  const response = await fetch(
+    `${BASE}/api/v1/wizard/workflows?workspace=${encodeURIComponent(workspace)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not load Wizard workflows' }))
+    throw new Error(error.detail || 'Could not load Wizard workflows')
+  }
+  return response.json()
+}
+
+export async function saveWizardWorkflows(
+  workspace: string,
+  collection: WizardWorkflowCollectionPayload,
+): Promise<WizardWorkflowCollectionPayload> {
+  const response = await fetch(`${BASE}/api/v1/wizard/workflows`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, baseRevision: collection.revision, collection }),
+  })
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    if (error && typeof error === 'object') {
+      const detail = (error as Record<string, unknown>).detail
+      if (typeof detail === 'string') throw new Error(detail)
+      if (detail && typeof detail === 'object') {
+        const message = (detail as Record<string, unknown>).message
+        if (typeof message === 'string') throw new Error(message)
+      }
+    }
+    throw new Error('Could not save Wizard workflows')
+  }
+  return response.json()
+}
+
 export async function fetchStoryLibrary(workspace: string): Promise<StoryLibraryPayload> {
   const response = await fetch(
     `${BASE}/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`,
@@ -2954,10 +3166,12 @@ export async function createSeriesEpisode(
   workspace: string,
   seriesId: string,
   seasonId?: string,
+  episode?: Partial<Pick<import('../features/series/types').SeriesEpisode,
+    'title' | 'premise' | 'logline' | 'targetDurationSeconds' | 'status' | 'outline'>>,
 ): Promise<import('../features/series/types').SeriesEpisode> {
   return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace, seasonId }),
+    body: JSON.stringify({ workspace, seasonId, episode }),
   }), 'Could not create Series episode')
 }
 
@@ -3957,6 +4171,7 @@ export async function startHunyuan3DJob(params: {
   operation?: 'generate' | 'retexture'
   source_model?: string
   preset?: string
+  provider?: string
   model_id?: string
   prompt?: string
   workspace?: string
@@ -4168,8 +4383,9 @@ export async function unloadLlm(): Promise<void> {
   if (!res.ok) throw new Error('Failed to unload LLM')
 }
 
-export async function fetchLlmModels(): Promise<{ models: import('../types').LlmModelOption[] }> {
-  const res = await fetch(`${BASE}/api/v1/llm/models`)
+export async function fetchLlmModels(provider?: string): Promise<{ models: import('../types').LlmModelOption[] }> {
+  const query = provider ? `?provider=${encodeURIComponent(provider)}` : ''
+  const res = await fetch(`${BASE}/api/v1/llm/models${query}`)
   if (!res.ok) throw new Error('Failed to fetch LLM models')
   return res.json()
 }

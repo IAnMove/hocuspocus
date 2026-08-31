@@ -20,6 +20,9 @@ def test_backend_status_and_reconnect_publish_frozen_generation_details():
     assert "generation_details?: GenerationDetails" in client
     assert "generationDetails: j.generation_details" in store
     assert "patch.generationDetails = status.generation_details" in store
+    assert 'details["prompt"]' in launch
+    assert 'details["initiator"]' in launch
+    assert 'gen_params["_initiator"]' in launch
 
 
 def test_activity_footer_places_exact_model_and_recipe_next_to_cancel():
@@ -39,6 +42,10 @@ def test_activity_footer_places_exact_model_and_recipe_next_to_cancel():
     assert "title={generationRecipe(primary)}" in source
     assert "api.cancelCanonicalTask(taskId, workspace)" in source
     assert "primary.cancelable" in source
+    assert "function generationPrompt" in source
+    assert "function generationInitiator" in source
+    assert "Click to copy the complete prompt" in source
+    assert "Started by {initiator}" in source
 
 
 def test_activity_footer_treats_cancellation_as_terminal_history():

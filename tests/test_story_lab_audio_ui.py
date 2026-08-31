@@ -220,7 +220,7 @@ def test_story_direct_reference_mode_uses_only_approved_visual_assets():
 
     assert "'direct_references'" in types
     assert "H3 Ref2VA" in panel
-    assert "setDirectorShotImageGuidance(directReferences ? 'prompt_only' : 'auto')" in panel
+    assert "setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')" in panel
     assert "setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')" in panel
     assert "approvedReferenceIds" in adaptations
     assert "project.assets[id]?.approval === 'approved'" in adaptations

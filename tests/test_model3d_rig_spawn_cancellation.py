@@ -128,6 +128,10 @@ def _seed_case(kind: str, tmp_path: Path, monkeypatch):
             "_condition_text_job_with_minimax",
             lambda *_args, **_kwargs: str(dummy_ref),
         )
+        # Keep this cancellation race focused on the spawn boundary. Importing
+        # wgp merely to discover an optional provider key cold-loads torch and
+        # can consume the entire synchronization timeout on CI.
+        monkeypatch.setattr(service, "_minimax_api_key", lambda: "")
     else:
         service = rig_service
         source = tmp_path / kind / "source.glb"

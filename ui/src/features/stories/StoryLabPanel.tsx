@@ -34,6 +34,7 @@ import {
 } from './adaptations'
 import type { TrailerAdaptationOptions } from './adaptations'
 import { normalizeStoryProject, storyId, useStoryStore } from './store'
+import { musicVideoShouldUseDirectVideo } from './musicVideoLook'
 import {
   analyzeStoryPromptHealth,
   applyStoryVisualStyle,
@@ -48,6 +49,7 @@ import type {
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
 import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, normalizeStoryMusicModel, songWriteTarget } from './musicModel'
+import { listenForAgentStoryDraft, listenForAgentStorySection, listenForAgentStoryVisualGeneration } from '../agent/agentUiBus'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
@@ -55,6 +57,7 @@ const panel = 'rounded-xl border border-border bg-bg-secondary p-3 md:p-4'
 const requiredInput = 'border-violet-400/70 bg-violet-500/5 shadow-[0_0_14px_rgba(139,92,246,0.22)] focus:border-violet-300 focus:shadow-[0_0_18px_rgba(139,92,246,0.32)]'
 const requiredPreparationButton = 'border-violet-400/70 bg-violet-500/10 text-violet-200 shadow-[0_0_14px_rgba(139,92,246,0.22)] hover:border-violet-300 hover:bg-violet-500/20 hover:text-violet-100 disabled:shadow-none'
 const completeGenerationButton = 'border-emerald-400/70 bg-emerald-500/10 text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.24)] hover:border-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100 disabled:shadow-none'
+const storyLookupName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
 const CHARACTER_IDENTITY_REFERENCE_LOCK = [
   'CHARACTER IDENTITY REFERENCE: show exactly one character in a clear medium close-up or chest-up portrait.',
   'The face must be large in frame, sharply readable, unobstructed and well lit, with both eyes and defining facial features clearly visible.',
@@ -942,7 +945,14 @@ export function StoryLabPanel() {
   const [tab, setTab] = useState<StoryTab>(() => (
     readDirectorClipReplacementResult() ? 'assembly' : 'overview'
   ))
+  useEffect(() => listenForAgentStorySection(setTab), [])
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
+  const [agentDraftRevision, setAgentDraftRevision] = useState(0)
+  useEffect(() => listenForAgentStoryDraft(projectId => {
+    if (projectId === useStoryStore.getState().project.id) {
+      setAgentDraftRevision(revision => revision + 1)
+    }
+  }), [])
   const [imageBusy, setImageBusy] = useState('')
   const [referenceBatchBusy, setReferenceBatchBusy] = useState(false)
   const [productionBusy, setProductionBusy] = useState<'film' | 'music' | 'trailer' | null>(null)
@@ -1262,7 +1272,10 @@ export function StoryLabPanel() {
   const selectedFilmImageModel = videoModels.find(model => model.model_type === filmImageModel)
   const selectedFilmVideoModel = videoModels.find(model => model.model_type === filmVideoModel)
   const filmImageReady = filmImageModel !== MINIMAX_IMAGE_API_MODEL || Boolean(servicesConfig?.minimax_api_key_set)
-  const directVideo = project.musicVideoGenerationMode === 'direct_video'
+  const effectiveMusicVideoMode = musicVideoShouldUseDirectVideo(project)
+    ? 'direct_video'
+    : project.musicVideoGenerationMode
+  const directVideo = effectiveMusicVideoMode === 'direct_video'
   const directMusicVideo = directVideo
   const directReferenceVideo = project.musicVideoGenerationMode === 'direct_references'
   const promptHealthWarnings = useMemo(() => analyzeStoryPromptHealth(project), [project])
@@ -1369,7 +1382,7 @@ export function StoryLabPanel() {
       })
     }
     return () => { disposed = true }
-  }, [activeWorkspace, project.id])
+  }, [activeWorkspace, agentDraftRevision, project.id])
 
   useEffect(() => {
     if (project.projectType === 'quick_video') {
@@ -2138,6 +2151,64 @@ export function StoryLabPanel() {
       endProjectOperation(sourceProjectId)
     }
   }
+  const generateVisualRef = useRef(generateVisual)
+  generateVisualRef.current = generateVisual
+  useEffect(() => listenForAgentStoryVisualGeneration(async request => {
+    const current = useStoryStore.getState().project
+    if (current.id !== request.projectId) {
+      throw new Error('La historia cambió mientras se preparaba la generación visual; no he generado imágenes en otro proyecto.')
+    }
+    const requestedNames = new Set(request.targetNames.map(storyLookupName).filter(Boolean))
+    const includeCharacters = request.scope === 'characters' || request.scope === 'all'
+    const includeLocations = request.scope === 'locations' || request.scope === 'all'
+    const characters = includeCharacters
+      ? current.characters.filter(character => !requestedNames.size || requestedNames.has(storyLookupName(character.name)))
+      : []
+    const locations = includeLocations
+      ? current.world.locations.filter(location => !requestedNames.size || requestedNames.has(storyLookupName(location.name)))
+      : []
+    const ambiguous = [...requestedNames].filter(name => (
+      characters.filter(character => storyLookupName(character.name) === name).length
+      + locations.filter(location => storyLookupName(location.name) === name).length
+    ) > 1)
+    if (ambiguous.length) throw new Error(`Estos destinos visuales no son inequívocos: ${ambiguous.join(', ')}.`)
+    const matchedNames = new Set([
+      ...characters.map(character => storyLookupName(character.name)),
+      ...locations.map(location => storyLookupName(location.name)),
+    ])
+    const unknown = [...requestedNames].filter(name => !matchedNames.has(name))
+    if (unknown.length) throw new Error(`No existen estos destinos visuales en “${current.title}”: ${unknown.join(', ')}.`)
+
+    const targets: Array<{ target: { kind: 'world' | 'character' | 'location'; id?: string }; label: string; prompt: string }> = []
+    if (request.scope === 'world' || (request.scope === 'all' && !requestedNames.size)) {
+      targets.push({ target: { kind: 'world' }, label: 'mundo', prompt: current.world.visualPrompt })
+    }
+    characters.forEach(character => targets.push({ target: { kind: 'character', id: character.id }, label: character.name, prompt: character.visualPrompt }))
+    locations.forEach(location => targets.push({ target: { kind: 'location', id: location.id }, label: location.name, prompt: location.visualPrompt }))
+    if (!targets.length) throw new Error('La selección no contiene mundos, personajes ni localizaciones que puedan generarse.')
+    const missingPrompts = targets.filter(target => !target.prompt.trim()).map(target => target.label)
+    if (missingPrompts.length) throw new Error(`Falta visualPrompt para: ${missingPrompts.join(', ')}.`)
+
+    const assetIdsBefore = new Set(Object.keys(current.assets))
+    let completed = 0
+    let failure = ''
+    for (const item of targets) {
+      const ok = await generateVisualRef.current(item.target, item.prompt, {
+        quiet: true,
+        projectId: request.projectId,
+        onError: message => { failure = message },
+      })
+      if (!ok) throw new Error(`${completed}/${targets.length} referencias terminadas. Falló “${item.label}”: ${failure || 'error de generación desconocido'}.`)
+      completed += 1
+    }
+    setTab('assets')
+    const message = `He generado y adjuntado ${completed} referencia${completed === 1 ? '' : 's'} visual${completed === 1 ? '' : 'es'} en “${current.title}”. Quedan en Draft dentro de Story Lab → Assets para que las revises y apruebes.`
+    const latest = useStoryStore.getState().projects[request.projectId]
+    const assetIds = latest ? Object.keys(latest.assets).filter(id => !assetIdsBefore.has(id)) : []
+    if (assetIds.length !== completed) throw new Error('Las referencias visuales terminaron sin poder correlacionar todos sus IDs de asset.')
+    setNotice({ kind: 'ok', text: message })
+    return { message, assetIds }
+  }), [])
 
   const writeStyleIntoPrompts = () => {
     const style = storyRenderStyle(project)
@@ -2812,7 +2883,7 @@ export function StoryLabPanel() {
     store.setDirectorResolution(resolution)
     store.setDirectorAspectRatio(aspectRatio)
     store.setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')
-    if (videoModel.startsWith('minimax_h3')) {
+    if (videoModel.startsWith('minimax_h3') && !directVideo) {
       store.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
     }
     // setSidebarMode normally sends a fresh Director session to its route
@@ -3842,6 +3913,7 @@ export function StoryLabPanel() {
           duration_seconds: current.music.targetDurationSeconds,
           model_type: ACE_STEP_MUSIC_MODEL,
           workspace: activeWorkspace,
+          initiator: `Story Lab · ${current.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
         })
         const createdAt = new Date().toISOString()
         const language = cue.lyricsLanguage || current.language
@@ -3853,7 +3925,7 @@ export function StoryLabPanel() {
           language,
           version: firstVersion,
           name: rendered.filename,
-          source: rendered.audio_path,
+          source: api.getFileUrl(rendered.filename, activeWorkspace),
           prompt,
           lyrics: cue.lyrics,
           provider: 'local' as const,
@@ -4114,8 +4186,8 @@ export function StoryLabPanel() {
     store.setSidebarMode('director')
     store.setDirectorSkill('music_video')
     store.setDirectorAutoMode(autoStart)
-    store.setDirectorShotImageGuidance(directReferences ? 'prompt_only' : 'auto')
-    if (generationSettings.videoModel.startsWith('minimax_h3')) {
+    store.setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')
+    if (generationSettings.videoModel.startsWith('minimax_h3') && !directVideo) {
       store.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
     }
     store.setDirectorMusicVideoTreatment({
@@ -4176,7 +4248,7 @@ export function StoryLabPanel() {
     }
 
     window.dispatchEvent(new Event('maestro:director-open'))
-    const blob = await fetch(candidate.source).then(response => {
+    const blob = await fetch(api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)).then(response => {
       if (!response.ok) throw new Error('The selected song file is unavailable')
       return response.blob()
     })
@@ -4240,8 +4312,8 @@ export function StoryLabPanel() {
       director.setSidebarMode('director')
       director.setDirectorSkill('music_video')
       director.setDirectorAutoMode(false)
-      director.setDirectorShotImageGuidance(project.musicVideoGenerationMode === 'direct_references' ? 'prompt_only' : 'auto')
-      if (filmVideoModel.startsWith('minimax_h3')) {
+      director.setDirectorShotImageGuidance(project.musicVideoGenerationMode === 'direct_video' || project.musicVideoGenerationMode === 'direct_references' ? 'prompt_only' : 'auto')
+      if (filmVideoModel.startsWith('minimax_h3') && project.musicVideoGenerationMode !== 'direct_video') {
         director.setDirectorH3ReferenceMode(project.musicVideoGenerationMode === 'direct_references' ? 'references' : 'first_frame')
       }
       director.setDirectorMusicVideoTreatment({
@@ -4276,7 +4348,7 @@ export function StoryLabPanel() {
         videoModel: filmVideoModel,
         resolution: storyVideoResolution,
         aspectRatio: storyVideoAspectRatio,
-        generationMode: project.musicVideoGenerationMode,
+        generationMode: effectiveMusicVideoMode,
         directVideoMasterPrompt: project.directVideoMasterPrompt,
         writingProvider: project.provider.writingProvider,
         writingModel: project.provider.writingModel,
@@ -5836,7 +5908,7 @@ export function StoryLabPanel() {
                                           <span className="text-text-primary">{label} · {candidate.model}</span>
                                           <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
                                         </button>
-                                        <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
+                                        <audio src={api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)} controls preload="metadata" className="w-full h-8" />
                                         <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue) || !storyVideoConfigurationReady}
                                           onClick={() => void openMusicalTrailer(candidate.id)}>
                                           <Film size={12} /> Use in musical trailer
@@ -5945,7 +6017,7 @@ export function StoryLabPanel() {
                       {project.music.candidates.map(candidate => (
                         <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">
                           <span className="text-[10px] text-text-primary">{musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1)} · {candidate.model}</span>
-                          <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
+                          <audio src={api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)} controls preload="metadata" className="w-full h-8" />
                           <button className={`${button} w-full`} disabled={!storyVideoConfigurationReady} onClick={() => void openMusicalTrailer(candidate.id)}><Film size={12} /> Use in musical trailer</button>
                         </div>
                       ))}
@@ -6362,7 +6434,7 @@ export function StoryLabPanel() {
                             {selectedMusicOption.cue?.purpose && (
                               <p className="text-[10px] text-text-secondary">{selectedMusicOption.cue.purpose}</p>
                             )}
-                            <audio src={selectedMusicOption.candidate.source} controls preload="metadata" className="h-8 w-full" />
+                            <audio src={api.getPlayableFileUrl(selectedMusicOption.candidate.source, selectedMusicOption.candidate.name, activeWorkspace)} controls preload="metadata" className="h-8 w-full" />
                           </div>
                         )}
                         <div className="rounded-lg border border-fuchsia-500/35 bg-fuchsia-500/5 p-2.5 space-y-2.5">
@@ -6598,7 +6670,7 @@ export function StoryLabPanel() {
                         {musicProductionMode === 'trailer' && selectedMusicOption && (
                           <AudioRangeSelector
                             key={selectedMusicOption.candidate.id}
-                            src={selectedMusicOption.candidate.source}
+                            src={api.getPlayableFileUrl(selectedMusicOption.candidate.source, selectedMusicOption.candidate.name, activeWorkspace)}
                             durationHint={selectedMusicOption.candidate.durationSeconds}
                             start={musicTrailerRange.start}
                             end={musicTrailerRange.end}
@@ -6776,7 +6848,7 @@ export function StoryLabPanel() {
                                 <span className="text-text-primary">{label} · {candidate.model}</span>
                                 <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
                               </button>
-                              <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
+                              <audio src={api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)} controls preload="metadata" className="w-full h-8" />
                               <button className={`${button} w-full ${selected ? 'border-pink-500/50 text-pink-300' : ''}`}
                                 onClick={() => void openMusicalTrailer(candidate.id)} disabled={productionBusy === 'music' || !storyVideoConfigurationReady}>
                                 <Film size={12} /> Use this song in musical trailer

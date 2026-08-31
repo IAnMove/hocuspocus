@@ -10,7 +10,8 @@ import { SeriesShotsPanel } from './SeriesShotsPanel'
 import { SeriesReviewPanel } from './SeriesReviewPanel'
 import { Pill } from './components'
 import { primaryButton, secondaryButton } from './styles'
-import type { SeriesJobStatus } from './types'
+import type { SeriesJobStatus, SeriesProject } from './types'
+import { listenForAgentSeriesRenderJob, listenForAgentSeriesSection } from '../agent/agentUiBus'
 
 type LabTab = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
 const tabs: Array<{ id: LabTab; label: string }> = [
@@ -29,12 +30,17 @@ export function SeriesLabPanel() {
     deleteSeries, importStory, createEpisode, deleteEpisode, refreshRecovery,
   } = useSeriesStore()
   const [tab, setTab] = useState<LabTab>('setup')
+  useEffect(() => listenForAgentSeriesSection(setTab), [])
   const [storyOptions, setStoryOptions] = useState<Array<{ id: string; title: string }>>([])
   const [storyId, setStoryId] = useState('')
   const [importOpen, setImportOpen] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [renderJob, setRenderJob] = useState<SeriesJobStatus | null>(null)
+  useEffect(() => listenForAgentSeriesRenderJob(job => {
+    setRenderJob(job)
+    setTab('review')
+  }), [])
   const [canonJob, setCanonJob] = useState<SeriesJobStatus | null>(null)
 
   useEffect(() => { void loadWorkspace(activeWorkspace || 'default') }, [activeWorkspace, loadWorkspace])
@@ -42,9 +48,16 @@ export function SeriesLabPanel() {
   useEffect(() => {
     if (!series?.provider.useGlobalProfile) return
     const next = {
-      writingProvider: productionProfile.text.provider === 'minimax' ? 'minimax' as const : 'maestro' as const,
+      writingProvider: (productionProfile.text.provider === 'local' || productionProfile.text.provider === 'anthropic'
+        ? 'maestro'
+        : productionProfile.text.provider === 'remote' ? 'openai-compatible' : productionProfile.text.provider) as SeriesProject['provider']['writingProvider'],
       writingModel: productionProfile.text.model,
-      writingBaseUrl: productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '',
+      writingBaseUrl: productionProfile.text.base_url || (
+        productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1'
+          : productionProfile.text.provider === 'grok' ? 'https://api.x.ai/v1'
+            : productionProfile.text.provider === 'ollama' ? 'http://127.0.0.1:11434'
+              : ''
+      ),
       imageProvider: productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
       imageModel: productionProfile.image.model,
       videoModel: productionProfile.video.model,

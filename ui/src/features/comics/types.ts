@@ -151,12 +151,15 @@ export interface ComicProject {
     input: ComicDirectorRequest
     plan: ComicPlan
     completedPanelIds: string[]
+    failedPanelIds?: string[]
     scriptApprovedAt?: string
     scriptVersion?: number
     /** Maestro generation jobs keyed by planned panel ID.
      *  Kept until the resulting image has been attached so a dropped browser
      *  request can resume the same backend job instead of generating twice. */
     panelJobs?: Record<string, string>
+    factualBiography?: boolean
+    biographyReviewedAt?: string
   }
   createdAt: string
   updatedAt: string
@@ -289,7 +292,7 @@ export interface ComicDirectorRequest {
   worldReferenceAssetIds?: string[]
   dialogueDensity: 'low' | 'medium' | 'high'
   /** LLM used only for this comic's planning, revision and translation. */
-  writingProvider?: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible'
+  writingProvider?: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible' | 'ollama' | 'grok'
   writingModel?: string
   writingBaseUrl?: string
   provider: 'maestro' | 'minimax'

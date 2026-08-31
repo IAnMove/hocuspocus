@@ -55,6 +55,8 @@ def main() -> int:
         ROOT / "update.js": (
             "Maestro has uncommitted changes",
             "Already up to date. Maestro",
+            "Loreframe Lab has uncommitted changes",
+            "Already up to date. Loreframe Lab",
         ),
         ROOT / "app" / "_launch_runtime.py": (
             'FastAPI(title="Maestro API"',

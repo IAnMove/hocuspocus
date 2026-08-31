@@ -11,8 +11,6 @@ export interface ResolutionOption {
   height: number
 }
 
-export const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
-
 export const RESOLUTIONS: ResolutionOption[] = [
   { label: 'Landscape 480p', width: 864, height: 480 },
   { label: 'Landscape 720p', width: 1280, height: 720 },
@@ -24,15 +22,29 @@ export const RESOLUTIONS: ResolutionOption[] = [
   { label: 'Classic 4:3', width: 1440, height: 1080 },
 ]
 
+export const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
+export const VIDEO_EDITOR_DRAFT_UPDATED_EVENT = 'maestro-video-editor-draft-updated'
+
+export interface EditorSoundtrack {
+  name: string
+  source: string
+  duration: number
+  trimStart: number
+  trimEnd: number
+  volume: number
+  loop: boolean
+}
+
 export type EditorDraft = {
   clips: EditorClip[]
   projectName: string
   resolution: ResolutionOption
   fps: number
+  soundtrack: EditorSoundtrack | null
   warning: string | null
 }
 
-function clipId(): string {
+export function clipId(): string {
   return `clip-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
@@ -57,6 +69,19 @@ function parseEditorDraft(raw: string | null): EditorDraft | null {
       projectName: typeof saved.projectName === 'string' ? saved.projectName : 'my_video',
       resolution,
       fps: [24, 25, 30, 50, 60].includes(saved.fps) ? saved.fps : 30,
+      soundtrack: saved.soundtrack && typeof saved.soundtrack.source === 'string'
+        ? {
+            name: String(saved.soundtrack.name || 'soundtrack'),
+            source: saved.soundtrack.source,
+            duration: Math.max(0, Number(saved.soundtrack.duration) || 0),
+            trimStart: Math.max(0, Number(saved.soundtrack.trimStart) || 0),
+            trimEnd: Math.max(0, Number(saved.soundtrack.trimEnd) || Number(saved.soundtrack.duration) || 0),
+            volume: Number.isFinite(Number(saved.soundtrack.volume))
+              ? Math.max(0, Math.min(2, Number(saved.soundtrack.volume)))
+              : 1,
+            loop: saved.soundtrack.loop === true,
+          }
+        : null,
       warning: editorClipRecoveryMessage(normalized),
     }
   } catch {
@@ -65,7 +90,7 @@ function parseEditorDraft(raw: string | null): EditorDraft | null {
 }
 
 export function loadEditorDraft(workspace?: string | null): EditorDraft {
-  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30, warning: null }
+  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30, soundtrack: null, warning: null }
   const namespacedKey = videoEditorDraftStorageKey(workspace)
   try {
     const namespaced = parseEditorDraft(window.localStorage.getItem(namespacedKey))
@@ -91,10 +116,15 @@ export function persistEditorDraft(
   resolution: ResolutionOption,
   fps: number,
   workspace?: string | null,
+  soundtrack?: EditorSoundtrack | null,
 ): boolean {
   try {
+    const currentSoundtrack = soundtrack === undefined ? loadEditorDraft(workspace).soundtrack : soundtrack
     window.localStorage.setItem(videoEditorDraftStorageKey(workspace), JSON.stringify({
-      clips, projectName, resolution, fps, savedAt: new Date().toISOString(),
+      clips, projectName, resolution, fps, soundtrack: currentSoundtrack, savedAt: new Date().toISOString(),
+    }))
+    window.dispatchEvent(new window.CustomEvent(VIDEO_EDITOR_DRAFT_UPDATED_EVENT, {
+      detail: { workspace: workspace || 'default' },
     }))
     return true
   } catch {

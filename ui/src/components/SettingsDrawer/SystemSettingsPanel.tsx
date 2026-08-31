@@ -689,6 +689,25 @@ function ThemeSection() {
   )
 }
 
+function DeveloperModeSection() {
+  const developerMode = useStore(s => s.developerMode)
+  const setDeveloperMode = useStore(s => s.setDeveloperMode)
+  return (
+    <label className="flex items-start gap-2 rounded-lg border border-border bg-bg-tertiary/40 px-3 py-2">
+      <input
+        type="checkbox"
+        checked={developerMode}
+        onChange={event => setDeveloperMode(event.target.checked)}
+        className="mt-0.5"
+      />
+      <span>
+        <span className="block text-xs text-text-primary">Developer mode</span>
+        <span className="block text-[10px] leading-relaxed text-text-muted">Shows internal tools such as Auditoría interna. Leave off for normal use.</span>
+      </span>
+    </label>
+  )
+}
+
 /**
  * AutoPerformanceCard — top of the Performance section.
  *
@@ -1066,6 +1085,10 @@ export function SystemSettingsPanel() {
   return (
     <div className="space-y-5">
       <ThemeSection />
+
+      <hr className="border-border" />
+
+      <DeveloperModeSection />
 
       <hr className="border-border" />
 

@@ -24,7 +24,7 @@ module.exports = {
     id: "dirty",
     method: "log",
     params: {
-      raw: "Update stopped safely: Loreframe Lab has uncommitted changes. Commit or stash them before updating; no files were changed."
+      raw: "Update stopped safely: HocusPocus has uncommitted changes. Commit or stash them before updating; no files were changed."
     },
     next: null
   }, {
@@ -62,7 +62,7 @@ module.exports = {
     id: "uptodate",
     method: "log",
     params: {
-      raw: "Already up to date. Loreframe Lab and its bundled runtimes are installed."
+      raw: "Already up to date. HocusPocus and its bundled runtimes are installed."
     },
     next: null
   }, {

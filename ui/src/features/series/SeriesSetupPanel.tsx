@@ -40,9 +40,16 @@ export function SeriesSetupPanel({
   const complete = Boolean(series.title.trim() && series.premise.trim() && series.visualStyle.trim())
   const useGlobalProfile = () => patchProvider({
     useGlobalProfile: true,
-    writingProvider: productionProfile.text.provider === 'minimax' ? 'minimax' : 'maestro',
+    writingProvider: productionProfile.text.provider === 'local' || productionProfile.text.provider === 'anthropic'
+      ? 'maestro'
+      : productionProfile.text.provider === 'remote' ? 'openai-compatible' : productionProfile.text.provider as SeriesProject['provider']['writingProvider'],
     writingModel: productionProfile.text.model,
-    writingBaseUrl: productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '',
+    writingBaseUrl: productionProfile.text.base_url || (
+      productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1'
+        : productionProfile.text.provider === 'grok' ? 'https://api.x.ai/v1'
+          : productionProfile.text.provider === 'ollama' ? 'http://127.0.0.1:11434'
+            : ''
+    ),
     imageProvider: productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
     imageModel: productionProfile.image.model,
     videoModel: productionProfile.video.model,

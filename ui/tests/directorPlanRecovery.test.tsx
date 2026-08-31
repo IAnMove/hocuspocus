@@ -60,7 +60,7 @@ test('partial-plan card explains saved work and resumes only missing clips', { c
     assert.ok(screen.getByRole('heading', { name: 'Propuesta parcial recuperable' }))
     assert.match(screen.getByText(/24 de 41 clips/).textContent || '', /No se ha iniciado ninguna generación de imágenes/)
     assert.equal(screen.getByText('Clips 25–41').textContent, 'Clips 25–41')
-    assert.equal(screen.getByText('12,345').textContent, '12,345')
+    assert.equal(screen.getByText('12.345').textContent, '12.345')
     fireEvent.click(screen.getByRole('button', { name: 'Reanudar clips faltantes' }))
     assert.equal(resumed, 1)
   } finally {

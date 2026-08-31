@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, planCutoutDialogue, rebuildCutoutDialogueLayers } from '../src/lib/cutoutDialogue.ts'
+import { applyCutoutDialogue, bindCutoutFaceToPose, ensureCutoutFacePlayback, findCutoutMouthLayers, planCutoutDialogue, rebuildCutoutDialogueLayers } from '../src/lib/cutoutDialogue.ts'
 
 const layer = id => ({ id, animation: { start: { x: 50, y: 48, scale: .12, opacity: 1 }, end: { x: 50, y: 48, scale: .12, opacity: 1 }, duration: 5, curve: 'hold' } })
 
@@ -156,4 +156,41 @@ test('editing dialogue speaker clears stale frames and rebuilds only the assigne
   const rebuilt = rebuildCutoutDialogueLayers([poseA, poseB, mouthA, mouthB], beats, 30, 5, [mouthA.id])
   assert.equal(rebuilt.find(item => item.id === mouthA.id).animation.keyframes, undefined)
   assert.ok(rebuilt.find(item => item.id === mouthB.id).animation.keyframes.some(frame => frame.opacity === 1))
+})
+
+test('playback fills talking and blink keyframes when the kit is still at rest', () => {
+  const closed = {
+    id: 'kit-luma-mouth-closed', name: 'Luma Mouth closed', type: 'overlay',
+    transform: { x: 32, y: 48, scale: .05, opacity: 1, rotation: 0 },
+    animation: { start: { x: 32, y: 48, scale: .05, opacity: 1 }, end: { x: 32, y: 48, scale: .05, opacity: 1 }, duration: 6, curve: 'hold' },
+    faceBinding: { poseLayerId: 'pose', role: 'mouth', state: 'closed' },
+  }
+  const wide = {
+    ...closed, id: 'kit-luma-mouth-wide', name: 'Luma Mouth wide',
+    transform: { ...closed.transform, opacity: 0 },
+    animation: { start: { x: 32, y: 48, scale: .05, opacity: 0 }, end: { x: 32, y: 48, scale: .05, opacity: 0 }, duration: 6, curve: 'hold' },
+    faceBinding: { poseLayerId: 'pose', role: 'mouth', state: 'wide' },
+  }
+  const blink = {
+    ...closed, id: 'kit-luma-eyes-blink', name: 'Luma Eyes blink',
+    transform: { ...closed.transform, opacity: 0, y: 40 },
+    animation: { start: { x: 32, y: 40, scale: .12, opacity: 0 }, end: { x: 32, y: 40, scale: .12, opacity: 0 }, duration: 6, curve: 'hold' },
+    faceBinding: { poseLayerId: 'pose', role: 'blink', state: 'blink' },
+  }
+  const open = {
+    ...blink, id: 'kit-luma-eyes-open', name: 'Luma Eyes open',
+    transform: { ...blink.transform, opacity: 1 },
+    animation: { start: { x: 32, y: 40, scale: .12, opacity: 1 }, end: { x: 32, y: 40, scale: .12, opacity: 1 }, duration: 6, curve: 'hold' },
+    faceBinding: { poseLayerId: 'pose', role: 'eyes', state: 'open' },
+  }
+  const next = ensureCutoutFacePlayback([closed, wide, blink, open], 6, 30)
+  const closedFrames = next.find(layer => layer.id === closed.id).animation.keyframes
+  const wideFrames = next.find(layer => layer.id === wide.id).animation.keyframes
+  const blinkFrames = next.find(layer => layer.id === blink.id).animation.keyframes
+  const openFrames = next.find(layer => layer.id === open.id).animation.keyframes
+  assert.ok(closedFrames.some(frame => frame.opacity === 0))
+  assert.ok(wideFrames.some(frame => frame.opacity === 1))
+  assert.ok(wideFrames.every(frame => frame.x === 32 && frame.y === 48))
+  assert.ok(blinkFrames.some(frame => frame.opacity === 1))
+  assert.ok(openFrames.some(frame => frame.opacity === 0))
 })

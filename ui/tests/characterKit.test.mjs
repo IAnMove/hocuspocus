@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { appliedCharacterFaceTransform, captureCharacterFaceAnchor, characterKitInventory, characterKitRecipeInventory, createCharacterKit, mountCharacterKitLayers } from '../src/lib/characterKit.ts'
+import { appliedCharacterFaceTransform, captureCharacterFaceAnchor, characterKitInventory, characterKitRecipeInventory, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, parseCharacterKitPoseLayerId, syncMountedCharacterKitLayers, syncSceneCharacterKits } from '../src/lib/characterKit.ts'
 
 const asset = (id, reviewState = 'approved') => ({ id, name: id, source: `${id}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState })
 
@@ -43,6 +43,79 @@ test('mounting a reviewed kit creates isolated semantic face layers', () => {
   assert.equal(closed.animation.start.opacity, 1)
   assert.equal(wide.transform.opacity, 0)
   assert.equal(wide.animation.start.opacity, 0)
+})
+
+test('open eyes stay visible at rest and blink starts hidden', () => {
+  const kit = {
+    ...createCharacterKit('Luma'),
+    base: { ...asset('luma-base'), kind: 'image' },
+    mouth: { closed: asset('closed') },
+    eyes: { open: asset('open'), blink: asset('blink') },
+    anchors: { base: { mouth: { offsetX: 0, offsetY: -18, scale: .05, rotation: 0 }, eyes: { offsetX: 0, offsetY: -28, scale: .12, rotation: 0 } } },
+  }
+  const layers = mountCharacterKitLayers(kit)
+  const open = layers.find(layer => layer.id.endsWith('eyes-open'))
+  const blink = layers.find(layer => layer.id.endsWith('eyes-blink'))
+  assert.equal(open.transform.opacity, 1)
+  assert.equal(open.faceBinding.role, 'eyes')
+  assert.equal(blink.transform.opacity, 0)
+  assert.equal(blink.z > open.z, true)
+})
+
+test('syncing a mounted kit moves the existing mouth without duplicating it', () => {
+  const kit = {
+    ...createCharacterKit('Luma'),
+    base: { ...asset('luma-base'), kind: 'image' },
+    mouth: { closed: asset('closed'), wide: asset('wide') },
+    eyes: {},
+    anchors: { base: { mouth: { offsetX: 0, offsetY: -10, scale: .05, rotation: 0 } } },
+  }
+  const mounted = mountCharacterKitLayers(kit)
+  const moved = {
+    ...kit,
+    anchors: { base: { mouth: { offsetX: 0, offsetY: -22, scale: .05, rotation: 0 } } },
+  }
+  const synced = syncMountedCharacterKitLayers(mounted, moved)
+  assert.equal(synced.filter(layer => layer.id.endsWith('mouth-closed')).length, 1)
+  assert.ok(synced.find(layer => layer.id.endsWith('mouth-closed')).transform.y < mounted.find(layer => layer.id.endsWith('mouth-closed')).transform.y)
+})
+
+test('playing a saved scene re-reads live kit anchors instead of the original snapshot', () => {
+  const kit = {
+    ...createCharacterKit('Luma'),
+    base: { ...asset('luma-base'), kind: 'image' },
+    mouth: { closed: asset('closed'), wide: asset('wide') },
+    eyes: {},
+    anchors: { base: { mouth: { offsetX: 0, offsetY: -10, scale: .05, rotation: 0 } } },
+  }
+  const snapshot = mountCharacterKitLayers(kit)
+  const closed = snapshot.find(layer => layer.id.endsWith('mouth-closed'))
+  const frozen = snapshot.map(layer => layer.id.endsWith('mouth-closed') || layer.id.endsWith('mouth-wide')
+    ? {
+      ...layer,
+      transform: { ...layer.transform, y: 40 },
+      animation: {
+        ...layer.animation,
+        start: { ...layer.animation.start, y: 40 },
+        end: { ...layer.animation.end, y: 40 },
+        keyframes: [
+          { id: `${layer.id}-0`, time: 0, x: layer.transform.x, y: 40, scale: layer.transform.scale, opacity: layer.transform.opacity, rotation: 0, curve: 'hold' },
+          { id: `${layer.id}-1`, time: 1, x: layer.transform.x, y: 40, scale: layer.transform.scale, opacity: layer.id.endsWith('wide') ? 1 : 0, rotation: 0, curve: 'hold' },
+        ],
+      },
+    }
+    : layer)
+  const live = {
+    ...kit,
+    anchors: { base: { mouth: { offsetX: 0, offsetY: -24, scale: .05, rotation: 0 } } },
+  }
+  const library = { ...emptyCharacterKitLibrary(), revision: 11, activeId: live.id, kits: { [live.id]: live } }
+  assert.deepEqual(parseCharacterKitPoseLayerId(snapshot[0].id), { kitId: 'luma', poseId: 'base' })
+  const synced = syncSceneCharacterKits(frozen, library)
+  const updated = synced.find(layer => layer.id.endsWith('mouth-closed'))
+  assert.ok(updated.transform.y < closed.transform.y)
+  assert.ok(updated.animation.keyframes.every(frame => frame.y === updated.transform.y))
+  assert.equal(updated.animation.keyframes[1].opacity, 0)
 })
 
 test('mounting uses a per-state mouth anchor and keeps the legacy fallback', () => {

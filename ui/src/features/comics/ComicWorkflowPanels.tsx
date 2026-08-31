@@ -192,6 +192,12 @@ export function ComicWritingProviderFields({
     } else if (next === 'openai') {
       onChange('writingModel', 'gpt-4.1')
       onChange('writingBaseUrl', 'https://api.openai.com')
+    } else if (next === 'ollama') {
+      onChange('writingModel', '')
+      onChange('writingBaseUrl', services?.llm_remote_url || 'http://127.0.0.1:11434')
+    } else if (next === 'grok') {
+      onChange('writingModel', 'grok-4')
+      onChange('writingBaseUrl', 'https://api.x.ai/v1')
     } else if (next === 'openai-compatible') {
       onChange('writingModel', '')
       onChange('writingBaseUrl', services?.compatible_base_url || '')
@@ -203,9 +209,19 @@ export function ComicWritingProviderFields({
         <button type="button" className={`${button} ${value.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`} disabled={disabled}
           onClick={() => {
             onChange('useGlobalProfile', true)
-            onChange('writingProvider', profile.text.provider === 'minimax' ? 'minimax' : 'maestro')
+            onChange(
+              'writingProvider',
+              profile.text.provider === 'local' || profile.text.provider === 'anthropic'
+                ? 'maestro'
+                : profile.text.provider === 'remote' ? 'openai-compatible' : profile.text.provider,
+            )
             onChange('writingModel', profile.text.model)
-            onChange('writingBaseUrl', profile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '')
+            onChange('writingBaseUrl', profile.text.base_url || (
+              profile.text.provider === 'minimax' ? 'https://api.minimax.io/v1'
+                : profile.text.provider === 'grok' ? 'https://api.x.ai/v1'
+                  : profile.text.provider === 'ollama' ? 'http://127.0.0.1:11434'
+                    : ''
+            ))
             onChange('provider', profile.image.provider === 'minimax' ? 'minimax' : 'maestro')
             onChange('imageModel', profile.image.model)
           }}>Use global profile</button>
@@ -224,6 +240,8 @@ export function ComicWritingProviderFields({
           <option value="maestro">HocusPocus internal · default</option>
           <option value="deepseek">DeepSeek · only this comic</option>
           <option value="minimax">MiniMax · only this comic</option>
+          <option value="ollama">Ollama · only this comic</option>
+          <option value="grok">Grok · only this comic</option>
           <option value="openai">OpenAI · only this comic</option>
           <option value="openai-compatible">Custom OpenAI-compatible · only this comic</option>
         </select>

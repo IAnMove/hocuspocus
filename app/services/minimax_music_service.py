@@ -141,6 +141,11 @@ def generate_candidates(
         except ValueError as exc:
             raise MiniMaxMusicError("MiniMax Music returned an invalid response", raw.status_code or 502) from exc
         base = response.get("base_resp") or {}
+        if raw.status_code == 410 or "no longer available" in str(base.get("status_msg") or response.get("message") or "").lower():
+            raise MiniMaxMusicError(
+                "MiniMax Music is not available for this account. Choose a local ACE-Step model in Settings.",
+                410,
+            )
         if not raw.ok or int(base.get("status_code") or 0) != 0:
             message = str(base.get("status_msg") or response.get("message") or f"HTTP {raw.status_code}")
             raise MiniMaxMusicError(f"MiniMax Music rejected the request: {message}", raw.status_code or 502)

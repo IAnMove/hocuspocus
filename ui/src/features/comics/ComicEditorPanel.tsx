@@ -7,7 +7,14 @@ import {
 import { getModelMode, useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
-import { findCompletedLocalImage, generateImageAsset } from '../../lib/imageGeneration'
+import { generateImageAsset } from '../../lib/imageGeneration'
+import { writingBaseUrlFromProfile, writingProviderFromText } from '../../lib/productionProfile'
+import {
+  buildDirectorImagePrompt,
+  generateDirectorArtwork,
+  miniMaxAspectRatio,
+  panelIdentityReference,
+} from './generateArtwork'
 import { rememberPrompt } from '../../lib/promptHistory'
 import { ComicCanvas } from './ComicCanvas'
 import {
@@ -17,7 +24,7 @@ import {
 import {
   comicId, COMIC_FORMATS, createComicProject, normalizeComicProject, panelsForCount,
   mergeComicVideoOverrideFields, normalizeComicPlan, planWithCanvasText, projectFromPlan,
-  repairComicText, repairMojibake, simplifyDirectorText, varyDirectorLayouts,
+  repairComicText, simplifyDirectorText, varyDirectorLayouts,
 } from './model'
 import { COMIC_EFFECTS, COMIC_LAYOUTS, createEffect } from './presets'
 import { useComicStore } from './store'
@@ -71,39 +78,6 @@ const translationCacheKey = (
   id: panel.id, captions: panel.captions, dialogue: panel.dialogue, soundEffects: panel.soundEffects,
 })) })
 
-function panelIdentityReference(
-  director: NonNullable<ComicProject['director']>,
-  panel: ComicPlanPanel,
-  assets: ComicProject['assets'],
-): { source?: string; characterId?: string } {
-  const characters = new Map(director.plan.characters.map(character => [character.id, character]))
-  for (const characterId of panel.characters) {
-    const character = characters.get(characterId)
-    if (!character) continue
-    const referenceIds = Array.from(new Set([
-      character.referenceAssetId,
-      ...(character.referenceAssetIds || []),
-    ].filter((value): value is string => Boolean(value))))
-    const asset = referenceIds.map(id => assets[id]).find(Boolean)
-    if (asset?.source) return { source: asset.source, characterId }
-  }
-  return {}
-}
-
-function miniMaxAspectRatio(
-  width: number,
-  height: number,
-): NonNullable<Parameters<typeof generateImageAsset>[5]>['aspectRatio'] {
-  const target = Math.max(0.01, width / Math.max(1, height))
-  const ratios = [
-    ['1:1', 1], ['16:9', 16 / 9], ['4:3', 4 / 3], ['3:2', 3 / 2],
-    ['2:3', 2 / 3], ['3:4', 3 / 4], ['9:16', 9 / 16], ['21:9', 21 / 9],
-  ] as const
-  return ratios.reduce((best, candidate) =>
-    Math.abs(Math.log(candidate[1] / target)) < Math.abs(Math.log(best[1] / target))
-      ? candidate : best)[0]
-}
-
 function panelScript(panel: ComicPlanPanel): string {
   return [
     ...panel.captions.map(text => `[Caption] ${text}`),
@@ -152,96 +126,6 @@ function PanelScriptEditor({
       onBlur={() => value !== canonical && onCommit(value)}
     />
   )
-}
-
-function buildDirectorImagePrompt(
-  director: ComicProject['director'],
-  panelPrompt: string,
-  promptSuffix: string,
-  plannedPanel?: ComicPlanPanel,
-): string {
-  const input = director?.input
-  const removePageLayoutInstructions = (value: string) => repairMojibake(value)
-    .replace(/\b(?:estructura|structure|layout)\s*:\s*[^.!?]*(?:p[aá]ginas?|pages?|paneles?|panels?|viñetas?)[^.!?]*[.!?]*/gi, ' ')
-    .replace(/[^.!?]*(?:\d+\s+)?(?:p[aá]ginas?|pages?)[^.!?]*(?:paneles?|panels?|viñetas?)[^.!?]*[.!?]*/gi, ' ')
-    .replace(/\bprofessional sequential comic art\b/gi, 'single comic-panel illustration')
-    .replace(/\s+/g, ' ')
-    .trim()
-  const visualBible = removePageLayoutInstructions(director?.plan.styleBible || '')
-  let repairedPanelPrompt = removePageLayoutInstructions(panelPrompt)
-  // Older plans embedded the complete bible into every panel prompt. Keep the
-  // reusable bible separate so a compact provider-specific excerpt can be used.
-  if (visualBible) {
-    const bibleTextIndex = repairedPanelPrompt.indexOf(visualBible)
-    const bibleLabelIndex = repairedPanelPrompt
-      .slice(0, Math.max(0, bibleTextIndex))
-      .toLocaleLowerCase()
-      .lastIndexOf('visual continuity bible:')
-    if (bibleTextIndex >= 0 && bibleLabelIndex >= 0) {
-      repairedPanelPrompt = `${repairedPanelPrompt.slice(0, bibleLabelIndex)} ${
-        repairedPanelPrompt.slice(bibleTextIndex + visualBible.length).replace(/^[.\s]+/, '')
-      }`.replace(/\s+/g, ' ').trim()
-    }
-  }
-  const characterLocks = plannedPanel?.characters.map(characterId => {
-    const character = director?.plan.characters.find(item => item.id === characterId)
-    if (!character) return ''
-    return [
-      `${character.name}: ${character.description}`,
-      character.visualNotes,
-      character.wardrobe,
-      character.negativePrompt ? `Never alter or add: ${character.negativePrompt}` : '',
-    ].filter(Boolean).join('. ')
-  }).filter(Boolean).join(' | ')
-  const storyboard = input?.productionMode === 'storyboard'
-  const singleImageLock = storyboard
-    ? 'STORYBOARD FRAME LOCK: Create exactly one full-bleed cinematic first frame in the requested video aspect ratio. No storyboard sheet, comic page, panel grid, collage, split screen, inset frame, border, speech bubble, caption, sound effect, subtitle, logo, watermark or lettering.'
-    : 'SINGLE IMAGE LOCK: Create exactly one full-bleed illustration for one comic panel. No comic page, panel grid, collage, split screen, inset panels, frames, borders, speech bubbles, captions, sound effects, text, logos, watermarks or lettering.'
-  const fullPrompt = [
-    singleImageLock,
-    input?.artStyle ? `VISUAL STYLE LOCK: ${removePageLayoutInstructions(input.artStyle)}.` : '',
-    input?.worldContext ? `WORLD AND PERIOD LOCK: ${removePageLayoutInstructions(input.worldContext)}.` : '',
-    visualBible && !repairedPanelPrompt.includes(visualBible)
-      ? `VISUAL CONTINUITY BIBLE: ${visualBible}.`
-      : '',
-    input?.forbiddenElements
-      ? `STRICTLY FORBIDDEN: ${repairMojibake(input.forbiddenElements)}. No anachronisms.`
-      : '',
-    characterLocks ? `CHARACTER IDENTITY LOCKS: ${characterLocks}. Keep face, body, scale, palette, wardrobe and invariant accessories identical to every prior appearance.` : '',
-    plannedPanel?.continuityNotes ? `SHOT CONTINUITY: ${plannedPanel.continuityNotes}.` : '',
-    repairedPanelPrompt,
-    removePageLayoutInstructions(promptSuffix),
-  ].filter(Boolean).join(' ')
-  if (director?.provider !== 'minimax' || fullPrompt.length < 1500) return fullPrompt
-
-  const trimSection = (value: string, limit: number) => {
-    if (value.length <= limit) return value
-    const prefix = value.slice(0, limit)
-    const lastSpace = prefix.lastIndexOf(' ')
-    const clipped = (lastSpace > limit * 0.6 ? prefix.slice(0, lastSpace) : prefix)
-      .replace(/[\s,;:-]+$/, '')
-    return `${clipped}.`
-  }
-  const compactSections = [
-    storyboard
-      ? 'One full-bleed cinematic first frame only. No storyboard sheet, grid, collage, border, bubbles, captions, subtitles, text, logo or watermark.'
-      : 'One full-bleed comic-panel illustration only. No grid, collage, border, bubbles, captions, text, logo or watermark.',
-    trimSection(repairedPanelPrompt, 780),
-    characterLocks ? `Character locks: ${trimSection(characterLocks, 260)}.` : '',
-    input?.artStyle ? `Style: ${trimSection(removePageLayoutInstructions(input.artStyle), 140)}.` : '',
-    input?.worldContext ? `World: ${trimSection(removePageLayoutInstructions(input.worldContext), 140)}.` : '',
-    input?.forbiddenElements ? `Avoid: ${trimSection(repairMojibake(input.forbiddenElements), 120)}.` : '',
-    plannedPanel?.continuityNotes ? `Continuity: ${trimSection(plannedPanel.continuityNotes, 120)}.` : '',
-    visualBible ? `Visual continuity: ${trimSection(visualBible, 220)}.` : '',
-    trimSection(removePageLayoutInstructions(promptSuffix), 100),
-  ].filter(Boolean)
-  let compactPrompt = ''
-  for (const section of compactSections) {
-    const available = 1450 - compactPrompt.length - (compactPrompt ? 1 : 0)
-    if (available < 24) break
-    compactPrompt += `${compactPrompt ? ' ' : ''}${trimSection(section, available)}`
-  }
-  return compactPrompt
 }
 
 function assetFromOutput(output: { name: string; url: string; thumbnail_url?: string | null }): ComicAsset {
@@ -825,9 +709,9 @@ const initialDirector = (): ComicDirectorRequest => ({
   worldContext: '',
   forbiddenElements: '',
   dialogueDensity: 'medium',
-  writingProvider: useStore.getState().productionProfile.text.provider === 'minimax' ? 'minimax' : 'maestro',
+  writingProvider: writingProviderFromText(useStore.getState().productionProfile.text.provider),
   writingModel: useStore.getState().productionProfile.text.model,
-  writingBaseUrl: useStore.getState().productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '',
+  writingBaseUrl: writingBaseUrlFromProfile(useStore.getState().productionProfile),
   provider: useStore.getState().productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
   imageModel: useStore.getState().productionProfile.image.model || useStore.getState().selectedModelPerMode.image || 'flux2_klein_9b',
   characters: [],
@@ -973,9 +857,9 @@ export function ComicDirectorPanel({
     if (!request.useGlobalProfile) return
     const next: ComicDirectorRequest = {
       ...request,
-      writingProvider: productionProfile.text.provider === 'minimax' ? 'minimax' : 'maestro',
+      writingProvider: writingProviderFromText(productionProfile.text.provider),
       writingModel: productionProfile.text.model,
-      writingBaseUrl: productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '',
+      writingBaseUrl: writingBaseUrlFromProfile(productionProfile),
       provider: productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
       imageModel: productionProfile.image.model,
     }
@@ -1118,150 +1002,28 @@ export function ComicDirectorPanel({
   }
 
   const generateAll = async (force = false): Promise<boolean> => {
-    const state = useComicStore.getState()
-    const director = state.project.director
+    const director = useComicStore.getState().project.director
     if (!director) return false
     if (!director.scriptApprovedAt && !window.confirm(
       'This script version has not been approved in the Script tab. Generate artwork anyway?',
     )) return false
-    const tasks: Array<{ pageId: string; panel: ComicPanelElement; plan: ComicPlanPanel }> = []
-    director.plan.pages.forEach((planPage, pageIndex) => {
-      const page = state.project.pages[pageIndex]
-      const panels = page?.elements.filter((element): element is ComicPanelElement => element.type === 'panel' && !element.parentId)
-        .sort((a, b) => a.zIndex - b.zIndex) || []
-      planPage.panels.forEach((planned, index) => {
-        if ((force || !director.completedPanelIds.includes(planned.id)) && panels[index]) {
-          tasks.push({ pageId: page.id, panel: panels[index], plan: planned })
-        }
-      })
-    })
     setBusy('images')
-    if (!tasks.length) {
-      report('All panels already have artwork.', { state: 'complete' })
-      setBusy(null)
-      return true
-    }
     try {
-      for (let index = 0; index < tasks.length; index++) {
-        const task = tasks[index]
-        report(`Generating artwork for panel ${index + 1} of ${tasks.length} with ${
-          director.provider === 'minimax' ? 'MiniMax' : 'HocusPocus'
-        }…`, { current: index + 1, total: tasks.length })
-        setProgress(`Generating panel ${index + 1} / ${tasks.length}`)
-        const currentDirector = useComicStore.getState().project.director!
-        const identityReference = panelIdentityReference(
-          currentDirector,
-          task.plan,
-          useComicStore.getState().project.assets,
-        )
-        const maestroState = useStore.getState()
-        const selectedImageModel = maestroState.models.find(model =>
-          model.model_type === currentDirector.imageModel)
-        const localSupportsReferences = currentDirector.provider === 'maestro'
-          && Boolean(
-            selectedImageModel?.supports_ref_images
-            || (currentDirector.imageModel === maestroState.params.model_type
-              && maestroState.modelOptions?.image_ref_choices),
-          )
-        const worldReferenceId = currentDirector.input.worldReferenceAssetIds?.[0]
-        const reference = identityReference.source || (localSupportsReferences && worldReferenceId
-          ? useComicStore.getState().project.assets[worldReferenceId]?.source
-          : undefined)
-        const prompt = buildDirectorImagePrompt(
-          currentDirector,
-          task.plan.imagePrompt,
-          state.project.style.promptSuffix,
-          task.plan,
-        )
-        const existingJobId = currentDirector.panelJobs?.[task.plan.id]
-        let asset: ComicAsset | null = null
-        if (
-          currentDirector.provider === 'maestro' &&
-          !existingJobId &&
-          currentDirector.completedPanelIds.length > 0 &&
-          currentDirector.imageModel
-        ) {
-          const assignedNames = new Set(Object.values(
-            useComicStore.getState().project.assets,
-          ).map(item => item.name))
-          asset = await findCompletedLocalImage(
-            prompt,
-            currentDirector.imageModel,
-            assignedNames,
-          )
-          if (asset) {
-            report(`Recovered finished artwork for panel ${index + 1} from HocusPocus outputs.`, {
-              current: index + 1,
-              total: tasks.length,
-            })
-          }
-        }
-        if (!asset) {
-          if (existingJobId) {
-            report(`Reconnecting to HocusPocus job ${existingJobId} for panel ${index + 1}…`, {
-              current: index + 1,
-              total: tasks.length,
-            })
-          }
-          asset = await generateImageAsset(
-            currentDirector.provider,
-            prompt,
-            currentDirector.imageModel,
-            reference,
-            '',
-            {
-              panelId: task.plan.id,
-              existingJobId,
-              onJobSubmitted: jobId => rememberPanelJob(task.plan.id, jobId),
-              onPollRetry: attempt => report(
-                `Connection interrupted while checking panel ${index + 1}; retrying (${attempt}/20)…`,
-                { current: index + 1, total: tasks.length },
-              ),
-              onProviderRetry: attempt => report(
-                `MiniMax temporarily failed on panel ${index + 1}; retrying (${attempt}/2)…`,
-                { current: index + 1, total: tasks.length },
-              ),
-              aspectRatio: miniMaxAspectRatio(task.panel.width, task.panel.height),
-            },
-          )
-        }
-        if (identityReference.characterId) {
-          asset.characterIds = [identityReference.characterId]
-        }
-        const latest = useComicStore.getState()
-        const latestPage = latest.project.pages.find(page => page.id === task.pageId)
-        latestPage?.elements
-          .filter(element => element.parentId === task.panel.id && element.type === 'image')
-          .forEach(element => latest.removeElement(task.pageId, element.id))
-        latest.addAsset(asset)
-        latest.addElement(task.pageId, {
-          id: comicId('image'), type: 'image', assetId: asset.id, parentId: task.panel.id,
-          x: 0, y: 0, width: task.panel.width, height: task.panel.height,
-          rotation: 0, zIndex: 2, objectFit: 'cover', filter: 'none', opacity: 1, visible: true,
-        })
-        latest.patchProject({
-          director: {
-            ...latest.project.director!,
-            completedPanelIds: Array.from(new Set([
-              ...latest.project.director!.completedPanelIds,
-              task.plan.id,
-            ])),
-            panelJobs: Object.fromEntries(
-              Object.entries(latest.project.director!.panelJobs || {})
-                .filter(([panelId]) => panelId !== task.plan.id),
-            ),
-          },
-        })
-        report(`Panel ${index + 1} of ${tasks.length} generated and placed.`, {
-          current: index + 1,
-          total: tasks.length,
-        })
-        await useStore.getState().loadOutputs()
+      const result = await generateDirectorArtwork({
+        force,
+        onProgress: (message, current, total) => {
+          report(message, { current, total })
+          setProgress(`Generating panel ${current} / ${total}`)
+        },
+      })
+      if (!result.total) {
+        report('All panels already have artwork.', { state: 'complete' })
+        return true
       }
-      report(`Comic complete: ${tasks.length} panel images generated and placed.`, {
+      report(`Comic complete: ${result.generated} panel images generated and placed.`, {
         state: 'complete',
-        current: tasks.length,
-        total: tasks.length,
+        current: result.generated,
+        total: result.total,
       })
       notify({ kind: 'ok', text: 'All Director panels were generated and placed.' })
       useStore.getState().loadOutputs()
@@ -2295,6 +2057,7 @@ export function ComicEditorPanel() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [comicHistory, setComicHistory] = useState<api.ComicHistoryEntry[]>([])
+  const [generatingArtwork, setGeneratingArtwork] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
   const previewViewportRef = useRef<HTMLDivElement>(null)
   const maestroOutputs = useStore(state => state.outputs)
@@ -2321,6 +2084,48 @@ export function ComicEditorPanel() {
     setSideTab(nextTab)
     if (nextTab === 'pre') setSidePanelCollapsed(true)
     else if (sideTab === 'pre') setSidePanelCollapsed(false)
+  }
+  const totalArtworkPanels = project.director?.plan.pages.reduce(
+    (total, page) => total + page.panels.length,
+    0,
+  ) || 0
+  const remainingArtworkPanels = project.director?.plan.pages.reduce(
+    (total, page) => total + page.panels.filter(
+      panel => !project.director?.completedPanelIds.includes(panel.id),
+    ).length,
+    0,
+  ) || 0
+  const generateComicArtwork = async () => {
+    const director = useComicStore.getState().project.director
+    setSideTab('director')
+    setSidePanelCollapsed(false)
+    if (!director) {
+      notify({ kind: 'error', text: 'Create or attach a Comic Director plan before generating panel artwork.' })
+      return
+    }
+    if (!director.scriptApprovedAt && !window.confirm(
+      'This script version has not been approved in the Script tab. Generate artwork anyway?',
+    )) return
+    setGeneratingArtwork(true)
+    try {
+      const result = await generateDirectorArtwork({
+        onProgress: (message, current, total) => notify({
+          kind: 'ok',
+          text: `${message} (${current}/${total})`,
+        }),
+      })
+      notify({
+        kind: 'ok',
+        text: result.total
+          ? `Comic artwork complete: ${result.generated} panel images generated and placed.`
+          : 'All comic panels already have artwork.',
+      })
+      void useStore.getState().loadOutputs()
+    } catch (error) {
+      notify({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setGeneratingArtwork(false)
+    }
   }
 
   useEffect(() => {
@@ -2623,7 +2428,16 @@ export function ComicEditorPanel() {
             <span className="min-w-0 truncate text-xs font-semibold text-text-primary">{project.title}</span>
             {dirty && <span className="text-[10px] text-yellow-400">Unsaved</span>}
             <button
-              className={`${button} ml-auto`}
+              className={`${button} ml-auto border-emerald-500/50 text-emerald-300`}
+              disabled={generatingArtwork}
+              onClick={() => void generateComicArtwork()}
+              title={project.director ? 'Generate every unfinished panel image sequentially' : 'Open Comic Director to create a plan'}
+            >
+              {generatingArtwork ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+              {remainingArtworkPanels > 0 ? `Generate comic (${remainingArtworkPanels})` : totalArtworkPanels ? 'Comic generated' : 'Generate comic'}
+            </button>
+            <button
+              className={button}
               onClick={() => setToolbarCollapsed(false)}
               title="Expand comic toolbar"
             >
@@ -2658,6 +2472,15 @@ export function ComicEditorPanel() {
             <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button>
             <input ref={importRef} type="file" accept=".json,.comic.json" className="hidden" onChange={event => importProject(event.target.files?.[0])} />
             <button className={button} disabled={saving} onClick={() => save(true)}>{saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save</button>
+            <button
+              className={`${button} border-emerald-500/50 text-emerald-300`}
+              disabled={generatingArtwork}
+              onClick={() => void generateComicArtwork()}
+              title={project.director ? 'Generate every unfinished panel image sequentially' : 'Open Comic Director to create a plan'}
+            >
+              {generatingArtwork ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+              {remainingArtworkPanels > 0 ? `Generate comic (${remainingArtworkPanels})` : totalArtworkPanels ? 'Comic generated' : 'Generate comic'}
+            </button>
             <button className={button} disabled={!history.past.length} onClick={undo}><Undo2 size={13} /></button>
             <button className={button} disabled={!history.future.length} onClick={redo}><Redo2 size={13} /></button>
             <button className={`${button} ${snapEnabled ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSnapEnabled(!snapEnabled)}>Grid</button>

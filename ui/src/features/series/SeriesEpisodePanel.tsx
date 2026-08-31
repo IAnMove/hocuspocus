@@ -6,6 +6,7 @@ import { Pill, SectionCard, SeriesField } from './components'
 import { SeriesEpisodeProposalReview } from './SeriesEpisodeProposalReview'
 import { inputClass, primaryButton, secondaryButton, textareaClass } from './styles'
 import type { SeriesEpisode, SeriesJobStatus, SeriesProject } from './types'
+import { listenForAgentSeriesPlanJob } from '../agent/agentUiBus'
 
 export function SeriesEpisodePanel({
   workspace, series, episode, updateEpisode, saveNow, reload,
@@ -33,6 +34,10 @@ export function SeriesEpisodePanel({
     setBusy(false)
     setError(null)
   }, [episode.id])
+
+  useEffect(() => listenForAgentSeriesPlanJob((value, episodeId) => {
+    if (episodeId === episodeIdRef.current) setJob(value)
+  }), [])
 
   useSerializedPoll({
     enabled: Boolean(activeJob),

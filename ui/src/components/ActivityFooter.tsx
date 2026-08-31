@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, Eraser, ListVideo, Loader2 } from 'lucide-react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, Copy, Eraser, ListVideo, Loader2 } from 'lucide-react'
 import * as api from '../api/client'
 import type { CanonicalTask } from '../api/client'
 import { applyCanonicalTaskEvent, canResumeCanonicalTask, canonicalTaskVisualState, reconcileCanonicalTaskSnapshot } from '../lib/canonicalTaskEvents'
 import { formatAppAction, formatAppTimestamp } from '../lib/locale'
 import { useStore } from '../stores/useStore'
+import { AgentAvatar } from '../features/agent/AgentAvatar'
+import { listenForAgentActivityDetails } from '../features/agent/agentUiBus'
+
+const AgentAssistantPanel = lazy(() =>
+  import('../features/agent/AgentAssistantPanel').then(module => ({ default: module.AgentAssistantPanel })),
+)
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const CONNECTED_RECONCILE_MS = 60_000
@@ -39,6 +45,11 @@ const PHASE_LABELS: Record<string, string> = {
 function epochMs(value?: number | null): number | undefined {
   if (!value || !Number.isFinite(value)) return undefined
   return value < 1_000_000_000_000 ? value * 1000 : value
+}
+
+function activityMoment(task: CanonicalTask): number {
+  if (ACTIVE.has(task.status)) return Number(task.updated_at || task.started_at || task.created_at || 0)
+  return Number(task.completed_at || task.started_at || task.created_at || 0)
 }
 
 function elapsed(task: CanonicalTask, now: number): string {
@@ -184,6 +195,36 @@ function generationRecipe(task: CanonicalTask): string {
   return parts.join(' · ')
 }
 
+function generationPrompt(task: CanonicalTask): string {
+  const metadata = task.metadata || {}
+  const details = (metadata.generation_details || metadata.settings || {}) as Record<string, unknown>
+  const value = details.prompt ?? metadata.prompt ?? metadata.prompt_preview
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function generationInitiator(task: CanonicalTask): string {
+  const metadata = task.metadata || {}
+  const details = (metadata.generation_details || metadata.settings || {}) as Record<string, unknown>
+  const explicit = details.initiator ?? metadata.initiator
+  if (typeof explicit === 'string' && explicit.trim()) return explicit.trim()
+  const mode = String(details.generation_mode || task.kind || '').replaceAll('_', ' ')
+  if (task.parent_id?.startsWith('task-series-') || task.workflow.startsWith('series')) return 'Series Lab · Chapter'
+  if (task.parent_id?.startsWith('task-director-') || task.workflow === 'director') {
+    return `Director${mode ? ` · ${mode === 'music video' ? 'Music video' : mode}` : ''}`
+  }
+  if (task.workflow === 'audio-analysis') return 'Story/Director · Audio analysis'
+  if (task.workflow === 'generation') {
+    const room = mode === 'model3d' ? '3D' : mode ? mode[0].toUpperCase() + mode.slice(1) : 'Generation'
+    return `Studio · ${room}`
+  }
+  return task.workflow ? task.workflow.replaceAll('_', ' ') : ''
+}
+
+function truncatePrompt(prompt: string, limit = 180): string {
+  const oneLine = prompt.replace(/\s+/g, ' ').trim()
+  return oneLine.length > limit ? `${oneLine.slice(0, limit - 1)}…` : oneLine
+}
+
 export function ActivityFooter() {
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const workspaceRef = useRef(activeWorkspace)
@@ -192,6 +233,7 @@ export function ActivityFooter() {
   const [tasks, setTasks] = useState<CanonicalTask[]>([])
   const tasksRef = useRef<CanonicalTask[]>([])
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [agentOpen, setAgentOpen] = useState(false)
   const [clock, setClock] = useState(Date.now())
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
   const [controlFailures, setControlFailures] = useState<Record<string, TaskControlFailure>>({})
@@ -203,6 +245,8 @@ export function ActivityFooter() {
     hiddenHistoryIdsRef.current = loaded
     setHiddenHistoryIds(loaded)
   }, [activeWorkspace])
+
+  useEffect(() => listenForAgentActivityDetails(() => setDetailsOpen(true)), [])
 
   useEffect(() => {
     let mounted = true
@@ -299,9 +343,9 @@ export function ActivityFooter() {
     const visibleTasks = tasks.filter(task => !hiddenHistoryIds.has(task.id) || ACTIVE.has(task.status))
     const rootTasks = visibleTasks.filter(task => !task.parent_id)
     const active = rootTasks.filter(task => ACTIVE.has(task.status))
-      .sort((left, right) => right.updated_at - left.updated_at)
+      .sort((left, right) => activityMoment(right) - activityMoment(left))
     const recent = rootTasks.filter(task => !ACTIVE.has(task.status))
-      .sort((left, right) => right.updated_at - left.updated_at)
+      .sort((left, right) => activityMoment(right) - activityMoment(left))
       .slice(0, 12)
     return [...active, ...recent]
   }, [hiddenHistoryIds, tasks])
@@ -318,9 +362,11 @@ export function ActivityFooter() {
     return result
   }, [hiddenHistoryIds, tasks])
   const activeTasks = roots.filter(task => ACTIVE.has(task.status))
-  const failedTasks = roots.filter(task => task.status === 'failed' || task.status === 'interrupted')
   const historicalTasks = roots.filter(task => !ACTIVE.has(task.status))
-  const primary = activeTasks[0] || failedTasks[0] || roots[0] || null
+  // With no active work, show what most recently happened. A days-old failure
+  // must not mask a newer successful song/render merely because recovery
+  // refreshed the old record's updated_at timestamp.
+  const primary = activeTasks[0] || roots[0] || null
 
   const clearHistory = () => {
     const next = new Set(hiddenHistoryIdsRef.current)
@@ -387,8 +433,13 @@ export function ActivityFooter() {
     void navigator.clipboard?.writeText(task.id)
   }
 
+  const copyPrompt = (task: CanonicalTask) => {
+    const prompt = generationPrompt(task)
+    if (prompt) void navigator.clipboard?.writeText(prompt)
+  }
+
   const isActive = activeTasks.length > 0
-  const hasError = !isActive && failedTasks.length > 0
+  const hasError = !isActive && (primary?.status === 'failed' || primary?.status === 'interrupted')
   const primaryVisualState = primary ? canonicalTaskVisualState(primary.status) : 'neutral'
   const primaryMessage = primary?.error?.message || primary?.detail || primary?.message || 'Ready — no active jobs'
   const primaryEta = primary ? formatEta(estimatedRemainingSeconds(primary, clock)) : ''
@@ -401,6 +452,15 @@ export function ActivityFooter() {
 
   return (
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
+      {agentOpen && (
+        <Suspense fallback={null}>
+          <AgentAssistantPanel
+            workspace={activeWorkspace}
+            tasks={tasks}
+            onClose={() => setAgentOpen(false)}
+          />
+        </Suspense>
+      )}
       {detailsOpen && roots.length > 0 && (
         <div className="absolute bottom-full left-3 mb-2 w-[min(48rem,calc(100vw-1.5rem))] max-h-80 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
           <div className="mb-1.5 flex items-center justify-between px-1">
@@ -426,6 +486,8 @@ export function ActivityFooter() {
               const activeChild = taskChildren.find(child => ACTIVE.has(child.status))
               const active = ACTIVE.has(task.status)
               const recipe = generationRecipe(task)
+              const prompt = generationPrompt(task)
+              const initiator = generationInitiator(task)
               const visualState = canonicalTaskVisualState(task.status)
               const controlFailure = controlFailures[task.id]
               const updatedAt = formatAppTimestamp(task.updated_at)
@@ -465,6 +527,24 @@ export function ActivityFooter() {
                         {task.error?.message || task.detail || task.message}
                       </p>
                       {recipe && <p className="mt-0.5 break-words text-[9px] text-amber-300">{recipe}</p>}
+                      {initiator && <p className="mt-0.5 text-[9px] text-violet-300">Started by {initiator}</p>}
+                      {prompt && (
+                        <div className="mt-1 flex min-w-0 items-center gap-1 rounded border border-border/70 bg-bg-tertiary/40 px-1.5 py-1 text-[9px]">
+                          <span className="shrink-0 text-text-muted">Prompt</span>
+                          <button
+                            type="button"
+                            onClick={() => copyPrompt(task)}
+                            className="min-w-0 flex-1 truncate text-left text-text-secondary hover:text-text-primary"
+                            title={`${prompt}\n\nClick to copy the complete prompt`}
+                            aria-label={`Copy complete prompt for ${task.title}`}
+                          >
+                            {truncatePrompt(prompt)}
+                          </button>
+                          <button type="button" onClick={() => copyPrompt(task)} className="shrink-0 text-text-muted hover:text-text-primary" title="Copy complete prompt" aria-label={`Copy prompt for ${task.title}`}>
+                            <Copy size={10} />
+                          </button>
+                        </div>
+                      )}
                       {resources(task) && <p className="text-[9px] text-accent-blue">{resources(task)}</p>}
                       {active && activeChild && (
                         <p className="text-[9px] text-violet-300">
@@ -497,6 +577,8 @@ export function ActivityFooter() {
                           {taskChildren.map(child => {
                             const childRecipe = generationRecipe(child)
                             const childResources = resources(child)
+                            const childPrompt = generationPrompt(child)
+                            const childInitiator = generationInitiator(child)
                             return (
                               <div key={child.id} className="mb-1 last:mb-0" title={child.detail || child.message}>
                                 <p>
@@ -505,6 +587,7 @@ export function ActivityFooter() {
                                 </p>
                                 <p className="flex flex-wrap gap-x-2 text-[8px] text-text-muted">
                                   {childRecipe && <span className="text-amber-300">{childRecipe}</span>}
+                                  {childInitiator && <span className="text-violet-300">Started by {childInitiator}</span>}
                                   {child.server_origin && <span>server {child.server_origin}</span>}
                                   {childResources && <span className="text-accent-blue">{childResources}</span>}
                                   <span>attempt {child.attempt}/{child.max_attempts}</span>
@@ -517,6 +600,11 @@ export function ActivityFooter() {
                                     {child.id}
                                   </button>
                                 </p>
+                                {childPrompt && (
+                                  <button type="button" onClick={() => copyPrompt(child)} className="block max-w-full truncate text-left text-[8px] text-text-secondary hover:text-text-primary" title={`${childPrompt}\n\nClick to copy the complete prompt`} aria-label={`Copy complete prompt for ${child.title}`}>
+                                    Prompt: {truncatePrompt(childPrompt, 140)} <Copy size={8} className="inline" />
+                                  </button>
+                                )}
                               </div>
                             )
                           })}
@@ -539,7 +627,20 @@ export function ActivityFooter() {
         </div>
       )}
 
-      <button type="button" onClick={() => setDetailsOpen(open => !open)} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title="Show canonical task history">
+      <div className="flex h-full w-44 shrink-0 items-center border-r border-amber-200/15 pr-3">
+        <button
+          type="button"
+          onClick={() => { setAgentOpen(open => !open); setDetailsOpen(false) }}
+          className={`hp-agent-trigger flex w-full items-center gap-2 rounded-lg border px-2 py-0.5 text-left transition ${agentOpen ? 'border-amber-200/45 bg-amber-200/10 text-amber-50' : 'border-amber-200/15 bg-amber-100/[.025] text-amber-100/75 hover:border-amber-200/35 hover:bg-amber-100/[.055] hover:text-amber-50'}`}
+          aria-expanded={agentOpen}
+          title="Ask to the Wizard about the app or current task queue"
+        >
+          <AgentAvatar state={agentOpen ? 'listening' : 'idle'} size={24} />
+          <span className="font-medium whitespace-nowrap">Ask to the Wizard</span>
+        </button>
+      </div>
+
+      <button type="button" onClick={() => { setDetailsOpen(open => !open); setAgentOpen(false) }} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title="Show canonical task history">
         {isActive
           ? <Loader2 size={13} className="animate-spin text-accent-blue" />
           : hasError
@@ -558,6 +659,12 @@ export function ActivityFooter() {
         {primaryEta && <span className="hidden sm:inline shrink-0 tabular-nums text-accent-blue" title="Estimated remaining time for the complete task">ETA {primaryEta}</span>}
         {primaryActiveChild && <span className="hidden lg:inline shrink-0 max-w-56 truncate text-violet-300" title={`Active subtask: ${primaryActiveChild.message}`}>Subtask {phaseLabel(primaryActiveChild)}{primaryChildEta ? ` · ETA ${primaryChildEta}` : ''}</span>}
         {primary?.model && <span className="hidden md:inline max-w-64 shrink-0 truncate rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-amber-300" title={generationRecipe(primary)}>{primary.model}</span>}
+        {primary && generationInitiator(primary) && <span className="hidden lg:inline max-w-48 shrink-0 truncate text-violet-300" title={generationInitiator(primary)}>{generationInitiator(primary)}</span>}
+        {primary && generationPrompt(primary) && (
+          <button type="button" onClick={() => copyPrompt(primary)} className="hidden xl:block min-w-0 max-w-80 truncate text-left text-text-secondary hover:text-text-primary" title={`${generationPrompt(primary)}\n\nClick to copy the complete prompt`} aria-label={`Copy current generation prompt for ${primary.title}`}>
+            “{truncatePrompt(generationPrompt(primary), 100)}”
+          </button>
+        )}
         <span className={`truncate ${hasError ? 'text-red-400' : isActive ? 'text-text-secondary' : 'text-text-muted'}`} title={primaryMessage}>{primaryMessage}</span>
       </div>
 

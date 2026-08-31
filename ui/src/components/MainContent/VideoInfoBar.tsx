@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react'
-import { Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Sparkles, Mic, BadgeInfo } from 'lucide-react'
+import { Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Sparkles, Mic, BadgeInfo, Music2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { getStoredAssetUrl } from '../../api/client'
 import { modelDisplayName } from '../../lib/modelDisplay'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
+import { AlternativeSongsDialog, canRemountVideoclip } from './AlternativeSongsDialog'
 
 export function VideoInfoBar() {
   const outputs = useStore(s => s.filteredOutputs())
@@ -27,6 +28,7 @@ export function VideoInfoBar() {
   const [rejoining, setRejoining] = useState(false)
   const [upscaling, setUpscaling] = useState(false)
   const [showExtraInfo, setShowExtraInfo] = useState(false)
+  const [showAlternativeSongs, setShowAlternativeSongs] = useState(false)
 
   const selected = outputs[selectedOutput]
   if (!selected) return null
@@ -211,6 +213,16 @@ export function VideoInfoBar() {
               <BadgeInfo size={14} />
               Extra info
             </button>
+            {canRemountVideoclip(selected) && (
+              <button
+                onClick={() => setShowAlternativeSongs(true)}
+                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] text-text-secondary transition-colors hover:bg-bg-hover hover:text-accent-blue"
+                title="Attach another song and remount this videoclip without regenerating shots"
+              >
+                <Music2 size={14} />
+                Alt. songs
+              </button>
+            )}
             <button
               onClick={handleUpscale}
               disabled={upscaling}
@@ -245,6 +257,12 @@ export function VideoInfoBar() {
         <VideoExtraInfoDialog
           name={selected.name}
           onClose={() => setShowExtraInfo(false)}
+        />
+      )}
+      {showAlternativeSongs && (
+        <AlternativeSongsDialog
+          name={selected.name}
+          onClose={() => setShowAlternativeSongs(false)}
         />
       )}
     </div>

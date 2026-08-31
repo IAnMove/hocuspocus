@@ -451,8 +451,13 @@ export function MainContent() {
   const selectedOutput = useStore(s => s.selectedOutput)
   const setMediaFilter = useStore(s => s.setMediaFilter)
   const mediaFilter = useStore(s => s.mediaFilter)
+  const developerMode = useStore(s => s.developerMode)
   const setGalleryFeedAtTop = useStore(s => s.setGalleryFeedAtTop)
   const visibleJobs = jobs.filter(job => jobFitsGalleryFilter(job, mediaFilter))
+
+  useEffect(() => {
+    if (mediaFilter === 'auditdev' && !developerMode) setMediaFilter('all')
+  }, [developerMode, mediaFilter, setMediaFilter])
 
   const feedRef = useRef<HTMLDivElement>(null)
   const activeIndex = selectedOutput
@@ -743,7 +748,7 @@ export function MainContent() {
               : mediaFilter === 'characters' ? 'Character Creator'
               : mediaFilter === 'styles' ? 'Hoja de estilos'
               : mediaFilter === 'videoeditor' ? 'Video Editor'
-              : mediaFilter === 'auditdev' ? 'Auditoría interna dev'
+              : mediaFilter === 'auditdev' && developerMode ? 'Auditoría interna'
               : outputsTotal > outputs.length
               ? `${outputs.length} / ${outputsTotal} items`
               : `${outputs.length} ${outputs.length === 1 ? 'item' : 'items'}`}
@@ -809,7 +814,7 @@ export function MainContent() {
               <VideoEditorPanel />
             </div>
           </div>
-        ) : mediaFilter === 'auditdev' ? (
+        ) : mediaFilter === 'auditdev' && developerMode ? (
           <div className="flex-1 overflow-hidden p-2 md:p-4">
             <div className="max-w-[1900px] mx-auto h-full">
               <AuditDevPanel />

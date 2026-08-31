@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, typ
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { useStore } from '../../stores/useStore'
-import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
+import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, fetchOutputs, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 import { SceneRecipePanel } from './SceneRecipePanel'
 import type { SceneRecipe } from '../../lib/sceneRecipe'
@@ -10,20 +10,25 @@ import { sceneToRecipe } from '../../lib/sceneToRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
 import { SceneLibraryDialog } from './SceneLibraryDialog'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
+import { normalizeSceneLookupName, sceneFromLibraryPayload, sceneLibraryTitle, sceneOutputMatchesName } from '../../lib/sceneLibrary'
 import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
-import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
-import { captureCharacterFaceAnchor, characterKitAssetFromLayer, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
+import { applySceneRhythmToLayer, buildSceneRhythmMap, type SceneRhythmCueSource, type SceneRhythmProfile } from '../../lib/sceneRhythm'
+import { applyCutoutDialogue, bindCutoutFaceToPose, ensureCutoutFacePlayback, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
+import { captureCharacterFaceAnchor, characterKitAssetFromLayer, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, syncMountedCharacterKitLayers, syncSceneCharacterKits, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
 import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } from '../../lib/characterKitHandoff'
+import { rememberCharacterKitLibrary, rememberVideo3dScene } from '../../features/agent/wizardLabSession'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
 import { normalizeSeamOccluder, paintSeamOccluder, seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
-import type { Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
+import type { AudioAnalysisResult, Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
-import { CharacterKitFaceRigPanel } from '../../features/characters/CharacterKitFaceRigPanel'
+import { CharacterKitLibraryPanel } from '../../features/characters/CharacterKitLibraryPanel'
+import type { CharacterKitEditorTab } from '../../features/characters/characterKitGuide'
+import { listenForAgentSceneControl, listenForAgentSceneRhythm, listenForAgentSceneWorkflow } from '../../features/agent/agentUiBus'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 type AnimatorLayerType = SceneLayerType
@@ -511,6 +516,15 @@ export function SceneAnimatorPanel() {
   const [sceneAudioPrompt, setSceneAudioPrompt] = useState('')
   const [sceneAudioBusy, setSceneAudioBusy] = useState(false)
   const [sceneAudioError, setSceneAudioError] = useState<string | null>(null)
+  const [rhythmTrackId, setRhythmTrackId] = useState('')
+  const [rhythmAnalysis, setRhythmAnalysis] = useState<AudioAnalysisResult | null>(null)
+  const [rhythmAnalysisTrackId, setRhythmAnalysisTrackId] = useState('')
+  const agentRhythmAnalysesRef = useRef(new Map<string, AudioAnalysisResult>())
+  const [rhythmBusy, setRhythmBusy] = useState(false)
+  const [rhythmError, setRhythmError] = useState<string | null>(null)
+  const [rhythmCueSource, setRhythmCueSource] = useState<SceneRhythmCueSource>('beats')
+  const [rhythmProfile, setRhythmProfile] = useState<SceneRhythmProfile>('pulse')
+  const [rhythmIntensity, setRhythmIntensity] = useState(.65)
   const [cutoutDialogueText, setCutoutDialogueText] = useState('')
   const [cutoutDialogueStart, setCutoutDialogueStart] = useState(0)
   const [cutoutDialogueEnd, setCutoutDialogueEnd] = useState(5)
@@ -522,11 +536,22 @@ export function SceneAnimatorPanel() {
   const [characterKitPoseId, setCharacterKitPoseId] = useState('base')
   const [characterKitMouthState, setCharacterKitMouthState] = useState<CharacterMouthState>('wide')
   const [characterKitAlphaStatus, setCharacterKitAlphaStatus] = useState<CharacterKitAlphaStatus>('transparent')
-  const [characterKitEditorTab, setCharacterKitEditorTab] = useState<'kit' | 'face-rig'>('kit')
+  const [characterKitEditorTab, setCharacterKitEditorTab] = useState<CharacterKitEditorTab>('face-rig')
   const [characterKitBusy, setCharacterKitBusy] = useState(false)
   const [characterKitError, setCharacterKitError] = useState<string | null>(null)
   const characterKitLibraryRef = useRef(characterKitLibrary)
   characterKitLibraryRef.current = characterKitLibrary
+  useEffect(() => {
+    rememberCharacterKitLibrary(characterKitLibrary)
+  }, [characterKitLibrary])
+  useEffect(() => {
+    rememberVideo3dScene({
+      scene_id: scene.name || '',
+      title: scene.name || '',
+      layers: scene.layers?.length || 0,
+      state: scene.layers?.length ? 'ready' : 'empty',
+    })
+  }, [scene])
   const [chainFromPlayhead, setChainFromPlayhead] = useState(false)
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -578,6 +603,11 @@ export function SceneAnimatorPanel() {
   const selectedDialogueTrack = dialogueAudioTracks.find(track => track.id === cutoutDialogueTrackId)
     ?? dialogueAudioTracks.find(track => track.kind === 'speech')
     ?? dialogueAudioTracks[0]
+  const rhythmAudioTracks = [...(scene.audioTracks ?? [])].sort((a, b) => Number(b.kind === 'music') - Number(a.kind === 'music'))
+  const selectedRhythmTrack = rhythmAudioTracks.find(track => track.id === rhythmTrackId)
+    ?? rhythmAudioTracks.find(track => track.kind === 'music')
+    ?? rhythmAudioTracks[0]
+  const activeRhythmAnalysis = selectedRhythmTrack?.id === rhythmAnalysisTrackId ? rhythmAnalysis : null
   const narrativeVisuals = outputs.filter(output => output.type === 'model3d' || output.type === 'image' || output.type === 'video')
   const narrativeTemplate = getNarrativeTemplate(narrativeTemplateId)!
   const narrativeAssetByName = (name: string) => narrativeVisuals.find(asset => asset.name === name)
@@ -685,7 +715,13 @@ export function SceneAnimatorPanel() {
         setMessage(`Opened Character Kit Face Rig from Character Creator. Save the kit after reviewing the base pose.`)
         return
       }
-      setCharacterKitDraft(library.kits[library.activeId] ? structuredClone(library.kits[library.activeId]) : null)
+      const active = library.kits[library.activeId]
+      if (active) {
+        setCharacterKitDraft(structuredClone(active))
+        setCharacterKitEditorTab(active.base?.reviewState === 'approved' || Object.values(active.poses).some(pose => pose.reviewState === 'approved') ? 'face-rig' : 'kit')
+      } else {
+        setCharacterKitDraft(null)
+      }
     }).catch(error => {
       if (!cancelled) setCharacterKitError(error instanceof Error ? error.message : 'Could not load Character Kits.')
     }).finally(() => { if (!cancelled) setCharacterKitBusy(false) })
@@ -716,6 +752,15 @@ export function SceneAnimatorPanel() {
   }, [])
 
   useEffect(() => { sceneRef.current = scene }, [scene])
+  useEffect(() => {
+    if (!Object.keys(characterKitLibrary.kits).length) return
+    const current = sceneRef.current
+    const synced = syncSceneCharacterKits(current.layers, characterKitLibrary) as AnimatorLayer[]
+    if (synced === current.layers) return
+    const next = { ...current, layers: synced }
+    sceneRef.current = next
+    setScene(next)
+  }, [characterKitLibrary])
   useEffect(() => { historyRevisionRef.current = historyRevision }, [historyRevision])
   const replaceScene = (next: AnimatorScene) => { sceneRef.current = next; setScene(next) }
   const updateScene = (updater: (current: AnimatorScene) => AnimatorScene) => {
@@ -1144,7 +1189,29 @@ export function SceneAnimatorPanel() {
     }
     animationRef.current = requestAnimationFrame(frame)
   }
-  const play = () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); setProgress(0); animate() }
+  const applyCharacterKitsToScene = (library = characterKitLibraryRef.current) => {
+    const current = sceneRef.current
+    const synced = syncSceneCharacterKits(current.layers, library) as AnimatorLayer[]
+    if (synced === current.layers) return current
+    const next = { ...current, layers: synced }
+    sceneRef.current = next
+    setScene(next)
+    return next
+  }
+  const prepareFacePlayback = () => {
+    const current = applyCharacterKitsToScene()
+    const layers = ensureCutoutFacePlayback(current.layers, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
+    if (layers === current.layers) return
+    const next = { ...current, layers }
+    sceneRef.current = next
+    setScene(next)
+  }
+  const play = () => {
+    prepareFacePlayback()
+    if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    setProgress(0)
+    animate()
+  }
   const appendPresetAtPlayhead = (layer: AnimatorLayer, preset: Pick<Preset, 'start' | 'end' | 'duration' | 'curve'> | CameraPreset) => {
     const sceneTime = Math.round(progress * scene.duration * fps) / fps
     const timing = getSceneLayerTiming(layer)
@@ -1539,7 +1606,7 @@ export function SceneAnimatorPanel() {
       setMessage(localAssets > 0 ? `Scene JSON exported. ${localAssets} local asset${localAssets === 1 ? '' : 's'} will require reassignment when imported.` : 'Scene JSON exported.')
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Scene JSON could not be exported.') }
   }
-  const importScene = (text: string, successMessage?: string) => {
+  const importScene = (text: string, successMessage?: string): boolean => {
     try {
       const incoming = parseSceneFile(text) as AnimatorScene
       const incomingIds = incoming.layers.map((layer, index) => {
@@ -1624,7 +1691,7 @@ export function SceneAnimatorPanel() {
         const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
         return keyframes ? withSceneKeyframes(timedLayer, keyframes, timedLayer.animation.duration) as AnimatorLayer : timedLayer
       }))
-      const layers = breakDependencyCycles(normalizedLayers)
+      const layers = syncSceneCharacterKits(breakDependencyCycles(normalizedLayers), characterKitLibraryRef.current) as AnimatorLayer[]
       const duration = Math.min(3600, Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed })))
       const incomingComposition = incoming.composition as Partial<NonNullable<Scene['composition']>> | undefined
       const safeAreas: NonNullable<Scene['composition']>['safeArea'][] = ['none', 'action', 'title', 'vertical', 'all']
@@ -1639,7 +1706,8 @@ export function SceneAnimatorPanel() {
       previousObjectUrls.forEach(url => URL.revokeObjectURL(url))
       const missingAssets = layers.filter(layer => layer.type !== 'camera' && layer.missingAsset).length
       localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(successMessage ?? `Scene imported: ${layers.length} layer${layers.length === 1 ? '' : 's'}.${missingAssets ? ` Reassign ${missingAssets} missing asset${missingAssets === 1 ? '' : 's'}.` : ''}`); setJsonOpen(false)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
+      return true
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.'); return false }
   }
   const importSceneFile = async (file: File) => {
     try {
@@ -1766,6 +1834,7 @@ export function SceneAnimatorPanel() {
   const recordCompatibilityWebm = (): Promise<Blob> => new Promise((resolve, reject) => {
     if (recording) { reject(new Error('A recording is already in progress.')); return }
     if (playing) { const error = new Error('Wait for Preview to finish before recording.'); setMessage(error.message); reject(error); return }
+    prepareFacePlayback()
     const current = sceneRef.current
     const currentFps: SceneFrameRate = current.fps === 60 ? 60 : 30
     if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) { const error = new Error('Add a visible visual layer before recording.'); setMessage(error.message); reject(error); return }
@@ -1966,6 +2035,7 @@ export function SceneAnimatorPanel() {
   const recordToBlob = async (): Promise<Blob> => {
     if (recording) throw new Error('A recording is already in progress.')
     if (playing) throw new Error('Wait for Preview to finish before recording.')
+    prepareFacePlayback()
     if (!('VideoEncoder' in window) || typeof VideoEncoder.isConfigSupported !== 'function') {
       setMessage('This browser lacks deterministic WebCodecs export; using compatibility recording.')
       return recordCompatibilityWebm()
@@ -2112,9 +2182,9 @@ export function SceneAnimatorPanel() {
       await persistScene()
     }
   }
-  const persistScene = async () => {
+  const persistScene = async (): Promise<string | null> => {
     const current = sceneRef.current
-    if (!current.layers.length) { setMessage('Add at least one layer before saving.'); return }
+    if (!current.layers.length) { setMessage('Add at least one layer before saving.'); return null }
     setSaving(true); setMessage(null)
     try {
       const preview = document.createElement('canvas')
@@ -2130,11 +2200,13 @@ export function SceneAnimatorPanel() {
         return { ...layer, source: uploaded.url, missingAsset: false }
       }))
       const persisted = { ...current, layers }
-      const saved = await saveSceneOutput(persisted, preview.toDataURL('image/png'))
+      const saved = await saveSceneOutput(persisted, preview.toDataURL('image/png'), workspace)
       replaceScene(persisted); localFilesRef.current = {}; await loadOutputs()
       setMessage(`Scene saved to HocusPocus as ${saved.name}`)
+      return saved.name
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to save scene.')
+      return null
     } finally {
       setSaving(false)
     }
@@ -2193,26 +2265,54 @@ export function SceneAnimatorPanel() {
     } : current)
     setCharacterKitError(null); setMessage(`Captured the ${role === 'blink' ? 'eye' : 'mouth'} anchor for ${poseId}.`)
   }
+  const persistCharacterKitDraft = async (kit: CharacterKit, announce = false) => {
+    try {
+      const next = { ...kit, updatedAt: new Date().toISOString() }
+      const library = await saveCharacterKit(workspace, characterKitLibraryRef.current, next)
+      setCharacterKitLibrary(library)
+      const saved = library.kits[next.id]
+      if (!saved) return
+      setCharacterKitDraft(structuredClone(saved))
+      updateScene(current => {
+        const synced = syncMountedCharacterKitLayers(current.layers, saved, characterKitPoseId.trim() || 'base') as AnimatorLayer[]
+        const layers = ensureCutoutFacePlayback(synced, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
+        return { ...current, layers }
+      })
+      if (announce) setMessage(`${next.name} guardado.`)
+    } catch (error) {
+      setCharacterKitError(error instanceof Error ? error.message : 'Could not save Character Kit. Reload the library and try again.')
+    }
+  }
   const persistCharacterKit = async () => {
     if (!characterKitDraft) return
     setCharacterKitBusy(true); setCharacterKitError(null)
     try {
-      const next = { ...characterKitDraft, updatedAt: new Date().toISOString() }
-      const library = await saveCharacterKit(workspace, characterKitLibrary, next)
-      setCharacterKitLibrary(library); setCharacterKitDraft(structuredClone(library.kits[next.id]))
-      setMessage(`Character Kit ${next.name} saved in workspace ${workspace}.`)
-    } catch (error) {
-      setCharacterKitError(error instanceof Error ? error.message : 'Could not save Character Kit. Reload the library and try again.')
+      await persistCharacterKitDraft(characterKitDraft, true)
     } finally { setCharacterKitBusy(false) }
   }
   const mountCharacterKit = () => {
     if (!characterKitDraft) return
     try {
-      const mounted = mountCharacterKitLayers(characterKitDraft, characterKitPoseId.trim() || 'base', undefined, scene.duration) as AnimatorLayer[]
+      const poseId = characterKitPoseId.trim() || 'base'
+      const mounted = ensureCutoutFacePlayback(
+        mountCharacterKitLayers(characterKitDraft, poseId, undefined, scene.duration),
+        scene.duration,
+        fps,
+        [],
+        cutoutDialogueText,
+      ) as AnimatorLayer[]
       const mountedIds = new Set(mounted.map(layer => layer.id))
-      if (scene.layers.some(layer => mountedIds.has(layer.id))) throw new Error('This Character Kit pose is already mounted in the scene.')
+      if (scene.layers.some(layer => mountedIds.has(layer.id))) {
+        updateScene(current => {
+          const synced = syncMountedCharacterKitLayers(current.layers, characterKitDraft, poseId) as AnimatorLayer[]
+          const layers = ensureCutoutFacePlayback(synced, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
+          return { ...current, layers }
+        })
+        setMessage(`${characterKitDraft.name} ya estaba en la escena. Actualicé boca y ojos.`)
+        return
+      }
       updateScene(current => ({ ...current, layers: normalizeZ([...current.layers, ...mounted]) }))
-      setSelectedId(mounted[0].id); setMessage(`Mounted ${characterKitDraft.name} with ${mounted.length - 1} reviewed face overlays.`)
+      setSelectedId(mounted[0].id); setMessage(`${characterKitDraft.name} está en la escena. Preview mueve boca y parpadeo.`)
     } catch (error) { setCharacterKitError(error instanceof Error ? error.message : 'Could not mount Character Kit.') }
   }
   const removeCharacterKit = async () => {
@@ -2278,6 +2378,307 @@ export function SceneAnimatorPanel() {
       setSceneAudioBusy(false)
     }
   }
+  const analyzeSceneRhythm = async () => {
+    const track = selectedRhythmTrack
+    if (!track) { setRhythmError('Attach an MP3, WAV or generated music track first.'); return }
+    setRhythmBusy(true); setRhythmError(null)
+    try {
+      const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
+      if (!analysis.beats.length) throw new Error('No stable beat grid was detected in this track.')
+      setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
+      setMessage(`Rhythm ready: ${analysis.bpm.toFixed(1)} BPM · ${analysis.beats.length} beats · ${analysis.downbeats.length} downbeats.`)
+    } catch (error) {
+      setRhythmAnalysis(null); setRhythmAnalysisTrackId('')
+      setRhythmError(error instanceof Error ? error.message : 'Could not identify the rhythm of this track.')
+    } finally {
+      setRhythmBusy(false)
+    }
+  }
+  const applySceneRhythm = () => {
+    const track = selectedRhythmTrack
+    const analysis = activeRhythmAnalysis
+    if (!track || !analysis) { setRhythmError('Analyze the selected audio track before applying rhythm.'); return }
+    if (!selected) { setRhythmError('Select the 3D object, visual layer or camera that should react to the music.'); return }
+    if (selected.locked) { setRhythmError(`Unlock ${selected.name} before generating beat keyframes.`); return }
+    try {
+      const map = buildSceneRhythmMap(analysis, track.startTime, scene.duration, rhythmCueSource)
+      if (!map.cues.length) throw new Error('The detected beats do not overlap the current scene duration and audio start time.')
+      const profile = selected.type === 'camera' && rhythmProfile === 'peek' ? 'camera-punch' : rhythmProfile
+      updateLayer(selected.id, layer => applySceneRhythmToLayer(layer, map, {
+        profile,
+        sceneDuration: scene.duration,
+        intensity: rhythmIntensity,
+      }) as AnimatorLayer)
+      setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(map.cues[0].time / scene.duration); setRhythmError(null)
+      setMessage(`Applied ${map.cues.length} ${rhythmCueSource} from ${track.name} to ${selected.name}. The result is ordinary editable keyframes.`)
+    } catch (error) {
+      setRhythmError(error instanceof Error ? error.message : 'Could not turn this rhythm into scene keyframes.')
+    }
+  }
+  const importSceneRef = useRef(importScene)
+  const addLayerRef = useRef(addLayer)
+  const addCameraRef = useRef(addCamera)
+  const persistSceneRef = useRef(persistScene)
+  const recordToBlobRef = useRef(recordToBlob)
+  const publishRecordingRef = useRef(publishRecording)
+  const waitForModelViewersRef = useRef(waitForModelViewers)
+  importSceneRef.current = importScene
+  addLayerRef.current = addLayer
+  addCameraRef.current = addCamera
+  persistSceneRef.current = persistScene
+  recordToBlobRef.current = recordToBlob
+  publishRecordingRef.current = publishRecording
+  waitForModelViewersRef.current = waitForModelViewers
+  useEffect(() => listenForAgentSceneWorkflow(async request => {
+    const normalize = normalizeSceneLookupName
+    const assertScene = () => {
+      const current = sceneRef.current
+      if (request.sceneName && normalize(request.sceneName) !== normalize(current.name)) {
+        throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”.`)
+      }
+      return current
+    }
+    const exactLayer = (name: string) => {
+      const matches = sceneRef.current.layers.filter(layer => normalize(layer.name) === normalize(name))
+      if (matches.length !== 1) throw new Error(matches.length ? `La capa “${name}” no es inequívoca.` : `No existe la capa “${name}”.`)
+      return matches[0]
+    }
+    const exactOutput = async (name: string, types: Array<'audio' | 'image' | 'video' | 'model3d'>) => {
+      const library = await fetchOutputs(0, 0, { workspace })
+      const matches = library.outputs.filter(output => types.includes(output.type as typeof types[number]) && normalize(output.name) === normalize(name))
+      if (matches.length !== 1) throw new Error(matches.length ? `El output “${name}” no es inequívoco.` : `No existe el output “${name}” en este workspace.`)
+      return matches[0]
+    }
+    if (request.type === 'create_3d_scene') {
+      if (!request.reset && normalize(sceneRef.current.name) === normalize(request.sceneName)) {
+        return { message: `La escena editable “${sceneRef.current.name}” ya está abierta.`, sceneId: sceneRef.current.name, layerIds: sceneRef.current.layers.map(layer => layer.id) }
+      }
+      const next = blankScene()
+      next.name = request.sceneName || 'Rhythmic scene'
+      next.duration = Math.max(1, Math.min(600, request.durationSeconds))
+      next.width = Math.max(320, Math.min(7680, Math.round(request.width)))
+      next.height = Math.max(240, Math.min(4320, Math.round(request.height)))
+      next.fps = request.fps
+      replaceScene(next); setSelectedId(null); setProgress(0)
+      return { message: `He creado la escena editable “${next.name}”.`, sceneId: next.name }
+    }
+    if (request.type === 'set_3d_scene_properties') {
+      const current = assertScene()
+      const next = {
+        ...current,
+        duration: request.durationSeconds === undefined ? current.duration : Math.max(1, Math.min(600, request.durationSeconds)),
+        width: request.width === undefined ? current.width : Math.max(320, Math.min(7680, Math.round(request.width))),
+        height: request.height === undefined ? current.height : Math.max(240, Math.min(4320, Math.round(request.height))),
+        fps: request.fps ?? current.fps,
+      }
+      replaceScene(next)
+      return { message: `He ajustado “${next.name}” a ${next.duration}s, ${next.width}×${next.height}, ${next.fps ?? 30} FPS.`, sceneId: next.name }
+    }
+    if (request.type === 'add_3d_scene_layer') {
+      assertScene()
+      const existing = sceneRef.current.layers.filter(layer => normalize(layer.name) === normalize(request.layerName))
+      if (existing.length > 1) throw new Error(`La capa “${request.layerName}” no es inequívoca.`)
+      if (existing[0]) return { message: `La capa “${request.layerName}” ya existe; reutilizo su ID estable.`, sceneId: sceneRef.current.name, layerIds: [existing[0].id] }
+      if (request.layerType === 'camera') {
+        addCameraRef.current()
+        const added = sceneRef.current.layers.at(-1)
+        if (!added) throw new Error('No se pudo crear la cámara.')
+        updateScene(current => ({ ...current, layers: current.layers.map(layer => layer.id === added.id ? { ...layer, name: request.layerName } : layer) }))
+        return { message: `He añadido la cámara “${request.layerName}”.`, sceneId: sceneRef.current.name, layerIds: [added.id] }
+      }
+      if (!request.outputName) throw new Error('Una capa visual necesita el nombre exacto de un output.')
+      const output = await exactOutput(request.outputName, [request.layerType === 'overlay' ? 'image' : request.layerType])
+      addLayerRef.current(request.layerType, output.url, request.layerName, output.thumbnail_url ?? undefined)
+      const added = sceneRef.current.layers.find(layer => normalize(layer.name) === normalize(request.layerName))
+      return { message: `He añadido “${request.layerName}” desde ${output.name}.`, sceneId: sceneRef.current.name, layerIds: added ? [added.id] : [] }
+    }
+    if (request.type === 'update_3d_scene_layer') {
+      assertScene(); const layer = exactLayer(request.layerName)
+      updateScene(current => ({ ...current, layers: current.layers.map(item => item.id === layer.id ? { ...item, visible: request.visible ?? item.visible, locked: request.locked ?? item.locked } : item) }))
+      return { message: `He actualizado la capa “${layer.name}”.`, sceneId: sceneRef.current.name, layerIds: [layer.id] }
+    }
+    if (request.type === 'remove_3d_scene_layer') {
+      assertScene(); const layer = exactLayer(request.layerName)
+      if (layer.locked) throw new Error(`Desbloquea “${layer.name}” antes de eliminarla.`)
+      updateScene(current => ({ ...current, layers: current.layers.filter(item => item.id !== layer.id) }))
+      return { message: `He eliminado la capa “${layer.name}”.`, sceneId: sceneRef.current.name, layerIds: [layer.id] }
+    }
+    if (request.type === 'attach_3d_scene_audio' || request.type === 'analyze_3d_scene_audio') {
+      assertScene()
+      const output = await exactOutput(request.audioOutputName, ['audio'])
+      let track = (sceneRef.current.audioTracks ?? []).find(item => normalize(item.filename) === normalize(output.name))
+      if (!track) {
+        track = { id: uid(), filename: output.name, name: output.name.replace(/\.[^.]+$/, ''), kind: 'music', startTime: 0, volume: 1 }
+        const attached = track
+        updateScene(current => ({ ...current, audioTracks: [...(current.audioTracks ?? []), attached] }))
+      }
+      setRhythmTrackId(track.id)
+      if (request.type === 'attach_3d_scene_audio') return { message: `He adjuntado ${output.name} a la escena.`, sceneId: sceneRef.current.name, audioTrackId: track.id, outputNames: [output.name] }
+      let analysis = agentRhythmAnalysesRef.current.get(track.id)
+      if (!analysis) {
+        analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
+        if (!analysis.beats.length) throw new Error('No se detectó una rejilla estable de beats en esta pista.')
+        agentRhythmAnalysesRef.current.set(track.id, analysis)
+      }
+      setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
+      return { message: `Ritmo listo: ${analysis.bpm.toFixed(1)} BPM y ${analysis.beats.length} beats.`, sceneId: sceneRef.current.name, audioTrackId: track.id, analysisId: track.id, bpm: analysis.bpm, beatCount: analysis.beats.length, downbeatCount: analysis.downbeats.length, rhythmGrid: { duration: analysis.duration, bpm: analysis.bpm, beats: analysis.beats.slice(0, 200), downbeats: analysis.downbeats.slice(0, 200) } }
+    }
+    if (request.type === 'apply_3d_choreography') {
+      const current = assertScene(); const layer = exactLayer(request.layerName)
+      if (layer.locked) throw new Error(`Desbloquea “${layer.name}” antes de generar keyframes.`)
+      const track = (current.audioTracks ?? []).find(item => normalize(item.filename) === normalize(request.audioOutputName) || normalize(item.name) === normalize(request.audioOutputName))
+      if (!track) throw new Error(`El audio “${request.audioOutputName}” no está adjunto a la escena.`)
+      let analysis = agentRhythmAnalysesRef.current.get(track.id)
+      if (!analysis && request.rhythmGrid) {
+        analysis = { duration: request.rhythmGrid.duration, sample_rate: 0, bpm: request.rhythmGrid.bpm, beats: request.rhythmGrid.beats, downbeats: request.rhythmGrid.downbeats, sections: [], onset_envelope: [], lyrics: null, vocals_path: null }
+        agentRhythmAnalysesRef.current.set(track.id, analysis)
+      }
+      if (!analysis) throw new Error('Analiza el audio una vez antes de aplicar la coreografía.')
+      const map = buildSceneRhythmMap(analysis, track.startTime, current.duration, request.cueSource)
+      if (!map.cues.length) throw new Error('Los beats detectados no coinciden con la duración de la escena.')
+      const profile = layer.type === 'camera' && request.profile === 'peek' ? 'camera-punch' : request.profile
+      updateScene(sceneValue => ({ ...sceneValue, layers: sceneValue.layers.map(item => item.id === layer.id ? applySceneRhythmToLayer(item, map, { profile, sceneDuration: sceneValue.duration, intensity: request.intensity }) as AnimatorLayer : item) }))
+      return { message: `He convertido ${map.cues.length} ${request.cueSource} en keyframes editables de “${layer.name}”.`, sceneId: current.name, layerIds: [layer.id], audioTrackId: track.id, analysisId: track.id }
+    }
+    if (request.type === 'save_3d_scene') {
+      assertScene(); const saved = await persistSceneRef.current()
+      if (!saved) throw new Error('No se pudo guardar la escena editable.')
+      return { message: `He guardado la escena editable como ${saved}.`, sceneId: sceneRef.current.name, outputNames: [saved] }
+    }
+    if (request.type === 'export_3d_scene') {
+      const current = assertScene()
+      if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) throw new Error('La escena necesita una capa visual visible antes de exportar.')
+      await waitForModelViewersRef.current()
+      const saved = await publishRecordingRef.current(await recordToBlobRef.current(), sceneRef.current)
+      return { message: `He publicado el MP4 como ${saved.name}.`, sceneId: current.name, outputNames: [saved.name] }
+    }
+    if (request.type === 'open_3d_scene') throw new Error('La apertura estructurada se realiza mediante el control de escenas existente.')
+    throw new Error('Operación 3D no reconocida.')
+  }), [workspace])
+  useEffect(() => listenForAgentSceneControl(async request => {
+    const current = sceneRef.current
+    if (request.type === 'save_3d_scene') {
+      if (request.sceneName && normalizeSceneLookupName(request.sceneName) !== normalizeSceneLookupName(current.name)) {
+        throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”; no he guardado otra escena por error.`)
+      }
+      const savedName = await persistSceneRef.current()
+      if (!savedName) throw new Error('HocusPocus no pudo guardar la escena 3D abierta.')
+      return `He guardado “${current.name}” como ${savedName}. Sus capas y keyframes siguen siendo editables.`
+    }
+    if (request.type === 'export_3d_scene') {
+      if (request.sceneName && normalizeSceneLookupName(request.sceneName) !== normalizeSceneLookupName(current.name)) {
+        throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”; no he renderizado otra escena por error.`)
+      }
+      if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) {
+        throw new Error('Añade al menos una capa visual visible antes de exportar la escena 3D.')
+      }
+      setPublishing(true); setMessage(null)
+      try {
+        await waitForModelViewersRef.current()
+        const blob = await recordToBlobRef.current()
+        const saved = await publishRecordingRef.current(blob, sceneRef.current)
+        return `He terminado y publicado el MP4 de “${current.name}” en Videos como ${saved.name}.`
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'No se pudo exportar la escena 3D a MP4.')
+        throw error
+      } finally {
+        setPublishing(false)
+      }
+    }
+
+    const library = await fetchOutputs(0, 0, { mediaType: 'scene', workspace })
+    const matches = library.outputs.filter(file => sceneOutputMatchesName(file, request.sceneName))
+    if (!matches.length) {
+      const available = library.outputs.slice(0, 8).map(file => `“${sceneLibraryTitle(file.name)}”`).join(', ')
+      throw new Error(`No existe una escena guardada llamada “${request.sceneName}” en este workspace.${available ? ` Disponibles: ${available}.` : ''}`)
+    }
+    if (matches.length > 1) throw new Error(`Hay varias escenas guardadas llamadas “${request.sceneName}”; indica el nombre completo del archivo.`)
+    const response = await fetch(matches[0].url)
+    if (!response.ok) throw new Error(`No se pudo cargar la escena guardada “${request.sceneName}”.`)
+    const next = sceneFromLibraryPayload(await response.json()) as AnimatorScene
+    const layerMatches = request.layerName
+      ? next.layers.filter(layer => normalizeSceneLookupName(layer.name) === normalizeSceneLookupName(request.layerName))
+      : []
+    if (layerMatches.length > 1) throw new Error(`La escena contiene varias capas llamadas “${request.layerName}”; renómbralas antes de seleccionarlas con el Wizard.`)
+    if (request.layerName && !layerMatches.length) throw new Error(`La escena “${next.name}” no contiene una capa llamada “${request.layerName}”.`)
+    if (!importSceneRef.current(JSON.stringify(next), `Opened ${sceneLibraryTitle(matches[0].name)}`)) {
+      throw new Error(`La escena guardada “${request.sceneName}” no se pudo abrir en Video 3D.`)
+    }
+    const target = layerMatches[0] ?? next.layers[0]
+    setSelectedId(target?.id ?? null)
+    const result = target
+      ? `He abierto “${next.name}” y seleccionado la capa “${target.name}”.`
+      : `He abierto “${next.name}”; la escena no contiene capas.`
+    setMessage(result)
+    return result
+  }), [workspace])
+  useEffect(() => listenForAgentSceneRhythm(async request => {
+    const normalize = normalizeSceneLookupName
+    const current = sceneRef.current
+    if (request.sceneName && normalize(request.sceneName) !== normalize(current.name)) {
+      throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”. Abre primero la escena correcta.`)
+    }
+    const layerMatches = request.layerName
+      ? current.layers.filter(layer => normalize(layer.name) === normalize(request.layerName))
+      : []
+    if (layerMatches.length > 1) throw new Error(`Hay varias capas llamadas “${request.layerName}”; renómbralas o selecciona una manualmente.`)
+    const eligibleLayers = current.layers.filter(layer => layer.visible)
+    const target = layerMatches[0]
+      ?? (!request.layerName && selectedId ? current.layers.find(layer => layer.id === selectedId) : undefined)
+      ?? (!request.layerName && eligibleLayers.length === 1 ? eligibleLayers[0] : undefined)
+    if (!target) throw new Error(request.layerName
+      ? `No existe la capa “${request.layerName}” en “${current.name}”.`
+      : 'Selecciona una capa inequívoca en Video 3D o indica su nombre al Wizard.')
+    if (target.locked) throw new Error(`Desbloquea “${target.name}” antes de generar keyframes rítmicos.`)
+
+    const attachedMatches = request.audioOutputName
+      ? (current.audioTracks ?? []).filter(track => normalize(track.name) === normalize(request.audioOutputName) || normalize(track.filename) === normalize(request.audioOutputName))
+      : []
+    const outputMatches = request.audioOutputName
+      ? outputs.filter(output => output.type === 'audio' && normalize(output.name) === normalize(request.audioOutputName))
+      : []
+    if (attachedMatches.length > 1 || outputMatches.length > 1) throw new Error(`El audio “${request.audioOutputName}” no es inequívoco.`)
+    let track: NonNullable<AnimatorScene['audioTracks']>[number] | undefined = attachedMatches[0]
+    if (!track && outputMatches[0]) {
+      track = { id: uid(), filename: outputMatches[0].name, name: outputMatches[0].name.replace(/\.[^.]+$/, ''), kind: 'music' as const, startTime: 0, volume: 1 }
+    }
+    if (!track && !request.audioOutputName) {
+      const tracks = current.audioTracks ?? []
+      track = tracks.find(item => item.kind === 'music') ?? (tracks.length === 1 ? tracks[0] : undefined)
+    }
+    if (!track) throw new Error(request.audioOutputName
+      ? `No existe el output de audio “${request.audioOutputName}” ni está adjunto a la escena.`
+      : 'Adjunta o indica un MP3/WAV de la galería antes de aplicar ritmo.')
+
+    setRhythmBusy(true); setRhythmError(null)
+    try {
+      const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
+      if (!analysis.beats.length) throw new Error('No se detectó una rejilla estable de beats en esta pista.')
+      const map = buildSceneRhythmMap(analysis, track.startTime, current.duration, request.cueSource)
+      if (!map.cues.length) throw new Error('Los beats detectados no coinciden con la duración actual de la escena.')
+      const profile = target.type === 'camera' && request.profile === 'peek' ? 'camera-punch' : request.profile
+      updateScene(sceneValue => ({
+        ...sceneValue,
+        audioTracks: (sceneValue.audioTracks ?? []).some(item => item.id === track!.id)
+          ? sceneValue.audioTracks : [...(sceneValue.audioTracks ?? []), track!],
+        layers: sceneValue.layers.map(layer => layer.id === target.id
+          ? applySceneRhythmToLayer(layer, map, { profile, sceneDuration: sceneValue.duration, intensity: request.intensity }) as AnimatorLayer
+          : layer),
+      }))
+      setSelectedId(target.id); setSelectedKeyframeId(null); setSelectedEventId(null)
+      setRhythmTrackId(track.id); setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
+      setRhythmCueSource(request.cueSource); setRhythmProfile(profile); setRhythmIntensity(request.intensity)
+      setProgress(map.cues[0].time / current.duration)
+      const result = `He analizado ${track.name}: ${analysis.bpm.toFixed(1)} BPM, ${analysis.beats.length} beats y ${analysis.downbeats.length} downbeats. Apliqué ${map.cues.length} ${request.cueSource} con perfil ${profile} a “${target.name}” como keyframes editables.`
+      setMessage(result)
+      return result
+    } catch (error) {
+      setRhythmError(error instanceof Error ? error.message : 'No se pudo aplicar el ritmo solicitado por el Wizard.')
+      throw error
+    } finally {
+      setRhythmBusy(false)
+    }
+  }), [outputs, selectedId])
   const animateCutoutDialogue = () => {
     const text = cutoutDialogueText.trim()
     if (!text) { setMessage('Write the dialogue line before animating the mouth.'); return }
@@ -2608,29 +3009,52 @@ export function SceneAnimatorPanel() {
         <button type="button" disabled={!sceneAudioPrompt.trim() || sceneAudioBusy || playing || recording || publishing} onClick={() => void generateSceneSpeech()} className="w-full rounded border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100 disabled:opacity-40">{sceneAudioBusy ? 'Generating narration…' : `Generate speech · ${selectedSpeechModel}`}</button>
         {generatedAudio.length > 0 && <label className="block text-[9px] text-text-muted">Attach existing output<select defaultValue="" onChange={event => { const output = generatedAudio.find(item => item.name === event.target.value); if (output) attachSceneAudio(output.name, output.name.replace(/\.[^.]+$/, ''), 'audio'); event.currentTarget.value = '' }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">Choose audio…</option>{generatedAudio.map(output => <option key={output.name} value={output.name}>{output.name}</option>)}</select></label>}
         {(scene.audioTracks ?? []).length > 0 && <div className="space-y-1 rounded border border-amber-300/15 bg-black/15 p-1.5">{scene.audioTracks!.map(track => <div key={track.id} className="grid grid-cols-[1fr_44px_44px_18px] items-center gap-1 text-[8px]"><span title={track.prompt ?? track.name} className="truncate text-amber-100">{track.kind} · {track.name}</span><label className="text-text-muted">at<input aria-label={`Start ${track.name}`} type="number" min="0" max={scene.duration} step="0.1" value={track.startTime} onChange={event => { const startTime = Number(event.target.value); if (Number.isFinite(startTime)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, startTime: Math.max(0, Math.min(current.duration, startTime)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><label className="text-text-muted">vol<input aria-label={`Volume ${track.name}`} type="number" min="0" max="2" step="0.1" value={track.volume} onChange={event => { const volume = Number(event.target.value); if (Number.isFinite(volume)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, volume: Math.max(0, Math.min(2, volume)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><button type="button" title={`Remove ${track.name}`} onClick={() => updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).filter(item => item.id !== track.id) }))} className="mt-3 text-red-300"><Trash2 size={12} /></button></div>)}</div>}
+        {rhythmAudioTracks.length > 0 && <div className="space-y-1.5 rounded border border-violet-300/25 bg-violet-400/[.045] p-1.5">
+          <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-medium text-violet-100">Music rhythm → animation</span><span className="text-[7px] text-violet-200/70">BPM + beat grid</span></div>
+          <label className="block text-[8px] text-text-muted">Rhythm track<select value={selectedRhythmTrack?.id ?? ''} disabled={rhythmBusy || playing || recording || publishing} onChange={event => { setRhythmTrackId(event.target.value); setRhythmError(null) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[9px] disabled:opacity-40">{rhythmAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind} · {track.name}</option>)}</select></label>
+          <button type="button" disabled={!selectedRhythmTrack || rhythmBusy || playing || recording || publishing} onClick={() => void analyzeSceneRhythm()} className="w-full rounded border border-violet-300/45 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{rhythmBusy ? 'Detecting beats…' : activeRhythmAnalysis ? 'Analyze again' : 'Analyze BPM and beats'}</button>
+          {activeRhythmAnalysis && <div className="rounded border border-violet-300/15 bg-black/15 px-1.5 py-1 text-[8px] text-violet-100"><strong>{activeRhythmAnalysis.bpm.toFixed(1)} BPM</strong> · {activeRhythmAnalysis.beats.length} beats · {activeRhythmAnalysis.downbeats.length} downbeats · {activeRhythmAnalysis.sections.length} sections</div>}
+          <div className="grid grid-cols-2 gap-1">
+            <label className="text-[8px] text-text-muted">Trigger<select value={rhythmCueSource} onChange={event => setRhythmCueSource(event.target.value as SceneRhythmCueSource)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="beats">Every beat</option><option value="downbeats">Downbeats only</option></select></label>
+            <label className="text-[8px] text-text-muted">Reaction<select value={rhythmProfile} onChange={event => setRhythmProfile(event.target.value as SceneRhythmProfile)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="pulse">Scale pulse</option><option value="bounce">Bounce</option><option value="peek" disabled={selected?.type === 'camera'}>Peek on beat</option><option value="camera-punch">Camera punch</option></select></label>
+          </div>
+          <label className="block text-[8px] text-text-muted">Intensity · {Math.round(rhythmIntensity * 100)}%<input type="range" min="0" max="1" step="0.05" value={rhythmIntensity} onChange={event => setRhythmIntensity(Number(event.target.value))} className="mt-0.5 w-full accent-violet-400" /></label>
+          <button type="button" disabled={!activeRhythmAnalysis || !selected || selected.locked || rhythmBusy || playing || recording || publishing} onClick={applySceneRhythm} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">Apply to {selected?.name ?? 'selected layer'}</button>
+          <p className="text-[7px] leading-relaxed text-text-muted">The detected grid is offset with the track, then baked into normal keyframes shared by preview and MP4 export. “Peek” hides the selected object between beats and reveals it on each hit.</p>
+        </div>}
+        {rhythmError && <p className="text-[8px] text-red-300">{rhythmError}</p>}
         {sceneAudioError && <p className="text-[8px] text-red-300">{sceneAudioError}</p>}
       </div>
-      <div className="space-y-1.5 rounded border border-emerald-400/30 bg-emerald-400/[.04] p-2">
-        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-emerald-100">Character Kits</span><span className="text-[8px] text-emerald-200/75">Workspace library · rev {characterKitLibrary.revision}</span></div>
-        <p className="text-[8px] leading-relaxed text-text-muted">Keep one reviewed identity, pose pack, mouth set and pose-specific face anchors together. The LLM will only receive approved pieces.</p>
-        {Object.keys(characterKitLibrary.kits).length > 0 && <div className="grid grid-cols-3 gap-1">{Object.values(characterKitLibrary.kits).map(kit => <button key={kit.id} type="button" disabled={characterKitBusy} onClick={() => { setCharacterKitDraft(structuredClone(kit)); setCharacterKitPoseId('base'); setCharacterKitEditorTab('kit'); setCharacterKitError(null) }} className={`overflow-hidden rounded border p-1 text-left ${characterKitDraft?.id === kit.id ? 'border-emerald-300 bg-emerald-400/10' : 'border-border bg-black/10'}`}>{kit.base?.source && <img src={kit.base.source} alt="" className="mb-1 aspect-square w-full rounded bg-bg-active object-contain" />}<span className="block truncate text-[8px] text-emerald-100">{kit.name}</span><span className="block text-[7px] text-text-muted">{Object.keys(kit.poses).length + (kit.base ? 1 : 0)} poses · {Object.keys(kit.mouth).length} mouths</span></button>)}</div>}
-        {!characterKitDraft && <div className="space-y-1"><input value={characterKitName} onChange={event => setCharacterKitName(event.target.value)} placeholder="Character name" className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-[9px]" /><button type="button" disabled={!selected || characterKitBusy} onClick={createKitFromSelected} className="w-full rounded border border-emerald-300/40 bg-emerald-400/10 px-2 py-1 text-[9px] text-emerald-100 disabled:opacity-40">New kit from selected base layer</button></div>}
-        {characterKitDraft && <div className="space-y-1.5 rounded border border-emerald-300/20 bg-black/10 p-1.5">
-          <div className="grid grid-cols-[1fr_84px] gap-1"><input aria-label="Character Kit name" value={characterKitDraft.name} onChange={event => setCharacterKitDraft(current => current ? { ...current, name: event.target.value } : current)} className="rounded border border-border bg-bg-primary px-1.5 py-1 text-[9px]" /><select aria-label="Character Kit style" value={characterKitDraft.style} onChange={event => setCharacterKitDraft(current => current ? { ...current, style: event.target.value as CharacterKit['style'] } : current)} className="rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="cutout">Cutout</option><option value="children-illustration">Children</option><option value="anime-2d">Anime 2D</option></select></div>
-          <div className="grid grid-cols-2 gap-1"><button type="button" onClick={() => setCharacterKitEditorTab('kit')} className={`rounded border px-1 py-1 text-[8px] ${characterKitEditorTab === 'kit' ? 'border-emerald-300 bg-emerald-400/10 text-emerald-100' : 'border-border text-text-muted'}`}>Paso 1 · Kit & poses</button><button type="button" onClick={() => setCharacterKitEditorTab('face-rig')} className={`rounded border px-1 py-1 text-[8px] ${characterKitEditorTab === 'face-rig' ? 'border-emerald-300 bg-emerald-400/10 text-emerald-100' : 'border-border text-text-muted'}`}>Paso 2 · Labios / ojos</button></div>
-          {characterKitEditorTab === 'kit' ? <>
-          <div className="grid grid-cols-2 gap-1"><label className="text-[8px] text-text-muted">Pose id<input list="character-kit-pose-ids" value={characterKitPoseId} onChange={event => setCharacterKitPoseId(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]" /><datalist id="character-kit-pose-ids"><option value="base" />{Object.keys(characterKitDraft.poses).map(id => <option key={id} value={id} />)}</datalist></label><label className="text-[8px] text-text-muted">Alpha review<select value={characterKitAlphaStatus} onChange={event => setCharacterKitAlphaStatus(event.target.value as CharacterKitAlphaStatus)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="transparent">Transparent</option><option value="unknown">Unknown</option><option value="opaque">Opaque</option></select></label></div>
-          <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!selected} onClick={() => assignSelectedToKit('base')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Selected → base</button><button type="button" disabled={!selected || !characterKitPoseId.trim()} onClick={() => assignSelectedToKit('pose')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Selected → pose</button></div>
-          <div className="grid grid-cols-[72px_1fr_1fr] gap-1"><select aria-label="Character mouth state" value={characterKitMouthState} onChange={event => setCharacterKitMouthState(event.target.value as CharacterMouthState)} className="rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="closed">Closed</option><option value="small">Small</option><option value="wide">Wide</option><option value="round">Round</option></select><button type="button" disabled={!selected} onClick={() => assignSelectedToKit('mouth')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Selected → mouth</button><button type="button" disabled={!selected} onClick={() => assignSelectedToKit('blink')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Selected → blink</button></div>
-          <button type="button" disabled={!selected || !isCutoutFaceLayer(selected)} onClick={captureKitAnchor} className="w-full rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Capture selected face anchor for {characterKitPoseId || 'base'}</button>
-          <div className="text-[7px] text-text-muted">Approved: {characterKitDraft.base ? 'base' : 'no base'} · {Object.keys(characterKitDraft.poses).length} extra poses · {Object.keys(characterKitDraft.mouth).join(', ') || 'no mouths'} · {Object.keys(characterKitDraft.anchors).length} anchored poses</div>
-          </> : <CharacterKitFaceRigPanel kit={characterKitDraft} poseId={characterKitPoseId} disabled={characterKitBusy || playing || recording || publishing} onChange={setCharacterKitDraft} onStatus={setMessage} />}
-          <div className="grid grid-cols-[1fr_1fr_24px] gap-1"><button type="button" disabled={characterKitBusy || !characterKitDraft.base} onClick={() => void persistCharacterKit()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{characterKitBusy ? 'Saving…' : 'Save kit'}</button><button type="button" disabled={characterKitBusy || !characterKitDraft.base} onClick={mountCharacterKit} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Mount pose</button><button type="button" title="Delete kit only" disabled={characterKitBusy || !characterKitLibrary.kits[characterKitDraft.id]} onClick={() => void removeCharacterKit()} className="rounded border border-red-400/30 text-red-300 disabled:opacity-30"><Trash2 size={11} className="mx-auto" /></button></div>
-          <button type="button" onClick={() => { setCharacterKitDraft(null); setCharacterKitError(null) }} className="w-full text-[7px] text-text-muted">Close kit editor</button>
-        </div>}
-        {characterKitBusy && !characterKitDraft && <p className="text-[8px] text-emerald-100"><Loader2 size={9} className="mr-1 inline animate-spin" />Loading Character Kits…</p>}
-        {characterKitError && <p className="text-[8px] text-red-300">{characterKitError}</p>}
-      </div>
+      <CharacterKitLibraryPanel
+        library={characterKitLibrary}
+        draft={characterKitDraft}
+        poseId={characterKitPoseId}
+        tab={characterKitEditorTab}
+        busy={characterKitBusy}
+        error={characterKitError}
+        newName={characterKitName}
+        alphaStatus={characterKitAlphaStatus}
+        mouthState={characterKitMouthState}
+        hasSelectedLayer={Boolean(selected)}
+        selectedIsFace={Boolean(selected && isCutoutFaceLayer(selected))}
+        disabled={playing || recording || publishing}
+        onSelectKit={(kit, tab) => { setCharacterKitDraft(kit); setCharacterKitPoseId('base'); setCharacterKitEditorTab(tab); setCharacterKitError(null) }}
+        onNewNameChange={setCharacterKitName}
+        onCreateFromSelected={createKitFromSelected}
+        onDraftChange={setCharacterKitDraft}
+        onPoseIdChange={setCharacterKitPoseId}
+        onTabChange={setCharacterKitEditorTab}
+        onAlphaStatusChange={setCharacterKitAlphaStatus}
+        onMouthStateChange={setCharacterKitMouthState}
+        onAssignSelected={assignSelectedToKit}
+        onCaptureAnchor={captureKitAnchor}
+        onSave={() => void persistCharacterKit()}
+        onPutOnScene={mountCharacterKit}
+        onDelete={() => void removeCharacterKit()}
+        onCommit={kit => { setCharacterKitDraft(kit); void persistCharacterKitDraft(kit) }}
+        onClose={() => { setCharacterKitDraft(null); setCharacterKitError(null) }}
+        onStatus={setMessage}
+      />
       <div className="space-y-1.5 rounded border border-rose-300/30 bg-rose-400/[.04] p-2">
         <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-rose-100">Cutout dialogue</span><span className="text-[8px] text-rose-200/75">Editable mouth keyframes</span></div>
         <p className="text-[8px] leading-relaxed text-text-muted">With mouth overlays named <em>Open</em>, <em>Small</em>, <em>Wide</em>, <em>Round</em> and optionally <em>Closed</em>, turn a known line into a restrained speaking rhythm. Missing shapes safely fall back to Open.</p>

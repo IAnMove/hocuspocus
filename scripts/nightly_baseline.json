@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "notes": "Exact known historical failures. They are expected failures, never passes. A different failing test in the same file remains a regression.",
+  "failures": [
+    {
+      "id": "sceneToRecipe",
+      "file": "ui/tests/sceneToRecipe.test.mjs",
+      "test": "a speaking beat round-trips with its editable mouth provenance"
+    },
+    {
+      "id": "storyTimelinePolling",
+      "file": "ui/tests/storyTimelinePolling.test.tsx",
+      "test": "successful manual timeline refresh clears an error and cancels retry polling"
+    },
+    {
+      "id": "videoEditorHandoff",
+      "file": "ui/tests/videoEditorHandoff.test.tsx",
+      "test": "Series handoff validates all sources before replacing the draft and can retry"
+    }
+  ]
+}

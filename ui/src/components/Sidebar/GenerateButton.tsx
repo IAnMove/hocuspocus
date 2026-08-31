@@ -78,6 +78,7 @@ export function GenerateButton() {
     return (
       <button
         disabled
+        data-wizard-anchor="generate"
         title={title}
         className="px-4 py-2 rounded-lg flex items-center gap-1.5 bg-amber-500/20 text-indicator-warning cursor-not-allowed text-xs font-medium whitespace-nowrap"
       >
@@ -90,6 +91,7 @@ export function GenerateButton() {
   return (
     <button
       onClick={handleClick}
+      data-wizard-anchor="generate"
       disabled={cooldown || needsScheduledPrompts}
       className={`px-4 py-2 rounded-lg flex items-center gap-1.5 font-medium text-xs transition-all whitespace-nowrap ${
         cooldown || needsScheduledPrompts

@@ -387,7 +387,42 @@ Open this in **3D Video** (import scene JSON). Assign missing assets if paths 40
 
 ---
 
-## 10. Decision tree
+## 10. Music rhythm → editable animation
+
+The compositor can reuse the Music Video Director's real audio analyzer. It
+extracts BPM, beat positions with normalized strength, heuristic downbeats,
+an onset-energy envelope and coarse song sections from an attached MP3/WAV.
+
+In **3D Video → Scene audio**:
+
+1. Attach an existing song/audio output and set its scene start time.
+2. Select the 3D object, image/overlay, video layer or camera that should react.
+3. Under **Music rhythm → animation**, select the track and click
+   **Analyze BPM and beats**.
+4. Choose **Every beat** or **Downbeats only**.
+5. Choose a reaction:
+   - **Scale pulse** — preserves the current path and accents scale.
+   - **Bounce** — adds a short vertical/scale hit.
+   - **Peek on beat** — hides the object between beats and makes it appear on
+     every hit (the direct “something peeks out on each beat” use case).
+   - **Camera punch** — a deliberately restrained zoom accent.
+6. Set intensity and click **Apply to _selected layer_**.
+
+The audio track's `startTime` is applied to the beat grid before keyframes are
+created. Existing layer motion is sampled and baked together with the reaction
+into ordinary `SceneKeyframe` records, so preview, timeline edits, save/import
+and MP4 capture all use the same deterministic path. Applying rhythm is an
+authoring operation: use Undo if you want the previous transform timeline.
+
+Long/high-BPM inputs are capped to a safe number of cues. Downbeats are a
+four-beat heuristic anchored to strong beats, not a full meter classifier yet.
+The analyzer already returns onset energy and song sections; mapping those to
+continuous effect density, lighting and section-level choreography is the next
+stage, not silently inferred by this first control.
+
+---
+
+## 11. Decision tree
 
 ```
 Need spoken acting / a real location evolving?
@@ -409,7 +444,7 @@ Need both in one sequence?
 
 ---
 
-## 11. Phase 2 / 3
+## 12. Phase 2 / 3
 
 **Phase 2 — built in the 3D Video tab (Recipe runner)**
 
@@ -422,20 +457,24 @@ Do this **in the browser tab**, not as a Python overnight script. UI: `SceneReci
 5. GPU jobs and Hunyuan poll with timeouts; **Cancel** aborts the run. If Lab dies (segfault), the runner errors instead of spinning forever.
 6. After compose, switch shots in the recipe panel without regenerating the mesh. A recipe rig `clip` is mounted into the Scene Animator and disables unintended turntable spin.
 
-Keep the 3D Video tab visible while it records. WebM is the recorded format; import it in Video Editor to join with H3 MP4s.
+Keep the 3D Video tab visible while it records. Browser capture is validated
+and published as H.264 MP4; import that output in Video Editor to join it with
+H3 clips.
 
 **Phase 3 — not built.** Director marks some shots `tool: compositor` inside Story Lab / trailers / videoclips / series only after phase 2 clips are in the gallery.
 
 ---
 
-## 12. Files to read next
+## 13. Files to read next
 
 | Path | Why |
 |---|---|
 | `ui/src/types/index.ts` | `Scene` / `SceneLayer` schema |
 | `ui/src/components/Sidebar/SceneAnimatorPanel.tsx` | Presets, atmosphere, record, save |
 | `ui/src/lib/sceneTimeline.ts` | Evaluation of x/y/scale over time |
+| `ui/src/lib/sceneRhythm.ts` | Beat/downbeat map and deterministic rhythm keyframes |
 | `ui/src/lib/sceneFile.ts` | Export/import JSON |
+| `app/services/audio_analysis.py` | Librosa BPM, beats, downbeats, onset envelope and sections |
 | `app/services/model3d_service.py` | Hunyuan models and presets |
 | `app/services/rig_service.py` | Rig profiles and clips |
 | `docs/minimax-h3-prompting.md` | H3 prompt dialect |

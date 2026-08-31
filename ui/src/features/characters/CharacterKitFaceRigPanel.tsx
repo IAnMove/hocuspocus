@@ -20,12 +20,13 @@ import {
   faceRigGenerationRequests,
   faceRigOverlayPreviewStyle,
   faceRigVisemeAt,
+  isFaceRigEyeState,
+  lockFaceRigEyePlacement,
   lockFaceRigMouthPlacement,
   previewFaceRigDialogue,
   previewFaceRigDialogueFromAudio,
   registerCleanedFaceRigAsset,
   registerGeneratedFaceRigAsset,
-  setFaceRigAnchor,
   setFaceRigReviewState,
   type FaceRigMouthPresetPack,
   type CharacterKitFaceRigState,
@@ -33,6 +34,7 @@ import {
   type FaceRigDialogueViseme,
 } from '../../lib/characterKitFaceRig'
 import { registerGeneratedKitPose, registerWipedKitPose, type CharacterFaceAnchor, type CharacterKit, type CharacterKitAsset, type CharacterMouthState } from '../../lib/characterKit'
+import { characterKitNextStep, characterKitPoseLabel } from './characterKitGuide'
 import { useStore } from '../../stores/useStore'
 
 type Props = {
@@ -40,22 +42,29 @@ type Props = {
   poseId: string
   disabled?: boolean
   onChange: (kit: CharacterKit) => void
+  onCommit?: (kit: CharacterKit) => void
   onStatus?: (message: string) => void
 }
 
 const LABELS: Record<CharacterKitFaceRigState, string> = {
-  closed: 'Closed',
-  small: 'Small',
-  wide: 'Wide',
-  round: 'Round / O',
-  blink: 'Blink',
+  closed: 'Cerrada',
+  small: 'Pequeña',
+  wide: 'Abierta',
+  round: 'Redonda',
+  'open-eyes': 'Ojos',
+  blink: 'Cerrar ojos',
 }
 
 function assetFor(kit: CharacterKit, state: CharacterKitFaceRigState): CharacterKitAsset | undefined {
-  return state === 'blink' ? kit.eyes.blink : kit.mouth[state as CharacterMouthState]
+  if (state === 'open-eyes') return kit.eyes.open
+  if (state === 'blink') return kit.eyes.blink
+  return kit.mouth[state as CharacterMouthState]
 }
 
 function withAlphaStatus(kit: CharacterKit, state: CharacterKitFaceRigState, alphaStatus: CharacterKitAsset['alphaStatus']): CharacterKit {
+  if (state === 'open-eyes') {
+    return kit.eyes.open ? { ...kit, eyes: { ...kit.eyes, open: { ...kit.eyes.open, alphaStatus } } } : kit
+  }
   if (state === 'blink') {
     return kit.eyes.blink ? { ...kit, eyes: { ...kit.eyes, blink: { ...kit.eyes.blink, alphaStatus } } } : kit
   }
@@ -77,7 +86,7 @@ async function inspectSourceAlpha(source: string) {
   } finally { bitmap.close() }
 }
 
-export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChange, onStatus }: Props) {
+export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChange, onCommit, onStatus }: Props) {
   const imageModel = useStore(state => state.selectedModelPerMode.image || '')
   const speechModel = useStore(state => state.selectedModelPerAudioSubMode.speech ?? 'kugelaudio_0_open')
   const workspace = useStore(state => state.activeWorkspace)
@@ -113,12 +122,20 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     extra: extraNotes,
   })
   const playbackState: CharacterKitFaceRigState = holdBlink ? 'blink' : (liveViseme?.sourceState ?? selectedState)
-  const playbackAsset = playbackState === 'blink' ? kit.eyes.blink ?? selectedAsset : kit.mouth[playbackState] ?? selectedAsset
+  const playbackAsset = playbackState === 'open-eyes'
+    ? kit.eyes.open ?? selectedAsset
+    : playbackState === 'blink'
+      ? kit.eyes.blink ?? selectedAsset
+      : kit.mouth[playbackState] ?? selectedAsset
   const playbackAnchor = holdBlink || liveViseme ? faceRigAnchorFor(kit, poseId, playbackState) : draftAnchor
+  const draftAnchorRef = useRef(draftAnchor)
+  draftAnchorRef.current = draftAnchor
   const poseApproved = Boolean((poseId === 'base' ? kit.base : kit.poses[poseId])?.reviewState === 'approved')
   const placement = useMemo(() => assessFaceRigPlacement(draftAnchor, selectedState), [draftAnchor, selectedState])
   const overlayStyle = useMemo(() => faceRigOverlayPreviewStyle(playbackAnchor), [playbackAnchor])
   const mouthRegion = useMemo(() => faceRigRegionFromAnchor(draftAnchor), [draftAnchor])
+  const nextStep = useMemo(() => characterKitNextStep(kit, poseId), [kit, poseId])
+  const poseName = characterKitPoseLabel(poseId)
   const dirtyAnchor = JSON.stringify(draftAnchor) !== JSON.stringify(savedAnchor)
   dialoguePreviewRef.current = dialoguePreview
 
@@ -209,7 +226,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
         workspace,
       })
       onChange(next)
-      onStatus?.('Paso 1: pose generated as pending. Approve it in Kit & poses, then generate mouths.')
+      onStatus?.(`Cuerpo “${poseName}” generado. Apruébalo en Cuerpos y luego coloca las bocas.`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Character pose generation failed.')
     } finally { setBusyState(null) }
@@ -219,7 +236,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     setBusyState(selectedState); setError(null)
     try {
       const next = await generateState(persistLook(kit), selectedState)
-      onChange(next); onStatus?.(`${LABELS[selectedState]} generated as pending review. Drag it onto the lips, then lock all mouths.`)
+      onChange(next); onStatus?.(`${LABELS[selectedState]} lista como pendiente. Arrástrala a los labios y pulsa Bloquear bocas.`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Face Rig generation failed.')
     } finally { setBusyState(null) }
@@ -230,7 +247,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     try {
       let next = persistLook(kit)
       const missing = CHARACTER_FACE_RIG_STATES.filter(state => !assetFor(next, state) || assetFor(next, state)?.reviewState === 'rejected')
-      if (!missing.length) throw new Error('The five Face Rig states already exist. Generate one selected state to replace it.')
+      if (!missing.length) throw new Error('Ya están todas las piezas. Genera una seleccionada para sustituirla.')
       for (const state of missing) {
         onStatus?.(`Generating Face Rig ${LABELS[state]}…`)
         next = await generateState(next, state)
@@ -259,7 +276,11 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
 
   const updateAnchorField = (field: keyof CharacterFaceAnchor, value: number) => {
     if (!Number.isFinite(value)) return
-    setDraftAnchor(current => ({ ...current, [field]: value }))
+    setDraftAnchor(current => {
+      const next = { ...current, [field]: value }
+      draftAnchorRef.current = next
+      return next
+    })
   }
 
   const planDialogue = () => {
@@ -275,8 +296,18 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   }
 
   const playDialogue = () => {
-    const preview = dialoguePreviewRef.current
-    if (!preview) { planDialogue(); return }
+    let preview = dialoguePreviewRef.current
+    if (!preview) {
+      try {
+        preview = previewFaceRigDialogue(kit, dialogueText)
+        setDialoguePreview(preview)
+        dialoguePreviewRef.current = preview
+        setError(null)
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Could not plan this Face Rig line.')
+        return
+      }
+    }
     const token = ++playTokenRef.current
     const started = performance.now()
     const audio = audioRef.current
@@ -348,22 +379,29 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     const dy = ((event.clientY - drag.startY) / Math.max(1, box.clientHeight)) * 100
     if (drag.mode === 'resize') {
       const region = faceRigRegionFromAnchor(drag.origin)
-      setDraftAnchor(faceRigAnchorFromRegion({
+      const next = faceRigAnchorFromRegion({
         ...region,
         width: Math.max(1, region.width + dx),
         height: Math.max(1, region.height + dy),
-      }))
+      })
+      draftAnchorRef.current = next
+      setDraftAnchor(next)
       return
     }
-    setDraftAnchor({
+    const next = {
       ...drag.origin,
       offsetX: drag.origin.offsetX + dx,
       offsetY: drag.origin.offsetY + dy,
-    })
+    }
+    draftAnchorRef.current = next
+    setDraftAnchor(next)
   }
 
   const onOverlayPointerUp = (event: ReactPointerEvent<HTMLImageElement>) => {
-    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null
+    if (dragRef.current?.pointerId === event.pointerId) {
+      dragRef.current = null
+      commitPlacement()
+    }
   }
 
   const applyPreset = () => {
@@ -379,31 +417,41 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     }
   }
 
-  const savePlacement = () => {
+  const commitPlacement = (source = kit, record = false) => {
     try {
-      const next = setFaceRigAnchor(persistLook(kit), poseId, selectedState, draftAnchor)
+      const anchor = draftAnchorRef.current
+      const next = isFaceRigEyeState(selectedState)
+        ? lockFaceRigEyePlacement(persistLook(source), poseId, anchor, record)
+        : lockFaceRigMouthPlacement(persistLook(source), poseId, anchor, record)
       onChange(next)
-      onStatus?.(`${LABELS[selectedState]} placement saved for ${poseId || 'base'}. It stays pending until you approve.`)
+      onCommit?.(next)
+      onStatus?.(isFaceRigEyeState(selectedState)
+        ? `Ojos guardados en “${poseName}”.`
+        : `Boca guardada en “${poseName}”. Preview ya debería moverla.`)
       setError(null)
+      return next
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save this Face Rig placement.')
+      return source
     }
   }
 
+  const savePlacement = () => {
+    commitPlacement(kit, true)
+  }
+
   const lockMouths = () => {
-    try {
-      const next = lockFaceRigMouthPlacement(persistLook(kit), poseId, draftAnchor)
-      onChange(next)
-      onStatus?.(`Locked this height and size on closed, small, wide and round for ${poseId || 'base'}.`)
-      setError(null)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not lock this mouth placement.')
-    }
+    commitPlacement(kit, true)
   }
 
   const nudge = (field: keyof CharacterFaceAnchor, delta: number) => {
     if (disabled || Boolean(busyState)) return
-    setDraftAnchor(current => ({ ...current, [field]: current[field] + delta }))
+    setDraftAnchor(current => {
+      const next = { ...current, [field]: current[field] + delta }
+      draftAnchorRef.current = next
+      return next
+    })
+    window.setTimeout(() => commitPlacement(), 0)
   }
 
   const wipeMouthZone = async () => {
@@ -451,8 +499,10 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
           reviewState: current?.reviewState ?? 'pending',
           workspace,
         })
-        onChange(lockFaceRigMouthPlacement(next, poseId || 'base', draftAnchor))
-        onStatus?.('Wiped the marked mouth zone on this pose. Lock is saved. Original pose stays in provenance.')
+        const locked = lockFaceRigMouthPlacement(next, poseId || 'base', draftAnchorRef.current, false)
+        onChange(locked)
+        onCommit?.(locked)
+        onStatus?.(`Boca pintada limpiada en “${poseName}”. La caja ya está guardada.`)
       } finally { bitmap.close() }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not wipe the mouth zone.')
@@ -482,28 +532,34 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   }
 
   return <div className="space-y-1.5">
-    <p className="text-[8px] leading-relaxed text-text-muted">Two steps: first the puppet body, then lips and blinks you drag onto the face. Pick a style and a couple of traits; the prompts are already written. Recipes never see pending pieces.</p>
-    <div className="space-y-1 rounded border border-emerald-300/20 bg-black/15 p-1.5">
-      <p className="text-[8px] font-medium text-emerald-100">Paso 1 · Personaje</p>
-      <p className="text-[7px] text-text-muted">Style + traits only. Generate a full-body cutout, then approve it in Kit & poses.</p>
-      <div className="flex flex-wrap gap-1">{FACE_RIG_STYLE_PRESETS.map(preset => (
-        <button key={preset.id} type="button" disabled={disabled || Boolean(busyState)} onClick={() => setStyleId(preset.id)} className={`rounded border px-1 py-0.5 text-[7px] ${styleId === preset.id ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{preset.label}</button>
-      ))}</div>
-      <div className="flex flex-wrap gap-1">{FACE_RIG_TRAIT_CHIPS.map(trait => (
-        <button key={trait} type="button" disabled={disabled || Boolean(busyState)} onClick={() => toggleTrait(trait)} className={`rounded border px-1 py-0.5 text-[7px] ${traits.includes(trait) ? 'border-amber-300 bg-amber-400/15 text-amber-100' : 'border-border text-text-muted'}`}>{trait}</button>
-      ))}</div>
-      <label className="block text-[8px] text-text-muted">Extra notes (optional)<textarea value={extraNotes} disabled={disabled || Boolean(busyState)} onChange={event => setExtraNotes(event.target.value)} rows={2} placeholder="Only what the chips do not cover…" className="mt-0.5 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px]" /></label>
-      <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void generatePose()} className="w-full rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === 'pose' ? 'Generating character…' : poseApproved ? 'Regenerate pose (stays pending)' : 'Generate full-body cutout'}</button>
-      <p className="text-[7px] text-text-secondary">{poseApproved ? `Approved pose: ${poseId || 'base'}. Continue with mouths.` : 'Approve the pose in Kit & poses before generating Face Rig overlays.'}</p>
-    </div>
-    {presetPacks.length > 0 && <div className="grid grid-cols-[1fr_auto] gap-1">
-      <select aria-label="Mouth style pack" value={presetId} disabled={disabled || Boolean(busyState)} onChange={event => setPresetId(event.target.value)} className="rounded border border-border bg-bg-primary px-1 py-1 text-[8px]">
-        {presetPacks.map(pack => <option key={pack.id} value={pack.id}>{pack.label}</option>)}
-      </select>
-      <button type="button" disabled={disabled || Boolean(busyState) || !presetId} onClick={applyPreset} className="rounded border border-violet-300/40 bg-violet-400/10 px-1 py-1 text-[8px] text-violet-100 disabled:opacity-40">Apply pack</button>
-    </div>}
-    <p className="text-[8px] font-medium text-emerald-100">Paso 2 · Labios y parpadeo</p>
-    <p className="text-[7px] text-text-muted">Mark the mouth box on the pose first. If the puppet still has a painted mouth, wipe that zone so overlays sit on skin.</p>
+    <p className="text-[10px] font-medium text-emerald-100">Bocas sobre “{poseName}”</p>
+    <ol className="list-decimal space-y-0.5 pl-4 text-[9px] leading-relaxed text-text-secondary">
+      <li>Arrastra la caja amarilla hasta tapar los labios. Al soltar se guarda sola.</li>
+      <li>Si el dibujo todavía tiene boca pintada, pulsa Limpiar zona de la boca.</li>
+      <li>Los ojos abiertos se quedan siempre; Cerrar ojos solo parpadea encima. Si el cuerpo ya tiene ojos, genera solo Cerrar ojos.</li>
+      <li>Poner en la escena y Preview. La boca y el parpadeo se animan solos.</li>
+    </ol>
+    <p className="text-[9px] text-amber-100">{nextStep.title}</p>
+    <details className="rounded border border-border/70 bg-black/10 px-1.5 py-1">
+      <summary className="cursor-pointer text-[9px] text-text-muted">Crear un cuerpo o bocas nuevas</summary>
+      <div className="mt-1 space-y-1">
+        <p className="text-[8px] text-text-muted">Estilo y rasgos solo para generar. Luma y Brin ya existen: no hace falta esto para colocarles la boca.</p>
+        <div className="flex flex-wrap gap-1">{FACE_RIG_STYLE_PRESETS.map(preset => (
+          <button key={preset.id} type="button" disabled={disabled || Boolean(busyState)} onClick={() => setStyleId(preset.id)} className={`rounded border px-1 py-0.5 text-[8px] ${styleId === preset.id ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{preset.label}</button>
+        ))}</div>
+        <div className="flex flex-wrap gap-1">{FACE_RIG_TRAIT_CHIPS.map(trait => (
+          <button key={trait} type="button" disabled={disabled || Boolean(busyState)} onClick={() => toggleTrait(trait)} className={`rounded border px-1 py-0.5 text-[8px] ${traits.includes(trait) ? 'border-amber-300 bg-amber-400/15 text-amber-100' : 'border-border text-text-muted'}`}>{trait}</button>
+        ))}</div>
+        <label className="block text-[8px] text-text-muted">Notas extra (opcional)<textarea value={extraNotes} disabled={disabled || Boolean(busyState)} onChange={event => setExtraNotes(event.target.value)} rows={2} placeholder="Solo lo que no cubren las etiquetas…" className="mt-0.5 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px]" /></label>
+        <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void generatePose()} className="w-full rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[9px] text-emerald-100 disabled:opacity-40">{busyState === 'pose' ? 'Generando cuerpo…' : poseApproved ? 'Regenerar cuerpo (queda pendiente)' : 'Generar recorte de cuerpo'}</button>
+        {presetPacks.length > 0 && <div className="grid grid-cols-[1fr_auto] gap-1">
+          <select aria-label="Pack de estilo de boca" value={presetId} disabled={disabled || Boolean(busyState)} onChange={event => setPresetId(event.target.value)} className="rounded border border-border bg-bg-primary px-1 py-1 text-[8px]">
+            {presetPacks.map(pack => <option key={pack.id} value={pack.id}>{pack.label}</option>)}
+          </select>
+          <button type="button" disabled={disabled || Boolean(busyState) || !presetId} onClick={applyPreset} className="rounded border border-violet-300/40 bg-violet-400/10 px-1 py-1 text-[8px] text-violet-100 disabled:opacity-40">Usar pack</button>
+        </div>}
+      </div>
+    </details>
     {poseSource && <div className="space-y-1 rounded border border-amber-300/25 bg-black/20 p-1">
       <div
         ref={previewRef}
@@ -535,13 +591,13 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
           />
         </div>
       </div>
-      <p className="text-[7px] text-text-secondary">Box {mouthRegion.width.toFixed(1)}×{mouthRegion.height.toFixed(1)}% · drag to move · corner to resize</p>
+      <p className="text-[8px] text-text-secondary">Arrastra la caja. La esquina cambia el tamaño.</p>
       <div className="grid grid-cols-2 gap-1">
-        <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void wipeMouthZone()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">{busyState === 'wipe' ? 'Wiping mouth…' : 'Clean mouth zone'}</button>
-        <button type="button" disabled={disabled || Boolean(busyState)} onClick={lockMouths} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Lock all mouths</button>
+        <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void wipeMouthZone()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1.5 text-[10px] text-amber-100 disabled:opacity-40">{busyState === 'wipe' ? 'Limpiando…' : 'Limpiar zona de la boca'}</button>
+        <button type="button" disabled={disabled || Boolean(busyState)} onClick={lockMouths} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1.5 text-[10px] text-emerald-100 disabled:opacity-40">Bloquear bocas</button>
       </div>
     </div>}
-    <div className="grid grid-cols-5 gap-1">{CHARACTER_FACE_RIG_STATES.map(state => {
+    <div className="grid grid-cols-3 gap-1">{CHARACTER_FACE_RIG_STATES.map(state => {
       const asset = assetFor(kit, state)
       return <button key={state} type="button" disabled={disabled || Boolean(busyState)} onClick={() => setSelectedState(state)} className={`rounded border px-1 py-1 text-[7px] ${selectedState === state ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{LABELS[state]}<span className="block text-[6px]">{asset?.reviewState ?? 'missing'}</span></button>
     })}</div>
@@ -549,10 +605,10 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     {assetFor(kit, selectedState) && <div className="space-y-1 rounded border border-emerald-300/20 bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px] p-1.5">
       <img src={assetFor(kit, selectedState)!.source} alt={`${kit.name} ${LABELS[selectedState]}`} className="mx-auto h-28 w-full object-contain" />
       <div className="flex items-center justify-between text-[7px]"><span className="truncate text-text-secondary">{assetFor(kit, selectedState)!.name}</span><span className="text-emerald-100">{assetFor(kit, selectedState)!.alphaStatus} · {assetFor(kit, selectedState)!.reviewState}</span></div>
-      <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void cleanSelected()} className="w-full rounded border border-cyan-300/40 bg-cyan-400/10 px-1 py-1 text-[8px] text-cyan-100 disabled:opacity-40">{busyState === 'cleanup' ? 'Cleaning overlay…' : 'Clean background / halo'}</button>
+      <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void cleanSelected()} className="w-full rounded border border-cyan-300/40 bg-cyan-400/10 px-1 py-1 text-[8px] text-cyan-100 disabled:opacity-40">{busyState === 'cleanup' ? 'Limpiando recorte…' : 'Limpiar fondo de esta boca'}</button>
       <div className="flex gap-1 text-[7px] text-text-muted">
-        <button type="button" onClick={() => setShowOverlay(value => !value)} className="rounded border border-border px-1 py-0.5">{showOverlay ? 'Hide overlay' : 'Show overlay'}</button>
-        <button type="button" onClick={() => setCheckerboard(value => !value)} className="rounded border border-border px-1 py-0.5">{checkerboard ? 'Solid' : 'Checker'}</button>
+        <button type="button" onClick={() => setShowOverlay(value => !value)} className="rounded border border-border px-1 py-0.5">{showOverlay ? 'Ocultar boca' : 'Ver boca'}</button>
+        <button type="button" onClick={() => setCheckerboard(value => !value)} className="rounded border border-border px-1 py-0.5">{checkerboard ? 'Fondo liso' : 'Cuadros'}</button>
       </div>
       <div className="space-y-1 rounded border border-border/70 bg-black/20 p-1">
         <div className="grid grid-cols-4 gap-1">
@@ -566,41 +622,41 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
           <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('scale', 0.005)} className="rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Bigger</button>
         </div>
         <div className="grid grid-cols-2 gap-1 text-[7px] text-text-muted">
-          <label>X<input type="range" min={-40} max={40} step={0.5} value={draftAnchor.offsetX} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('offsetX', Number(event.target.value))} className="w-full" /></label>
-          <label>Y (down →)<input type="range" min={-50} max={20} step={0.5} value={draftAnchor.offsetY} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('offsetY', Number(event.target.value))} className="w-full" /></label>
-          <label>Scale<input type="range" min={0.01} max={0.45} step={0.001} value={draftAnchor.scale} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('scale', Number(event.target.value))} className="w-full" /></label>
-          <label>Rotate<input type="range" min={-45} max={45} step={0.5} value={draftAnchor.rotation} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('rotation', Number(event.target.value))} className="w-full" /></label>
+          <label>X<input type="range" min={-40} max={40} step={0.5} value={draftAnchor.offsetX} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('offsetX', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
+          <label>Y (down →)<input type="range" min={-50} max={20} step={0.5} value={draftAnchor.offsetY} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('offsetY', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
+          <label>Scale<input type="range" min={0.01} max={0.45} step={0.001} value={draftAnchor.scale} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('scale', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
+          <label>Rotate<input type="range" min={-45} max={45} step={0.5} value={draftAnchor.rotation} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('rotation', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
         </div>
         <p className="text-[7px] text-text-secondary">x {draftAnchor.offsetX.toFixed(2)} · y {draftAnchor.offsetY.toFixed(2)} · scale {draftAnchor.scale.toFixed(4)} · rot {draftAnchor.rotation.toFixed(1)}°</p>
         {placement.warnings.map(warning => <p key={warning} className="text-[7px] text-amber-200">{warning}</p>)}
         <div className="grid grid-cols-2 gap-1">
-          <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} onClick={savePlacement} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Save this state</button>
-          <button type="button" disabled={disabled || Boolean(busyState)} onClick={lockMouths} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">Lock all mouths</button>
+          <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} onClick={savePlacement} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Guardar esta boca</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} onClick={lockMouths} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">Bloquear bocas</button>
         </div>
         <div className="grid grid-cols-2 gap-1">
           <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} onClick={() => setDraftAnchor(savedAnchor)} className="rounded border border-border px-1 py-1 text-[8px] text-text-muted disabled:opacity-40">Reset</button>
           <button type="button" disabled={disabled || Boolean(busyState) || !kit.eyes.blink?.source} onClick={flashBlink} className="rounded border border-cyan-300/40 px-1 py-1 text-[8px] text-cyan-100 disabled:opacity-40">{holdBlink ? 'Blinking…' : 'Flash blink 0.4s'}</button>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || assetFor(kit, selectedState)!.alphaStatus !== 'transparent'} onClick={() => review(selectedState, true)} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Approve transparent</button><button type="button" disabled={disabled || Boolean(busyState)} onClick={() => review(selectedState, false)} className="rounded border border-red-300/30 px-1 py-1 text-[8px] text-red-200">Reject</button></div>
+      <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || assetFor(kit, selectedState)!.alphaStatus !== 'transparent'} onClick={() => review(selectedState, true)} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Aprobar transparente</button><button type="button" disabled={disabled || Boolean(busyState)} onClick={() => review(selectedState, false)} className="rounded border border-red-300/30 px-1 py-1 text-[8px] text-red-200">Rechazar</button></div>
     </div>}
-    <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || !selectedRequest} onClick={() => void generateSelected()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === selectedState ? `Generating ${LABELS[selectedState]}…` : `Generate / replace ${LABELS[selectedState]}`}</button><button type="button" disabled={disabled || Boolean(busyState) || !requests.length} onClick={() => void generateMissingPack()} className="rounded border border-emerald-300/30 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === 'pack' ? 'Generating pack…' : 'Generate missing pack'}</button></div>
-    <div className="space-y-1 rounded border border-amber-300/20 bg-black/15 p-1.5">
-      <p className="text-[8px] text-text-muted">Short dialogue preview. This does not save visemes or audio into the kit.</p>
-      <textarea value={dialogueText} disabled={disabled || Boolean(busyState)} onChange={event => setDialogueText(event.target.value)} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px]" />
+    <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || !selectedRequest} onClick={() => void generateSelected()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === selectedState ? `Generando ${LABELS[selectedState]}…` : `Generar / cambiar ${LABELS[selectedState]}`}</button><button type="button" disabled={disabled || Boolean(busyState) || !requests.length} onClick={() => void generateMissingPack()} className="rounded border border-emerald-300/30 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === 'pack' ? 'Generando pack…' : 'Generar las que faltan'}</button></div>
+    <details className="space-y-1 rounded border border-amber-300/20 bg-black/15 p-1.5">
+      <summary className="cursor-pointer text-[9px] text-text-muted">Probar una frase (no se guarda)</summary>
+      <textarea value={dialogueText} disabled={disabled || Boolean(busyState)} onChange={event => setDialogueText(event.target.value)} rows={2} className="mt-1 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px]" />
       <div className="grid grid-cols-2 gap-1">
-        <button type="button" disabled={disabled || Boolean(busyState) || !dialogueText.trim()} onClick={planDialogue} className="rounded border border-amber-300/40 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">Plan visemes</button>
-        <button type="button" disabled={disabled || Boolean(busyState) || !dialogueText.trim()} onClick={() => void speakDialogue()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">{busyState === 'dialogue' ? 'Generating speech…' : `Speak 3s · ${speechModel}`}</button>
+        <button type="button" disabled={disabled || Boolean(busyState) || !dialogueText.trim()} onClick={planDialogue} className="rounded border border-amber-300/40 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">Ver ritmo de bocas</button>
+        <button type="button" disabled={disabled || Boolean(busyState) || !dialogueText.trim()} onClick={() => void speakDialogue()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">{busyState === 'dialogue' ? 'Generando voz…' : 'Hablar 3 s'}</button>
       </div>
       {dialoguePreview && <div className="space-y-1">
         <p className="text-[7px] text-text-secondary">{dialoguePreview.visemes.length} beats · {dialoguePreview.end.toFixed(1)}s · available {dialoguePreview.available.join(', ') || 'none'}</p>
         {dialoguePreview.missing.length > 0 && <p className="text-[7px] text-amber-200">Missing {dialoguePreview.missing.join(', ')}; those beats use {dialoguePreview.visemes.find(beat => beat.fallback)?.sourceState ?? 'the remaining mouth'} as fallback.</p>}
         <div className="flex flex-wrap gap-1">{dialoguePreview.visemes.map((beat, index) => <span key={`${beat.start}-${index}`} className={`rounded border px-1 py-0.5 text-[6px] ${liveViseme && liveViseme.start === beat.start && liveViseme.state === beat.state ? 'border-amber-300 text-amber-100' : 'border-border text-text-muted'}`}>{beat.state}{beat.fallback ? `→${beat.sourceState}` : ''}</span>)}</div>
-        <button type="button" disabled={disabled || Boolean(busyState)} onClick={playDialogue} className="w-full rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Play visemes</button>
+        <button type="button" disabled={disabled || Boolean(busyState)} onClick={playDialogue} className="w-full rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Reproducir bocas</button>
       </div>}
       {dialogueAudio && <audio ref={audioRef} src={getFileUrl(dialogueAudio, workspace)} preload="auto" className="hidden" />}
-    </div>
-    <p className="text-[7px] text-text-muted">Model: {imageModel || 'current HocusPocus image model'} · reference: {poseId || 'base'}. Drag the overlay or use the sliders, save placement, then approve. Recipes never see pending pieces.</p>
-    {error && <p className="text-[8px] text-red-300">{error}</p>}
+    </details>
+    <p className="text-[8px] text-text-muted">Hasta que pulses Guardar, los cambios no están en la biblioteca. El LLM no ve piezas pendientes.</p>
+    {error && <p className="text-[9px] text-red-300">{error}</p>}
   </div>
 }

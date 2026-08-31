@@ -6,6 +6,8 @@ export type StoryWritingProvider =
   | 'minimax'
   | 'openai'
   | 'openai-compatible'
+  | 'ollama'
+  | 'grok'
 
 export type StoryImageProvider = 'maestro' | 'minimax'
 export type StoryApprovalState = 'draft' | 'approved'
