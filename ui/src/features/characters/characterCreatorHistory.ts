@@ -76,3 +76,42 @@ export function attachCharacterCreatorMesh(
 ): CharacterCreatorHistoryEntry[] {
   return history.map(item => item.videoName === videoName ? { ...item, hunyuanGlb } : item)
 }
+
+export type CharacterCreatorHistoryStorage = {
+  getItem: (key: string) => string | null
+  setItem: (key: string, value: string) => void
+}
+
+/** Merge a sheet into the origin workspace store, never the in-memory list of another workspace. */
+export function rememberCharacterCreatorSheetForWorkspace(
+  storage: CharacterCreatorHistoryStorage,
+  workspace: string,
+  entry: CharacterCreatorHistoryEntry,
+  limit = CHARACTER_CREATOR_HISTORY_LIMIT,
+): CharacterCreatorHistoryEntry[] {
+  const key = characterCreatorHistoryKey(workspace)
+  const next = rememberCharacterCreatorSheet(
+    parseCharacterCreatorHistory(storage.getItem(key)),
+    { ...entry, workspace },
+    limit,
+  )
+  storage.setItem(key, JSON.stringify(next))
+  return next
+}
+
+/** Attach a mesh on the origin workspace store so a later workspace switch cannot wipe or retarget it. */
+export function attachCharacterCreatorMeshForWorkspace(
+  storage: CharacterCreatorHistoryStorage,
+  workspace: string,
+  videoName: string,
+  hunyuanGlb: string,
+): CharacterCreatorHistoryEntry[] {
+  const key = characterCreatorHistoryKey(workspace)
+  const next = attachCharacterCreatorMesh(
+    parseCharacterCreatorHistory(storage.getItem(key)),
+    videoName,
+    hunyuanGlb,
+  )
+  storage.setItem(key, JSON.stringify(next))
+  return next
+}
