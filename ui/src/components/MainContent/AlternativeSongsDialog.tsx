@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, Music2, Trash2, X } from 'lucide-react'
 import {
@@ -14,6 +14,8 @@ import {
 } from '../../api/client'
 import { useStore } from '../../stores/useStore'
 
+// Kept exported for the focused DOM contract test.
+// eslint-disable-next-line react-refresh/only-export-components
 export function canRemountVideoclip(file: { type: string }): boolean {
   return file.type === 'video'
 }
@@ -36,15 +38,15 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     const [songs, outputs] = await Promise.all([
       fetchAlternativeSongs(name, workspace),
       fetchOutputs(80, 0, { workspace, mediaType: 'audio' }),
     ])
     setList(songs)
     setAudio(outputs.outputs)
-    if (!selectedAudio && outputs.outputs[0]) setSelectedAudio(outputs.outputs[0].name)
-  }
+    if (outputs.outputs[0]) setSelectedAudio(current => current || outputs.outputs[0].name)
+  }, [name, workspace])
 
   useEffect(() => {
     let cancelled = false
@@ -52,7 +54,7 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
       if (!cancelled) setError((reason as Error).message)
     })
     return () => { cancelled = true }
-  }, [name, workspace])
+  }, [reload])
 
   useEffect(() => {
     const mounting = list?.songs.find(song => song.status === 'mounting' && song.job_id)
@@ -74,7 +76,7 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [list, name, workspace])
+  }, [list, loadOutputs, reload])
 
   const run = async (label: string, work: () => Promise<void>) => {
     setBusy(label)

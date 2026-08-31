@@ -43,6 +43,8 @@ function normalizedChoice(value: unknown): string {
   return String(value ?? '').trim().toLocaleLowerCase()
 }
 
+// Kept exported for the focused pending-answer contract test.
+// eslint-disable-next-line react-refresh/only-export-components
 export function resolveWizardPendingAnswer(pending: WizardWorkflowPendingInput, text: string): Record<string, unknown> | null {
   if (pending.fields.length === 1) {
     const field = pending.fields[0]

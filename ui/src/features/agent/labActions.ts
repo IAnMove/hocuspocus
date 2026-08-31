@@ -150,7 +150,7 @@ export async function configureStorySong(action: AgentConfigureStorySongAction):
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
   if (!found) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
-  let target = found.projectType === 'music_video'
+  const target = found.projectType === 'music_video'
     ? applyMusicVideoDirectVideoDefaults(found)
     : applyMusicVideoDirectVideoDefaults({
       ...found,
