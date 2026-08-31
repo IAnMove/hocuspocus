@@ -16,7 +16,7 @@ export function GenerationModeSelector() {
   const setGenerationMode = useStore(s => s.setGenerationMode)
 
   return (
-    <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
+    <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border" data-wizard-anchor="mode">
       {modes.map(m => {
         const Icon = m.icon
         const active = generationMode === m.value

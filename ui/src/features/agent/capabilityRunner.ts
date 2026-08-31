@@ -17,6 +17,7 @@ import {
   type CommandResultStatus,
   type EntityRef,
 } from './commandContract'
+import { replayWizardPresentation } from './wizardPresentation'
 
 export type CapabilityRunnerStage =
   | 'resolve'
@@ -110,6 +111,10 @@ export async function runRegisteredCapability(
     input: prepared,
     presentation: presentationPlanFromCapabilityPresentation(definition.presentation),
   })
+
+  if (prepared.type === 'prepare_video') {
+    await replayWizardPresentation(envelope.presentation)
+  }
 
   stage(options, 'track', action.type)
   const tracked = await definition.track(prepared, executed, options)

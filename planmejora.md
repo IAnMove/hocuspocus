@@ -365,6 +365,22 @@ Ese smoke conserva en el informe `projectIds`, `cueIds`, `outputIds`, `taskIds`
 y `pipelineIds`. No se ejecutó durante el desarrollo; sus llamadas se validaron
 con una red simulada.
 
+### Nota de relevo — Bloque H cerrado
+
+**Acabé el Bloque H (prototipo de magia visible en Studio → Video) y comienzo la auditoría final del plan.**
+
+El prototipo usa anclas `data-wizard-anchor` para modo, modelo, prompt y generar.
+La mutación de store/API sigue siendo atómica y factual; el replay posterior
+sólo revela lo que ya quedó guardado. Espera dos frames al montaje del sidebar,
+enfoca el primer control únicamente cuando el usuario no está editando, cede
+ante teclado/input/pointer, tolera anclas ausentes y respeta reduced motion.
+La velocidad se puede fijar en `hocuspocus.wizard_presentation_speed` como
+`instant`, `normal` o `theatrical`.
+
+No se ha extendido la coreografía al resto de Labs: el siguiente paso visual es
+probar este ritmo en la aplicación y aprobar partículas, auto-scroll y foco
+antes de reutilizar el contrato fuera de Studio → Video.
+
 - `EntityRef`, `ArtifactRef`, `CommandEnvelope`, `CommandResult`, `NavigationTarget`, `PresentationPlan` y `StructuredError` comparten una frontera JSON validada.
 - El contrato rechaza IDs vacíos, referencias entre workspaces, ciclos, prototipos no planos, valores no reproducibles y claves de idempotencia incoherentes.
 - El runner común devuelve, junto al informe existente, el comando canónico y un resultado con entidad, artifacts, task IDs, pipeline IDs y navegación verificables.

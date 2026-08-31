@@ -61,7 +61,7 @@ export function ModelSelector() {
   }, 0)
 
   return (
-    <div className="relative flex-1 min-w-0" ref={containerRef}>
+    <div className="relative flex-1 min-w-0" ref={containerRef} data-wizard-anchor="model">
       {/* Trigger button */}
       <button
         onClick={() => setOpen(!open)}

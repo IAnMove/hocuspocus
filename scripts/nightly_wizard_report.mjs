@@ -478,7 +478,7 @@ async function main() {
       id: 'wizard-presentation-contracts', level: 7, title: LEVEL_CATALOG['7'].title, logName: 'wizard-presentation-contracts.log',
       run: async () => requireTestDiagnostics(await runCaptured(
         process.execPath,
-        ['--import', 'tsx', '--test', 'tests/wizardPresentationContract.test.mjs'],
+        ['--import', 'tsx', '--test', 'tests/wizardPresentationContract.test.mjs', 'tests/wizardPresentation.test.mjs'],
         { cwd: ui, logPath: path.join(outDir, 'wizard-presentation-contracts.log') },
       ), 'Wizard presentation contracts'),
     })
