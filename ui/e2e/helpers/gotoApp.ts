@@ -1,19 +1,17 @@
 import { expect, type Page } from '@playwright/test'
 import { formatUnhandled, installApiRoutes, type ApiRouteSession } from './apiRoutes'
+import { installBootWatchdogPlaceholder } from './bootWatchdogPlaceholder'
 
 export async function gotoApp(page: Page): Promise<ApiRouteSession> {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   const session = await installApiRoutes(page)
   await page.addInitScript(() => {
     window.localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
-    // index.html replaces the document after 10s if #root has no element
-    // children. The production bundle can take longer than that to parse
-    // on a cold CI runner; keep a placeholder so the watchdog stays inert.
-    const root = document.getElementById('root')
-    if (root && root.childElementCount === 0) {
-      root.appendChild(document.createElement('span'))
-    }
   })
+  // index.html replaces the document after 10s if #root has no element
+  // children. The production bundle can take longer than that to parse
+  // on a cold CI runner; keep a placeholder so the watchdog stays inert.
+  await page.addInitScript(installBootWatchdogPlaceholder)
   await page.goto('/')
   const skip = page.getByRole('button', { name: 'Skip' })
   try {
