@@ -14,6 +14,7 @@ import type {
   AgentGenerateComicAction,
   AgentGenerateStorySectionAction,
   AgentGenerateStoryVisualsAction,
+  AgentStageStoryComicAction,
   AgentStartDirectorProductionAction,
   AgentStageStoryVideoAction,
   AgentStageStoryMusicVideoAction,
@@ -473,6 +474,23 @@ defineCapability<AgentApproveStoryVisualsAction>({
   async execute(action, context) { return context.adapters.storyLab.approveVisuals(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'story_lab', anchors: ['assets', 'references', 'approval'], replay: 'atomic' },
+})
+
+defineCapability<AgentStageStoryComicAction>({
+  name: 'stage_story_comic', title: 'Stage a Story Lab comic in Comic Director',
+  description: 'Create a new editable Comic Director project from an exact Story Lab project, then verify its linked Story production and comic ID.',
+  useWhen: 'The user explicitly asks to turn a Story Lab project into a filled comic without rendering its artwork yet.',
+  parameters: ['target_story_title', 'direction', 'page_count', 'panels_per_page', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_comic' }, target_story_title: { type: 'string', maxLength: 300 }, page_count: { type: 'integer', minimum: 1, maximum: 100 }, panels_per_page: { type: 'integer', minimum: 1, maximum: 12 }, confirm: { const: true } }, required: ['type', 'confirm'] },
+  risk: 'edit', confirmation: 'required', progress: 'Convirtiendo la historia en un cómic editable…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    return { type: 'stage_story_comic', targetStoryTitle: text(raw.target_story_title, 300), direction: text(raw.direction, 4_000), pageCount: Math.round(boundedNumber(raw.page_count, 1, 100, 4)), panelsPerPage: Math.round(boundedNumber(raw.panels_per_page, 1, 12, 4)), confirm: true }
+  },
+  validate(action) { return action.confirm === true && action.pageCount >= 1 && action.panelsPerPage >= 1 ? [] : ['confirmed page and panel counts are required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.stageComic(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'comic', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'comics', anchors: ['project', 'pages', 'panels'], replay: 'atomic' },
 })
 
 defineCapability<AgentCreateComicAction>({

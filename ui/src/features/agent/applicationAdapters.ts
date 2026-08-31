@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentCreateComicAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentCreateComicAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateStoryAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -39,6 +39,7 @@ export interface StoryLabAdapter {
   approveSection(action: AgentApproveStorySectionAction): Promise<AdapterOutcome>
   approveVisuals(action: AgentApproveStoryVisualsAction): Promise<AdapterOutcome>
   generateVisuals(action: AgentGenerateStoryVisualsAction): Promise<AdapterOutcome>
+  stageComic(action: AgentStageStoryComicAction): Promise<AdapterOutcome>
   stageVideo(action: AgentStageStoryVideoAction): Promise<AdapterOutcome>
   stageMusicVideo(action: AgentStageStoryMusicVideoAction): Promise<AdapterOutcome>
   startDirectorProduction(action: AgentStartDirectorProductionAction, expectedProductionId?: string): Promise<AdapterOutcome>
@@ -189,6 +190,18 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { generateStoryVisuals } = await import('./labActions')
       const result = await generateStoryVisuals(action)
       return { ...await storyOutcome(result.message), assetIds: result.assetIds }
+    },
+    async stageComic(action) {
+      const { stageStoryComic } = await import('./labActions')
+      const message = await stageStoryComic(action)
+      const [{ useStoryStore }, { useComicStore }] = await Promise.all([
+        import('../stories/store'), import('../comics/store'),
+      ])
+      const story = useStoryStore.getState().project
+      const comic = useComicStore.getState().project
+      const production = story?.productions.find(item => item.kind === 'comic' && item.targetId === comic?.id)
+      if (!story?.id || !comic?.id || !production?.id) throw new Error('Story Lab no correlacionó la producción de cómic con su proyecto editable.')
+      return { message, target: { kind: 'comic', id: comic.id, title: comic.title } }
     },
     async stageVideo(action) {
       const { stageStoryVideo } = await import('./labActions')

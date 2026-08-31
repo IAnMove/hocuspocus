@@ -87,6 +87,11 @@ test('registered capabilities supply one contract for prompt schema parser execu
   assert.equal(parseRegisteredCapability('approve_story_visuals', {
     type: 'approve_story_visuals', story_visual_selections: [{ target_kind: 'character', target_name: 'Iria', asset_name: 'Iria concept', primary: true }], confirm: true,
   })?.type, 'approve_story_visuals')
+  assert.deepEqual(parseRegisteredCapability('stage_story_comic', {
+    type: 'stage_story_comic', page_count: 6, panels_per_page: 5, confirm: true,
+  }), {
+    type: 'stage_story_comic', targetStoryTitle: '', direction: '', pageCount: 6, panelsPerPage: 5, confirm: true,
+  })
 
   const calls = []
   const context = { adapters: {
