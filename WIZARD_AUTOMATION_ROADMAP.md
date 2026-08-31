@@ -449,11 +449,13 @@ Agent Mode complete prematurely.
   including a deterministic 120 BPM click-track tolerance check.
 - Comic Director creation and artwork rendering: migrated to the common Wizard
   adapter/registry contract with the real comic project ID preserved.
+- Director production start: migrated to the common contract; it preserves the
+  verified production target and real running pipeline ID.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration block **Comic Director**. Begin the next high-value family
-with Story/Director production only after preserving its behavior tests and
-real task/pipeline IDs. Keep Decision gate A open; the workflow remains
-correct without visual magic effects.
+Finished migration subblock **Director production start**. Continue Story Lab
+creation, proposal, review and staging actions incrementally, preserving their
+real project/pipeline IDs and behavior tests. Keep Decision gate A open; the
+workflow remains correct without visual magic effects.

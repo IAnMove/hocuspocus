@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentCreateComicAction, AgentGenerateComicAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentCreateComicAction, AgentGenerateComicAction, AgentStartDirectorProductionAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -29,7 +29,10 @@ export interface StudioAdapter {
   queueMusic(action: AgentPrepareAudioAction): Promise<AdapterOutcome>
 }
 
-export interface StoryLabAdapter { open(): Promise<AdapterOutcome> }
+export interface StoryLabAdapter {
+  open(): Promise<AdapterOutcome>
+  startDirectorProduction(action: AgentStartDirectorProductionAction, expectedProductionId?: string): Promise<AdapterOutcome>
+}
 export interface SeriesLabAdapter { open(): Promise<AdapterOutcome> }
 export interface ComicAdapter {
   open(): Promise<AdapterOutcome>
@@ -140,7 +143,15 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       return { ...result, target: { kind: 'queue_task', id: result.taskId, title: 'Song generation' } }
     },
   }
-  adapters.storyLab = { open: () => navigate('story_lab') }
+  adapters.storyLab = {
+    open: () => navigate('story_lab'),
+    async startDirectorProduction(action, expectedProductionId) {
+      const { startDirectorProduction } = await import('./labActions')
+      const result = await startDirectorProduction(action, expectedProductionId)
+      if (!result.target) throw new Error('Director no devolvió el destino de producción verificado.')
+      return { message: result.message, target: result.target, pipelineId: result.pipelineId }
+    },
+  }
   adapters.seriesLab = { open: () => navigate('series_lab') }
   adapters.comic = {
     open: () => navigate('comics'),

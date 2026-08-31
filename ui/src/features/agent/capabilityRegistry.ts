@@ -8,10 +8,13 @@ import type {
   AgentExport3dSceneAction,
   AgentCreateComicAction,
   AgentGenerateComicAction,
+  AgentStartDirectorProductionAction,
   AgentOpenTabAction,
 } from './agentActions'
+import { useStore } from '../../stores/useStore'
 import type { AgentExecutionReport } from './agentContract'
 import type { AgentExecutionTarget } from './agentContract'
+import { executionKey, executionReport } from './agentContract'
 import type { WizardApplicationAdapters } from './applicationAdapters'
 
 export const AGENT_TABS = [
@@ -323,6 +326,28 @@ defineCapability<AgentGenerateComicAction>({
   async execute(action, context) { return context.adapters.comic.generate(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'comic', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'comics', anchors: ['generate-all-images'], replay: 'atomic' },
+})
+
+defineCapability<AgentStartDirectorProductionAction>({
+  name: 'start_director_production', title: 'Start a prepared Director production',
+  description: 'Start only the exact Story/Director production prepared by the Wizard and return its real pipeline ID.',
+  useWhen: 'The user explicitly asks to start or queue the prepared Story film, trailer or music video.',
+  parameters: ['target_story_title', 'production_kind', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'start_director_production' }, target_story_title: { type: 'string' }, production_kind: { type: 'string', enum: ['film', 'trailer', 'music_video'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
+  risk: 'compute', confirmation: 'required', progress: 'Iniciando el pipeline real de Director…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const kind = text(raw.production_kind, 30)
+    if (kind !== 'film' && kind !== 'trailer' && kind !== 'music_video') return null
+    return { type: 'start_director_production', targetStoryTitle: text(raw.target_story_title, 300), kind, confirm: true }
+  },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
+  async execute(action, context) {
+    const outcome = await context.adapters.storyLab.startDirectorProduction(action)
+    return { ...outcome, report: executionReport({ state: 'running', message: outcome.message, target: outcome.target, pipelineId: outcome.pipelineId, recoverable: false, executionKey: executionKey({ workspace: useStore.getState().activeWorkspace || 'default', type: action.type, targetId: outcome.target.id, params: action }) }) }
+  }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'director_production', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'director', anchors: ['production', 'pipeline'], replay: 'atomic' },
 })
 
 const sceneCapabilityMeta: Record<AgentSceneWorkflowAction['type'], { title: string; description: string; risk: CapabilityRisk }> = {
