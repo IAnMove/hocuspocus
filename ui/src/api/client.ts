@@ -1205,6 +1205,90 @@ export async function generateVideoExtraInfo(
   return res.json()
 }
 
+export interface AlternativeSong {
+  id: string
+  audio_name: string
+  duration_seconds: number
+  created_at: number
+  status: 'attached' | 'mounting' | 'mounted' | 'failed' | string
+  mounted_output: string | null
+  job_id: string | null
+  extra_clip_count: number
+  planned_clip_count: number
+}
+
+export interface AlternativeSongList {
+  parent: string
+  duration_seconds: number
+  source_clip_count: number
+  adaptation: 'random_extras' | 'loop_assembled' | string
+  songs: AlternativeSong[]
+  song?: AlternativeSong
+}
+
+export async function fetchAlternativeSongs(name: string, workspace?: string): Promise<AlternativeSongList> {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}/alternative-songs${query}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not read alternative songs' }))
+    throw new Error(error.detail || 'Could not read alternative songs')
+  }
+  return res.json()
+}
+
+export async function attachAlternativeSong(
+  name: string,
+  audioName: string,
+  workspace?: string,
+): Promise<AlternativeSongList> {
+  const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}/alternative-songs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audio_name: audioName, workspace }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not attach the song' }))
+    throw new Error(error.detail || 'Could not attach the song')
+  }
+  return res.json()
+}
+
+export async function deleteAlternativeSong(name: string, songId: string, workspace?: string): Promise<void> {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  const res = await fetch(
+    `${BASE}/api/v1/outputs/${encodeURIComponent(name)}/alternative-songs/${encodeURIComponent(songId)}${query}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not remove the song' }))
+    throw new Error(error.detail || 'Could not remove the song')
+  }
+}
+
+export async function mountAlternativeSong(
+  name: string,
+  songId: string,
+  details?: { audioName?: string; workspace?: string; seed?: number },
+): Promise<{ job_id: string; task_id?: string; status: string; song: AlternativeSong; output_name: string }> {
+  const res = await fetch(
+    `${BASE}/api/v1/outputs/${encodeURIComponent(name)}/alternative-songs/${encodeURIComponent(songId)}/mount`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audio_name: details?.audioName,
+        workspace: details?.workspace,
+        seed: details?.seed,
+      }),
+    },
+  )
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not remount the videoclip' }))
+    throw new Error(error.detail || 'Could not remount the videoclip')
+  }
+  return res.json()
+}
+
 export async function deleteOutput(name: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete output')

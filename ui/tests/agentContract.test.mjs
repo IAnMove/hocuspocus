@@ -41,8 +41,9 @@ test('registered capabilities supply one contract for prompt schema parser execu
   assert.ok(registered.some(item => item.name === 'generate_comic'))
   assert.equal(registered[0].risk, 'read')
   assert.equal(registered[0].confirmation, 'none')
-  const noConfirmationEdits = new Set(['open_tab', 'create_comic', 'create_story', 'update_story', 'create_series_episode', 'update_series_episode'])
-  assert.ok(registered.filter(item => !noConfirmationEdits.has(item.name)).every(item => item.confirmation === 'required'))
+  const noConfirmationEdits = new Set(['open_tab', 'create_comic', 'create_story', 'update_story', 'create_series_episode', 'update_series_episode', 'attach_videoclip_alternative_song'])
+  assert.ok(registered.filter(item => item.risk === 'compute' || item.risk === 'external_cost').every(item => item.confirmation === 'required'))
+  assert.ok(registered.filter(item => noConfirmationEdits.has(item.name)).every(item => item.confirmation === 'none'))
   assert.equal(registeredCapabilitySchemas().length, registered.length)
   assert.equal(registeredCapabilityDocumentationRows().length, registered.length)
   for (const capability of registered) {
@@ -198,6 +199,13 @@ test('execution keys are deterministic and compound predecessors are explicit', 
   assert.deepEqual(
     orderCompoundActions([{ type: 'generate_comic' }, { type: 'create_comic' }]).map(item => item.type),
     ['create_comic', 'generate_comic'],
+  )
+  assert.deepEqual(
+    orderCompoundActions([
+      { type: 'start_director_production' }, { type: 'stage_story_music_video' },
+      { type: 'generate_story_song' }, { type: 'configure_story_song' },
+    ]).map(item => item.type),
+    ['configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production'],
   )
   const report = executionReport({ state: 'prepared', message: 'Listo.', recoverable: false })
   assert.equal(report.state, 'prepared')

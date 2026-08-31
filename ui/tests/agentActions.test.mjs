@@ -94,7 +94,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_rhythmic_3d_video', 'create_3d_scene', 'set_3d_scene_properties', 'add_3d_scene_layer', 'update_3d_scene_layer', 'remove_3d_scene_layer', 'attach_3d_scene_audio', 'analyze_3d_scene_audio', 'apply_3d_choreography', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_rhythmic_3d_video', 'create_3d_scene', 'set_3d_scene_properties', 'add_3d_scene_layer', 'update_3d_scene_layer', 'remove_3d_scene_layer', 'attach_3d_scene_audio', 'analyze_3d_scene_audio', 'apply_3d_choreography', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export', 'attach_videoclip_alternative_song', 'mount_videoclip_alternative_song', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -283,6 +283,32 @@ test('parses a confirmed Story music-video staging and start', async () => {
     { role: 'assistant', text: prepared.reply },
   ])
   assert.deepEqual(launched.actions, [{ type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true }])
+})
+
+test('keeps a vocal Story song in the UI workflow before launching its videoclip', async () => {
+  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Conjuro el himno.',
+    actions: [
+      { type: 'create_story', title: 'El Himno del Sysadmin', project_type: 'music_video', premise: 'Una guardia nocturna salva la red cantando.' },
+      {
+        type: 'configure_story_song', target_story_title: 'El Himno del Sysadmin', song_title: 'Sudo, sangra, reinicia',
+        song_brief: 'Un himno para administradores de sistemas.', music_style: 'heavy metal español ochentero, voz líder ronca y coro grave',
+        lyrics_language: 'Español', instrumental: false, model_type: 'ace_step_v1_5_xl_sft_lm_4b',
+        lyrics: '[Verse]\nEn la torre de cristal\n[Chorus]\nSudo, sangra, reinicia', target_duration_seconds: 90,
+      },
+      { type: 'stage_story_music_video', target_story_title: 'El Himno del Sysadmin', cue_title: 'Sudo, sangra, reinicia', pacing: 'rhythmic', confirm: true },
+    ],
+  }))
+  assert.equal(turn.actions[1].type, 'configure_story_song')
+  assert.equal(turn.actions[1].instrumental, false)
+  assert.match(turn.actions[1].lyrics, /\[Chorus\]/)
+  const reconciled = await reconcileAgentTurnWithRequest(
+    'hazme una canción con letra, créala como Story Lab y ejecuta el videoclip', turn,
+  )
+  assert.deepEqual(reconciled.actions.map(action => action.type), [
+    'create_story', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production',
+  ])
 })
 
 test('resolves an exact Story song and cue, and rejects ambiguous names', async () => {

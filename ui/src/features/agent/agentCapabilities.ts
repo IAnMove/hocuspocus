@@ -170,6 +170,22 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['target_story_title', 'production_kind', 'direction', 'duration_seconds', 'confirm'],
   },
   {
+    type: 'configure_story_song',
+    title: 'Fill a Story Lab song draft',
+    purpose: 'Persist the selected music model, vocal mode, style, language and structured lyrics in the canonical Story Lab music form.',
+    useWhen: 'The user asks for a song or lyrics inside a Story Lab videoclip; the lyrics must be visible and editable in the UI, not only printed in chat.',
+    risk: 'edit',
+    parameters: ['target_story_title', 'song_title', 'song_brief', 'music_style', 'lyrics', 'lyrics_language', 'instrumental', 'model_type', 'target_duration_seconds'],
+  },
+  {
+    type: 'generate_story_song',
+    title: 'Generate a Story Lab song',
+    purpose: 'Run ACE-Step for the exact filled vocal/instrumental cue, persist the real audio candidate and select it for the videoclip.',
+    useWhen: 'The user explicitly asks to execute, generate or launch the song after configuring it.',
+    risk: 'compute',
+    parameters: ['target_story_title', 'cue_title', 'confirm'],
+  },
+  {
     type: 'stage_story_music_video',
     title: 'Stage a Story music video',
     purpose: 'Select the exact Story, song/candidate and cue, save a reopenable music-video production snapshot and load Music Video Director without starting generation.',
@@ -438,6 +454,8 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     risk: 'read',
     parameters: [],
   },
+  registeredDescriptor('attach_videoclip_alternative_song'),
+  registeredDescriptor('mount_videoclip_alternative_song'),
   {
     type: 'inspect_queue',
     title: 'Inspect the canonical queue',

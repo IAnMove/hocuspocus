@@ -11,6 +11,7 @@ import {
   inferExecutionState,
   isExpensiveAction,
   orderCompoundActions,
+  requiredPredecessor,
   rememberExecution,
   reuseExecution,
 } from './agentContract'
@@ -35,6 +36,10 @@ import type {
   AgentTrimVideoEditorClipAction,
   AgentValidateVideoEditorTimelineAction,
 } from './videoEditorActions'
+import type {
+  AgentAttachVideoclipAlternativeSongAction,
+  AgentMountVideoclipAlternativeSongAction,
+} from './alternativeSongActions'
 import type { ExampleConversation } from './agentExamples'
 import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
@@ -261,6 +266,26 @@ export interface AgentStageStoryMusicVideoAction {
   songName: string
   cueTitle: string
   pacing: 'cinematic' | 'balanced' | 'rhythmic'
+  confirm: true
+}
+
+export interface AgentConfigureStorySongAction {
+  type: 'configure_story_song'
+  targetStoryTitle: string
+  songTitle: string
+  brief: string
+  style: string
+  lyrics: string
+  lyricsLanguage: string
+  instrumental: boolean
+  model: 'music-3.0' | 'music-2.6' | 'ace_step_v1_5_xl_sft_lm_4b'
+  durationSeconds?: number
+}
+
+export interface AgentGenerateStorySongAction {
+  type: 'generate_story_song'
+  targetStoryTitle: string
+  cueTitle: string
   confirm: true
 }
 
@@ -516,6 +541,8 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateStoryVisualsAction
   | AgentStageStoryComicAction
   | AgentStageStoryVideoAction
+  | AgentConfigureStorySongAction
+  | AgentGenerateStorySongAction
   | AgentStageStoryMusicVideoAction
   | AgentStartDirectorProductionAction
   | AgentCreateSeriesEpisodeAction
@@ -560,6 +587,8 @@ export type AgentAction = AgentOpenTabAction
   | AgentValidateVideoEditorTimelineAction
   | AgentExportVideoEditorAction
   | AgentTrackVideoEditorExportAction
+  | AgentAttachVideoclipAlternativeSongAction
+  | AgentMountVideoclipAlternativeSongAction
 
 export interface AgentTurn {
   reply: string
@@ -752,6 +781,8 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   validatevideoeditortimeline: 'validate_video_editor_timeline',
   exportvideoeditor: 'export_video_editor',
   trackvideoeditorexport: 'track_video_editor_export',
+  attachvideoclipalternativesong: 'attach_videoclip_alternative_song',
+  mountvideoclipalternativesong: 'mount_videoclip_alternative_song',
   attachstudioreferences: 'attach_studio_references',
   configurestudioloras: 'configure_studio_loras',
   inspectqueue: 'inspect_queue',
@@ -872,7 +903,7 @@ const CANONICAL_FIELD_NAMES = [
   'queue_scope', 'task_id', 'job_id', 'shot_ids', 'shot_numbers', 'attempt_id', 'render_mode',
   'review_decision', 'review_scope', 'canon_decision', 'canon_item_ids', 'production_kind',
   'song_name', 'cue_title', 'pacing',
-  'scene_name', 'layer_name', 'audio_output_name', 'cue_source', 'rhythm_profile', 'intensity',
+  'scene_name', 'layer_name', 'audio_output_name', 'videoclip_name', 'cue_source', 'rhythm_profile', 'intensity',
   'confirm', 'characters', 'locations', 'outline_beats', 'story_visual_selections', 'story_visual_scope', 'target_names',
   'target_kind', 'target_name', 'asset_name', 'primary',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'comic_pages', 'caption', 'stage', 'image_provider',
@@ -1693,8 +1724,8 @@ const MUSIC_VIDEO_STAGE_REQUESTS = [
   /\b(?:hazme|hacedme|crea|cread|creame|créame)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical)\b/i,
 ]
 const MUSIC_VIDEO_START_REQUESTS = [
-  /\b(?:l[aá]nzalo|in[ií]cialo|arr[aá]ncalo)\b/i,
-  /\b(?:l[aá]nza|inicia|arranca|genera|encola)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical|producci[oó]n\s+musical)\b/i,
+  /\b(?:l[aá]nzalo|in[ií]cialo|arr[aá]ncalo|ejec[uú]talo)\b/i,
+  /\b(?:l[aá]nza|inicia|arranca|ejecuta|genera|encola)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical|producci[oó]n\s+musical)\b/i,
 ]
 
 function inferMusicVideoContext(text: string, history: ExampleConversation[]): boolean {
@@ -1870,21 +1901,38 @@ export async function reconcileAgentTurnWithRequest(
   const musicVideoStage = isExplicitMusicVideoStageRequest(request)
   const musicVideoStart = isExplicitMusicVideoStartRequest(request, history)
   if (musicVideoStage || musicVideoStart) {
+    const storySongSetup = turn.actions.filter(action => (
+      action.type === 'create_story'
+      || action.type === 'configure_story_song'
+      || action.type === 'generate_story_song'
+    ))
     const existingStage = turn.actions.find(
       (action): action is AgentStageStoryMusicVideoAction => action.type === 'stage_story_music_video',
     )
+    const songDraft = turn.actions.find(
+      (action): action is AgentConfigureStorySongAction => action.type === 'configure_story_song',
+    )
+    const createdMusicVideo = turn.actions.find(
+      (action): action is AgentCreateStoryAction => action.type === 'create_story' && action.projectType === 'music_video',
+    )
     const stage: AgentStageStoryMusicVideoAction = existingStage || {
       type: 'stage_story_music_video',
-      targetStoryTitle: '',
+      targetStoryTitle: songDraft?.targetStoryTitle || createdMusicVideo?.title || '',
       songName: '',
-      cueTitle: '',
+      cueTitle: songDraft?.songTitle || '',
       pacing: 'balanced',
       confirm: true,
     }
     if (musicVideoStage && musicVideoStart) {
+      const configuredSong = storySongSetup.some(action => action.type === 'configure_story_song')
+      const songActions = configuredSong && !storySongSetup.some(action => action.type === 'generate_story_song')
+        ? [...storySongSetup, { type: 'generate_story_song' as const, targetStoryTitle: stage.targetStoryTitle, cueTitle: stage.cueTitle, confirm: true as const }]
+        : storySongSetup
       return {
-        reply: 'Prepararé el videoclip en Music Video Director y, si el plan queda listo, lo iniciaré. Preparado no es en cola; en marcha no es terminado. 🪄',
-        actions: [stage, { type: 'start_director_production', targetStoryTitle: stage.targetStoryTitle, kind: 'music_video', confirm: true }],
+        reply: configuredSong
+          ? 'Guardaré la canción y su letra en Story Lab, generaré el audio real y sólo entonces prepararé e iniciaré el videoclip. En marcha no es terminado. 🪄'
+          : 'Prepararé el videoclip en Music Video Director y, si el plan queda listo, lo iniciaré. Preparado no es en cola; en marcha no es terminado. 🪄',
+        actions: [...songActions, stage, { type: 'start_director_production', targetStoryTitle: stage.targetStoryTitle, kind: 'music_video', confirm: true }],
       }
     }
     if (musicVideoStart) {
@@ -2008,7 +2056,7 @@ export async function reconcileAgentTurnWithRequest(
   }
 }
 
-const LEGACY_ACTION_TYPES = ['open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export'] as const
+const LEGACY_ACTION_TYPES = ['open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export', 'attach_videoclip_alternative_song', 'mount_videoclip_alternative_song'] as const
 
 export const HOCUSPOCUS_REGISTERED_ACTION_SCHEMAS = registeredCapabilitySchemas()
 
@@ -2053,7 +2101,13 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           project_type: { type: 'string', enum: ['', 'full_story', 'music_video', 'trailer', 'quick_video'] },
           production_kind: { type: 'string', enum: ['', 'film', 'trailer', 'music_video'] },
           song_name: { type: 'string', maxLength: 300 },
+          song_title: { type: 'string', maxLength: 300 },
           cue_title: { type: 'string', maxLength: 300 },
+          song_brief: { type: 'string', maxLength: 4_000 },
+          music_style: { type: 'string', maxLength: 4_000 },
+          lyrics: { type: 'string', maxLength: 12_000 },
+          lyrics_language: { type: 'string', maxLength: 120 },
+          instrumental: { type: 'boolean' },
           pacing: { type: 'string', enum: ['', 'cinematic', 'balanced', 'rhythmic'] },
           creative_brief: { type: 'string', maxLength: 4_000 },
           premise: { type: 'string', maxLength: 2_000 },
@@ -2219,6 +2273,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           project_name: { type: 'string', maxLength: 160 },
           clip_names: { type: 'array', maxItems: 40, items: { type: 'string', maxLength: 300 } },
           clip_name: { type: 'string', maxLength: 300 },
+          videoclip_name: { type: 'string', maxLength: 300 },
           trim_start: { type: 'number', minimum: 0, maximum: 86_400 },
           trim_end: { type: 'number', minimum: 0, maximum: 86_400 },
         },
@@ -2541,7 +2596,27 @@ export async function executeAgentActions(
   let preparedStudio = false
   let createdComicId = ''
   let stagedProductionId = ''
-  for (const action of orderCompoundActions(actions)) {
+  const orderedActions = orderCompoundActions(actions)
+  const failedActionTypes = new Set<string>()
+  for (const action of orderedActions) {
+    const predecessors = (requiredPredecessor(action.type) || '').split('|').filter(Boolean)
+    const failedPredecessor = predecessors.find(type => (
+      failedActionTypes.has(type) && orderedActions.some(candidate => candidate.type === type)
+    ))
+    if (failedPredecessor) {
+      results.push({
+        action,
+        ok: false,
+        message: `No ejecuto ${action.type}: el paso requerido ${failedPredecessor} ha fallado.`,
+        report: executionReport({
+          state: 'failed',
+          message: `Bloqueado por el fallo de ${failedPredecessor}.`,
+          recoverable: true,
+        }),
+      })
+      failedActionTypes.add(action.type)
+      continue
+    }
     const registeredProgress = getCapability(action.type)?.progress
     const working = registeredProgress || (action.type === 'open_tab'
       ? `Abriendo ${TAB_LABELS[action.tab]}…`
@@ -2994,10 +3069,12 @@ export async function executeAgentActions(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       results.push({ action, ok: false, message })
+      failedActionTypes.add(action.type)
       if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio' || action.type === 'prepare_3d') preparedStudio = false
     }
     const last = results.at(-1)
     if (last && last.action === action) {
+      if (!last.ok) failedActionTypes.add(action.type)
       if (!last.report) {
         let target: AgentExecutionTarget | undefined
         if (action.type === 'create_comic' || action.type === 'generate_comic' || action.type === 'generate_comic_panel') {

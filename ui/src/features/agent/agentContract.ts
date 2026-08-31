@@ -34,6 +34,9 @@ export interface AgentActionDefinitionMeta {
 
 const COMPOUND_DEPENDENCIES: Record<string, readonly string[]> = {
   generate_comic: ['create_comic'],
+  configure_story_song: ['create_story'],
+  generate_story_song: ['configure_story_song'],
+  stage_story_music_video: ['generate_story_song'],
   start_director_production: ['stage_story_video', 'stage_story_music_video'],
   export_video_editor: ['validate_video_editor_timeline'],
 }
@@ -45,14 +48,16 @@ const EXPENSIVE_ACTIONS = new Set([
   'generate_comic_panel',
   'start_director_production',
   'generate_story_visuals',
+  'generate_story_song',
   'render_series_shots',
   'assemble_series_episode',
   'export_3d_scene',
   'export_video_editor',
+  'mount_videoclip_alternative_song',
 ])
 
-const QUEUED_ACTIONS = new Set(['start_generation', 'queue_sfx_pack', 'render_series_shots', 'export_video_editor'])
-const RUNNING_ACTIONS = new Set(['start_director_production', 'export_3d_scene', 'generate_story_visuals'])
+const QUEUED_ACTIONS = new Set(['start_generation', 'queue_sfx_pack', 'render_series_shots', 'export_video_editor', 'mount_videoclip_alternative_song'])
+const RUNNING_ACTIONS = new Set(['start_director_production', 'export_3d_scene', 'generate_story_visuals', 'mount_videoclip_alternative_song'])
 const REUSABLE_STATES = new Set<AgentExecutionState>(['prepared', 'queued', 'running', 'completed'])
 
 const recentExecutions = new Map<string, AgentExecutionReport>()

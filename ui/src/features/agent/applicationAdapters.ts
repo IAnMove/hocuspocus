@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentCommitSeriesCanonAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentCommitSeriesCanonAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -41,6 +41,8 @@ export interface StoryLabAdapter {
   approveSection(action: AgentApproveStorySectionAction): Promise<AdapterOutcome>
   approveVisuals(action: AgentApproveStoryVisualsAction): Promise<AdapterOutcome>
   generateVisuals(action: AgentGenerateStoryVisualsAction): Promise<AdapterOutcome>
+  configureSong(action: AgentConfigureStorySongAction): Promise<AdapterOutcome>
+  generateSong(action: AgentGenerateStorySongAction): Promise<AdapterOutcome>
   stageComic(action: AgentStageStoryComicAction): Promise<AdapterOutcome>
   stageVideo(action: AgentStageStoryVideoAction): Promise<AdapterOutcome>
   stageMusicVideo(action: AgentStageStoryMusicVideoAction): Promise<AdapterOutcome>
@@ -211,6 +213,20 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { generateStoryVisuals } = await import('./labActions')
       const result = await generateStoryVisuals(action)
       return { ...await storyOutcome(result.message), assetIds: result.assetIds }
+    },
+    async configureSong(action) {
+      const { configureStorySong } = await import('./labActions')
+      const result = await configureStorySong(action)
+      return { message: result.message, target: { kind: 'story_song', id: result.cueId, title: result.cueTitle } }
+    },
+    async generateSong(action) {
+      const { generateStorySong } = await import('./labActions')
+      const result = await generateStorySong(action)
+      return {
+        message: result.message,
+        target: { kind: 'story_song', id: result.candidateId, title: result.cueTitle },
+        outputNames: [result.outputName],
+      }
     },
     async stageComic(action) {
       const { stageStoryComic } = await import('./labActions')

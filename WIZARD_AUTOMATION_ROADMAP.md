@@ -453,6 +453,12 @@ Agent Mode complete prematurely.
   verified production target and real running pipeline ID.
 - Story-to-Director staging: film/trailer and music-video preparation now
   verify and return the exact production target before launch.
+- Story videoclip song authoring: the Wizard can now persist the requested
+  model, vocal/instrumental mode, musical direction, language and structured
+  lyrics in the visible Story Lab music form. A separate confirmed action runs
+  ACE-Step, stores the verified audio candidate and selects it before Director
+  staging. Compound execution stops downstream videoclip steps if song creation
+  fails.
 - Story Lab creation and updates: migrated to the common adapter/registry
   contract, preserving the canonical story project ID after each mutation.
 - Story Lab proposals and section approval: migrated to the common contract;
@@ -482,7 +488,12 @@ Agent Mode complete prematurely.
 
 ## Continuity note
 
-Finished migration subblock **Video Editor creation and opening**. Continue
-with Video Editor timeline assembly and export while preserving
-the canonical kit ID and behavior tests. Keep Decision gate A open; the
-workflow remains correct without visual magic effects.
+Paused the general migration to repair the real **Story Lab song → videoclip**
+flow reported from the Wizard. The missing bridge is now implemented as
+`configure_story_song → generate_story_song → stage_story_music_video →
+start_director_production`, with `create_story(project_type=music_video)` in
+front when the project is new. The UI form, not the chat prose, is authoritative
+for lyrics and instrumental mode. Resume the migration from the first remaining
+unmigrated capability after reviewing the uncommitted alternative-song block.
+Keep Decision gate A open; visible focus/fill/sparkle choreography remains the
+final presentation phase.

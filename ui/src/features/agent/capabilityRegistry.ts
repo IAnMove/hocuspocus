@@ -4,6 +4,7 @@ import type {
   AgentApplySeriesPlanAction,
   AgentAssembleSeriesEpisodeAction,
   AgentCommitSeriesCanonAction,
+  AgentConfigureStorySongAction,
   AgentApplyStoryProposalAction,
   AgentApproveStorySectionAction,
   AgentApproveStoryVisualsAction,
@@ -18,6 +19,7 @@ import type {
   AgentGenerateComicAction,
   AgentGenerateSeriesPlanAction,
   AgentGenerateStorySectionAction,
+  AgentGenerateStorySongAction,
   AgentGenerateStoryVisualsAction,
   AgentRenderSeriesShotsAction,
   AgentReviewSeriesAttemptsAction,
@@ -35,6 +37,7 @@ import type { AgentExecutionTarget } from './agentContract'
 import { executionKey, executionReport } from './agentContract'
 import type { WizardApplicationAdapters } from './applicationAdapters'
 import type { AgentCreateVideoEditorProjectAction, AgentOpenVideoEditorProjectAction } from './videoEditorActions'
+import type { AgentAttachVideoclipAlternativeSongAction, AgentMountVideoclipAlternativeSongAction } from './alternativeSongActions'
 import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
 
 export const AGENT_TABS = [
@@ -242,6 +245,82 @@ defineCapability<AgentOpenTabAction>({
 function videoEditorProjectCapability<T extends AgentCreateVideoEditorProjectAction | AgentOpenVideoEditorProjectAction>(type: T['type'], title: string, execute: (action: T, context: CapabilityExecutionContext) => Promise<CapabilityExecutionOutcome>) { defineCapability<T>({ name: type, title, description: `${title} for the canonical workspace draft.`, useWhen: `The user explicitly asks to ${title.toLowerCase()}.`, parameters: ['project_name'], inputSchema: { type: 'object', properties: { type: { const: type }, project_name: { type: 'string' } }, required: ['type'] }, risk: 'edit', confirmation: 'none', progress: `${title}…`, resolve(raw) { return { type, projectName: text(raw.project_name, 300) } as T }, validate() { return [] }, async prepare(action) { return action }, execute, correlate(_a, o) { return o.target }, async track(_a, o) { return o }, report: { targetKind: 'video_editor', successState: 'completed' }, summarize(_a, o) { return o.message }, presentation: { destination: 'video_editor', anchors: ['project'], replay: 'atomic' } }) }
 videoEditorProjectCapability<AgentCreateVideoEditorProjectAction>('create_video_editor_project', 'Create Video Editor project', (action, context) => context.adapters.videoEditor.create(action))
 videoEditorProjectCapability<AgentOpenVideoEditorProjectAction>('open_video_editor_project', 'Open Video Editor project', (action, context) => context.adapters.videoEditor.openProject(action))
+
+defineCapability<AgentAttachVideoclipAlternativeSongAction>({
+  name: 'attach_videoclip_alternative_song',
+  title: 'Attach an alternative song to a videoclip',
+  description: 'Attach an existing audio output to an assembled videoclip without remounting or using the GPU.',
+  useWhen: 'The user wants to add another language or mix of the same music video without generating new shots.',
+  parameters: ['videoclip_name', 'audio_output_name'],
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      type: { const: 'attach_videoclip_alternative_song' },
+      videoclip_name: { type: 'string', maxLength: 300 },
+      audio_output_name: { type: 'string', maxLength: 300 },
+    },
+    required: ['type', 'videoclip_name', 'audio_output_name'],
+  },
+  risk: 'edit', confirmation: 'none', progress: 'Añadiendo la canción alternativa al videoclip…',
+  resolve(raw) {
+    const videoclipName = text(raw.videoclip_name, 300)
+    const audioOutputName = text(raw.audio_output_name, 300)
+    return videoclipName && audioOutputName
+      ? { type: 'attach_videoclip_alternative_song', videoclipName, audioOutputName }
+      : null
+  },
+  validate(action) { return action.videoclipName && action.audioOutputName ? [] : ['videoclip and audio names are required'] },
+  async prepare(action) { return action },
+  async execute(action) {
+    const { attachAgentVideoclipAlternativeSong } = await import('./alternativeSongActions')
+    const outcome = await attachAgentVideoclipAlternativeSong(action)
+    return { message: outcome.message, report: outcome.report, target: outcome.report.target, outputNames: outcome.report.outputNames }
+  },
+  correlate(_action, outcome) { return outcome.target },
+  async track(_action, outcome) { return outcome },
+  report: { targetKind: 'video', successState: 'prepared' },
+  summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'action', anchors: ['alternative-songs'], replay: 'atomic' },
+})
+
+defineCapability<AgentMountVideoclipAlternativeSongAction>({
+  name: 'mount_videoclip_alternative_song',
+  title: 'Remount a videoclip with an alternative song',
+  description: 'FFmpeg-only remount of an existing videoclip with another song. Longer tracks append random source shots; shorter tracks trim. Never regenerates H3.',
+  useWhen: 'The user has an existing music video and a new song (for example another language) and wants a new mix without regenerating clips.',
+  parameters: ['videoclip_name', 'audio_output_name', 'confirm'],
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      type: { const: 'mount_videoclip_alternative_song' },
+      videoclip_name: { type: 'string', maxLength: 300 },
+      audio_output_name: { type: 'string', maxLength: 300 },
+      confirm: { const: true },
+    },
+    required: ['type', 'videoclip_name', 'audio_output_name', 'confirm'],
+  },
+  risk: 'compute', confirmation: 'required', progress: 'Montando el videoclip con la canción alternativa…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const videoclipName = text(raw.videoclip_name, 300)
+    const audioOutputName = text(raw.audio_output_name, 300)
+    return videoclipName && audioOutputName
+      ? { type: 'mount_videoclip_alternative_song', videoclipName, audioOutputName, confirm: true }
+      : null
+  },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
+  async prepare(action) { return action },
+  async execute(action) {
+    const { mountAgentVideoclipAlternativeSong } = await import('./alternativeSongActions')
+    const outcome = await mountAgentVideoclipAlternativeSong(action)
+    return { message: outcome.message, report: outcome.report, target: outcome.report.target, taskId: outcome.report.taskId, outputNames: outcome.report.outputNames }
+  },
+  correlate(_action, outcome) { return outcome.target },
+  async track(_action, outcome) { return outcome },
+  report: { targetKind: 'video', successState: 'completed' },
+  summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'action', anchors: ['alternative-songs'], replay: 'atomic' },
+})
 
 defineCapability<AgentCreateCharacterKitAction>({
   name: 'create_character_kit', title: 'Create a Character Kit', description: 'Create or reopen one canonical Character Kit and return its real ID.', useWhen: 'The user asks to create a named Character Kit.', parameters: ['kit_name', 'style'],
@@ -640,8 +719,8 @@ defineCapability<AgentReviewSeriesAttemptsAction>({
   resolve(raw) {
     if (raw.confirm !== true) return null
     const decision = text(raw.review_decision, 30); const scope = text(raw.review_scope, 30)
-    const shotNumbers = Array.isArray(raw.shot_numbers) ? raw.shot_numbers.slice(0, 200).flatMap(value => typeof value === 'number' && Number.isInteger(value) && value > 0 ? [value] : []) : []
-    if (!seriesReviewDecisions.has(decision) || !seriesReviewScopes.has(scope) || (scope === 'selected_latest' && !shotNumbers.length)) return null
+    const shotNumbers = [...new Set(Array.isArray(raw.shot_numbers) ? raw.shot_numbers.slice(0, 200).flatMap(value => typeof value === 'number' && Number.isInteger(value) && value > 0 ? [value] : []) : [])]
+    if (!seriesReviewDecisions.has(decision) || !seriesReviewScopes.has(scope) || (scope === 'selected_latest' && !shotNumbers.length) || (scope === 'all_latest' && decision !== 'approve')) return null
     return { type: 'review_series_attempts', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), decision: decision as AgentReviewSeriesAttemptsAction['decision'], scope: scope as AgentReviewSeriesAttemptsAction['scope'], shotNumbers, attemptId: text(raw.attempt_id, 160), confirm: true }
   },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.seriesLab.reviewAttempts(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'series_lab', anchors: ['review'], replay: 'atomic' },
@@ -655,7 +734,7 @@ defineCapability<AgentCommitSeriesCanonAction>({
     if (raw.confirm !== true) return null
     const decision = text(raw.canon_decision, 30)
     const itemIds = Array.isArray(raw.canon_item_ids) ? raw.canon_item_ids.slice(0, 200).flatMap(value => { const id = text(value, 160); return id ? [id] : [] }) : []
-    if (!seriesCanonDecisions.has(decision) || (decision.endsWith('_selected') && !itemIds.length)) return null
+    if (!seriesCanonDecisions.has(decision) || (decision.endsWith('_selected') && !itemIds.length) || (decision.endsWith('_all') && itemIds.length)) return null
     return { type: 'commit_series_canon', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), decision: decision as AgentCommitSeriesCanonAction['decision'], itemIds, confirm: true }
   },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.seriesLab.commitCanon(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'series_lab', anchors: ['review', 'canon'], replay: 'atomic' },
@@ -765,6 +844,79 @@ defineCapability<AgentStageStoryVideoAction>({
   resolve(raw) { const kind = text(raw.production_kind, 30); return raw.confirm === true && (kind === 'film' || kind === 'trailer') ? { type: 'stage_story_video', targetStoryTitle: text(raw.target_story_title, 300), kind, direction: text(raw.direction, 4_000), durationSeconds: raw.duration_seconds === undefined ? undefined : boundedNumber(raw.duration_seconds, 15, 3_600, 60), confirm: true } : null },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.storyLab.stageVideo(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'director_production', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'director', anchors: ['production'], replay: 'atomic' },
+})
+
+defineCapability<AgentConfigureStorySongAction>({
+  name: 'configure_story_song', title: 'Fill a Story Lab song draft',
+  description: 'Write the selected model, vocal/instrumental mode, musical direction and structured lyrics into the canonical Story Lab music form.',
+  useWhen: 'The user asks to create, write or revise the song/lyrics for a Story Lab videoclip.',
+  parameters: ['target_story_title', 'song_title', 'song_brief', 'music_style', 'lyrics', 'lyrics_language', 'instrumental', 'model_type', 'target_duration_seconds'],
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      type: { const: 'configure_story_song' },
+      target_story_title: { type: 'string', maxLength: 300 },
+      song_title: { type: 'string', maxLength: 300 },
+      song_brief: { type: 'string', maxLength: 4_000 },
+      music_style: { type: 'string', maxLength: 4_000 },
+      lyrics: { type: 'string', maxLength: 12_000 },
+      lyrics_language: { type: 'string', maxLength: 120 },
+      instrumental: { type: 'boolean' },
+      model_type: { type: 'string', enum: ['ace_step_v1_5_xl_sft_lm_4b', 'music-3.0', 'music-2.6'] },
+      target_duration_seconds: { type: 'number', minimum: 20, maximum: 360 },
+    },
+    required: ['type', 'music_style', 'lyrics', 'instrumental'],
+  },
+  risk: 'edit', confirmation: 'none', progress: 'Rellenando la canción y la letra en Story Lab…',
+  resolve(raw) {
+    const instrumental = raw.instrumental === true
+    const lyrics = text(raw.lyrics, 12_000)
+    const style = text(raw.music_style, 4_000)
+    if (!style || (!instrumental && !lyrics)) return null
+    const model = text(raw.model_type, 160)
+    return {
+      type: 'configure_story_song',
+      targetStoryTitle: text(raw.target_story_title, 300),
+      songTitle: text(raw.song_title, 300),
+      brief: text(raw.song_brief, 4_000),
+      style,
+      lyrics,
+      lyricsLanguage: text(raw.lyrics_language, 120),
+      instrumental,
+      model: model === 'music-3.0' || model === 'music-2.6' ? model : 'ace_step_v1_5_xl_sft_lm_4b',
+      durationSeconds: raw.target_duration_seconds === undefined ? undefined : boundedNumber(raw.target_duration_seconds, 20, 360, 90),
+    }
+  },
+  validate(action) { return action.style && (action.instrumental || action.lyrics) ? [] : ['music style and vocal lyrics are required'] },
+  async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.configureSong(action) },
+  correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'story_song', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'story_lab', anchors: ['music', 'lyrics'], replay: 'atomic' },
+})
+
+defineCapability<AgentGenerateStorySongAction>({
+  name: 'generate_story_song', title: 'Generate the configured Story song',
+  description: 'Generate the exact configured Story Lab song with ACE-Step and select the verified audio candidate in the music form.',
+  useWhen: 'The user explicitly asks to generate, execute or launch the Story Lab song after its draft is filled.',
+  parameters: ['target_story_title', 'cue_title', 'confirm'],
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      type: { const: 'generate_story_song' },
+      target_story_title: { type: 'string', maxLength: 300 },
+      cue_title: { type: 'string', maxLength: 300 },
+      confirm: { const: true },
+    },
+    required: ['type', 'confirm'],
+  },
+  risk: 'compute', confirmation: 'required', progress: 'Generando la canción configurada con ACE-Step…',
+  resolve(raw) { return raw.confirm === true ? { type: 'generate_story_song', targetStoryTitle: text(raw.target_story_title, 300), cueTitle: text(raw.cue_title, 300), confirm: true } : null },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.generateSong(action) },
+  correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'story_song', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'story_lab', anchors: ['music', 'candidate'], replay: 'atomic' },
 })
 
 defineCapability<AgentStageStoryMusicVideoAction>({

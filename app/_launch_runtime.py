@@ -43,6 +43,7 @@ import hashlib
 import json
 import re
 import math
+import random
 import time
 import uuid
 import asyncio
@@ -34490,6 +34491,376 @@ def get_output_metadata(name: str, workspace: str | None = None):
         return {"source": "embedded", "params": embedded}
 
     return {"source": "none", "params": None}
+
+
+def _alternative_song_parent(name: str, workspace: str | None = None) -> tuple[str, str, str, dict]:
+    """Return workspace dir, video path, basename and sidecar for one mix."""
+    from services.alternative_songs import load_sidecar
+
+    out_dir = _workspace_dir(workspace)
+    filepath = _safe_join(out_dir, name)
+    if filepath is None or not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="Videoclip not found")
+    if os.path.splitext(filepath)[1].lower() not in {".mp4", ".mkv", ".webm", ".mov"}:
+        raise HTTPException(status_code=400, detail="Alternative songs are for video mixes")
+    return out_dir, filepath, os.path.basename(filepath), load_sidecar(filepath)
+
+
+def _alternative_song_sources(out_dir: str, video_name: str, sidecar: dict) -> list[dict]:
+    from services.alternative_songs import resolve_existing_files, source_clip_names
+
+    names = source_clip_names(sidecar, video_name)
+    sources = resolve_existing_files(names, out_dir)
+    if not sources:
+        sources = resolve_existing_files([video_name], out_dir)
+    if not sources:
+        raise HTTPException(
+            status_code=400,
+            detail="This videoclip has no reusable shots on disk to remount",
+        )
+    return sources
+
+
+def _run_alternative_song_mount(
+    job_id: str,
+    *,
+    out_dir: str,
+    video_path: str,
+    video_name: str,
+    audio_path: str,
+    output_path: str,
+    song_id: str,
+    workspace: str,
+    seed: int,
+) -> None:
+    from services.alternative_songs import (
+        find_song,
+        load_sidecar,
+        plan_timeline,
+        remount_clips,
+        save_sidecar,
+        source_clip_names,
+        resolve_existing_files,
+        write_mounted_sidecar,
+    )
+
+    def fail(message: str) -> None:
+        sidecar = load_sidecar(video_path)
+        song = find_song(sidecar, song_id=song_id)
+        if song is not None:
+            song["status"] = "failed"
+            song["job_id"] = job_id
+            save_sidecar(video_path, sidecar)
+        _video_editor_job_update(
+            job_id,
+            status="failed",
+            phase="failed",
+            error=message,
+            message=message,
+            output_files=[],
+            acquired_resources=[],
+            finished_at=time.time(),
+            _resource_acquired=False,
+            _worker_active=False,
+        )
+
+    try:
+        _video_editor_job_update(
+            job_id,
+            status="waiting_resource",
+            phase="waiting_resource",
+            message="Waiting for the local FFmpeg lane…",
+            acquired_resources=[],
+        )
+        sidecar = load_sidecar(video_path)
+        sources = resolve_existing_files(source_clip_names(sidecar, video_name), out_dir)
+        song = find_song(sidecar, song_id=song_id)
+        if song is None:
+            raise ValueError("The alternative song disappeared before remount")
+        target = float(song.get("duration_seconds") or 0)
+        planned = plan_timeline(sources, target, rng=random.Random(seed))
+        try:
+            with resource_scheduler.coordinator.acquire(
+                _VIDEO_EDITOR_FFMPEG_LANE,
+                task_id=str((_video_editor_job_snapshot(job_id) or {}).get("task_id") or job_id),
+                description="Alternative song remount",
+                cancelled=lambda: _video_editor_cancel_requested(job_id),
+            ):
+                started = _video_editor_job_update(
+                    job_id,
+                    status="running",
+                    phase="rendering",
+                    message="Remounting videoclip with the alternative song…",
+                    started_at=time.time(),
+                    acquired_resources=[_VIDEO_EDITOR_FFMPEG_LANE.key],
+                    _resource_acquired=True,
+                )
+                if (
+                    _video_editor_cancel_requested(job_id)
+                    or str(started.get("status") or "") in _VIDEO_EDITOR_TERMINAL
+                ):
+                    raise resource_scheduler.ResourceAcquireCancelled(
+                        f"Alternative song remount {job_id} was cancelled before FFmpeg started"
+                    )
+                remount_clips(
+                    planned,
+                    audio_path,
+                    output_path,
+                    abort_callback=lambda: _video_editor_cancel_requested(job_id),
+                )
+        except resource_scheduler.ResourceAcquireCancelled:
+            current = _video_editor_job_snapshot(job_id) or {}
+            deferred = bool(current.get("started_at"))
+            sidecar = load_sidecar(video_path)
+            song = find_song(sidecar, song_id=song_id)
+            if song is not None and str(song.get("status") or "") == "mounting":
+                song["status"] = "attached"
+                song["job_id"] = None
+                save_sidecar(video_path, sidecar)
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message=(
+                    "Cancelled after FFmpeg reached a safe boundary"
+                    if deferred else "Cancelled before FFmpeg started"
+                ),
+                cancel_mode="deferred" if deferred else "immediate",
+                safe_boundary=(
+                    "after_current_ffmpeg_render" if deferred else "before_ffmpeg"
+                ),
+            )
+            return
+
+        if _video_editor_cancel_requested(job_id):
+            sidecar = load_sidecar(video_path)
+            song = find_song(sidecar, song_id=song_id)
+            if song is not None:
+                song["status"] = "attached"
+                song["job_id"] = None
+                save_sidecar(video_path, sidecar)
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message="Cancelled after FFmpeg reached a safe boundary",
+                cancel_mode="deferred",
+                safe_boundary="after_current_ffmpeg_render",
+            )
+            return
+
+        sidecar = load_sidecar(video_path)
+        song = find_song(sidecar, song_id=song_id)
+        if song is None:
+            raise ValueError("The alternative song disappeared after remount")
+        write_mounted_sidecar(
+            output_path=output_path,
+            parent_name=video_name,
+            parent_sidecar=sidecar,
+            song=song,
+            planned=planned,
+            job_id=job_id,
+            workspace=workspace,
+        )
+        save_sidecar(video_path, sidecar)
+        output_name = os.path.basename(output_path)
+        _video_editor_job_update(
+            job_id,
+            status="completed",
+            phase="completed",
+            progress=100,
+            current=100,
+            message="Alternative song remount complete",
+            filename=output_name,
+            url=f"/api/v1/file/{output_name}",
+            output_files=[output_name],
+            acquired_resources=[],
+            finished_at=time.time(),
+            _resource_acquired=False,
+            _worker_active=False,
+        )
+    except Exception as exc:
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+        _remove_video_editor_output_bundle(output_path)
+        fail(str(exc))
+
+
+@api.get("/api/v1/outputs/{name}/alternative-songs")
+def list_alternative_songs(name: str, workspace: str | None = None):
+    """List songs attached to an assembled videoclip without remounting."""
+    from services.alternative_songs import describe_parent
+
+    out_dir, filepath, video_name, sidecar = _alternative_song_parent(name, workspace)
+    sources = _alternative_song_sources(out_dir, video_name, sidecar)
+    return describe_parent(
+        video_name=video_name,
+        video_path=filepath,
+        sidecar=sidecar,
+        source_files=sources,
+    )
+
+
+@api.post("/api/v1/outputs/{name}/alternative-songs")
+def attach_alternative_song(name: str, body: dict, workspace: str | None = None):
+    """Attach an existing audio output as an alternative song. No GPU work."""
+    from services.alternative_songs import attach_song, describe_parent, public_song, save_sidecar
+
+    audio_name = str((body or {}).get("audio_name") or "").strip()
+    if not audio_name:
+        raise HTTPException(status_code=400, detail="audio_name is required")
+    ws = workspace if workspace is not None else (body or {}).get("workspace")
+    out_dir, filepath, video_name, sidecar = _alternative_song_parent(name, ws)
+    sources = _alternative_song_sources(out_dir, video_name, sidecar)
+    try:
+        audio_path = _resolve_video_editor_audio_source(audio_name, ws)
+        from services.alternative_songs import probe_song_duration
+        duration = probe_song_duration(audio_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    record = attach_song(sidecar, audio_name=os.path.basename(audio_path), duration_seconds=duration)
+    save_sidecar(filepath, sidecar)
+    parent = describe_parent(
+        video_name=video_name, video_path=filepath, sidecar=sidecar, source_files=sources,
+    )
+    return {"song": public_song(record), **parent}
+
+
+@api.delete("/api/v1/outputs/{name}/alternative-songs/{song_id}")
+def delete_alternative_song(name: str, song_id: str, workspace: str | None = None):
+    from services.alternative_songs import public_song, remove_song, save_sidecar
+
+    _out_dir, filepath, _video_name, sidecar = _alternative_song_parent(name, workspace)
+    try:
+        removed = remove_song(sidecar, song_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    save_sidecar(filepath, sidecar)
+    return {"removed": public_song(removed)}
+
+
+@api.post("/api/v1/outputs/{name}/alternative-songs/{song_id}/mount", status_code=202)
+def mount_alternative_song(name: str, song_id: str, body: dict | None = None, workspace: str | None = None):
+    """Remount the videoclip with an attached alternative song using FFmpeg only."""
+    from services.alternative_songs import (
+        attach_song,
+        find_song,
+        public_song,
+        save_sidecar,
+        unique_mounted_name,
+        probe_song_duration,
+    )
+
+    payload = body if isinstance(body, dict) else {}
+    ws = workspace if workspace is not None else payload.get("workspace")
+    out_dir, filepath, video_name, sidecar = _alternative_song_parent(name, ws)
+    _alternative_song_sources(out_dir, video_name, sidecar)
+    record = find_song(sidecar, song_id=song_id)
+    if record is None:
+        audio_name = str(payload.get("audio_name") or "").strip()
+        if not audio_name:
+            raise HTTPException(status_code=404, detail="Alternative song not found")
+        try:
+            audio_path = _resolve_video_editor_audio_source(audio_name, ws)
+            record = attach_song(
+                sidecar,
+                audio_name=os.path.basename(audio_path),
+                duration_seconds=probe_song_duration(audio_path),
+            )
+            song_id = str(record["id"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if str(record.get("status") or "") == "mounting":
+        raise HTTPException(status_code=409, detail="That song is already remounting")
+    try:
+        audio_path = _resolve_video_editor_audio_source(str(record.get("audio_name") or ""), ws)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        seed = int(payload.get("seed") if payload.get("seed") is not None else 1)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="seed must be an integer") from exc
+    output_name = unique_mounted_name(out_dir, video_name, str(record.get("audio_name") or "song"))
+    output_path = os.path.join(out_dir, output_name)
+    job_id = f"alt-song-{uuid.uuid4().hex[:12]}"
+    task_id, root_task_id, parent_task_id = _video_editor_task_identity(payload, job_id)
+    now = time.time()
+    job = {
+        "job_id": job_id,
+        "task_id": task_id,
+        "root_task_id": root_task_id,
+        "parent_task_id": parent_task_id,
+        "workspace": ws or _get_active_workspace(),
+        "status": "queued",
+        "phase": "queued",
+        "progress": 0,
+        "current": 0,
+        "total": 100,
+        "message": "Waiting to remount the alternative song…",
+        "filename": None,
+        "url": None,
+        "output_files": [],
+        "result": None,
+        "error": None,
+        "provider": "local",
+        "model": "FFmpeg",
+        "server_origin": "local",
+        "resource_lane": _VIDEO_EDITOR_FFMPEG_LANE.key,
+        "resource_requirements": [_VIDEO_EDITOR_FFMPEG_LANE.key],
+        "acquired_resources": [],
+        "created_at": now,
+        "queued_at": now,
+        "updated_at": now,
+        "_cancel_requested": False,
+        "_resource_acquired": False,
+        "_worker_active": True,
+    }
+    record["status"] = "mounting"
+    record["job_id"] = job_id
+    save_sidecar(filepath, sidecar)
+    try:
+        snapshot = _register_video_editor_job(job)
+    except Exception as exc:
+        record["status"] = "attached"
+        record["job_id"] = None
+        save_sidecar(filepath, sidecar)
+        raise HTTPException(status_code=500, detail=f"Could not queue remount: {exc}") from exc
+    worker = threading.Thread(
+        target=_run_alternative_song_mount,
+        kwargs={
+            "job_id": job_id,
+            "out_dir": out_dir,
+            "video_path": filepath,
+            "video_name": video_name,
+            "audio_path": audio_path,
+            "output_path": output_path,
+            "song_id": song_id,
+            "workspace": str(job["workspace"]),
+            "seed": seed,
+        },
+        daemon=True,
+        name=f"maestro-{job_id}",
+    )
+    try:
+        worker.start()
+    except Exception as exc:
+        record["status"] = "attached"
+        record["job_id"] = None
+        save_sidecar(filepath, sidecar)
+        _video_editor_job_update(
+            job_id,
+            status="failed",
+            phase="failed",
+            error=str(exc),
+            message=f"Could not start remount: {exc}",
+            finished_at=time.time(),
+            _worker_active=False,
+        )
+        raise HTTPException(status_code=500, detail=f"Could not start remount: {exc}") from exc
+    return {
+        "job_id": job_id,
+        "task_id": snapshot.get("task_id"),
+        "status": snapshot.get("status"),
+        "song": public_song(record),
+        "output_name": output_name,
+    }
 
 
 def _saved_video_context_for_extra_info(name: str):

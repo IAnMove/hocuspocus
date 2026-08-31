@@ -158,18 +158,32 @@ test('Play all advances through ordered shot slots and stops after the final cli
   cleanup()
 })
 
+function mockRecoveryFetch({
+  recovered = [{
+    job_id: 'job-1', model_type: 'minimax_h3', previous_status: 'running',
+    prompt_preview: 'A cyclist crosses the rain', workspace: 'default',
+  }],
+  live = [],
+}: {
+  recovered?: Array<Record<string, unknown>>
+  live?: Array<Record<string, unknown>>
+} = {}) {
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const payload = url.includes('/jobs/recovery')
+      ? { jobs: recovered }
+      : { jobs: live }
+    return new Response(JSON.stringify(payload), { headers: { 'content-type': 'application/json' } })
+  }
+}
+
 test('recovery dialog resumes the durable queue through its accessible button', { concurrency: false }, async () => {
   const { render, screen, waitFor, cleanup } = await import('@testing-library/react')
   const { QueueRecoveryDialog } = await import('../src/components/QueueRecoveryDialog.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
   let reconnects = 0
   useStore.setState({ reconnectJobs: async () => { reconnects += 1 } })
-  globalThis.fetch = async () => new Response(JSON.stringify({
-    jobs: [{
-      job_id: 'job-1', model_type: 'minimax_h3', previous_status: 'running',
-      prompt_preview: 'A cyclist crosses the rain', workspace: 'default',
-    }],
-  }), { headers: { 'content-type': 'application/json' } })
+  mockRecoveryFetch()
 
   render(<QueueRecoveryDialog />)
   await screen.findByRole('dialog', { name: /cola de generación por recuperar/i })
@@ -178,6 +192,23 @@ test('recovery dialog resumes the durable queue through its accessible button', 
   resume.click()
   await waitFor(() => assert.equal(reconnects, 1))
   await waitFor(() => assert.equal(screen.queryByRole('dialog'), null))
+  cleanup()
+})
+
+test('recovery dialog warns that leftover jobs would duplicate a live generation', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { QueueRecoveryDialog } = await import('../src/components/QueueRecoveryDialog.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.setState({ reconnectJobs: async () => {} })
+  mockRecoveryFetch({
+    live: [{ job_id: '8db472e9', status: 'running', message: 'decoding' }],
+  })
+
+  render(<QueueRecoveryDialog />)
+  await screen.findByRole('dialog', { name: /restos antiguos además de la generación actual/i })
+  assert.ok(screen.getByText(/duplica GPU/i))
+  assert.equal(screen.getByRole('button', { name: 'Aun así retomar restos antiguos' }).disabled, false)
+  assert.equal(screen.getByRole('button', { name: 'Descartar y empezar limpio' }).disabled, false)
   cleanup()
 })
 
