@@ -73,11 +73,11 @@ Otros commits relevantes inmediatamente anteriores incluían fixes de visema en 
 
 Hay documentos locales sin seguimiento que pertenecen al usuario y no se tocaron:
 
-- `CODEX_README.md`
-- `resumen.md`
-- `roadmap_agentmode.md`
+- `comunicaciones/CODEX_README.md`
+- `comunicaciones/resumen.md`
+- `comunicaciones/roadmap_agentmode.md`
 
-No borrar, sobrescribir ni asumir que se pueden reemplazar. `roadmap_agentmode.md` contiene una propuesta anterior de Agent Mode en la barra lateral. El nuevo requisito del usuario cambia la colocación: ahora quiere el acceso en el **footer inferior izquierdo**.
+No borrar, sobrescribir ni asumir que se pueden reemplazar. `comunicaciones/roadmap_agentmode.md` contiene una propuesta anterior de Agent Mode en la barra lateral. El nuevo requisito del usuario cambia la colocación: ahora quiere el acceso en el **footer inferior izquierdo**.
 
 ## 4. Infraestructura de audio que ya existía
 

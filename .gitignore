@@ -12,6 +12,7 @@ ui/dist/
 
 # Private planning notes and local-only development artefacts.
 /internal/
+/comunicaciones/
 
 # Pinokio runtime
 logs/
