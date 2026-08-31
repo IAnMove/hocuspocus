@@ -164,8 +164,8 @@ def create_series_project(
         "episodesById": {}, "assets": {},
         "provider": {
             "useGlobalProfile": True,
-            "writingProvider": "minimax", "writingModel": "MiniMax-M3", "writingBaseUrl": "https://api.minimax.io/v1",
-            "imageProvider": "minimax", "imageModel": "image-01", "videoModel": "minimax_h3_legacy",
+            "writingProvider": "maestro", "writingModel": "", "writingBaseUrl": "",
+            "imageProvider": "maestro", "imageModel": "", "videoModel": "minimax_h3_legacy",
             "videoSettings": {
                 "renderStrategy": "auto", "resolution": "540p",
                 "orientation": "landscape", "numInferenceSteps": 20,

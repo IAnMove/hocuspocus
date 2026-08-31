@@ -8,6 +8,7 @@ import { getModelMode, useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
 import { generateImageAsset } from '../../lib/imageGeneration'
+import { writingBaseUrlFromProfile, writingProviderFromText } from '../../lib/productionProfile'
 import {
   buildDirectorImagePrompt,
   generateDirectorArtwork,
@@ -708,9 +709,9 @@ const initialDirector = (): ComicDirectorRequest => ({
   worldContext: '',
   forbiddenElements: '',
   dialogueDensity: 'medium',
-  writingProvider: useStore.getState().productionProfile.text.provider === 'minimax' ? 'minimax' : 'maestro',
+  writingProvider: writingProviderFromText(useStore.getState().productionProfile.text.provider),
   writingModel: useStore.getState().productionProfile.text.model,
-  writingBaseUrl: useStore.getState().productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '',
+  writingBaseUrl: writingBaseUrlFromProfile(useStore.getState().productionProfile),
   provider: useStore.getState().productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
   imageModel: useStore.getState().productionProfile.image.model || useStore.getState().selectedModelPerMode.image || 'flux2_klein_9b',
   characters: [],
@@ -856,9 +857,9 @@ export function ComicDirectorPanel({
     if (!request.useGlobalProfile) return
     const next: ComicDirectorRequest = {
       ...request,
-      writingProvider: productionProfile.text.provider === 'minimax' ? 'minimax' : 'maestro',
+      writingProvider: writingProviderFromText(productionProfile.text.provider),
       writingModel: productionProfile.text.model,
-      writingBaseUrl: productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '',
+      writingBaseUrl: writingBaseUrlFromProfile(productionProfile),
       provider: productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
       imageModel: productionProfile.image.model,
     }

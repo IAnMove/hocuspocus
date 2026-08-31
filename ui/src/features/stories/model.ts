@@ -543,7 +543,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       useGlobalProfile: project.provider && typeof project.provider === 'object'
         ? project.provider.useGlobalProfile === true
         : false,
-      writingProvider: ['maestro', 'deepseek', 'minimax', 'openai', 'openai-compatible']
+      writingProvider: ['maestro', 'deepseek', 'minimax', 'openai', 'openai-compatible', 'ollama', 'grok']
         .includes(text(project.provider?.writingProvider))
         ? project.provider!.writingProvider
         : 'maestro',

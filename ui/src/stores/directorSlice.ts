@@ -87,7 +87,7 @@ export type DirectorSlice = {
   setDirectorSongStyle: (v: string) => void
   setDirectorSongLyrics: (v: string) => void
   setDirectorSongDuration: (v: number) => void
-  directorWritingProvider: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible'
+  directorWritingProvider: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible' | 'ollama' | 'grok'
   directorWritingModel: string
   directorWritingBaseUrl: string
   shortFilmNarrative: boolean

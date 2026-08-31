@@ -11,14 +11,20 @@ const DEFAULT_BASE_URLS: Partial<Record<StoryWritingProvider, string>> = {
   minimax: 'https://api.minimax.io/v1',
   openai: 'https://api.openai.com',
   deepseek: 'https://api.deepseek.com',
+  grok: 'https://api.x.ai/v1',
+  ollama: 'http://127.0.0.1:11434',
 }
 
-function normalizeProfileProvider(value: ProductionProfile['text']['provider']): StoryWritingProvider {
+function normalizeProfileProvider(
+  value: ProductionProfile['text']['provider'],
+): StoryWritingProvider {
   if (
     value === 'minimax'
     || value === 'openai'
     || value === 'deepseek'
     || value === 'openai-compatible'
+    || value === 'ollama'
+    || value === 'grok'
   ) return value
   return 'maestro'
 }
@@ -46,8 +52,8 @@ export function resolveStoryWritingProvider(
     model: profile.text.model,
     // OpenAI-compatible URLs are configured on the Story override because the
     // global ProductionProfile intentionally stores only provider and model.
-    baseUrl: provider === 'openai-compatible'
-      ? project.provider.writingBaseUrl
+    baseUrl: provider === 'openai-compatible' || provider === 'ollama'
+      ? (profile.text.base_url || project.provider.writingBaseUrl || DEFAULT_BASE_URLS[provider] || '')
       : DEFAULT_BASE_URLS[provider] || '',
   }
 }

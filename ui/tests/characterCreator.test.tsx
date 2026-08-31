@@ -153,7 +153,7 @@ test('Character Creator captures 4 stills before Hunyuan, from one image', async
     assert.equal((screen.getByRole('button', { name: /Generar órbita 360/ }) as HTMLButtonElement).disabled, true)
     const hunyuan = screen.getByRole('button', { name: /Generar Hunyuan3D/ }) as HTMLButtonElement
     assert.equal(hunyuan.disabled, true)
-    assert.ok(screen.getByText(/MiniMax describe/i))
+    assert.ok(screen.getByText(/MiniMax o el LLM interno describen/i))
     assert.ok(screen.getByText(/Turnaround 3D/i))
     assert.ok(screen.getByText(/No es el puppet 2D de Face Rig/i))
     assert.ok(screen.getByRole('button', { name: /Create \/ open CharacterKit Face Rig/ }))

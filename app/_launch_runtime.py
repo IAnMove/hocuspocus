@@ -1379,7 +1379,7 @@ _PRODUCTION_PROFILE_CONFIG_KEY = "maestro_production_profile"
 _PRODUCTION_PROFILE_VERSION = 1
 _DEFAULT_PRODUCTION_PROFILE = {
     "version": _PRODUCTION_PROFILE_VERSION,
-    "text": {"provider": "minimax", "model": "MiniMax-M3"},
+    "text": {"provider": "minimax", "model": "MiniMax-M3", "base_url": "https://api.minimax.io"},
     "image": {"provider": "minimax", "model": "image-01"},
     "music": {"provider": "local", "model": "ace_step_v1_5_xl_sft_lm_4b"},
     "video": {
@@ -1397,6 +1397,7 @@ _DEFAULT_PRODUCTION_PROFILE = {
             "aspectRatio": "16:9",
         },
     },
+    "model3d": {"provider": "local", "model": "hunyuan3d-2mini-turbo"},
 }
 
 
@@ -1413,35 +1414,52 @@ def _bounded_profile_text(value, label: str, *, maximum: int = 200) -> str:
 
 def _normalize_production_profile(value) -> dict:
     """Validate the credential-free defaults shared by every production UI."""
+    from services.provider_profile import (
+        IMAGE_PROVIDERS,
+        MODEL3D_PROVIDERS,
+        MUSIC_PROVIDERS,
+        TEXT_PROVIDERS,
+        alias_model3d_provider,
+        alias_text_provider,
+        canonicalize_remote_url,
+        default_url_for_provider,
+    )
+
     if not isinstance(value, dict):
         raise ValueError("Production profile must be an object.")
     text_profile = value.get("text")
     image_profile = value.get("image")
     music_profile = value.get("music")
     video_profile = value.get("video")
+    model3d_profile = value.get("model3d") if isinstance(value.get("model3d"), dict) else {
+        "provider": "local",
+        "model": "hunyuan3d-2mini-turbo",
+    }
     if not all(isinstance(item, dict) for item in (
         text_profile, image_profile, music_profile, video_profile,
     )):
         raise ValueError("Production profile needs text, image, music and video sections.")
 
-    text_provider = _bounded_profile_text(
+    text_provider = alias_text_provider(_bounded_profile_text(
         text_profile.get("provider"), "Text provider",
-    ).lower()
-    if text_provider not in {
-        "local", "remote", "openai", "anthropic", "deepseek", "minimax",
-        "openai-compatible",
-    }:
+    ).lower(), str(text_profile.get("base_url") or ""))
+    if text_provider not in TEXT_PROVIDERS:
         raise ValueError("Unsupported production text provider.")
     image_provider = _bounded_profile_text(
         image_profile.get("provider"), "Image provider",
     ).lower()
-    if image_provider not in {"maestro", "local", "minimax"}:
+    if image_provider not in IMAGE_PROVIDERS:
         raise ValueError("Unsupported production image provider.")
     music_provider = _bounded_profile_text(
         music_profile.get("provider"), "Music provider",
     ).lower()
-    if music_provider not in {"maestro", "local", "minimax"}:
+    if music_provider not in MUSIC_PROVIDERS:
         raise ValueError("Unsupported production music provider.")
+    model3d_provider = alias_model3d_provider(_bounded_profile_text(
+        model3d_profile.get("provider"), "3D provider",
+    ).lower())
+    if model3d_provider not in MODEL3D_PROVIDERS:
+        raise ValueError("Unsupported production 3D provider.")
     music_model = _bounded_profile_text(music_profile.get("model"), "Music model")
     video_provider = _bounded_profile_text(
         video_profile.get("provider"), "Video provider",
@@ -1482,11 +1500,16 @@ def _normalize_production_profile(value) -> dict:
     if aspect_ratio not in {"auto", "21:9", "16:9", "9:16", "1:1", "4:3", "3:4"}:
         raise ValueError("Unsupported production video aspect ratio.")
 
+    text_base_url = canonicalize_remote_url(str(text_profile.get("base_url") or ""))
+    if text_provider in {"ollama", "remote", "openai-compatible", "grok", "openai", "minimax"}:
+        text_base_url = default_url_for_provider(text_provider, text_base_url)
+
     return {
         "version": _PRODUCTION_PROFILE_VERSION,
         "text": {
             "provider": text_provider,
             "model": _bounded_profile_text(text_profile.get("model"), "Text model"),
+            "base_url": text_base_url,
         },
         "image": {
             "provider": image_provider,
@@ -1495,6 +1518,13 @@ def _normalize_production_profile(value) -> dict:
         "music": {
             "provider": music_provider,
             "model": music_model,
+        },
+        "model3d": {
+            "provider": model3d_provider,
+            "model": _bounded_profile_text(
+                model3d_profile.get("model") or "hunyuan3d-2mini-turbo",
+                "3D model",
+            ),
         },
         "video": {
             "provider": video_provider,
@@ -1531,16 +1561,39 @@ def _effective_llm_routing(services: dict | None = None) -> tuple[str, str, str]
     what prevents Director/prompt tools from downloading a local model while a
     new or migrated install already advertises MiniMax in its global profile.
     """
+    from services.provider_profile import alias_text_provider, default_url_for_provider
+
     service_values = services if isinstance(services, dict) else {}
     text_profile = _active_production_profile().get("text", {})
-    provider = str(text_profile.get("provider") or "local").strip().lower()
+    remote_url = str(
+        text_profile.get("base_url")
+        or service_values.get("llm_remote_url")
+        or ""
+    ).strip()
+    provider = alias_text_provider(
+        str(text_profile.get("provider") or "local").strip().lower(),
+        remote_url,
+    )
     model = str(text_profile.get("model") or "").strip()
-    remote_url = str(service_values.get("llm_remote_url") or "").strip()
-    if provider == "minimax":
-        remote_url = "https://api.minimax.io"
-    elif provider == "openai" and not remote_url:
-        remote_url = "https://api.openai.com"
+    remote_url = default_url_for_provider(provider, remote_url)
     return provider, model, remote_url
+
+
+def _llm_provider_credentials(provider: str, services: dict, remote_url: str = "") -> tuple[str, str]:
+    from services.provider_profile import default_url_for_provider, resolve_minimax_key
+
+    api_key = ""
+    if provider == "openai":
+        api_key = str(services.get("openai_api_key") or "")
+    elif provider == "anthropic":
+        api_key = str(services.get("anthropic_api_key") or "")
+    elif provider == "minimax":
+        api_key = resolve_minimax_key(services, "llm")
+    elif provider == "grok":
+        api_key = str(services.get("grok_api_key") or "")
+    elif provider == "deepseek":
+        api_key = str(services.get("deepseek_api_key") or "")
+    return api_key, default_url_for_provider(provider, remote_url)
 
 
 def _production_profile_response() -> dict:
@@ -1586,8 +1639,14 @@ async def update_production_profile(request: Request):
         services = wgp.server_config.setdefault("services", {})
         services["llm_provider"] = profile["text"]["provider"]
         services["llm_model_id"] = profile["text"]["model"]
-        if profile["text"]["provider"] == "minimax":
+        if profile["text"].get("base_url"):
+            services["llm_remote_url"] = profile["text"]["base_url"]
+        elif profile["text"]["provider"] == "minimax":
             services["llm_remote_url"] = "https://api.minimax.io"
+        elif profile["text"]["provider"] == "grok":
+            services["llm_remote_url"] = "https://api.x.ai"
+        elif profile["text"]["provider"] == "ollama" and not services.get("llm_remote_url"):
+            services["llm_remote_url"] = "http://127.0.0.1:11434"
         # Saving the global profile is an explicit request to make Studio and
         # Director inherit it. Later manual model choices are persisted again
         # as ordinary per-mode overrides.
@@ -7197,7 +7256,7 @@ def _mask_key(key: str) -> str:
     return key[:4] + "..." + key[-4:]
 
 
-_PUBLIC_LLM_PROVIDERS = {"openai", "anthropic", "minimax"}
+_PUBLIC_LLM_PROVIDERS = {"openai", "anthropic", "minimax", "grok", "deepseek"}
 
 
 def _llm_default_device() -> str:
@@ -7253,6 +7312,18 @@ def get_services_config():
         "anthropic_api_key_set": bool(services.get("anthropic_api_key", "")),
         "minimax_api_key": _mask_key(services.get("minimax_api_key", "")),
         "minimax_api_key_set": bool(services.get("minimax_api_key", "")),
+        "minimax_llm_api_key": _mask_key(services.get("minimax_llm_api_key", "")),
+        "minimax_llm_api_key_set": bool(services.get("minimax_llm_api_key") or services.get("minimax_api_key")),
+        "minimax_image_api_key": _mask_key(services.get("minimax_image_api_key", "")),
+        "minimax_image_api_key_set": bool(services.get("minimax_image_api_key") or services.get("minimax_api_key")),
+        "minimax_music_api_key": _mask_key(services.get("minimax_music_api_key", "")),
+        "minimax_music_api_key_set": bool(services.get("minimax_music_api_key") or services.get("minimax_api_key")),
+        "grok_api_key": _mask_key(services.get("grok_api_key", "")),
+        "grok_api_key_set": bool(services.get("grok_api_key", "")),
+        "meshy_api_key": _mask_key(services.get("meshy_api_key", "")),
+        "meshy_api_key_set": bool(services.get("meshy_api_key", "")),
+        "hi3d_api_key": _mask_key(services.get("hi3d_api_key", "")),
+        "hi3d_api_key_set": bool(services.get("hi3d_api_key", "")),
         # Director v2 (layered architecture: structured shot planning,
         # mode-specific renderers, prompt validation) is now the default
         # as of 2026-05-03 after weeks of real-world validation. v1 had
@@ -7339,6 +7410,8 @@ async def update_services_config(request: Request):
         "enhance_llm_model_id", "enhance_llm_device",
         "google_api_key", "openai_api_key", "deepseek_api_key", "compatible_api_key",
         "compatible_base_url", "anthropic_api_key", "minimax_api_key",
+        "minimax_llm_api_key", "minimax_image_api_key", "minimax_music_api_key",
+        "grok_api_key", "meshy_api_key", "hi3d_api_key",
         "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
         "debug_trace_enabled", "workflow_parallelism_enabled",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
@@ -7389,6 +7462,8 @@ async def update_services_config(request: Request):
             profile["text"]["model"] = str(
                 services.get("llm_model_id") or profile["text"]["model"]
             )
+            if services.get("llm_remote_url"):
+                profile["text"]["base_url"] = str(services.get("llm_remote_url") or "")
             wgp.server_config[_PRODUCTION_PROFILE_CONFIG_KEY] = _normalize_production_profile(profile)
         except ValueError:
             pass
@@ -8144,14 +8219,7 @@ async def llm_load(request: Request):
     device = body.get("device", services.get("llm_device", _llm_default_device()))
     provider = body.get("provider", profile_provider)
     remote_url = body.get("remote_url", profile_remote_url)
-    api_key = ""
-    if provider == "openai":
-        api_key = services.get("openai_api_key", "")
-    elif provider == "anthropic":
-        api_key = services.get("anthropic_api_key", "")
-    elif provider == "minimax":
-        api_key = services.get("minimax_api_key", "")
-        remote_url = remote_url or "https://api.minimax.io"
+    api_key, remote_url = _llm_provider_credentials(provider, services, remote_url)
 
     try:
         llm_service.load_model(model_id=model_id, device=device, provider=provider, remote_url=remote_url, api_key=api_key)
@@ -8176,15 +8244,7 @@ def list_llm_models(provider: str = ""):
     services = wgp.server_config.get("services", {})
     profile_provider, _profile_model, profile_remote_url = _effective_llm_routing(services)
     p = provider or profile_provider
-    remote_url = profile_remote_url
-    api_key = ""
-    if p == "openai":
-        api_key = services.get("openai_api_key", "")
-    elif p == "anthropic":
-        api_key = services.get("anthropic_api_key", "")
-    elif p == "minimax":
-        api_key = services.get("minimax_api_key", "")
-        remote_url = remote_url or "https://api.minimax.io"
+    api_key, remote_url = _llm_provider_credentials(p, services, profile_remote_url)
     return {"models": llm_service.get_available_models(provider=p, remote_url=remote_url, api_key=api_key)}
 
 
@@ -8202,19 +8262,14 @@ def _ensure_llm_loaded():
     desired_provider, profile_model, desired_remote_url = _effective_llm_routing(services)
     desired = profile_model or _DEFAULT_LLM_REPO
     desired_device = services.get("llm_device", _llm_default_device())
-    desired_api_key = ""
-    if desired_provider == "openai":
-        desired_api_key = services.get("openai_api_key", "")
-    elif desired_provider == "anthropic":
-        desired_api_key = services.get("anthropic_api_key", "")
-    elif desired_provider == "minimax":
-        desired_api_key = services.get("minimax_api_key", "")
-        desired_remote_url = desired_remote_url or "https://api.minimax.io"
+    desired_api_key, desired_remote_url = _llm_provider_credentials(
+        desired_provider, services, desired_remote_url,
+    )
 
     if llm_service.is_loaded():
         status = llm_service.get_status()
         remote_changed = (
-            desired_provider in ("remote", "openai", "minimax")
+            desired_provider in ("remote", "ollama", "openai", "minimax", "grok")
             and status.get("remote_url", "") != desired_remote_url
         )
         if (
@@ -8275,7 +8330,7 @@ async def llm_test():
         # so a just-edited URL or API key is what this explicit test validates.
         services = wgp.server_config.get("services", {})
         provider = _effective_llm_routing(services)[0]
-        if provider in ("remote", "openai", "anthropic", "minimax") and llm_service.is_loaded():
+        if provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok") and llm_service.is_loaded():
             llm_service.unload_model()
         _ensure_llm_loaded()
         response = llm_service.generate(
@@ -8982,20 +9037,35 @@ async def describe_character_refs(request: Request):
         image_paths.append(resolved)
 
     services = wgp.server_config.get("services", {})
-    api_key = str(services.get("minimax_api_key") or "")
-    if not api_key:
+    from services.provider_profile import character_describe_backend, resolve_minimax_key
+
+    backend = character_describe_backend(_effective_llm_routing(services)[0])
+    if backend == "unavailable":
         raise HTTPException(
             status_code=400,
-            detail="Configure the MiniMax API key in Settings → Services first",
+            detail="Auto-describe only works with MiniMax or the internal LLM. Type an A Prompt, or switch Settings → LLM.",
         )
 
     def complete(system_prompt: str, user_prompt: str, paths: list[str]) -> str:
-        return llm_service.generate_openai_compatible(
+        if backend == "minimax":
+            api_key = resolve_minimax_key(services, "llm")
+            if not api_key:
+                raise ValueError("Configure the MiniMax LLM API key in Settings → Services first")
+            return llm_service.generate_openai_compatible(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                model_id="MiniMax-M3",
+                base_url="https://api.minimax.io/v1",
+                api_key=api_key,
+                max_new_tokens=1200,
+                temperature=0.2,
+                json_schema=DESCRIBE_SCHEMA,
+                image_paths=paths,
+            )
+        _ensure_llm_loaded()
+        return llm_service.generate(
             prompt=user_prompt,
             system_prompt=system_prompt,
-            model_id="MiniMax-M3",
-            base_url="https://api.minimax.io/v1",
-            api_key=api_key,
             max_new_tokens=1200,
             temperature=0.2,
             json_schema=DESCRIBE_SCHEMA,
@@ -27117,8 +27187,9 @@ def _run_minimax_image_job(job_id: str) -> None:
                 )
             generated = minimax_image_service.generate_image(
                 api_key=str(
-                    (wgp.server_config.get("services") or {}).get("minimax_api_key")
-                    or ""
+                    __import__("services.provider_profile", fromlist=["resolve_minimax_key"]).resolve_minimax_key(
+                        wgp.server_config.get("services") or {}, "image",
+                    )
                 ),
                 prompt=str(request_body.get("prompt") or ""),
                 aspect_ratio=str(request_body.get("aspect_ratio") or "1:1"),
@@ -27292,7 +27363,8 @@ def generate_comic_minimax(body: dict):
     """Generate one comic panel with MiniMax image-01 and persist it."""
     prompt = str(body.get("prompt") or "").strip()
     services = wgp.server_config.get("services", {})
-    api_key = services.get("minimax_api_key", "")
+    from services.provider_profile import resolve_minimax_key
+    api_key = resolve_minimax_key(services, "image")
     aspect_ratio = str(body.get("aspect_ratio") or "1:1")
     subject = body.get("subject_reference")
     try:
@@ -27834,92 +27906,18 @@ def _generate_comic_director_json(
 
 def _comic_writing_llm(body: dict) -> dict | None:
     """Resolve a comic-only LLM override without changing global LLM state."""
-    provider = str(body.get("writingProvider") or "maestro").strip().lower()
-    if provider in ("", "maestro", "internal", "local"):
-        return None
-    if provider not in ("deepseek", "minimax", "openai", "openai-compatible"):
-        raise HTTPException(status_code=400, detail="Unsupported comic writing provider")
+    from services.provider_profile import resolve_writing_override
 
-    services = wgp.server_config.get("services", {})
-    requested_url = str(body.get("writingBaseUrl") or "").strip()[:1000]
-    # Projects created before provider profiles existed stored DeepSeek/OpenAI
-    # as a generic compatible endpoint. Route those projects to the matching
-    # named profile, but never migrate or copy credentials between providers.
-    if provider == "openai-compatible":
-        from urllib.parse import urlparse
-        legacy_host = (urlparse(requested_url).hostname or "").lower()
-        if legacy_host == "api.deepseek.com":
-            provider = "deepseek"
-        elif legacy_host == "api.openai.com":
-            provider = "openai"
-
-    if provider == "deepseek":
-        model = str(body.get("writingModel") or "deepseek-v4-pro").strip()[:200]
-        if model in ("", "deepseek-chat", "deepseek-reasoner"):
-            model = "deepseek-v4-pro"
-        if str(body.get("mode") or "").lower() == "translate":
-            model = "deepseek-v4-flash"
-        if model not in {"deepseek-v4-pro", "deepseek-v4-flash"}:
-            raise HTTPException(status_code=400, detail="Choose DeepSeek V4 Pro or V4 Flash")
-        base_url = "https://api.deepseek.com"
-        api_key = str(services.get("deepseek_api_key") or "")
-        if not api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="Configure the DeepSeek API key in Settings → Services first",
-            )
-    elif provider == "minimax":
-        model = str(body.get("writingModel") or "MiniMax-M3").strip()[:200]
-        allowed_models = {"MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"}
-        if model not in allowed_models:
-            raise HTTPException(
-                status_code=400,
-                detail="Choose MiniMax M3, M2.7, or M2.7 Highspeed",
-            )
-        base_url = "https://api.minimax.io/v1"
-        api_key = str(services.get("minimax_api_key") or "")
-        if not api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="Configure the MiniMax API key in Settings → Services first",
-            )
-    elif provider == "openai":
-        model = str(body.get("writingModel") or "gpt-4.1").strip()[:200]
-        base_url = "https://api.openai.com"
-        api_key = str(services.get("openai_api_key") or "")
-        if not api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="Configure the OpenAI API key in Settings → Services first",
-            )
-    else:
-        model = str(body.get("writingModel") or "").strip()[:200]
-        base_url = str(services.get("compatible_base_url") or "").strip()[:1000].rstrip("/")
-        if not base_url:
-            raise HTTPException(
-                status_code=400,
-                detail="Configure the custom compatible URL in Settings → Services first",
-            )
-        if requested_url and requested_url.rstrip("/") != base_url:
-            raise HTTPException(
-                status_code=400,
-                detail="The comic's custom URL does not match the trusted compatible profile",
-            )
-        api_key = str(services.get("compatible_api_key") or "")
-
-    if not base_url.startswith(("http://", "https://")):
-        raise HTTPException(
-            status_code=400,
-            detail="OpenAI-compatible URL must start with http:// or https://",
+    try:
+        return resolve_writing_override(
+            provider=str(body.get("writingProvider") or "maestro"),
+            model=str(body.get("writingModel") or ""),
+            requested_url=str(body.get("writingBaseUrl") or ""),
+            services=wgp.server_config.get("services", {}),
+            mode=str(body.get("mode") or ""),
         )
-    if not model:
-        raise HTTPException(status_code=400, detail="Choose an OpenAI-compatible model")
-    return {
-        "provider": provider,
-        "model": model,
-        "base_url": base_url.rstrip("/"),
-        "api_key": api_key,
-    }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
@@ -32357,8 +32355,9 @@ def _run_minimax_music_job(job_id: str) -> None:
                     )
                 result = minimax_music_service.generate_candidates(
                     api_key=str(
-                        (wgp.server_config.get("services") or {}).get("minimax_api_key")
-                        or ""
+                        __import__("services.provider_profile", fromlist=["resolve_minimax_key"]).resolve_minimax_key(
+                            wgp.server_config.get("services") or {}, "music",
+                        )
                     ),
                     prompt=str(request_body.get("prompt") or ""),
                     lyrics=str(request_body.get("lyrics") or ""),
@@ -32635,7 +32634,7 @@ async def generate_story_music_candidates(body: dict):
     try:
         candidates = await asyncio.to_thread(
             minimax_music_service.generate_candidates,
-            api_key=str(services.get("minimax_api_key") or ""),
+            api_key=str(__import__("services.provider_profile", fromlist=["resolve_minimax_key"]).resolve_minimax_key(services, "music") or ""),
             prompt=str(body.get("prompt") or ""),
             lyrics=str(body.get("lyrics") or ""),
             count=int(body.get("count") or 2),

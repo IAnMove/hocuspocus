@@ -919,11 +919,23 @@ export interface MultiClip {
 
 export type SettingsTab = 'performance' | 'integrations'
 
+export type TextProvider =
+  | 'local'
+  | 'remote'
+  | 'ollama'
+  | 'openai'
+  | 'anthropic'
+  | 'deepseek'
+  | 'minimax'
+  | 'grok'
+  | 'openai-compatible'
+
 export interface ProductionProfile {
   version: 1
   text: {
-    provider: 'local' | 'remote' | 'openai' | 'anthropic' | 'deepseek' | 'minimax' | 'openai-compatible'
+    provider: TextProvider
     model: string
+    base_url?: string
   }
   image: {
     provider: 'maestro' | 'local' | 'minimax'
@@ -931,6 +943,10 @@ export interface ProductionProfile {
   }
   music: {
     provider: 'maestro' | 'local' | 'minimax'
+    model: string
+  }
+  model3d: {
+    provider: 'local' | 'hunyuan' | 'meshy' | 'hi3d'
     model: string
   }
   video: {
@@ -970,6 +986,18 @@ export interface ServicesConfig {
   anthropic_api_key_set: boolean
   minimax_api_key: string
   minimax_api_key_set: boolean
+  minimax_llm_api_key: string
+  minimax_llm_api_key_set: boolean
+  minimax_image_api_key: string
+  minimax_image_api_key_set: boolean
+  minimax_music_api_key: string
+  minimax_music_api_key_set: boolean
+  grok_api_key: string
+  grok_api_key_set: boolean
+  meshy_api_key: string
+  meshy_api_key_set: boolean
+  hi3d_api_key: string
+  hi3d_api_key_set: boolean
   use_director_v2: boolean
   nsfw_mode: boolean
   nsfw_accepted_at: string | null
@@ -1248,6 +1276,7 @@ export interface LlmModelOption {
   id: string
   label: string
   size_hint: string
+  provider?: string
 }
 
 export interface AudioBeat {

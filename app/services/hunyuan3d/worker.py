@@ -155,7 +155,12 @@ def _minimax_api_key() -> str:
     config_path = HERE.parents[1] / "wgp_config.json"
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        return str((data.get("services") or {}).get("minimax_api_key") or "").strip()
+        services = data.get("services") or {}
+        return str(
+            services.get("minimax_image_api_key")
+            or services.get("minimax_api_key")
+            or ""
+        ).strip()
     except (OSError, ValueError, TypeError):
         return ""
 

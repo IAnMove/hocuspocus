@@ -5,7 +5,7 @@ import * as api from '../api/client'
 import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { loadDeveloperMode, saveDeveloperMode } from '../lib/developerMode'
 import { splitPromptSchedule } from '../lib/promptScheduler'
-import { DEFAULT_PRODUCTION_PROFILE, resolveSupportedVideoFormat } from '../lib/productionProfile'
+import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
 import { createActivityPublicationGate } from '../lib/activityPublication'
 import { isGenerationJobActive } from '../lib/generationJobState'
@@ -1903,7 +1903,7 @@ interface AppState {
   shortFilmCharacters: ShortFilmCharacter[]
   shortFilmPath: ShortFilmPath | null
   shortFilmTargetDuration: number
-  directorWritingProvider: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible'
+  directorWritingProvider: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible' | 'ollama' | 'grok'
   directorWritingModel: string
   directorWritingBaseUrl: string
   shortFilmNarrative: boolean
@@ -7063,7 +7063,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
   loadLlmModels: async () => {
     try {
-      const data = await api.fetchLlmModels()
+      const provider = get().servicesConfig?.llm_provider || get().productionProfile.text.provider
+      const data = await api.fetchLlmModels(provider)
       set({ llmModels: data.models })
     } catch (e) {
       console.error('Failed to load LLM models:', e)
@@ -10485,7 +10486,9 @@ export const useStore = create<AppState>((set, get) => ({
             shortFilmPreserveVisualStyle, directorCharacterVisualStyle,
             directorAllowClipText } = state
 
-    const selectedImageModel = selectedModelPerMode.image || 'flux2_klein_9b'
+    const selectedImageModel = selectedModelPerMode.image
+      || productionImageModelType(state.productionProfile)
+      || 'flux2_klein_9b'
     const selectedVideoModel = selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
 
     // Director model choices are independent from whichever Studio model was

@@ -4072,6 +4072,7 @@ export async function startHunyuan3DJob(params: {
   operation?: 'generate' | 'retexture'
   source_model?: string
   preset?: string
+  provider?: string
   model_id?: string
   prompt?: string
   workspace?: string
@@ -4283,8 +4284,9 @@ export async function unloadLlm(): Promise<void> {
   if (!res.ok) throw new Error('Failed to unload LLM')
 }
 
-export async function fetchLlmModels(): Promise<{ models: import('../types').LlmModelOption[] }> {
-  const res = await fetch(`${BASE}/api/v1/llm/models`)
+export async function fetchLlmModels(provider?: string): Promise<{ models: import('../types').LlmModelOption[] }> {
+  const query = provider ? `?provider=${encodeURIComponent(provider)}` : ''
+  const res = await fetch(`${BASE}/api/v1/llm/models${query}`)
   if (!res.ok) throw new Error('Failed to fetch LLM models')
   return res.json()
 }

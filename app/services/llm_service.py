@@ -40,10 +40,10 @@ import collections as _collections
 _server_log: "_collections.deque[str]" = _collections.deque(maxlen=200)
 _log_reader: Optional[threading.Thread] = None
 
-# Provider state: "local" | "remote" | "openai" | "anthropic" | "minimax"
+# Provider state: "local" | "remote" | "ollama" | "openai" | "anthropic" | "minimax" | "grok"
 _provider: str = "local"
 _remote_url: str = ""       # Base URL for remote/OpenAI-compatible servers
-_api_key: str = ""           # API key for OpenAI/Anthropic
+_api_key: str = ""           # API key for OpenAI/Anthropic/MiniMax/Grok
 
 # Auto-unload idle timer
 _idle_timer: Optional[threading.Timer] = None
@@ -646,25 +646,52 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
 
     remote_models: list[dict] = []
 
-    # Query remote OpenAI-compatible server (LM Studio, etc.)
-    if provider in ("remote", "openai") and remote_url:
+    from .provider_profile import (
+        GROK_MODELS,
+        canonicalize_remote_url,
+        looks_like_ollama,
+        ollama_tags_url,
+        openai_models_url,
+    )
+
+    # Query remote OpenAI-compatible server (LM Studio, Ollama, etc.)
+    if provider in ("remote", "openai", "ollama", "grok") and remote_url:
         try:
             headers = {}
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
-            url = remote_url.rstrip("/")
-            resp = requests.get(f"{url}/v1/models", headers=headers, timeout=10)
-            if resp.ok:
-                data = resp.json()
-                for m in data.get("data", []):
-                    mid = m.get("id", "")
-                    if mid:
-                        remote_models.append({
-                            "id": mid,
-                            "label": f"{mid} (Remote)" if provider == "remote" else f"{mid} (OpenAI)",
-                            "size_hint": provider,
-                            "provider": provider,
-                        })
+            origin = canonicalize_remote_url(remote_url)
+            listed = []
+            if provider == "ollama" or looks_like_ollama(origin):
+                try:
+                    tags = requests.get(ollama_tags_url(origin), timeout=10)
+                    if tags.ok:
+                        for entry in (tags.json() or {}).get("models", []):
+                            mid = str(entry.get("name") or entry.get("model") or "").strip()
+                            if mid:
+                                listed.append(mid)
+                except Exception as e:
+                    print(f"[LLM] Ollama /api/tags failed at {origin}: {e}")
+            if not listed:
+                resp = requests.get(openai_models_url(origin), headers=headers, timeout=10)
+                if resp.ok:
+                    data = resp.json()
+                    for m in data.get("data", []):
+                        mid = m.get("id", "")
+                        if mid:
+                            listed.append(mid)
+            suffix = {
+                "ollama": "Ollama",
+                "openai": "OpenAI",
+                "grok": "Grok",
+            }.get(provider, "Remote")
+            for mid in listed:
+                remote_models.append({
+                    "id": mid,
+                    "label": f"{mid} ({suffix})",
+                    "size_hint": provider,
+                    "provider": provider,
+                })
         except Exception as e:
             print(f"[LLM] Failed to query remote models at {remote_url}: {e}")
 
@@ -679,6 +706,13 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
         remote_models.extend([
             {"id": "MiniMax-M3", "label": "MiniMax M3", "size_hint": "MiniMax API", "provider": "minimax"},
             {"id": "MiniMax-M2.7", "label": "MiniMax M2.7", "size_hint": "MiniMax API", "provider": "minimax"},
+            {"id": "MiniMax-M2.7-highspeed", "label": "MiniMax M2.7 Highspeed", "size_hint": "MiniMax API", "provider": "minimax"},
+        ])
+
+    if provider == "grok" and not remote_models:
+        remote_models.extend([
+            {"id": model_id, "label": f"{model_id} (Grok)", "size_hint": "grok", "provider": "grok"}
+            for model_id in GROK_MODELS
         ])
 
     return local_models + remote_models
@@ -716,19 +750,24 @@ def get_model_dir() -> str:
 
 
 def _server_url() -> str:
-    if _provider in ("remote", "openai", "minimax") and _remote_url:
-        return _remote_url.rstrip("/")
+    from .provider_profile import canonicalize_remote_url
+    if _provider in ("remote", "ollama", "openai", "minimax", "grok") and _remote_url:
+        return canonicalize_remote_url(_remote_url)
     if _provider == "minimax":
         return "https://api.minimax.io"
+    if _provider == "grok":
+        return "https://api.x.ai"
     return f"http://127.0.0.1:{_server_port}"
 
 
 def _is_ollama_remote() -> bool:
     """Best-effort detection for Ollama's OpenAI-compatible endpoint."""
+    from .provider_profile import looks_like_ollama
+    if _provider == "ollama":
+        return True
     if _provider != "remote":
         return False
-    url = (_remote_url or "").lower()
-    return "ollama" in url or ":11434" in url
+    return looks_like_ollama(_remote_url)
 
 
 def _is_deepseek_remote() -> bool:
@@ -741,7 +780,7 @@ def _is_deepseek_remote() -> bool:
 def _api_headers() -> dict:
     """Build headers for API calls (adds auth for remote providers)."""
     headers = {"Content-Type": "application/json"}
-    if _provider in ("remote", "openai", "anthropic", "minimax") and _api_key:
+    if _provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok") and _api_key:
         if _provider == "anthropic":
             headers["x-api-key"] = _api_key
             headers["anthropic-version"] = "2023-06-01"
@@ -958,7 +997,7 @@ def _prepare_thinking(system_prompt: str, enable_thinking: Optional[bool], think
 
 
 def is_loaded() -> bool:
-    if _provider in ("remote", "openai", "anthropic", "minimax"):
+    if _provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok"):
         return bool(_model_id)
     return _process is not None and _process.poll() is None
 
@@ -969,7 +1008,7 @@ def get_status() -> dict:
         "model_id": _model_id or None,
         "device": _device if is_loaded() else None,
         "provider": _provider,
-        "remote_url": _remote_url if _provider in ("remote", "openai", "minimax") else "",
+        "remote_url": _remote_url if _provider in ("remote", "ollama", "openai", "minimax", "grok") else "",
     }
 
 
@@ -1374,23 +1413,28 @@ def load_model(
         model_id: Model ID (HF repo for local, model name for remote/API)
         device: "cpu" or "cuda" (local only)
         force_reload: If True, restart even if already running
-        provider: "local" | "remote" | "openai" | "anthropic" | "minimax"
+        provider: "local" | "remote" | "ollama" | "openai" | "anthropic" | "minimax" | "grok"
         remote_url: Base URL for remote/openai servers (e.g. http://192.168.1.100:1234)
         api_key: API key for public API providers
     """
     global _process, _model_id, _device, _server_port, _vision_available
     global _provider, _remote_url, _api_key
 
+    from .provider_profile import alias_text_provider, canonicalize_remote_url, default_url_for_provider
+
     provider, remote_url = normalize_minimax_chat_routing(
         str(model_id or ""),
         str(provider or "local"),
         str(remote_url or ""),
     )
+    provider = alias_text_provider(provider, remote_url)
+    remote_url = default_url_for_provider(provider, remote_url)
     if provider == "minimax" and not str(remote_url or "").strip():
         remote_url = "https://api.minimax.io"
+    remote_url = canonicalize_remote_url(remote_url)
 
     # Handle remote/API providers — no subprocess needed
-    if provider in ("remote", "openai", "anthropic", "minimax"):
+    if provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok"):
         with _lock:
             if is_loaded() and _model_id == model_id and _provider == provider and not force_reload:
                 return
@@ -2048,12 +2092,14 @@ def generate(
     # reasoning, returning an empty content field. Reuse the hardened
     # compatible-provider path, which also retries one confirmed empty
     # response with a larger bounded budget.
-    if _provider == "minimax":
+    if _provider in ("minimax", "grok"):
         return generate_openai_compatible(
             prompt=prompt,
             system_prompt=system_prompt,
             model_id=_model_id,
-            base_url=_remote_url or "https://api.minimax.io",
+            base_url=_remote_url or (
+                "https://api.minimax.io" if _provider == "minimax" else "https://api.x.ai"
+            ),
             api_key=_api_key,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
@@ -2112,7 +2158,7 @@ def generate(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and (_vision_available or _provider in ("remote", "openai", "minimax")):
+    if image_paths and (_vision_available or _provider in ("remote", "ollama", "openai", "minimax", "grok")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -2134,7 +2180,7 @@ def generate(
     # llama-server hosts one model and does not require this field, while
     # OpenAI-compatible remote servers such as Ollama require the selected
     # model name on every chat completion request.
-    if _provider in ("remote", "openai", "minimax"):
+    if _provider in ("remote", "ollama", "openai", "minimax", "grok"):
         payload["model"] = _model_id
     # Per-model sampling defaults (e.g. Gemma 4 wants temp=1.0, top_k=64)
     temperature, top_p = _apply_model_defaults(temperature, top_p, payload)
@@ -2343,6 +2389,8 @@ def generate_openai_compatible(
         raise RuntimeError("The OpenAI-compatible base URL must start with http:// or https://")
     is_deepseek = "deepseek.com" in base_url.lower()
     is_minimax = "minimax.io" in base_url.lower()
+    is_grok = "api.x.ai" in base_url.lower()
+    is_ollama = "11434" in base_url or "ollama" in base_url.lower()
     provider_schema = (
         _minimax_compatible_json_schema(json_schema)
         if is_minimax and json_schema is not None
@@ -2401,7 +2449,7 @@ def generate_openai_compatible(
         schema_root = str(provider_schema.get("type") or "") if isinstance(provider_schema, dict) else ""
         if is_deepseek and schema_root == "object":
             payload["response_format"] = {"type": "json_object"}
-        elif not is_deepseek:
+        elif is_ollama or not is_deepseek:
             payload["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
@@ -2411,11 +2459,8 @@ def generate_openai_compatible(
                 },
             }
 
-    endpoint = (
-        f"{base_url}/chat/completions"
-        if base_url.endswith("/v1")
-        else f"{base_url}/v1/chat/completions"
-    )
+    from .provider_profile import openai_chat_completions_url
+    endpoint = openai_chat_completions_url(base_url)
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -2424,7 +2469,13 @@ def generate_openai_compatible(
     # entirely on hidden reasoning, even for a short plain-text task such as
     # lyric translation. Retry only a confirmed successful HTTP response with
     # empty content; never retry timeouts or transport failures.
-    provider_name = "MiniMax" if is_minimax else "DeepSeek" if is_deepseek else "OpenAI-compatible provider"
+    provider_name = (
+        "MiniMax" if is_minimax
+        else "DeepSeek" if is_deepseek
+        else "Grok" if is_grok
+        else "Ollama" if is_ollama
+        else "OpenAI-compatible provider"
+    )
     attempts = 2 if is_minimax or (json_schema is not None and is_deepseek) else 1
     from . import resource_scheduler
     request_lane = resource_scheduler.remote_lane(model_id, base_url)
@@ -2698,6 +2749,42 @@ def generate_streaming(
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
 
+    # MiniMax/Grok streaming used the generic max_tokens payload and could
+    # return empty content. Reuse the hardened non-streaming path and publish
+    # the finished text into the stream buffer so the Director dashboard still
+    # sees a response.
+    if _provider in ("minimax", "grok"):
+        with _stream_lock:
+            _stream_buffer = ""
+            _stream_done = False
+        try:
+            result = generate_openai_compatible(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                model_id=_model_id,
+                base_url=_remote_url or (
+                    "https://api.minimax.io" if _provider == "minimax" else "https://api.x.ai"
+                ),
+                api_key=_api_key,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                json_schema=json_schema,
+                image_paths=image_paths,
+                cancellation_token=cancellation_token,
+            )
+            with _stream_lock:
+                _stream_buffer = result
+                _stream_done = True
+            _record_activity_stream(result, True)
+            return result
+        except Exception:
+            with _stream_lock:
+                _stream_done = True
+            raise
+
     # Grammar-constrained JSON mode requires thinking OFF — same rationale
     # as the matching block in generate(): the grammar masks sampling from
     # the first token, so a force-opened think block could never close.
@@ -2730,7 +2817,7 @@ def generate_streaming(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and (_vision_available or _provider in ("remote", "openai", "minimax")):
+    if image_paths and (_vision_available or _provider in ("remote", "ollama", "openai", "minimax", "grok")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -2750,7 +2837,7 @@ def generate_streaming(
         "stream": True,
         "cache_prompt": False,  # Disable prompt caching — system prompt changes between calls
     }
-    if _provider in ("remote", "openai", "minimax"):
+    if _provider in ("remote", "ollama", "openai", "minimax", "grok"):
         payload["model"] = _model_id
     # Apply caller's penalty values FIRST so they're in the payload
     # before _apply_model_defaults runs. The registry-defaults pass below

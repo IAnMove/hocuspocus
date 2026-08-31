@@ -2,9 +2,10 @@ import type { AspectRatio, ModelOptions, ProductionProfile, ResolutionPreset } f
 
 export const DEFAULT_PRODUCTION_PROFILE: ProductionProfile = {
   version: 1,
-  text: { provider: 'minimax', model: 'MiniMax-M3' },
+  text: { provider: 'minimax', model: 'MiniMax-M3', base_url: 'https://api.minimax.io' },
   image: { provider: 'minimax', model: 'image-01' },
   music: { provider: 'local', model: 'ace_step_v1_5_xl_sft_lm_4b' },
+  model3d: { provider: 'local', model: 'hunyuan3d-2mini-turbo' },
   video: {
     provider: 'local',
     model: 'minimax_h3_legacy',
@@ -20,6 +21,24 @@ export const DEFAULT_PRODUCTION_PROFILE: ProductionProfile = {
       aspectRatio: '16:9',
     },
   },
+}
+
+export function writingProviderFromText(
+  provider: ProductionProfile['text']['provider'],
+): 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible' | 'ollama' | 'grok' {
+  if (provider === 'local' || provider === 'anthropic') return 'maestro'
+  if (provider === 'remote') return 'openai-compatible'
+  return provider
+}
+
+export function writingBaseUrlFromProfile(profile: ProductionProfile): string {
+  if (profile.text.base_url) return profile.text.base_url
+  if (profile.text.provider === 'minimax') return 'https://api.minimax.io/v1'
+  if (profile.text.provider === 'grok') return 'https://api.x.ai/v1'
+  if (profile.text.provider === 'ollama') return 'http://127.0.0.1:11434'
+  if (profile.text.provider === 'openai') return 'https://api.openai.com'
+  if (profile.text.provider === 'deepseek') return 'https://api.deepseek.com'
+  return ''
 }
 
 export function productionImageModelType(profile: ProductionProfile): string {

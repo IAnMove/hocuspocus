@@ -8942,24 +8942,37 @@ def _ensure_llm_loaded(params: dict):
     """Load/reload LLM if needed. Shared between legacy and new planning."""
     from . import llm_service
 
+    from .provider_profile import alias_text_provider, default_url_for_provider, resolve_minimax_key
+
     services_cfg = _wgp.server_config.get("services", {}) if _wgp else {}
-    desired_model = params.get("llm_model_id") or services_cfg.get("llm_model_id", "Abhiray/gemma-4-E4B-it-heretic-GGUF")
+    profile_text = {}
+    try:
+        raw_profile = (_wgp.server_config.get("maestro_production_profile") if _wgp else None) or {}
+        profile_text = raw_profile.get("text") if isinstance(raw_profile.get("text"), dict) else {}
+    except Exception:
+        profile_text = {}
+    desired_model = params.get("llm_model_id") or profile_text.get("model") or services_cfg.get("llm_model_id", "Abhiray/gemma-4-E4B-it-heretic-GGUF")
     desired_device = params.get("llm_device") or services_cfg.get("llm_device", "cpu")
-    desired_provider = params.get("llm_provider") or services_cfg.get("llm_provider", "local")
-    desired_remote_url = params.get("llm_remote_url") or services_cfg.get("llm_remote_url", "")
+    desired_provider = params.get("llm_provider") or profile_text.get("provider") or services_cfg.get("llm_provider", "local")
+    desired_remote_url = params.get("llm_remote_url") or profile_text.get("base_url") or services_cfg.get("llm_remote_url", "")
     desired_provider, desired_remote_url = llm_service.normalize_minimax_chat_routing(
         str(desired_model or ""),
         str(desired_provider or "local"),
         str(desired_remote_url or ""),
     )
+    desired_provider = alias_text_provider(desired_provider, desired_remote_url)
+    desired_remote_url = default_url_for_provider(desired_provider, desired_remote_url)
     desired_api_key = ""
     if desired_provider == "openai":
         desired_api_key = services_cfg.get("openai_api_key", "")
     elif desired_provider == "anthropic":
         desired_api_key = services_cfg.get("anthropic_api_key", "")
     elif desired_provider == "minimax":
-        desired_api_key = services_cfg.get("minimax_api_key", "")
+        desired_api_key = resolve_minimax_key(services_cfg, "llm")
         desired_remote_url = desired_remote_url or "https://api.minimax.io"
+    elif desired_provider == "grok":
+        desired_api_key = services_cfg.get("grok_api_key", "")
+        desired_remote_url = desired_remote_url or "https://api.x.ai"
 
     # Free GPU memory before running a local CUDA LLM. Director planning
     # fires right after image edits / audio analysis: memory profiles keep
@@ -9013,84 +9026,29 @@ def _scoped_writing_llm(params: dict) -> dict | None:
     sends only the profile name, model and (for the custom profile) the URL it
     expects; this keeps API keys out of comic/story files and pipeline state.
     """
-    provider = str(
-        params.get("writing_provider")
-        or params.get("writingProvider")
-        or "maestro"
-    ).strip().lower()
-    if provider in ("", "maestro", "internal", "local"):
-        return None
-    if provider not in ("deepseek", "minimax", "openai", "openai-compatible"):
-        raise RuntimeError("Unsupported production writing provider")
+    from .provider_profile import resolve_writing_override
 
-    services = _wgp.server_config.get("services", {}) if _wgp else {}
-    requested_url = str(
-        params.get("writing_base_url")
-        or params.get("writingBaseUrl")
-        or ""
-    ).strip()[:1000]
-    requested_model = str(
-        params.get("writing_model")
-        or params.get("writingModel")
-        or ""
-    ).strip()[:200]
-
-    if provider == "openai-compatible":
-        from urllib.parse import urlparse
-        legacy_host = (urlparse(requested_url).hostname or "").lower()
-        if legacy_host == "api.deepseek.com":
-            provider = "deepseek"
-        elif legacy_host == "api.openai.com":
-            provider = "openai"
-
-    if provider == "deepseek":
-        model = requested_model or "deepseek-v4-pro"
-        if model in ("deepseek-chat", "deepseek-reasoner"):
-            model = "deepseek-v4-pro"
-        if model not in {"deepseek-v4-pro", "deepseek-v4-flash"}:
-            raise RuntimeError("Choose DeepSeek V4 Pro or V4 Flash")
-        base_url = "https://api.deepseek.com"
-        api_key = str(services.get("deepseek_api_key") or "")
-        missing = "Configure the DeepSeek API key in Settings → Services first"
-    elif provider == "minimax":
-        model = requested_model or "MiniMax-M3"
-        if model not in {"MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"}:
-            raise RuntimeError("Choose MiniMax M3, M2.7, or M2.7 Highspeed")
-        base_url = "https://api.minimax.io/v1"
-        api_key = str(services.get("minimax_api_key") or "")
-        missing = "Configure the MiniMax API key in Settings → Services first"
-    elif provider == "openai":
-        model = requested_model or "gpt-4.1"
-        base_url = "https://api.openai.com"
-        api_key = str(services.get("openai_api_key") or "")
-        missing = "Configure the OpenAI API key in Settings → Services first"
-    else:
-        model = requested_model
-        base_url = str(services.get("compatible_base_url") or "").strip().rstrip("/")
-        configured_key = str(services.get("compatible_api_key") or "")
-        if not base_url:
-            raise RuntimeError(
-                "Configure the custom compatible URL in Settings → Services first"
-            )
-        if requested_url and requested_url.rstrip("/") != base_url:
-            raise RuntimeError(
-                "The production's custom URL does not match the trusted compatible profile"
-            )
-        api_key = configured_key
-        missing = ""
-
-    if not model:
-        raise RuntimeError("Choose an OpenAI-compatible writing model")
-    if not base_url.startswith(("http://", "https://")):
-        raise RuntimeError("OpenAI-compatible URL must start with http:// or https://")
-    if provider != "openai-compatible" and not api_key:
-        raise RuntimeError(missing)
-    return {
-        "provider": provider,
-        "model": model,
-        "base_url": base_url,
-        "api_key": api_key,
-    }
+    try:
+        return resolve_writing_override(
+            provider=str(
+                params.get("writing_provider")
+                or params.get("writingProvider")
+                or "maestro"
+            ),
+            model=str(
+                params.get("writing_model")
+                or params.get("writingModel")
+                or ""
+            ),
+            requested_url=str(
+                params.get("writing_base_url")
+                or params.get("writingBaseUrl")
+                or ""
+            ),
+            services=_wgp.server_config.get("services", {}) if _wgp else {},
+        )
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def _capture_llm_pass(pid: str, pass_name: str):
@@ -10208,9 +10166,10 @@ def _generate_minimax_director_image(
     except ImportError:  # pragma: no cover - package import mode
         from app.services import resource_scheduler
 
-    api_key = ((_wgp.server_config.get("services") or {}).get("minimax_api_key") or "")
+    from services.provider_profile import resolve_minimax_key
+    api_key = resolve_minimax_key(_wgp.server_config.get("services") or {}, "image")
     if not api_key:
-        raise RuntimeError("Set the MiniMax API key in Settings → Services")
+        raise RuntimeError("Set the MiniMax Image API key in Settings → Services")
     subject_reference = ""
     for path in reference_paths:
         if path and os.path.isfile(path):
@@ -10501,8 +10460,10 @@ def _run_image_generation(
     extra_refs = valid_character_refs + valid_location_refs
     print(f"[Pipeline {pid}] Image refs: main={ref_image_path}, chars={len(character_ref_paths)}, locs={len(location_ref_paths)}, extra_valid={len(extra_refs)}")
 
-    if use_minimax_image_api and not ((_wgp.server_config.get("services") or {}).get("minimax_api_key")):
-        raise RuntimeError("Set the MiniMax API key in Settings → Services before starting Director")
+    if use_minimax_image_api:
+        from services.provider_profile import resolve_minimax_key
+        if not resolve_minimax_key(_wgp.server_config.get("services") or {}, "image"):
+            raise RuntimeError("Set the MiniMax Image API key in Settings → Services before starting Director")
 
     # Count total images to generate (start images + keyframes)
     total_images = len(clip_plans)

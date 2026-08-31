@@ -57,7 +57,7 @@ function ApiKeyField({ label, maskedValue, isSet, onSave }: {
   )
 }
 
-const PUBLIC_PROVIDERS = new Set(['openai', 'anthropic', 'minimax'])
+const PUBLIC_PROVIDERS = new Set(['openai', 'anthropic', 'minimax', 'grok', 'deepseek'])
 
 function NsfwDisclaimerModal({
   onAccept,
@@ -286,10 +286,13 @@ export function ServicesSettingsPanel() {
   }
 
   const provider = servicesConfig.llm_provider || 'local'
-  const isRemote = provider === 'remote'
+  const isRemote = provider === 'remote' || provider === 'openai-compatible'
+  const isOllama = provider === 'ollama'
   const isOpenAI = provider === 'openai'
   const isMiniMax = provider === 'minimax'
+  const isGrok = provider === 'grok'
   const isLocal = provider === 'local'
+  const needsUrl = isRemote || isOllama || isOpenAI || isMiniMax || isGrok
 
   const handleRefreshModels = async () => {
     setRefreshing(true)
@@ -358,16 +361,29 @@ export function ServicesSettingsPanel() {
                 value={productionProfile.text.provider}
                 onChange={e => setProductionProfile({
                   ...productionProfile,
-                  text: { ...productionProfile.text, provider: e.target.value as typeof productionProfile.text.provider },
+                  text: {
+                    ...productionProfile.text,
+                    provider: e.target.value as typeof productionProfile.text.provider,
+                    base_url: e.target.value === 'ollama'
+                      ? (productionProfile.text.base_url || 'http://127.0.0.1:11434')
+                      : e.target.value === 'grok'
+                        ? 'https://api.x.ai'
+                        : e.target.value === 'minimax'
+                          ? 'https://api.minimax.io'
+                          : productionProfile.text.base_url,
+                  },
                 })}
                 disabled={productionProfileLoading}
                 className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
               >
+                <option value="local">Internal (local llama-server)</option>
+                <option value="ollama">Ollama</option>
                 <option value="minimax">MiniMax API</option>
-                <option value="local">Local</option>
+                <option value="grok">Grok (xAI)</option>
                 <option value="remote">Remote compatible</option>
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
+                <option value="deepseek">DeepSeek</option>
               </select>
             </label>
             <label className="text-[10px] text-text-muted">
@@ -416,13 +432,17 @@ export function ServicesSettingsPanel() {
                   value={productionProfile.music.provider}
                   onChange={e => setProductionProfile({
                     ...productionProfile,
-                    music: { ...productionProfile.music, provider: e.target.value as typeof productionProfile.music.provider },
+                    music: {
+                      ...productionProfile.music,
+                      provider: e.target.value as typeof productionProfile.music.provider,
+                      model: e.target.value === 'minimax' ? 'music-3.0' : 'ace_step_v1_5_xl_sft_lm_4b',
+                    },
                   })}
                   disabled={productionProfileLoading}
                   className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
                 >
-                  <option value="minimax">MiniMax</option>
-                  <option value="local">Local</option>
+                  <option value="local">Local ACE-Step</option>
+                  <option value="minimax">MiniMax Music</option>
                   <option value="maestro">HocusPocus</option>
                 </select>
                 <input
@@ -430,6 +450,42 @@ export function ServicesSettingsPanel() {
                   onChange={e => setProductionProfile({
                     ...productionProfile,
                     music: { ...productionProfile.music, model: e.target.value },
+                  })}
+                  disabled={productionProfileLoading}
+                  className="min-w-0 flex-1 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                />
+              </div>
+              {productionProfile.music.provider === 'minimax' && (
+                <p className="mt-1 text-[10px] text-amber-300">MiniMax Music is closed for most accounts and will error if you select it. Prefer a local ACE-Step model.</p>
+              )}
+            </label>
+            <label className="text-[10px] text-text-muted">
+              3D provider / model
+              <div className="mt-1 flex gap-1">
+                <select
+                  value={productionProfile.model3d?.provider || 'local'}
+                  onChange={e => setProductionProfile({
+                    ...productionProfile,
+                    model3d: {
+                      ...(productionProfile.model3d || { provider: 'local', model: 'hunyuan3d-2mini-turbo' }),
+                      provider: e.target.value as NonNullable<typeof productionProfile.model3d>['provider'],
+                    },
+                  })}
+                  disabled={productionProfileLoading}
+                  className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                >
+                  <option value="local">Hunyuan local</option>
+                  <option value="meshy">Meshy API</option>
+                  <option value="hi3d">Hi3D API</option>
+                </select>
+                <input
+                  value={productionProfile.model3d?.model || 'hunyuan3d-2mini-turbo'}
+                  onChange={e => setProductionProfile({
+                    ...productionProfile,
+                    model3d: {
+                      ...(productionProfile.model3d || { provider: 'local', model: 'hunyuan3d-2mini-turbo' }),
+                      model: e.target.value,
+                    },
                   })}
                   disabled={productionProfileLoading}
                   className="min-w-0 flex-1 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
@@ -558,6 +614,15 @@ export function ServicesSettingsPanel() {
             onChange={e => {
               const newProvider = e.target.value
               const updates: Record<string, unknown> = { llm_provider: newProvider }
+              if (newProvider === 'ollama' && !servicesConfig.llm_remote_url) {
+                updates.llm_remote_url = 'http://127.0.0.1:11434'
+              }
+              if (newProvider === 'grok' && !servicesConfig.llm_remote_url) {
+                updates.llm_remote_url = 'https://api.x.ai'
+              }
+              if (newProvider === 'minimax') {
+                updates.llm_remote_url = servicesConfig.llm_remote_url || 'https://api.minimax.io'
+              }
               // Auto-disable NSFW when switching to a public provider
               if (PUBLIC_PROVIDERS.has(newProvider) && servicesConfig.nsfw_mode) {
                 updates.nsfw_mode = false
@@ -567,19 +632,22 @@ export function ServicesSettingsPanel() {
             }}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="local">Local (llama-server)</option>
+            <option value="local">Internal (local llama-server)</option>
+            <option value="ollama">Ollama</option>
+            <option value="minimax">MiniMax API</option>
+            <option value="grok">Grok (xAI)</option>
             <option value="remote">Remote OpenAI-Compatible (LM Studio, etc.)</option>
             <option value="openai">OpenAI API</option>
             <option value="anthropic">Anthropic API</option>
-            <option value="minimax">MiniMax API</option>
+            <option value="deepseek">DeepSeek</option>
           </select>
         </div>
 
         {/* Remote URL (for remote/openai providers) */}
-        {(isRemote || isOpenAI || isMiniMax) && (
+        {needsUrl && (
           <div>
             <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-              {isRemote ? 'Server URL' : 'API Base URL'}
+              {isOllama || isRemote ? 'Server URL' : 'API Base URL'}
             </label>
             <input
               type="text"
@@ -588,15 +656,25 @@ export function ServicesSettingsPanel() {
                 void saveLlmConfig({ llm_remote_url: e.target.value })
                 resetLlmTest()
               }}
-              placeholder={isRemote ? 'http://192.168.1.100:1234' : isMiniMax ? 'https://api.minimax.io' : 'https://api.openai.com'}
+              placeholder={
+                isOllama ? 'http://127.0.0.1:11434'
+                  : isRemote ? 'http://192.168.1.100:1234'
+                    : isMiniMax ? 'https://api.minimax.io'
+                      : isGrok ? 'https://api.x.ai'
+                        : 'https://api.openai.com'
+              }
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             />
             <p className="text-[10px] text-text-muted mt-1">
-              {isRemote
-                ? 'URL of your LM Studio, Ollama, or other OpenAI-compatible server'
-                : isMiniMax
-                  ? 'MiniMax OpenAI-compatible API base; leave blank to use https://api.minimax.io.'
-                  : 'OpenAI API base URL; leave blank to use the default.'}
+              {isOllama
+                ? 'Type the Ollama IP/URL by hand, then Refresh to list models via /api/tags. /v1 is optional.'
+                : isRemote
+                  ? 'URL of your LM Studio or other OpenAI-compatible server'
+                  : isMiniMax
+                    ? 'MiniMax OpenAI-compatible API base; leave blank to use https://api.minimax.io.'
+                    : isGrok
+                      ? 'xAI OpenAI-compatible API base; leave blank to use https://api.x.ai.'
+                      : 'OpenAI API base URL; leave blank to use the default.'}
             </p>
           </div>
         )}
@@ -697,15 +775,45 @@ export function ServicesSettingsPanel() {
       <hr className="border-border" />
 
       <div className="space-y-3">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">MiniMax API</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Provider keys</h3>
         <p className="text-[10px] text-text-muted">
-          One MiniMax key is shared by its text and Image-01 APIs. Writing and image models remain independently selectable in Comics, Story Lab and Director.
+          LLM, image and music MiniMax keys are stored separately even if you paste the same value twice. A blank specific field still falls back to the legacy shared MiniMax key.
         </p>
         <ApiKeyField
-          label="MiniMax API Key"
-          maskedValue={servicesConfig.minimax_api_key}
-          isSet={servicesConfig.minimax_api_key_set}
-          onSave={value => updateConfig({ minimax_api_key: value })}
+          label="MiniMax LLM API key"
+          maskedValue={servicesConfig.minimax_llm_api_key || servicesConfig.minimax_api_key}
+          isSet={servicesConfig.minimax_llm_api_key_set || servicesConfig.minimax_api_key_set}
+          onSave={value => updateConfig({ minimax_llm_api_key: value, minimax_api_key: value })}
+        />
+        <ApiKeyField
+          label="MiniMax Image API key"
+          maskedValue={servicesConfig.minimax_image_api_key || servicesConfig.minimax_api_key}
+          isSet={servicesConfig.minimax_image_api_key_set || servicesConfig.minimax_api_key_set}
+          onSave={value => updateConfig({ minimax_image_api_key: value })}
+        />
+        <ApiKeyField
+          label="MiniMax Music API key"
+          maskedValue={servicesConfig.minimax_music_api_key || servicesConfig.minimax_api_key}
+          isSet={servicesConfig.minimax_music_api_key_set || servicesConfig.minimax_api_key_set}
+          onSave={value => updateConfig({ minimax_music_api_key: value })}
+        />
+        <ApiKeyField
+          label="Grok (xAI) API key"
+          maskedValue={servicesConfig.grok_api_key}
+          isSet={servicesConfig.grok_api_key_set}
+          onSave={value => updateConfig({ grok_api_key: value })}
+        />
+        <ApiKeyField
+          label="Meshy API key"
+          maskedValue={servicesConfig.meshy_api_key}
+          isSet={servicesConfig.meshy_api_key_set}
+          onSave={value => updateConfig({ meshy_api_key: value })}
+        />
+        <ApiKeyField
+          label="Hi3D API key"
+          maskedValue={servicesConfig.hi3d_api_key}
+          isSet={servicesConfig.hi3d_api_key_set}
+          onSave={value => updateConfig({ hi3d_api_key: value })}
         />
       </div>
 

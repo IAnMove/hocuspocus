@@ -292,7 +292,7 @@ export interface ComicDirectorRequest {
   worldReferenceAssetIds?: string[]
   dialogueDensity: 'low' | 'medium' | 'high'
   /** LLM used only for this comic's planning, revision and translation. */
-  writingProvider?: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible'
+  writingProvider?: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible' | 'ollama' | 'grok'
   writingModel?: string
   writingBaseUrl?: string
   provider: 'maestro' | 'minimax'
