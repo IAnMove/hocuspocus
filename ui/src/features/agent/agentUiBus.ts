@@ -25,16 +25,21 @@ export interface AgentStoryVisualGenerationRequest {
   targetNames: string[]
 }
 
+export interface AgentStoryVisualGenerationResult {
+  message: string
+  assetIds: string[]
+}
+
 interface PendingStoryVisualGenerationRequest {
   request: AgentStoryVisualGenerationRequest
-  resolve: (message: string) => void
+  resolve: (result: AgentStoryVisualGenerationResult) => void
   reject: (error: Error) => void
 }
 
 const STORY_VISUAL_GENERATION_EVENT = 'hocuspocus:story-visual-generation'
 const pendingStoryVisualGenerationRequests: PendingStoryVisualGenerationRequest[] = []
 
-export function requestAgentStoryVisualGeneration(request: AgentStoryVisualGenerationRequest): Promise<string> {
+export function requestAgentStoryVisualGeneration(request: AgentStoryVisualGenerationRequest): Promise<AgentStoryVisualGenerationResult> {
   return new Promise((resolve, reject) => {
     pendingStoryVisualGenerationRequests.push({ request, resolve, reject })
     window.dispatchEvent(new CustomEvent(STORY_VISUAL_GENERATION_EVENT))
@@ -42,7 +47,7 @@ export function requestAgentStoryVisualGeneration(request: AgentStoryVisualGener
 }
 
 export function listenForAgentStoryVisualGeneration(
-  listener: (request: AgentStoryVisualGenerationRequest) => Promise<string>,
+  listener: (request: AgentStoryVisualGenerationRequest) => Promise<AgentStoryVisualGenerationResult>,
 ): () => void {
   let active = true
   const drain = async () => {

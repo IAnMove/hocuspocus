@@ -3,6 +3,7 @@ import type {
   AgentApply3dRhythmAction,
   AgentApplyStoryProposalAction,
   AgentApproveStorySectionAction,
+  AgentApproveStoryVisualsAction,
   AgentCreateRhythmic3dVideoAction,
   AgentSceneWorkflowAction,
   AgentOpen3dSceneAction,
@@ -12,6 +13,7 @@ import type {
   AgentCreateStoryAction,
   AgentGenerateComicAction,
   AgentGenerateStorySectionAction,
+  AgentGenerateStoryVisualsAction,
   AgentStartDirectorProductionAction,
   AgentStageStoryVideoAction,
   AgentStageStoryMusicVideoAction,
@@ -47,6 +49,7 @@ export interface CapabilityExecutionOutcome {
   taskId?: string
   pipelineId?: string
   outputNames?: string[]
+  assetIds?: string[]
 }
 
 export interface CapabilityExecutionContext {
@@ -106,6 +109,8 @@ const rhythmProfiles = new Set(['pulse', 'bounce', 'peek', 'camera-punch'])
 const storyProjectTypes = new Set(['full_story', 'music_video', 'trailer', 'quick_video'])
 const storyProposalScopes = new Set(['all', 'overview', 'world', 'characters', 'relationships', 'structure'])
 const storyApprovalSections = new Set(['overview', 'world', 'characters', 'relationships', 'structure'])
+const storyVisualScopes = new Set(['world', 'locations', 'characters', 'all'])
+const storyVisualTargetKinds = new Set(['world', 'location', 'character'])
 
 function storyCharacters(value: unknown): AgentCreateStoryAction['characters'] {
   return Array.isArray(value) ? value.slice(0, 16).flatMap(item => {
@@ -139,6 +144,18 @@ function storyOutlineBeats(value: unknown): string[] {
 function optionalStoryDuration(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined
   return Math.round(Math.min(3_600, Math.max(15, value)))
+}
+
+function storyVisualSelections(value: unknown): AgentApproveStoryVisualsAction['selections'] {
+  return Array.isArray(value) ? value.slice(0, 40).flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = item as Record<string, unknown>
+    const targetKind = text(raw.target_kind, 30)
+    const assetName = text(raw.asset_name, 300)
+    const targetName = text(raw.target_name, 300)
+    if (!storyVisualTargetKinds.has(targetKind) || !assetName || (targetKind !== 'world' && !targetName)) return []
+    return [{ targetKind: targetKind as AgentApproveStoryVisualsAction['selections'][number]['targetKind'], targetName, assetName, primary: raw.primary === true }]
+  }) : []
 }
 
 function storyFields(raw: Record<string, unknown>) {
@@ -415,6 +432,47 @@ defineCapability<AgentApproveStorySectionAction>({
   async execute(action, context) { return context.adapters.storyLab.approveSection(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'story_lab', anchors: ['review', 'approval'], replay: 'atomic' },
+})
+
+defineCapability<AgentGenerateStoryVisualsAction>({
+  name: 'generate_story_visuals', title: 'Generate exact Story Lab visual references',
+  description: 'Render the requested Story Lab visual references, attach them to the canonical project and return every new asset ID.',
+  useWhen: 'The user explicitly asks to generate the visual references for a Story Lab project.',
+  parameters: ['target_story_title', 'story_visual_scope', 'target_names', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'generate_story_visuals' }, story_visual_scope: { type: 'string', enum: ['world', 'locations', 'characters', 'all'] }, target_names: { type: 'array', items: { type: 'string' } }, confirm: { const: true } }, required: ['type', 'story_visual_scope', 'confirm'] },
+  risk: 'compute', confirmation: 'required', progress: 'Generando y correlacionando referencias visuales…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const scope = text(raw.story_visual_scope, 30)
+    if (!storyVisualScopes.has(scope)) return null
+    const targetNames = Array.isArray(raw.target_names) ? raw.target_names.slice(0, 40).flatMap(value => {
+      const name = text(value, 300)
+      return name ? [name] : []
+    }) : []
+    return { type: 'generate_story_visuals', targetStoryTitle: text(raw.target_story_title, 300), scope: scope as AgentGenerateStoryVisualsAction['scope'], targetNames, confirm: true }
+  },
+  validate(action) { return action.confirm === true && storyVisualScopes.has(action.scope) ? [] : ['a confirmed valid visual scope is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.generateVisuals(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'story_lab', anchors: ['assets', 'references'], replay: 'atomic' },
+})
+
+defineCapability<AgentApproveStoryVisualsAction>({
+  name: 'approve_story_visuals', title: 'Approve exact Story Lab visual references',
+  description: 'Resolve named visual assets unambiguously, attach them to their Story Lab targets and approve them.',
+  useWhen: 'The user explicitly asks to approve named Story Lab visual references.',
+  parameters: ['target_story_title', 'story_visual_selections', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'approve_story_visuals' }, story_visual_selections: { type: 'array' }, confirm: { const: true } }, required: ['type', 'story_visual_selections', 'confirm'] },
+  risk: 'edit', confirmation: 'required', progress: 'Vinculando y aprobando referencias visuales…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const selections = storyVisualSelections(raw.story_visual_selections)
+    return selections.length ? { type: 'approve_story_visuals', targetStoryTitle: text(raw.target_story_title, 300), selections, confirm: true } : null
+  },
+  validate(action) { return action.confirm === true && action.selections.length ? [] : ['confirmed visual selections are required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.approveVisuals(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'story_lab', anchors: ['assets', 'references', 'approval'], replay: 'atomic' },
 })
 
 defineCapability<AgentCreateComicAction>({

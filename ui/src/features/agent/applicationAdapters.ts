@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentCreateComicAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateStorySectionAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentCreateComicAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateStoryAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -14,6 +14,7 @@ export interface AdapterOutcome {
   taskId?: string
   pipelineId?: string
   outputNames?: string[]
+  assetIds?: string[]
   sceneId?: string
   layerIds?: string[]
   audioTrackId?: string
@@ -36,6 +37,8 @@ export interface StoryLabAdapter {
   generateProposal(action: AgentGenerateStorySectionAction): Promise<AdapterOutcome>
   applyProposal(action: AgentApplyStoryProposalAction): Promise<AdapterOutcome>
   approveSection(action: AgentApproveStorySectionAction): Promise<AdapterOutcome>
+  approveVisuals(action: AgentApproveStoryVisualsAction): Promise<AdapterOutcome>
+  generateVisuals(action: AgentGenerateStoryVisualsAction): Promise<AdapterOutcome>
   stageVideo(action: AgentStageStoryVideoAction): Promise<AdapterOutcome>
   stageMusicVideo(action: AgentStageStoryMusicVideoAction): Promise<AdapterOutcome>
   startDirectorProduction(action: AgentStartDirectorProductionAction, expectedProductionId?: string): Promise<AdapterOutcome>
@@ -176,6 +179,16 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { approveStorySection } = await import('./labActions')
       const message = await approveStorySection(action)
       return storyOutcome(message)
+    },
+    async approveVisuals(action) {
+      const { approveStoryVisuals } = await import('./labActions')
+      const message = await approveStoryVisuals(action)
+      return storyOutcome(message)
+    },
+    async generateVisuals(action) {
+      const { generateStoryVisuals } = await import('./labActions')
+      const result = await generateStoryVisuals(action)
+      return { ...await storyOutcome(result.message), assetIds: result.assetIds }
     },
     async stageVideo(action) {
       const { stageStoryVideo } = await import('./labActions')

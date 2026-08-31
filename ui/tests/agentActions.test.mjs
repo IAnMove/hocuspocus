@@ -85,8 +85,8 @@ test('queues structured Video3D operations until the lazy animator mounts', asyn
 test('queues Story visual generation until Story Lab mounts', async () => {
   const { listenForAgentStoryVisualGeneration, requestAgentStoryVisualGeneration } = await import('../src/features/agent/agentUiBus.ts')
   const pending = requestAgentStoryVisualGeneration({ projectId: 'story-1', scope: 'characters', targetNames: ['Iria'] })
-  const unsubscribe = listenForAgentStoryVisualGeneration(async request => `generated:${request.targetNames[0]}`)
-  assert.equal(await pending, 'generated:Iria')
+  const unsubscribe = listenForAgentStoryVisualGeneration(async request => ({ message: `generated:${request.targetNames[0]}`, assetIds: ['asset-1'] }))
+  assert.deepEqual(await pending, { message: 'generated:Iria', assetIds: ['asset-1'] })
   unsubscribe()
 })
 

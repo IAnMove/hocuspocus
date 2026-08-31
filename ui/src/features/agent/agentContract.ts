@@ -21,6 +21,8 @@ export interface AgentExecutionReport {
   taskId?: string
   pipelineId?: string
   outputNames?: string[]
+  /** Exact Story Lab visual assets created by the operation, when applicable. */
+  assetIds?: string[]
   recoverable: boolean
   executionKey?: string
 }

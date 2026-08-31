@@ -2185,6 +2185,7 @@ export function StoryLabPanel() {
     const missingPrompts = targets.filter(target => !target.prompt.trim()).map(target => target.label)
     if (missingPrompts.length) throw new Error(`Falta visualPrompt para: ${missingPrompts.join(', ')}.`)
 
+    const assetIdsBefore = new Set(Object.keys(current.assets))
     let completed = 0
     let failure = ''
     for (const item of targets) {
@@ -2197,9 +2198,12 @@ export function StoryLabPanel() {
       completed += 1
     }
     setTab('assets')
-    const result = `He generado y adjuntado ${completed} referencia${completed === 1 ? '' : 's'} visual${completed === 1 ? '' : 'es'} en “${current.title}”. Quedan en Draft dentro de Story Lab → Assets para que las revises y apruebes.`
-    setNotice({ kind: 'ok', text: result })
-    return result
+    const message = `He generado y adjuntado ${completed} referencia${completed === 1 ? '' : 's'} visual${completed === 1 ? '' : 'es'} en “${current.title}”. Quedan en Draft dentro de Story Lab → Assets para que las revises y apruebes.`
+    const latest = useStoryStore.getState().projects[request.projectId]
+    const assetIds = latest ? Object.keys(latest.assets).filter(id => !assetIdsBefore.has(id)) : []
+    if (assetIds.length !== completed) throw new Error('Las referencias visuales terminaron sin poder correlacionar todos sus IDs de asset.')
+    setNotice({ kind: 'ok', text: message })
+    return { message, assetIds }
   }), [])
 
   const writeStyleIntoPrompts = () => {

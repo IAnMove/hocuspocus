@@ -2771,7 +2771,8 @@ export async function executeAgentActions(
         results.push({ action, ok: true, message: await approveStoryVisuals(action) })
       } else if (action.type === 'generate_story_visuals') {
         const { generateStoryVisuals } = await import('./labActions')
-        results.push({ action, ok: true, message: await generateStoryVisuals(action) })
+        const result = await generateStoryVisuals(action)
+        results.push({ action, ok: true, message: result.message })
       } else if (action.type === 'stage_story_comic') {
         const { stageStoryComic } = await import('./labActions')
         results.push({ action, ok: true, message: await stageStoryComic(action) })

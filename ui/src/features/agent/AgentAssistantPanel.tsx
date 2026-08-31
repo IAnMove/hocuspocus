@@ -410,6 +410,9 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
                   {card.outputNames?.length ? (
                     <p className="mt-1 truncate text-[9px] text-emerald-200/80">Outputs: {card.outputNames.join(', ')}</p>
                   ) : null}
+                  {card.assetIds?.length ? (
+                    <p className="mt-1 truncate text-[9px] text-emerald-200/80">Assets: {card.assetIds.join(', ')}</p>
+                  ) : null}
                   {errorCardId === card.id && card.controls.viewErrors && (
                     <p className="mt-1 text-[9px] text-rose-200/80">{card.message}</p>
                   )}

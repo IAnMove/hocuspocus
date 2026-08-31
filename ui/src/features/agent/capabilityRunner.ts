@@ -79,6 +79,7 @@ export async function runRegisteredCapability(
     taskId: tracked.taskId,
     pipelineId: tracked.pipelineId,
     outputNames: tracked.outputNames,
+    assetIds: tracked.assetIds,
     recoverable: false,
     executionKey: executionKey({
       workspace: options.workspace || 'default',

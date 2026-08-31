@@ -838,7 +838,7 @@ export async function approveStoryVisuals(action: AgentApproveStoryVisualsAction
   return `He vinculado y aprobado ${labels.length} referencia${labels.length === 1 ? '' : 's'} en “${project.title}”: ${labels.join(' · ')}.`
 }
 
-export async function generateStoryVisuals(action: AgentGenerateStoryVisualsAction): Promise<string> {
+export async function generateStoryVisuals(action: AgentGenerateStoryVisualsAction) {
   if (!action.confirm) throw new Error('Generar referencias visuales de Story Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const { useStoryStore } = await import('../stories/store')

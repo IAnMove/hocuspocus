@@ -43,6 +43,7 @@ export function applyPollToCard(card: WizardExecutionCard, update: Partial<Agent
     ...update,
     message: update.message || card.message,
     outputNames: update.outputNames || card.outputNames,
+    assetIds: update.assetIds || card.assetIds,
   }, card.id)
 }
 
