@@ -7,6 +7,7 @@ import type { AgentRhythmGrid } from './agentUiBus'
 import { queueMusic } from './audioActions'
 import type { AgentPrepareAudioAction } from './agentActions'
 import type { AgentTab } from './capabilityRegistry'
+import type { AgentCreateCharacterKitAction, AgentOpenCharacterKitAction } from './characterKitActions'
 
 export interface AdapterOutcome {
   message: string
@@ -61,7 +62,11 @@ export interface ComicAdapter {
   generate(action: AgentGenerateComicAction, expectedProjectId?: string): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }>
 }
 export interface VideoEditorAdapter { open(): Promise<AdapterOutcome> }
-export interface CharacterKitAdapter { open(creator?: boolean): Promise<AdapterOutcome> }
+export interface CharacterKitAdapter {
+  open(creator?: boolean): Promise<AdapterOutcome>
+  create(action: AgentCreateCharacterKitAction): Promise<AdapterOutcome>
+  openKit(action: AgentOpenCharacterKitAction): Promise<AdapterOutcome>
+}
 export interface QueueAdapter { openActivity(): Promise<AdapterOutcome> }
 
 export interface Video3DAdapter {
@@ -306,7 +311,11 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     },
   }
   adapters.videoEditor = { open: () => navigate('video_editor') }
-  adapters.characterKit = { open: creator => navigate(creator ? 'character_creator' : 'character_kit') }
+  adapters.characterKit = {
+    open: creator => navigate(creator ? 'character_creator' : 'character_kit'),
+    async create(action) { const { createAgentCharacterKit } = await import('./characterKitActions'); const result = await createAgentCharacterKit(action); return { message: result.message, target: result.report.target! } },
+    async openKit(action) { const { openAgentCharacterKit } = await import('./characterKitActions'); const result = await openAgentCharacterKit(action); return { message: result.message, target: result.report.target! } },
+  }
   adapters.queue = {
     async openActivity() {
       openAgentActivityDetails()

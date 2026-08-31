@@ -472,11 +472,13 @@ Agent Mode complete prematurely.
   keep approvals, rejections and canon mutations bound to the canonical episode.
 - Series Lab assembly: migrated to the common contract and returns the verified
   recoverable assembly-job ID for the canonical episode.
+- CharacterKit creation and opening: migrated to the common contract and return
+  the canonical kit ID.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **Series Lab assembly**. Continue the migration
-audit with the remaining legacy domains, preserving real IDs and behavior tests
-before implementing visible magic effects. Keep Decision gate A open; the
+Finished migration subblock **CharacterKit creation and opening**. Continue
+with identity reference, base pose and Face Rig preparation while preserving
+the canonical kit ID and behavior tests. Keep Decision gate A open; the
 workflow remains correct without visual magic effects.
