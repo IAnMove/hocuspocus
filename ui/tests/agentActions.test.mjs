@@ -300,7 +300,8 @@ test('keeps a vocal Story song in the UI workflow before launching its videoclip
         lyrics_language: 'Español', instrumental: false, model_type: 'ace_step_v1_5_xl_sft_lm_4b',
         lyrics: '[Verse]\nEn la torre de cristal\n[Chorus]\nSudo, sangra, reinicia', target_duration_seconds: 90,
       },
-      { type: 'stage_story_music_video', target_story_title: 'El Himno del Sysadmin', cue_title: 'Sudo, sangra, reinicia', pacing: 'rhythmic', confirm: true },
+      { type: 'generate_story_song', target_story_title: 'El Himno del Sysadmin', cue_title: 'Sudo, sangra, reinicia · Español', confirm: true },
+      { type: 'stage_story_music_video', target_story_title: 'El Himno del Sysadmin', song_name: 'Sudo, sangra, reinicia · Español', cue_title: 'Sudo, sangra, reinicia · Español', pacing: 'rhythmic', confirm: true },
     ],
   }))
   assert.equal(turn.actions[1].type, 'configure_story_song')
@@ -312,6 +313,53 @@ test('keeps a vocal Story song in the UI workflow before launching its videoclip
   assert.deepEqual(reconciled.actions.map(action => action.type), [
     'create_story', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production',
   ])
+  assert.equal(reconciled.actions[2].cueTitle, 'Sudo, sangra, reinicia')
+  assert.equal(reconciled.actions[3].cueTitle, 'Sudo, sangra, reinicia')
+  assert.equal(reconciled.actions[3].songName, '')
+})
+
+test('runtime passes the persisted cue identity to song generation and videoclip staging', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { defaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const original = {
+    configureSong: defaultApplicationAdapters.storyLab.configureSong,
+    generateSong: defaultApplicationAdapters.storyLab.generateSong,
+    stageMusicVideo: defaultApplicationAdapters.storyLab.stageMusicVideo,
+  }
+  const received = []
+  clearExecutionMemory()
+  defaultApplicationAdapters.storyLab.configureSong = async action => ({
+    message: 'Cue saved', target: { kind: 'story_song', id: 'cue-real', title: 'El Himno del Sysadmin' },
+  })
+  defaultApplicationAdapters.storyLab.generateSong = async action => {
+    received.push(action)
+    return { message: 'Song generated', target: { kind: 'story_song', id: 'song-real', title: action.cueTitle }, outputNames: ['song.wav'] }
+  }
+  defaultApplicationAdapters.storyLab.stageMusicVideo = async action => {
+    received.push(action)
+    return { message: 'Video staged', target: { kind: 'director_production', id: 'production-real', title: 'Video' } }
+  }
+  try {
+    const results = await executeAgentActions([{
+      type: 'configure_story_song', targetStoryTitle: 'El Himno del Sysadmin 3', songTitle: 'El Himno del Sysadmin',
+      brief: 'Himno', style: 'metal', lyrics: '[Verse]\nNoche', writeLyrics: false,
+      lyricsLanguage: 'Español', instrumental: false, model: 'ace_step_v1_5_xl_sft_lm_4b', durationSeconds: 75,
+    }, {
+      type: 'generate_story_song', targetStoryTitle: 'El Himno del Sysadmin 3', cueTitle: 'El Himno del Sysadmin · Español', confirm: true,
+    }, {
+      type: 'stage_story_music_video', targetStoryTitle: 'El Himno del Sysadmin 3', songName: 'El Himno del Sysadmin · Español', cueTitle: 'El Himno del Sysadmin · Español', pacing: 'rhythmic', confirm: true,
+    }])
+    assert.equal(results.every(result => result.ok), true)
+    assert.equal(received[0].cueTitle, 'El Himno del Sysadmin')
+    assert.equal(received[1].cueTitle, 'El Himno del Sysadmin')
+    assert.equal(received[1].songName, '')
+  } finally {
+    defaultApplicationAdapters.storyLab.configureSong = original.configureSong
+    defaultApplicationAdapters.storyLab.generateSong = original.generateSong
+    defaultApplicationAdapters.storyLab.stageMusicVideo = original.stageMusicVideo
+    clearExecutionMemory()
+  }
 })
 
 test('a videoclip request infers music_video even if the model omits project_type', async () => {

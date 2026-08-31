@@ -18,13 +18,6 @@ function candidateNames(candidate: StoryMusicCandidate): string[] {
     .filter(Boolean)
 }
 
-function uniqueMatch<T>(items: T[], predicate: (item: T) => boolean, missing: string, ambiguous: string): T {
-  const matches = items.filter(predicate)
-  if (!matches.length) throw new Error(missing)
-  if (matches.length > 1) throw new Error(ambiguous)
-  return matches[0]
-}
-
 function allCandidates(project: StoryProject, cue?: StoryMusicCue): StoryMusicCandidate[] {
   const seen = new Set<string>()
   const list: StoryMusicCandidate[] = []
@@ -51,13 +44,14 @@ export function resolveStoryMusicSelection(
   const candidateFromCueTitle = requestedCue
     ? allCandidates(project).find(item => candidateNames(item).includes(requestedCue))
     : undefined
+  const exactCues = requestedCue
+    ? project.music.cues.filter(item => normalizeName(item.title) === requestedCue)
+    : []
+  if (exactCues.length > 1) {
+    throw new Error(`Hay varios cues llamados “${cueTitle}”; usa el título exacto y único.`)
+  }
   const cue = requestedCue && !candidateFromCueTitle
-    ? uniqueMatch(
-        project.music.cues,
-        item => normalizeName(item.title) === requestedCue,
-        `No existe el cue ni la canción “${cueTitle}” en “${project.title}”.`,
-        `Hay varios cues llamados “${cueTitle}”; usa el título exacto y único.`,
-      )
+    ? exactCues[0] || (project.music.cues.length === 1 ? project.music.cues[0] : undefined)
     : candidateFromCueTitle
       ? project.music.cues.find(item => item.candidates.some(candidate => candidate.id === candidateFromCueTitle.id))
     : project.music.cues.length === 1
@@ -75,12 +69,10 @@ export function resolveStoryMusicSelection(
   const requestedSong = normalizeName(songName)
   let candidate: StoryMusicCandidate | undefined = candidateFromCueTitle
   if (requestedSong) {
-    candidate = uniqueMatch(
-      pool,
-      item => candidateNames(item).includes(requestedSong),
-      `No existe la canción “${songName}” en “${project.title}”.`,
-      `Hay varias canciones llamadas “${songName}”; usa el nombre exacto y único.`,
-    )
+    const matches = pool.filter(item => candidateNames(item).includes(requestedSong))
+    if (matches.length > 1) throw new Error(`Hay varias canciones llamadas “${songName}”; usa el nombre exacto y único.`)
+    candidate = matches[0] || (pool.length === 1 ? pool[0] : undefined)
+    if (!candidate) throw new Error(`No existe la canción “${songName}” en “${project.title}”.`)
   } else if (!candidate) {
     const selectedId = cue?.selectedCandidateId || project.music.selectedCandidateId
     const selected = selectedId ? pool.find(item => item.id === selectedId) : undefined

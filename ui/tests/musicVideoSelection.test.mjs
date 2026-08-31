@@ -36,6 +36,16 @@ test('a rendered version accidentally supplied as cue_title resolves its owning 
   assert.equal(selection.candidate.id, candidate.id)
 })
 
+test('a resumed pre-render label resolves the only persisted cue and candidate', () => {
+  const selection = resolveStoryMusicSelection(
+    project,
+    'El Himno del Sysadmin · Español',
+    'El Himno del Sysadmin · Español',
+  )
+  assert.equal(selection.cue.id, cue.id)
+  assert.equal(selection.candidate.id, candidate.id)
+})
+
 test('absolute generator paths become playable workspace URLs', () => {
   assert.equal(
     getPlayableFileUrl(candidate.source, candidate.name, 'default'),

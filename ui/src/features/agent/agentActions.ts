@@ -1946,6 +1946,19 @@ export async function reconcileAgentTurnWithRequest(
       : undefined
     const effectiveSongDraft = songDraft || automaticDraft
     const completeSongSetup = automaticDraft ? [...storySongSetup, automaticDraft] : storySongSetup
+    // A rendered candidate label ("Title · Español · v1") does not exist yet
+    // while the song is only a cue. Correlate every later step with the exact
+    // cue that this same plan configures instead of trusting independently
+    // guessed names from the LLM.
+    const correlatedSongSetup = effectiveSongDraft
+      ? completeSongSetup.map(action => action.type === 'generate_story_song'
+        ? {
+            ...action,
+            targetStoryTitle: effectiveSongDraft.targetStoryTitle,
+            cueTitle: effectiveSongDraft.songTitle,
+          }
+        : action)
+      : completeSongSetup
     const stageSeed: AgentStageStoryMusicVideoAction = existingStage || {
       type: 'stage_story_music_video',
       targetStoryTitle: effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || '',
@@ -1957,13 +1970,14 @@ export async function reconcileAgentTurnWithRequest(
     const stage: AgentStageStoryMusicVideoAction = {
       ...stageSeed,
       targetStoryTitle: stageSeed.targetStoryTitle || effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || '',
-      cueTitle: stageSeed.cueTitle || effectiveSongDraft?.songTitle || '',
+      cueTitle: effectiveSongDraft?.songTitle || stageSeed.cueTitle || '',
+      songName: effectiveSongDraft ? '' : stageSeed.songName,
     }
     if (musicVideoStage && musicVideoStart) {
-      const configuredSong = completeSongSetup.some(action => action.type === 'configure_story_song')
-      const songActions = configuredSong && !completeSongSetup.some(action => action.type === 'generate_story_song')
-        ? [...completeSongSetup, { type: 'generate_story_song' as const, targetStoryTitle: stage.targetStoryTitle, cueTitle: stage.cueTitle, confirm: true as const }]
-        : completeSongSetup
+      const configuredSong = correlatedSongSetup.some(action => action.type === 'configure_story_song')
+      const songActions = configuredSong && !correlatedSongSetup.some(action => action.type === 'generate_story_song')
+        ? [...correlatedSongSetup, { type: 'generate_story_song' as const, targetStoryTitle: stage.targetStoryTitle, cueTitle: stage.cueTitle, confirm: true as const }]
+        : correlatedSongSetup
       return {
         reply: configuredSong
           ? 'Guardaré la canción y su letra en Story Lab, generaré el audio real y sólo entonces prepararé e iniciaré el videoclip. En marcha no es terminado. 🪄'
@@ -2633,9 +2647,29 @@ export async function executeAgentActions(
   let preparedStudio = false
   let createdComicId = ''
   let stagedProductionId = ''
+  let configuredStorySong: { targetStoryTitle: string; cueTitle: string } | null = null
   const orderedActions = orderCompoundActions(actions)
   const failedActionTypes = new Set<string>()
-  for (const action of orderedActions) {
+  for (const plannedAction of orderedActions) {
+    let action = plannedAction
+    // Runtime correlation is the final guard: the configure capability returns
+    // the canonical cue title after persistence, so downstream steps consume
+    // that identity even when the original LLM plan used a future candidate
+    // display label or stale language/version suffix.
+    if (configuredStorySong && action.type === 'generate_story_song') {
+      action = {
+        ...action,
+        targetStoryTitle: configuredStorySong.targetStoryTitle,
+        cueTitle: configuredStorySong.cueTitle,
+      }
+    } else if (configuredStorySong && action.type === 'stage_story_music_video') {
+      action = {
+        ...action,
+        targetStoryTitle: configuredStorySong.targetStoryTitle,
+        cueTitle: configuredStorySong.cueTitle,
+        songName: '',
+      }
+    }
     const predecessors = (requiredPredecessor(action.type) || '').split('|').filter(Boolean)
     const failedPredecessor = predecessors.find(type => (
       failedActionTypes.has(type) && orderedActions.some(candidate => candidate.type === type)
@@ -2814,6 +2848,12 @@ export async function executeAgentActions(
       })
       if (registeredResult) {
         results.push(registeredResult)
+        if (action.type === 'configure_story_song' && registeredResult.report?.target?.title) {
+          configuredStorySong = {
+            targetStoryTitle: action.targetStoryTitle,
+            cueTitle: registeredResult.report.target.title,
+          }
+        }
       } else if (action.type === 'open_story_section') {
         await defaultApplicationAdapters.storyLab.open()
         const { openAgentStorySection } = await import('./agentUiBus')

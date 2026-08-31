@@ -247,9 +247,15 @@ export async function generateStorySong(action: AgentGenerateStorySongAction): P
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
   if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
-  const cue = action.cueTitle
+  const exactCue = action.cueTitle
     ? target.music.cues.find(item => normalizeName(item.title) === normalizeName(action.cueTitle))
-    : target.music.cues.find(item => item.kind === 'story')
+    : undefined
+  // A resumed Wizard workflow may retain a guessed future candidate label
+  // such as "Cue · Español". When the persisted project has exactly one cue,
+  // its identity is unambiguous and must win over that stale label.
+  const cue = exactCue
+    || (target.music.cues.length === 1 ? target.music.cues[0] : undefined)
+    || (!action.cueTitle ? target.music.cues.find(item => item.kind === 'story') : undefined)
   if (!cue) throw new Error(`No existe la canción “${action.cueTitle || 'principal'}” en “${target.title}”.`)
   if (!cue.style.trim()) throw new Error(`“${cue.title}” necesita un estilo musical antes de generarse.`)
   if (!cue.instrumental && !cue.lyrics.trim()) throw new Error(`“${cue.title}” necesita letra antes de generarse.`)
