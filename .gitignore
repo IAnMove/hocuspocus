@@ -9,6 +9,9 @@ ui/node_modules/
 
 # React build output
 ui/dist/
+ui/playwright-report/
+ui/test-results/
+ui/blob-report/
 
 # Private planning notes and local-only development artefacts.
 /internal/
