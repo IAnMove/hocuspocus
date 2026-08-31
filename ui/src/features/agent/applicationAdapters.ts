@@ -7,7 +7,7 @@ import type { AgentRhythmGrid } from './agentUiBus'
 import { queueMusic } from './audioActions'
 import type { AgentPrepareAudioAction } from './agentActions'
 import type { AgentTab } from './capabilityRegistry'
-import type { AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction } from './characterKitActions'
+import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
 
 export interface AdapterOutcome {
   message: string
@@ -69,6 +69,8 @@ export interface CharacterKitAdapter {
   attachReference(action: AgentAttachCharacterKitReferencesAction): Promise<AdapterOutcome>
   build(action: AgentBuildCharacterKitAction): Promise<AdapterOutcome>
   openRig(action: AgentOpenCharacterKitRigAction): Promise<AdapterOutcome>
+  applyPreset(action: AgentApplyCharacterKitPresetAction): Promise<AdapterOutcome>
+  trackJob(action: AgentTrackCharacterKitJobAction): Promise<AdapterOutcome>
 }
 export interface QueueAdapter { openActivity(): Promise<AdapterOutcome> }
 
@@ -321,6 +323,8 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async attachReference(action) { const { attachAgentCharacterKitReferences } = await import('./characterKitActions'); const result = await attachAgentCharacterKitReferences(action); return { message: result.message, target: result.report.target! } },
     async build(action) { const { buildAgentCharacterKit } = await import('./characterKitActions'); const result = await buildAgentCharacterKit(action); return { message: result.message, target: result.report.target! } },
     async openRig(action) { const { openAgentCharacterKitRig } = await import('./characterKitActions'); const result = await openAgentCharacterKitRig(action); return { message: result.message, target: result.report.target! } },
+    async applyPreset(action) { const { applyAgentCharacterKitPreset } = await import('./characterKitActions'); const result = await applyAgentCharacterKitPreset(action); return { message: result.message, target: result.report.target! } },
+    async trackJob(action) { const { trackAgentCharacterKitJob } = await import('./characterKitActions'); const result = await trackAgentCharacterKitJob(action); return { message: result.message, target: result.report.target! } },
   }
   adapters.queue = {
     async openActivity() {
