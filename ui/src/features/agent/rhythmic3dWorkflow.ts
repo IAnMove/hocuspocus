@@ -7,6 +7,7 @@ import {
   type WizardWorkflowDefinition,
   type WizardWorkflowRecord,
   type WizardWorkflowStepContext,
+  type WizardWorkflowStepResult,
 } from './wizardWorkflowRuntime'
 
 export const RHYTHMIC_3D_WORKFLOW = 'create_rhythmic_3d_video'
@@ -28,11 +29,44 @@ export async function resolveRhythmic3dAudioName(context: WizardWorkflowStepCont
   const library = await fetchOutputs(0, 0, { mediaType: 'audio', workspace: context.workflow.workspace })
   const matches = library.outputs.filter(output => candidates.some(candidate => candidate === output.name || basename(candidate) === output.name))
   if (matches.length !== 1) {
-    throw new Error(matches.length
-      ? 'La tarea de canción publicó varios audios; no puedo elegir uno de forma segura.'
-      : 'La tarea terminó sin publicar un output de audio exacto en este workspace.')
+    throw new Rhythmic3dAudioSelectionRequired(
+      matches.length
+        ? 'La tarea publicó varios audios. Elige cuál debe mover la escena.'
+        : 'No pude correlacionar un único audio. Elige un audio real de este workspace para continuar.',
+      (matches.length ? matches : library.outputs).slice(0, 30).map(output => output.name),
+    )
   }
   return matches[0].name
+}
+
+class Rhythmic3dAudioSelectionRequired extends Error {
+  readonly names: string[]
+
+  constructor(message: string, names: string[]) {
+    super(message)
+    this.name = 'Rhythmic3dAudioSelectionRequired'
+    this.names = names
+  }
+}
+
+async function resolveAudioForStep(
+  context: WizardWorkflowStepContext,
+  resolver: (context: WizardWorkflowStepContext) => Promise<string>,
+): Promise<string | WizardWorkflowStepResult> {
+  try {
+    return await resolver(context)
+  } catch (error) {
+    if (!(error instanceof Rhythmic3dAudioSelectionRequired)) throw error
+    return {
+      state: 'awaiting_input',
+      awaitingInput: {
+        reason: error.message,
+        fields: ['audioOutputName'],
+        options: error.names.map(name => ({ value: name, label: name, field: 'audioOutputName' })),
+        recommended: error.names[0] || null,
+      },
+    }
+  }
 }
 
 export function createRhythmic3dWorkflowDefinition(
@@ -47,7 +81,8 @@ export function createRhythmic3dWorkflowDefinition(
         async execute(context) {
           const action = input(context)
           if (action.audioOutputName) {
-            const name = await resolveAudioName(context)
+            const name = await resolveAudioForStep(context, resolveAudioName)
+            if (typeof name !== 'string') return name
             return { state: 'completed', output: { audioOutputName: name }, outputRefs: [name] }
           }
           const song: AgentPrepareAudioAction = {
@@ -82,7 +117,8 @@ export function createRhythmic3dWorkflowDefinition(
       {
         stepId: 'attach-audio', kind: 'resolve and attach exact audio',
         async execute(context) {
-          const action = input(context); const audioOutputName = await resolveAudioName(context)
+          const action = input(context); const audioOutputName = await resolveAudioForStep(context, resolveAudioName)
+          if (typeof audioOutputName !== 'string') return audioOutputName
           const outcome = await applicationAdapters.video3d.run({ type: 'attach_3d_scene_audio', sceneName: action.sceneName, audioOutputName })
           return { state: 'completed', output: { audioOutputName, message: outcome.message }, outputRefs: [audioOutputName], resolvedEntityIds: { audioTrackId: outcome.audioTrackId || '' } }
         },
@@ -90,7 +126,8 @@ export function createRhythmic3dWorkflowDefinition(
       {
         stepId: 'analyze-audio', kind: 'analyze audio once',
         async execute(context) {
-          const action = input(context); const audioOutputName = await resolveAudioName(context)
+          const action = input(context); const audioOutputName = await resolveAudioForStep(context, resolveAudioName)
+          if (typeof audioOutputName !== 'string') return audioOutputName
           const outcome = await applicationAdapters.video3d.run({ type: 'analyze_3d_scene_audio', sceneName: action.sceneName, audioOutputName })
           return { state: 'completed', output: { audioOutputName, bpm: outcome.bpm, beatCount: outcome.beatCount, downbeatCount: outcome.downbeatCount, rhythmGrid: outcome.rhythmGrid }, resolvedEntityIds: { analysisId: outcome.analysisId || '' } }
         },
@@ -98,7 +135,8 @@ export function createRhythmic3dWorkflowDefinition(
       {
         stepId: 'bake-choreography', kind: 'bake editable beat choreography',
         async execute(context) {
-          const action = input(context); const audioOutputName = await resolveAudioName(context)
+          const action = input(context); const audioOutputName = await resolveAudioForStep(context, resolveAudioName)
+          if (typeof audioOutputName !== 'string') return audioOutputName
           const analysisStep = context.workflow.steps.find(step => step.stepId === 'analyze-audio')
           const rhythmGrid = analysisStep?.output.rhythmGrid as import('./agentUiBus').AgentRhythmGrid | undefined
           if (!rhythmGrid?.beats.length) throw new Error('El checkpoint no contiene la rejilla rítmica analizada.')

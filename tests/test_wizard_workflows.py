@@ -67,6 +67,44 @@ class TestWizardWorkflows(unittest.TestCase):
                 write_workflows(directory, {"revision": 0, "workflows": []}, base_revision=0)
             self.assertEqual(read_workflows(directory)["revision"], 1)
 
+    def test_awaiting_input_question_and_answer_survive_round_trip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            write_workflows(directory, {
+                "revision": 0,
+                "workflows": [{
+                    "workflowId": "workflow-question",
+                    "type": "choose_audio",
+                    "workspace": "default",
+                    "state": "awaiting_input",
+                    "currentStep": 0,
+                    "steps": [{
+                        "stepId": "select-audio", "kind": "select_audio",
+                        "state": "awaiting_input", "input": {},
+                    }],
+                    "pendingInput": {
+                        "workflowId": "spoofed-workflow",
+                        "stepId": "select-audio",
+                        "reason": "Choose one exact output",
+                        "fields": ["audioOutputName"],
+                        "options": [{"value": "song-v2.wav", "label": "Song v2"}],
+                        "recommended": "song-v2.wav",
+                        "resolvedEntityIds": {"project": "story-42"},
+                        "answer": {"audioOutputName": "song-v2.wav"},
+                        "version": 2,
+                        "requestedAt": 10,
+                        "answeredAt": 20,
+                    },
+                }],
+            }, base_revision=0)
+            workflow = read_workflows(directory)["workflows"][0]
+            question = workflow["pendingInput"]
+            self.assertEqual(workflow["state"], "awaiting_input")
+            self.assertEqual(workflow["steps"][0]["state"], "awaiting_input")
+            self.assertEqual(question["workflowId"], "workflow-question")
+            self.assertEqual(question["fields"], ["audioOutputName"])
+            self.assertEqual(question["answer"], {"audioOutputName": "song-v2.wav"})
+            self.assertEqual(question["resolvedEntityIds"], {"project": "story-42"})
+
     def test_runtime_exposes_workspace_scoped_get_and_put_endpoints(self):
         source = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(encoding="utf-8")
         self.assertIn('@api.get("/api/v1/wizard/workflows")', source)

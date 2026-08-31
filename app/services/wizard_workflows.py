@@ -22,9 +22,12 @@ _LOCK = threading.RLock()
 
 WORKFLOW_STATES = frozenset({
     "prepared", "queued", "waiting", "running", "completed",
-    "partial", "failed", "retrying", "cancelled",
+    "awaiting_input", "partial", "failed", "retrying", "cancelled",
 })
-STEP_STATES = frozenset({"pending", "running", "waiting", "completed", "failed", "cancelled"})
+STEP_STATES = frozenset({
+    "pending", "running", "waiting", "awaiting_input",
+    "completed", "failed", "cancelled",
+})
 _SENSITIVE_PARTS = (
     "api_key", "apikey", "token", "authorization", "password", "passwd",
     "secret", "cookie", "session",
@@ -120,6 +123,44 @@ def _clean_step(value: Any, index: int) -> dict[str, Any] | None:
     }
 
 
+def _clean_pending_input(value: Any, workflow_id: str, fallback_step_id: str) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    step_id = _text(value.get("stepId") or fallback_step_id, 160)
+    fields = _string_list(value.get("fields"), 50, 160)
+    if not step_id or not fields:
+        return None
+    options = []
+    for raw in (value.get("options") or [])[:100]:
+        if not isinstance(raw, dict) or "value" not in raw:
+            continue
+        options.append({
+            "value": _safe_value(raw.get("value")),
+            "label": _text(raw.get("label") or raw.get("value"), 300),
+            "description": _text(raw.get("description"), 1_000),
+            "field": _text(raw.get("field"), 160),
+        })
+    answer = value.get("answer")
+    return {
+        "workflowId": workflow_id,
+        "stepId": step_id,
+        "reason": _text(value.get("reason"), 4_000),
+        "fields": fields,
+        "options": options,
+        "recommended": _safe_value(value.get("recommended")),
+        "resolvedEntityIds": _safe_value(
+            value.get("resolvedEntityIds")
+            if isinstance(value.get("resolvedEntityIds"), dict) else {}
+        ),
+        "answer": _safe_value(answer) if isinstance(answer, dict) else None,
+        "version": max(1, _integer(value.get("version"), 1)),
+        "requestedAt": _integer(value.get("requestedAt")),
+        "createdAt": _integer(value.get("createdAt")),
+        "updatedAt": _integer(value.get("updatedAt")),
+        "answeredAt": _integer(value.get("answeredAt")),
+    }
+
+
 def _clean_workflow(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
@@ -137,6 +178,11 @@ def _clean_workflow(value: Any) -> dict[str, Any] | None:
         if step:
             steps.append(step)
     current_step = min(_integer(value.get("currentStep")), len(steps))
+    pending_input = _clean_pending_input(
+        value.get("pendingInput"),
+        workflow_id,
+        steps[current_step]["stepId"] if current_step < len(steps) else "",
+    )
     return {
         "workflowId": workflow_id,
         "type": workflow_type,
@@ -164,6 +210,7 @@ def _clean_workflow(value: Any) -> dict[str, Any] | None:
         "recoverableError": _text(value.get("recoverableError"), 4_000),
         "cancelRequested": value.get("cancelRequested") is True,
         "resumeRequested": value.get("resumeRequested") is True,
+        "pendingInput": pending_input,
     }
 
 

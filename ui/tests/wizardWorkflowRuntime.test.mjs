@@ -135,3 +135,151 @@ test('waiting workflow cancellation is durable and does not run its next step', 
   assert.equal(runtime.get('workflow-cancel').state, 'cancelled')
   assert.equal(nextCalls, 0)
 })
+
+test('awaiting input persists the question, validates answers, and resumes the same step once', async () => {
+  const { WizardWorkflowRuntime } = await import('../src/features/agent/wizardWorkflowRuntime.ts')
+  const persistence = memoryPersistence()
+  const calls = []
+  const definition = {
+    type: 'needs_choice',
+    steps: [{
+      stepId: 'choose-audio', kind: 'choose audio',
+      async execute(context) {
+        calls.push({
+          input: clone(context.step.input),
+          snapshot: clone(context.inputSnapshot),
+        })
+        if (calls.length === 1) {
+          return {
+            state: 'awaiting_input',
+            awaitingInput: {
+              reason: 'Elige el audio canónico para continuar.',
+              fields: ['audio.outputName'],
+              options: [
+                { value: 'himno-v2.wav', label: 'El Himno v2', field: 'audio.outputName' },
+                { value: 'himno-v1.wav', label: 'El Himno v1', field: 'audio.outputName' },
+              ],
+              recommended: 'himno-v2.wav',
+              resolvedEntityIds: { storyId: 'story-42' },
+            },
+          }
+        }
+        return {
+          state: 'completed',
+          output: { selectedAudio: context.step.input.audio.outputName },
+          outputRefs: [context.step.input.audio.outputName],
+        }
+      },
+    }],
+  }
+  const runtime = new WizardWorkflowRuntime(persistence)
+  runtime.register(definition)
+  await runtime.open('demo')
+  const started = await runtime.start({
+    workflowId: 'workflow-question', type: 'needs_choice', workspace: 'demo',
+    userRequest: 'Usa la canción correcta',
+    inputSnapshot: {
+      prompt: 'videoclip', audio: { outputName: 'unknown.wav' }, untouched: 'keep-me',
+    },
+    stepInputs: {
+      'choose-audio': { audio: { outputName: 'unknown.wav' }, untouched: 'keep-step' },
+    },
+  })
+
+  assert.equal(started.state, 'awaiting_input')
+  assert.equal(started.steps[0].state, 'awaiting_input')
+  assert.deepEqual(started.pendingInput.fields, ['audio.outputName'])
+  assert.equal(started.pendingInput.options[0].value, 'himno-v2.wav')
+  assert.equal(started.pendingInput.recommended, 'himno-v2.wav')
+  assert.deepEqual(started.pendingInput.resolvedEntityIds, { storyId: 'story-42' })
+  assert.equal(persistence.snapshot().workflows[0].pendingInput.reason, 'Elige el audio canónico para continuar.')
+
+  // A reload must show the exact same durable question instead of executing it
+  // again or silently losing the selected entity identity.
+  const reloaded = new WizardWorkflowRuntime(persistence)
+  reloaded.register(definition)
+  await reloaded.open('demo')
+  const restored = reloaded.get('workflow-question')
+  assert.equal(restored.state, 'awaiting_input')
+  assert.equal(restored.pendingInput.version, 1)
+  assert.deepEqual(restored.pendingInput.fields, ['audio.outputName'])
+  assert.deepEqual(restored.resolvedEntityIds, { storyId: 'story-42' })
+  assert.equal(calls.length, 1)
+
+  await assert.rejects(
+    () => reloaded.answer('workflow-question', {
+      'audio.outputName': 'himno-v2.wav', unexpected: true,
+    }, { version: 1 }),
+    /undeclared field/,
+  )
+  await assert.rejects(
+    () => reloaded.answer('workflow-question', {}, { version: 1 }),
+    /missing field/,
+  )
+  await assert.rejects(
+    () => reloaded.answer('workflow-question', { 'audio.outputName': 'other.wav' }, { version: 1 }),
+    /available options/,
+  )
+  await assert.rejects(
+    () => reloaded.answer('workflow-question', { 'audio.outputName': 'himno-v1.wav' }, { version: 2 }),
+    /stale/,
+  )
+  assert.equal(reloaded.get('workflow-question').state, 'awaiting_input')
+  assert.equal(calls.length, 1)
+
+  const completed = await reloaded.answer(
+    'workflow-question',
+    { 'audio.outputName': 'himno-v2.wav' },
+    { version: 1, stepId: 'choose-audio' },
+  )
+  assert.equal(completed.state, 'completed')
+  assert.equal(completed.currentStep, 1)
+  assert.equal(calls.length, 2)
+  assert.deepEqual(calls[1].input, {
+    audio: { outputName: 'himno-v2.wav' }, untouched: 'keep-step',
+  })
+  assert.deepEqual(calls[1].snapshot, {
+    prompt: 'videoclip', audio: { outputName: 'himno-v2.wav' }, untouched: 'keep-me',
+  })
+  assert.deepEqual(completed.outputRefs, ['himno-v2.wav'])
+  assert.deepEqual(completed.pendingInput.answer, { 'audio.outputName': 'himno-v2.wav' })
+  assert.ok(completed.pendingInput.answeredAt > 0)
+
+  // Replaying the same UI event after the checkpoint has been consumed is a
+  // no-op: it cannot overwrite the answer or execute the step a third time.
+  const duplicate = await reloaded.answer(
+    'workflow-question',
+    { 'audio.outputName': 'himno-v1.wav' },
+    { version: 1, stepId: 'choose-audio' },
+  )
+  assert.equal(duplicate.state, 'completed')
+  assert.equal(calls.length, 2)
+  assert.deepEqual(duplicate.pendingInput.answer, { 'audio.outputName': 'himno-v2.wav' })
+})
+
+test('awaiting input rejects prototype-polluting field paths before persistence', async () => {
+  const { WizardWorkflowRuntime } = await import('../src/features/agent/wizardWorkflowRuntime.ts')
+  const persistence = memoryPersistence()
+  const runtime = new WizardWorkflowRuntime(persistence)
+  runtime.register({
+    type: 'unsafe_question',
+    steps: [{
+      stepId: 'unsafe', kind: 'unsafe question',
+      async execute() {
+        return {
+          state: 'awaiting_input',
+          awaitingInput: {
+            reason: 'bad field', fields: ['__proto__.polluted'],
+          },
+        }
+      },
+    }],
+  })
+  await runtime.open('demo')
+  const failed = await runtime.start({
+    workflowId: 'workflow-unsafe', type: 'unsafe_question', workspace: 'demo', userRequest: 'test',
+  })
+  assert.equal(failed.state, 'failed')
+  assert.match(failed.recoverableError, /requested input/)
+  assert.equal(Object.prototype.polluted, undefined)
+})

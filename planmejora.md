@@ -318,3 +318,13 @@ Comenzar **Bloque B — contexto canónico de sesión y selección**. Antes de m
 - Las etiquetas siguen siendo solo presentación: no se convierten en identidad ni cruzan workspaces.
 - La serialización es JSON segura, corta ciclos y conserva referencias compartidas sin enviar stores vivos.
 - Se mantiene el snapshot compacto anterior durante la migración de capacidades.
+
+### Nota de relevo — Bloque E cerrado
+
+**Acabé el Bloque E (`awaiting_input`) y comienzo el Bloque C (contrato global).**
+
+- Workflow y paso pueden quedar en `awaiting_input` con pregunta, campos, opciones, recomendación, entidades ya resueltas, versión y respuesta persistidas.
+- La respuesta valida versión/paso, rechaza campos extra y modifica únicamente los campos declarados antes de reanudar exactamente el mismo paso.
+- El chat muestra la pregunta y opciones; la respuesta se entrega directamente al runtime, sin pedir al LLM que reconstruya el workflow.
+- La ambigüedad de audio en canción → Video3D deja de fallar: pregunta qué output exacto usar y continúa desde `attach-audio`.
+- Backend, recarga, duplicados, seguridad contra prototype pollution, chat y flujo rítmico están cubiertos por pruebas focalizadas.

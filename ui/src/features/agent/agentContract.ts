@@ -2,6 +2,7 @@ export type AgentActionRisk = 'read' | 'edit' | 'compute' | 'external_cost'
 
 export type AgentExecutionState =
   | 'prepared'
+  | 'awaiting_input'
   | 'queued'
   | 'running'
   | 'completed'
@@ -58,7 +59,7 @@ const EXPENSIVE_ACTIONS = new Set([
 
 const QUEUED_ACTIONS = new Set(['start_generation', 'queue_sfx_pack', 'render_series_shots', 'export_video_editor', 'mount_videoclip_alternative_song'])
 const RUNNING_ACTIONS = new Set(['start_director_production', 'export_3d_scene', 'generate_story_visuals', 'mount_videoclip_alternative_song'])
-const REUSABLE_STATES = new Set<AgentExecutionState>(['prepared', 'queued', 'running', 'completed'])
+const REUSABLE_STATES = new Set<AgentExecutionState>(['prepared', 'awaiting_input', 'queued', 'running', 'completed'])
 
 const recentExecutions = new Map<string, AgentExecutionReport>()
 

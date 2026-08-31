@@ -16,7 +16,7 @@ import {
 import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
 import { applyRemoteWizardConversation, WIZARD_WELCOME_TEXT } from './wizardConversationSync'
 import { AgentMarkdown } from './AgentMarkdown'
-import { defaultWizardWorkflowRuntime } from './wizardWorkflowRuntime'
+import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
 
@@ -38,6 +38,30 @@ const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const STORAGE_PREFIX = 'hocuspocus-agent-chat-v2:'
 
 const newId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+function normalizedChoice(value: unknown): string {
+  return String(value ?? '').trim().toLocaleLowerCase()
+}
+
+export function resolveWizardPendingAnswer(pending: WizardWorkflowPendingInput, text: string): Record<string, unknown> | null {
+  if (pending.fields.length === 1) {
+    const field = pending.fields[0]
+    const typed = text.trim()
+    const option = pending.options.find(item => (
+      (!item.field || item.field === field)
+      && (normalizedChoice(item.label) === normalizedChoice(typed)
+        || normalizedChoice(item.value) === normalizedChoice(typed))
+    ))
+    if (pending.options.length && !option) return null
+    return { [field]: option ? option.value : typed }
+  }
+  const entries = text.split(/[\n,]+/).flatMap(part => {
+    const match = part.match(/^\s*([^:=]+)\s*[:=]\s*(.+?)\s*$/)
+    return match ? [[match[1].trim(), match[2].trim()] as const] : []
+  })
+  const answer = Object.fromEntries(entries)
+  return pending.fields.every(field => Object.prototype.hasOwnProperty.call(answer, field)) ? answer : null
+}
 
 const welcomeMessage = (): AgentMessage => ({
   id: newId(),
@@ -90,6 +114,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   const [busyMessage, setBusyMessage] = useState('Consultando el grimorio de HocusPocus…')
   const [expanded, setExpanded] = useState(false)
   const [errorCardId, setErrorCardId] = useState<string | null>(null)
+  const [activeWorkflow, setActiveWorkflow] = useState<WizardWorkflowRecord | null>(null)
+  const [pendingInput, setPendingInput] = useState<WizardWorkflowPendingInput | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
   const conversationRevisionRef = useRef(0)
@@ -111,6 +137,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
     ensureRhythmic3dWorkflowRegistered(defaultApplicationAdapters)
     const unsubscribe = defaultWizardWorkflowRuntime.subscribe(({ workflow, card }) => {
       if (!active || workflow.workspace !== workspace) return
+      setActiveWorkflow(workflow)
+      setPendingInput(workflow.state === 'awaiting_input' ? workflow.pendingInput : null)
       setMessages(current => {
         let found = false
         const updated = current.map(message => {
@@ -118,7 +146,9 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
           found = true
           return {
             ...message,
-            text: `El hechizo duradero **${workflow.type}** está ahora en estado **${workflow.state}**.`,
+            text: workflow.state === 'awaiting_input'
+              ? `🪄 **Necesito una decisión para continuar el mismo hechizo.**\n\n${workflow.pendingInput?.reason || 'Falta un dato requerido.'}`
+              : `El hechizo duradero **${workflow.type}** está ahora en estado **${workflow.state}**.`,
             cards: message.cards.map(existing => existing.id === card.id ? card : existing),
           }
         })
@@ -126,7 +156,9 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
         return [...updated, {
           id: `wizard-workflow-${workflow.workflowId}`,
           role: 'assistant' as const,
-          text: `El hechizo duradero **${workflow.type}** está ahora en estado **${workflow.state}**.`,
+          text: workflow.state === 'awaiting_input'
+            ? `🪄 **Necesito una decisión para continuar el mismo hechizo.**\n\n${workflow.pendingInput?.reason || 'Falta un dato requerido.'}`
+            : `El hechizo duradero **${workflow.type}** está ahora en estado **${workflow.state}**.`,
           createdAt: Date.now(),
           cards: [card],
         }].slice(-40)
@@ -145,6 +177,11 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       unsubscribe()
       closeEvents()
     }
+  }, [workspace])
+
+  useEffect(() => {
+    setActiveWorkflow(null)
+    setPendingInput(null)
   }, [workspace])
 
   useEffect(() => {
@@ -290,9 +327,29 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
     setBusyMessage('Consultando el grimorio de HocusPocus…')
     setState('thinking')
     try {
+      if (pendingInput) {
+        const answer = resolveWizardPendingAnswer(pendingInput, question)
+        if (!answer) {
+          const choices = pendingInput.options.map(option => `“${option.label}”`).join(', ')
+          throw new Error(choices
+            ? `Elige una de estas opciones para continuar el hechizo: ${choices}.`
+            : `Responde los campos ${pendingInput.fields.map(field => `${field}=valor`).join(', ')}.`)
+        }
+        setBusyMessage('Aplicando tu decisión al paso bloqueado…')
+        await defaultWizardWorkflowRuntime.answer(pendingInput.workflowId, answer, {
+          stepId: pendingInput.stepId,
+          version: pendingInput.version,
+        })
+        if (!mountedRef.current) return
+        setState('success')
+        return
+      }
       const answer = await generateLlmText({
         system_prompt: HOCUSPOCUS_AGENT_SYSTEM_PROMPT,
-        prompt: buildAgentTurnPrompt(workspace, nextMessages, tasks, buildAgentAppSnapshot()),
+        prompt: buildAgentTurnPrompt(workspace, nextMessages, tasks, buildAgentAppSnapshot({
+          workflow: activeWorkflow,
+          pending_question: pendingInput,
+        })),
         max_new_tokens: 3_200,
         temperature: .1,
         json_schema: HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
@@ -330,7 +387,9 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       const assistantMessage: AgentMessage = {
         id: newId(),
         role: 'assistant',
-        text: `No he podido consultar el LLM: ${message}. Comprueba Settings → Services y vuelve a intentarlo.`,
+        text: pendingInput
+          ? `No puedo aplicar todavía esa respuesta al paso bloqueado: ${message}`
+          : `No he podido consultar el LLM: ${message}. Comprueba Settings → Services y vuelve a intentarlo.`,
         createdAt: Date.now(),
       }
       setMessages(current => [...current, assistantMessage].slice(-40))
@@ -452,6 +511,32 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
           {['¿Qué hay en cola?', 'Abre 3D Video', 'Hazme un cómic de ejemplo'].map(suggestion => (
             <button key={suggestion} type="button" disabled={busy} onClick={() => void ask(suggestion)} className="rounded-full border border-amber-200/15 bg-amber-200/5 px-2 py-1 text-[9px] text-amber-100/65 hover:border-amber-200/35 hover:text-amber-50 disabled:opacity-40">{suggestion}</button>
           ))}
+        </div>
+      )}
+
+      {pendingInput && (
+        <div className="border-t border-amber-200/10 bg-amber-200/[.035] px-3 py-2" role="group" aria-label="Wizard pending question">
+          <p className="text-[10px] font-medium text-amber-100">El hechizo está esperando tu elección</p>
+          <p className="mt-0.5 text-[9px] text-amber-50/65">{pendingInput.reason}</p>
+          {pendingInput.options.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {pendingInput.options.map((option, index) => {
+                const field = option.field || pendingInput.fields[0]
+                return (
+                  <button
+                    key={`${field}-${index}`}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void ask(option.label)}
+                    className="rounded-lg border border-amber-200/25 bg-amber-200/10 px-2 py-1 text-[9px] text-amber-50 hover:bg-amber-200/20 disabled:opacity-40"
+                    title={option.description}
+                  >
+                    {option.label}{Object.is(option.value, pendingInput.recommended) ? ' · recomendado' : ''}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
