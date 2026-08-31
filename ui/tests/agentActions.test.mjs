@@ -283,6 +283,9 @@ test('parses a confirmed Story music-video staging and start', async () => {
     { role: 'assistant', text: prepared.reply },
   ])
   assert.deepEqual(launched.actions, [{ type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true }])
+
+  const created = await reconcileAgentTurnWithRequest('crea el videoclip con la canción seleccionada', { reply: 'Lo preparo.', actions: [] })
+  assert.deepEqual(created.actions.map(action => action.type), ['stage_story_music_video', 'start_director_production'])
 })
 
 test('keeps a vocal Story song in the UI workflow before launching its videoclip', async () => {

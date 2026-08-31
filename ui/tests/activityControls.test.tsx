@@ -167,3 +167,36 @@ test('clearing Activity history only hides terminal rows locally', { concurrency
     })
   }
 })
+
+test('Activity summary shows the most recent real completion instead of a rehydrated old failure', { concurrency: false }, async () => {
+  const { render, screen, waitFor, cleanup } = await import('@testing-library/react')
+  const { ActivityFooter } = await import('../src/components/ActivityFooter.tsx')
+  const originalFetch = globalThis.fetch
+  const originalEventSource = globalThis.EventSource
+
+  Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: QuietEventSource })
+  const staleFailure = { ...task('failed'), id: 'old-failure', root_id: 'old-failure', created_at: 100, started_at: 100, completed_at: 160, updated_at: 9_999 }
+  const recentSong = {
+    ...task('failed'), id: 'new-song', root_id: 'new-song', title: 'Story song', status: 'completed',
+    phase: 'completed', message: 'ACE-Step song ready', error: null, resumable: false,
+    created_at: 200, started_at: 200, completed_at: 260, updated_at: 260,
+  }
+  globalThis.fetch = async input => {
+    if (String(input).includes('/api/v1/tasks?')) {
+      return new Response(JSON.stringify({ workspace: 'default', tasks: [staleFailure, recentSong], latest_event_id: 10 }), {
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    throw new Error(`Unexpected request: ${String(input)}`)
+  }
+
+  try {
+    render(<ActivityFooter />)
+    await waitFor(() => assert.equal(screen.getByText('ACE-Step song ready').textContent, 'ACE-Step song ready'))
+    assert.equal(screen.queryByText('Provider stopped'), null)
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+    Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: originalEventSource })
+  }
+})

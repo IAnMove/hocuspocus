@@ -45,13 +45,21 @@ export function resolveStoryMusicSelection(
   cueTitle = '',
 ): StoryMusicSelection {
   const requestedCue = normalizeName(cueTitle)
-  const cue = requestedCue
+  // Models occasionally put the selected rendered version ("… · v2") in
+  // cue_title. Accept that harmless field mix-up and resolve its owning cue;
+  // exact cue titles remain authoritative when they do match.
+  const candidateFromCueTitle = requestedCue
+    ? allCandidates(project).find(item => candidateNames(item).includes(requestedCue))
+    : undefined
+  const cue = requestedCue && !candidateFromCueTitle
     ? uniqueMatch(
-      project.music.cues,
-      item => normalizeName(item.title) === requestedCue,
-      `No existe el cue “${cueTitle}” en “${project.title}”.`,
-      `Hay varios cues llamados “${cueTitle}”; usa el título exacto y único.`,
-    )
+        project.music.cues,
+        item => normalizeName(item.title) === requestedCue,
+        `No existe el cue ni la canción “${cueTitle}” en “${project.title}”.`,
+        `Hay varios cues llamados “${cueTitle}”; usa el título exacto y único.`,
+      )
+    : candidateFromCueTitle
+      ? project.music.cues.find(item => item.candidates.some(candidate => candidate.id === candidateFromCueTitle.id))
     : project.music.cues.length === 1
       ? project.music.cues[0]
       : project.music.cues.find(item => (
@@ -65,7 +73,7 @@ export function resolveStoryMusicSelection(
   }
 
   const requestedSong = normalizeName(songName)
-  let candidate: StoryMusicCandidate | undefined
+  let candidate: StoryMusicCandidate | undefined = candidateFromCueTitle
   if (requestedSong) {
     candidate = uniqueMatch(
       pool,
@@ -73,7 +81,7 @@ export function resolveStoryMusicSelection(
       `No existe la canción “${songName}” en “${project.title}”.`,
       `Hay varias canciones llamadas “${songName}”; usa el nombre exacto y único.`,
     )
-  } else {
+  } else if (!candidate) {
     const selectedId = cue?.selectedCandidateId || project.music.selectedCandidateId
     const selected = selectedId ? pool.find(item => item.id === selectedId) : undefined
     if (selected) candidate = selected

@@ -3924,7 +3924,7 @@ export function StoryLabPanel() {
           language,
           version: firstVersion,
           name: rendered.filename,
-          source: rendered.audio_path,
+          source: api.getFileUrl(rendered.filename, activeWorkspace),
           prompt,
           lyrics: cue.lyrics,
           provider: 'local' as const,
@@ -4247,7 +4247,7 @@ export function StoryLabPanel() {
     }
 
     window.dispatchEvent(new Event('maestro:director-open'))
-    const blob = await fetch(candidate.source).then(response => {
+    const blob = await fetch(api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)).then(response => {
       if (!response.ok) throw new Error('The selected song file is unavailable')
       return response.blob()
     })
@@ -5907,7 +5907,7 @@ export function StoryLabPanel() {
                                           <span className="text-text-primary">{label} · {candidate.model}</span>
                                           <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
                                         </button>
-                                        <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
+                                        <audio src={api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)} controls preload="metadata" className="w-full h-8" />
                                         <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue) || !storyVideoConfigurationReady}
                                           onClick={() => void openMusicalTrailer(candidate.id)}>
                                           <Film size={12} /> Use in musical trailer
@@ -6016,7 +6016,7 @@ export function StoryLabPanel() {
                       {project.music.candidates.map(candidate => (
                         <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">
                           <span className="text-[10px] text-text-primary">{musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1)} · {candidate.model}</span>
-                          <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
+                          <audio src={api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)} controls preload="metadata" className="w-full h-8" />
                           <button className={`${button} w-full`} disabled={!storyVideoConfigurationReady} onClick={() => void openMusicalTrailer(candidate.id)}><Film size={12} /> Use in musical trailer</button>
                         </div>
                       ))}
@@ -6433,7 +6433,7 @@ export function StoryLabPanel() {
                             {selectedMusicOption.cue?.purpose && (
                               <p className="text-[10px] text-text-secondary">{selectedMusicOption.cue.purpose}</p>
                             )}
-                            <audio src={selectedMusicOption.candidate.source} controls preload="metadata" className="h-8 w-full" />
+                            <audio src={api.getPlayableFileUrl(selectedMusicOption.candidate.source, selectedMusicOption.candidate.name, activeWorkspace)} controls preload="metadata" className="h-8 w-full" />
                           </div>
                         )}
                         <div className="rounded-lg border border-fuchsia-500/35 bg-fuchsia-500/5 p-2.5 space-y-2.5">
@@ -6669,7 +6669,7 @@ export function StoryLabPanel() {
                         {musicProductionMode === 'trailer' && selectedMusicOption && (
                           <AudioRangeSelector
                             key={selectedMusicOption.candidate.id}
-                            src={selectedMusicOption.candidate.source}
+                            src={api.getPlayableFileUrl(selectedMusicOption.candidate.source, selectedMusicOption.candidate.name, activeWorkspace)}
                             durationHint={selectedMusicOption.candidate.durationSeconds}
                             start={musicTrailerRange.start}
                             end={musicTrailerRange.end}
@@ -6847,7 +6847,7 @@ export function StoryLabPanel() {
                                 <span className="text-text-primary">{label} · {candidate.model}</span>
                                 <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
                               </button>
-                              <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
+                              <audio src={api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)} controls preload="metadata" className="w-full h-8" />
                               <button className={`${button} w-full ${selected ? 'border-pink-500/50 text-pink-300' : ''}`}
                                 onClick={() => void openMusicalTrailer(candidate.id)} disabled={productionBusy === 'music' || !storyVideoConfigurationReady}>
                                 <Film size={12} /> Use this song in musical trailer

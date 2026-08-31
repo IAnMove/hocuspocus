@@ -47,6 +47,11 @@ function epochMs(value?: number | null): number | undefined {
   return value < 1_000_000_000_000 ? value * 1000 : value
 }
 
+function activityMoment(task: CanonicalTask): number {
+  if (ACTIVE.has(task.status)) return Number(task.updated_at || task.started_at || task.created_at || 0)
+  return Number(task.completed_at || task.started_at || task.created_at || 0)
+}
+
 function elapsed(task: CanonicalTask, now: number): string {
   const start = epochMs(task.started_at || task.queued_at || task.created_at)
   if (!start) return ''
@@ -308,9 +313,9 @@ export function ActivityFooter() {
     const visibleTasks = tasks.filter(task => !hiddenHistoryIds.has(task.id) || ACTIVE.has(task.status))
     const rootTasks = visibleTasks.filter(task => !task.parent_id)
     const active = rootTasks.filter(task => ACTIVE.has(task.status))
-      .sort((left, right) => right.updated_at - left.updated_at)
+      .sort((left, right) => activityMoment(right) - activityMoment(left))
     const recent = rootTasks.filter(task => !ACTIVE.has(task.status))
-      .sort((left, right) => right.updated_at - left.updated_at)
+      .sort((left, right) => activityMoment(right) - activityMoment(left))
       .slice(0, 12)
     return [...active, ...recent]
   }, [hiddenHistoryIds, tasks])
@@ -327,9 +332,11 @@ export function ActivityFooter() {
     return result
   }, [hiddenHistoryIds, tasks])
   const activeTasks = roots.filter(task => ACTIVE.has(task.status))
-  const failedTasks = roots.filter(task => task.status === 'failed' || task.status === 'interrupted')
   const historicalTasks = roots.filter(task => !ACTIVE.has(task.status))
-  const primary = activeTasks[0] || failedTasks[0] || roots[0] || null
+  // With no active work, show what most recently happened. A days-old failure
+  // must not mask a newer successful song/render merely because recovery
+  // refreshed the old record's updated_at timestamp.
+  const primary = activeTasks[0] || roots[0] || null
 
   const clearHistory = () => {
     const next = new Set(hiddenHistoryIdsRef.current)
@@ -397,7 +404,7 @@ export function ActivityFooter() {
   }
 
   const isActive = activeTasks.length > 0
-  const hasError = !isActive && failedTasks.length > 0
+  const hasError = !isActive && (primary?.status === 'failed' || primary?.status === 'interrupted')
   const primaryVisualState = primary ? canonicalTaskVisualState(primary.status) : 'neutral'
   const primaryMessage = primary?.error?.message || primary?.detail || primary?.message || 'Ready — no active jobs'
   const primaryEta = primary ? formatEta(estimatedRemainingSeconds(primary, clock)) : ''

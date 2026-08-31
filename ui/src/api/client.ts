@@ -919,6 +919,20 @@ export function getFileUrl(filename: string, workspace?: string): string {
   return `${BASE}/api/v1/file/${encodeURIComponent(filename)}${query}`
 }
 
+/** Convert persisted media references into a URL the browser can actually play.
+ * Older/local generation responses contain an absolute filesystem path. That
+ * path is useful to the backend but is not an HTTP route, so use the canonical
+ * workspace file endpoint and the separately persisted filename instead.
+ */
+export function getPlayableFileUrl(source: string, filename: string, workspace?: string): string {
+  const value = String(source || '').trim()
+  if (/^(?:https?:|blob:|data:)/i.test(value) || value.startsWith('/api/')) return value
+  if (!value || value.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(value)) {
+    return getFileUrl(filename, workspace)
+  }
+  return value
+}
+
 export function getOutputThumbnailUrl(filename: string, workspace?: string): string {
   const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
   return `${BASE}/api/v1/outputs/thumbnail/${encodeURIComponent(filename)}${query}`

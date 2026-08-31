@@ -662,6 +662,9 @@ export interface AgentAppSnapshot {
     characters: number
     productions: number
     visual_jobs: number
+    active_cue_title: string
+    selected_song_name: string
+    selected_song_id: string
     state: string
   }
   series?: {
@@ -1731,6 +1734,7 @@ const MUSIC_VIDEO_STAGE_REQUESTS = [
 const MUSIC_VIDEO_START_REQUESTS = [
   /\b(?:l[aá]nzalo|in[ií]cialo|arr[aá]ncalo|ejec[uú]talo)\b/i,
   /\b(?:l[aá]nza|inicia|arranca|ejecuta|genera|encola)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical|producci[oó]n\s+musical)\b/i,
+  /\b(?:hazme|hacedme|crea|cread|creame|créame)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical)\b/i,
 ]
 
 function inferMusicVideoContext(text: string, history: ExampleConversation[]): boolean {

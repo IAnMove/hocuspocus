@@ -16,6 +16,9 @@ export interface WizardLabSnapshots {
     characters: number
     productions: number
     visual_jobs: number
+    active_cue_title: string
+    selected_song_name: string
+    selected_song_id: string
     state: string
   }
   series: {
@@ -56,6 +59,12 @@ function storySnapshot(): WizardLabSnapshots['story'] {
   const { project } = useStoryStore.getState()
   const visualJobs = project.visualJobs ? Object.keys(project.visualJobs).length : 0
   const running = Object.values(project.visualJobs || {}).some(status => /run|queue/i.test(String(status)))
+  const cue = project.music?.cues?.find(item => (
+    item.selectedCandidateId && item.candidates.some(candidate => candidate.id === item.selectedCandidateId)
+  )) || project.music?.cues?.find(item => item.kind === 'story')
+  const selectedId = cue?.selectedCandidateId || project.music?.selectedCandidateId || ''
+  const candidate = cue?.candidates.find(item => item.id === selectedId)
+    || project.music?.candidates?.find(item => item.id === selectedId)
   return {
     project_id: project.id || '',
     title: project.title || '',
@@ -63,6 +72,9 @@ function storySnapshot(): WizardLabSnapshots['story'] {
     characters: project.characters?.length || 0,
     productions: project.productions?.length || 0,
     visual_jobs: visualJobs,
+    active_cue_title: cue?.title || '',
+    selected_song_name: candidate?.displayName || candidate?.title || candidate?.name || '',
+    selected_song_id: candidate?.id || '',
     state: running ? 'running' : project.title && project.title !== 'Untitled story' ? 'ready' : 'empty',
   }
 }

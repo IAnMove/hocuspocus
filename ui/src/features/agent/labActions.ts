@@ -277,7 +277,7 @@ export async function generateStorySong(action: AgentGenerateStorySongAction): P
       language: cue.lyricsLanguage || target.language,
       version,
       name: rendered.filename,
-      source: rendered.audio_path,
+      source: api.getFileUrl(rendered.filename, workspace),
       prompt: cue.style,
       lyrics: cue.instrumental ? '' : cue.lyrics,
       provider: 'local' as const,
@@ -1485,9 +1485,7 @@ export async function stageStoryMusicVideo(action: AgentStageStoryMusicVideoActi
       } catch { /* The written world bible remains available in the visual brief. */ }
     }
 
-    const audioSource = /^https?:\/\//i.test(candidate.source) || candidate.source.startsWith('/')
-      ? candidate.source
-      : api.getFileUrl(candidate.source, workspace)
+    const audioSource = api.getPlayableFileUrl(candidate.source, candidate.name, workspace)
     const audioResponse = await fetch(audioSource)
     if (!audioResponse.ok) throw new Error(`No pude leer el audio de “${candidate.displayName || candidate.title || candidate.name}”.`)
     const audioBlob = await audioResponse.blob()
