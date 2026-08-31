@@ -333,6 +333,12 @@ Comenzar **Bloque B — contexto canónico de sesión y selección**. Antes de m
 
 **Acabé el Bloque C (contrato global) y comienzo el Bloque F (migración de capacidades).**
 
+- `EntityRef`, `ArtifactRef`, `CommandEnvelope`, `CommandResult`, `NavigationTarget`, `PresentationPlan` y `StructuredError` comparten una frontera JSON validada.
+- El contrato rechaza IDs vacíos, referencias entre workspaces, ciclos, prototipos no planos, valores no reproducibles y claves de idempotencia incoherentes.
+- El runner común devuelve, junto al informe existente, el comando canónico y un resultado con entidad, artifacts, task IDs, pipeline IDs y navegación verificables.
+- Las claves idempotentes incorporan workspace, capacidad, target canónico e input serializado de forma estable.
+- El contrato no depende de React y queda listo para trasladarse a backend/API sin duplicar semántica.
+
 ### Nota de relevo — Bloque F cerrado
 
 **Acabé el Bloque F (72/72 acciones bajo el registro y contrato común) y comienzo el Bloque G (pruebas y observabilidad).**
@@ -381,8 +387,16 @@ No se ha extendido la coreografía al resto de Labs: el siguiente paso visual es
 probar este ritmo en la aplicación y aprobar partículas, auto-scroll y foco
 antes de reutilizar el contrato fuera de Studio → Video.
 
-- `EntityRef`, `ArtifactRef`, `CommandEnvelope`, `CommandResult`, `NavigationTarget`, `PresentationPlan` y `StructuredError` comparten una frontera JSON validada.
-- El contrato rechaza IDs vacíos, referencias entre workspaces, ciclos, prototipos no planos, valores no reproducibles y claves de idempotencia incoherentes.
-- El runner común devuelve, junto al informe existente, el comando canónico y un resultado con entidad, artifacts, task IDs, pipeline IDs y navegación verificables.
-- Las claves idempotentes incorporan workspace, capacidad, target canónico e input serializado de forma estable.
-- El contrato no depende de React y queda listo para trasladarse a backend/API sin duplicar semántica.
+### Nota de relevo — auditoría final cerrada
+
+**Acabé la auditoría final: los bloques A–H quedan cerrados en commits separados; el siguiente bloque futuro será expandir la magia visible sólo después de la aprobación visual del prototipo.**
+
+Comprobaciones finales:
+
+- 72/72 tipos de acción están registrados una sola vez;
+- pruebas focalizadas del Wizard, DOM, presentación y contratos en verde;
+- niveles nocturnos 3 y 7 en `PASS`, sin GPU ni proveedor;
+- build de producción correcto;
+- smoke canción → videoclip implementado pero no ejecutado sin opt-in;
+- ningún launcher de Pinokio fue modificado;
+- el worktree rastreado queda limpio y se preservan los documentos locales del usuario.
