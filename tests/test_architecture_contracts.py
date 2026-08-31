@@ -25,6 +25,7 @@ WGP_ALLOWLIST = {
     ("app/services/model3d_service.py", "_active_profile", "import wgp"),
     ("app/services/model3d_service.py", "_minimax_api_key", "import wgp"),
     ("app/services/model3d_service.py", "_services", "import wgp"),
+    ("app/shared/api.py", "WanGPSession._ensure_runtime", "importlib.import_module('wgp')"),
     ("app/shared/magic_mask.py", "_ensure_sam3_assets", "import wgp"),
     ("app/shared/magic_mask.py", "_video_to_numpy", "from wgp import get_resampled_video"),
 }
@@ -40,6 +41,47 @@ IGNORED_WGP_TREES = (
 )
 
 
+_DYNAMIC_WGP_LOADERS = frozenset({
+    "__import__",
+    "import_module",
+    "importlib.__import__",
+    "importlib.import_module",
+})
+
+
+def _qualified_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _qualified_name(node.value)
+        if parent is None:
+            return None
+        return f"{parent}.{node.attr}"
+    return None
+
+
+def _literal_module_name(node: ast.AST | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _is_wgp_module(name: str | None) -> bool:
+    return name == "wgp" or bool(name and name.startswith("wgp."))
+
+
+def _is_wgp_import(node: ast.AST) -> bool:
+    if isinstance(node, ast.Import):
+        return any(_is_wgp_module(alias.name) for alias in node.names)
+    if isinstance(node, ast.ImportFrom):
+        return _is_wgp_module(node.module)
+    if isinstance(node, ast.Call) and node.args:
+        callee = _qualified_name(node.func)
+        if callee in _DYNAMIC_WGP_LOADERS:
+            return _is_wgp_module(_literal_module_name(node.args[0]))
+    return False
+
+
 def _wgp_imports() -> set[tuple[str, str, str]]:
     found = set()
     for path in (ROOT / "app").rglob("*.py"):
@@ -52,9 +94,7 @@ def _wgp_imports() -> set[tuple[str, str, str]]:
             for child in ast.iter_child_nodes(parent):
                 parents[child] = parent
         for node in ast.walk(tree):
-            is_wgp = isinstance(node, ast.Import) and any(alias.name == "wgp" for alias in node.names)
-            is_wgp = is_wgp or isinstance(node, ast.ImportFrom) and node.module == "wgp"
-            if not is_wgp:
+            if not _is_wgp_import(node):
                 continue
             scopes = []
             current = node
@@ -79,6 +119,28 @@ def test_architecture_wire_inventory_has_no_unclassified_readers() -> None:
     assert all(entry["classification"] in {
         "behavior", "symbol_importable", "architecture_rule", "fragile_source",
     } for entry in fixture["entries"])
+
+
+def test_wgp_import_detector_names_static_and_dynamic_forms() -> None:
+    tree = ast.parse(
+        "\n".join([
+            "import wgp",
+            "from wgp import get_model_def",
+            "importlib.import_module('wgp')",
+            "import_module('wgp')",
+            "__import__('wgp')",
+            "importlib.import_module('unrelated')",
+            "import other",
+        ])
+    )
+    detected = {ast.unparse(node) for node in ast.walk(tree) if _is_wgp_import(node)}
+    assert detected == {
+        "import wgp",
+        "from wgp import get_model_def",
+        "importlib.import_module('wgp')",
+        "import_module('wgp')",
+        "__import__('wgp')",
+    }
 
 
 def test_first_party_wgp_imports_are_named_and_cannot_grow() -> None:
