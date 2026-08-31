@@ -269,6 +269,10 @@ export function clearAgentSeriesPlanJob(episodeId: string): void {
   window.dispatchEvent(new CustomEvent(SERIES_PLAN_JOB_EVENT, { detail: { job: null, episodeId } }))
 }
 
+export function getAgentSeriesPlanJob(): SeriesJobStatus | null {
+  return requestedSeriesPlanJob
+}
+
 export function listenForAgentSeriesPlanJob(
   listener: (job: SeriesJobStatus | null, episodeId: string) => void,
 ): () => void {

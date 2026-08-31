@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -48,6 +48,8 @@ export interface SeriesLabAdapter {
   open(): Promise<AdapterOutcome>
   createEpisode(action: AgentCreateSeriesEpisodeAction): Promise<AdapterOutcome>
   updateEpisode(action: AgentUpdateSeriesEpisodeAction): Promise<AdapterOutcome>
+  generatePlan(action: AgentGenerateSeriesPlanAction): Promise<AdapterOutcome>
+  applyPlan(action: AgentApplySeriesPlanAction): Promise<AdapterOutcome>
 }
 export interface ComicAdapter {
   open(): Promise<AdapterOutcome>
@@ -235,6 +237,21 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { updateSeriesEpisode } = await import('./labActions')
       const message = await updateSeriesEpisode(action)
       return seriesEpisodeOutcome(message)
+    },
+    async generatePlan(action) {
+      const { generateSeriesPlan } = await import('./labActions')
+      const message = await generateSeriesPlan(action)
+      const { getAgentSeriesPlanJob } = await import('./agentUiBus')
+      const job = getAgentSeriesPlanJob()
+      if (!job?.jobId) throw new Error('Series Lab no devolvió el job de planificación iniciado.')
+      const outcome = await seriesEpisodeOutcome(message)
+      if (job.episodeId !== outcome.target.id) throw new Error('El job de planificación no pertenece al episodio canónico abierto.')
+      return { ...outcome, taskId: job.jobId }
+    },
+    async applyPlan(action) {
+      const { applySeriesPlan } = await import('./labActions')
+      const message = await applySeriesPlan(action)
+      return { ...await seriesEpisodeOutcome(message), taskId: action.jobId || undefined }
     },
   }
   adapters.comic = {

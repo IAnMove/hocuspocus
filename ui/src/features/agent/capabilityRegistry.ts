@@ -1,6 +1,7 @@
 import type {
   AgentAction,
   AgentApply3dRhythmAction,
+  AgentApplySeriesPlanAction,
   AgentApplyStoryProposalAction,
   AgentApproveStorySectionAction,
   AgentApproveStoryVisualsAction,
@@ -13,6 +14,7 @@ import type {
   AgentCreateSeriesEpisodeAction,
   AgentCreateStoryAction,
   AgentGenerateComicAction,
+  AgentGenerateSeriesPlanAction,
   AgentGenerateStorySectionAction,
   AgentGenerateStoryVisualsAction,
   AgentStageStoryComicAction,
@@ -114,6 +116,7 @@ const storyProposalScopes = new Set(['all', 'overview', 'world', 'characters', '
 const storyApprovalSections = new Set(['overview', 'world', 'characters', 'relationships', 'structure'])
 const storyVisualScopes = new Set(['world', 'locations', 'characters', 'all'])
 const storyVisualTargetKinds = new Set(['world', 'location', 'character'])
+const seriesPlanScopes = new Set(['outline', 'script', 'shots', 'complete'])
 
 function storyCharacters(value: unknown): AgentCreateStoryAction['characters'] {
   return Array.isArray(value) ? value.slice(0, 16).flatMap(item => {
@@ -538,6 +541,38 @@ defineCapability<AgentUpdateSeriesEpisodeAction>({
   async execute(action, context) { return context.adapters.seriesLab.updateEpisode(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'series_lab', anchors: ['episode'], replay: 'atomic' },
+})
+
+defineCapability<AgentGenerateSeriesPlanAction>({
+  name: 'generate_series_plan', title: 'Generate a recoverable Series Lab plan',
+  description: 'Start planning for one exact episode and return its real recoverable planning job ID without applying it.',
+  useWhen: 'The user explicitly asks to generate an episode outline, script, shots or complete plan.',
+  parameters: ['series_title', 'target_episode_title', 'series_plan_scope', 'instruction', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'generate_series_plan' }, series_plan_scope: { type: 'string', enum: ['outline', 'script', 'shots', 'complete'] }, confirm: { const: true } }, required: ['type', 'series_plan_scope', 'confirm'] },
+  risk: 'compute', confirmation: 'required', progress: 'Generando un plan recuperable de Series Lab…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const scope = text(raw.series_plan_scope, 40)
+    return seriesPlanScopes.has(scope) ? { type: 'generate_series_plan', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), scope: scope as AgentGenerateSeriesPlanAction['scope'], instruction: text(raw.instruction, 4_000), confirm: true } : null
+  },
+  validate(action) { return action.confirm === true && seriesPlanScopes.has(action.scope) ? [] : ['a confirmed planning scope is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.seriesLab.generatePlan(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'series_lab', anchors: ['episode', 'plan'], replay: 'atomic' },
+})
+
+defineCapability<AgentApplySeriesPlanAction>({
+  name: 'apply_series_plan', title: 'Apply a completed Series Lab plan',
+  description: 'Apply only a completed planning job belonging to the exact episode, without rendering or committing canon.',
+  useWhen: 'The user explicitly asks to apply a completed Series Lab proposal.',
+  parameters: ['series_title', 'target_episode_title', 'job_id', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'apply_series_plan' }, job_id: { type: 'string', maxLength: 160 }, confirm: { const: true } }, required: ['type', 'confirm'] },
+  risk: 'edit', confirmation: 'required', progress: 'Aplicando el plan al episodio exacto…',
+  resolve(raw) { return raw.confirm === true ? { type: 'apply_series_plan', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), jobId: text(raw.job_id, 160), confirm: true } : null },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.seriesLab.applyPlan(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'series_lab', anchors: ['episode', 'plan'], replay: 'atomic' },
 })
 
 defineCapability<AgentCreateComicAction>({

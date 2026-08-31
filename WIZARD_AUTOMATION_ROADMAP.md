@@ -464,11 +464,13 @@ Agent Mode complete prematurely.
   Story production links to the newly created editable Comic Director project.
 - Series Lab episode creation and updates: migrated to the common contract and
   return the persisted canonical episode ID.
+- Series Lab planning: generation now returns the verified recoverable plan job
+  ID for its canonical episode; applying a plan remains separate and explicit.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **Series Lab creation and updates**. Continue with
-Series planning, plan application and rendering incrementally, preserving real
-episode, plan and job IDs in behavior tests. Keep Decision gate A open; the
-workflow remains correct without visual magic effects.
+Finished migration subblock **Series Lab planning and plan application**.
+Continue with Series rendering, review and assembly, preserving real episode,
+render-job and assembly-job IDs in behavior tests. Keep Decision gate A open;
+the workflow remains correct without visual magic effects.
