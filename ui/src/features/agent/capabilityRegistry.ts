@@ -34,6 +34,7 @@ import type { AgentExecutionReport } from './agentContract'
 import type { AgentExecutionTarget } from './agentContract'
 import { executionKey, executionReport } from './agentContract'
 import type { WizardApplicationAdapters } from './applicationAdapters'
+import type { AgentCreateVideoEditorProjectAction, AgentOpenVideoEditorProjectAction } from './videoEditorActions'
 import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
 
 export const AGENT_TABS = [
@@ -237,6 +238,10 @@ defineCapability<AgentOpenTabAction>({
   summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'action', anchors: [] },
 })
+
+function videoEditorProjectCapability<T extends AgentCreateVideoEditorProjectAction | AgentOpenVideoEditorProjectAction>(type: T['type'], title: string, execute: (action: T, context: CapabilityExecutionContext) => Promise<CapabilityExecutionOutcome>) { defineCapability<T>({ name: type, title, description: `${title} for the canonical workspace draft.`, useWhen: `The user explicitly asks to ${title.toLowerCase()}.`, parameters: ['project_name'], inputSchema: { type: 'object', properties: { type: { const: type }, project_name: { type: 'string' } }, required: ['type'] }, risk: 'edit', confirmation: 'none', progress: `${title}…`, resolve(raw) { return { type, projectName: text(raw.project_name, 300) } as T }, validate() { return [] }, async prepare(action) { return action }, execute, correlate(_a, o) { return o.target }, async track(_a, o) { return o }, report: { targetKind: 'video_editor', successState: 'completed' }, summarize(_a, o) { return o.message }, presentation: { destination: 'video_editor', anchors: ['project'], replay: 'atomic' } }) }
+videoEditorProjectCapability<AgentCreateVideoEditorProjectAction>('create_video_editor_project', 'Create Video Editor project', (action, context) => context.adapters.videoEditor.create(action))
+videoEditorProjectCapability<AgentOpenVideoEditorProjectAction>('open_video_editor_project', 'Open Video Editor project', (action, context) => context.adapters.videoEditor.openProject(action))
 
 defineCapability<AgentCreateCharacterKitAction>({
   name: 'create_character_kit', title: 'Create a Character Kit', description: 'Create or reopen one canonical Character Kit and return its real ID.', useWhen: 'The user asks to create a named Character Kit.', parameters: ['kit_name', 'style'],

@@ -477,11 +477,12 @@ Agent Mode complete prematurely.
 - CharacterKit identity reference: migrated with exact one-output resolution.
 - CharacterKit base pose and Face Rig opening: migrated to the common contract.
 - CharacterKit presets and job tracking: migrated to the common contract.
+- Video Editor creation and opening: migrated to the common contract.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **CharacterKit presets and job tracking**. Continue
-with Video Editor assembly and export while preserving
+Finished migration subblock **Video Editor creation and opening**. Continue
+with Video Editor timeline assembly and export while preserving
 the canonical kit ID and behavior tests. Keep Decision gate A open; the
 workflow remains correct without visual magic effects.

@@ -7,6 +7,7 @@ import type { AgentRhythmGrid } from './agentUiBus'
 import { queueMusic } from './audioActions'
 import type { AgentPrepareAudioAction } from './agentActions'
 import type { AgentTab } from './capabilityRegistry'
+import type { AgentCreateVideoEditorProjectAction, AgentOpenVideoEditorProjectAction } from './videoEditorActions'
 import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
 
 export interface AdapterOutcome {
@@ -61,7 +62,7 @@ export interface ComicAdapter {
   create(action: AgentCreateComicAction): Promise<AdapterOutcome>
   generate(action: AgentGenerateComicAction, expectedProjectId?: string): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }>
 }
-export interface VideoEditorAdapter { open(): Promise<AdapterOutcome> }
+export interface VideoEditorAdapter { open(): Promise<AdapterOutcome>; create(action: AgentCreateVideoEditorProjectAction): Promise<AdapterOutcome>; openProject(action: AgentOpenVideoEditorProjectAction): Promise<AdapterOutcome> }
 export interface CharacterKitAdapter {
   open(creator?: boolean): Promise<AdapterOutcome>
   create(action: AgentCreateCharacterKitAction): Promise<AdapterOutcome>
@@ -315,7 +316,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       return { ...result, target: { kind: 'comic', id: project.id, title: project.title } }
     },
   }
-  adapters.videoEditor = { open: () => navigate('video_editor') }
+  adapters.videoEditor = { open: () => navigate('video_editor'), async create(action) { const { createAgentVideoEditorProject } = await import('./videoEditorActions'); const result = await createAgentVideoEditorProject(action); return { message: result.message, target: result.report.target! } }, async openProject(action) { const { openAgentVideoEditorProject } = await import('./videoEditorActions'); const result = await openAgentVideoEditorProject(action); return { message: result.message, target: result.report.target! } } }
   adapters.characterKit = {
     open: creator => navigate(creator ? 'character_creator' : 'character_kit'),
     async create(action) { const { createAgentCharacterKit } = await import('./characterKitActions'); const result = await createAgentCharacterKit(action); return { message: result.message, target: result.report.target! } },
