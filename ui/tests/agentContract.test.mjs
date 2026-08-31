@@ -140,6 +140,16 @@ test('common capability runner follows every stage and reports the verified adap
     kind: 'application_section', id: 'series_lab', title: 'Series Lab',
   })
   assert.match(result.report.executionKey, /^demo\|open_tab\|series_lab\|/)
+  assert.equal(result.command.capability, 'open_tab')
+  assert.equal(result.command.workspaceId, 'demo')
+  assert.equal(result.command.actor, 'wizard')
+  assert.equal(result.command.target.id, 'series_lab')
+  assert.equal(result.commandResult.commandId, result.command.commandId)
+  assert.equal(result.commandResult.status, 'completed')
+  assert.deepEqual(result.commandResult.entities, [{
+    kind: 'application_section', id: 'series_lab', workspaceId: 'demo',
+  }])
+  assert.equal(result.commandResult.navigationTarget, undefined)
 })
 
 test('application adapters navigate and verify targets without rendering React', async () => {
@@ -216,9 +226,9 @@ test('execution keys are deterministic and compound predecessors are explicit', 
   assert.equal(inferExecutionState('generate_comic', false), 'failed')
 })
 
-test('execution reports distinguish prepared queued running completed partial and failed', async () => {
+test('execution reports distinguish prepared awaiting-input queued running completed partial and failed', async () => {
   const { executionReport } = await import('../src/features/agent/agentContract.ts')
-  const states = ['prepared', 'queued', 'running', 'completed', 'partial', 'failed']
+  const states = ['prepared', 'awaiting_input', 'queued', 'running', 'completed', 'partial', 'failed']
   const reports = states.map(state => executionReport({
     state,
     message: state,
@@ -514,6 +524,9 @@ test('wizard snapshot includes Story, Series, Video 3D, CharacterKit and Video E
   rememberVideo3dScene({ scene_id: 'concierto', title: 'Concierto', layers: 4, state: 'ready' })
   persistEditorDraft([], 'corte-final', RESOLUTIONS[0], 30, 'default')
   const snapshot = buildAgentAppSnapshot()
+  assert.equal(snapshot.context.schema, 'hocuspocus.wizard_context')
+  assert.equal(snapshot.context.version, 1)
+  assert.equal(snapshot.context.workspace.id, 'default')
   assert.equal(snapshot.story.title, 'La torre de sal')
   assert.equal(snapshot.story.project_id, story.id)
   assert.equal(snapshot.series.title, 'Mesa para cuatro')

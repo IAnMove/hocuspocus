@@ -328,3 +328,13 @@ Comenzar **Bloque B — contexto canónico de sesión y selección**. Antes de m
 - El chat muestra la pregunta y opciones; la respuesta se entrega directamente al runtime, sin pedir al LLM que reconstruya el workflow.
 - La ambigüedad de audio en canción → Video3D deja de fallar: pregunta qué output exacto usar y continúa desde `attach-audio`.
 - Backend, recarga, duplicados, seguridad contra prototype pollution, chat y flujo rítmico están cubiertos por pruebas focalizadas.
+
+### Nota de relevo — Bloque C cerrado
+
+**Acabé el Bloque C (contrato global) y comienzo el Bloque F (migración de capacidades).**
+
+- `EntityRef`, `ArtifactRef`, `CommandEnvelope`, `CommandResult`, `NavigationTarget`, `PresentationPlan` y `StructuredError` comparten una frontera JSON validada.
+- El contrato rechaza IDs vacíos, referencias entre workspaces, ciclos, prototipos no planos, valores no reproducibles y claves de idempotencia incoherentes.
+- El runner común devuelve, junto al informe existente, el comando canónico y un resultado con entidad, artifacts, task IDs, pipeline IDs y navegación verificables.
+- Las claves idempotentes incorporan workspace, capacidad, target canónico e input serializado de forma estable.
+- El contrato no depende de React y queda listo para trasladarse a backend/API sin duplicar semántica.

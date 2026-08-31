@@ -3,6 +3,7 @@ import { comicArtworkInventory } from '../comics/generateArtwork'
 import { buildWizardContextSnapshot, buildWizardLabSnapshots, comicLabSnapshot, type BuildWizardContextOptions, type WizardContextSnapshot } from './wizardContext'
 import type { AspectRatio, ModelDef, ResolutionPreset } from '../../types'
 import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
+import type { CommandEnvelope, CommandResult } from './commandContract'
 import {
   bindDirectorProductionTarget,
   bindGenerateComicTarget,
@@ -602,6 +603,8 @@ export interface AgentActionResult {
   ok: boolean
   message: string
   report?: AgentExecutionReport
+  command?: CommandEnvelope<AgentAction>
+  commandResult?: CommandResult
 }
 
 export interface AgentAppSnapshot {
