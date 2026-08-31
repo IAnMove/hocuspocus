@@ -447,12 +447,13 @@ Agent Mode complete prematurely.
   real GPU smoke remains opt-in.
 - Rhythmic recovery and timing coverage: implemented in nightly level 5,
   including a deterministic 120 BPM click-track tolerance check.
+- Comic Director creation and artwork rendering: migrated to the common Wizard
+  adapter/registry contract with the real comic project ID preserved.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished block **6 — rhythmic recovery/timing coverage**. Begin the next
-migration block with a high-value action family (Comic Director) only after
-preserving its existing behavior tests and real adapter/result IDs. Keep
-Decision gate A open; the workflow remains correct without visual magic
-effects.
+Finished migration block **Comic Director**. Begin the next high-value family
+with Story/Director production only after preserving its behavior tests and
+real task/pipeline IDs. Keep Decision gate A open; the workflow remains
+correct without visual magic effects.
