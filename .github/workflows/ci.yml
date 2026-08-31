@@ -99,3 +99,35 @@ jobs:
       - name: Type-check, build and bundle budget
         working-directory: ui
         run: npm run build && npm run budget
+
+  ui-e2e:
+    name: UI E2E boot (Chromium + simulated API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install UI deps
+        working-directory: ui
+        run: npm ci
+      - name: Install Playwright Chromium
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+      - name: UI E2E
+        working-directory: ui
+        run: npm run test:e2e
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-e2e-artifacts
+          path: |
+            ui/playwright-report
+            ui/test-results
+          if-no-files-found: ignore
