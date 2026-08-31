@@ -2,6 +2,7 @@ import type {
   AgentAction,
   AgentApply3dRhythmAction,
   AgentApplySeriesPlanAction,
+  AgentCommitSeriesCanonAction,
   AgentApplyStoryProposalAction,
   AgentApproveStorySectionAction,
   AgentApproveStoryVisualsAction,
@@ -18,6 +19,7 @@ import type {
   AgentGenerateStorySectionAction,
   AgentGenerateStoryVisualsAction,
   AgentRenderSeriesShotsAction,
+  AgentReviewSeriesAttemptsAction,
   AgentStageStoryComicAction,
   AgentStartDirectorProductionAction,
   AgentStageStoryVideoAction,
@@ -119,6 +121,9 @@ const storyVisualScopes = new Set(['world', 'locations', 'characters', 'all'])
 const storyVisualTargetKinds = new Set(['world', 'location', 'character'])
 const seriesPlanScopes = new Set(['outline', 'script', 'shots', 'complete'])
 const seriesRenderModes = new Set(['selected', 'missing', 'failed', 'all'])
+const seriesReviewScopes = new Set(['selected_latest', 'all_latest'])
+const seriesReviewDecisions = new Set(['approve', 'reject'])
+const seriesCanonDecisions = new Set(['accept_all', 'reject_all', 'accept_selected', 'reject_selected'])
 
 function storyCharacters(value: unknown): AgentCreateStoryAction['characters'] {
   return Array.isArray(value) ? value.slice(0, 16).flatMap(item => {
@@ -596,6 +601,34 @@ defineCapability<AgentRenderSeriesShotsAction>({
   async execute(action, context) { return context.adapters.seriesLab.renderShots(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'series_lab', anchors: ['review', 'render'], replay: 'atomic' },
+})
+
+defineCapability<AgentReviewSeriesAttemptsAction>({
+  name: 'review_series_attempts', title: 'Review exact Series Lab attempts', description: 'Approve or reject only reproducible attempts belonging to the exact canonical episode.',
+  useWhen: 'The user explicitly asks to approve or reject rendered Series Lab shots.', parameters: ['series_title', 'target_episode_title', 'review_decision', 'review_scope', 'shot_numbers', 'attempt_id', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'review_series_attempts' }, review_decision: { type: 'string', enum: ['approve', 'reject'] }, review_scope: { type: 'string', enum: ['selected_latest', 'all_latest'] }, confirm: { const: true } }, required: ['type', 'review_decision', 'review_scope', 'confirm'] }, risk: 'edit', confirmation: 'required', progress: 'Revisando intentos reproducibles de Series Lab…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const decision = text(raw.review_decision, 30); const scope = text(raw.review_scope, 30)
+    const shotNumbers = Array.isArray(raw.shot_numbers) ? raw.shot_numbers.slice(0, 200).flatMap(value => typeof value === 'number' && Number.isInteger(value) && value > 0 ? [value] : []) : []
+    if (!seriesReviewDecisions.has(decision) || !seriesReviewScopes.has(scope) || (scope === 'selected_latest' && !shotNumbers.length)) return null
+    return { type: 'review_series_attempts', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), decision: decision as AgentReviewSeriesAttemptsAction['decision'], scope: scope as AgentReviewSeriesAttemptsAction['scope'], shotNumbers, attemptId: text(raw.attempt_id, 160), confirm: true }
+  },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.seriesLab.reviewAttempts(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'series_lab', anchors: ['review'], replay: 'atomic' },
+})
+
+defineCapability<AgentCommitSeriesCanonAction>({
+  name: 'commit_series_canon', title: 'Commit reviewed Series canon decisions', description: 'Commit only explicit accepted or rejected canon delta items for the exact episode.',
+  useWhen: 'The user explicitly asks to accept or reject proposed Series canon changes.', parameters: ['series_title', 'target_episode_title', 'canon_decision', 'canon_item_ids', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'commit_series_canon' }, canon_decision: { type: 'string', enum: ['accept_all', 'reject_all', 'accept_selected', 'reject_selected'] }, canon_item_ids: { type: 'array', items: { type: 'string' } }, confirm: { const: true } }, required: ['type', 'canon_decision', 'confirm'] }, risk: 'edit', confirmation: 'required', progress: 'Comprometiendo decisiones explícitas de canon…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const decision = text(raw.canon_decision, 30)
+    const itemIds = Array.isArray(raw.canon_item_ids) ? raw.canon_item_ids.slice(0, 200).flatMap(value => { const id = text(value, 160); return id ? [id] : [] }) : []
+    if (!seriesCanonDecisions.has(decision) || (decision.endsWith('_selected') && !itemIds.length)) return null
+    return { type: 'commit_series_canon', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), decision: decision as AgentCommitSeriesCanonAction['decision'], itemIds, confirm: true }
+  },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.seriesLab.commitCanon(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'series_lab', anchors: ['review', 'canon'], replay: 'atomic' },
 })
 
 defineCapability<AgentCreateComicAction>({

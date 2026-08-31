@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentRenderSeriesShotsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentCommitSeriesCanonAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -51,6 +51,8 @@ export interface SeriesLabAdapter {
   generatePlan(action: AgentGenerateSeriesPlanAction): Promise<AdapterOutcome>
   applyPlan(action: AgentApplySeriesPlanAction): Promise<AdapterOutcome>
   renderShots(action: AgentRenderSeriesShotsAction): Promise<AdapterOutcome>
+  reviewAttempts(action: AgentReviewSeriesAttemptsAction): Promise<AdapterOutcome>
+  commitCanon(action: AgentCommitSeriesCanonAction): Promise<AdapterOutcome>
 }
 export interface ComicAdapter {
   open(): Promise<AdapterOutcome>
@@ -263,6 +265,14 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const outcome = await seriesEpisodeOutcome(message)
       if (job.episodeId !== outcome.target.id) throw new Error('El job de render no pertenece al episodio canónico abierto.')
       return { ...outcome, taskId: job.jobId }
+    },
+    async reviewAttempts(action) {
+      const { reviewSeriesAttempts } = await import('./labActions')
+      return seriesEpisodeOutcome(await reviewSeriesAttempts(action))
+    },
+    async commitCanon(action) {
+      const { commitSeriesCanonDelta } = await import('./labActions')
+      return seriesEpisodeOutcome(await commitSeriesCanonDelta(action))
     },
   }
   adapters.comic = {
