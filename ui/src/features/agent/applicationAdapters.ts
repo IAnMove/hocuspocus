@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentCreateComicAction, AgentGenerateComicAction, AgentStartDirectorProductionAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentCreateComicAction, AgentGenerateComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -31,6 +31,8 @@ export interface StudioAdapter {
 
 export interface StoryLabAdapter {
   open(): Promise<AdapterOutcome>
+  stageVideo(action: AgentStageStoryVideoAction): Promise<AdapterOutcome>
+  stageMusicVideo(action: AgentStageStoryMusicVideoAction): Promise<AdapterOutcome>
   startDirectorProduction(action: AgentStartDirectorProductionAction, expectedProductionId?: string): Promise<AdapterOutcome>
 }
 export interface SeriesLabAdapter { open(): Promise<AdapterOutcome> }
@@ -145,6 +147,16 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   }
   adapters.storyLab = {
     open: () => navigate('story_lab'),
+    async stageVideo(action) {
+      const { stageStoryVideo } = await import('./labActions')
+      const message = await stageStoryVideo(action)
+      return stagedDirectorOutcome(message)
+    },
+    async stageMusicVideo(action) {
+      const { stageStoryMusicVideo } = await import('./labActions')
+      const message = await stageStoryMusicVideo(action)
+      return stagedDirectorOutcome(message)
+    },
     async startDirectorProduction(action, expectedProductionId) {
       const { startDirectorProduction } = await import('./labActions')
       const result = await startDirectorProduction(action, expectedProductionId)
@@ -215,6 +227,16 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     return navigate(tab)
   }
   return adapters
+}
+
+async function stagedDirectorOutcome(message: string): Promise<AdapterOutcome> {
+  const handoff = useStore.getState().directorStoryProductionHandoff
+  if (!handoff?.productionId) throw new Error('Story Lab no devolvió el destino de producción preparado.')
+  const { useStoryStore } = await import('../stories/store')
+  const project = useStoryStore.getState().projects[handoff.projectId] || useStoryStore.getState().project
+  const production = project?.productions.find(item => item.id === handoff.productionId)
+  if (!production) throw new Error('La producción preparada no está en el estado canónico de Story Lab.')
+  return { message, target: { kind: 'director_production', id: production.id, title: production.title } }
 }
 
 export const defaultApplicationAdapters = createDefaultApplicationAdapters()

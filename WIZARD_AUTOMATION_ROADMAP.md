@@ -451,11 +451,13 @@ Agent Mode complete prematurely.
   adapter/registry contract with the real comic project ID preserved.
 - Director production start: migrated to the common contract; it preserves the
   verified production target and real running pipeline ID.
+- Story-to-Director staging: film/trailer and music-video preparation now
+  verify and return the exact production target before launch.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **Director production start**. Continue Story Lab
-creation, proposal, review and staging actions incrementally, preserving their
-real project/pipeline IDs and behavior tests. Keep Decision gate A open; the
-workflow remains correct without visual magic effects.
+Finished migration subblock **Story-to-Director staging**. Continue Story Lab
+creation, proposal and review actions incrementally, preserving their real
+project IDs and behavior tests. Keep Decision gate A open; the workflow remains
+correct without visual magic effects.

@@ -9,6 +9,8 @@ import type {
   AgentCreateComicAction,
   AgentGenerateComicAction,
   AgentStartDirectorProductionAction,
+  AgentStageStoryVideoAction,
+  AgentStageStoryMusicVideoAction,
   AgentOpenTabAction,
 } from './agentActions'
 import { useStore } from '../../stores/useStore'
@@ -348,6 +350,30 @@ defineCapability<AgentStartDirectorProductionAction>({
   }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'director_production', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'director', anchors: ['production', 'pipeline'], replay: 'atomic' },
+})
+
+defineCapability<AgentStageStoryVideoAction>({
+  name: 'stage_story_video', title: 'Prepare a Story video in Director',
+  description: 'Create and verify an exact Story film or trailer production in Director without starting compute.',
+  useWhen: 'The user asks to prepare a Story film or trailer for later review or launch.',
+  parameters: ['target_story_title', 'production_kind', 'direction', 'duration_seconds', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_video' }, production_kind: { type: 'string', enum: ['film', 'trailer'] }, confirm: { const: true } }, required: ['type', 'production_kind', 'confirm'] },
+  risk: 'edit', confirmation: 'required', progress: 'Preparando la producción de Story en Director…',
+  resolve(raw) { const kind = text(raw.production_kind, 30); return raw.confirm === true && (kind === 'film' || kind === 'trailer') ? { type: 'stage_story_video', targetStoryTitle: text(raw.target_story_title, 300), kind, direction: text(raw.direction, 4_000), durationSeconds: raw.duration_seconds === undefined ? undefined : boundedNumber(raw.duration_seconds, 15, 3_600, 60), confirm: true } : null },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.storyLab.stageVideo(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'director_production', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'director', anchors: ['production'], replay: 'atomic' },
+})
+
+defineCapability<AgentStageStoryMusicVideoAction>({
+  name: 'stage_story_music_video', title: 'Prepare a Story music video in Director',
+  description: 'Resolve the exact Story song and cue, then prepare a verified Music Video Director production without launching it.',
+  useWhen: 'The user asks to prepare a Story music video for later launch.',
+  parameters: ['target_story_title', 'song_name', 'cue_title', 'pacing', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_music_video' }, pacing: { type: 'string', enum: ['cinematic', 'balanced', 'rhythmic'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
+  risk: 'edit', confirmation: 'required', progress: 'Preparando el videoclip de Story en Director…',
+  resolve(raw) { const pacing = text(raw.pacing, 20); return raw.confirm === true ? { type: 'stage_story_music_video', targetStoryTitle: text(raw.target_story_title, 300), songName: text(raw.song_name, 300), cueTitle: text(raw.cue_title, 300), pacing: pacing === 'cinematic' || pacing === 'rhythmic' ? pacing : 'balanced', confirm: true } : null },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.storyLab.stageMusicVideo(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'director_production', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'director', anchors: ['production', 'music'], replay: 'atomic' },
 })
 
 const sceneCapabilityMeta: Record<AgentSceneWorkflowAction['type'], { title: string; description: string; risk: CapabilityRisk }> = {
