@@ -41,7 +41,7 @@ test('registered capabilities supply one contract for prompt schema parser execu
   assert.ok(registered.some(item => item.name === 'generate_comic'))
   assert.equal(registered[0].risk, 'read')
   assert.equal(registered[0].confirmation, 'none')
-  const noConfirmationEdits = new Set(['open_tab', 'create_comic', 'create_story', 'update_story'])
+  const noConfirmationEdits = new Set(['open_tab', 'create_comic', 'create_story', 'update_story', 'create_series_episode', 'update_series_episode'])
   assert.ok(registered.filter(item => !noConfirmationEdits.has(item.name)).every(item => item.confirmation === 'required'))
   assert.equal(registeredCapabilitySchemas().length, registered.length)
   assert.equal(registeredCapabilityDocumentationRows().length, registered.length)
@@ -92,6 +92,9 @@ test('registered capabilities supply one contract for prompt schema parser execu
   }), {
     type: 'stage_story_comic', targetStoryTitle: '', direction: '', pageCount: 6, panelsPerPage: 5, confirm: true,
   })
+  assert.equal(parseRegisteredCapability('create_series_episode', {
+    type: 'create_series_episode', series_title: 'Taller', episode_premise: 'El hechizo sale mal.', create_if_missing: true,
+  })?.type, 'create_series_episode')
 
   const calls = []
   const context = { adapters: {

@@ -462,11 +462,13 @@ Agent Mode complete prematurely.
   contract; generated assets are correlated by their new canonical asset IDs.
 - Story-to-Comic staging: migrated to the common contract and verifies that the
   Story production links to the newly created editable Comic Director project.
+- Series Lab episode creation and updates: migrated to the common contract and
+  return the persisted canonical episode ID.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **Story-to-Comic staging**. Begin Series Lab
-creation and planning incrementally, preserving real episode, plan and job IDs
-in behavior tests. Keep Decision gate A open; the workflow remains correct
-without visual magic effects.
+Finished migration subblock **Series Lab creation and updates**. Continue with
+Series planning, plan application and rendering incrementally, preserving real
+episode, plan and job IDs in behavior tests. Keep Decision gate A open; the
+workflow remains correct without visual magic effects.

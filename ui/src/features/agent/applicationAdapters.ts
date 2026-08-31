@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentCreateComicAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateStorySectionAction, AgentGenerateStoryVisualsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -44,7 +44,11 @@ export interface StoryLabAdapter {
   stageMusicVideo(action: AgentStageStoryMusicVideoAction): Promise<AdapterOutcome>
   startDirectorProduction(action: AgentStartDirectorProductionAction, expectedProductionId?: string): Promise<AdapterOutcome>
 }
-export interface SeriesLabAdapter { open(): Promise<AdapterOutcome> }
+export interface SeriesLabAdapter {
+  open(): Promise<AdapterOutcome>
+  createEpisode(action: AgentCreateSeriesEpisodeAction): Promise<AdapterOutcome>
+  updateEpisode(action: AgentUpdateSeriesEpisodeAction): Promise<AdapterOutcome>
+}
 export interface ComicAdapter {
   open(): Promise<AdapterOutcome>
   create(action: AgentCreateComicAction): Promise<AdapterOutcome>
@@ -220,7 +224,19 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       return { message: result.message, target: result.target, pipelineId: result.pipelineId }
     },
   }
-  adapters.seriesLab = { open: () => navigate('series_lab') }
+  adapters.seriesLab = {
+    open: () => navigate('series_lab'),
+    async createEpisode(action) {
+      const { createFilledSeriesEpisode } = await import('./labActions')
+      const message = await createFilledSeriesEpisode(action)
+      return seriesEpisodeOutcome(message)
+    },
+    async updateEpisode(action) {
+      const { updateSeriesEpisode } = await import('./labActions')
+      const message = await updateSeriesEpisode(action)
+      return seriesEpisodeOutcome(message)
+    },
+  }
   adapters.comic = {
     open: () => navigate('comics'),
     async create(action) {
@@ -300,6 +316,15 @@ async function storyOutcome(message: string): Promise<AdapterOutcome> {
   const project = useStoryStore.getState().project
   if (!project?.id) throw new Error('Story Lab no devolvió la historia canónica creada o actualizada.')
   return { message, target: { kind: 'story', id: project.id, title: project.title } }
+}
+
+async function seriesEpisodeOutcome(message: string): Promise<AdapterOutcome> {
+  const { useSeriesStore } = await import('../series/store')
+  const state = useSeriesStore.getState()
+  const series = state.library.seriesById[state.activeSeriesId]
+  const episode = series?.episodesById[state.activeEpisodeId]
+  if (!series?.id || !episode?.id) throw new Error('Series Lab no devolvió el episodio canónico creado o actualizado.')
+  return { message, target: { kind: 'series_episode', id: episode.id, title: `${series.title} · ${episode.title}` } }
 }
 
 export const defaultApplicationAdapters = createDefaultApplicationAdapters()

@@ -10,6 +10,7 @@ import type {
   AgentSave3dSceneAction,
   AgentExport3dSceneAction,
   AgentCreateComicAction,
+  AgentCreateSeriesEpisodeAction,
   AgentCreateStoryAction,
   AgentGenerateComicAction,
   AgentGenerateStorySectionAction,
@@ -19,6 +20,7 @@ import type {
   AgentStageStoryVideoAction,
   AgentStageStoryMusicVideoAction,
   AgentUpdateStoryAction,
+  AgentUpdateSeriesEpisodeAction,
   AgentOpenTabAction,
 } from './agentActions'
 import { useStore } from '../../stores/useStore'
@@ -177,6 +179,15 @@ function storyFields(raw: Record<string, unknown>) {
     locations: storyLocations(raw.locations),
     outlineBeats: storyOutlineBeats(raw.outline_beats),
     durationSeconds: optionalStoryDuration(raw.target_duration_seconds),
+  }
+}
+
+function seriesEpisodeFields(raw: Record<string, unknown>) {
+  return {
+    seriesTitle: text(raw.series_title, 300), seriesPremise: text(raw.series_premise, 3_000), seriesLogline: text(raw.series_logline, 2_000),
+    episodeTitle: text(raw.episode_title, 300), episodePremise: text(raw.episode_premise, 3_000), episodeLogline: text(raw.episode_logline, 2_000),
+    genre: text(raw.genre, 300), tone: text(raw.tone, 500), visualStyle: text(raw.visual_style, 2_000), worldSummary: text(raw.world_summary, 3_000), theme: text(raw.theme, 1_000), ending: text(raw.ending, 2_000), language: text(raw.language, 120),
+    characters: storyCharacters(raw.characters), locations: storyLocations(raw.locations), outlineBeats: storyOutlineBeats(raw.outline_beats), targetDurationSeconds: optionalStoryDuration(raw.target_duration_seconds),
   }
 }
 
@@ -491,6 +502,42 @@ defineCapability<AgentStageStoryComicAction>({
   async execute(action, context) { return context.adapters.storyLab.stageComic(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'comic', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'comics', anchors: ['project', 'pages', 'panels'], replay: 'atomic' },
+})
+
+defineCapability<AgentCreateSeriesEpisodeAction>({
+  name: 'create_series_episode', title: 'Create a filled Series Lab episode',
+  description: 'Create or resolve a series, save its editable canon and create one exact episode with its canonical episode ID.',
+  useWhen: 'The user asks for a new, filled episode in Series Lab.',
+  parameters: ['series_title', 'episode_title', 'episode_premise', 'create_if_missing', 'characters', 'locations', 'outline_beats'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'create_series_episode' }, series_title: { type: 'string', maxLength: 300 }, episode_premise: { type: 'string', maxLength: 3_000 }, create_if_missing: { type: 'boolean' } }, required: ['type', 'series_title', 'episode_premise'] },
+  risk: 'edit', confirmation: 'none', progress: 'Creando el episodio editable de Series Lab…',
+  resolve(raw) {
+    const fields = seriesEpisodeFields(raw)
+    if (!fields.seriesTitle || !fields.episodePremise) return null
+    return { type: 'create_series_episode', ...fields, createIfMissing: raw.create_if_missing === true, knownUniverse: raw.known_universe === true }
+  },
+  validate(action) { return action.seriesTitle && action.episodePremise ? [] : ['series title and episode premise are required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.seriesLab.createEpisode(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'series_lab', anchors: ['setup', 'canon', 'episode'], replay: 'atomic' },
+})
+
+defineCapability<AgentUpdateSeriesEpisodeAction>({
+  name: 'update_series_episode', title: 'Update a Series Lab episode',
+  description: 'Apply an explicit non-destructive episode patch and return the canonical episode ID.',
+  useWhen: 'The user asks to modify one existing Series Lab episode.',
+  parameters: ['series_title', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline', 'outline_beats', 'target_duration_seconds'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'update_series_episode' }, series_title: { type: 'string', maxLength: 300 }, target_episode_title: { type: 'string', maxLength: 300 } }, required: ['type'] },
+  risk: 'edit', confirmation: 'none', progress: 'Actualizando el episodio de Series Lab…',
+  resolve(raw) {
+    const fields = seriesEpisodeFields(raw)
+    const action: AgentUpdateSeriesEpisodeAction = { type: 'update_series_episode', seriesTitle: fields.seriesTitle, targetEpisodeTitle: text(raw.target_episode_title, 300), episodeTitle: fields.episodeTitle, episodePremise: fields.episodePremise, episodeLogline: fields.episodeLogline, outlineBeats: fields.outlineBeats, targetDurationSeconds: fields.targetDurationSeconds }
+    return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined ? action : null
+  },
+  validate(action) { return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined ? [] : ['an episode patch is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.seriesLab.updateEpisode(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'series_lab', anchors: ['episode'], replay: 'atomic' },
 })
 
 defineCapability<AgentCreateComicAction>({

@@ -52,7 +52,8 @@ export function tabForExecutionTarget(kind?: string): AgentTab {
     case 'comic': return 'comics'
     case 'director_production': return 'director'
     case 'story': return 'story_lab'
-    case 'series': return 'series_lab'
+    case 'series':
+    case 'series_episode': return 'series_lab'
     case 'scene': return 'video_3d'
     case 'character_kit': return 'character_kit'
     case 'video_editor': return 'video_editor'
