@@ -308,3 +308,13 @@ Comenzar **Bloque B — contexto canónico de sesión y selección**. Antes de m
 - Story Lab distingue canción de historia y videoclip; Director identifica el flujo de videoclip; las generaciones comunes conservan un fallback visible de Studio por modalidad.
 - El footer enseña una versión truncada, ofrece el texto completo al pasar el cursor y permite copiarlo con clic tanto en la barra como en el historial.
 - Verificado con pruebas UI, contratos backend y build de producción. No fue necesario reiniciar ni interrumpir el render activo.
+
+### Nota de relevo — Bloque B/D cerrado
+
+**Acabé el Bloque B/D (contexto canónico) y comienzo el Bloque E (`awaiting_input`).**
+
+- Existe una instantánea versionada `hocuspocus.wizard_context` que acompaña cada turno del LLM.
+- Contiene IDs canónicos de workspace, entidad, proyecto, producción, cue, output, tarea y pipeline, además de selección, drafts, artifacts, capacidades y workflow activo.
+- Las etiquetas siguen siendo solo presentación: no se convierten en identidad ni cruzan workspaces.
+- La serialización es JSON segura, corta ciclos y conserva referencias compartidas sin enviar stores vivos.
+- Se mantiene el snapshot compacto anterior durante la migración de capacidades.

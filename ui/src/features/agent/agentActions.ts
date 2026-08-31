@@ -1,6 +1,6 @@
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
 import { comicArtworkInventory } from '../comics/generateArtwork'
-import { buildWizardLabSnapshots, comicLabSnapshot } from './wizardContext'
+import { buildWizardContextSnapshot, buildWizardLabSnapshots, comicLabSnapshot, type BuildWizardContextOptions, type WizardContextSnapshot } from './wizardContext'
 import type { AspectRatio, ModelDef, ResolutionPreset } from '../../types'
 import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
 import {
@@ -605,6 +605,8 @@ export interface AgentActionResult {
 }
 
 export interface AgentAppSnapshot {
+  /** Versioned, canonical read model. Labels are display-only; actions target IDs. */
+  context: WizardContextSnapshot
   current: {
     media_filter: string
     sidebar_mode: string
@@ -2335,9 +2337,10 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
   required: ['reply', 'actions'],
 }
 
-export function buildAgentAppSnapshot(): AgentAppSnapshot {
+export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions = {}): AgentAppSnapshot {
   const state = useStore.getState()
   return {
+    context: buildWizardContextSnapshot(contextOptions),
     current: {
       media_filter: state.mediaFilter,
       sidebar_mode: state.sidebarMode,
