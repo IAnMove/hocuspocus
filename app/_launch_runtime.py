@@ -676,11 +676,12 @@ _PUBLIC_MODEL_LABELS = {
 
 
 def _public_generation_details(params: dict | None) -> dict:
-    """Return non-sensitive frozen settings suitable for job status UIs.
+    """Return frozen settings suitable for the canonical Activity UI.
 
-    Prompts, local paths and reference media are deliberately excluded.  This
-    summary comes from the submitted job params, so it keeps describing the
-    real run even if the user changes the current Studio selection afterward.
+    Local paths and reference media stay private.  The authored prompt is
+    intentionally retained: Activity is the user's durable audit trail and
+    must identify what a model is actually generating after the editable form
+    has changed.  It is bounded before persistence and never treated as HTML.
     """
     if not isinstance(params, dict):
         return {}
@@ -743,6 +744,16 @@ def _public_generation_details(params: dict | None) -> dict:
     for key, value in public_values.items():
         if value is not None and value != "":
             details[key] = value
+
+    prompt = str(params.get("prompt") or "").replace("\x00", "").strip()
+    style_prompt = str(params.get("alt_prompt") or "").replace("\x00", "").strip()
+    if prompt or style_prompt:
+        details["prompt"] = (
+            f"{style_prompt}\n\n{prompt}" if style_prompt and prompt else style_prompt or prompt
+        )[:32_000]
+    initiator = str(params.get("_initiator") or "").replace("\x00", "").strip()
+    if initiator:
+        details["initiator"] = initiator[:200]
 
     cache_type = str(params.get("skip_steps_cache_type") or "").strip()
     if cache_type or model_type.startswith("minimax_h3"):
@@ -8665,6 +8676,7 @@ async def director_generate_music(request: Request):
         raise HTTPException(status_code=400, detail="Provide a description, or style + lyrics")
 
     gen_params = _build_music_gen_params(model_type, lyrics, style, duration_seconds, seed)
+    gen_params["_initiator"] = str(body.get("initiator") or "Director · Music video")[:200]
 
     out_dir = _workspace_dir(workspace)
     os.makedirs(out_dir, exist_ok=True)

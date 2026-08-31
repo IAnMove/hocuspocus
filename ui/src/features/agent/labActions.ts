@@ -306,6 +306,7 @@ export async function generateStorySong(action: AgentGenerateStorySongAction): P
       duration_seconds: cue.durationSeconds,
       model_type: ACE_STEP_MUSIC_MODEL,
       workspace,
+      initiator: `Story Lab · ${target.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
     })
     if (!rendered.filename || !rendered.audio_path) throw new Error('ACE-Step terminó sin devolver un archivo de audio verificable.')
     const candidateId = storyId('song')

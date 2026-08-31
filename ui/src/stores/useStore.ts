@@ -7865,6 +7865,7 @@ export const useStore = create<AppState>((set, get) => ({
         duration_seconds: s.directorSongDuration,
         reference_image_path: refPath || undefined,
         workspace: get().activeWorkspace || undefined,
+        initiator: 'Director · Music video',
       })
       setTimeout(() => { void get().reconnectJobs() }, 1200)
       setTimeout(() => { void get().reconnectJobs() }, 5000)

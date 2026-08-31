@@ -299,3 +299,12 @@ Pruebas de cierre del bloque:
 ### Siguiente bloque
 
 Comenzar **Bloque B — contexto canónico de sesión y selección**. Antes de migrar dominios completos, fijar el contrato único de IDs, `activeContext`, resultados, bloqueos `awaiting_input` y política `prepare/review/execute`. Después migrar una capacidad vertical pequeña y repetir el recorrido visible.
+
+### Nota de relevo — Activity cerrada
+
+**Acabé el minibloque Activity (prompt y procedencia) y comienzo el Bloque B.**
+
+- Las generaciones nuevas congelan en la tarea canónica el prompt real completo (máximo 32 000 caracteres) y la herramienta que las inició.
+- Story Lab distingue canción de historia y videoclip; Director identifica el flujo de videoclip; las generaciones comunes conservan un fallback visible de Studio por modalidad.
+- El footer enseña una versión truncada, ofrece el texto completo al pasar el cursor y permite copiarlo con clic tanto en la barra como en el historial.
+- Verificado con pruebas UI, contratos backend y build de producción. No fue necesario reiniciar ni interrumpir el render activo.

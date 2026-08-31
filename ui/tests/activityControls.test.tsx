@@ -200,3 +200,55 @@ test('Activity summary shows the most recent real completion instead of a rehydr
     Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: originalEventSource })
   }
 })
+
+test('Activity identifies the initiating tool and exposes the complete prompt for copy', { concurrency: false }, async () => {
+  const { render, screen, waitFor, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ActivityFooter } = await import('../src/components/ActivityFooter.tsx')
+  const originalFetch = globalThis.fetch
+  const originalEventSource = globalThis.EventSource
+  const copied: string[] = []
+  const fullPrompt = 'A copper server cathedral where the sysadmin raises a glowing terminal while a grave choir sings through electric storms.'
+  const promptTask = {
+    ...task('running'),
+    title: 'Video generation',
+    kind: 'video',
+    workflow: 'generation',
+    model: 'H3 Legacy Quality',
+    metadata: {
+      generation_details: {
+        generation_mode: 'video',
+        prompt: fullPrompt,
+        initiator: 'Story Lab · Videoclip',
+      },
+    },
+  }
+
+  Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: QuietEventSource })
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: async value => { copied.push(String(value)) } },
+  })
+  globalThis.fetch = async input => {
+    if (String(input).includes('/api/v1/tasks?')) {
+      return new Response(JSON.stringify({ workspace: 'default', tasks: [promptTask], latest_event_id: 10 }), {
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    throw new Error(`Unexpected request: ${String(input)}`)
+  }
+
+  try {
+    render(<ActivityFooter />)
+    await waitFor(() => assert.ok(screen.getByText('Story Lab · Videoclip')))
+    fireEvent.click(screen.getByRole('button', { name: /Activity/ }))
+    assert.ok(screen.getByText('Started by Story Lab · Videoclip'))
+    const promptButton = screen.getByRole('button', { name: 'Copy complete prompt for Video generation' })
+    assert.equal(promptButton.getAttribute('title')?.startsWith(fullPrompt), true)
+    fireEvent.click(promptButton)
+    await waitFor(() => assert.deepEqual(copied, [fullPrompt]))
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+    Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: originalEventSource })
+  }
+})

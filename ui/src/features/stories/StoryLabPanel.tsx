@@ -3913,6 +3913,7 @@ export function StoryLabPanel() {
           duration_seconds: current.music.targetDurationSeconds,
           model_type: ACE_STEP_MUSIC_MODEL,
           workspace: activeWorkspace,
+          initiator: `Story Lab · ${current.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
         })
         const createdAt = new Date().toISOString()
         const language = cue.lyricsLanguage || current.language

@@ -615,6 +615,7 @@ export async function generateMusic(params: {
   model_type?: string
   seed?: number
   workspace?: string
+  initiator?: string
 }): Promise<{ audio_path: string; filename: string; style: string; lyrics: string }> {
   const res = await fetch(`${BASE}/api/v1/director/generate-music`, {
     method: 'POST',
