@@ -7,10 +7,12 @@ import type {
   AgentSave3dSceneAction,
   AgentExport3dSceneAction,
   AgentCreateComicAction,
+  AgentCreateStoryAction,
   AgentGenerateComicAction,
   AgentStartDirectorProductionAction,
   AgentStageStoryVideoAction,
   AgentStageStoryMusicVideoAction,
+  AgentUpdateStoryAction,
   AgentOpenTabAction,
 } from './agentActions'
 import { useStore } from '../../stores/useStore'
@@ -98,6 +100,62 @@ function boundedNumber(value: unknown, minimum: number, maximum: number, fallbac
 const tabSet = new Set<string>(AGENT_TABS)
 const rhythmCueSources = new Set(['beats', 'downbeats'])
 const rhythmProfiles = new Set(['pulse', 'bounce', 'peek', 'camera-punch'])
+const storyProjectTypes = new Set(['full_story', 'music_video', 'trailer', 'quick_video'])
+
+function storyCharacters(value: unknown): AgentCreateStoryAction['characters'] {
+  return Array.isArray(value) ? value.slice(0, 16).flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = item as Record<string, unknown>
+    const name = text(raw.name, 160)
+    return name ? [{
+      name, role: text(raw.role, 300), personality: text(raw.personality, 1_000),
+      desire: text(raw.desire, 1_000), flaw: text(raw.flaw, 1_000),
+      appearance: text(raw.appearance, 1_000), voice: text(raw.voice, 1_000),
+    }] : []
+  }) : []
+}
+
+function storyLocations(value: unknown): AgentCreateStoryAction['locations'] {
+  return Array.isArray(value) ? value.slice(0, 16).flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = item as Record<string, unknown>
+    const name = text(raw.name, 160)
+    return name ? [{ name, purpose: text(raw.purpose, 1_000), description: text(raw.description, 1_500) }] : []
+  }) : []
+}
+
+function storyOutlineBeats(value: unknown): string[] {
+  return Array.isArray(value) ? value.slice(0, 24).flatMap(item => {
+    const beat = text(item, 1_500)
+    return beat ? [beat] : []
+  }) : []
+}
+
+function optionalStoryDuration(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined
+  return Math.round(Math.min(3_600, Math.max(15, value)))
+}
+
+function storyFields(raw: Record<string, unknown>) {
+  return {
+    title: text(raw.title, 300),
+    creativeBrief: text(raw.creative_brief, 4_000),
+    premise: text(raw.premise, 2_000),
+    logline: text(raw.logline, 2_000),
+    synopsis: text(raw.synopsis, 6_000),
+    theme: text(raw.theme, 1_000),
+    ending: text(raw.ending, 2_000),
+    genre: text(raw.genre, 300),
+    tone: text(raw.tone, 500),
+    visualStyle: text(raw.visual_style, 2_000),
+    worldSummary: text(raw.world_summary, 3_000),
+    language: text(raw.language, 120),
+    characters: storyCharacters(raw.characters),
+    locations: storyLocations(raw.locations),
+    outlineBeats: storyOutlineBeats(raw.outline_beats),
+    durationSeconds: optionalStoryDuration(raw.target_duration_seconds),
+  }
+}
 
 defineCapability<AgentOpenTabAction>({
   name: 'open_tab',
@@ -264,6 +322,44 @@ defineCapability<AgentCreateRhythmic3dVideoAction>({
   report: { targetKind: 'wizard_workflow', successState: 'prepared' },
   summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'video_3d', anchors: ['scene', 'audio', 'layers', 'timeline'], replay: 'atomic' },
+})
+
+defineCapability<AgentCreateStoryAction>({
+  name: 'create_story', title: 'Create a filled Story Lab project',
+  description: 'Create a new editable Story Lab project with its canon, characters, locations and outline, then return its canonical project ID.',
+  useWhen: 'The user asks for a new story, episode, trailer, music video or a filled example in Story Lab.',
+  parameters: ['title', 'project_type', 'premise', 'creative_brief', 'characters', 'locations', 'outline_beats', 'target_duration_seconds'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'create_story' }, title: { type: 'string', maxLength: 300 }, premise: { type: 'string', maxLength: 2_000 }, project_type: { type: 'string', enum: ['full_story', 'music_video', 'trailer', 'quick_video'] } }, required: ['type', 'title', 'premise'] },
+  risk: 'edit', confirmation: 'none', progress: 'Escribiendo y guardando la nueva historia…',
+  resolve(raw) {
+    const fields = storyFields(raw)
+    if (!fields.title || !fields.premise) return null
+    const projectType = text(raw.project_type, 30)
+    return { type: 'create_story', ...fields, projectType: storyProjectTypes.has(projectType) ? projectType as AgentCreateStoryAction['projectType'] : 'full_story' }
+  },
+  validate(action) { return action.title && action.premise ? [] : ['title and premise are required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.create(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'story_lab', anchors: ['overview', 'characters', 'world', 'structure'], replay: 'atomic' },
+})
+
+defineCapability<AgentUpdateStoryAction>({
+  name: 'update_story', title: 'Update a filled Story Lab project',
+  description: 'Apply an explicit patch to one canonical Story Lab project and return that project’s real ID.',
+  useWhen: 'The user asks to change an existing Story Lab story, its canon, characters, locations or outline.',
+  parameters: ['target_story_title', 'title', 'premise', 'creative_brief', 'characters', 'locations', 'outline_beats', 'target_duration_seconds'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'update_story' }, target_story_title: { type: 'string', maxLength: 300 } }, required: ['type'] },
+  risk: 'edit', confirmation: 'none', progress: 'Actualizando el canon de la historia…',
+  resolve(raw) {
+    const fields = storyFields(raw)
+    const action: AgentUpdateStoryAction = { type: 'update_story', targetStoryTitle: text(raw.target_story_title, 300), ...fields }
+    const hasPatch = action.title || action.creativeBrief || action.premise || action.logline || action.synopsis || action.theme || action.ending || action.genre || action.tone || action.visualStyle || action.worldSummary || action.language || action.characters.length || action.locations.length || action.outlineBeats.length || action.durationSeconds !== undefined
+    return hasPatch ? action : null
+  },
+  validate(action) { return action.targetStoryTitle || action.title || action.premise ? [] : ['a target story or a patch is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.update(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'story_lab', anchors: ['overview', 'characters', 'world', 'structure'], replay: 'atomic' },
 })
 
 defineCapability<AgentCreateComicAction>({

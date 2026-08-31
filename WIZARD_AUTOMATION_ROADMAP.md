@@ -453,11 +453,13 @@ Agent Mode complete prematurely.
   verified production target and real running pipeline ID.
 - Story-to-Director staging: film/trailer and music-video preparation now
   verify and return the exact production target before launch.
+- Story Lab creation and updates: migrated to the common adapter/registry
+  contract, preserving the canonical story project ID after each mutation.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **Story-to-Director staging**. Continue Story Lab
-creation, proposal and review actions incrementally, preserving their real
-project IDs and behavior tests. Keep Decision gate A open; the workflow remains
-correct without visual magic effects.
+Finished migration subblock **Story Lab creation and updates**. Continue with
+proposal, approval and visual-review actions incrementally, preserving their
+real project and proposal IDs and behavior tests. Keep Decision gate A open;
+the workflow remains correct without visual magic effects.

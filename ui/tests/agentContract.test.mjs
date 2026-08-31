@@ -41,7 +41,8 @@ test('registered capabilities supply one contract for prompt schema parser execu
   assert.ok(registered.some(item => item.name === 'generate_comic'))
   assert.equal(registered[0].risk, 'read')
   assert.equal(registered[0].confirmation, 'none')
-  assert.ok(registered.filter(item => item.name !== 'open_tab' && item.name !== 'create_comic').every(item => item.confirmation === 'required'))
+  const noConfirmationEdits = new Set(['open_tab', 'create_comic', 'create_story', 'update_story'])
+  assert.ok(registered.filter(item => !noConfirmationEdits.has(item.name)).every(item => item.confirmation === 'required'))
   assert.equal(registeredCapabilitySchemas().length, registered.length)
   assert.equal(registeredCapabilityDocumentationRows().length, registered.length)
   for (const capability of registered) {
@@ -65,6 +66,15 @@ test('registered capabilities supply one contract for prompt schema parser execu
   assert.equal(parseRegisteredCapability('apply_3d_rhythm', {
     type: 'apply_3d_rhythm', cue_source: 'beats', rhythm_profile: 'pulse', confirm: false,
   }), null)
+  assert.deepEqual(parseRegisteredCapability('create_story', {
+    type: 'create_story', title: 'Una tarde imposible', premise: 'Dos rivales deben colaborar.',
+    project_type: 'trailer', target_duration_seconds: 80,
+  }), {
+    type: 'create_story', title: 'Una tarde imposible', premise: 'Dos rivales deben colaborar.',
+    projectType: 'trailer', creativeBrief: '', logline: '', synopsis: '', theme: '', ending: '',
+    genre: '', tone: '', visualStyle: '', worldSummary: '', language: '', characters: [], locations: [],
+    outlineBeats: [], durationSeconds: 80,
+  })
 
   const calls = []
   const context = { adapters: {
