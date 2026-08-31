@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 _APP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app"))
 if _APP_DIR not in sys.path:
@@ -15,7 +16,9 @@ from services.alternative_songs import (  # noqa: E402
     load_sidecar,
     plan_timeline,
     public_song,
+    recover_stale_mounts,
     remove_song,
+    resolve_remount_sources,
     save_sidecar,
     source_clip_names,
     unique_mounted_name,
@@ -61,6 +64,35 @@ class AlternativeSongPlannerTests(unittest.TestCase):
         self.assertTrue(all(item["name"] == "mix.mp4" for item in planned))
         self.assertTrue(planned[0]["extra"] is False)
         self.assertTrue(any(item["extra"] for item in planned[1:]))
+
+    def test_missing_authored_shots_fall_back_to_assembled_video(self):
+        assembled = _clip("mix.mp4", 8)
+        sidecar = {"params": {"source_clips": ["deleted-a.mp4", "deleted-b.mp4"]}}
+        with mock.patch(
+            "services.alternative_songs.resolve_existing_files",
+            side_effect=[[], [assembled]],
+        ) as resolve:
+            sources = resolve_remount_sources(sidecar, "mix.mp4", "/outputs")
+
+        self.assertEqual(sources, [assembled])
+        self.assertEqual(
+            resolve.call_args_list,
+            [
+                mock.call(["deleted-a.mp4", "deleted-b.mp4"], "/outputs"),
+                mock.call(["mix.mp4"], "/outputs"),
+            ],
+        )
+
+    def test_stale_mount_is_released_but_live_worker_stays_mounting(self):
+        sidecar = {"params": {}}
+        record = attach_song(sidecar, audio_name="en.mp3", duration_seconds=12)
+        record.update({"status": "mounting", "job_id": "alt-song-live"})
+
+        self.assertFalse(recover_stale_mounts(sidecar, lambda job_id: job_id == "alt-song-live"))
+        self.assertEqual(record["status"], "mounting")
+        self.assertTrue(recover_stale_mounts(sidecar, lambda _job_id: False))
+        self.assertEqual(record["status"], "attached")
+        self.assertIsNone(record["job_id"])
 
     def test_source_clip_names_prefer_director_then_editor_then_self(self):
         sidecar = {

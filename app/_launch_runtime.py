@@ -34522,6 +34522,9 @@ def get_output_metadata(name: str, workspace: str | None = None):
     return {"source": "none", "params": None}
 
 
+_alternative_song_sidecar_lock = threading.RLock()
+
+
 def _alternative_song_parent(name: str, workspace: str | None = None) -> tuple[str, str, str, dict]:
     """Return workspace dir, video path, basename and sidecar for one mix."""
     from services.alternative_songs import load_sidecar
@@ -34536,18 +34539,34 @@ def _alternative_song_parent(name: str, workspace: str | None = None) -> tuple[s
 
 
 def _alternative_song_sources(out_dir: str, video_name: str, sidecar: dict) -> list[dict]:
-    from services.alternative_songs import resolve_existing_files, source_clip_names
+    from services.alternative_songs import resolve_remount_sources
 
-    names = source_clip_names(sidecar, video_name)
-    sources = resolve_existing_files(names, out_dir)
-    if not sources:
-        sources = resolve_existing_files([video_name], out_dir)
+    sources = resolve_remount_sources(sidecar, video_name, out_dir)
     if not sources:
         raise HTTPException(
             status_code=400,
             detail="This videoclip has no reusable shots on disk to remount",
         )
     return sources
+
+
+def _alternative_song_job_is_active(job_id: str) -> bool:
+    """Only an in-process editor worker can finish a persisted remount."""
+    snapshot = _video_editor_job_snapshot(job_id)
+    return bool(
+        snapshot
+        and str(snapshot.get("status") or "") not in {"completed", "failed", "cancelled"}
+        and snapshot.get("_worker_active")
+    )
+
+
+def _recover_stale_alternative_song_mounts(video_path: str, sidecar: dict) -> bool:
+    from services.alternative_songs import recover_stale_mounts, save_sidecar
+
+    changed = recover_stale_mounts(sidecar, _alternative_song_job_is_active)
+    if changed:
+        save_sidecar(video_path, sidecar)
+    return changed
 
 
 def _run_alternative_song_mount(
@@ -34567,19 +34586,19 @@ def _run_alternative_song_mount(
         load_sidecar,
         plan_timeline,
         remount_clips,
+        resolve_remount_sources,
         save_sidecar,
-        source_clip_names,
-        resolve_existing_files,
         write_mounted_sidecar,
     )
 
     def fail(message: str) -> None:
-        sidecar = load_sidecar(video_path)
-        song = find_song(sidecar, song_id=song_id)
-        if song is not None:
-            song["status"] = "failed"
-            song["job_id"] = job_id
-            save_sidecar(video_path, sidecar)
+        with _alternative_song_sidecar_lock:
+            sidecar = load_sidecar(video_path)
+            song = find_song(sidecar, song_id=song_id)
+            if song is not None:
+                song["status"] = "failed"
+                song["job_id"] = job_id
+                save_sidecar(video_path, sidecar)
         _video_editor_job_update(
             job_id,
             status="failed",
@@ -34601,12 +34620,13 @@ def _run_alternative_song_mount(
             message="Waiting for the local FFmpeg lane…",
             acquired_resources=[],
         )
-        sidecar = load_sidecar(video_path)
-        sources = resolve_existing_files(source_clip_names(sidecar, video_name), out_dir)
-        song = find_song(sidecar, song_id=song_id)
-        if song is None:
-            raise ValueError("The alternative song disappeared before remount")
-        target = float(song.get("duration_seconds") or 0)
+        with _alternative_song_sidecar_lock:
+            sidecar = load_sidecar(video_path)
+            sources = resolve_remount_sources(sidecar, video_name, out_dir)
+            song = find_song(sidecar, song_id=song_id)
+            if song is None:
+                raise ValueError("The alternative song disappeared before remount")
+            target = float(song.get("duration_seconds") or 0)
         planned = plan_timeline(sources, target, rng=random.Random(seed))
         try:
             with resource_scheduler.coordinator.acquire(
@@ -34640,12 +34660,13 @@ def _run_alternative_song_mount(
         except resource_scheduler.ResourceAcquireCancelled:
             current = _video_editor_job_snapshot(job_id) or {}
             deferred = bool(current.get("started_at"))
-            sidecar = load_sidecar(video_path)
-            song = find_song(sidecar, song_id=song_id)
-            if song is not None and str(song.get("status") or "") == "mounting":
-                song["status"] = "attached"
-                song["job_id"] = None
-                save_sidecar(video_path, sidecar)
+            with _alternative_song_sidecar_lock:
+                sidecar = load_sidecar(video_path)
+                song = find_song(sidecar, song_id=song_id)
+                if song is not None and str(song.get("status") or "") == "mounting":
+                    song["status"] = "attached"
+                    song["job_id"] = None
+                    save_sidecar(video_path, sidecar)
             _finish_video_editor_cancelled(
                 job_id,
                 output_path,
@@ -34661,12 +34682,13 @@ def _run_alternative_song_mount(
             return
 
         if _video_editor_cancel_requested(job_id):
-            sidecar = load_sidecar(video_path)
-            song = find_song(sidecar, song_id=song_id)
-            if song is not None:
-                song["status"] = "attached"
-                song["job_id"] = None
-                save_sidecar(video_path, sidecar)
+            with _alternative_song_sidecar_lock:
+                sidecar = load_sidecar(video_path)
+                song = find_song(sidecar, song_id=song_id)
+                if song is not None:
+                    song["status"] = "attached"
+                    song["job_id"] = None
+                    save_sidecar(video_path, sidecar)
             _finish_video_editor_cancelled(
                 job_id,
                 output_path,
@@ -34676,20 +34698,21 @@ def _run_alternative_song_mount(
             )
             return
 
-        sidecar = load_sidecar(video_path)
-        song = find_song(sidecar, song_id=song_id)
-        if song is None:
-            raise ValueError("The alternative song disappeared after remount")
-        write_mounted_sidecar(
-            output_path=output_path,
-            parent_name=video_name,
-            parent_sidecar=sidecar,
-            song=song,
-            planned=planned,
-            job_id=job_id,
-            workspace=workspace,
-        )
-        save_sidecar(video_path, sidecar)
+        with _alternative_song_sidecar_lock:
+            sidecar = load_sidecar(video_path)
+            song = find_song(sidecar, song_id=song_id)
+            if song is None:
+                raise ValueError("The alternative song disappeared after remount")
+            write_mounted_sidecar(
+                output_path=output_path,
+                parent_name=video_name,
+                parent_sidecar=sidecar,
+                song=song,
+                planned=planned,
+                job_id=job_id,
+                workspace=workspace,
+            )
+            save_sidecar(video_path, sidecar)
         output_name = os.path.basename(output_path)
         _video_editor_job_update(
             job_id,
@@ -34717,19 +34740,26 @@ def list_alternative_songs(name: str, workspace: str | None = None):
     """List songs attached to an assembled videoclip without remounting."""
     from services.alternative_songs import describe_parent
 
-    out_dir, filepath, video_name, sidecar = _alternative_song_parent(name, workspace)
-    sources = _alternative_song_sources(out_dir, video_name, sidecar)
-    return describe_parent(
-        video_name=video_name,
-        video_path=filepath,
-        sidecar=sidecar,
-        source_files=sources,
-    )
+    with _alternative_song_sidecar_lock:
+        out_dir, filepath, video_name, sidecar = _alternative_song_parent(name, workspace)
+        _recover_stale_alternative_song_mounts(filepath, sidecar)
+        sources = _alternative_song_sources(out_dir, video_name, sidecar)
+        return describe_parent(
+            video_name=video_name,
+            video_path=filepath,
+            sidecar=sidecar,
+            source_files=sources,
+        )
 
 
 @api.post("/api/v1/outputs/{name}/alternative-songs")
 def attach_alternative_song(name: str, body: dict, workspace: str | None = None):
     """Attach an existing audio output as an alternative song. No GPU work."""
+    with _alternative_song_sidecar_lock:
+        return _attach_alternative_song_locked(name, body, workspace)
+
+
+def _attach_alternative_song_locked(name: str, body: dict, workspace: str | None = None):
     from services.alternative_songs import attach_song, describe_parent, public_song, save_sidecar
 
     audio_name = str((body or {}).get("audio_name") or "").strip()
@@ -34754,9 +34784,15 @@ def attach_alternative_song(name: str, body: dict, workspace: str | None = None)
 
 @api.delete("/api/v1/outputs/{name}/alternative-songs/{song_id}")
 def delete_alternative_song(name: str, song_id: str, workspace: str | None = None):
+    with _alternative_song_sidecar_lock:
+        return _delete_alternative_song_locked(name, song_id, workspace)
+
+
+def _delete_alternative_song_locked(name: str, song_id: str, workspace: str | None = None):
     from services.alternative_songs import public_song, remove_song, save_sidecar
 
     _out_dir, filepath, _video_name, sidecar = _alternative_song_parent(name, workspace)
+    _recover_stale_alternative_song_mounts(filepath, sidecar)
     try:
         removed = remove_song(sidecar, song_id)
     except ValueError as exc:
@@ -34768,6 +34804,16 @@ def delete_alternative_song(name: str, song_id: str, workspace: str | None = Non
 @api.post("/api/v1/outputs/{name}/alternative-songs/{song_id}/mount", status_code=202)
 def mount_alternative_song(name: str, song_id: str, body: dict | None = None, workspace: str | None = None):
     """Remount the videoclip with an attached alternative song using FFmpeg only."""
+    with _alternative_song_sidecar_lock:
+        return _mount_alternative_song_locked(name, song_id, body, workspace)
+
+
+def _mount_alternative_song_locked(
+    name: str,
+    song_id: str,
+    body: dict | None = None,
+    workspace: str | None = None,
+):
     from services.alternative_songs import (
         attach_song,
         find_song,
@@ -34780,6 +34826,7 @@ def mount_alternative_song(name: str, song_id: str, body: dict | None = None, wo
     payload = body if isinstance(body, dict) else {}
     ws = workspace if workspace is not None else payload.get("workspace")
     out_dir, filepath, video_name, sidecar = _alternative_song_parent(name, ws)
+    _recover_stale_alternative_song_mounts(filepath, sidecar)
     _alternative_song_sources(out_dir, video_name, sidecar)
     record = find_song(sidecar, song_id=song_id)
     if record is None:

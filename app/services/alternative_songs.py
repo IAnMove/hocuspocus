@@ -109,6 +109,36 @@ def resolve_existing_files(names: list[str], out_dir: str) -> list[dict[str, Any
     return resolved
 
 
+def resolve_remount_sources(
+    sidecar: dict[str, Any],
+    assembled_name: str,
+    out_dir: str,
+) -> list[dict[str, Any]]:
+    """Resolve authored shots, falling back to the assembled videoclip."""
+    sources = resolve_existing_files(source_clip_names(sidecar, assembled_name), out_dir)
+    if not sources:
+        sources = resolve_existing_files([os.path.basename(assembled_name)], out_dir)
+    return sources
+
+
+def recover_stale_mounts(
+    sidecar: dict[str, Any],
+    is_job_active: Callable[[str], bool],
+) -> bool:
+    """Release persisted ``mounting`` records whose in-process worker is gone."""
+    changed = False
+    for record in _song_list(sidecar):
+        if not isinstance(record, dict) or str(record.get("status") or "") != "mounting":
+            continue
+        job_id = str(record.get("job_id") or "").strip()
+        if job_id and is_job_active(job_id):
+            continue
+        record["status"] = "attached"
+        record["job_id"] = None
+        changed = True
+    return changed
+
+
 def plan_timeline(
     sources: list[dict[str, Any]],
     target_seconds: float,
