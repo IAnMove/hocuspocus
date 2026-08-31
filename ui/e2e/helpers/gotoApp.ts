@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test'
 import { formatUnhandled, installApiRoutes, type ApiRouteSession } from './apiRoutes'
-import { bootWatchdogPlaceholderPath } from './bootWatchdogPlaceholder'
+import { bootWatchdogPlaceholderPath } from './bootWatchdogPlaceholderPath'
 
 export async function gotoApp(page: Page): Promise<ApiRouteSession> {
   await page.emulateMedia({ reducedMotion: 'reduce' })

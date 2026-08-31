@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { bootWatchdogPlaceholderPath } from '../helpers/bootWatchdogPlaceholder'
+import { bootWatchdogPlaceholderPath } from '../helpers/bootWatchdogPlaceholderPath'
 import { closeApp, gotoApp } from '../helpers/gotoApp'
 
 test('seeds #root before the index.html watchdog can replace the document', async ({ page }) => {
