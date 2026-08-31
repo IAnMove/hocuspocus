@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentCreateComicAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentCreateComicAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateStorySectionAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateStoryAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -33,6 +33,9 @@ export interface StoryLabAdapter {
   open(): Promise<AdapterOutcome>
   create(action: AgentCreateStoryAction): Promise<AdapterOutcome>
   update(action: AgentUpdateStoryAction): Promise<AdapterOutcome>
+  generateProposal(action: AgentGenerateStorySectionAction): Promise<AdapterOutcome>
+  applyProposal(action: AgentApplyStoryProposalAction): Promise<AdapterOutcome>
+  approveSection(action: AgentApproveStorySectionAction): Promise<AdapterOutcome>
   stageVideo(action: AgentStageStoryVideoAction): Promise<AdapterOutcome>
   stageMusicVideo(action: AgentStageStoryMusicVideoAction): Promise<AdapterOutcome>
   startDirectorProduction(action: AgentStartDirectorProductionAction, expectedProductionId?: string): Promise<AdapterOutcome>
@@ -157,6 +160,21 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async update(action) {
       const { updateFilledStory } = await import('./labActions')
       const message = await updateFilledStory(action)
+      return storyOutcome(message)
+    },
+    async generateProposal(action) {
+      const { generateStorySectionDraft } = await import('./labActions')
+      const message = await generateStorySectionDraft(action)
+      return storyOutcome(message)
+    },
+    async applyProposal(action) {
+      const { applyStoredStoryProposal } = await import('./labActions')
+      const message = await applyStoredStoryProposal(action)
+      return storyOutcome(message)
+    },
+    async approveSection(action) {
+      const { approveStorySection } = await import('./labActions')
+      const message = await approveStorySection(action)
       return storyOutcome(message)
     },
     async stageVideo(action) {

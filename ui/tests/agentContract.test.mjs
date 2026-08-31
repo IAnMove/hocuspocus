@@ -75,6 +75,12 @@ test('registered capabilities supply one contract for prompt schema parser execu
     genre: '', tone: '', visualStyle: '', worldSummary: '', language: '', characters: [], locations: [],
     outlineBeats: [], durationSeconds: 80,
   })
+  assert.equal(parseRegisteredCapability('generate_story_section', {
+    type: 'generate_story_section', story_generation_scope: 'characters', confirm: true,
+  })?.type, 'generate_story_section')
+  assert.equal(parseRegisteredCapability('approve_story_section', {
+    type: 'approve_story_section', story_section: 'assets', confirm: true,
+  }), null)
 
   const calls = []
   const context = { adapters: {

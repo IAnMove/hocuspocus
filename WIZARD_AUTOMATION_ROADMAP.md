@@ -455,11 +455,14 @@ Agent Mode complete prematurely.
   verify and return the exact production target before launch.
 - Story Lab creation and updates: migrated to the common adapter/registry
   contract, preserving the canonical story project ID after each mutation.
+- Story Lab proposals and section approval: migrated to the common contract;
+  generation remains reviewable until an explicit apply and approval returns the
+  canonical story ID.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **Story Lab creation and updates**. Continue with
-proposal, approval and visual-review actions incrementally, preserving their
-real project and proposal IDs and behavior tests. Keep Decision gate A open;
+Finished migration subblock **Story Lab proposals and section approval**.
+Continue with visual-reference generation and approval, making their queue or
+asset IDs explicit before migrating the next domain. Keep Decision gate A open;
 the workflow remains correct without visual magic effects.

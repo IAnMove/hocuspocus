@@ -1,6 +1,8 @@
 import type {
   AgentAction,
   AgentApply3dRhythmAction,
+  AgentApplyStoryProposalAction,
+  AgentApproveStorySectionAction,
   AgentCreateRhythmic3dVideoAction,
   AgentSceneWorkflowAction,
   AgentOpen3dSceneAction,
@@ -9,6 +11,7 @@ import type {
   AgentCreateComicAction,
   AgentCreateStoryAction,
   AgentGenerateComicAction,
+  AgentGenerateStorySectionAction,
   AgentStartDirectorProductionAction,
   AgentStageStoryVideoAction,
   AgentStageStoryMusicVideoAction,
@@ -101,6 +104,8 @@ const tabSet = new Set<string>(AGENT_TABS)
 const rhythmCueSources = new Set(['beats', 'downbeats'])
 const rhythmProfiles = new Set(['pulse', 'bounce', 'peek', 'camera-punch'])
 const storyProjectTypes = new Set(['full_story', 'music_video', 'trailer', 'quick_video'])
+const storyProposalScopes = new Set(['all', 'overview', 'world', 'characters', 'relationships', 'structure'])
+const storyApprovalSections = new Set(['overview', 'world', 'characters', 'relationships', 'structure'])
 
 function storyCharacters(value: unknown): AgentCreateStoryAction['characters'] {
   return Array.isArray(value) ? value.slice(0, 16).flatMap(item => {
@@ -360,6 +365,56 @@ defineCapability<AgentUpdateStoryAction>({
   async execute(action, context) { return context.adapters.storyLab.update(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'story_lab', anchors: ['overview', 'characters', 'world', 'structure'], replay: 'atomic' },
+})
+
+defineCapability<AgentGenerateStorySectionAction>({
+  name: 'generate_story_section', title: 'Generate a reviewable Story Lab proposal',
+  description: 'Generate a proposal for an exact Story Lab section without modifying or approving the project canon.',
+  useWhen: 'The user explicitly asks to generate a Story Lab proposal for review.',
+  parameters: ['target_story_title', 'story_generation_scope', 'instruction', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'generate_story_section' }, story_generation_scope: { type: 'string', enum: ['all', 'overview', 'world', 'characters', 'relationships', 'structure'] }, confirm: { const: true } }, required: ['type', 'story_generation_scope', 'confirm'] },
+  risk: 'compute', confirmation: 'required', progress: 'Invocando una propuesta revisable de Story Lab…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const scope = text(raw.story_generation_scope, 40)
+    return storyProposalScopes.has(scope) ? { type: 'generate_story_section', targetStoryTitle: text(raw.target_story_title, 300), scope: scope as AgentGenerateStorySectionAction['scope'], instruction: text(raw.instruction, 4_000), confirm: true } : null
+  },
+  validate(action) { return action.confirm === true && storyProposalScopes.has(action.scope) ? [] : ['a confirmed valid proposal scope is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.generateProposal(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'story_lab', anchors: ['proposal', 'review'], replay: 'atomic' },
+})
+
+defineCapability<AgentApplyStoryProposalAction>({
+  name: 'apply_story_proposal', title: 'Apply a reviewed Story Lab proposal',
+  description: 'Apply the previously generated proposal for one exact Story Lab project and invalidate only the approvals it changes.',
+  useWhen: 'The user explicitly confirms that the saved Story Lab proposal should become canon.',
+  parameters: ['target_story_title', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'apply_story_proposal' }, target_story_title: { type: 'string', maxLength: 300 }, confirm: { const: true } }, required: ['type', 'confirm'] },
+  risk: 'edit', confirmation: 'required', progress: 'Aplicando la propuesta revisada al canon…',
+  resolve(raw) { return raw.confirm === true ? { type: 'apply_story_proposal', targetStoryTitle: text(raw.target_story_title, 300), confirm: true } : null },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.applyProposal(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'story_lab', anchors: ['proposal', 'review'], replay: 'atomic' },
+})
+
+defineCapability<AgentApproveStorySectionAction>({
+  name: 'approve_story_section', title: 'Approve a Story Lab canon section',
+  description: 'Validate and approve one exact current-version Story Lab section.',
+  useWhen: 'The user explicitly asks to approve a reviewed Story Lab canon section.',
+  parameters: ['target_story_title', 'story_section', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'approve_story_section' }, story_section: { type: 'string', enum: ['overview', 'world', 'characters', 'relationships', 'structure'] }, confirm: { const: true } }, required: ['type', 'story_section', 'confirm'] },
+  risk: 'edit', confirmation: 'required', progress: 'Validando y aprobando el canon…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const section = text(raw.story_section, 40)
+    return storyApprovalSections.has(section) ? { type: 'approve_story_section', targetStoryTitle: text(raw.target_story_title, 300), section: section as AgentApproveStorySectionAction['section'], confirm: true } : null
+  },
+  validate(action) { return action.confirm === true && storyApprovalSections.has(action.section) ? [] : ['a confirmed valid Story section is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.storyLab.approveSection(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'story_lab', anchors: ['review', 'approval'], replay: 'atomic' },
 })
 
 defineCapability<AgentCreateComicAction>({
