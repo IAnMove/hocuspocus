@@ -1,5 +1,5 @@
 {
-  "name": "Loreframe Lab (CPU dev)",
+  "name": "HocusPocus (CPU dev)",
   "install": "bash .cursor/install.sh",
   "terminals": [
     {
