@@ -22,7 +22,7 @@ const LEVEL_CATALOG = Object.freeze({
   '2': { title: 'Wizard unit and schema tests', implemented: true },
   '3': { title: 'Browser interaction tests', implemented: false },
   '4': { title: 'Full UI test suite', implemented: true },
-  '5': { title: 'Workflow recovery and persistence tests', implemented: false },
+  '5': { title: 'Workflow recovery and persistence tests', implemented: true },
   '6': { title: 'Python backend test suite', implemented: true },
   '7': { title: 'Presentation and reduced-motion tests', implemented: false },
   '8': { title: 'Real GPU/provider smoke', implemented: false, optional: true },
@@ -48,7 +48,7 @@ export function selectPythonTestFiles(raw, available) {
 let levelConfigurationError = null
 let REQUESTED_LEVELS = []
 try {
-  REQUESTED_LEVELS = parseLevels(process.env.NIGHTLY_LEVELS || '1,2,4,6')
+  REQUESTED_LEVELS = parseLevels(process.env.NIGHTLY_LEVELS || '1,2,4,5,6')
 } catch (error) {
   levelConfigurationError = error
 }
@@ -370,6 +370,16 @@ async function main() {
     })
   }
 
+  if (LEVELS.has('5')) {
+    jobs.push({
+      id: 'workflow-recovery', level: 5, title: 'Durable workflow recovery and rhythm tests', logName: 'workflow-recovery.log',
+      run: async () => requireTestDiagnostics(await runCaptured(
+        process.execPath, ['--import', 'tsx', '--test', 'tests/wizardWorkflowRuntime.test.mjs', 'tests/rhythmic3dWorkflow.test.mjs'],
+        { cwd: ui, logPath: path.join(outDir, 'workflow-recovery.log') },
+      ), 'Workflow recovery tests'),
+    })
+  }
+
   if (LEVELS.has('6')) {
     jobs.push({
       id: 'backend-pytest', level: 6, title: 'Python tests', logName: 'backend-tests.log',
@@ -418,7 +428,7 @@ async function main() {
     })
   }
 
-  for (const level of ['3', '5', '7']) {
+  for (const level of ['3', '7']) {
     if (!LEVELS.has(level)) continue
     jobs.push({
       id: `level-${level}-not-implemented`,

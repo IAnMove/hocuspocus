@@ -69,6 +69,17 @@ export async function prepareAudio(action: AgentPrepareAudioAction): Promise<str
   return `He preparado Studio → Audio → ${room} con ${modelName}, ${duration.toFixed(0)} s y el prompt indicado. La pestaña Audios solo muestra resultados; la creación queda en Studio.`
 }
 
+export async function queueMusic(action: AgentPrepareAudioAction): Promise<{ message: string; taskId: string }> {
+  if (action.subMode !== 'music') throw new Error('queueMusic solo acepta peticiones de música.')
+  await prepareAudio(action)
+  const known = new Set(useStore.getState().jobs)
+  await useStore.getState().startGeneration()
+  const created = useStore.getState().jobs.find(job => !known.has(job))
+  if (!created?.id) throw new Error('HocusPocus no devolvió el taskId canónico de la canción.')
+  if (created.status === 'failed') throw new Error(created.error || created.message || 'La canción no pudo entrar en cola.')
+  return { message: `He enviado la canción a la cola (${created.id}).`, taskId: created.id }
+}
+
 export async function queueSfxPack(action: AgentQueueSfxPackAction): Promise<string> {
   if (!action.confirm) throw new Error('Encolar el pack de SFX requiere confirm=true tras una petición explícita.')
   if (!action.clips.length) throw new Error('El pack de SFX no incluye clips.')

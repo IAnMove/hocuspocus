@@ -13,7 +13,7 @@ PowerShell:
 scripts/nightly_wizard_validation.ps1
 ```
 
-The default coverage is `NIGHTLY_LEVELS=1,2,4,6`. A reduced diagnostic run can
+The default coverage is `NIGHTLY_LEVELS=1,2,4,5,6`. A reduced diagnostic run can
 select levels explicitly, for example `NIGHTLY_LEVELS=1,2`. Selecting an
 unknown level is a configuration failure; selecting a documented but missing
 level produces `INCOMPLETE`, never a false pass.
@@ -26,7 +26,7 @@ level produces `INCOMPLETE`, never a false pass.
 | 2 | Implemented | Wizard action, schema and capability unit tests |
 | 3 | Missing | Browser-level interaction tests |
 | 4 | Implemented | Complete frontend test suite |
-| 5 | Missing | Durable workflow reload, retry and persistence suite |
+| 5 | Implemented | Durable workflow reload, retry, export-recovery and rhythm-grid suite |
 | 6 | Implemented | Complete Python backend test suite |
 | 7 | Missing | Presentation anchors, accessibility and reduced-motion suite |
 | 8 | Missing/opt-in | Real song → Video3D → MP4 smoke workflow |

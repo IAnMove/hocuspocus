@@ -2,7 +2,10 @@ import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
 import type { AgentApply3dRhythmAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
-import { openAgentActivityDetails, requestAgentSceneRhythm } from './agentUiBus'
+import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
+import type { AgentRhythmGrid } from './agentUiBus'
+import { queueMusic } from './audioActions'
+import type { AgentPrepareAudioAction } from './agentActions'
 import type { AgentTab } from './capabilityRegistry'
 
 export interface AdapterOutcome {
@@ -11,10 +14,19 @@ export interface AdapterOutcome {
   taskId?: string
   pipelineId?: string
   outputNames?: string[]
+  sceneId?: string
+  layerIds?: string[]
+  audioTrackId?: string
+  analysisId?: string
+  bpm?: number
+  beatCount?: number
+  downbeatCount?: number
+  rhythmGrid?: AgentRhythmGrid
 }
 
 export interface StudioAdapter {
   open(tab?: 'studio' | 'images' | 'videos' | 'audio' | '3d'): Promise<AdapterOutcome>
+  queueMusic(action: AgentPrepareAudioAction): Promise<AdapterOutcome>
 }
 
 export interface StoryLabAdapter { open(): Promise<AdapterOutcome> }
@@ -27,6 +39,8 @@ export interface QueueAdapter { openActivity(): Promise<AdapterOutcome> }
 export interface Video3DAdapter {
   open(animate?: boolean): Promise<AdapterOutcome>
   applyRhythm(action: AgentApply3dRhythmAction): Promise<AdapterOutcome>
+  run(request: AgentSceneWorkflowRequest): Promise<AdapterOutcome>
+  control(request: AgentSceneControlRequest): Promise<AdapterOutcome>
 }
 
 export interface WizardApplicationAdapters {
@@ -115,7 +129,13 @@ async function navigate(tab: AgentTab): Promise<AdapterOutcome> {
 
 export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   const adapters = {} as WizardApplicationAdapters
-  adapters.studio = { open: tab => navigate(tab || 'studio') }
+  adapters.studio = {
+    open: tab => navigate(tab || 'studio'),
+    async queueMusic(action) {
+      const result = await queueMusic(action)
+      return { ...result, target: { kind: 'queue_task', id: result.taskId, title: 'Song generation' } }
+    },
+  }
   adapters.storyLab = { open: () => navigate('story_lab') }
   adapters.seriesLab = { open: () => navigate('series_lab') }
   adapters.comic = { open: () => navigate('comics') }
@@ -136,6 +156,15 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const navigation = await navigate('video_3d')
       const message = await requestAgentSceneRhythm(action)
       return { ...navigation, message }
+    },
+    async run(request) {
+      const navigation = await navigate('video_3d')
+      const outcome = await requestAgentSceneWorkflow(request)
+      return { ...navigation, ...outcome, outputNames: outcome.outputNames }
+    },
+    async control(request) {
+      const navigation = await navigate('video_3d')
+      return { ...navigation, message: await requestAgentSceneControl(request) }
     },
   }
   adapters.openTab = tab => {

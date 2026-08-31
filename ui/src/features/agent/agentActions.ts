@@ -363,6 +363,30 @@ export interface AgentApply3dRhythmAction {
   confirm: true
 }
 
+export interface AgentCreateRhythmic3dVideoAction {
+  type: 'create_rhythmic_3d_video'
+  sceneName: string
+  musicPrompt: string
+  audioOutputName: string
+  visualOutputName: string
+  layerName: string
+  durationSeconds: number
+  cueSource: 'beats' | 'downbeats'
+  profile: 'pulse' | 'bounce' | 'peek' | 'camera-punch'
+  intensity: number
+  confirm: true
+}
+
+export type AgentSceneWorkflowAction =
+  | { type: 'create_3d_scene'; sceneName: string; durationSeconds: number; width: number; height: number; fps: 30 | 60; confirm: true }
+  | { type: 'set_3d_scene_properties'; sceneName: string; durationSeconds?: number; width?: number; height?: number; fps?: 30 | 60; confirm: true }
+  | { type: 'add_3d_scene_layer'; sceneName: string; layerName: string; layerType: 'model3d' | 'image' | 'video' | 'overlay' | 'camera'; outputName: string; confirm: true }
+  | { type: 'update_3d_scene_layer'; sceneName: string; layerName: string; visible?: boolean; locked?: boolean; confirm: true }
+  | { type: 'remove_3d_scene_layer'; sceneName: string; layerName: string; confirm: true }
+  | { type: 'attach_3d_scene_audio'; sceneName: string; audioOutputName: string; confirm: true }
+  | { type: 'analyze_3d_scene_audio'; sceneName: string; audioOutputName: string; confirm: true }
+  | { type: 'apply_3d_choreography'; sceneName: string; layerName: string; audioOutputName: string; cueSource: 'beats' | 'downbeats'; profile: 'pulse' | 'bounce' | 'peek' | 'camera-punch'; intensity: number; confirm: true }
+
 export interface AgentOpen3dSceneAction {
   type: 'open_3d_scene'
   sceneName: string
@@ -506,6 +530,8 @@ export type AgentAction = AgentOpenTabAction
   | AgentSave3dSceneAction
   | AgentExport3dSceneAction
   | AgentApply3dRhythmAction
+  | AgentCreateRhythmic3dVideoAction
+  | AgentSceneWorkflowAction
   | AgentCreateComicAction
   | AgentGenerateComicAction
   | AgentGenerateComicPanelAction
@@ -1773,6 +1799,15 @@ export async function reconcileAgentTurnWithRequest(
   const { maybeExampleTurn } = await import('./agentExamples')
   const exampleTurn = maybeExampleTurn(request, turn, history)
   if (exampleTurn) return exampleTurn
+  const rhythmic3dWorkflow = turn.actions.find(
+    (action): action is AgentCreateRhythmic3dVideoAction => action.type === 'create_rhythmic_3d_video',
+  )
+  if (rhythmic3dWorkflow) {
+    return {
+      reply: 'Invocaré la canción y esperaré su taskId real; después crearé la escena 3D, convertiré sus beats en keyframes editables, guardaré el proyecto y publicaré el MP4. Si un paso falla, el hechizo podrá reanudarse desde ese punto. 🪄',
+      actions: [rhythmic3dWorkflow],
+    }
+  }
   if (isComicLaunchHowQuestion(request, history)) {
     return {
       reply: [
@@ -2056,9 +2091,17 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           scene_name: { type: 'string', maxLength: 300 },
           layer_name: { type: 'string', maxLength: 300 },
           audio_output_name: { type: 'string', maxLength: 300 },
+          visual_output_name: { type: 'string', maxLength: 300 },
           cue_source: { type: 'string', enum: ['', 'beats', 'downbeats'] },
           rhythm_profile: { type: 'string', enum: ['', 'pulse', 'bounce', 'peek', 'camera-punch'] },
           intensity: { type: 'number', minimum: 0, maximum: 1 },
+          layer_type: { type: 'string', enum: ['', 'model3d', 'image', 'video', 'overlay', 'camera'] },
+          output_name: { type: 'string', maxLength: 300 },
+          width: { type: 'integer', minimum: 320, maximum: 7680 },
+          height: { type: 'integer', minimum: 240, maximum: 4320 },
+          fps: { type: 'integer', enum: [30, 60] },
+          visible: { type: 'boolean' },
+          locked: { type: 'boolean' },
           confirm: { type: 'boolean' },
           page_number: { type: 'integer', minimum: 0, maximum: 100 },
           panel_number: { type: 'integer', minimum: 0, maximum: 100 },

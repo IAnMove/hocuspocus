@@ -37,9 +37,16 @@ test('registered capabilities supply one contract for prompt schema parser execu
     registeredCapabilitySchemas,
   } = await import('../src/features/agent/capabilityRegistry.ts')
   const registered = listCapabilities()
-  assert.deepEqual(registered.map(item => item.name), ['open_tab', 'apply_3d_rhythm'])
-  assert.deepEqual(registered.map(item => item.risk), ['read', 'compute'])
-  assert.deepEqual(registered.map(item => item.confirmation), ['none', 'required'])
+  assert.deepEqual(registered.map(item => item.name), [
+    'open_tab', 'apply_3d_rhythm', 'create_rhythmic_3d_video',
+    'create_3d_scene', 'set_3d_scene_properties', 'add_3d_scene_layer',
+    'update_3d_scene_layer', 'remove_3d_scene_layer', 'attach_3d_scene_audio',
+    'analyze_3d_scene_audio', 'apply_3d_choreography',
+    'open_3d_scene', 'save_3d_scene', 'export_3d_scene',
+  ])
+  assert.equal(registered[0].risk, 'read')
+  assert.equal(registered[0].confirmation, 'none')
+  assert.ok(registered.slice(1).every(item => item.confirmation === 'required'))
   assert.equal(registeredCapabilitySchemas().length, registered.length)
   assert.equal(registeredCapabilityDocumentationRows().length, registered.length)
   for (const capability of registered) {

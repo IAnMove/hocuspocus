@@ -64,6 +64,71 @@ export type AgentSceneControlRequest =
   | { type: 'save_3d_scene'; sceneName: string }
   | { type: 'export_3d_scene'; sceneName: string }
 
+export type AgentSceneWorkflowRequest =
+  | { type: 'create_3d_scene'; sceneName: string; durationSeconds: number; width: number; height: number; fps: 30 | 60; reset?: boolean }
+  | { type: 'set_3d_scene_properties'; sceneName: string; durationSeconds?: number; width?: number; height?: number; fps?: 30 | 60 }
+  | { type: 'add_3d_scene_layer'; sceneName: string; layerName: string; layerType: 'model3d' | 'image' | 'video' | 'overlay' | 'camera'; outputName?: string }
+  | { type: 'update_3d_scene_layer'; sceneName: string; layerName: string; visible?: boolean; locked?: boolean }
+  | { type: 'remove_3d_scene_layer'; sceneName: string; layerName: string }
+  | { type: 'attach_3d_scene_audio'; sceneName: string; audioOutputName: string }
+  | { type: 'analyze_3d_scene_audio'; sceneName: string; audioOutputName: string }
+  | { type: 'apply_3d_choreography'; sceneName: string; layerName: string; audioOutputName: string; cueSource: 'beats' | 'downbeats'; profile: 'pulse' | 'bounce' | 'peek' | 'camera-punch'; intensity: number; rhythmGrid?: AgentRhythmGrid }
+  | AgentSceneControlRequest
+
+export interface AgentSceneWorkflowResult {
+  message: string
+  sceneId?: string
+  layerIds?: string[]
+  audioTrackId?: string
+  analysisId?: string
+  bpm?: number
+  beatCount?: number
+  downbeatCount?: number
+  outputNames?: string[]
+  rhythmGrid?: AgentRhythmGrid
+}
+
+export interface AgentRhythmGrid {
+  duration: number
+  bpm: number
+  beats: Array<{ time: number; strength: number }>
+  downbeats: number[]
+}
+
+interface PendingSceneWorkflowRequest {
+  request: AgentSceneWorkflowRequest
+  resolve: (result: AgentSceneWorkflowResult) => void
+  reject: (error: Error) => void
+}
+
+const SCENE_WORKFLOW_REQUEST_EVENT = 'hocuspocus:scene-workflow-request'
+const pendingSceneWorkflowRequests: PendingSceneWorkflowRequest[] = []
+
+export function requestAgentSceneWorkflow(request: AgentSceneWorkflowRequest): Promise<AgentSceneWorkflowResult> {
+  return new Promise((resolve, reject) => {
+    pendingSceneWorkflowRequests.push({ request, resolve, reject })
+    window.dispatchEvent(new CustomEvent(SCENE_WORKFLOW_REQUEST_EVENT))
+  })
+}
+
+export function listenForAgentSceneWorkflow(
+  listener: (request: AgentSceneWorkflowRequest) => Promise<AgentSceneWorkflowResult>,
+): () => void {
+  let active = true
+  const drain = async () => {
+    while (active && pendingSceneWorkflowRequests.length) {
+      const pending = pendingSceneWorkflowRequests.shift()
+      if (!pending) continue
+      try { pending.resolve(await listener(pending.request)) }
+      catch (error) { pending.reject(error instanceof Error ? error : new Error(String(error))) }
+    }
+  }
+  const handler = () => { void drain() }
+  window.addEventListener(SCENE_WORKFLOW_REQUEST_EVENT, handler)
+  void drain()
+  return () => { active = false; window.removeEventListener(SCENE_WORKFLOW_REQUEST_EVENT, handler) }
+}
+
 interface PendingSceneControlRequest {
   request: AgentSceneControlRequest
   resolve: (message: string) => void

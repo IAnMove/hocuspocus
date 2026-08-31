@@ -74,6 +74,14 @@ test('queues a 3D scene control request until the lazy animator mounts', async (
   unsubscribe()
 })
 
+test('queues structured Video3D operations until the lazy animator mounts', async () => {
+  const { listenForAgentSceneWorkflow, requestAgentSceneWorkflow } = await import('../src/features/agent/agentUiBus.ts')
+  const pending = requestAgentSceneWorkflow({ type: 'create_3d_scene', sceneName: 'Pulse', durationSeconds: 8, width: 1280, height: 720, fps: 30 })
+  const unsubscribe = listenForAgentSceneWorkflow(async request => ({ message: `created:${request.sceneName}`, sceneId: request.sceneName }))
+  assert.deepEqual(await pending, { message: 'created:Pulse', sceneId: 'Pulse' })
+  unsubscribe()
+})
+
 test('queues Story visual generation until Story Lab mounts', async () => {
   const { listenForAgentStoryVisualGeneration, requestAgentStoryVisualGeneration } = await import('../src/features/agent/agentUiBus.ts')
   const pending = requestAgentStoryVisualGeneration({ projectId: 'story-1', scope: 'characters', targetNames: ['Iria'] })
@@ -86,7 +94,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_rhythmic_3d_video', 'create_3d_scene', 'set_3d_scene_properties', 'add_3d_scene_layer', 'update_3d_scene_layer', 'remove_3d_scene_layer', 'attach_3d_scene_audio', 'analyze_3d_scene_audio', 'apply_3d_choreography', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -430,6 +438,22 @@ test('parses a confirmed bounded 3D rhythm request', async () => {
     { type: 'apply_3d_rhythm', layer_name: 'Mago', audio_output_name: 'tema.wav', cue_source: 'downbeats', rhythm_profile: 'peek', intensity: 2, confirm: true },
   ] }))
   assert.deepEqual(turn.actions, [{ type: 'apply_3d_rhythm', sceneName: '', layerName: 'Mago', audioOutputName: 'tema.wav', cueSource: 'downbeats', profile: 'peek', intensity: 1, confirm: true }])
+})
+
+test('parses a complete confirmed rhythmic Video3D workflow', async () => {
+  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({ reply: 'Lanzo el videoclip.', actions: [{
+    type: 'create_rhythmic_3d_video', scene_name: 'Concierto arcano', prompt: 'synthwave at 120 BPM',
+    visual_output_name: 'wizard.glb', layer_name: 'Mago', duration_seconds: 12,
+    cue_source: 'beats', rhythm_profile: 'pulse', intensity: .8, confirm: true,
+  }] }))
+  assert.deepEqual(turn.actions, [{
+    type: 'create_rhythmic_3d_video', sceneName: 'Concierto arcano', musicPrompt: 'synthwave at 120 BPM',
+    audioOutputName: '', visualOutputName: 'wizard.glb', layerName: 'Mago', durationSeconds: 12,
+    cueSource: 'beats', profile: 'pulse', intensity: .8, confirm: true,
+  }])
+  const reconciled = await reconcileAgentTurnWithRequest('crea una canción y un vídeo 3D que siga cada beat', turn, [])
+  assert.deepEqual(reconciled.actions, turn.actions)
 })
 
 test('parses only confirmed exact 3D scene open and save requests', async () => {

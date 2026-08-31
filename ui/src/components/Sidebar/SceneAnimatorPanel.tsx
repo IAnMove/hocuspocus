@@ -28,7 +28,7 @@ import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
 import { CharacterKitLibraryPanel } from '../../features/characters/CharacterKitLibraryPanel'
 import type { CharacterKitEditorTab } from '../../features/characters/characterKitGuide'
-import { listenForAgentSceneControl, listenForAgentSceneRhythm } from '../../features/agent/agentUiBus'
+import { listenForAgentSceneControl, listenForAgentSceneRhythm, listenForAgentSceneWorkflow } from '../../features/agent/agentUiBus'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 type AnimatorLayerType = SceneLayerType
@@ -519,6 +519,7 @@ export function SceneAnimatorPanel() {
   const [rhythmTrackId, setRhythmTrackId] = useState('')
   const [rhythmAnalysis, setRhythmAnalysis] = useState<AudioAnalysisResult | null>(null)
   const [rhythmAnalysisTrackId, setRhythmAnalysisTrackId] = useState('')
+  const agentRhythmAnalysesRef = useRef(new Map<string, AudioAnalysisResult>())
   const [rhythmBusy, setRhythmBusy] = useState(false)
   const [rhythmError, setRhythmError] = useState<string | null>(null)
   const [rhythmCueSource, setRhythmCueSource] = useState<SceneRhythmCueSource>('beats')
@@ -2415,15 +2416,145 @@ export function SceneAnimatorPanel() {
     }
   }
   const importSceneRef = useRef(importScene)
+  const addLayerRef = useRef(addLayer)
+  const addCameraRef = useRef(addCamera)
   const persistSceneRef = useRef(persistScene)
   const recordToBlobRef = useRef(recordToBlob)
   const publishRecordingRef = useRef(publishRecording)
   const waitForModelViewersRef = useRef(waitForModelViewers)
   importSceneRef.current = importScene
+  addLayerRef.current = addLayer
+  addCameraRef.current = addCamera
   persistSceneRef.current = persistScene
   recordToBlobRef.current = recordToBlob
   publishRecordingRef.current = publishRecording
   waitForModelViewersRef.current = waitForModelViewers
+  useEffect(() => listenForAgentSceneWorkflow(async request => {
+    const normalize = normalizeSceneLookupName
+    const assertScene = () => {
+      const current = sceneRef.current
+      if (request.sceneName && normalize(request.sceneName) !== normalize(current.name)) {
+        throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”.`)
+      }
+      return current
+    }
+    const exactLayer = (name: string) => {
+      const matches = sceneRef.current.layers.filter(layer => normalize(layer.name) === normalize(name))
+      if (matches.length !== 1) throw new Error(matches.length ? `La capa “${name}” no es inequívoca.` : `No existe la capa “${name}”.`)
+      return matches[0]
+    }
+    const exactOutput = async (name: string, types: Array<'audio' | 'image' | 'video' | 'model3d'>) => {
+      const library = await fetchOutputs(0, 0, { workspace })
+      const matches = library.outputs.filter(output => types.includes(output.type as typeof types[number]) && normalize(output.name) === normalize(name))
+      if (matches.length !== 1) throw new Error(matches.length ? `El output “${name}” no es inequívoco.` : `No existe el output “${name}” en este workspace.`)
+      return matches[0]
+    }
+    if (request.type === 'create_3d_scene') {
+      if (!request.reset && normalize(sceneRef.current.name) === normalize(request.sceneName)) {
+        return { message: `La escena editable “${sceneRef.current.name}” ya está abierta.`, sceneId: sceneRef.current.name, layerIds: sceneRef.current.layers.map(layer => layer.id) }
+      }
+      const next = blankScene()
+      next.name = request.sceneName || 'Rhythmic scene'
+      next.duration = Math.max(1, Math.min(600, request.durationSeconds))
+      next.width = Math.max(320, Math.min(7680, Math.round(request.width)))
+      next.height = Math.max(240, Math.min(4320, Math.round(request.height)))
+      next.fps = request.fps
+      replaceScene(next); setSelectedId(null); setProgress(0)
+      return { message: `He creado la escena editable “${next.name}”.`, sceneId: next.name }
+    }
+    if (request.type === 'set_3d_scene_properties') {
+      const current = assertScene()
+      const next = {
+        ...current,
+        duration: request.durationSeconds === undefined ? current.duration : Math.max(1, Math.min(600, request.durationSeconds)),
+        width: request.width === undefined ? current.width : Math.max(320, Math.min(7680, Math.round(request.width))),
+        height: request.height === undefined ? current.height : Math.max(240, Math.min(4320, Math.round(request.height))),
+        fps: request.fps ?? current.fps,
+      }
+      replaceScene(next)
+      return { message: `He ajustado “${next.name}” a ${next.duration}s, ${next.width}×${next.height}, ${next.fps ?? 30} FPS.`, sceneId: next.name }
+    }
+    if (request.type === 'add_3d_scene_layer') {
+      assertScene()
+      const existing = sceneRef.current.layers.filter(layer => normalize(layer.name) === normalize(request.layerName))
+      if (existing.length > 1) throw new Error(`La capa “${request.layerName}” no es inequívoca.`)
+      if (existing[0]) return { message: `La capa “${request.layerName}” ya existe; reutilizo su ID estable.`, sceneId: sceneRef.current.name, layerIds: [existing[0].id] }
+      if (request.layerType === 'camera') {
+        addCameraRef.current()
+        const added = sceneRef.current.layers.at(-1)
+        if (!added) throw new Error('No se pudo crear la cámara.')
+        updateScene(current => ({ ...current, layers: current.layers.map(layer => layer.id === added.id ? { ...layer, name: request.layerName } : layer) }))
+        return { message: `He añadido la cámara “${request.layerName}”.`, sceneId: sceneRef.current.name, layerIds: [added.id] }
+      }
+      if (!request.outputName) throw new Error('Una capa visual necesita el nombre exacto de un output.')
+      const output = await exactOutput(request.outputName, [request.layerType === 'overlay' ? 'image' : request.layerType])
+      addLayerRef.current(request.layerType, output.url, request.layerName, output.thumbnail_url ?? undefined)
+      const added = sceneRef.current.layers.find(layer => normalize(layer.name) === normalize(request.layerName))
+      return { message: `He añadido “${request.layerName}” desde ${output.name}.`, sceneId: sceneRef.current.name, layerIds: added ? [added.id] : [] }
+    }
+    if (request.type === 'update_3d_scene_layer') {
+      assertScene(); const layer = exactLayer(request.layerName)
+      updateScene(current => ({ ...current, layers: current.layers.map(item => item.id === layer.id ? { ...item, visible: request.visible ?? item.visible, locked: request.locked ?? item.locked } : item) }))
+      return { message: `He actualizado la capa “${layer.name}”.`, sceneId: sceneRef.current.name, layerIds: [layer.id] }
+    }
+    if (request.type === 'remove_3d_scene_layer') {
+      assertScene(); const layer = exactLayer(request.layerName)
+      if (layer.locked) throw new Error(`Desbloquea “${layer.name}” antes de eliminarla.`)
+      updateScene(current => ({ ...current, layers: current.layers.filter(item => item.id !== layer.id) }))
+      return { message: `He eliminado la capa “${layer.name}”.`, sceneId: sceneRef.current.name, layerIds: [layer.id] }
+    }
+    if (request.type === 'attach_3d_scene_audio' || request.type === 'analyze_3d_scene_audio') {
+      assertScene()
+      const output = await exactOutput(request.audioOutputName, ['audio'])
+      let track = (sceneRef.current.audioTracks ?? []).find(item => normalize(item.filename) === normalize(output.name))
+      if (!track) {
+        track = { id: uid(), filename: output.name, name: output.name.replace(/\.[^.]+$/, ''), kind: 'music', startTime: 0, volume: 1 }
+        const attached = track
+        updateScene(current => ({ ...current, audioTracks: [...(current.audioTracks ?? []), attached] }))
+      }
+      setRhythmTrackId(track.id)
+      if (request.type === 'attach_3d_scene_audio') return { message: `He adjuntado ${output.name} a la escena.`, sceneId: sceneRef.current.name, audioTrackId: track.id, outputNames: [output.name] }
+      let analysis = agentRhythmAnalysesRef.current.get(track.id)
+      if (!analysis) {
+        analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
+        if (!analysis.beats.length) throw new Error('No se detectó una rejilla estable de beats en esta pista.')
+        agentRhythmAnalysesRef.current.set(track.id, analysis)
+      }
+      setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
+      return { message: `Ritmo listo: ${analysis.bpm.toFixed(1)} BPM y ${analysis.beats.length} beats.`, sceneId: sceneRef.current.name, audioTrackId: track.id, analysisId: track.id, bpm: analysis.bpm, beatCount: analysis.beats.length, downbeatCount: analysis.downbeats.length, rhythmGrid: { duration: analysis.duration, bpm: analysis.bpm, beats: analysis.beats.slice(0, 200), downbeats: analysis.downbeats.slice(0, 200) } }
+    }
+    if (request.type === 'apply_3d_choreography') {
+      const current = assertScene(); const layer = exactLayer(request.layerName)
+      if (layer.locked) throw new Error(`Desbloquea “${layer.name}” antes de generar keyframes.`)
+      const track = (current.audioTracks ?? []).find(item => normalize(item.filename) === normalize(request.audioOutputName) || normalize(item.name) === normalize(request.audioOutputName))
+      if (!track) throw new Error(`El audio “${request.audioOutputName}” no está adjunto a la escena.`)
+      let analysis = agentRhythmAnalysesRef.current.get(track.id)
+      if (!analysis && request.rhythmGrid) {
+        analysis = { duration: request.rhythmGrid.duration, sample_rate: 0, bpm: request.rhythmGrid.bpm, beats: request.rhythmGrid.beats, downbeats: request.rhythmGrid.downbeats, sections: [], onset_envelope: [], lyrics: null, vocals_path: null }
+        agentRhythmAnalysesRef.current.set(track.id, analysis)
+      }
+      if (!analysis) throw new Error('Analiza el audio una vez antes de aplicar la coreografía.')
+      const map = buildSceneRhythmMap(analysis, track.startTime, current.duration, request.cueSource)
+      if (!map.cues.length) throw new Error('Los beats detectados no coinciden con la duración de la escena.')
+      const profile = layer.type === 'camera' && request.profile === 'peek' ? 'camera-punch' : request.profile
+      updateScene(sceneValue => ({ ...sceneValue, layers: sceneValue.layers.map(item => item.id === layer.id ? applySceneRhythmToLayer(item, map, { profile, sceneDuration: sceneValue.duration, intensity: request.intensity }) as AnimatorLayer : item) }))
+      return { message: `He convertido ${map.cues.length} ${request.cueSource} en keyframes editables de “${layer.name}”.`, sceneId: current.name, layerIds: [layer.id], audioTrackId: track.id, analysisId: track.id }
+    }
+    if (request.type === 'save_3d_scene') {
+      assertScene(); const saved = await persistSceneRef.current()
+      if (!saved) throw new Error('No se pudo guardar la escena editable.')
+      return { message: `He guardado la escena editable como ${saved}.`, sceneId: sceneRef.current.name, outputNames: [saved] }
+    }
+    if (request.type === 'export_3d_scene') {
+      const current = assertScene()
+      if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) throw new Error('La escena necesita una capa visual visible antes de exportar.')
+      await waitForModelViewersRef.current()
+      const saved = await publishRecordingRef.current(await recordToBlobRef.current(), sceneRef.current)
+      return { message: `He publicado el MP4 como ${saved.name}.`, sceneId: current.name, outputNames: [saved.name] }
+    }
+    if (request.type === 'open_3d_scene') throw new Error('La apertura estructurada se realiza mediante el control de escenas existente.')
+    throw new Error('Operación 3D no reconocida.')
+  }), [workspace])
   useEffect(() => listenForAgentSceneControl(async request => {
     const current = sceneRef.current
     if (request.type === 'save_3d_scene') {

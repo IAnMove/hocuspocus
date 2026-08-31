@@ -45,8 +45,8 @@ The Wizard panel subscribes to the canonical task stream while open. Workflow
 updates reuse one stable execution-card ID, so a completion edits the existing
 card instead of appending a second result.
 
-## Next vertical slice
+## First vertical slice
 
-The runtime intentionally contains no creative workflow definition yet. Phase
-5 registers `create_rhythmic_3d_video`, whose steps will generate/resolve audio,
-prepare the scene, bake rhythm, save and export using the stored IDs above.
+Phase 5 registers `create_rhythmic_3d_video`: it generates or resolves audio,
+waits on its exact canonical task, creates an editable scene, bakes its rhythm,
+saves and exports. See [the rhythmic Video3D workflow](WIZARD_RHYTHMIC_VIDEO3D.md).

@@ -441,12 +441,16 @@ Agent Mode complete prematurely.
 - Basic Video3D beat keyframes: implemented and unit-tested.
 - Durable multi-step workflow runtime: implemented with backend checkpoints,
   canonical-event wakeup, retry/cancel state and stable chat cards.
-- Autonomous song -> Video3D -> MP4: pending.
+- Autonomous song -> Video3D -> MP4: implemented as the first durable vertical
+  slice. It resolves/generates exact audio, waits on the canonical task,
+  builds an editable scene, analyzes once, bakes keyframes, saves and exports;
+  real GPU smoke remains opt-in.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished block **4 — durable workflow runtime**. Begin block **5 — complete
-rhythmic Video3D workflow** next, using the runtime as the first real vertical
-slice. Keep Decision gate A open; the workflow remains correct without visual
-magic effects.
+Finished block **5 — complete rhythmic Video3D workflow**. Begin block **6 —
+nightly recovery/timing coverage** next: add a synthetic click-track timing
+suite and wire the durable workflow recovery suite into the nightly runner.
+Keep Decision gate A open; the workflow remains correct without visual magic
+effects.

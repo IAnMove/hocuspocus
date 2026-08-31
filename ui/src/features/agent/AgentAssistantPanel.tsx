@@ -17,6 +17,8 @@ import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardEx
 import { applyRemoteWizardConversation, WIZARD_WELCOME_TEXT } from './wizardConversationSync'
 import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime } from './wizardWorkflowRuntime'
+import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
+import { defaultApplicationAdapters } from './applicationAdapters'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 
@@ -106,6 +108,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
 
   useEffect(() => {
     let active = true
+    ensureRhythmic3dWorkflowRegistered(defaultApplicationAdapters)
     const unsubscribe = defaultWizardWorkflowRuntime.subscribe(({ workflow, card }) => {
       if (!active || workflow.workspace !== workspace) return
       setMessages(current => {
