@@ -445,12 +445,14 @@ Agent Mode complete prematurely.
   slice. It resolves/generates exact audio, waits on the canonical task,
   builds an editable scene, analyzes once, bakes keyframes, saves and exports;
   real GPU smoke remains opt-in.
+- Rhythmic recovery and timing coverage: implemented in nightly level 5,
+  including a deterministic 120 BPM click-track tolerance check.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished block **5 — complete rhythmic Video3D workflow**. Begin block **6 —
-nightly recovery/timing coverage** next: add a synthetic click-track timing
-suite and wire the durable workflow recovery suite into the nightly runner.
-Keep Decision gate A open; the workflow remains correct without visual magic
+Finished block **6 — rhythmic recovery/timing coverage**. Begin the next
+migration block with a high-value action family (Comic Director) only after
+preserving its existing behavior tests and real adapter/result IDs. Keep
+Decision gate A open; the workflow remains correct without visual magic
 effects.

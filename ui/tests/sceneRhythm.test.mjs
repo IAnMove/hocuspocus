@@ -82,3 +82,15 @@ test('camera punch uses a restrained scale accent', () => {
   assert.ok(evaluateSceneLayer(punch, .5).scale > 1)
   assert.ok(evaluateSceneLayer(punch, .5).scale < evaluateSceneLayer(pulse, .5).scale)
 })
+
+test('a synthetic 120 BPM click track bakes beat peaks within one millisecond', () => {
+  const clicks = Array.from({ length: 16 }, (_, index) => ({ time: index * .5, strength: 1 }))
+  const clickTrack = { ...analysis, duration: 8, beats: clicks, downbeats: [0, 2, 4, 6, 8] }
+  const map = buildSceneRhythmMap(clickTrack, 0, 8, 'beats')
+  const synced = applySceneRhythmToLayer(layer, map, { profile: 'pulse', sceneDuration: 8, intensity: 1 })
+  const peaks = synced.animation.keyframes.filter(frame => frame.id.includes('rhythm-peak-'))
+  assert.equal(peaks.length, clicks.length)
+  for (const [index, frame] of peaks.entries()) {
+    assert.ok(Math.abs(frame.time - clicks[index].time) <= .001, `click ${index} drifted by ${Math.abs(frame.time - clicks[index].time)}s`)
+  }
+})

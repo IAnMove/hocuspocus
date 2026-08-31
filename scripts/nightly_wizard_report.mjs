@@ -374,7 +374,7 @@ async function main() {
     jobs.push({
       id: 'workflow-recovery', level: 5, title: 'Durable workflow recovery and rhythm tests', logName: 'workflow-recovery.log',
       run: async () => requireTestDiagnostics(await runCaptured(
-        process.execPath, ['--import', 'tsx', '--test', 'tests/wizardWorkflowRuntime.test.mjs', 'tests/rhythmic3dWorkflow.test.mjs'],
+        process.execPath, ['--import', 'tsx', '--test', 'tests/wizardWorkflowRuntime.test.mjs', 'tests/rhythmic3dWorkflow.test.mjs', 'tests/sceneRhythm.test.mjs'],
         { cwd: ui, logPath: path.join(outDir, 'workflow-recovery.log') },
       ), 'Workflow recovery tests'),
     })

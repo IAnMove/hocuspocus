@@ -26,7 +26,7 @@ level produces `INCOMPLETE`, never a false pass.
 | 2 | Implemented | Wizard action, schema and capability unit tests |
 | 3 | Missing | Browser-level interaction tests |
 | 4 | Implemented | Complete frontend test suite |
-| 5 | Implemented | Durable workflow reload, retry, export-recovery and rhythm-grid suite |
+| 5 | Implemented | Durable workflow reload, retry, export-recovery, rhythm-grid and synthetic 120 BPM timing suite |
 | 6 | Implemented | Complete Python backend test suite |
 | 7 | Missing | Presentation anchors, accessibility and reduced-motion suite |
 | 8 | Missing/opt-in | Real song → Video3D → MP4 smoke workflow |
