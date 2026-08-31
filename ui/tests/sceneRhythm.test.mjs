@@ -67,6 +67,8 @@ test('peek hides a 3D object between beats and reveals it on the beat', () => {
   const map = buildSceneRhythmMap(analysis, 0, 2)
   const synced = applySceneRhythmToLayer(layer, map, { profile: 'peek', sceneDuration: 2, intensity: .7 })
 
+  assert.equal(evaluateSceneLayer(synced, 0).opacity, 1)
+  assert.match(synced.animation.keyframes[0].id, /peek-visible-0/)
   assert.equal(evaluateSceneLayer(synced, .25).opacity, 0)
   assert.equal(evaluateSceneLayer(synced, .5).opacity, 1)
   assert.equal(evaluateSceneLayer(synced, .7).opacity, 0)
