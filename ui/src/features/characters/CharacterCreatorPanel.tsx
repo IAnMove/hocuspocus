@@ -7,10 +7,10 @@ import { useStore } from '../../stores/useStore'
 import { queueFaceRigHandoff } from '../../lib/characterKitHandoff'
 import { safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
 import {
-  attachCharacterCreatorMesh,
+  attachCharacterCreatorMeshForWorkspace,
   characterCreatorHistoryKey,
   parseCharacterCreatorHistory,
-  rememberCharacterCreatorSheet,
+  rememberCharacterCreatorSheetForWorkspace,
   type CharacterCreatorHistoryEntry,
 } from './characterCreatorHistory'
 import {
@@ -25,6 +25,11 @@ import {
   type OrbitRefRole,
   type OrbitSubjectKind,
 } from './orbitPrompt'
+
+const historyStorage = {
+  getItem: (key: string) => safeStorageGet('local', key),
+  setItem: (key: string, value: string) => { safeStorageSet('local', key, value) },
+}
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed'
 const primary = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-violet-400/50 bg-violet-500/15 px-2.5 py-1.5 text-xs text-violet-100 hover:bg-violet-500/25 disabled:opacity-40 disabled:cursor-not-allowed'
@@ -97,9 +102,13 @@ export function CharacterCreatorPanel() {
   const refsRef = useRef(refs)
   const aPromptRef = useRef(aPrompt)
   const hunyuanGlbRef = useRef(hunyuanGlb)
+  const activeWorkspaceRef = useRef(activeWorkspace)
+  const orbitWorkspaceRef = useRef(activeWorkspace)
+  const hunyuanWorkspaceRef = useRef(activeWorkspace)
   refsRef.current = refs
   aPromptRef.current = aPrompt
   hunyuanGlbRef.current = hunyuanGlb
+  activeWorkspaceRef.current = activeWorkspace
 
   useEffect(() => () => {
     refsRef.current.forEach(ref => { if (ref.preview) URL.revokeObjectURL(ref.preview) })
@@ -139,6 +148,8 @@ export function CharacterCreatorPanel() {
 
   const generateOrbit = async () => {
     if (!readyRefs.length) return
+    const workspaceAtStart = activeWorkspace
+    orbitWorkspaceRef.current = workspaceAtStart
     setBusy(true)
     setError(null)
     setViews([])
@@ -156,7 +167,7 @@ export function CharacterCreatorPanel() {
           kind,
           image_paths: uploaded.map(ref => ref.path).filter((path): path is string => Boolean(path)),
           roles: uploaded.map(ref => ref.role),
-          workspace: activeWorkspace,
+          workspace: workspaceAtStart,
         })
         resolvedAPrompt = described.a_prompt.trim()
         setAPrompt(resolvedAPrompt)
@@ -176,7 +187,7 @@ export function CharacterCreatorPanel() {
         num_inference_steps: CHARACTER_SHEET_STEPS,
         guidance_scale: 1,
         seed: -1,
-        workspace: activeWorkspace,
+        workspace: workspaceAtStart,
         h3_reference_mode: 'references',
         h3_ref_image_size: 'max',
         minimax_h3_reference_detail: 'max',
@@ -202,11 +213,11 @@ export function CharacterCreatorPanel() {
     }
   }
 
-  const takePhotos = useCallback(async (sourceName: string) => {
+  const takePhotos = useCallback(async (sourceName: string, workspace = activeWorkspace) => {
     setBusy(true)
     setError(null)
     try {
-      const metadata = await api.fetchOutputMetadata(sourceName, activeWorkspace).catch(() => null)
+      const metadata = await api.fetchOutputMetadata(sourceName, workspace).catch(() => null)
       const rawLength = metadata?.params?.video_length
       const duration = typeof rawLength === 'number' && rawLength > 0
         ? rawLength / 24
@@ -219,20 +230,17 @@ export function CharacterCreatorPanel() {
           source: sourceName,
           time,
           name: `${kind}_${view.id}`,
-          workspace: activeWorkspace,
+          workspace,
         })
         captured.push({
           id: view.id,
           hunyuan: view.hunyuan,
           label: kind === 'object' ? view.objectLabel : view.label,
           filename: shot.filename,
-          url: shot.url || getFileUrl(shot.filename, activeWorkspace),
+          url: shot.url || getFileUrl(shot.filename, workspace),
           time,
         })
       }
-      setViews(captured)
-      setSelectedViewId(captured[0]?.id || null)
-      setSelectedTime(captured[0]?.time || 0)
       const entry: CharacterCreatorHistoryEntry = {
         id: `sheet-${sourceName}`,
         name: aPromptRef.current.trim().split(/[.!\n]/)[0].slice(0, 48) || sourceName.replace(/\.[^.]+$/, ''),
@@ -240,17 +248,21 @@ export function CharacterCreatorPanel() {
         videoName: sourceName,
         views: captured,
         hunyuanGlb: hunyuanGlbRef.current,
-        workspace: activeWorkspace,
+        workspace,
         createdAt: new Date().toISOString(),
       }
-      setHistory(current => {
-        const next = rememberCharacterCreatorSheet(current, entry)
-        safeStorageSet('local', characterCreatorHistoryKey(activeWorkspace), JSON.stringify(next))
-        return next
-      })
+      const next = rememberCharacterCreatorSheetForWorkspace(historyStorage, workspace, entry)
+      if (activeWorkspaceRef.current === workspace) {
+        setViews(captured)
+        setSelectedViewId(captured[0]?.id || null)
+        setSelectedTime(captured[0]?.time || 0)
+        setHistory(next)
+      }
       void loadOutputs()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
+      if (activeWorkspaceRef.current === workspace) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      }
     } finally {
       setBusy(false)
     }
@@ -356,18 +368,20 @@ export function CharacterCreatorPanel() {
     poll: () => api.fetchJobStatus(jobId!),
     onValue: status => {
       orbitFailuresRef.current = 0
-      setJobMessage(status.message || status.status)
+      const workspace = orbitWorkspaceRef.current
+      const stillOnOrigin = activeWorkspaceRef.current === workspace
+      if (stillOnOrigin) setJobMessage(status.message || status.status)
       if (status.status === 'completed') {
         const name = status.output_files.find(file => /\.(mp4|webm|mov)$/i.test(file)) || status.output_files[0] || null
-        setVideoName(name)
+        if (stillOnOrigin) setVideoName(name)
         setJobId(null)
         void loadOutputs()
-        if (name) void takePhotos(name)
+        if (name) void takePhotos(name, workspace)
         else setBusy(false)
         return
       }
       if (status.status === 'failed' || status.status === 'cancelled') {
-        setError(status.error || `Orbit ${status.status}`)
+        if (stillOnOrigin) setError(status.error || `Orbit ${status.status}`)
         setBusy(false)
         setJobId(null)
       }
@@ -385,6 +399,8 @@ export function CharacterCreatorPanel() {
   const generateHunyuan = async () => {
     const front = views.find(view => view.hunyuan === 'front')
     if (!front) return
+    const workspaceAtStart = activeWorkspace
+    hunyuanWorkspaceRef.current = workspaceAtStart
     setBusy(true)
     setError(null)
     setHunyuanGlb(null)
@@ -396,7 +412,7 @@ export function CharacterCreatorPanel() {
         operation: 'generate',
         preset: 'multiview',
         model_id: 'hunyuan3d-2mv-turbo',
-        workspace: activeWorkspace,
+        workspace: workspaceAtStart,
         images,
         texture_mode: 'v2-turbo',
         cpu_offload: true,
@@ -421,26 +437,25 @@ export function CharacterCreatorPanel() {
     poll: () => api.fetchHunyuan3DJob(hunyuanJobId!),
     onValue: status => {
       hunyuanFailuresRef.current = 0
-      setHunyuanMessage(status.message || status.status)
+      const workspace = hunyuanWorkspaceRef.current
+      const stillOnOrigin = activeWorkspaceRef.current === workspace
+      if (stillOnOrigin) setHunyuanMessage(status.message || status.status)
       if (status.status === 'completed') {
-        setHunyuanGlb(status.filename)
+        if (stillOnOrigin) setHunyuanGlb(status.filename)
         setHunyuanJobId(null)
         setBusy(false)
         const sheetName = videoName
         const meshName = status.filename
         if (meshName && sheetName) {
-          setHistory(current => {
-            const next = attachCharacterCreatorMesh(current, sheetName, meshName)
-            safeStorageSet('local', characterCreatorHistoryKey(activeWorkspace), JSON.stringify(next))
-            return next
-          })
+          const next = attachCharacterCreatorMeshForWorkspace(historyStorage, workspace, sheetName, meshName)
+          if (stillOnOrigin) setHistory(next)
         }
         void loadOutputs()
         if (status.filename) void import('@google/model-viewer')
         return
       }
       if (status.status === 'failed' || status.status === 'cancelled') {
-        setError(status.error || `Hunyuan3D ${status.status}`)
+        if (stillOnOrigin) setError(status.error || `Hunyuan3D ${status.status}`)
         setHunyuanJobId(null)
         setBusy(false)
       }
