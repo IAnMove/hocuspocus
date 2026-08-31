@@ -4,12 +4,20 @@ Field-by-field audit of everything a `Scene` can hold against everything a
 `SceneRecipe` can express. Six readers swept one domain each, and every claim
 was then re-checked by a second reader briefed to refute it.
 
+**Status (2026-08-31):** a Scene → Recipe serializer now exists at
+`ui/src/lib/sceneToRecipe.ts`. It copies `animation.keyframes`, `strip` /
+`seamOccluder`, `relationship`, `visible`, `locked`, `faceBinding`, per-layer
+`effects`, and related timing. The counts below are the **T2.3 snapshot** from
+before that serializer; do not treat “there is no serializer” as current.
+Re-audit before using this file as a blocker list. Character Kit / cutout
+dialogue transport is documented in [`character-kits/HOWUSEIT.md`](character-kits/HOWUSEIT.md).
+
 **122 fields audited. 65 cannot be expressed at all, 28 partially, 29 fully.**
 118 claims survived verification; 4 were corrected.
 
-There is no `Scene → Recipe` serializer anywhere in `ui/src`. The sidecar written
+At audit time there was no `Scene → Recipe` serializer in `ui/src`. The sidecar written
 beside every exported MP4 pairs the recipe with the compiled scene and presents
-the recipe as the clip's reproduction. For 65 fields that is already untrue, and
+the recipe as the clip's reproduction. For 65 fields that was already untrue, and
 it becomes untrue for a given clip the moment anyone edits it.
 
 ## Where the losses cluster

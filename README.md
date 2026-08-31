@@ -12,9 +12,9 @@ HocusPocus exists for creators who do not want a one-off prompt machine. It is a
 2. **Director (sidebar)** — select Music Video, Short Film, Trailer or a story-driven workflow and describe the outcome. The LLM turns the brief into reviewable shots, prompts and references. Choose manual review for control or automatic mode for a complete recoverable pipeline.
 3. **Gallery: All, Images, Videos, Audio, Videoclips, Trailers and Chapters** — browse results by kind. Open an item to inspect it; use it as a reference, send it to an editor, or keep it in the active workspace.
 4. **3D** — create a mesh from text, one image or the four front/left/right/back views. You can upload references or select existing HocusPocus images. Export GLB for later animation or 3D-video composition.
-5. **3D Video** — place GLBs, images and effects in a controllable scene and render an MP4/WebM composition. Use it for camera moves that must be exact rather than invented by a video model.
+5. **3D Video** — place GLBs, images, Character Kits and effects in a controllable scene and render an MP4/WebM composition. Use it for camera moves that must be exact rather than invented by a video model, and for 2D cutout speech (Face Rig + dialogue beats).
 6. **Animate** — rig a compatible static GLB and apply procedural or AI-assisted motion. Export the rigged model or bring it back to 3D Video.
-7. **Character Creator** — upload one subject image. H3 makes a centered 360° turntable; select/re-take the best front, left, back and right frames, then build a Hunyuan multi-view mesh. It is the quickest route from character art to a 3D asset.
+7. **Character Creator** — upload one subject image. H3 makes a centered 360° turntable; select/re-take the best front, left, back and right frames, then build a Hunyuan multi-view mesh. **Create / open CharacterKit Face Rig** hands a saved view to **3D Video** as a 2D puppet (not a mesh). Operator guide: [Character Kits / Face Rig](docs/character-kits/HOWUSEIT.md).
 8. **Story Lab** — write the production bible: premise, world rules, locations, cast, relationships and beats. Review each field, then hand the approved canon to Comic Studio, Director, trailers or music-video production.
 9. **Series Lab** — turn approved canon into seasons, episodes, scenes and shots. Use it when continuity has to survive several episodes and you need attempts and references tracked per shot.
 10. **Workspaces** — separate client work, worlds and experiments. The workspace selector changes the active output folder; this tab is also the place to inspect and resume Director production threads.
@@ -200,7 +200,7 @@ Included geometry variants:
 - **Hunyuan3D 2 Multi-view**: Turbo, Fast, and full-step models using front/left/right/back references
 - **Hunyuan3D 2.1**: high-fidelity 3.3B geometry with optional PBR materials
 
-The **Characters** tab builds a Hunyuan multi-view mesh from one subject or object photo: MiniMax-M3 vision writes the A Prompt (`POST /api/v1/characters/describe-refs`), H3 Ref2VA records a frozen 360° orbit (`768x1344`, 124 frames), then four stills at frames 2 / 21 / 42 / 63 become front / left / back / right for `hunyuan3d-2mv-turbo`. Details: **[3D Video compositor](docs/3d-video-compositor/HOWUSEIT.md)** §5.4.
+The **Characters** tab builds a Hunyuan multi-view mesh from one subject or object photo: MiniMax-M3 vision writes the A Prompt (`POST /api/v1/characters/describe-refs`), H3 Ref2VA records a frozen 360° orbit (`768x1344`, 124 frames), then four stills at frames 2 / 21 / 42 / 63 become front / left / back / right for `hunyuan3d-2mv-turbo`. Details: **[3D Video compositor](docs/3d-video-compositor/HOWUSEIT.md)** §5.4. The same tab can hand a saved view to **3D Video** as a Character Kit Face Rig (2D cutout, not a mesh): **[Character Kits](docs/character-kits/HOWUSEIT.md)**.
 
 The advanced panel exposes inference steps, guidance, octree resolution, processing chunks, seed, texture model/resolution, CPU offload, FlashVDM, Torch compilation, DMC/Marching Cubes, mesh simplification, face target, and GLB/OBJ/PLY/STL export. Four presets provide sensible Low VRAM, Balanced, Quality/PBR, and Multi-view configurations.
 
@@ -439,7 +439,7 @@ After clicking **Start**, the launcher shows an **Open Web UI** button once the 
 - **Activity footer** — persistent live job progress and access to current or past **Productions**
 - **Settings drawer** (gear icon) — model visibility, performance auto-tune, services (LLM, API keys, NSFW, theme)
 - **Pinokio menu** — Update, Reset, Install Inpaint Support, LoRA folder shortcuts
-- **Operator guides** — [HOWUSEIT index](docs/HOWUSEIT.md) (Video Editor, Workspaces tab, 3D compositor)
+- **Operator guides** — [HOWUSEIT index](docs/HOWUSEIT.md) (Video Editor, Workspaces tab, 3D compositor, Character Kits)
 
 ## Sharing on the local network
 

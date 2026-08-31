@@ -19,8 +19,9 @@ A **layered compositor**, not MiniMax H3.
 | Scene Animator | **3D Video** | Stack images, videos, GLBs, camera, rain/fog/etc. Animate them. Record a clip |
 | MiniMax H3 | Studio / Story Lab | Native video + stereo audio (acting, dialogue, locations) |
 | Video Editor | **Video Editor** | Join compositor clips with H3 clips |
+| Character Kits | **3D Video** sidebar | Reusable 2D cutout puppets + Face Rig mouths. Operator guide: [Character Kits](../character-kits/HOWUSEIT.md) |
 
-Use the compositor when you need **controllable motion of a known object** over plates: a ship crossing stars, a UFO rising behind mountains, a logo flying in, rain over a still. Use H3 when you need **performance, speech, or a living location**. Mix them: H3 for people/places, compositor for the vehicle insert, Video Editor to cut them together.
+Use the compositor when you need **controllable motion of a known object** over plates: a ship crossing stars, a UFO rising behind mountains, a logo flying in, rain over a still. Use H3 when you need **performance, speech, or a living location**. Mix them: H3 for people/places, compositor for the vehicle insert, Video Editor to cut them together. Use a **Character Kit** when the “known object” is a graphic puppet that must speak with four mouth sprites — not a Hunyuan mesh and not H3 lipsync.
 
 Do **not** ask H3 to “keep this exact GLB flying on a perfect path.” H3 will invent a new ship. The compositor keeps the mesh.
 
@@ -232,6 +233,14 @@ Import H3 MP4s + recorded WebM. Multi-select in **From Loreframe Lab**. Export M
 
 Director / Series **auto-joins** (not the editor) use a 0.5 s last-frame freeze + ~0.4 s crossfade when there is no driving audio. Full probe/export/`result_kind` contract: [Video Editor / mixes](../video-editor/HOWUSEIT.md).
 
+### 5.9 Character Kits (2D puppets)
+
+Workspace library: `GET/PATCH/DELETE /api/v1/character-kits/library…`. Overlay matte: `POST /api/v1/character-kits/face-rig/cleanup`. Character Creator can hand a saved view into this editor (`hocuspocus:character-kit-face-rig-handoff`) but does not generate visemes itself.
+
+Only **approved** poses/mouths mount into the scene or appear in the Recipe inventory (`APPROVED_CHARACTER_KIT`). Spoken cutout dialogue is `scene.dialogueBeats` compiled to hold/snap opacity keyframes — not phoneme-perfect lipsync.
+
+Full contract, CAS revisions, mouth packs, and pitfalls: [Character Kits / Face Rig](../character-kits/HOWUSEIT.md).
+
 ---
 
 ## 6. Layer cookbook (what to stack)
@@ -421,6 +430,7 @@ Do this **in the browser tab**, not as a Python overnight script. UI: `SceneReci
 4. **Auto**: **Generate + compose** creates missing plates/meshes. One `identity` per object — a UFO series uses **one** GLB and several `shots[]`. Static environments use image plates; inherently moving scenery can use an H3 video plate. Rain, fog, snow and particles use procedural effects instead of redundant generated overlays. Default `record`/`save` are false so you preview first.
 5. GPU jobs and Hunyuan poll with timeouts; **Cancel** aborts the run. If Lab dies (segfault), the runner errors instead of spinning forever.
 6. After compose, switch shots in the recipe panel without regenerating the mesh. A recipe rig `clip` is mounted into the Scene Animator and disables unintended turntable spin.
+7. Approved Character Kits enter inventory as `APPROVED_CHARACTER_KIT` rows. Spoken cutout shots need both a `speech` audio entry and a `dialogueBeats` row whose `mouthLayerIds` name the overlays (for `cutout-talking-head`: `["mouth-open", "mouth-closed"]`). Never mix one kit’s mouth with another kit’s body.
 
 Keep the 3D Video tab visible while it records. WebM is the recorded format; import it in Video Editor to join with H3 MP4s.
 
@@ -440,6 +450,7 @@ Keep the 3D Video tab visible while it records. WebM is the recorded format; imp
 | `app/services/rig_service.py` | Rig profiles and clips |
 | `docs/minimax-h3-prompting.md` | H3 prompt dialect |
 | `docs/video-editor/HOWUSEIT.md` | Cut compositor WebM with H3 MP4s; mix kinds |
+| `docs/character-kits/HOWUSEIT.md` | Character Kit library, Face Rig, cutout dialogue |
 | `ui/src/features/characters/orbitPrompt.ts` | Orbit A/B prompts and still-frame indices |
 
 When in doubt: **one identity per mesh, one path per compositor shot, H3 never draws that mesh.**

@@ -23,9 +23,11 @@ Typical flow: generate a song or Director video elsewhere → the thread appears
 
 ## 2. Queue inspection
 
-`GET /api/v1/director/pipelines` — saved threads.  
+`GET /api/v1/director/pipelines` — saved threads (newest first).  
 `GET /api/v1/director/pipelines/active` — in-memory runs (recovery).  
 `GET /api/v1/director/pipelines/{pid}` — full state, **hydrated**.
+
+List query: `?limit=&offset=`. **`limit=0` (default) returns every saved pipeline** and parses each JSON. The Workspaces UI pages **8** (`DASHBOARD_PIPELINE_PAGE_SIZE`) and uses `total` + `loadMorePipelineList` so opening the tab does not hydrate the whole archive. `GET …/{pid}` is still required for the selected thread. Status polls are serialised in the UI; do not fire a full unpaged list on an interval.
 
 Hydration (`hydrate_queue_clips`):
 
@@ -128,6 +130,7 @@ Rejoin uses the mix path in [Video Editor / mixes](../video-editor/HOWUSEIT.md) 
 
 ## 7. Pitfalls
 
+- Calling `GET /api/v1/director/pipelines` with the default `limit=0` from a poller. That re-parses every pipeline JSON. Use `limit`/`offset` (the tab uses 8).
 - Confusing this tab with the **output-directory** switcher. Threads are scoped to whichever directory is active.
 - Editing prompts while Director is sampling → `409`.
 - Batch rewrite without a loaded local LLM → `POST /api/v1/llm/generate` fails.

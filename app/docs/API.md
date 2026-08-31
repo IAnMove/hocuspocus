@@ -717,13 +717,43 @@ curl -X POST "$MAESTRO_URL/api/v1/characters/describe-refs" \
 
 `kind` is `character` or `object` (default `character`). `roles` are `subject`, `face`, `outfit`, `extra`, or `accessory`; missing/invalid roles become `subject` for index 0 and `extra` otherwise. Response: `{ "a_prompt", "kind" }`. `400` if `image_paths` is empty, a file is missing, or the API key is unset.
 
+## Character Kits
+
+Reusable 2D cutout puppets live in `{workspace}/.character-kit-library-v1.json` (max 100 kits, 20 MB). Writes are compare-and-swap on `revision`. Operator guide: `docs/character-kits/HOWUSEIT.md`.
+
+- `GET /api/v1/character-kits/library?workspace=default` — load or return an empty `{ version: 1, revision: 0, activeId: "", kits: {} }`.
+- `PATCH /api/v1/character-kits/library/kits/{kit_id}` — `{ workspace, baseRevision, kit, makeActive? }`. `makeActive` defaults true. `400` invalid kit. `409` `{ "code": "character_kit_revision_conflict", "expectedRevision", "currentRevision" }`.
+- `DELETE /api/v1/character-kits/library/kits/{kit_id}` — `{ workspace, baseRevision }`. `404` if missing. Source files are not deleted.
+- `POST /api/v1/character-kits/face-rig/cleanup` — `{ workspace, source, padding? }` (`padding` 0–64, default 8). rembg U2Net + crop-to-alpha; writes a new PNG and never overwrites `source`. `400` / `404` if the path is outside uploads/workspace.
+
+Workspace token: `default` or `[A-Za-z0-9][A-Za-z0-9_-]*`. Mouth keys are only `closed|small|wide|round`. `blob:` sources are rejected. `lookNotes` is UI-only and is stripped on save.
+
+```bash
+curl -X PATCH "$MAESTRO_URL/api/v1/character-kits/library/kits/luma" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workspace": "default",
+    "baseRevision": 0,
+    "kit": {
+      "version": 1, "id": "luma", "name": "Luma", "style": "cutout",
+      "base": {
+        "id": "luma-base", "name": "Luma base", "source": "luma-base.png",
+        "kind": "image", "alphaStatus": "transparent", "reviewState": "approved"
+      },
+      "poses": {}, "mouth": {}, "eyes": {},
+      "anchors": { "base": { "mouth": { "offsetX": 0, "offsetY": -18, "scale": 0.05, "rotation": 0 } } },
+      "provenance": []
+    }
+  }'
+```
+
 ## Director pipeline threads
 
 These routes always use the server active workspace. They do not accept `?workspace=`.
 
-- `GET /api/v1/director/pipelines` / `GET /api/v1/director/pipelines/active` / `GET /api/v1/director/pipelines/{pid}` — list or load. `{pid}` hydrates an empty `clips` array from `clip_plans` or `planned_clips` and sets `queue_source` to `clips`, `clip_plans`, or `planned`.
+- `GET /api/v1/director/pipelines` / `GET /api/v1/director/pipelines/active` / `GET /api/v1/director/pipelines/{pid}` — list or load. `{pid}` hydrates an empty `clips` array from `clip_plans` or `planned_clips` and sets `queue_source` to `clips`, `clip_plans`, or `planned`. List accepts `limit` and `offset` (newest first). `limit=0` (the default) returns the full list; the Workspaces tab pages 8 at a time and reads `total` for “load more”.
 - `PUT /api/v1/director/pipelines/{pid}/clips/{clip_index}/prompt` — optional `video_prompt`, `image_prompt`, `soundtrack_drive`. `true` writes an `audio_driven` / `lip_sync_critical` plan; `false` writes `music_driven` and clears `_director_dialogue_beats`. `409` while the pipeline is active.
 - `POST /api/v1/director/pipeline/{pid}/resume` and `POST /api/v1/director/pipeline/{pid}/continue` use the singular `pipeline` path.
 - Batch prompt rewrite is UI-only: loop `POST /api/v1/llm/generate` (local LLM) then PUT the chosen prompts.
 
-Operator notes: `docs/video-editor/HOWUSEIT.md` and `docs/workspaces/HOWUSEIT.md`.
+Operator notes: `docs/video-editor/HOWUSEIT.md`, `docs/workspaces/HOWUSEIT.md`, and `docs/character-kits/HOWUSEIT.md`.
