@@ -124,6 +124,7 @@ export interface AgentPrepare3dAction {
 
 export interface AgentStartGenerationAction {
   type: 'start_generation'
+  confirm: true
 }
 
 export interface AgentOpenStorySectionAction {
@@ -1140,7 +1141,7 @@ function parseAction(value: unknown): AgentAction | null {
       confirm: true,
     }
   }
-  if (type === 'start_generation') return { type: 'start_generation' }
+  if (type === 'start_generation') return raw.confirm === true ? { type: 'start_generation', confirm: true } : null
   if (type === 'create_story') {
     const title = cleanString(raw.title, 300)
     const premise = cleanString(raw.premise, 2_000)
@@ -2061,7 +2062,7 @@ export async function reconcileAgentTurnWithRequest(
 
     return {
       reply: '¡La petición está clara! Usaré un conjuro de vídeo estándar con los ajustes disponibles, prepararé Studio → Video y lo enviaré a la cola. 🪄',
-      actions: [...navigation, prepare, { type: 'start_generation' }],
+      actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
     }
   }
   if (isExplicit3dGenerationRequest(request)) {
@@ -2078,7 +2079,7 @@ export async function reconcileAgentTurnWithRequest(
       } satisfies AgentPrepare3dAction
     return {
       reply: 'Prepararé Studio → 3D (Hunyuan3D) con un preset equilibrado y lo enviaré a generar. 🪄',
-      actions: [...navigation, prepare, { type: 'start_generation' }],
+      actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
     }
   }
   if (NEGATED_VIDEO_REQUEST.test(request)) {
@@ -2107,11 +2108,9 @@ export async function reconcileAgentTurnWithRequest(
 
   return {
     reply: '¡La petición está clara! Prepararé Studio → Image con un modelo compatible y lo enviaré a la cola. 🪄',
-    actions: [...navigation, prepare, { type: 'start_generation' }],
+    actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
   }
 }
-
-const LEGACY_ACTION_TYPES = ['open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export', 'attach_videoclip_alternative_song', 'mount_videoclip_alternative_song'] as const
 
 export const HOCUSPOCUS_REGISTERED_ACTION_SCHEMAS = registeredCapabilitySchemas()
 
@@ -2127,7 +2126,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: [...listCapabilities().map(item => item.name), ...LEGACY_ACTION_TYPES] },
+          type: { type: 'string', enum: listCapabilities().map(item => item.name) },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -2508,6 +2507,18 @@ async function prepareVideo(action: AgentPrepareVideoAction): Promise<string> {
   return `He preparado Studio → Video con ${selected.name}, ${useStore.getState().durationSeconds.toFixed(1)} s y el prompt indicado.`
 }
 
+/**
+ * Public bridge for the registered Studio capability.
+ *
+ * Keep the actual form mutation here so both the legacy action runner and the
+ * canonical capability runner exercise exactly the same visible Studio UI.
+ * The capability module imports this lazily to avoid an agentActions ↔
+ * capabilityRegistry initialization cycle.
+ */
+export async function prepareVideoForAgent(action: AgentPrepareVideoAction): Promise<string> {
+  return prepareVideo(action)
+}
+
 function visibleImageModels(models: ModelDef[]): ModelDef[] {
   const enabledModels = useStore.getState().enabledModels
   const families = getFamiliesForMode('image', useStore.getState().families)
@@ -2577,6 +2588,11 @@ async function prepareImage(action: AgentPrepareImageAction): Promise<string> {
   return `He preparado Studio → Image con ${selected.name}, ${resolution} y el prompt indicado.`
 }
 
+/** See prepareVideoForAgent: canonical registry entry point for Studio Image. */
+export async function prepareImageForAgent(action: AgentPrepareImageAction): Promise<string> {
+  return prepareImage(action)
+}
+
 let prepared3dPreset = 'balanced'
 
 async function prepare3d(action: AgentPrepare3dAction): Promise<string> {
@@ -2612,6 +2628,11 @@ async function prepare3d(action: AgentPrepare3dAction): Promise<string> {
   return `He preparado Studio → 3D con ${selected.name}, preset ${prepared3dPreset} y el prompt indicado. La pestaña 3D solo muestra resultados; la creación queda en Studio.`
 }
 
+/** See prepareVideoForAgent: canonical registry entry point for Studio 3D. */
+export async function prepare3dForAgent(action: AgentPrepare3dAction): Promise<string> {
+  return prepare3d(action)
+}
+
 async function startPreparedGeneration(): Promise<{ message: string; taskId?: string }> {
   const state = useStore.getState()
   if (state.generationMode === 'model3d') {
@@ -2643,6 +2664,39 @@ async function startPreparedGeneration(): Promise<{ message: string; taskId?: st
     taskId: created.id,
     message: `He enviado la ${kind} a la cola (${created.id}).`,
   }
+}
+
+/**
+ * Queue the form currently prepared by one of the Studio prepare actions.
+ * This remains a single bridge so the registered and legacy runners cannot
+ * drift in how they verify the returned task identity.
+ */
+export async function startPreparedGenerationForAgent(): Promise<{ message: string; taskId?: string }> {
+  return startPreparedGeneration()
+}
+
+/** Canonical Studio Audio form bridge; the implementation stays lazy. */
+export async function prepareAudioForAgent(action: AgentPrepareAudioAction): Promise<string> {
+  const { prepareAudio } = await import('./audioActions')
+  return prepareAudio(action)
+}
+
+/** Canonical Studio SFX-pack bridge; the implementation stays lazy. */
+export async function queueSfxPackForAgent(action: AgentQueueSfxPackAction): Promise<string> {
+  const { queueSfxPack } = await import('./audioActions')
+  return queueSfxPack(action)
+}
+
+/** Canonical Studio references bridge; the implementation stays lazy. */
+export async function attachStudioReferencesForAgent(action: AgentAttachStudioReferencesAction): Promise<string> {
+  const { attachStudioReferences } = await import('./studioGuidance')
+  return attachStudioReferences(action)
+}
+
+/** Canonical Studio LoRA bridge; the implementation stays lazy. */
+export async function configureStudioLorasForAgent(action: AgentConfigureStudioLorasAction): Promise<string> {
+  const { configureStudioLoras } = await import('./studioGuidance')
+  return configureStudioLoras(action)
 }
 
 export async function executeAgentActions(
@@ -2848,12 +2902,19 @@ export async function executeAgentActions(
       }
     }
     try {
+      if (action.type === 'start_generation' && !preparedStudio) {
+        throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
+      }
       const registeredResult = await runRegisteredCapability(action, {
         adapters: defaultApplicationAdapters,
         workspace: useStore.getState().activeWorkspace || 'default',
       })
       if (registeredResult) {
         results.push(registeredResult)
+        if (action.type === 'prepare_video' || action.type === 'prepare_image'
+          || action.type === 'prepare_audio' || action.type === 'prepare_3d') {
+          preparedStudio = true
+        }
         if (action.type === 'configure_story_song' && registeredResult.report?.target?.title) {
           configuredStorySong = {
             targetStoryTitle: action.targetStoryTitle,

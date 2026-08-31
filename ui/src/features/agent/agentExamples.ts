@@ -412,7 +412,7 @@ export function exampleActionsFor(
       reply: `Inventaré un vídeo de ejemplo distinto y lo enviaré a la cola.\n\n**Prompt:** ${prompt}`,
       actions: [
         { type: 'prepare_video', prompt, durationSeconds: 5, resolutionPreset: '720p', aspectRatio: '16:9', seed: -1, outputCount: 1 },
-        { type: 'start_generation' },
+        { type: 'start_generation', confirm: true },
       ],
     }
   }
@@ -422,7 +422,7 @@ export function exampleActionsFor(
       reply: `Inventaré una imagen de ejemplo y la enviaré a la cola.\n\n**Prompt:** ${prompt}`,
       actions: [
         { type: 'prepare_image', prompt, resolutionPreset: 'auto', aspectRatio: 'auto', seed: -1, outputCount: 1 },
-        { type: 'start_generation' },
+        { type: 'start_generation', confirm: true },
       ],
     }
   }
@@ -432,7 +432,7 @@ export function exampleActionsFor(
       reply: `Inventaré una pieza de audio de ejemplo en Studio → Audio → Music (ACE-Step, **sin vídeo**).\n\n**Prompt:** ${example.prompt}`,
       actions: [
         { type: 'prepare_audio', subMode: 'music', prompt: example.prompt, durationSeconds: example.durationSeconds },
-        { type: 'start_generation' },
+        { type: 'start_generation', confirm: true },
       ],
     }
   }
@@ -449,7 +449,7 @@ export function exampleActionsFor(
       reply: `Inventaré un objeto 3D de ejemplo en Hunyuan3D y lo enviaré a generar.\n\n**Prompt:** ${prompt}`,
       actions: [
         { type: 'prepare_3d', prompt, preset: 'balanced', seed: hashSalt(salt) % 10_000 },
-        { type: 'start_generation' },
+        { type: 'start_generation', confirm: true },
       ],
     }
   }
@@ -589,5 +589,5 @@ function ensureExampleExecutes(kind: ExampleKind, turn: AgentTurn): AgentTurn {
   if (!needsStart) return turn
   const hasStart = turn.actions.some(action => action.type === 'start_generation')
   if (hasStart) return turn
-  return { ...turn, actions: [...turn.actions, { type: 'start_generation' }] }
+  return { ...turn, actions: [...turn.actions, { type: 'start_generation', confirm: true }] }
 }

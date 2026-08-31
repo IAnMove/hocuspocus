@@ -40,6 +40,9 @@ import { inferStoryProjectTypeFromText } from '../stories/musicVideoLook'
 import type { AgentCreateVideoEditorProjectAction, AgentOpenVideoEditorProjectAction } from './videoEditorActions'
 import type { AgentAttachVideoclipAlternativeSongAction, AgentMountVideoclipAlternativeSongAction } from './alternativeSongActions'
 import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
+import { registerStudioCapabilities } from './studioCapabilities'
+import { registerNavigationQueueCapabilities } from './navigationQueueCapabilities'
+import { registerEditorAuxCapabilities } from './editorAuxCapabilities'
 
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
@@ -69,6 +72,7 @@ export interface CapabilityExecutionOutcome {
 
 export interface CapabilityExecutionContext {
   adapters: WizardApplicationAdapters
+  workspace?: string
 }
 
 export interface CapabilityDefinition<TAction extends AgentAction = AgentAction> {
@@ -1023,6 +1027,10 @@ function defineSceneControlCapability<T extends AgentOpen3dSceneAction | AgentSa
 defineSceneControlCapability<AgentOpen3dSceneAction>('open_3d_scene', 'Open a saved 3D scene', 'read')
 defineSceneControlCapability<AgentSave3dSceneAction>('save_3d_scene', 'Save the editable 3D scene', 'edit')
 defineSceneControlCapability<AgentExport3dSceneAction>('export_3d_scene', 'Export the 3D scene MP4', 'compute')
+
+registerStudioCapabilities(defineCapability)
+registerNavigationQueueCapabilities(defineCapability)
+registerEditorAuxCapabilities(defineCapability)
 
 export function getCapability(name: string): CapabilityDefinition | undefined {
   return definitions.get(name)

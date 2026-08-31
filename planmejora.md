@@ -333,6 +333,16 @@ Comenzar **Bloque B — contexto canónico de sesión y selección**. Antes de m
 
 **Acabé el Bloque C (contrato global) y comienzo el Bloque F (migración de capacidades).**
 
+### Nota de relevo — Bloque F cerrado
+
+**Acabé el Bloque F (72/72 acciones bajo el registro y contrato común) y comienzo el Bloque G (pruebas y observabilidad).**
+
+El catálogo de acciones, la guía que recibe el LLM, el JSON Schema, el parser y
+el ejecutor se derivan ya del mismo registro. Un test exhaustivo falla si se
+añade una acción al tipo `AgentAction` sin registrar su capacidad. Studio,
+navegación de Labs, cola/workspaces, Comics, Character Kit y Video Editor ya no
+dependen de una descripción paralela para ser controlables por el Wizard.
+
 - `EntityRef`, `ArtifactRef`, `CommandEnvelope`, `CommandResult`, `NavigationTarget`, `PresentationPlan` y `StructuredError` comparten una frontera JSON validada.
 - El contrato rechaza IDs vacíos, referencias entre workspaces, ciclos, prototipos no planos, valores no reproducibles y claves de idempotencia incoherentes.
 - El runner común devuelve, junto al informe existente, el comando canónico y un resultado con entidad, artifacts, task IDs, pipeline IDs y navegación verificables.

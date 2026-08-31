@@ -92,9 +92,10 @@ test('queues Story visual generation until Story Lab mounts', async () => {
 
 test('capability knowledge includes every currently executable action family', async () => {
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
+  const { AGENT_ACTION_TYPES } = await import('../src/features/agent/agentActionTypes.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_rhythmic_3d_video', 'create_3d_scene', 'set_3d_scene_properties', 'add_3d_scene_layer', 'update_3d_scene_layer', 'remove_3d_scene_layer', 'attach_3d_scene_audio', 'analyze_3d_scene_audio', 'apply_3d_choreography', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job', 'create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor', 'track_video_editor_export', 'attach_videoclip_alternative_song', 'mount_videoclip_alternative_song', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    [...AGENT_ACTION_TYPES],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -842,14 +843,14 @@ test('start_generation reports the real taskId and an identical repeat reuses it
   try {
     const first = await executeAgentActions([
       { type: 'prepare_image', prompt: 'un faro al anochecer', resolutionPreset: 'auto', aspectRatio: 'auto', seed: -1, outputCount: 1 },
-      { type: 'start_generation' },
+      { type: 'start_generation', confirm: true },
     ])
     assert.equal(first[0].ok, true)
     assert.equal(first[1].ok, true)
     assert.equal(first[1].report.state, 'queued')
     assert.equal(first[1].report.taskId, 'job-studio-1')
     assert.equal(generationCalls, 1)
-    const second = await executeAgentActions([{ type: 'start_generation' }])
+    const second = await executeAgentActions([{ type: 'start_generation', confirm: true }])
     assert.match(second[0].message, /Reutilizo/)
     assert.equal(second[0].report.taskId, 'job-studio-1')
     assert.equal(generationCalls, 1)
