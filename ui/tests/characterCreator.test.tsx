@@ -12,8 +12,11 @@ import {
 } from '../src/features/characters/orbitPrompt.ts'
 import {
   attachCharacterCreatorMesh,
+  attachCharacterCreatorMeshForWorkspace,
+  characterCreatorHistoryKey,
   parseCharacterCreatorHistory,
   rememberCharacterCreatorSheet,
+  rememberCharacterCreatorSheetForWorkspace,
 } from '../src/features/characters/characterCreatorHistory.ts'
 
 function installDom() {
@@ -71,6 +74,57 @@ test('a single object image is enough to build an orbit prompt', () => {
   assert.doesNotMatch(prompt, /<Picture 2>/)
   assert.doesNotMatch(prompt, /A-pose/)
   assert.match(prompt, /turntable/)
+})
+
+test('Character Creator history writes the origin workspace store, not the in-memory list of another workspace', () => {
+  const store = new Map<string, string>()
+  const storage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value) },
+  }
+  const luma = {
+    id: 'luma',
+    name: 'Luma',
+    kind: 'character' as const,
+    videoName: 'luma-orbit.mp4',
+    views: [{ id: 'front', hunyuan: 'front' as const, label: 'Front', filename: 'luma-front.png', url: '/luma-front.png', time: 0.1 }],
+    workspace: 'cast-a',
+    createdAt: '2026-08-29T00:00:00Z',
+  }
+  const brin = {
+    id: 'brin',
+    name: 'Brin',
+    kind: 'character' as const,
+    videoName: 'brin-orbit.mp4',
+    views: [],
+    workspace: 'cast-b',
+    createdAt: '2026-08-29T01:00:00Z',
+  }
+  rememberCharacterCreatorSheetForWorkspace(storage, 'cast-a', luma)
+  rememberCharacterCreatorSheetForWorkspace(storage, 'cast-b', brin)
+
+  const lateSheet = {
+    id: 'luma-late',
+    name: 'Luma late',
+    kind: 'character' as const,
+    videoName: 'luma-late.mp4',
+    views: [],
+    workspace: 'cast-a',
+    createdAt: '2026-08-29T02:00:00Z',
+  }
+  const nextA = rememberCharacterCreatorSheetForWorkspace(storage, 'cast-a', lateSheet)
+  assert.deepEqual(nextA.map(item => item.videoName), ['luma-late.mp4', 'luma-orbit.mp4'])
+  assert.deepEqual(
+    parseCharacterCreatorHistory(storage.getItem(characterCreatorHistoryKey('cast-b'))).map(item => item.videoName),
+    ['brin-orbit.mp4'],
+  )
+
+  const attached = attachCharacterCreatorMeshForWorkspace(storage, 'cast-a', 'luma-orbit.mp4', 'luma.glb')
+  assert.equal(attached.find(item => item.videoName === 'luma-orbit.mp4')?.hunyuanGlb, 'luma.glb')
+  assert.equal(
+    parseCharacterCreatorHistory(storage.getItem(characterCreatorHistoryKey('cast-b')))[0]?.hunyuanGlb,
+    null,
+  )
 })
 
 test('Character Creator history remembers sheets and can attach a later mesh', () => {
