@@ -2,6 +2,7 @@ import type {
   AgentAction,
   AgentApply3dRhythmAction,
   AgentApplySeriesPlanAction,
+  AgentAssembleSeriesEpisodeAction,
   AgentCommitSeriesCanonAction,
   AgentApplyStoryProposalAction,
   AgentApproveStorySectionAction,
@@ -629,6 +630,14 @@ defineCapability<AgentCommitSeriesCanonAction>({
     return { type: 'commit_series_canon', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), decision: decision as AgentCommitSeriesCanonAction['decision'], itemIds, confirm: true }
   },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.seriesLab.commitCanon(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'series_lab', anchors: ['review', 'canon'], replay: 'atomic' },
+})
+
+defineCapability<AgentAssembleSeriesEpisodeAction>({
+  name: 'assemble_series_episode', title: 'Assemble approved Series Lab shots', description: 'Start a recoverable assembly only when every canonical episode shot has an approved reproducible asset.',
+  useWhen: 'The user explicitly asks to assemble the finished Series Lab episode.', parameters: ['series_title', 'target_episode_title', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'assemble_series_episode' }, confirm: { const: true } }, required: ['type', 'confirm'] }, risk: 'compute', confirmation: 'required', progress: 'Ensamblando el episodio de Series Lab…',
+  resolve(raw) { return raw.confirm === true ? { type: 'assemble_series_episode', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), confirm: true } : null },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.seriesLab.assembleEpisode(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'series_lab', anchors: ['review', 'assembly'], replay: 'atomic' },
 })
 
 defineCapability<AgentCreateComicAction>({

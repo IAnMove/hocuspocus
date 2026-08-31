@@ -309,6 +309,10 @@ export function notifyAgentSeriesAssemblyJob(job: SeriesAssemblyJob): void {
   window.dispatchEvent(new CustomEvent(SERIES_ASSEMBLY_JOB_EVENT, { detail: { job } }))
 }
 
+export function getAgentSeriesAssemblyJob(): SeriesAssemblyJob | null {
+  return requestedSeriesAssemblyJob
+}
+
 export function listenForAgentSeriesAssemblyJob(listener: (job: SeriesAssemblyJob) => void): () => void {
   const handler = (event: Event) => {
     const job = (event as CustomEvent<{ job?: SeriesAssemblyJob }>).detail?.job

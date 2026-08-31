@@ -470,11 +470,13 @@ Agent Mode complete prematurely.
   recoverable render-job ID tied to the canonical episode.
 - Series Lab review and canon decisions: migrated to the common contract and
   keep approvals, rejections and canon mutations bound to the canonical episode.
+- Series Lab assembly: migrated to the common contract and returns the verified
+  recoverable assembly-job ID for the canonical episode.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **Series Lab review and canon decisions**. Continue
-with episode assembly, preserving the real canonical episode and assembly-job ID
-in behavior tests. Keep Decision gate A open; the workflow remains correct
-without visual magic effects.
+Finished migration subblock **Series Lab assembly**. Continue the migration
+audit with the remaining legacy domains, preserving real IDs and behavior tests
+before implementing visible magic effects. Keep Decision gate A open; the
+workflow remains correct without visual magic effects.
