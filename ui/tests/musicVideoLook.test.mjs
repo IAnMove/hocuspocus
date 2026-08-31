@@ -7,6 +7,7 @@ test('named film and series looks require MiniMax H3 text-to-video', async () =>
     musicVideoShouldUseDirectVideo,
     applyMusicVideoDirectVideoDefaults,
     inferStoryProjectTypeFromText,
+    resolveMusicVideoVisualStyle,
   } = await import('../src/features/stories/musicVideoLook.ts')
   const { createStoryProject } = await import('../src/features/stories/model.ts')
 
@@ -22,4 +23,19 @@ test('named film and series looks require MiniMax H3 text-to-video', async () =>
   assert.equal(next.musicVideoGenerationMode, 'direct_video')
   assert.equal(next.protagonistConsistency, false)
   assert.match(next.directVideoMasterPrompt, /text-to-video/i)
+
+  const brief = 'Videoclip heavy metal con estética visual de animación adulta fantástica de la película Heavy Metal 1981.'
+  const recoveredStyle = resolveMusicVideoVisualStyle(
+    'music_video',
+    'Dirección visual cinematográfica coherente, personajes legibles y continuidad entre escenas.',
+    brief,
+  )
+  assert.equal(recoveredStyle, brief)
+  const recovered = applyMusicVideoDirectVideoDefaults({
+    ...createStoryProject('music_video'),
+    visualStyle: recoveredStyle,
+    characterVisualStyle: recoveredStyle,
+    musicVideoGenerationMode: 'image_guided',
+  })
+  assert.match(recovered.directVideoMasterPrompt, /Heavy Metal 1981/i)
 })

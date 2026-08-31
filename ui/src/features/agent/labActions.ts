@@ -1,5 +1,5 @@
 import { useStore } from '../../stores/useStore'
-import { applyMusicVideoDirectVideoDefaults } from '../stories/musicVideoLook'
+import { applyMusicVideoDirectVideoDefaults, resolveMusicVideoVisualStyle } from '../stories/musicVideoLook'
 import type {
   AgentApplyStoryProposalAction,
   AgentApproveStorySectionAction,
@@ -86,23 +86,42 @@ function showLab(filter: 'stories' | 'series'): void {
   state.setSidebarOpen(false)
 }
 
-async function saveActiveStoryProject(
+async function saveActiveStoryProjectMutation(
   workspace: string,
   current: { libraryRevision: number; projects: Record<string, import('../stories/types').StoryProject> },
-  project: import('../stories/types').StoryProject,
-): Promise<void> {
+  projectId: string,
+  mutate: (project: import('../stories/types').StoryProject) => import('../stories/types').StoryProject,
+): Promise<import('../stories/types').StoryProject> {
   const [{ useStoryStore }, api] = await Promise.all([
     import('../stories/store'), import('../../api/client'),
   ])
-  const library = await api.saveStoryLibrary(workspace, {
-    version: 2,
-    revision: current.libraryRevision,
-    activeId: project.id,
-    projects: { ...current.projects, [project.id]: project },
-  })
+  let baseline = current
+  let library: Awaited<ReturnType<typeof api.saveStoryLibrary>> | null = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const source = baseline.projects[projectId]
+    if (!source) throw new Error('La historia activa desapareció antes de poder guardarla.')
+    const project = mutate(source)
+    try {
+      library = await api.saveStoryLibrary(workspace, {
+        version: 2,
+        revision: baseline.libraryRevision,
+        activeId: project.id,
+        projects: { ...baseline.projects, [project.id]: project },
+      })
+      break
+    } catch (error) {
+      if (!(error instanceof api.StoryLibraryRevisionError) || attempt === 2) throw error
+      const remote = await api.fetchStoryLibrary(workspace)
+      baseline = {
+        libraryRevision: remote.revision,
+        projects: remote.projects,
+      }
+    }
+  }
+  if (!library?.projects[projectId]) throw new Error('Story Lab guardó la biblioteca sin devolver la historia editada.')
   useStoryStore.setState({
     workspace,
-    project: library.projects[project.id],
+    project: library.projects[projectId],
     projects: library.projects,
     libraryRevision: library.revision,
     dirty: false,
@@ -112,6 +131,7 @@ async function saveActiveStoryProject(
     libraryConflicts: [],
   })
   await useStoryStore.getState().loadWorkspace(workspace)
+  return library.projects[projectId]
 }
 
 export async function configureStorySong(action: AgentConfigureStorySongAction): Promise<{
@@ -176,56 +196,70 @@ export async function configureStorySong(action: AgentConfigureStorySongAction):
   if (!action.instrumental && !lyrics) throw new Error('El compositor no devolvió una letra vocal completa para la ficha.')
   const existing = target.music.cues.find(item => item.kind === 'story')
   const cueTitle = action.songTitle.trim() || existing?.title || `${target.title} · canción`
-  const cue = {
-    id: existing?.id || storyId('music-cue'),
-    kind: 'story' as const,
-    targetId: target.id,
-    title: cueTitle,
-    purpose: brief,
-    referenceSong: existing?.referenceSong || '',
-    brief,
-    style,
-    lyrics,
-    lyricsLanguage,
-    lyriaPrompt: lyriaPrompt || existing?.lyriaPrompt || '',
-    instrumental: action.instrumental,
-    durationSeconds,
-    candidates: existing?.candidates || [],
-    selectedCandidateId: undefined,
-  }
-  const cues = existing
-    ? target.music.cues.map(item => item.id === existing.id ? cue : item)
-    : [cue, ...target.music.cues]
-  const project = normalizeStoryProject({
-    ...target,
-    revision: target.revision + 1,
-    creativeBrief: {
-      ...target.creativeBrief,
-      musicStyle: cue.style,
-      songStory: cue.purpose,
-      durationSeconds: cue.durationSeconds,
-    },
-    music: {
-      ...target.music,
-      mode: 'original',
-      model,
-      brief: cue.brief,
-      style: cue.style,
-      lyrics: cue.lyrics,
-      lyricsLanguage: cue.lyricsLanguage,
-      targetDurationSeconds: cue.durationSeconds,
-      cues,
+  const cueId = existing?.id || storyId('music-cue')
+  const project = await saveActiveStoryProjectMutation(workspace, current, target.id, source => {
+    const latestTarget = source.projectType === 'music_video'
+      ? applyMusicVideoDirectVideoDefaults(source)
+      : applyMusicVideoDirectVideoDefaults({
+        ...source,
+        projectType: 'music_video',
+        musicVideoGenerationMode: 'direct_video',
+      })
+    const latestExisting = latestTarget.music.cues.find(item => item.id === cueId)
+      || latestTarget.music.cues.find(item => item.kind === 'story')
+    const cue = {
+      id: latestExisting?.id || cueId,
+      kind: 'story' as const,
+      targetId: latestTarget.id,
+      title: cueTitle,
+      purpose: brief,
+      referenceSong: latestExisting?.referenceSong || '',
+      brief,
+      style,
+      lyrics,
+      lyricsLanguage,
+      lyriaPrompt: lyriaPrompt || latestExisting?.lyriaPrompt || '',
+      instrumental: action.instrumental,
+      durationSeconds,
+      candidates: latestExisting?.candidates || [],
       selectedCandidateId: undefined,
-    },
-    updatedAt: new Date().toISOString(),
+    }
+    const cues = latestExisting
+      ? latestTarget.music.cues.map(item => item.id === latestExisting.id ? cue : item)
+      : [cue, ...latestTarget.music.cues]
+    return normalizeStoryProject({
+      ...latestTarget,
+      revision: latestTarget.revision + 1,
+      creativeBrief: {
+        ...latestTarget.creativeBrief,
+        musicStyle: cue.style,
+        songStory: cue.purpose,
+        durationSeconds: cue.durationSeconds,
+      },
+      music: {
+        ...latestTarget.music,
+        mode: 'original',
+        model,
+        brief: cue.brief,
+        style: cue.style,
+        lyrics: cue.lyrics,
+        lyricsLanguage: cue.lyricsLanguage,
+        targetDurationSeconds: cue.durationSeconds,
+        cues,
+        selectedCandidateId: undefined,
+      },
+      updatedAt: new Date().toISOString(),
+    })
   })
-  await saveActiveStoryProject(workspace, current, project)
+  const savedCue = project.music.cues.find(item => item.id === cueId)
+    || project.music.cues.find(item => item.kind === 'story')
+  if (!savedCue) throw new Error('Story Lab guardó la ficha sin devolver el cue musical.')
   showLab('stories')
   openAgentStorySection('music')
   return {
-    cueId: cue.id,
-    cueTitle,
-    message: `He rellenado y guardado la canción “${cueTitle}” en Story Lab → Music con ${project.music.model}, modo ${cue.instrumental ? 'instrumental' : 'vocal'} y la letra editable en ${cue.lyricsLanguage}.`,
+    cueId: savedCue.id,
+    cueTitle: savedCue.title,
+    message: `He rellenado y guardado la canción “${savedCue.title}” en Story Lab → Music con ${project.music.model}, modo ${savedCue.instrumental ? 'instrumental' : 'vocal'} y la letra editable en ${savedCue.lyricsLanguage}.`,
   }
 }
 
@@ -275,44 +309,58 @@ export async function generateStorySong(action: AgentGenerateStorySongAction): P
     })
     if (!rendered.filename || !rendered.audio_path) throw new Error('ACE-Step terminó sin devolver un archivo de audio verificable.')
     const candidateId = storyId('song')
-    const version = cue.candidates.length + 1
-    const candidate = {
-      id: candidateId,
-      displayName: `${cue.title} · ${cue.lyricsLanguage || target.language} · v${version}`,
-      title: cue.title,
-      language: cue.lyricsLanguage || target.language,
-      version,
-      name: rendered.filename,
-      source: api.getFileUrl(rendered.filename, workspace),
-      prompt: cue.style,
-      lyrics: cue.instrumental ? '' : cue.lyrics,
-      provider: 'local' as const,
-      model: ACE_STEP_MUSIC_MODEL,
-      durationSeconds: cue.durationSeconds,
-      createdAt: new Date().toISOString(),
-    }
-    const project = normalizeStoryProject({
-      ...target,
-      revision: target.revision + 1,
-      music: {
-        ...target.music,
-        selectedCandidateId: candidateId,
-        cues: target.music.cues.map(item => item.id === cue.id ? {
-          ...item,
-          candidates: [...item.candidates, candidate],
-          selectedCandidateId: candidateId,
-        } : item),
+    let version = 1
+    const project = await saveActiveStoryProjectMutation(
+      workspace,
+      useStoryStore.getState(),
+      target.id,
+      source => {
+        const latestCue = source.music.cues.find(item => item.id === cue.id)
+        if (!latestCue) throw new Error(`El cue “${cue.title}” desapareció mientras se generaba el audio.`)
+        const existingCandidate = latestCue.candidates.find(item => item.id === candidateId)
+        version = existingCandidate?.version || (latestCue.candidates.length + 1)
+        const candidate = existingCandidate || {
+          id: candidateId,
+          displayName: `${latestCue.title} · ${latestCue.lyricsLanguage || source.language} · v${version}`,
+          title: latestCue.title,
+          language: latestCue.lyricsLanguage || source.language,
+          version,
+          name: rendered.filename,
+          source: api.getFileUrl(rendered.filename, workspace),
+          prompt: latestCue.style,
+          lyrics: latestCue.instrumental ? '' : latestCue.lyrics,
+          provider: 'local' as const,
+          model: ACE_STEP_MUSIC_MODEL,
+          durationSeconds: latestCue.durationSeconds,
+          createdAt: new Date().toISOString(),
+        }
+        return normalizeStoryProject({
+          ...source,
+          revision: source.revision + 1,
+          music: {
+            ...source.music,
+            selectedCandidateId: candidateId,
+            cues: source.music.cues.map(item => item.id === latestCue.id ? {
+              ...item,
+              candidates: existingCandidate ? item.candidates : [...item.candidates, candidate],
+              selectedCandidateId: candidateId,
+            } : item),
+          },
+          updatedAt: new Date().toISOString(),
+        })
       },
-      updatedAt: new Date().toISOString(),
-    })
-    await saveActiveStoryProject(workspace, current, project)
+    )
+    const savedCue = project.music.cues.find(item => item.id === cue.id)
+    if (!savedCue?.candidates.some(item => item.id === candidateId)) {
+      throw new Error('Story Lab guardó la canción sin devolver el candidato generado.')
+    }
     showLab('stories')
     openAgentStorySection('music')
     return {
       candidateId,
-      cueTitle: cue.title,
+      cueTitle: savedCue.title,
       outputName: rendered.filename,
-      message: `ACE-Step ha generado “${cue.title}” y la versión v${version} ha quedado seleccionada en Story Lab → Music.`,
+      message: `ACE-Step ha generado “${savedCue.title}” y la versión v${version} ha quedado seleccionada en Story Lab → Music.`,
     }
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
@@ -352,6 +400,11 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
   }
 
   const base = createStoryProject(action.projectType || 'full_story')
+  const resolvedVisualStyle = resolveMusicVideoVisualStyle(
+    action.projectType || 'full_story',
+    action.visualStyle,
+    action.creativeBrief,
+  )
   const characters = creativeCharacters(action.characters).map((character, index) => ({
     id: storyId('character'),
     name: character.name || `Personaje ${index + 1}`,
@@ -366,7 +419,7 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
     voice: character.voice,
     appearance: character.appearance,
     wardrobe: 'Vestuario coherente y reconocible durante toda la historia.',
-    visualPrompt: `${character.appearance}. ${action.visualStyle}`.trim(),
+    visualPrompt: `${character.appearance}. ${resolvedVisualStyle}`.trim(),
     negativePrompt: 'inconsistent identity, duplicate character, unreadable face',
     referenceAssetIds: [], approval: 'draft' as const,
   }))
@@ -375,7 +428,7 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
     name: location.name || `Localización ${index + 1}`,
     purpose: location.purpose,
     description: location.description,
-    visualPrompt: `${location.description}. ${action.visualStyle}`.trim(),
+    visualPrompt: `${location.description}. ${resolvedVisualStyle}`.trim(),
     negativePrompt: 'inconsistent layout, unreadable signage, visual clutter',
     referenceAssetIds: [],
   }))
@@ -409,8 +462,8 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
     spokenLanguage: action.language || 'Español de España',
     genre: action.genre || 'Narrativa',
     tone: action.tone || 'Cinematográfico',
-    visualStyle: action.visualStyle || 'Dirección visual cinematográfica coherente, personajes legibles y continuidad entre escenas.',
-    characterVisualStyle: action.visualStyle || 'Identidades consistentes, siluetas reconocibles y expresiones claras.',
+    visualStyle: resolvedVisualStyle || 'Dirección visual cinematográfica coherente, personajes legibles y continuidad entre escenas.',
+    characterVisualStyle: resolvedVisualStyle || 'Identidades consistentes, siluetas reconocibles y expresiones claras.',
     premise: action.premise,
     logline: action.logline,
     synopsis: action.synopsis || action.premise,
@@ -424,8 +477,8 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
       society: 'Las relaciones y normas sociales sostienen el conflicto dramático.',
       technology: 'Coherente con la época y el universo narrativo.',
       rules: ['Mantener la continuidad de personajes, espacios y consecuencias entre beats.'],
-      visualLanguage: action.visualStyle || 'Lenguaje cinematográfico claro y consistente.',
-      visualPrompt: action.visualStyle,
+      visualLanguage: resolvedVisualStyle || 'Lenguaje cinematográfico claro y consistente.',
+      visualPrompt: resolvedVisualStyle,
       negativePrompt: 'continuity errors, inconsistent characters, unreadable composition',
       locations,
     },
@@ -1593,6 +1646,10 @@ export async function startDirectorProduction(
     if (production.kind === 'music_video' && useStore.getState().directorStep === 'structure') {
       useStore.getState().directorConfirmStructure()
     }
+    // The Wizard reaches this adapter only after an explicit, confirmed
+    // start action. Staging remains reviewable, while "execute" must not
+    // silently stop at Director's manual prompt/image checkpoints.
+    useStore.getState().setDirectorAutoMode(true)
     await useStore.getState().startDirectorPipeline()
     const pipelineId = useStore.getState().pipelineId
     if (!pipelineId) throw new Error('Director no devolvió un pipelineId; la producción no se inició.')

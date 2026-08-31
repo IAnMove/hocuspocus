@@ -276,4 +276,26 @@ El Agent Mode no se considera terminado porque el LLM haya producido un plan cor
 
 ## 13. Punto actual para el relevo
 
-El bloque activo es **Bloque A**. Los últimos commits repararon la correlación entre `configure_story_song`, `generate_story_song`, `stage_story_music_video` y `start_director_production`, pero falta validar el recorrido desde la UI contra una generación real y corregir cualquier ruptura observada. No comenzar la capa de chispas ni una migración masiva antes de cerrar esta prueba y congelar el contrato global.
+El **Bloque A está cerrado** con una prueba real desde la UI. No comenzar la capa de chispas ni una migración masiva antes de congelar el contrato global del Bloque B.
+
+### Validación real del 31 de agosto de 2026
+
+- Se escribió la petición completa en `Ask to the Wizard` mediante teclado y clics de navegador, sin invocar directamente los adapters.
+- El Wizard creó un proyecto `music_video`, abrió Story Lab y rellenó una canción vocal en español con ACE-Step 1.5 XL, letra completa y modo instrumental desactivado.
+- ACE-Step generó un WAV de 75 segundos, el candidato quedó seleccionado y la ficha mostró un reproductor utilizable.
+- El mismo workflow conservó `project_id`, `cue_id`, `candidate_id`, `production_id` y `pipeline_id` hasta Music Video Director.
+- Se reprodujo y corrigió una carrera CAS: el autosave adelantaba la revisión mientras ACE-Step generaba. La persistencia ahora relee la biblioteca y reaplica la mutación por IDs canónicos, sin sobrescribir cambios concurrentes.
+- Se reprodujo y corrigió una pérdida de dirección artística: si el LLM dejaba un estilo genérico pero el brief contenía una película/serie/año explícitos, ese look no llegaba al master prompt. Los videoclips recuperan ahora la estética explícita para `visualStyle`, prompts de sujetos/localizaciones y `directVideoMasterPrompt`.
+- Una segunda creación visible confirmó en API `projectType=music_video`, español, letra vocal, IDs nuevos y un master prompt que contiene `Heavy Metal 1981`.
+- Se descubrió que una orden explícita «ejecuta» arrancaba Director con `auto_mode=false` y quedaba en `Review direct video prompts`. El inicio confirmado del Wizard activa ahora auto mode; preparar sin ejecutar continúa siendo visible, editable y manual.
+- El pipeline anterior se reanudó pulsando su botón visible `Generate` y pasó de `paused` a generación H3 real. No se esperó a que terminara el render completo.
+
+Pruebas de cierre del bloque:
+
+- build de producción de UI;
+- 56 pruebas focalizadas de acciones, selección/persistencia de canciones, estética y carrera de revisión;
+- recorrido de navegador hasta creación, ficha, audio, staging, checkpoint y reanudación.
+
+### Siguiente bloque
+
+Comenzar **Bloque B — contexto canónico de sesión y selección**. Antes de migrar dominios completos, fijar el contrato único de IDs, `activeContext`, resultados, bloqueos `awaiting_input` y política `prepare/review/execute`. Después migrar una capacidad vertical pequeña y repetir el recorrido visible.

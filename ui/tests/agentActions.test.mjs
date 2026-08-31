@@ -967,6 +967,7 @@ test('start_director_production after same-turn stage reports that pipeline, not
     loadOutputs: async () => {},
     pollPipelineStatus: () => {},
     startDirectorPipeline: async () => {
+      assert.equal(useStore.getState().directorAutoMode, true)
       pipelineStarts += 1
       useStore.setState({ pipelineId: `pipe-new-${pipelineStarts}`, pipelinePolling: false })
     },
