@@ -62,6 +62,19 @@ def main() -> int:
             'FastAPI(title="Maestro API"',
             "  Maestro UI:",
             "[Maestro] React UI serving",
+            'FastAPI(title="Loreframe Lab API"',
+            "Loreframe Lab UI:",
+            "[Loreframe Lab] React UI serving",
+        ),
+        ROOT / "pinokio.js": (
+            'title: "Loreframe Lab · Experimental"',
+        ),
+        ROOT / "ui" / "index.html": (
+            "<title>Loreframe Lab · Experimental</title>",
+            "Loreframe Lab UI failed to load",
+        ),
+        ROOT / "README.md": (
+            "# Loreframe Lab",
         ),
     }
     for path, snippets in old_visible.items():

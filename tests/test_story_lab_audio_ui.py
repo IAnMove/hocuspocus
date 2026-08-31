@@ -46,7 +46,7 @@ def test_chained_music_and_director_workflows_expose_cancel_controls():
     assert "cancelMusicQueue" in story
     assert "Cancelling active request" in story
     assert "cancelStoryMusicCandidatesJob(jobId)" in story
-    assert "api.cancelCanonicalTask(task.id, activeWorkspace)" in activity
+    assert "api.cancelCanonicalTask(taskId, workspace)" in activity
     assert "active && task.cancelable" in activity
     assert "Cancelling…" in activity
 
@@ -220,7 +220,7 @@ def test_story_direct_reference_mode_uses_only_approved_visual_assets():
 
     assert "'direct_references'" in types
     assert "H3 Ref2VA" in panel
-    assert "setDirectorShotImageGuidance(directReferences ? 'prompt_only' : 'auto')" in panel
+    assert "setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')" in panel
     assert "setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')" in panel
     assert "approvedReferenceIds" in adaptations
     assert "project.assets[id]?.approval === 'approved'" in adaptations

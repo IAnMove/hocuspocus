@@ -79,6 +79,10 @@ test('a serialized edited scene survives parser and compiler round trip', () => 
 test('a speaking beat round-trips with its editable mouth provenance', () => {
   const authored = sceneFixture()
   authored.layers[0].visible = true
+  authored.audioTracks = [{
+    id: 'voice', filename: 'line-1.wav', name: 'Spoken line',
+    kind: 'audio', startTime: .5, volume: 1, prompt: 'Hola mundo',
+  }]
   authored.dialogueBeats = [{ id: 'line-1', text: 'Hola mundo', start: .5, end: 3, mouthLayerIds: ['hero'], audioTrackId: 'voice', confidence: 'known-text' }]
   const recipe = parseSceneRecipe(JSON.parse(JSON.stringify(sceneToRecipe(authored))))
   const scene = compileSceneRecipe(recipe, {}, source => source)

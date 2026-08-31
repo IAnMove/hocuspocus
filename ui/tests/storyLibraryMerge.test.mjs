@@ -9,7 +9,13 @@ function installDom() {
     window: dom.window,
     document: dom.window.document,
     HTMLElement: dom.window.HTMLElement,
+    HTMLButtonElement: dom.window.HTMLButtonElement,
+    Event: dom.window.Event,
     MutationObserver: dom.window.MutationObserver,
+  })
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: dom.window.navigator,
   })
   return dom
 }

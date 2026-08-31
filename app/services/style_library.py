@@ -520,7 +520,7 @@ class StyleLibrary:
                 "updatedAt": time.time(),
             })
             snapshot = copy.deepcopy(job)
-        _atomic_json(self.job_path, snapshot)
+            _atomic_json(self.job_path, snapshot)
         return snapshot
 
     def import_status(self, job_id: str) -> dict[str, Any] | None:
@@ -536,8 +536,11 @@ class StyleLibrary:
             job.update(copy.deepcopy(patch))
             job["updatedAt"] = time.time()
             snapshot = copy.deepcopy(job)
-        if persist:
-            _atomic_json(self.job_path, snapshot)
+            if persist:
+                # Persist before releasing the lock so a reconstructed
+                # StyleLibrary cannot observe a stale active file and rewrite
+                # a completed cancel as interrupted.
+                _atomic_json(self.job_path, snapshot)
 
     def _cancel_event(self, job_id: str) -> threading.Event:
         with self._lock:

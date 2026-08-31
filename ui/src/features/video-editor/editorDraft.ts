@@ -35,6 +35,15 @@ export interface EditorSoundtrack {
   loop: boolean
 }
 
+export type EditorDraft = {
+  clips: EditorClip[]
+  projectName: string
+  resolution: ResolutionOption
+  fps: number
+  soundtrack: EditorSoundtrack | null
+  warning: string | null
+}
+
 export function clipId(): string {
   return `clip-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
@@ -43,14 +52,7 @@ export function videoEditorDraftStorageKey(workspace: string | null | undefined)
   return `${VIDEO_EDITOR_DRAFT_KEY}:${encodeURIComponent(workspace || 'default')}`
 }
 
-function parseEditorDraft(raw: string | null): {
-  clips: EditorClip[]
-  projectName: string
-  resolution: ResolutionOption
-  fps: number
-  soundtrack: EditorSoundtrack | null
-  warning: string | null
-} | null {
+function parseEditorDraft(raw: string | null): EditorDraft | null {
   if (!raw) return null
   try {
     const saved = JSON.parse(raw)
@@ -87,14 +89,7 @@ function parseEditorDraft(raw: string | null): {
   }
 }
 
-export function loadEditorDraft(workspace?: string | null): {
-  clips: EditorClip[]
-  projectName: string
-  resolution: ResolutionOption
-  fps: number
-  soundtrack: EditorSoundtrack | null
-  warning: string | null
-} {
+export function loadEditorDraft(workspace?: string | null): EditorDraft {
   const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30, soundtrack: null, warning: null }
   const namespacedKey = videoEditorDraftStorageKey(workspace)
   try {
@@ -128,7 +123,7 @@ export function persistEditorDraft(
     window.localStorage.setItem(videoEditorDraftStorageKey(workspace), JSON.stringify({
       clips, projectName, resolution, fps, soundtrack: currentSoundtrack, savedAt: new Date().toISOString(),
     }))
-    window.dispatchEvent(new CustomEvent(VIDEO_EDITOR_DRAFT_UPDATED_EVENT, {
+    window.dispatchEvent(new window.CustomEvent(VIDEO_EDITOR_DRAFT_UPDATED_EVENT, {
       detail: { workspace: workspace || 'default' },
     }))
     return true
