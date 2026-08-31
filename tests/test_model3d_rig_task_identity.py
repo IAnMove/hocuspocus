@@ -58,7 +58,9 @@ def isolated_job_registries():
 
 
 def _successful_popen(command, **_kwargs):
-    Path(command[-1]).write_bytes(b"generated asset")
+    if "--output" in command:
+        output_index = command.index("--output") + 1
+        Path(command[output_index]).write_bytes(b"generated asset")
     return _SuccessfulWorker()
 
 
