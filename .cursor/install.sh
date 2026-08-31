@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent Cloud Agent / headless dev bootstrap for Loreframe Lab.
+# Idempotent Cloud Agent / headless dev bootstrap for HocusPocus.
 #
 # Sets up the CPU-only Python virtualenv used to run the repository's checks
 # (clean-repo guard, compileall, unittest suite) and installs the React UI
@@ -12,7 +12,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-echo "==> Loreframe Lab dev bootstrap (repo: $REPO_ROOT)"
+echo "==> HocusPocus dev bootstrap (repo: $REPO_ROOT)"
 
 # --- Ensure the venv module is available (default Ubuntu image ships python3
 #     without ensurepip). Guarded so re-runs are a no-op. ---
