@@ -175,7 +175,7 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     purpose: 'Persist the selected music model, vocal mode, style, language and structured lyrics in the canonical Story Lab music form.',
     useWhen: 'The user asks for a song or lyrics inside a Story Lab videoclip; the lyrics must be visible and editable in the UI, not only printed in chat.',
     risk: 'edit',
-    parameters: ['target_story_title', 'song_title', 'song_brief', 'music_style', 'lyrics', 'lyrics_language', 'instrumental', 'model_type', 'target_duration_seconds'],
+    parameters: ['target_story_title', 'song_title', 'song_brief', 'music_style', 'lyrics', 'write_lyrics', 'lyrics_language', 'instrumental', 'model_type', 'target_duration_seconds'],
   },
   {
     type: 'generate_story_song',

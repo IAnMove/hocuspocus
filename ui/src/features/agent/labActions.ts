@@ -1,4 +1,5 @@
 import { useStore } from '../../stores/useStore'
+import { applyMusicVideoDirectVideoDefaults } from '../stories/musicVideoLook'
 import type {
   AgentApplyStoryProposalAction,
   AgentApproveStorySectionAction,
@@ -38,6 +39,15 @@ const normalizeName = (value: string): string => value
 const boundedDuration = (value: number | undefined, fallback: number): number => (
   Math.max(15, Math.min(3_600, Math.round(value || fallback)))
 )
+
+const explicitMusicLanguage = (value: string): string => {
+  const raw = value.trim()
+  const aliases: Record<string, string> = {
+    es: 'Español', en: 'English', fr: 'Français', de: 'Deutsch',
+    it: 'Italiano', pt: 'Português', ja: '日本語', ko: '한국어', zh: '中文',
+  }
+  return aliases[raw.toLowerCase()] || raw || 'Español'
+}
 
 function creativeCharacters(values: AgentCreativeCharacter[]): AgentCreativeCharacter[] {
   return values.length ? values : [{
@@ -110,20 +120,60 @@ export async function configureStorySong(action: AgentConfigureStorySongAction):
   cueTitle: string
 }> {
   const workspace = useStore.getState().activeWorkspace || 'default'
-  const [{ useStoryStore, normalizeStoryProject, storyId }, { normalizeStoryMusicModel }] = await Promise.all([
-    import('../stories/store'), import('../stories/musicModel'),
+  const [{ useStoryStore, normalizeStoryProject, storyId }, { normalizeStoryMusicModel, songWriteTarget }, { resolveStoryWritingProvider }, api] = await Promise.all([
+    import('../stories/store'), import('../stories/musicModel'), import('../stories/provider'), import('../../api/client'),
   ])
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de editar la canción.')
-  const target = action.targetStoryTitle
+  const found = action.targetStoryTitle
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
-  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
-  if (target.projectType !== 'music_video') throw new Error(`“${target.title}” no es un proyecto de tipo videoclip.`)
+  if (!found) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  let target = found.projectType === 'music_video'
+    ? applyMusicVideoDirectVideoDefaults(found)
+    : applyMusicVideoDirectVideoDefaults({
+      ...found,
+      projectType: 'music_video',
+      musicVideoGenerationMode: 'direct_video',
+    })
   if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
-  const lyrics = action.instrumental ? '' : action.lyrics.trim()
-  if (!action.instrumental && !lyrics) throw new Error('Una canción vocal necesita letra antes de rellenar la ficha.')
+  const lyricsLanguage = explicitMusicLanguage(action.lyricsLanguage || target.language)
+  const durationSeconds = boundedDuration(action.durationSeconds, target.music.targetDurationSeconds)
+  const model = normalizeStoryMusicModel(action.model)
+  const brief = action.brief.trim() || target.music.brief || target.creativeBrief.songStory || target.premise
+  let style = action.style.trim()
+  let lyrics = action.instrumental ? '' : action.lyrics.trim()
+  let lyriaPrompt = ''
+  if (!action.instrumental && !lyrics && action.writeLyrics) {
+    const writing = resolveStoryWritingProvider(useStore.getState().productionProfile, target)
+    const storyContext = [
+      `Título: ${target.title}`,
+      `Premisa: ${target.premise}`,
+      target.synopsis ? `Sinopsis: ${target.synopsis}` : '',
+      target.theme ? `Tema: ${target.theme}` : '',
+      target.beats.length ? `Progresión: ${target.beats.map(item => item.summary).join(' → ')}` : '',
+    ].filter(Boolean).join('\n')
+    const written = await api.writeSong({
+      description: `${brief}\nEscribe el prompt musical y la letra completa en ${lyricsLanguage}.`,
+      instrumental: false,
+      target: songWriteTarget(model),
+      model,
+      style_direction: `${style}\nRedacta también la dirección musical visible en ${lyricsLanguage}.`,
+      lyrics_direction: `Letra vocal completamente original en ${lyricsLanguage}, con secciones [Verse], [Chorus], [Bridge] y [Outro].`,
+      story_context: storyContext,
+      language: lyricsLanguage,
+      duration_seconds: durationSeconds,
+      max_new_tokens: 2200,
+      writingProvider: writing.provider,
+      writingModel: writing.model,
+      writingBaseUrl: writing.baseUrl,
+    })
+    style = written.style.trim() || style
+    lyrics = written.lyrics.trim()
+    lyriaPrompt = written.lyria_prompt.trim()
+  }
+  if (!action.instrumental && !lyrics) throw new Error('El compositor no devolvió una letra vocal completa para la ficha.')
   const existing = target.music.cues.find(item => item.kind === 'story')
   const cueTitle = action.songTitle.trim() || existing?.title || `${target.title} · canción`
   const cue = {
@@ -131,15 +181,15 @@ export async function configureStorySong(action: AgentConfigureStorySongAction):
     kind: 'story' as const,
     targetId: target.id,
     title: cueTitle,
-    purpose: action.brief.trim() || target.creativeBrief.songStory || target.premise,
+    purpose: brief,
     referenceSong: existing?.referenceSong || '',
-    brief: action.brief.trim() || target.music.brief || target.premise,
-    style: action.style.trim(),
+    brief,
+    style,
     lyrics,
-    lyricsLanguage: action.lyricsLanguage.trim() || target.language,
-    lyriaPrompt: existing?.lyriaPrompt || '',
+    lyricsLanguage,
+    lyriaPrompt: lyriaPrompt || existing?.lyriaPrompt || '',
     instrumental: action.instrumental,
-    durationSeconds: boundedDuration(action.durationSeconds, target.music.targetDurationSeconds),
+    durationSeconds,
     candidates: existing?.candidates || [],
     selectedCandidateId: undefined,
   }
@@ -158,7 +208,7 @@ export async function configureStorySong(action: AgentConfigureStorySongAction):
     music: {
       ...target.music,
       mode: 'original',
-      model: normalizeStoryMusicModel(action.model),
+      model,
       brief: cue.brief,
       style: cue.style,
       lyrics: cue.lyrics,
@@ -275,11 +325,20 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
     throw new Error('Story Lab tiene un conflicto pendiente entre la copia local y la del workspace; resuélvelo antes de crear otra historia.')
   }
 
+  const sameTitle = Object.values(current.projects).find(project => (
+    normalizeName(project.title) === normalizeName(action.title)
+  ))
   const duplicate = Object.values(current.projects).find(project => (
     normalizeName(project.title) === normalizeName(action.title)
     && normalizeName(project.premise) === normalizeName(action.premise)
   ))
-  if (duplicate) {
+  if (action.projectType === 'music_video' && sameTitle?.projectType === 'music_video') {
+    useStoryStore.setState({ project: sameTitle, dirty: false })
+    showLab('stories')
+    openAgentStorySection('overview')
+    return `El videoclip “${sameTitle.title}” ya existía; lo he abierto en Story Lab → Overview.`
+  }
+  if (duplicate && !(action.projectType === 'music_video' && duplicate.projectType !== 'music_video')) {
     useStoryStore.setState({ project: duplicate, dirty: false })
     showLab('stories')
     openAgentStorySection('overview')
@@ -323,8 +382,12 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
     conflict: index === 0 ? action.premise : 'La situación se complica y obliga a tomar una decisión.',
     turn: index === all.length - 1 ? action.ending || beat : 'La nueva información cambia el rumbo de la historia.',
   }))
-  const project = normalizeStoryProject({
+  const reuseId = action.projectType === 'music_video' && sameTitle && sameTitle.projectType !== 'music_video'
+    ? sameTitle.id
+    : undefined
+  let project = normalizeStoryProject({
     ...base,
+    id: reuseId || base.id,
     title: action.title,
     projectType: action.projectType || 'full_story',
     creativeBrief: {
@@ -372,6 +435,12 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
     beats,
     updatedAt: new Date().toISOString(),
   })
+  if (project.projectType === 'music_video') {
+    project = applyMusicVideoDirectVideoDefaults({
+      ...project,
+      musicVideoGenerationMode: 'direct_video',
+    })
+  }
 
   const library = await api.saveStoryLibrary(workspace, {
     version: 2,
@@ -1266,13 +1335,16 @@ export async function stageStoryMusicVideo(action: AgentStageStoryMusicVideoActi
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de preparar el videoclip.')
-  const target = action.targetStoryTitle
+  const found = action.targetStoryTitle
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
-  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
-  if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
-  const { cue, candidate } = selection.resolveStoryMusicSelection(target, action.songName, action.cueTitle)
-  const resolvedCue = selection.effectiveStoryMusicCue(target, cue, candidate)
+  if (!found) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (current.activeProjectOperations[found.id]) throw new Error(`La historia “${found.title}” tiene una operación activa.`)
+  const { cue, candidate } = selection.resolveStoryMusicSelection(found, action.songName, action.cueTitle)
+  const resolvedCue = selection.effectiveStoryMusicCue(found, cue, candidate)
+  const target = applyMusicVideoDirectVideoDefaults(found.projectType === 'music_video'
+    ? found
+    : { ...found, projectType: 'music_video', musicVideoGenerationMode: 'direct_video' })
   const directVideo = target.musicVideoGenerationMode === 'direct_video'
   const directReferences = target.musicVideoGenerationMode === 'direct_references'
   if (directReferences && !String(target.videoOverride.model || '').startsWith('minimax_h3')) {
@@ -1363,8 +1435,8 @@ export async function stageStoryMusicVideo(action: AgentStageStoryMusicVideoActi
     director.setSidebarMode('director')
     director.setDirectorSkill('music_video')
     director.setDirectorAutoMode(false)
-    director.setDirectorShotImageGuidance(directReferences ? 'prompt_only' : 'auto')
-    if (String(target.videoOverride.model || '').startsWith('minimax_h3')) {
+    director.setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')
+    if (String(target.videoOverride.model || '').startsWith('minimax_h3') && !directVideo) {
       director.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
     }
     director.setDirectorMusicVideoTreatment({

@@ -34,6 +34,7 @@ import {
 } from './adaptations'
 import type { TrailerAdaptationOptions } from './adaptations'
 import { normalizeStoryProject, storyId, useStoryStore } from './store'
+import { musicVideoShouldUseDirectVideo } from './musicVideoLook'
 import {
   analyzeStoryPromptHealth,
   applyStoryVisualStyle,
@@ -1271,7 +1272,10 @@ export function StoryLabPanel() {
   const selectedFilmImageModel = videoModels.find(model => model.model_type === filmImageModel)
   const selectedFilmVideoModel = videoModels.find(model => model.model_type === filmVideoModel)
   const filmImageReady = filmImageModel !== MINIMAX_IMAGE_API_MODEL || Boolean(servicesConfig?.minimax_api_key_set)
-  const directVideo = project.musicVideoGenerationMode === 'direct_video'
+  const effectiveMusicVideoMode = musicVideoShouldUseDirectVideo(project)
+    ? 'direct_video'
+    : project.musicVideoGenerationMode
+  const directVideo = effectiveMusicVideoMode === 'direct_video'
   const directMusicVideo = directVideo
   const directReferenceVideo = project.musicVideoGenerationMode === 'direct_references'
   const promptHealthWarnings = useMemo(() => analyzeStoryPromptHealth(project), [project])
@@ -2879,7 +2883,7 @@ export function StoryLabPanel() {
     store.setDirectorResolution(resolution)
     store.setDirectorAspectRatio(aspectRatio)
     store.setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')
-    if (videoModel.startsWith('minimax_h3')) {
+    if (videoModel.startsWith('minimax_h3') && !directVideo) {
       store.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
     }
     // setSidebarMode normally sends a fresh Director session to its route
@@ -4181,8 +4185,8 @@ export function StoryLabPanel() {
     store.setSidebarMode('director')
     store.setDirectorSkill('music_video')
     store.setDirectorAutoMode(autoStart)
-    store.setDirectorShotImageGuidance(directReferences ? 'prompt_only' : 'auto')
-    if (generationSettings.videoModel.startsWith('minimax_h3')) {
+    store.setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')
+    if (generationSettings.videoModel.startsWith('minimax_h3') && !directVideo) {
       store.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
     }
     store.setDirectorMusicVideoTreatment({
@@ -4307,8 +4311,8 @@ export function StoryLabPanel() {
       director.setSidebarMode('director')
       director.setDirectorSkill('music_video')
       director.setDirectorAutoMode(false)
-      director.setDirectorShotImageGuidance(project.musicVideoGenerationMode === 'direct_references' ? 'prompt_only' : 'auto')
-      if (filmVideoModel.startsWith('minimax_h3')) {
+      director.setDirectorShotImageGuidance(project.musicVideoGenerationMode === 'direct_video' || project.musicVideoGenerationMode === 'direct_references' ? 'prompt_only' : 'auto')
+      if (filmVideoModel.startsWith('minimax_h3') && project.musicVideoGenerationMode !== 'direct_video') {
         director.setDirectorH3ReferenceMode(project.musicVideoGenerationMode === 'direct_references' ? 'references' : 'first_frame')
       }
       director.setDirectorMusicVideoTreatment({
@@ -4343,7 +4347,7 @@ export function StoryLabPanel() {
         videoModel: filmVideoModel,
         resolution: storyVideoResolution,
         aspectRatio: storyVideoAspectRatio,
-        generationMode: project.musicVideoGenerationMode,
+        generationMode: effectiveMusicVideoMode,
         directVideoMasterPrompt: project.directVideoMasterPrompt,
         writingProvider: project.provider.writingProvider,
         writingModel: project.provider.writingModel,

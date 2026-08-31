@@ -458,7 +458,10 @@ Agent Mode complete prematurely.
   lyrics in the visible Story Lab music form. A separate confirmed action runs
   ACE-Step, stores the verified audio candidate and selects it before Director
   staging. Compound execution stops downstream videoclip steps if song creation
-  fails.
+  fails. The reconciler also repairs incomplete LLM plans by coercing new
+  videoclip projects to `music_video` and invoking the Story song writer when
+  literal lyrics were omitted. Both the editable STYLE prompt and lyrics follow
+  the user-selected language; only provider section tags stay in English.
 - Story Lab creation and updates: migrated to the common adapter/registry
   contract, preserving the canonical story project ID after each mutation.
 - Story Lab proposals and section approval: migrated to the common contract;
@@ -492,8 +495,10 @@ Paused the general migration to repair the real **Story Lab song → videoclip**
 flow reported from the Wizard. The missing bridge is now implemented as
 `configure_story_song → generate_story_song → stage_story_music_video →
 start_director_production`, with `create_story(project_type=music_video)` in
-front when the project is new. The UI form, not the chat prose, is authoritative
-for lyrics and instrumental mode. Resume the migration from the first remaining
+front when the project is new. Incomplete model plans are repaired into this
+chain and missing lyrics are composed into the UI in the requested language.
+The UI form, not the chat prose, is authoritative for prompts, lyrics and
+instrumental mode. Resume the migration from the first remaining
 unmigrated capability after reviewing the uncommitted alternative-song block.
 Keep Decision gate A open; visible focus/fill/sparkle choreography remains the
 final presentation phase.

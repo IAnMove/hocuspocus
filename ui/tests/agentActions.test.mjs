@@ -311,6 +311,47 @@ test('keeps a vocal Story song in the UI workflow before launching its videoclip
   ])
 })
 
+test('a videoclip request infers music_video even if the model omits project_type', async () => {
+  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const parsed = parseAgentTurn(JSON.stringify({
+    reply: 'Creo el himno.',
+    actions: [{
+      type: 'create_story',
+      title: 'El Himno del Sysadmin',
+      premise: 'Videoclip musical de una guardia nocturna que salva la red cantando.',
+      visual_style: 'Classic adult animated style of Heavy Metal 1981',
+    }],
+  }))
+  assert.equal(parsed.actions[0].type, 'create_story')
+  assert.equal(parsed.actions[0].projectType, 'music_video')
+
+  const coerced = await reconcileAgentTurnWithRequest(
+    'Crea desde cero en Story Lab un videoclip llamado El Himno del Sysadmin y ejecuta el videoclip',
+    {
+      reply: 'Creo el himno.',
+      actions: [{
+        type: 'create_story',
+        title: 'El Himno del Sysadmin',
+        projectType: 'full_story',
+        creativeBrief: '',
+        premise: 'Una guardia nocturna salva la red cantando.',
+        logline: '', synopsis: '', theme: '', ending: '', genre: '', tone: '',
+        visualStyle: 'Heavy Metal 1981', worldSummary: '', language: 'es',
+        characters: [], locations: [], outlineBeats: [],
+      }],
+    },
+  )
+  assert.equal(coerced.actions[0].type, 'create_story')
+  assert.equal(coerced.actions[0].projectType, 'music_video')
+  assert.deepEqual(coerced.actions.map(action => action.type), [
+    'create_story', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production',
+  ])
+  assert.equal(coerced.actions[1].writeLyrics, true)
+  assert.equal(coerced.actions[1].instrumental, false)
+  assert.equal(coerced.actions[1].lyricsLanguage, 'es')
+  assert.match(coerced.actions[1].style, /videoclip llamado El Himno/i)
+})
+
 test('resolves an exact Story song and cue, and rejects ambiguous names', async () => {
   const { createStoryProject } = await import('../src/features/stories/model.ts')
   const { resolveStoryMusicSelection } = await import('../src/features/stories/musicVideoSelection.ts')

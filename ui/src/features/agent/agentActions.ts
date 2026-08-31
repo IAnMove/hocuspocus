@@ -53,6 +53,7 @@ import {
 } from './capabilityRegistry'
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
+import { inferStoryProjectTypeFromText } from '../stories/musicVideoLook'
 
 export type { ExampleConversation }
 export { AGENT_TABS }
@@ -276,6 +277,7 @@ export interface AgentConfigureStorySongAction {
   brief: string
   style: string
   lyrics: string
+  writeLyrics: boolean
   lyricsLanguage: string
   instrumental: boolean
   model: 'music-3.0' | 'music-2.6' | 'ace_step_v1_5_xl_sft_lm_4b'
@@ -1136,10 +1138,13 @@ function parseAction(value: unknown): AgentAction | null {
     const premise = cleanString(raw.premise, 2_000)
     if (!title || !premise) return null
     const projectType = cleanString(raw.project_type, 30) as AgentCreateStoryAction['projectType']
+    const inferred = inferStoryProjectTypeFromText(
+      title, premise, cleanString(raw.creative_brief, 4_000), cleanString(raw.visual_style, 2_000),
+    )
     return {
       type: 'create_story',
       title,
-      projectType: STORY_PROJECT_TYPES.has(projectType) ? projectType : 'full_story',
+      projectType: STORY_PROJECT_TYPES.has(projectType) ? projectType : inferred || 'full_story',
       creativeBrief: cleanString(raw.creative_brief, 4_000),
       premise,
       logline: cleanString(raw.logline, 2_000),
@@ -1901,33 +1906,60 @@ export async function reconcileAgentTurnWithRequest(
   const musicVideoStage = isExplicitMusicVideoStageRequest(request)
   const musicVideoStart = isExplicitMusicVideoStartRequest(request, history)
   if (musicVideoStage || musicVideoStart) {
-    const storySongSetup = turn.actions.filter(action => (
+    const actions = turn.actions.map(action => (
+      action.type === 'create_story' && action.projectType !== 'music_video'
+        ? { ...action, projectType: 'music_video' as const }
+        : action
+    ))
+    const storySongSetup = actions.filter(action => (
       action.type === 'create_story'
       || action.type === 'configure_story_song'
       || action.type === 'generate_story_song'
     ))
-    const existingStage = turn.actions.find(
+    const existingStage = actions.find(
       (action): action is AgentStageStoryMusicVideoAction => action.type === 'stage_story_music_video',
     )
-    const songDraft = turn.actions.find(
+    const songDraft = actions.find(
       (action): action is AgentConfigureStorySongAction => action.type === 'configure_story_song',
     )
-    const createdMusicVideo = turn.actions.find(
+    const createdMusicVideo = actions.find(
       (action): action is AgentCreateStoryAction => action.type === 'create_story' && action.projectType === 'music_video',
     )
-    const stage: AgentStageStoryMusicVideoAction = existingStage || {
+    const automaticDraft: AgentConfigureStorySongAction | undefined = !songDraft && createdMusicVideo
+      ? {
+          type: 'configure_story_song',
+          targetStoryTitle: createdMusicVideo.title,
+          songTitle: createdMusicVideo.title,
+          brief: createdMusicVideo.creativeBrief || createdMusicVideo.premise,
+          style: request.trim().slice(0, 4_000),
+          lyrics: '',
+          writeLyrics: true,
+          lyricsLanguage: createdMusicVideo.language || 'Español',
+          instrumental: false,
+          model: 'ace_step_v1_5_xl_sft_lm_4b',
+          durationSeconds: createdMusicVideo.durationSeconds || 90,
+        }
+      : undefined
+    const effectiveSongDraft = songDraft || automaticDraft
+    const completeSongSetup = automaticDraft ? [...storySongSetup, automaticDraft] : storySongSetup
+    const stageSeed: AgentStageStoryMusicVideoAction = existingStage || {
       type: 'stage_story_music_video',
-      targetStoryTitle: songDraft?.targetStoryTitle || createdMusicVideo?.title || '',
+      targetStoryTitle: effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || '',
       songName: '',
-      cueTitle: songDraft?.songTitle || '',
+      cueTitle: effectiveSongDraft?.songTitle || '',
       pacing: 'balanced',
       confirm: true,
     }
+    const stage: AgentStageStoryMusicVideoAction = {
+      ...stageSeed,
+      targetStoryTitle: stageSeed.targetStoryTitle || effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || '',
+      cueTitle: stageSeed.cueTitle || effectiveSongDraft?.songTitle || '',
+    }
     if (musicVideoStage && musicVideoStart) {
-      const configuredSong = storySongSetup.some(action => action.type === 'configure_story_song')
-      const songActions = configuredSong && !storySongSetup.some(action => action.type === 'generate_story_song')
-        ? [...storySongSetup, { type: 'generate_story_song' as const, targetStoryTitle: stage.targetStoryTitle, cueTitle: stage.cueTitle, confirm: true as const }]
-        : storySongSetup
+      const configuredSong = completeSongSetup.some(action => action.type === 'configure_story_song')
+      const songActions = configuredSong && !completeSongSetup.some(action => action.type === 'generate_story_song')
+        ? [...completeSongSetup, { type: 'generate_story_song' as const, targetStoryTitle: stage.targetStoryTitle, cueTitle: stage.cueTitle, confirm: true as const }]
+        : completeSongSetup
       return {
         reply: configuredSong
           ? 'Guardaré la canción y su letra en Story Lab, generaré el audio real y sólo entonces prepararé e iniciaré el videoclip. En marcha no es terminado. 🪄'
@@ -2106,6 +2138,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           song_brief: { type: 'string', maxLength: 4_000 },
           music_style: { type: 'string', maxLength: 4_000 },
           lyrics: { type: 'string', maxLength: 12_000 },
+          write_lyrics: { type: 'boolean' },
           lyrics_language: { type: 'string', maxLength: 120 },
           instrumental: { type: 'boolean' },
           pacing: { type: 'string', enum: ['', 'cinematic', 'balanced', 'rhythmic'] },

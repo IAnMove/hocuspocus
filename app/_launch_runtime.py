@@ -8373,7 +8373,8 @@ _SONG_WRITER_FALLBACK_INSTRUMENTAL = (
 )
 _SONG_WRITER_FALLBACK_MINIMAX = (
     "You write prompts for MiniMax Music. Output exactly [STYLE] and [LYRICS]. "
-    "STYLE is one English comma-separated line of 10-300 characters containing "
+    "Write both STYLE and LYRICS in the language requested by the user. STYLE is one "
+    "comma-separated line of 10-300 characters containing "
     "genre, mood, instruments, vocal direction, tempo and production. Never put "
     "reference song or artist names in STYLE. LYRICS use supported tags such as "
     "[Verse], [Pre Chorus], [Chorus], [Bridge], [Inst], [Solo] and [Outro], each "
@@ -8426,7 +8427,9 @@ def _minimax_song_request_prompt(body: dict, description: str, instrumental: boo
     sections = [
         f"MODE: {'instrumental' if instrumental else 'vocal song'}",
         f"TARGET MODEL: {model}",
-        f"LYRICS LANGUAGE: {language}",
+        f"STYLE AND LYRICS LANGUAGE: {language}",
+        f"LANGUAGE RULE: Write the visible STYLE prompt and all sung words in {language}. "
+        "Keep only provider structural tags such as [Verse] and [Chorus] in English.",
         f"TARGET DURATION: approximately {duration} seconds",
         "DURATION NOTE: MiniMax Music has no exact duration API parameter. Treat the target "
         "as a strict lyric and arrangement budget: keep the section count and sung lines "
@@ -8464,6 +8467,19 @@ def _normalize_minimax_song_output(style: str, lyrics: str, instrumental: bool, 
     return style, lyrics
 
 
+def _ace_song_request_prompt(description: str, language: str, instrumental: bool) -> str:
+    """Keep the editable ACE-Step prompt in the language selected by the user."""
+    target = str(language or "English").strip()[:80] or "English"
+    if instrumental:
+        rule = f"Write the visible STYLE prompt in {target}."
+    else:
+        rule = (
+            f"Write both the visible STYLE prompt and all lyrics in {target}; "
+            "keep structural tags such as [Verse] and [Chorus] in English."
+        )
+    return f"OUTPUT LANGUAGE: {target}. {rule}\n\n{str(description or '').strip()}"
+
+
 @api.post("/api/v1/llm/write-song")
 async def llm_write_song(request: Request):
     """Produce a provider-ready style prompt and structured lyrics.
@@ -8480,6 +8496,7 @@ async def llm_write_song(request: Request):
     instrumental = bool(body.get("instrumental"))
     target = str(body.get("target") or "ace-step").strip().lower()
     model = str(body.get("model") or "music-3.0").strip()
+    language = str(body.get("language") or "English").strip()[:80]
 
     # Optional reference image → the vision LLM lets the visuals inform the
     # STYLE (e.g. neon cityscape → synthwave). Degrades gracefully: if the
@@ -8501,10 +8518,10 @@ async def llm_write_song(request: Request):
         user_prompt = _minimax_song_request_prompt(body, description, instrumental)
     elif instrumental:
         system_prompt = load_guide("music", "song_writer_instrumental") or _SONG_WRITER_FALLBACK_INSTRUMENTAL
-        user_prompt = description
+        user_prompt = _ace_song_request_prompt(description, language, True)
     else:
         system_prompt = load_guide("music", "song_writer") or _SONG_WRITER_FALLBACK
-        user_prompt = description
+        user_prompt = _ace_song_request_prompt(description, language, False)
     llm_override = _comic_writing_llm(body) if body.get("writingProvider") else None
     try:
         if llm_override:
@@ -31620,7 +31637,7 @@ Music-video contract:
 - Target duration: {max(20, min(360, brief_duration or 90))} seconds.
 - referenceSong is an editable inspiration example in "Title — Artist" form. Use it only
   for broad tempo, instrumentation or emotional architecture; never copy melody or lyrics.
-- style is the final MiniMax Music prompt: one concise English comma-separated line,
+- style is the final MiniMax Music prompt: one concise {language} comma-separated line,
   10–300 characters, covering genre, mood, instruments, vocals, tempo and production.
 - Write lyrics in {language}, maximum 3500 characters, with a recurring hook and a clear
   narrative progression. Use supported English tags on their own lines: [Intro], [Verse],
@@ -31639,7 +31656,7 @@ Music-specific contract:
   reproduce the reference song's melody, lyrics, title phrases or distinctive arrangement.
 - Treat referenceSong, brief, the Story canon and requested lyric theme as INPUTS to transform.
   The final style field must never contain the reference title or artist name.
-- style is the final MiniMax Music prompt. Write one concise English comma-separated line,
+- style is the final MiniMax Music prompt. Write one concise {language} comma-separated line,
   10–300 characters, ordered as applicable: primary genre/subgenre, secondary influence,
   mood/atmosphere, key instruments, vocal direction, tempo or BPM, dynamics, production.
   Prefer concrete compatible traits; avoid contradictions, filler and narrative synopsis.

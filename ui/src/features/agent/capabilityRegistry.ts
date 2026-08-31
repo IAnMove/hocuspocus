@@ -36,6 +36,7 @@ import type { AgentExecutionReport } from './agentContract'
 import type { AgentExecutionTarget } from './agentContract'
 import { executionKey, executionReport } from './agentContract'
 import type { WizardApplicationAdapters } from './applicationAdapters'
+import { inferStoryProjectTypeFromText } from '../stories/musicVideoLook'
 import type { AgentCreateVideoEditorProjectAction, AgentOpenVideoEditorProjectAction } from './videoEditorActions'
 import type { AgentAttachVideoclipAlternativeSongAction, AgentMountVideoclipAlternativeSongAction } from './alternativeSongActions'
 import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
@@ -488,7 +489,14 @@ defineCapability<AgentCreateStoryAction>({
     const fields = storyFields(raw)
     if (!fields.title || !fields.premise) return null
     const projectType = text(raw.project_type, 30)
-    return { type: 'create_story', ...fields, projectType: storyProjectTypes.has(projectType) ? projectType as AgentCreateStoryAction['projectType'] : 'full_story' }
+    const inferred = inferStoryProjectTypeFromText(fields.title, fields.premise, fields.creativeBrief, fields.visualStyle)
+    return {
+      type: 'create_story',
+      ...fields,
+      projectType: storyProjectTypes.has(projectType)
+        ? projectType as AgentCreateStoryAction['projectType']
+        : inferred || 'full_story',
+    }
   },
   validate(action) { return action.title && action.premise ? [] : ['title and premise are required'] }, async prepare(action) { return action },
   async execute(action, context) { return context.adapters.storyLab.create(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
@@ -850,7 +858,7 @@ defineCapability<AgentConfigureStorySongAction>({
   name: 'configure_story_song', title: 'Fill a Story Lab song draft',
   description: 'Write the selected model, vocal/instrumental mode, musical direction and structured lyrics into the canonical Story Lab music form.',
   useWhen: 'The user asks to create, write or revise the song/lyrics for a Story Lab videoclip.',
-  parameters: ['target_story_title', 'song_title', 'song_brief', 'music_style', 'lyrics', 'lyrics_language', 'instrumental', 'model_type', 'target_duration_seconds'],
+  parameters: ['target_story_title', 'song_title', 'song_brief', 'music_style', 'lyrics', 'write_lyrics', 'lyrics_language', 'instrumental', 'model_type', 'target_duration_seconds'],
   inputSchema: {
     type: 'object', additionalProperties: false,
     properties: {
@@ -860,19 +868,21 @@ defineCapability<AgentConfigureStorySongAction>({
       song_brief: { type: 'string', maxLength: 4_000 },
       music_style: { type: 'string', maxLength: 4_000 },
       lyrics: { type: 'string', maxLength: 12_000 },
+      write_lyrics: { type: 'boolean' },
       lyrics_language: { type: 'string', maxLength: 120 },
       instrumental: { type: 'boolean' },
       model_type: { type: 'string', enum: ['ace_step_v1_5_xl_sft_lm_4b', 'music-3.0', 'music-2.6'] },
       target_duration_seconds: { type: 'number', minimum: 20, maximum: 360 },
     },
-    required: ['type', 'music_style', 'lyrics', 'instrumental'],
+    required: ['type', 'music_style', 'instrumental'],
   },
   risk: 'edit', confirmation: 'none', progress: 'Rellenando la canción y la letra en Story Lab…',
   resolve(raw) {
     const instrumental = raw.instrumental === true
     const lyrics = text(raw.lyrics, 12_000)
+    const writeLyrics = raw.write_lyrics === true
     const style = text(raw.music_style, 4_000)
-    if (!style || (!instrumental && !lyrics)) return null
+    if (!style || (!instrumental && !lyrics && !writeLyrics)) return null
     const model = text(raw.model_type, 160)
     return {
       type: 'configure_story_song',
@@ -881,13 +891,14 @@ defineCapability<AgentConfigureStorySongAction>({
       brief: text(raw.song_brief, 4_000),
       style,
       lyrics,
+      writeLyrics,
       lyricsLanguage: text(raw.lyrics_language, 120),
       instrumental,
       model: model === 'music-3.0' || model === 'music-2.6' ? model : 'ace_step_v1_5_xl_sft_lm_4b',
       durationSeconds: raw.target_duration_seconds === undefined ? undefined : boundedNumber(raw.target_duration_seconds, 20, 360, 90),
     }
   },
-  validate(action) { return action.style && (action.instrumental || action.lyrics) ? [] : ['music style and vocal lyrics are required'] },
+  validate(action) { return action.style && (action.instrumental || action.lyrics || action.writeLyrics) ? [] : ['music style and vocal lyrics or write_lyrics are required'] },
   async prepare(action) { return action },
   async execute(action, context) { return context.adapters.storyLab.configureSong(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
