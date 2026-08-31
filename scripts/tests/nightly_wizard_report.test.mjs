@@ -6,8 +6,10 @@ import {
   deriveRunStatus,
   junitXml,
   parseLevels,
+  parseSmokeResult,
   requireTestDiagnostics,
   selectPythonTestFiles,
+  smokeOptInMissing,
 } from '../nightly_wizard_report.mjs'
 
 const baseline = {
@@ -70,9 +72,29 @@ test('JUnit records expected failures as skipped rather than passed', () => {
 })
 
 test('level parsing rejects empty and unknown coverage requests', () => {
-  assert.deepEqual(parseLevels('1,2,2,6'), ['1', '2', '6'])
+  assert.deepEqual(parseLevels('1,2,2,6,8'), ['1', '2', '6', '8'])
   assert.throws(() => parseLevels(''), /at least one/)
   assert.throws(() => parseLevels('1,99'), /Unknown NIGHTLY_LEVELS: 99/)
+})
+
+test('level 8 smoke is fail-closed until both flags and the base URL are explicit', () => {
+  assert.deepEqual(smokeOptInMissing(), [
+    'RUN_GPU_TESTS=1', 'RUN_EXTERNAL_PROVIDER_TESTS=1', 'HOCUSPOCUS_SMOKE_BASE_URL',
+    'HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA',
+  ])
+  assert.deepEqual(smokeOptInMissing({ runGpu: true, runExternal: true }), [
+    'HOCUSPOCUS_SMOKE_BASE_URL', 'HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA',
+  ])
+  assert.deepEqual(smokeOptInMissing({
+    runGpu: true, runExternal: true, baseUrl: 'http://127.0.0.1:8000', confirm: 'GENERATE_REAL_MEDIA',
+  }), [])
+})
+
+test('nightly runner can recover explicit smoke identifiers from the child contract', () => {
+  assert.deepEqual(parseSmokeResult('noise\nSMOKE_RESULT {"identifiers":{"taskIds":["task-1"],"pipelineIds":[],"outputIds":[]}}\n'), {
+    identifiers: { taskIds: ['task-1'], pipelineIds: [], outputIds: [] },
+  })
+  assert.equal(parseSmokeResult('SMOKE_RESULT not-json'), null)
 })
 
 test('empty or sandbox-blocked test output is an infrastructure failure', () => {

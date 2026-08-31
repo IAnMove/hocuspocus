@@ -1,0 +1,64 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import { normalizeSmokeBaseUrl, runMediaSmoke, validateSmokeOptIn } from '../nightly_wizard_smoke.mjs'
+
+test('media smoke is fail-closed behind four explicit controls', () => {
+  assert.equal(normalizeSmokeBaseUrl(' http://127.0.0.1:8000/ '), 'http://127.0.0.1:8000')
+  assert.throws(() => normalizeSmokeBaseUrl('file:///tmp/hocuspocus'), /http:\/\/ or https:\/\//)
+  assert.throws(() => validateSmokeOptIn({
+    runGpu: true, runExternal: true, baseUrl: 'http://127.0.0.1:8000',
+  }), /HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA/)
+  assert.equal(validateSmokeOptIn({
+    runGpu: true, runExternal: true, baseUrl: 'http://127.0.0.1:8000', confirm: 'GENERATE_REAL_MEDIA',
+  }), 'http://127.0.0.1:8000')
+})
+
+test('media smoke preserves project cue output task and pipeline identities', async () => {
+  let revision = 0
+  const calls = []
+  const fetchImpl = async (url, options) => {
+    const route = new URL(url).pathname
+    calls.push(`${options.method} ${route}`)
+    const request = options.body ? JSON.parse(options.body) : null
+    let payload
+    if (options.method === 'GET' && route === '/api/v1/stories/library') {
+      payload = { version: 2, revision, activeId: '', projects: {} }
+    } else if (options.method === 'PUT' && route === '/api/v1/stories/library') {
+      revision += 1
+      payload = { ...request.library, revision }
+    } else if (options.method === 'POST' && route === '/api/v1/stories/music-candidates/jobs') {
+      assert.equal(request.instrumental, false)
+      assert.equal(request.model, 'ace_step_v1_5_xl_sft_lm_4b')
+      payload = { jobId: 'song-job', taskId: 'task-song', rootTaskId: 'task-song' }
+    } else if (options.method === 'GET' && route === '/api/v1/stories/music-candidates/jobs/song-job') {
+      payload = { status: 'completed', taskId: 'task-song', candidates: [{ filename: 'himno.wav', audio_path: '/outputs/himno.wav', duration_seconds: 15 }] }
+    } else if (options.method === 'POST' && route === '/api/v1/audio/analyze') {
+      payload = { bpm: 112, lyrics: request.lyrics_hint, beats: [0, .5, 1] }
+    } else if (options.method === 'POST' && route === '/api/v1/audio/plan-structure') {
+      payload = { clips: [{ start: 0, end: 5 }] }
+    } else if (options.method === 'POST' && route === '/api/v1/director/pipeline/start') {
+      assert.equal(request.pipeline_type, 'music_video')
+      payload = { pipeline_id: 'pipeline-smoke' }
+    } else if (options.method === 'GET' && route === '/api/v1/director/pipeline/pipeline-smoke') {
+      payload = { status: 'completed', output_files: ['videoclip.mp4'] }
+    } else {
+      throw new Error(`Unexpected ${options.method} ${route}`)
+    }
+    return { ok: true, status: 200, async json() { return payload } }
+  }
+
+  const result = await runMediaSmoke({
+    baseUrl: 'http://127.0.0.1:8000', workspace: 'nightly-smoke',
+    runGpu: true, runExternal: true, confirm: 'GENERATE_REAL_MEDIA',
+    fetchImpl, timeoutMs: 2_000, pollIntervalMs: 0,
+  })
+  assert.equal(result.songStatus, 'completed')
+  assert.equal(result.pipelineStatus, 'completed')
+  assert.equal(result.identifiers.projectIds.length, 1)
+  assert.equal(result.identifiers.cueIds.length, 1)
+  assert.deepEqual(result.identifiers.taskIds, ['task-song'])
+  assert.deepEqual(result.identifiers.pipelineIds, ['pipeline-smoke'])
+  assert.deepEqual(result.identifiers.outputIds, ['himno.wav', 'videoclip.mp4'])
+  assert.equal(calls.filter(call => call === 'PUT /api/v1/stories/library').length, 3)
+})

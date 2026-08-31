@@ -343,6 +343,28 @@ añade una acción al tipo `AgentAction` sin registrar su capacidad. Studio,
 navegación de Labs, cola/workspaces, Comics, Character Kit y Video Editor ya no
 dependen de una descripción paralela para ser controlables por el Wizard.
 
+### Nota de relevo — Bloque G cerrado
+
+**Acabé el Bloque G (batería nocturna y observabilidad) y comienzo el Bloque H (prototipo de magia visible en Studio → Video).**
+
+La ejecución nocturna normal cubre ahora los niveles 1–7 y mantiene GPU y
+proveedores externos desactivados. Los niveles 3 y 7 validan interacción DOM,
+navegación, formularios, reanudación de preguntas, ARIA y reduced motion. El
+nivel 8 implementa el smoke real canción → cue de Story → videoclip de Director,
+pero falla cerrado salvo que se indiquen simultáneamente:
+
+```text
+NIGHTLY_LEVELS=8
+RUN_GPU_TESTS=1
+RUN_EXTERNAL_PROVIDER_TESTS=1
+HOCUSPOCUS_SMOKE_BASE_URL=http://127.0.0.1:PUERTO
+HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA
+```
+
+Ese smoke conserva en el informe `projectIds`, `cueIds`, `outputIds`, `taskIds`
+y `pipelineIds`. No se ejecutó durante el desarrollo; sus llamadas se validaron
+con una red simulada.
+
 - `EntityRef`, `ArtifactRef`, `CommandEnvelope`, `CommandResult`, `NavigationTarget`, `PresentationPlan` y `StructuredError` comparten una frontera JSON validada.
 - El contrato rechaza IDs vacíos, referencias entre workspaces, ciclos, prototipos no planos, valores no reproducibles y claves de idempotencia incoherentes.
 - El runner común devuelve, junto al informe existente, el comando canónico y un resultado con entidad, artifacts, task IDs, pipeline IDs y navegación verificables.

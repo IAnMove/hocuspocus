@@ -17,15 +17,18 @@ const JOB_TIMEOUT_MS = Number(process.env.NIGHTLY_JOB_TIMEOUT_MS || 10 * 60 * 10
 const PYTEST_FILE_TIMEOUT_MS = Number(process.env.NIGHTLY_PYTEST_FILE_TIMEOUT_MS || 3 * 60 * 1000)
 const RUN_EXTERNAL = process.env.RUN_EXTERNAL_PROVIDER_TESTS === '1'
 const RUN_GPU = process.env.RUN_GPU_TESTS === '1'
+const SMOKE_BASE_URL = String(process.env.HOCUSPOCUS_SMOKE_BASE_URL || '').trim()
+const SMOKE_WORKSPACE = String(process.env.HOCUSPOCUS_SMOKE_WORKSPACE || 'default').trim() || 'default'
+const SMOKE_CONFIRM = String(process.env.HOCUSPOCUS_SMOKE_CONFIRM || '').trim()
 const LEVEL_CATALOG = Object.freeze({
   '1': { title: 'Static contracts and build', implemented: true },
   '2': { title: 'Wizard unit and schema tests', implemented: true },
-  '3': { title: 'Browser interaction tests', implemented: false },
+  '3': { title: 'Browser interaction tests', implemented: true },
   '4': { title: 'Full UI test suite', implemented: true },
   '5': { title: 'Workflow recovery and persistence tests', implemented: true },
   '6': { title: 'Python backend test suite', implemented: true },
-  '7': { title: 'Presentation and reduced-motion tests', implemented: false },
-  '8': { title: 'Real GPU/provider smoke', implemented: false, optional: true },
+  '7': { title: 'Presentation and reduced-motion tests', implemented: true },
+  '8': { title: 'Real GPU/provider smoke', implemented: true, optional: true },
 })
 
 export function parseLevels(raw = '1,2,4,6') {
@@ -45,10 +48,35 @@ export function selectPythonTestFiles(raw, available) {
   return selected
 }
 
+export function smokeOptInMissing({
+  runGpu = false,
+  runExternal = false,
+  baseUrl = '',
+  confirm = '',
+} = {}) {
+  const missing = []
+  if (runGpu !== true) missing.push('RUN_GPU_TESTS=1')
+  if (runExternal !== true) missing.push('RUN_EXTERNAL_PROVIDER_TESTS=1')
+  if (!String(baseUrl || '').trim()) missing.push('HOCUSPOCUS_SMOKE_BASE_URL')
+  if (confirm !== 'GENERATE_REAL_MEDIA') missing.push('HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA')
+  return missing
+}
+
+export function parseSmokeResult(output) {
+  const match = [...String(output || '').matchAll(/^SMOKE_RESULT\s+(\{.*\})\s*$/gm)].at(-1)
+  if (!match) return null
+  try {
+    const result = JSON.parse(match[1])
+    return result && typeof result === 'object' ? result : null
+  } catch {
+    return null
+  }
+}
+
 let levelConfigurationError = null
 let REQUESTED_LEVELS = []
 try {
-  REQUESTED_LEVELS = parseLevels(process.env.NIGHTLY_LEVELS || '1,2,4,5,6')
+  REQUESTED_LEVELS = parseLevels(process.env.NIGHTLY_LEVELS || '1,2,3,4,5,6,7')
 } catch (error) {
   levelConfigurationError = error
 }
@@ -157,6 +185,7 @@ async function recordJob(job) {
           : outcome.signal ? 'infrastructure_failure' : 'failure'
     ),
     baselineMatches: outcome.baselineMatches || [],
+    identifiers: outcome.identifiers || null,
     reason: outcome.reason || null,
     timedOut: outcome.timedOut === true,
     signal: outcome.signal || null,
@@ -428,43 +457,82 @@ async function main() {
     })
   }
 
-  for (const level of ['3', '7']) {
-    if (!LEVELS.has(level)) continue
+  if (LEVELS.has('3')) {
     jobs.push({
-      id: `level-${level}-not-implemented`,
-      level: Number(level),
-      title: LEVEL_CATALOG[level].title,
-      run: async () => ({
-        code: 0,
-        stdout: '',
-        stderr: '',
-        timedOut: false,
-        classification: 'skipped',
-        reason: `Level ${level} is intentionally not implemented yet`,
-      }),
+      id: 'wizard-browser-contracts', level: 3, title: LEVEL_CATALOG['3'].title, logName: 'wizard-browser-contracts.log',
+      run: async () => requireTestDiagnostics(await runCaptured(
+        process.execPath,
+        ['--import', 'tsx', '--test',
+          'tests/agentActions.test.mjs',
+          'tests/agentContract.test.mjs',
+          'tests/wizardPendingAnswer.test.mjs',
+          'tests/wizardWorkflowRuntime.test.mjs',
+          'tests/wizardInteractionDom.test.tsx'],
+        { cwd: ui, logPath: path.join(outDir, 'wizard-browser-contracts.log') },
+      ), 'Wizard browser interaction contracts'),
+    })
+  }
+
+  if (LEVELS.has('7')) {
+    jobs.push({
+      id: 'wizard-presentation-contracts', level: 7, title: LEVEL_CATALOG['7'].title, logName: 'wizard-presentation-contracts.log',
+      run: async () => requireTestDiagnostics(await runCaptured(
+        process.execPath,
+        ['--import', 'tsx', '--test', 'tests/wizardPresentationContract.test.mjs'],
+        { cwd: ui, logPath: path.join(outDir, 'wizard-presentation-contracts.log') },
+      ), 'Wizard presentation contracts'),
     })
   }
 
   if (LEVELS.has('8')) {
     jobs.push({
       id: 'optional-smoke', level: 8, title: 'Optional real smoke (explicit)', logName: 'smoke.log',
-      run: async () => (RUN_EXTERNAL || RUN_GPU)
-        ? {
+      run: async () => {
+        const missing = smokeOptInMissing({
+          runGpu: RUN_GPU,
+          runExternal: RUN_EXTERNAL,
+          baseUrl: SMOKE_BASE_URL,
+          confirm: SMOKE_CONFIRM,
+        })
+        if (missing.length) {
+          return {
             code: 1,
             stdout: '',
-            stderr: 'Optional real smoke is not implemented.\n',
+            stderr: `Level 8 is fail-closed; explicit opt-in is missing: ${missing.join(', ')}\n`,
             timedOut: false,
-            classification: 'failure',
-            reason: 'Level 8 was enabled but its real smoke workflow is not implemented',
+            classification: 'configuration_error',
+            reason: `Level 8 requires ${missing.join(', ')}`,
           }
-        : {
-            code: 0,
-            stdout: '',
-            stderr: '',
-            timedOut: false,
-            classification: 'skipped',
-            reason: 'Level 8 requires RUN_GPU_TESTS=1 and/or RUN_EXTERNAL_PROVIDER_TESTS=1',
+        }
+        const outcome = await runCaptured(
+          process.execPath,
+          ['scripts/nightly_wizard_smoke.mjs'],
+          {
+            env: {
+              HOCUSPOCUS_SMOKE_BASE_URL: SMOKE_BASE_URL,
+              HOCUSPOCUS_SMOKE_WORKSPACE: SMOKE_WORKSPACE,
+              HOCUSPOCUS_SMOKE_CONFIRM: SMOKE_CONFIRM,
+            },
+            logPath: path.join(outDir, 'smoke.log'),
+            timeoutMs: Number(process.env.NIGHTLY_SMOKE_TIMEOUT_MS || JOB_TIMEOUT_MS),
           },
+        )
+        const smoke = parseSmokeResult(outcome.stdout)
+        if (outcome.code !== 0) return outcome
+        if (!smoke?.identifiers) {
+          return {
+            ...outcome,
+            code: 1,
+            classification: 'infrastructure_failure',
+            reason: 'Smoke probe exited successfully without a machine-readable result or identifiers',
+          }
+        }
+        return {
+          ...outcome,
+          identifiers: smoke.identifiers,
+          reason: `Song ${smoke.songStatus}; videoclip pipeline ${smoke.pipelineStatus}`,
+        }
+      },
     })
   }
 
