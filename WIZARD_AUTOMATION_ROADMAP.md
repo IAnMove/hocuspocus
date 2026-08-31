@@ -475,11 +475,12 @@ Agent Mode complete prematurely.
 - CharacterKit creation and opening: migrated to the common contract and return
   the canonical kit ID.
 - CharacterKit identity reference: migrated with exact one-output resolution.
+- CharacterKit base pose and Face Rig opening: migrated to the common contract.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **CharacterKit identity reference**. Continue
-with base pose and Face Rig preparation while preserving
+Finished migration subblock **CharacterKit base pose and Face Rig**. Continue
+with presets and job tracking while preserving
 the canonical kit ID and behavior tests. Keep Decision gate A open; the
 workflow remains correct without visual magic effects.
