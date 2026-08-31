@@ -189,7 +189,9 @@ export const applySceneRhythmToLayer = (
       const direction = point.x <= 50 ? -1 : 1
       return { ...point, x: point.x + direction * (8 + intensity * 18), opacity: 0 }
     }
-    addFrame(frames, rhythmFrame(layer, 0, 'peek-scene-start', hide, 'hold'))
+    if (!frames.has(roundedTime(0))) {
+      addFrame(frames, rhythmFrame(layer, 0, 'peek-scene-start', hide, 'hold'))
+    }
     addFrame(frames, rhythmFrame(layer, duration, 'peek-scene-end', hide, 'hold'))
   }
 
