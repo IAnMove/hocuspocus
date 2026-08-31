@@ -6,6 +6,8 @@ import type {
   AgentOpen3dSceneAction,
   AgentSave3dSceneAction,
   AgentExport3dSceneAction,
+  AgentCreateComicAction,
+  AgentGenerateComicAction,
   AgentOpenTabAction,
 } from './agentActions'
 import type { AgentExecutionReport } from './agentContract'
@@ -257,6 +259,70 @@ defineCapability<AgentCreateRhythmic3dVideoAction>({
   report: { targetKind: 'wizard_workflow', successState: 'prepared' },
   summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'video_3d', anchors: ['scene', 'audio', 'layers', 'timeline'], replay: 'atomic' },
+})
+
+defineCapability<AgentCreateComicAction>({
+  name: 'create_comic', title: 'Create a filled Comic Director project',
+  description: 'Create a new editable one- or multi-page comic with its specified pages, panels, lettering and image provider; it does not render artwork.',
+  useWhen: 'The user asks to create a filled comic or a new multi-page comic project.',
+  parameters: ['title', 'synopsis', 'language', 'visual_style', 'characters', 'comic_pages', 'comic_panels', 'image_provider', 'model_type'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'create_comic' }, title: { type: 'string', maxLength: 300 } }, required: ['type', 'title'] },
+  risk: 'edit', confirmation: 'none', progress: 'Montando el cómic editable…',
+  resolve(raw) {
+    const title = text(raw.title, 300)
+    if (!title) return null
+    const pages = Array.isArray(raw.comic_pages) ? raw.comic_pages.slice(0, 100).flatMap((page, pageIndex) => {
+      if (!page || typeof page !== 'object') return []
+      const value = page as Record<string, unknown>
+      const panelValues = Array.isArray(value.panels) ? value.panels : Array.isArray(value.comic_panels) ? value.comic_panels : []
+      const panels = panelValues.slice(0, 12).flatMap(panel => {
+        if (!panel || typeof panel !== 'object') return []
+        const item = panel as Record<string, unknown>
+        return [{ caption: text(item.caption, 2_000), dialogue: text(item.dialogue, 2_000), sfx: text(item.sfx, 500), scene: text(item.scene, 4_000) }]
+      })
+      return panels.length ? [{ title: text(value.title, 300) || `Página ${pageIndex + 1}`, stage: text(value.stage, 2_000), panels }] : []
+    }) : []
+    const panels = Array.isArray(raw.comic_panels) ? raw.comic_panels.slice(0, 12).flatMap(panel => {
+      if (!panel || typeof panel !== 'object') return []
+      const item = panel as Record<string, unknown>
+      return [{ caption: text(item.caption, 2_000), dialogue: text(item.dialogue, 2_000), sfx: text(item.sfx, 500), scene: text(item.scene, 4_000) }]
+    }) : []
+    const provider = text(raw.image_provider, 20)
+    const characters = Array.isArray(raw.characters) ? raw.characters.slice(0, 40).flatMap(character => {
+      if (!character || typeof character !== 'object') return []
+      const value = character as Record<string, unknown>
+      const name = text(value.name, 300)
+      return name ? [{ name, role: text(value.role, 300), personality: text(value.personality, 1_000), desire: text(value.desire, 1_000), flaw: text(value.flaw, 1_000), appearance: text(value.appearance, 2_000), voice: text(value.voice, 1_000) }] : []
+    }) : []
+    return {
+      type: 'create_comic', title, synopsis: text(raw.synopsis, 6_000) || text(raw.premise, 2_000), language: text(raw.language, 120), styleName: text(raw.visual_style, 2_000),
+      characters, panels, pages, imageProvider: provider === 'minimax' || provider === 'maestro' ? provider : 'profile', imageModel: text(raw.model_type, 160), factualBiography: raw.factual_biography === true,
+    }
+  },
+  validate(action) { return action.title ? [] : ['title is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.comic.create(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'comic', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'comics', anchors: ['project', 'pages', 'panels'], replay: 'atomic' },
+})
+
+defineCapability<AgentGenerateComicAction>({
+  name: 'generate_comic', title: 'Render Comic Director artwork',
+  description: 'Render the selected missing, failed or all panels of the open comic through its configured local or MiniMax provider.',
+  useWhen: 'The user explicitly asks to draw, render or generate comic images.',
+  parameters: ['image_provider', 'model_type', 'render_scope', 'page_numbers', 'pilot', 'biography_review', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'generate_comic' }, confirm: { const: true } }, required: ['type', 'confirm'] },
+  risk: 'compute', confirmation: 'required', progress: 'Dibujando las viñetas del cómic…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const provider = text(raw.image_provider, 20)
+    const scope = text(raw.render_scope, 20)
+    const pages = Array.isArray(raw.page_numbers) ? raw.page_numbers.map(Number).filter(value => Number.isInteger(value) && value > 0).slice(0, 100) : []
+    return { type: 'generate_comic', imageProvider: provider === 'minimax' || provider === 'maestro' ? provider : 'keep', imageModel: text(raw.model_type, 160), scope: scope === 'all' || scope === 'failed' ? scope : 'missing', pages, pilot: raw.pilot === true, biographyReview: raw.biography_review === true, confirm: true }
+  },
+  validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.comic.generate(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'comic', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'comics', anchors: ['generate-all-images'], replay: 'atomic' },
 })
 
 const sceneCapabilityMeta: Record<AgentSceneWorkflowAction['type'], { title: string; description: string; risk: CapabilityRisk }> = {

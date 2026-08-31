@@ -1,6 +1,6 @@
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentCreateComicAction, AgentGenerateComicAction } from './agentActions'
 import type { AgentExecutionTarget } from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
@@ -31,7 +31,11 @@ export interface StudioAdapter {
 
 export interface StoryLabAdapter { open(): Promise<AdapterOutcome> }
 export interface SeriesLabAdapter { open(): Promise<AdapterOutcome> }
-export interface ComicAdapter { open(): Promise<AdapterOutcome> }
+export interface ComicAdapter {
+  open(): Promise<AdapterOutcome>
+  create(action: AgentCreateComicAction): Promise<AdapterOutcome>
+  generate(action: AgentGenerateComicAction, expectedProjectId?: string): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }>
+}
 export interface VideoEditorAdapter { open(): Promise<AdapterOutcome> }
 export interface CharacterKitAdapter { open(creator?: boolean): Promise<AdapterOutcome> }
 export interface QueueAdapter { openActivity(): Promise<AdapterOutcome> }
@@ -138,7 +142,25 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   }
   adapters.storyLab = { open: () => navigate('story_lab') }
   adapters.seriesLab = { open: () => navigate('series_lab') }
-  adapters.comic = { open: () => navigate('comics') }
+  adapters.comic = {
+    open: () => navigate('comics'),
+    async create(action) {
+      await navigate('comics')
+      const { createFilledComic } = await import('./labActions')
+      const message = await createFilledComic(action)
+      const { useComicStore } = await import('../comics/store')
+      const project = useComicStore.getState().project
+      return { message, target: { kind: 'comic', id: project.id, title: project.title } }
+    },
+    async generate(action, expectedProjectId) {
+      await navigate('comics')
+      const { generateFilledComicArtwork } = await import('./labActions')
+      const result = await generateFilledComicArtwork(action, undefined, expectedProjectId)
+      const { useComicStore } = await import('../comics/store')
+      const project = useComicStore.getState().project
+      return { ...result, target: { kind: 'comic', id: project.id, title: project.title } }
+    },
+  }
   adapters.videoEditor = { open: () => navigate('video_editor') }
   adapters.characterKit = { open: creator => navigate(creator ? 'character_creator' : 'character_kit') }
   adapters.queue = {
