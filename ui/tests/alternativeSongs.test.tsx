@@ -13,6 +13,10 @@ function installDom() {
     HTMLSelectElement: dom.window.HTMLSelectElement,
     Event: dom.window.Event,
   })
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: dom.window.navigator,
+  })
   return dom
 }
 
