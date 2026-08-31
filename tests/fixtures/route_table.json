@@ -1,0 +1,2945 @@
+{
+  "version": 1,
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/lan/status",
+      "endpoint": "status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/lan_auth.py",
+      "ordinal": 0
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/lan/login",
+      "endpoint": "login",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/lan_auth.py",
+      "ordinal": 1
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/lan/logout",
+      "endpoint": "logout",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/lan_auth.py",
+      "ordinal": 2
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/models",
+      "endpoint": "list_models",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 3
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/model-visibility",
+      "endpoint": "get_model_visibility",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 4
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/model-visibility",
+      "endpoint": "update_model_visibility",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 5
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/production-profile",
+      "endpoint": "get_production_profile",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 6
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/production-profile",
+      "endpoint": "update_production_profile",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 7
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/model-selections",
+      "endpoint": "get_model_selections",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 8
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/model-selections",
+      "endpoint": "update_model_selections",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 9
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/models/{model_type}/debug",
+      "endpoint": "debug_model",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 10
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/models/{model_type}",
+      "endpoint": "delete_model",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 11
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/models/{model_type}/download",
+      "endpoint": "download_model",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 12
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/models/downloads/status",
+      "endpoint": "model_downloads_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 13
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/resolutions",
+      "endpoint": "list_resolutions",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 14
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/defaults/{model_type}",
+      "endpoint": "get_defaults",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 15
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/primary-settings",
+      "endpoint": "get_primary_settings",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 16
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/loras/scan-status/{scan_id}",
+      "endpoint": "scan_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 17
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/loras/directories",
+      "endpoint": "list_lora_directories",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 18
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/loras/preview/{filename}",
+      "endpoint": "serve_lora_preview",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 19
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/loras/installed",
+      "endpoint": "list_all_installed_loras",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 20
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/loras/file",
+      "endpoint": "delete_lora_file",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 21
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/loras/{model_type}",
+      "endpoint": "list_loras",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 22
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/loras/{model_type}/details",
+      "endpoint": "list_loras_details",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 23
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/loras/nsfw-override",
+      "endpoint": "set_lora_nsfw_override",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 24
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/loras/check-updates",
+      "endpoint": "check_lora_updates",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 25
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/loras/update-manifest",
+      "endpoint": "get_lora_update_manifest",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 26
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/civitai/base-models",
+      "endpoint": "civitai_base_models",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 27
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/civitai/checkpoint-architectures",
+      "endpoint": "civitai_checkpoint_architectures",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 28
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/models/reload",
+      "endpoint": "reload_model_definitions",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 29
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/checkpoints/installed",
+      "endpoint": "checkpoints_installed",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 30
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/checkpoints/check-updates",
+      "endpoint": "checkpoints_check_updates",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 31
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/civitai/search",
+      "endpoint": "civitai_search",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 32
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/civitai/model/{model_id}",
+      "endpoint": "civitai_model_detail",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 33
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/civitai/download",
+      "endpoint": "civitai_download",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 34
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/civitai/downloads",
+      "endpoint": "civitai_downloads_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 35
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/huggingface/import-lora",
+      "endpoint": "hf_import_lora",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 36
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/loras/generate-guide",
+      "endpoint": "generate_lora_guide",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 37
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/loras/{model_type}/{filename}/guide",
+      "endpoint": "get_lora_guide",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 38
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/checkpoints/{model_type}/generate-guide",
+      "endpoint": "generate_checkpoint_guide",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 39
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/loras/scan-and-generate-guides",
+      "endpoint": "scan_and_generate_guides",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 40
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/model-options/{model_type}",
+      "endpoint": "get_model_options",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 41
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/presets",
+      "endpoint": "list_presets",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 42
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/presets",
+      "endpoint": "create_preset",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 43
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/presets/{preset_id}",
+      "endpoint": "delete_preset",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 44
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system-config",
+      "endpoint": "get_system_config",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 45
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/system-config",
+      "endpoint": "update_system_config",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 46
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/model-folders/scan",
+      "endpoint": "scan_model_folders",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 47
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/downloads/active",
+      "endpoint": "get_active_downloads",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 48
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system-detect",
+      "endpoint": "get_system_detect",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 49
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system-detect/apply",
+      "endpoint": "apply_system_detect",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 50
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system-stats",
+      "endpoint": "get_system_stats_live",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 51
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/release-model",
+      "endpoint": "system_release_model",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 52
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/recipes",
+      "endpoint": "list_recipes_route",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 53
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/recipes/{rid}",
+      "endpoint": "get_recipe_route",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 54
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/recipes/{rid}/thumbnail",
+      "endpoint": "get_recipe_thumbnail_route",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 55
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/recipes/save-from-output",
+      "endpoint": "save_recipe_from_output_route",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 56
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/recipes/import",
+      "endpoint": "import_recipe_route",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 57
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/recipes/{rid}",
+      "endpoint": "delete_recipe_route",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 58
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/preflight",
+      "endpoint": "system_preflight",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 59
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/services-config",
+      "endpoint": "get_services_config",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 60
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/services-config",
+      "endpoint": "update_services_config",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 61
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/debug/user-action",
+      "endpoint": "record_debug_user_action",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 62
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/model3d/capabilities",
+      "endpoint": "model3d_capabilities",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 63
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/model3d/generate",
+      "endpoint": "generate_model3d",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 64
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/model3d/status/{job_id}",
+      "endpoint": "model3d_job_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 65
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/model3d/jobs/{job_id}/cancel",
+      "endpoint": "cancel_model3d_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 66
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/model3d/unload",
+      "endpoint": "unload_model3d",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 67
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rig/capabilities",
+      "endpoint": "rig_capabilities",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 68
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/rig/generate",
+      "endpoint": "generate_rig",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 69
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rig/status/{job_id}",
+      "endpoint": "rig_job_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 70
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/rig/jobs/{job_id}/cancel",
+      "endpoint": "cancel_rig_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 71
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces",
+      "endpoint": "list_workspaces_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 72
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/workspaces/active",
+      "endpoint": "set_active_workspace",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 73
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces",
+      "endpoint": "create_workspace",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 74
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/workspaces/{name}",
+      "endpoint": "delete_workspace",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 75
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/storage/duplicates",
+      "endpoint": "storage_duplicates",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 76
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/storage/duplicates/reclaim",
+      "endpoint": "storage_reclaim",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 77
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/storage/duplicates/remove-linked",
+      "endpoint": "storage_remove_linked",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 78
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/storage/usage",
+      "endpoint": "storage_usage",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 79
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/llm/status",
+      "endpoint": "llm_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 80
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/llm/load",
+      "endpoint": "llm_load",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 81
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/llm/unload",
+      "endpoint": "llm_unload",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 82
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/llm/models",
+      "endpoint": "list_llm_models",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 83
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/llm/stream-status",
+      "endpoint": "llm_stream_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 84
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/llm/generate",
+      "endpoint": "llm_generate",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 85
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/llm/test",
+      "endpoint": "llm_test",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 86
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/llm/write-song",
+      "endpoint": "llm_write_song",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 87
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/generate-music",
+      "endpoint": "director_generate_music",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 88
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/llm/plan-h3-windows",
+      "endpoint": "llm_plan_h3_windows",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 89
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/llm/enhance-prompt",
+      "endpoint": "llm_enhance_prompt",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 90
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/llm/describe-image",
+      "endpoint": "llm_describe_image",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 91
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/characters/describe-refs",
+      "endpoint": "describe_character_refs",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 92
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/upload-audio",
+      "endpoint": "upload_audio",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 93
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uploads/audio/{filename}",
+      "endpoint": "serve_audio_upload",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 94
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/audio/trim",
+      "endpoint": "trim_uploaded_audio",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 95
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/audio/mix",
+      "endpoint": "mix_audio",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 96
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/audio/analyze",
+      "endpoint": "analyze_audio",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 97
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audio/analyze/status",
+      "endpoint": "audio_analyze_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 98
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/audio/analyze/jobs",
+      "endpoint": "start_audio_analysis_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 99
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audio/analyze/jobs/{job_id}",
+      "endpoint": "get_audio_analysis_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 100
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/audio/analyze/jobs/{job_id}/cancel",
+      "endpoint": "cancel_audio_analysis_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 101
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/audio/suggest-clips",
+      "endpoint": "suggest_audio_clips",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 102
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/plan-prompts",
+      "endpoint": "director_plan_prompts",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 103
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/plan-angle-prompts",
+      "endpoint": "director_plan_angle_prompts",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 104
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/audio/plan-structure",
+      "endpoint": "plan_audio_structure",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 105
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/classify-sections",
+      "endpoint": "director_classify_sections",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 106
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/plan-prompts-and-images",
+      "endpoint": "director_plan_prompts_and_images",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 107
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/plan-dialogue-scenes",
+      "endpoint": "director_plan_dialogue_scenes",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 108
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/plan-short-film-prompts",
+      "endpoint": "director_plan_short_film_prompts",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 109
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/plan-short-film-script",
+      "endpoint": "director_plan_short_film_script",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 110
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipeline/start",
+      "endpoint": "director_pipeline_start",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 111
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/director/pipeline/{pid}",
+      "endpoint": "director_pipeline_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 112
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipeline/{pid}/continue",
+      "endpoint": "director_pipeline_continue",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 113
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipeline/{pid}/generate-preview",
+      "endpoint": "director_pipeline_generate_preview",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 114
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/director/pipeline/{pid}/preview",
+      "endpoint": "director_pipeline_update_preview",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 115
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipeline/{pid}/stop",
+      "endpoint": "director_pipeline_stop",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 116
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipeline/{pid}/resume",
+      "endpoint": "director_pipeline_resume",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 117
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/director/pipelines",
+      "endpoint": "list_saved_pipelines",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 118
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/director/pipelines/active",
+      "endpoint": "list_active_director_pipelines",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 119
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/director/pipelines/{pid}",
+      "endpoint": "get_saved_pipeline",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 120
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/director/pipelines/{pid}/clips/{clip_index}/prompt",
+      "endpoint": "update_pipeline_clip_prompt",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 121
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/director/pipelines/{pid}/clips/{clip_index}/tag",
+      "endpoint": "tag_pipeline_clip",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 122
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/director/pipelines/{pid}/clips/{clip_index}/video-selection",
+      "endpoint": "select_pipeline_clip_video",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 123
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipelines/{pid}/repair",
+      "endpoint": "repair_saved_pipeline",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 124
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipelines/{pid}/repair/cancel",
+      "endpoint": "cancel_saved_pipeline_repair",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 125
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-image",
+      "endpoint": "rerun_pipeline_clip_image",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 126
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-video",
+      "endpoint": "rerun_pipeline_clip_video",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 127
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipelines/{pid}/clips/{clip_index}/segments/{segment_index}/rerun",
+      "endpoint": "rerun_pipeline_h3_segment",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 128
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/pipelines/{pid}/rejoin",
+      "endpoint": "rejoin_pipeline_clips",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 129
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/director/pipelines/{pid}",
+      "endpoint": "delete_pipeline_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 130
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/v2/plan",
+      "endpoint": "director_v2_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 131
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/director/v2/plan/jobs",
+      "endpoint": "list_director_v2_plan_jobs",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 132
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/director/v2/plan/jobs/{job_id}",
+      "endpoint": "get_director_v2_plan_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 133
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/v2/plan/jobs/{job_id}/resume",
+      "endpoint": "resume_director_v2_plan_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 134
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/director/v2/plan/progress/{activity_id}",
+      "endpoint": "director_v2_plan_progress",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 135
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/generate",
+      "endpoint": "generate",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 136
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/retake",
+      "endpoint": "retake_video_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 137
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/extract-frames",
+      "endpoint": "extract_frames_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 138
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/edit-anything",
+      "endpoint": "edit_anything_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 139
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/repaint/preview",
+      "endpoint": "repaint_preview_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 140
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/repaint",
+      "endpoint": "repaint_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 141
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/recast/preview",
+      "endpoint": "recast_preview_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 142
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/recast",
+      "endpoint": "recast_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 143
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/outpaint",
+      "endpoint": "outpaint_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 144
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/blend",
+      "endpoint": "blend_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 145
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/sam/status",
+      "endpoint": "sam_status_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 146
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/segment/preview",
+      "endpoint": "segment_preview_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 147
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/inpaint",
+      "endpoint": "inpaint_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 148
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tools/upscale",
+      "endpoint": "tools_upscale",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 149
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tools/revoice",
+      "endpoint": "tools_revoice",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 150
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/status/{job_id}",
+      "endpoint": "get_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 151
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/cancel/{job_id}",
+      "endpoint": "cancel_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 152
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs",
+      "endpoint": "list_jobs",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 153
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/recovery",
+      "endpoint": "get_generation_queue_recovery",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 154
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/jobs/recovery/resume",
+      "endpoint": "resume_generation_queue",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 155
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/jobs/recovery/discard",
+      "endpoint": "discard_generation_queue",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 156
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/favorites",
+      "endpoint": "list_favorites",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 157
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/favorites/{name}",
+      "endpoint": "toggle_favorite",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 158
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scenes",
+      "endpoint": "save_scene_output",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 159
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/character-kits/library",
+      "endpoint": "get_character_kit_library",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 160
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/character-kits/library/kits/{kit_id}",
+      "endpoint": "patch_character_kit_library_item",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 161
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/character-kits/library/kits/{kit_id}",
+      "endpoint": "delete_character_kit_library_item",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 162
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/character-kits/face-rig/cleanup",
+      "endpoint": "cleanup_face_rig_overlay",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/character_kit_face.py",
+      "ordinal": 163
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scenes/recordings",
+      "endpoint": "save_scene_recording",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 164
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/comics",
+      "endpoint": "create_comic_output",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 165
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/comics/history",
+      "endpoint": "create_comic_history",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 166
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/comics/history",
+      "endpoint": "list_comic_history",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 167
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/comics/history/{snapshot_id}",
+      "endpoint": "get_comic_history",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 168
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/comics/{name}",
+      "endpoint": "update_comic_output",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 169
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/comics/{name}",
+      "endpoint": "get_comic_output",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 170
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/comics/generate/minimax/jobs",
+      "endpoint": "start_comic_minimax_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 171
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/comics/generate/minimax/jobs/{job_id}",
+      "endpoint": "get_comic_minimax_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 172
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/comics/generate/minimax/jobs/{job_id}/cancel",
+      "endpoint": "cancel_comic_minimax_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 173
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/comics/generate/minimax",
+      "endpoint": "generate_comic_minimax",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 174
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/library",
+      "endpoint": "get_series_library",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 175
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/series/library",
+      "endpoint": "put_series_library",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 176
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series",
+      "endpoint": "list_series_projects",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 177
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series",
+      "endpoint": "create_series_project_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 178
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/{series_id}",
+      "endpoint": "get_series_project_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 179
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/series/{series_id}",
+      "endpoint": "put_series_project_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 180
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/series/{series_id}",
+      "endpoint": "delete_series_project_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 181
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/duplicate",
+      "endpoint": "duplicate_series_project_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 182
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/import-story",
+      "endpoint": "import_story_as_series_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 183
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes",
+      "endpoint": "create_series_episode_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 184
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/{series_id}/episodes",
+      "endpoint": "list_series_episodes_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 185
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}",
+      "endpoint": "get_series_episode_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 186
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}",
+      "endpoint": "delete_series_episode_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 187
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/assets/import",
+      "endpoint": "import_series_asset_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 188
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}",
+      "endpoint": "put_series_episode_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 189
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/canon/commit",
+      "endpoint": "commit_series_canon_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 190
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/canon/approve",
+      "endpoint": "approve_series_canon_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 191
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/references/route",
+      "endpoint": "route_series_episode_references_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 192
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/canon/prepare/start",
+      "endpoint": "start_series_canon_preparation",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 193
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/plan/start",
+      "endpoint": "start_series_episode_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 194
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/plan/jobs/{job_id}",
+      "endpoint": "get_series_episode_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 195
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/plan/jobs/{job_id}/cancel",
+      "endpoint": "cancel_series_episode_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 196
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/plan/jobs/{job_id}/resume",
+      "endpoint": "resume_series_episode_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 197
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/shots/duration/preview",
+      "endpoint": "preview_series_shot_duration",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 198
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/plan/jobs/{job_id}/apply",
+      "endpoint": "apply_series_episode_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 199
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/plan/jobs/{job_id}/apply-canon",
+      "endpoint": "apply_series_canon_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/plan/recovery",
+      "endpoint": "list_series_plan_recovery",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 201
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/series/plan/jobs/{job_id}",
+      "endpoint": "discard_series_plan_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 202
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/render/start",
+      "endpoint": "start_series_episode_render",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 203
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/render/jobs/{job_id}",
+      "endpoint": "get_series_render_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 204
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/render/jobs/{job_id}/cancel",
+      "endpoint": "cancel_series_render_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 205
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/render/recovery",
+      "endpoint": "list_series_render_recovery",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 206
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/render/jobs/{job_id}/resume",
+      "endpoint": "resume_series_render_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 207
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/series/render/jobs/{job_id}",
+      "endpoint": "discard_series_render_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 208
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot_id}/attempts/{attempt_id}/approve",
+      "endpoint": "approve_series_shot_attempt_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 209
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/attempts/approve-bulk",
+      "endpoint": "approve_series_episode_attempts_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 210
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start",
+      "endpoint": "start",
+      "status_code": null,
+      "response_model": "SeriesAssemblyJobResponse",
+      "include_in_schema": null,
+      "source": "app/routers/series_assembly.py",
+      "ordinal": 211
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/assembly/jobs/{job_id}/cancel",
+      "endpoint": "cancel",
+      "status_code": null,
+      "response_model": "SeriesAssemblyJobResponse",
+      "include_in_schema": null,
+      "source": "app/routers/series_assembly.py",
+      "ordinal": 212
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/assembly/jobs/{job_id}/resume",
+      "endpoint": "resume",
+      "status_code": null,
+      "response_model": "SeriesAssemblyJobResponse",
+      "include_in_schema": null,
+      "source": "app/routers/series_assembly.py",
+      "ordinal": 213
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/assembly/recovery",
+      "endpoint": "recovery",
+      "status_code": null,
+      "response_model": "SeriesAssemblyRecoveryResponse",
+      "include_in_schema": null,
+      "source": "app/routers/series_assembly.py",
+      "ordinal": 214
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/series/assembly/jobs/{job_id}",
+      "endpoint": "discard",
+      "status_code": null,
+      "response_model": "SeriesAssemblyDiscardResponse",
+      "include_in_schema": null,
+      "source": "app/routers/series_assembly.py",
+      "ordinal": 215
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/assembly/jobs/{job_id}",
+      "endpoint": "status",
+      "status_code": null,
+      "response_model": "SeriesAssemblyJobResponse",
+      "include_in_schema": null,
+      "source": "app/routers/series_assembly.py",
+      "ordinal": 216
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/quick-video-batches/start",
+      "endpoint": "start_batch",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/quick_video_batches.py",
+      "ordinal": 217
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/stories/quick-video-batches",
+      "endpoint": "list_batches",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/quick_video_batches.py",
+      "ordinal": 218
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/stories/quick-video-batches/{job_id}",
+      "endpoint": "get_batch",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/quick_video_batches.py",
+      "ordinal": 219
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/quick-video-batches/{job_id}/{action}",
+      "endpoint": "batch_action",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/quick_video_batches.py",
+      "ordinal": 220
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/style-library/sources",
+      "endpoint": "list_sources",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 221
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/style-library/styles",
+      "endpoint": "list_styles",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 222
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/style-library/imports/minimax-h3-1k",
+      "endpoint": "import_minimax_h3_1k",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 223
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/style-library/imports/minimax-h3-1k/preflight",
+      "endpoint": "import_minimax_h3_1k_preflight",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 224
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/style-library/manifest/recover",
+      "endpoint": "recover_manifest",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 225
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/style-library/imports/{job_id}",
+      "endpoint": "import_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 226
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/style-library/imports/{job_id}/cancel",
+      "endpoint": "cancel_import",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 227
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/style-library/styles/{style_id}/preview",
+      "endpoint": "style_preview",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 228
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/style-library/styles/{style_id}/video",
+      "endpoint": "style_video",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 229
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/style-library/styles/{style_id}",
+      "endpoint": "delete_style",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/style_library.py",
+      "ordinal": 230
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot_id}/attempts/{attempt_id}/reject",
+      "endpoint": "reject_series_shot_attempt_endpoint",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 231
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/wizard/conversations",
+      "endpoint": "get_wizard_conversation",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 232
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/wizard/conversations",
+      "endpoint": "put_wizard_conversation",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 233
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/wizard/workflows",
+      "endpoint": "get_wizard_workflows",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 234
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/wizard/workflows",
+      "endpoint": "put_wizard_workflows",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 235
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/stories/library",
+      "endpoint": "get_story_library",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 236
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/stories/library",
+      "endpoint": "put_story_library",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 237
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/stories/library/projects/{project_id}",
+      "endpoint": "patch_story_library_project",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 238
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/stories/library/projects/{project_id}",
+      "endpoint": "delete_story_library_project",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 239
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/assets/analyze",
+      "endpoint": "analyze_story_assets",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 240
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/generate",
+      "endpoint": "generate_story_lab_section",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 241
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/music-candidates/jobs",
+      "endpoint": "start_story_music_candidates_job",
+      "status_code": 202,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 242
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/stories/music-candidates/jobs/{job_id}",
+      "endpoint": "get_story_music_candidates_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 243
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/music-candidates/jobs/{job_id}/cancel",
+      "endpoint": "cancel_story_music_candidates_job",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 244
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/music-candidates",
+      "endpoint": "generate_story_music_candidates",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 245
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/translate-lyrics",
+      "endpoint": "translate_story_lyrics",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 246
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/generate/start",
+      "endpoint": "start_story_lab_generation",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 247
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/stories/generate/status/{job_id}",
+      "endpoint": "get_story_lab_generation",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 248
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/generate/resume/{job_id}",
+      "endpoint": "resume_story_lab_generation",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 249
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/stories/generate/cancel/{job_id}",
+      "endpoint": "cancel_story_lab_generation",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 250
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/comic/plan",
+      "endpoint": "director_comic_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 251
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/comic/text/page",
+      "endpoint": "director_comic_text_page",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 252
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/comic/story/revise",
+      "endpoint": "director_comic_story_revise",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 253
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/comic/plan/start",
+      "endpoint": "start_director_comic_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 254
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/director/comic/plan/status/{job_id}",
+      "endpoint": "get_director_comic_plan_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 255
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/director/comic/plan/resume/{job_id}",
+      "endpoint": "resume_director_comic_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 256
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/director/comic/plan/recent/completed",
+      "endpoint": "get_latest_completed_director_comic_plan",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 257
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/outputs",
+      "endpoint": "list_outputs",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 258
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/outputs/thumbnail/{filename:path}",
+      "endpoint": "serve_output_thumbnail",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 259
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/file/{filename:path}",
+      "endpoint": "serve_file",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 260
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/outputs/{name}/metadata",
+      "endpoint": "get_output_metadata",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 261
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/outputs/{name}/alternative-songs",
+      "endpoint": "list_alternative_songs",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 262
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/outputs/{name}/alternative-songs",
+      "endpoint": "attach_alternative_song",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 263
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/outputs/{name}/alternative-songs/{song_id}",
+      "endpoint": "delete_alternative_song",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 264
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/outputs/{name}/alternative-songs/{song_id}/mount",
+      "endpoint": "mount_alternative_song",
+      "status_code": 202,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 265
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/outputs/{name}/extra-info",
+      "endpoint": "get_video_extra_info",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 266
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/outputs/{name}/extra-info",
+      "endpoint": "generate_output_extra_info",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 267
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/outputs/rejoin",
+      "endpoint": "rejoin_clips",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 268
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/outputs/group/{group_id}",
+      "endpoint": "get_group_clips",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 269
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/video-editor/probe",
+      "endpoint": "probe_video_editor_source",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 270
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/video-editor/probe-audio",
+      "endpoint": "probe_video_editor_audio_source",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 271
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/video-editor/thumbnail",
+      "endpoint": "serve_video_editor_thumbnail",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 272
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/video-editor/screenshot",
+      "endpoint": "capture_video_editor_frame",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 273
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/video-editor/export",
+      "endpoint": "start_video_editor_export",
+      "status_code": 202,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 274
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/comics/animatic",
+      "endpoint": "start_comic_animatic",
+      "status_code": 202,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 275
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/video-editor/export/{job_id}",
+      "endpoint": "get_video_editor_export",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 276
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/video-editor/export/{job_id}/cancel",
+      "endpoint": "cancel_video_editor_export",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 277
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/outputs/{name:path}/move",
+      "endpoint": "move_output",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 278
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/outputs/{name}",
+      "endpoint": "delete_output",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 279
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/upload",
+      "endpoint": "upload_image",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 280
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/uploads/{filename}",
+      "endpoint": "serve_upload",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 281
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/resources",
+      "endpoint": "list_resource_lanes",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 282
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "endpoint": "list_canonical_tasks",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/canonical_tasks.py",
+      "ordinal": 283
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/upsert",
+      "endpoint": "upsert_client_task",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/canonical_tasks.py",
+      "ordinal": 284
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/events",
+      "endpoint": "stream_canonical_task_events",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/canonical_tasks.py",
+      "ordinal": 285
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/{task_id}/events",
+      "endpoint": "get_canonical_task_events",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/canonical_tasks.py",
+      "ordinal": 286
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/{task_id}",
+      "endpoint": "get_canonical_task",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/canonical_tasks.py",
+      "ordinal": 287
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/{task_id}/cancel",
+      "endpoint": "cancel_canonical_task",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/canonical_tasks.py",
+      "ordinal": 288
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/{task_id}/retry",
+      "endpoint": "retry_canonical_task",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/canonical_tasks.py",
+      "ordinal": 289
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/{task_id}/resume",
+      "endpoint": "resume_canonical_task",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/canonical_tasks.py",
+      "ordinal": 290
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tasks/{task_id}",
+      "endpoint": "dismiss_canonical_task",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/canonical_tasks.py",
+      "ordinal": 291
+    },
+    {
+      "method": "GET",
+      "path": "/classic",
+      "endpoint": "_classic_redirect",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": false,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 292
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "endpoint": "index",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 293
+    }
+  ]
+}
