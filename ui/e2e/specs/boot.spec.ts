@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { installBootWatchdogPlaceholder } from '../helpers/bootWatchdogPlaceholder'
+import { bootWatchdogPlaceholderPath } from '../helpers/bootWatchdogPlaceholder'
 import { closeApp, gotoApp } from '../helpers/gotoApp'
 
 test('seeds #root before the index.html watchdog can replace the document', async ({ page }) => {
@@ -8,7 +8,7 @@ test('seeds #root before the index.html watchdog can replace the document', asyn
   await page.addInitScript(() => {
     window.localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
   })
-  await page.addInitScript(installBootWatchdogPlaceholder)
+  await page.addInitScript({ path: bootWatchdogPlaceholderPath })
 
   await page.goto('/')
 

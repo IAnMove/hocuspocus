@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { JSDOM } from 'jsdom'
-import { installBootWatchdogPlaceholder } from '../e2e/helpers/bootWatchdogPlaceholder.ts'
+
+const PLACEHOLDER_SOURCE = readFileSync(
+  fileURLToPath(new URL('../e2e/helpers/bootWatchdogPlaceholder.js', import.meta.url)),
+  'utf8',
+)
 
 function installDom(html = '<!doctype html><html><body></body></html>') {
   const dom = new JSDOM(html, { url: 'http://localhost/' })
@@ -20,6 +26,11 @@ function seedSynchronously() {
   if (root && root.childElementCount === 0) {
     root.appendChild(document.createElement('span'))
   }
+}
+
+function installBootWatchdogPlaceholder() {
+  const runner = new Function(PLACEHOLDER_SOURCE)
+  runner()
 }
 
 function watchdogWouldReplace(): boolean {

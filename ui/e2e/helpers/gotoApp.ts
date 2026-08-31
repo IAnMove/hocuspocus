@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test'
 import { formatUnhandled, installApiRoutes, type ApiRouteSession } from './apiRoutes'
-import { installBootWatchdogPlaceholder } from './bootWatchdogPlaceholder'
+import { bootWatchdogPlaceholderPath } from './bootWatchdogPlaceholder'
 
 export async function gotoApp(page: Page): Promise<ApiRouteSession> {
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -11,7 +11,9 @@ export async function gotoApp(page: Page): Promise<ApiRouteSession> {
   // index.html replaces the document after 10s if #root has no element
   // children. The production bundle can take longer than that to parse
   // on a cold CI runner; keep a placeholder so the watchdog stays inert.
-  await page.addInitScript(installBootWatchdogPlaceholder)
+  // Inject via path: a serialized function picks up the test runner's
+  // __name helper, which is not defined in the page.
+  await page.addInitScript({ path: bootWatchdogPlaceholderPath })
   await page.goto('/')
   const skip = page.getByRole('button', { name: 'Skip' })
   try {
