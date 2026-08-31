@@ -290,6 +290,10 @@ export function notifyAgentSeriesRenderJob(job: SeriesJobStatus): void {
   window.dispatchEvent(new CustomEvent(SERIES_RENDER_JOB_EVENT, { detail: { job } }))
 }
 
+export function getAgentSeriesRenderJob(): SeriesJobStatus | null {
+  return requestedSeriesRenderJob
+}
+
 export function listenForAgentSeriesRenderJob(listener: (job: SeriesJobStatus) => void): () => void {
   const handler = (event: Event) => {
     const job = (event as CustomEvent<{ job?: SeriesJobStatus }>).detail?.job

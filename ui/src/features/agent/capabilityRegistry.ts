@@ -17,6 +17,7 @@ import type {
   AgentGenerateSeriesPlanAction,
   AgentGenerateStorySectionAction,
   AgentGenerateStoryVisualsAction,
+  AgentRenderSeriesShotsAction,
   AgentStageStoryComicAction,
   AgentStartDirectorProductionAction,
   AgentStageStoryVideoAction,
@@ -117,6 +118,7 @@ const storyApprovalSections = new Set(['overview', 'world', 'characters', 'relat
 const storyVisualScopes = new Set(['world', 'locations', 'characters', 'all'])
 const storyVisualTargetKinds = new Set(['world', 'location', 'character'])
 const seriesPlanScopes = new Set(['outline', 'script', 'shots', 'complete'])
+const seriesRenderModes = new Set(['selected', 'missing', 'failed', 'all'])
 
 function storyCharacters(value: unknown): AgentCreateStoryAction['characters'] {
   return Array.isArray(value) ? value.slice(0, 16).flatMap(item => {
@@ -573,6 +575,27 @@ defineCapability<AgentApplySeriesPlanAction>({
   async execute(action, context) { return context.adapters.seriesLab.applyPlan(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'series_lab', anchors: ['episode', 'plan'], replay: 'atomic' },
+})
+
+defineCapability<AgentRenderSeriesShotsAction>({
+  name: 'render_series_shots', title: 'Render eligible Series Lab shots',
+  description: 'Queue only eligible shots for the exact episode and return the real recoverable render job ID.',
+  useWhen: 'The user explicitly asks to render a Series Lab episode’s shots.',
+  parameters: ['series_title', 'target_episode_title', 'render_mode', 'shot_ids', 'seed', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'render_series_shots' }, render_mode: { type: 'string', enum: ['selected', 'missing', 'failed', 'all'] }, shot_ids: { type: 'array', items: { type: 'string' } }, confirm: { const: true } }, required: ['type', 'render_mode', 'confirm'] },
+  risk: 'compute', confirmation: 'required', progress: 'Encolando las tomas elegibles de Series Lab…',
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const mode = text(raw.render_mode, 30)
+    const shotIds = Array.isArray(raw.shot_ids) ? raw.shot_ids.slice(0, 200).flatMap(value => { const id = text(value, 160); return id ? [id] : [] }) : []
+    if (!seriesRenderModes.has(mode) || (mode === 'selected' && !shotIds.length)) return null
+    const seedValue = typeof raw.seed === 'number' && Number.isFinite(raw.seed) ? Math.round(Math.max(-1, Math.min(2_147_483_647, raw.seed))) : undefined
+    return { type: 'render_series_shots', seriesTitle: text(raw.series_title, 300), targetEpisodeTitle: text(raw.target_episode_title, 300), mode: mode as AgentRenderSeriesShotsAction['mode'], shotIds, seed: seedValue, confirm: true }
+  },
+  validate(action) { return action.confirm === true && seriesRenderModes.has(action.mode) && (action.mode !== 'selected' || action.shotIds.length) ? [] : ['a confirmed valid render request is required'] }, async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.seriesLab.renderShots(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'series_lab', anchors: ['review', 'render'], replay: 'atomic' },
 })
 
 defineCapability<AgentCreateComicAction>({

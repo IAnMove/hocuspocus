@@ -466,11 +466,13 @@ Agent Mode complete prematurely.
   return the persisted canonical episode ID.
 - Series Lab planning: generation now returns the verified recoverable plan job
   ID for its canonical episode; applying a plan remains separate and explicit.
+- Series Lab rendering: rendering eligible shots now returns the verified
+  recoverable render-job ID tied to the canonical episode.
 - Visible focus/fill/sparkle presentation: designed here, implementation pending.
 
 ## Continuity note
 
-Finished migration subblock **Series Lab planning and plan application**.
-Continue with Series rendering, review and assembly, preserving real episode,
-render-job and assembly-job IDs in behavior tests. Keep Decision gate A open;
-the workflow remains correct without visual magic effects.
+Finished migration subblock **Series Lab shot rendering**. Continue with
+review, assembly and canon commitment, preserving real episode and assembly-job
+IDs in behavior tests. Keep Decision gate A open; the workflow remains correct
+without visual magic effects.
