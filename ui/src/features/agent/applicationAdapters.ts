@@ -7,7 +7,7 @@ import type { AgentRhythmGrid } from './agentUiBus'
 import { queueMusic } from './audioActions'
 import type { AgentPrepareAudioAction } from './agentActions'
 import type { AgentTab } from './capabilityRegistry'
-import type { AgentCreateCharacterKitAction, AgentOpenCharacterKitAction } from './characterKitActions'
+import type { AgentAttachCharacterKitReferencesAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction } from './characterKitActions'
 
 export interface AdapterOutcome {
   message: string
@@ -66,6 +66,7 @@ export interface CharacterKitAdapter {
   open(creator?: boolean): Promise<AdapterOutcome>
   create(action: AgentCreateCharacterKitAction): Promise<AdapterOutcome>
   openKit(action: AgentOpenCharacterKitAction): Promise<AdapterOutcome>
+  attachReference(action: AgentAttachCharacterKitReferencesAction): Promise<AdapterOutcome>
 }
 export interface QueueAdapter { openActivity(): Promise<AdapterOutcome> }
 
@@ -315,6 +316,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     open: creator => navigate(creator ? 'character_creator' : 'character_kit'),
     async create(action) { const { createAgentCharacterKit } = await import('./characterKitActions'); const result = await createAgentCharacterKit(action); return { message: result.message, target: result.report.target! } },
     async openKit(action) { const { openAgentCharacterKit } = await import('./characterKitActions'); const result = await openAgentCharacterKit(action); return { message: result.message, target: result.report.target! } },
+    async attachReference(action) { const { attachAgentCharacterKitReferences } = await import('./characterKitActions'); const result = await attachAgentCharacterKitReferences(action); return { message: result.message, target: result.report.target! } },
   }
   adapters.queue = {
     async openActivity() {

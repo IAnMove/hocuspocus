@@ -34,7 +34,7 @@ import type { AgentExecutionReport } from './agentContract'
 import type { AgentExecutionTarget } from './agentContract'
 import { executionKey, executionReport } from './agentContract'
 import type { WizardApplicationAdapters } from './applicationAdapters'
-import type { AgentCreateCharacterKitAction, AgentOpenCharacterKitAction } from './characterKitActions'
+import type { AgentAttachCharacterKitReferencesAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction } from './characterKitActions'
 
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
@@ -248,6 +248,11 @@ defineCapability<AgentCreateCharacterKitAction>({
 defineCapability<AgentOpenCharacterKitAction>({
   name: 'open_character_kit', title: 'Open a Character Kit', description: 'Open one exact canonical Character Kit.', useWhen: 'The user asks to open a Character Kit.', parameters: ['kit_name'], inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'open_character_kit' }, kit_name: { type: 'string', maxLength: 160 } }, required: ['type'] }, risk: 'read', confirmation: 'none', progress: 'Abriendo Character Kit…',
   resolve(raw) { return { type: 'open_character_kit', kitName: text(raw.kit_name, 160) } }, validate() { return [] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.characterKit.openKit(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'character_kit', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'character_kit', anchors: ['kit'] },
+})
+
+defineCapability<AgentAttachCharacterKitReferencesAction>({
+  name: 'attach_character_kit_references', title: 'Attach a Character Kit identity reference', description: 'Attach one exact existing image output as the kit identity reference.', useWhen: 'The user explicitly asks to use an image as a Character Kit identity.', parameters: ['kit_name', 'reference_output_names'], inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'attach_character_kit_references' }, kit_name: { type: 'string' }, reference_output_names: { type: 'array', minItems: 1, maxItems: 1, items: { type: 'string' } } }, required: ['type', 'reference_output_names'] }, risk: 'edit', confirmation: 'none', progress: 'Vinculando la identidad del Character Kit…',
+  resolve(raw) { const names = Array.isArray(raw.reference_output_names) ? raw.reference_output_names.flatMap(value => { const name = text(value, 300); return name ? [name] : [] }).slice(0, 2) : []; return names.length === 1 ? { type: 'attach_character_kit_references', kitName: text(raw.kit_name, 160), outputNames: names } : null }, validate(action) { return action.outputNames.length === 1 ? [] : ['one exact identity reference is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.characterKit.attachReference(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome }, report: { targetKind: 'character_kit', successState: 'completed' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'character_kit', anchors: ['identity-reference'], replay: 'atomic' },
 })
 
 defineCapability<AgentApply3dRhythmAction>({
