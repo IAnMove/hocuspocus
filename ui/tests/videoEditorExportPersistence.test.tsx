@@ -46,6 +46,7 @@ test('Video Editor persists one export per workspace and reconnects after remoun
   const jobId = 'export-persistent-42'
   let postCount = 0
   let statusCount = 0
+  const previousFetch = globalThis.fetch
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/api/v1/video-editor/export') && init?.method === 'POST') {
@@ -71,17 +72,26 @@ test('Video Editor persists one export per workspace and reconnects after remoun
     throw new Error(`Unexpected request: ${url}`)
   }) as typeof fetch
 
-  const first = render(<VideoEditorPanel />)
-  fireEvent.click(screen.getByRole('button', { name: 'Export MP4' }))
-  await waitFor(() => assert.equal(postCount, 1))
-  await waitFor(() => assert.ok(statusCount >= 1))
-  assert.equal(dom.window.localStorage.getItem('maestro-video-editor-export-v1:default'), jobId)
-  first.unmount()
+  let first: { unmount: () => void } | null = null
+  let second: { unmount: () => void } | null = null
+  try {
+    first = render(<VideoEditorPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Export MP4' }))
+    await waitFor(() => assert.equal(postCount, 1))
+    await waitFor(() => assert.ok(statusCount >= 1))
+    assert.equal(dom.window.localStorage.getItem('maestro-video-editor-export-v1:default'), jobId)
+    first.unmount()
+    first = null
 
-  const second = render(<VideoEditorPanel />)
-  await waitFor(() => assert.ok(statusCount >= 2))
-  assert.equal(postCount, 1)
-  assert.match(screen.getByText('Rendering').textContent || '', /Rendering/)
-  second.unmount()
-  cleanup()
+    const statusCountBeforeRemount = statusCount
+    second = render(<VideoEditorPanel />)
+    await waitFor(() => assert.ok(statusCount > statusCountBeforeRemount))
+    assert.equal(postCount, 1)
+    assert.match((await screen.findByText('Rendering')).textContent || '', /Rendering/)
+  } finally {
+    first?.unmount()
+    second?.unmount()
+    cleanup()
+    globalThis.fetch = previousFetch
+  }
 })

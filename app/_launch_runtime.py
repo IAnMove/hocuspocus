@@ -9050,7 +9050,7 @@ async def llm_describe_image(request: Request):
 
 @api.post("/api/v1/characters/describe-refs")
 async def describe_character_refs(request: Request):
-    """MiniMax-M3 vision → PoopMan333 A Prompt. Does not load the local LLM."""
+    """Build an A Prompt with MiniMax vision or the configured internal LLM."""
     from services import llm_service
     from services.character_sheet import DESCRIBE_SCHEMA, describe_character_sheet
 

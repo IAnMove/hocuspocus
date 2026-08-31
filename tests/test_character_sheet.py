@@ -62,11 +62,14 @@ class CharacterSheetDescribeTests(unittest.TestCase):
 
 
 class CharacterSheetRouteTests(unittest.TestCase):
-    def test_launch_runtime_exposes_describe_refs_without_loading_local_llm(self):
+    def test_launch_runtime_keeps_minimax_describe_off_the_local_llm(self):
         launch = os.path.join(os.path.dirname(__file__), "..", "app", "_launch_runtime.py")
         with open(launch, encoding="utf-8") as handle:
             source = handle.read()
         self.assertIn('@api.post("/api/v1/characters/describe-refs")', source)
-        self.assertIn("Does not load the local LLM", source)
-        self.assertIn('model_id="MiniMax-M3"', source)
-        self.assertNotIn("_ensure_llm_loaded()", source.split("describe_character_refs")[1].split("return {")[0])
+        handler = source.split("describe_character_refs", 1)[1].split("return {", 1)[0]
+        minimax_path, local_path = handler.split("        _ensure_llm_loaded()", 1)
+        self.assertIn('if backend == "minimax":', minimax_path)
+        self.assertIn('model_id="MiniMax-M3"', minimax_path)
+        self.assertIn("return llm_service.generate_openai_compatible", minimax_path)
+        self.assertIn("return llm_service.generate(", local_path)
