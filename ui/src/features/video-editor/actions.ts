@@ -1,68 +1,23 @@
 import { fetchOutputs, fetchVideoEditorExport, getVideoEditorThumbnailUrl, probeVideoEditorAudio, probeVideoEditorClip, startVideoEditorExport, type ApiOutput } from '../../api/client'
+import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
 import { useStore } from '../../stores/useStore'
 import { clipId, loadEditorDraft, persistEditorDraft, RESOLUTIONS, type EditorSoundtrack } from './editorDraft'
 import { sequenceTotalDuration } from './editorTimeline'
 import type { EditorClip } from './editorClipNormalization'
-import { executionKey, executionReport, rememberExecution, reuseExecution, type AgentExecutionReport } from '../agent/agentContract'
-
-export interface AgentCreateVideoEditorProjectAction {
-  type: 'create_video_editor_project'
-  projectName: string
-}
-
-export interface AgentOpenVideoEditorProjectAction {
-  type: 'open_video_editor_project'
-  projectName: string
-}
-
-export interface AgentAddVideoEditorClipsAction {
-  type: 'add_video_editor_clips'
-  outputNames: string[]
-}
-
-export interface AgentOrderVideoEditorClipsAction {
-  type: 'order_video_editor_clips'
-  clipNames: string[]
-}
-
-export interface AgentTrimVideoEditorClipAction {
-  type: 'trim_video_editor_clip'
-  clipName: string
-  trimStart: number
-  trimEnd: number
-}
-
-export interface AgentAddVideoEditorAudioAction {
-  type: 'add_video_editor_audio'
-  clipName: string
-  outputName: string
-}
-
-export interface AgentValidateVideoEditorTimelineAction {
-  type: 'validate_video_editor_timeline'
-}
-
-export interface AgentExportVideoEditorAction {
-  type: 'export_video_editor'
-  confirm: true
-}
-
-export interface AgentTrackVideoEditorExportAction {
-  type: 'track_video_editor_export'
-}
+import type {
+  AddVideoEditorAudioCommand,
+  AddVideoEditorClipsCommand,
+  CreateVideoEditorProjectCommand,
+  ExportVideoEditorCommand,
+  OpenVideoEditorProjectCommand,
+  OrderVideoEditorClipsCommand,
+  TrimVideoEditorClipCommand,
+} from './commands'
 
 const EXPORT_KEY = 'maestro-video-editor-export-v1'
 
 function workspaceName(): string {
   return useStore.getState().activeWorkspace || 'default'
-}
-
-function showEditor(): void {
-  const state = useStore.getState()
-  state.setSettingsOpen(false)
-  state.setDashboardOpen(false)
-  state.setMediaFilter('videoeditor')
-  state.setSidebarOpen(false)
 }
 
 function loadDraft() {
@@ -79,39 +34,35 @@ function saveDraft(
   persistEditorDraft(clips, projectName, resolution, fps, workspaceName(), soundtrack)
 }
 
-function editorReport(message: string, extra: Partial<AgentExecutionReport> = {}): AgentExecutionReport {
+function editorEntity() {
   const draft = loadDraft()
-  return executionReport({
-    state: extra.state || 'completed',
-    message,
-    recoverable: extra.recoverable === true,
-    target: { kind: 'video_editor', id: draft.projectName, title: draft.projectName },
-    taskId: extra.taskId,
-    outputNames: extra.outputNames,
-    executionKey: extra.executionKey,
+  return { kind: 'video_editor', id: draft.projectName, workspaceId: workspaceName() }
+}
+
+function editorResult(extra: Parameters<typeof commandResultFromSlice>[0] = {}): CommandResult {
+  const entity = editorEntity()
+  return commandResultFromSlice({
+    entity,
+    navigationTarget: { destination: 'video_editor', entity },
+    ...extra,
   })
 }
 
-export async function createAgentVideoEditorProject(action: AgentCreateVideoEditorProjectAction): Promise<{ message: string; report: AgentExecutionReport }> {
-  const name = action.projectName.trim() || 'my_video'
+export async function createAgentVideoEditorProject(command: CreateVideoEditorProjectCommand): Promise<CommandResult> {
+  const name = command.projectName.trim() || 'my_video'
   saveDraft([], name, RESOLUTIONS[0], 30, null)
-  showEditor()
-  const message = `He creado el proyecto de Video Editor “${name}”.`
-  return { message, report: editorReport(message) }
+  return editorResult()
 }
 
-export async function openAgentVideoEditorProject(action: AgentOpenVideoEditorProjectAction): Promise<{ message: string; report: AgentExecutionReport }> {
+export async function openAgentVideoEditorProject(command: OpenVideoEditorProjectCommand): Promise<CommandResult> {
   const draft = loadDraft()
-  if (action.projectName.trim() && draft.projectName !== action.projectName.trim()) {
+  if (command.projectName.trim() && draft.projectName !== command.projectName.trim()) {
     throw new Error(
       `Solo existe un borrador de Video Editor por workspace: “${draft.projectName}”. `
       + 'Pide explícitamente crear otro proyecto para reemplazar el borrador actual.',
     )
   }
-  showEditor()
-  const next = loadDraft()
-  const message = `He abierto Video Editor “${next.projectName}” con ${next.clips.length} clips.`
-  return { message, report: editorReport(message) }
+  return editorResult()
 }
 
 async function clipsFromNamedOutputs(
@@ -150,48 +101,44 @@ async function clipsFromNamedOutputs(
   return added
 }
 
-export async function addAgentVideoEditorClips(action: AgentAddVideoEditorClipsAction): Promise<{ message: string; report: AgentExecutionReport }> {
+export async function addAgentVideoEditorClips(command: AddVideoEditorClipsCommand): Promise<CommandResult> {
   const draft = loadDraft()
-  const added = await clipsFromNamedOutputs(action.outputNames)
+  const added = await clipsFromNamedOutputs(command.outputNames)
   saveDraft([...draft.clips, ...added], draft.projectName, draft.resolution, draft.fps)
-  showEditor()
-  const message = `He añadido ${added.length} clips exactos a “${draft.projectName}”.`
-  return { message, report: editorReport(message) }
+  return editorResult()
 }
 
-export async function orderAgentVideoEditorClips(action: AgentOrderVideoEditorClipsAction): Promise<{ message: string; report: AgentExecutionReport }> {
+export async function orderAgentVideoEditorClips(command: OrderVideoEditorClipsCommand): Promise<CommandResult> {
   const draft = loadDraft()
   const byName = new Map(draft.clips.map(clip => [clip.name, clip]))
-  const ordered = action.clipNames.map(name => {
+  const ordered = command.clipNames.map(name => {
     const clip = byName.get(name)
     if (!clip) throw new Error(`El clip “${name}” no está en la línea de tiempo.`)
     return clip
   })
-  const rest = draft.clips.filter(clip => !action.clipNames.includes(clip.name))
+  const rest = draft.clips.filter(clip => !command.clipNames.includes(clip.name))
   saveDraft([...ordered, ...rest], draft.projectName, draft.resolution, draft.fps)
-  const message = `He reordenado ${ordered.length} clips.`
-  return { message, report: editorReport(message) }
+  return editorResult()
 }
 
-export async function trimAgentVideoEditorClip(action: AgentTrimVideoEditorClipAction): Promise<{ message: string; report: AgentExecutionReport }> {
+export async function trimAgentVideoEditorClip(command: TrimVideoEditorClipCommand): Promise<CommandResult> {
   const draft = loadDraft()
   const clips = draft.clips.map(clip => {
-    if (clip.name !== action.clipName && clip.id !== action.clipName) return clip
-    const start = Math.max(0, action.trimStart)
-    const end = Math.max(start + 0.05, Math.min(clip.duration || action.trimEnd, action.trimEnd))
+    if (clip.name !== command.clipName && clip.id !== command.clipName) return clip
+    const start = Math.max(0, command.trimStart)
+    const end = Math.max(start + 0.05, Math.min(clip.duration || command.trimEnd, command.trimEnd))
     return { ...clip, trimStart: start, trimEnd: end }
   })
-  if (!draft.clips.some(clip => clip.name === action.clipName || clip.id === action.clipName)) {
-    throw new Error(`No encuentro el clip “${action.clipName}” para recortar.`)
+  if (!draft.clips.some(clip => clip.name === command.clipName || clip.id === command.clipName)) {
+    throw new Error(`No encuentro el clip “${command.clipName}” para recortar.`)
   }
   saveDraft(clips, draft.projectName, draft.resolution, draft.fps)
-  const message = `He recortado “${action.clipName}” a ${action.trimStart}-${action.trimEnd}s.`
-  return { message, report: editorReport(message) }
+  return editorResult()
 }
 
-export async function addAgentVideoEditorAudio(action: AgentAddVideoEditorAudioAction): Promise<{ message: string; report: AgentExecutionReport }> {
+export async function addAgentVideoEditorAudio(command: AddVideoEditorAudioCommand): Promise<CommandResult> {
   const draft = loadDraft()
-  const wanted = action.outputName.trim()
+  const wanted = command.outputName.trim()
   if (!wanted) throw new Error('Indica el nombre exacto del output de audio.')
   const outputs = await fetchOutputs(80, 0, { workspace: workspaceName(), mediaType: 'audio' })
   const output = outputs.outputs.find(item => item.name === wanted)
@@ -208,43 +155,21 @@ export async function addAgentVideoEditorAudio(action: AgentAddVideoEditorAudioA
     loop: probe.duration < sequenceTotalDuration(draft.clips),
   }
   saveDraft(draft.clips, draft.projectName, draft.resolution, draft.fps, soundtrack)
-  showEditor()
-  const message = `He configurado “${soundtrack.name}” como banda sonora de “${draft.projectName}”.`
-  return { message, report: editorReport(message) }
+  return editorResult()
 }
 
-export async function validateAgentVideoEditorTimeline(): Promise<{ message: string; report: AgentExecutionReport }> {
+export async function validateAgentVideoEditorTimeline(): Promise<CommandResult> {
   const draft = loadDraft()
   if (!draft.clips.length) throw new Error('La línea de tiempo está vacía.')
   const duration = sequenceTotalDuration(draft.clips)
   if (duration <= 0) throw new Error('La línea de tiempo no tiene duración usable.')
-  const message = `Línea de tiempo válida: ${draft.clips.length} clips, ${duration.toFixed(1)}s.`
-  return { message, report: editorReport(message, { state: 'prepared' }) }
+  return editorResult()
 }
 
-export async function exportAgentVideoEditor(action: AgentExportVideoEditorAction): Promise<{ message: string; report: AgentExecutionReport }> {
-  if (!action.confirm) throw new Error('Exportar requiere confirm=true.')
+export async function exportAgentVideoEditor(command: ExportVideoEditorCommand): Promise<CommandResult> {
+  if (!command.confirm) throw new Error('Exportar requiere confirm=true.')
   const draft = loadDraft()
   if (!draft.clips.length) throw new Error('No hay clips para exportar.')
-  const key = executionKey({
-    workspace: workspaceName(),
-    type: 'export_video_editor',
-    targetId: draft.projectName,
-    params: {
-      clips: draft.clips.map(clip => clip.name),
-      duration: sequenceTotalDuration(draft.clips),
-      soundtrack: draft.soundtrack ? {
-        name: draft.soundtrack.name,
-        source: draft.soundtrack.source,
-        trimStart: draft.soundtrack.trimStart,
-        trimEnd: draft.soundtrack.trimEnd,
-        volume: draft.soundtrack.volume,
-        loop: draft.soundtrack.loop,
-      } : null,
-    },
-  })
-  const reused = reuseExecution(key)
-  if (reused) return { message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`, report: reused }
   const job = await startVideoEditorExport({
     name: draft.projectName,
     width: draft.resolution.width,
@@ -277,16 +202,13 @@ export async function exportAgentVideoEditor(action: AgentExportVideoEditorActio
   try {
     window.localStorage.setItem(`${EXPORT_KEY}:${encodeURIComponent(workspaceName())}`, job.job_id)
   } catch { /* keep going */ }
-  const report = editorReport(
-    `He encolado la exportación de “${draft.projectName}” (${job.job_id}).`,
-    { state: 'queued', taskId: job.job_id, executionKey: key, recoverable: true },
-  )
-  rememberExecution(report)
-  showEditor()
-  return { message: report.message, report }
+  return editorResult({
+    status: 'queued',
+    taskIds: [job.job_id],
+  })
 }
 
-export async function trackAgentVideoEditorExport(): Promise<{ message: string; report: AgentExecutionReport }> {
+export async function trackAgentVideoEditorExport(): Promise<CommandResult> {
   let jobId = ''
   try {
     jobId = window.localStorage.getItem(`${EXPORT_KEY}:${encodeURIComponent(workspaceName())}`) || ''
@@ -295,18 +217,20 @@ export async function trackAgentVideoEditorExport(): Promise<{ message: string; 
   }
   if (!jobId) throw new Error('No hay una exportación de Video Editor en curso.')
   const job = await fetchVideoEditorExport(jobId)
-  const state = job.status === 'completed' ? 'completed'
+  const status = job.status === 'completed' ? 'completed'
     : job.status === 'failed' || job.status === 'cancelled' ? 'failed'
-      : job.status === 'queued' || job.status === 'waiting_resource' ? 'queued'
-        : 'running'
-  const message = `Exportación ${job.job_id}: ${job.status}. ${job.message || ''}`
-  return {
-    message,
-    report: editorReport(message, {
-      state,
+      : 'queued'
+  const owner = editorEntity()
+  return editorResult({
+    status,
+    taskIds: [job.job_id],
+    artifacts: [{
+      id: job.filename || `export-job:${job.job_id}`,
+      kind: job.filename ? 'video' : 'document',
+      owner,
       taskId: job.job_id,
-      outputNames: job.filename ? [job.filename] : [],
-      recoverable: state === 'failed',
-    }),
-  }
+      uri: job.url || job.filename || job.job_id,
+      metadata: { status: job.status, message: job.message || '' },
+    }],
+  })
 }

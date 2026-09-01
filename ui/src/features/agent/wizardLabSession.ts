@@ -1,4 +1,7 @@
-import type { CharacterKitLibrary } from '../../lib/characterKit'
+export {
+  rememberCharacterKitLibrary,
+  rememberedCharacterKitLibrary,
+} from '../characters/session'
 
 export interface Video3dSessionSnapshot {
   scene_id: string
@@ -7,16 +10,7 @@ export interface Video3dSessionSnapshot {
   state: string
 }
 
-let characterKitLibrary: CharacterKitLibrary | null = null
 let video3dScene: Video3dSessionSnapshot | null = null
-
-export function rememberCharacterKitLibrary(library: CharacterKitLibrary | null): void {
-  characterKitLibrary = library
-}
-
-export function rememberedCharacterKitLibrary(): CharacterKitLibrary | null {
-  return characterKitLibrary
-}
 
 export function rememberVideo3dScene(scene: Video3dSessionSnapshot | null): void {
   video3dScene = scene

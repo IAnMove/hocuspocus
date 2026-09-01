@@ -1119,6 +1119,125 @@ test('character kit and video editor execute, reuse export id, and reject unsign
   }
 })
 
+test('track_video_editor_export keeps job status without a filename', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  clearExecutionMemory()
+  const originalFetch = globalThis.fetch
+  const originalLoadOutputs = useStore.getState().loadOutputs
+  useStore.setState({ loadOutputs: async () => {}, activeWorkspace: 'default' })
+  let job = {
+    job_id: 'export-88',
+    status: 'running',
+    progress: 40,
+    message: 'Codificando el corte',
+    filename: null,
+    url: null,
+    error: null,
+  }
+  globalThis.fetch = async (input, init) => {
+    const url = String(typeof input === 'string' ? input : input.url)
+    const method = init?.method || 'GET'
+    const json = body => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url.includes('/api/v1/video-editor/export/export-88') && method === 'GET') return json(job)
+    return json({})
+  }
+  window.localStorage.setItem('maestro-video-editor-export-v1:default', 'export-88')
+  try {
+    await executeAgentActions([{ type: 'create_video_editor_project', projectName: 'corte-final' }])
+    const running = await executeAgentActions([{ type: 'track_video_editor_export' }])
+    assert.equal(running[0].ok, true)
+    assert.equal(running[0].report.state, 'running')
+    assert.equal(running[0].report.taskId, 'export-88')
+    assert.match(running[0].message, /Codificando el corte/)
+    assert.deepEqual(running[0].report.outputNames || [], [])
+
+    job = { ...job, status: 'failed', message: 'FFmpeg se quedó sin disco', error: 'disk' }
+    const failed = await executeAgentActions([{ type: 'track_video_editor_export' }])
+    assert.equal(failed[0].report.state, 'failed')
+    assert.match(failed[0].message, /FFmpeg se quedó sin disco/)
+    assert.deepEqual(failed[0].report.outputNames || [], [])
+  } finally {
+    window.localStorage.removeItem('maestro-video-editor-export-v1:default')
+    globalThis.fetch = originalFetch
+    useStore.setState({ loadOutputs: originalLoadOutputs })
+    clearExecutionMemory()
+  }
+})
+
+test('track_character_kit_job inspects the canonical queue and stays running', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  clearExecutionMemory()
+  let kitLibrary = { version: 1, revision: 0, activeId: '', kits: {} }
+  let activityOpened = 0
+  const onActivity = () => { activityOpened += 1 }
+  window.addEventListener('hocuspocus:activity-details', onActivity)
+  const originalFetch = globalThis.fetch
+  const originalLoadOutputs = useStore.getState().loadOutputs
+  useStore.setState({ loadOutputs: async () => {} })
+  globalThis.fetch = async (input, init) => {
+    const url = String(typeof input === 'string' ? input : input.url)
+    const method = init?.method || 'GET'
+    const json = body => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url.includes('/api/v1/character-kits/library/kits/') && method === 'PATCH') {
+      const body = JSON.parse(String(init.body || '{}'))
+      kitLibrary = { ...kitLibrary, revision: kitLibrary.revision + 1, activeId: body.kit.id, kits: { ...kitLibrary.kits, [body.kit.id]: body.kit } }
+      return json(kitLibrary)
+    }
+    if (url.includes('/api/v1/character-kits/library')) return json(kitLibrary)
+    if (url.includes('/api/v1/tasks')) {
+      return json({
+        workspace: 'default',
+        latest_event_id: 1,
+        tasks: [{
+          id: 'task-kit-1',
+          root_id: 'task-kit-1',
+          parent_id: null,
+          kind: 'generation',
+          title: 'Pose base Nora',
+          workflow: 'character_kit',
+          status: 'running',
+          phase: 'render',
+          message: 'Generando',
+          current: 1,
+          total: 2,
+          progress: 0.5,
+          detail_current: 0,
+          detail_total: 0,
+          created_at: 1,
+          updated_at: 1,
+          attempt: 1,
+          max_attempts: 1,
+          cancelable: true,
+          resumable: false,
+          recoverable: false,
+          resource_requirements: ['gpu'],
+        }],
+      })
+    }
+    return json({})
+  }
+  try {
+    await executeAgentActions([{ type: 'create_character_kit', name: 'Nora', style: 'cutout' }])
+    const tracked = await executeAgentActions([{ type: 'track_character_kit_job', kitName: 'Nora' }])
+    assert.equal(tracked[0].ok, true)
+    assert.equal(tracked[0].report.state, 'running')
+    assert.equal(tracked[0].report.target.kind, 'character_kit')
+    assert.match(tracked[0].message, /Sigo el trabajo de “Nora”/)
+    assert.match(tracked[0].message, /Pose base Nora/)
+    assert.match(tracked[0].message, /He abierto Activity/)
+    assert.ok(activityOpened >= 1)
+  } finally {
+    window.removeEventListener('hocuspocus:activity-details', onActivity)
+    globalThis.fetch = originalFetch
+    useStore.setState({ loadOutputs: originalLoadOutputs })
+    clearExecutionMemory()
+  }
+})
+
 test('compute comic render without confirm is dropped', async () => {
   const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
   const turn = parseAgentTurn(JSON.stringify({
