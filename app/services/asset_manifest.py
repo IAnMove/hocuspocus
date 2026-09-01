@@ -336,6 +336,12 @@ def adapt_legacy_sidecar(
         key: legacy.get(key) or params.get(key)
         for key in ("command_id", "workflow_id", "run_id", "task_id", "root_task_id", "job_id", "pipeline_id")
     }
+    if not _clean_text(correlations.get("pipeline_id")):
+        correlations["pipeline_id"] = (
+            legacy.get("director_pipeline_id")
+            or params.get("director_pipeline_id")
+            or params.get("_director_pipeline_id")
+        )
     stable_workspace = workspace_id or legacy.get("workspace") or params.get("workspace")
     legacy_asset_id = _clean_text(legacy.get("asset_id")) or (
         "asset_legacy_"

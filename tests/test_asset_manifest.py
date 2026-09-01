@@ -150,6 +150,34 @@ def test_explicit_legacy_adapter_marks_origin(tmp_path: Path):
     assert manifest["technical"]["legacy_sidecar"] is True
 
 
+@pytest.mark.parametrize(
+    ("legacy", "expected_pipeline_id"),
+    [
+        ({"director_pipeline_id": "pipe-top"}, "pipe-top"),
+        ({"params": {"director_pipeline_id": "pipe-params"}}, "pipe-params"),
+        ({"params": {"_director_pipeline_id": "pipe-private"}}, "pipe-private"),
+        (
+            {
+                "pipeline_id": "pipe-canonical",
+                "director_pipeline_id": "pipe-director",
+            },
+            "pipe-canonical",
+        ),
+    ],
+)
+def test_legacy_director_sidecar_preserves_pipeline_identity(
+    tmp_path: Path,
+    legacy: dict,
+    expected_pipeline_id: str,
+):
+    output = tmp_path / "director.mp4"
+    output.write_bytes(b"video")
+
+    manifest = adapt_legacy_sidecar(output, legacy)
+
+    assert manifest["execution"]["pipeline_id"] == expected_pipeline_id
+
+
 def test_non_finite_metadata_is_normalized_to_valid_json(tmp_path: Path):
     manifest = build_asset_manifest(
         tmp_path / "valid.png", tool="studio-image",
