@@ -37,8 +37,8 @@ export async function update(command: UpdateStoryCommand) {
   return updateFilledStory(command)
 }
 
-export async function generateProposal(command: GenerateStorySectionCommand) {
-  return generateStorySectionDraft(command)
+export async function generateProposal(command: GenerateStorySectionCommand, onStep?: (message: string) => void) {
+  return generateStorySectionDraft(command, onStep)
 }
 
 export async function applyProposal(command: ApplyStoryProposalCommand) {

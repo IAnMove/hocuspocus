@@ -37,7 +37,9 @@ function storyResult(
     entity,
     pipelineIds: typeof extra.pipelineId === 'string' && extra.pipelineId ? [extra.pipelineId] : undefined,
     navigationTarget: {
-      destination: extra.destination === 'director' ? 'director' : 'story_lab',
+      destination: extra.destination === 'director' || extra.destination === 'comics'
+        ? extra.destination
+        : 'story_lab',
       section,
       entity,
     },

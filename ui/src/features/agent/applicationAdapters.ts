@@ -65,7 +65,7 @@ export interface StoryLabAdapter {
   open(): Promise<AdapterOutcome>
   create(action: AgentCreateStoryAction): Promise<AdapterOutcome>
   update(action: AgentUpdateStoryAction): Promise<AdapterOutcome>
-  generateProposal(action: AgentGenerateStorySectionAction): Promise<AdapterOutcome>
+  generateProposal(action: AgentGenerateStorySectionAction, onStep?: (message: string) => void): Promise<AdapterOutcome>
   applyProposal(action: AgentApplyStoryProposalAction): Promise<AdapterOutcome>
   approveSection(action: AgentApproveStorySectionAction): Promise<AdapterOutcome>
   approveVisuals(action: AgentApproveStoryVisualsAction): Promise<AdapterOutcome>
@@ -91,8 +91,8 @@ export interface SeriesLabAdapter {
 export interface ComicAdapter {
   open(): Promise<AdapterOutcome>
   create(action: AgentCreateComicAction): Promise<AdapterOutcome>
-  generate(action: AgentGenerateComicAction, expectedProjectId?: string): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }>
-  generatePanel(pageNumber: number, panelNumber: number): Promise<AdapterOutcome>
+  generate(action: AgentGenerateComicAction, expectedProjectId?: string, onStep?: (message: string) => void): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }>
+  generatePanel(pageNumber: number, panelNumber: number, onStep?: (message: string) => void): Promise<AdapterOutcome>
 }
 export interface VideoEditorAdapter {
   open(): Promise<AdapterOutcome>
@@ -279,9 +279,9 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { update } = await import('../stories/adapters')
       return presentStorySliceResult(await update(action))
     },
-    async generateProposal(action) {
+    async generateProposal(action, onStep) {
       const { generateProposal } = await import('../stories/adapters')
-      return presentStorySliceResult(await generateProposal(action))
+      return presentStorySliceResult(await generateProposal(action, onStep))
     },
     async applyProposal(action) {
       const { applyProposal } = await import('../stories/adapters')
@@ -423,17 +423,17 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { create } = await import('../comics/adapters')
       return presentComicSliceResult(await create(action))
     },
-    async generate(action, expectedProjectId) {
+    async generate(action, expectedProjectId, onStep) {
       const { bindGenerateComicTarget } = await import('./agentContract')
       const { useComicStore } = await import('../comics/store')
       const current = useComicStore.getState().project
       bindGenerateComicTarget(expectedProjectId, current.id, current.title)
       const { generate } = await import('../comics/adapters')
-      return presentComicSliceResult(await generate(action))
+      return presentComicSliceResult(await generate(action, onStep))
     },
-    async generatePanel(pageNumber, panelNumber) {
+    async generatePanel(pageNumber, panelNumber, onStep) {
       const { generatePanel } = await import('../comics/adapters')
-      return presentComicSliceResult(await generatePanel(pageNumber, panelNumber))
+      return presentComicSliceResult(await generatePanel(pageNumber, panelNumber, onStep))
     },
   }
   adapters.videoEditor = {

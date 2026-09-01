@@ -73,6 +73,7 @@ export interface CapabilityExecutionOutcome {
 export interface CapabilityExecutionContext {
   adapters: WizardApplicationAdapters
   workspace?: string
+  onStep?: (message: string) => void
 }
 
 export interface CapabilityDefinition<TAction extends AgentAction = AgentAction> {
@@ -540,7 +541,7 @@ defineCapability<AgentGenerateStorySectionAction>({
     return storyProposalScopes.has(scope) ? { type: 'generate_story_section', targetStoryTitle: text(raw.target_story_title, 300), scope: scope as AgentGenerateStorySectionAction['scope'], instruction: text(raw.instruction, 4_000), confirm: true } : null
   },
   validate(action) { return action.confirm === true && storyProposalScopes.has(action.scope) ? [] : ['a confirmed valid proposal scope is required'] }, async prepare(action) { return action },
-  async execute(action, context) { return context.adapters.storyLab.generateProposal(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  async execute(action, context) { return context.adapters.storyLab.generateProposal(action, context.onStep) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'story_lab', anchors: ['proposal', 'review'], replay: 'atomic' },
 })
@@ -819,7 +820,7 @@ defineCapability<AgentGenerateComicAction>({
     return { type: 'generate_comic', imageProvider: provider === 'minimax' || provider === 'maestro' ? provider : 'keep', imageModel: text(raw.model_type, 160), scope: scope === 'all' || scope === 'failed' ? scope : 'missing', pages, pilot: raw.pilot === true, biographyReview: raw.biography_review === true, confirm: true }
   },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
-  async execute(action, context) { return context.adapters.comic.generate(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+  async execute(action, context) { return context.adapters.comic.generate(action, undefined, context.onStep) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'comic', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'comics', anchors: ['generate-all-images'], replay: 'atomic' },
 })

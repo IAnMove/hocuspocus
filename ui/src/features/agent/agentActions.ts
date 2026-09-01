@@ -2908,6 +2908,7 @@ export async function executeAgentActions(
       const registeredResult = await runRegisteredCapability(action, {
         adapters: defaultApplicationAdapters,
         workspace: useStore.getState().activeWorkspace || 'default',
+        onStep,
       })
       if (registeredResult) {
         results.push(registeredResult)
@@ -2977,7 +2978,7 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.storyLab.update(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'generate_story_section') {
-        const outcome = await defaultApplicationAdapters.storyLab.generateProposal(action)
+        const outcome = await defaultApplicationAdapters.storyLab.generateProposal(action, onStep)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'apply_story_proposal') {
         const outcome = await defaultApplicationAdapters.storyLab.applyProposal(action)
@@ -3115,7 +3116,7 @@ export async function executeAgentActions(
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'generate_comic') {
         if (!action.confirm) throw new Error('Dibujar las viñetas requiere confirm=true.')
-        const outcome = await defaultApplicationAdapters.comic.generate(action, createdComicId || undefined)
+        const outcome = await defaultApplicationAdapters.comic.generate(action, createdComicId || undefined, onStep)
         results.push({
           action,
           ok: outcome.state !== 'failed',
@@ -3135,7 +3136,7 @@ export async function executeAgentActions(
         })
       } else if (action.type === 'generate_comic_panel') {
         if (!action.confirm) throw new Error('Regenerar una viñeta requiere confirm=true.')
-        const outcome = await defaultApplicationAdapters.comic.generatePanel(action.pageNumber, action.panelNumber)
+        const outcome = await defaultApplicationAdapters.comic.generatePanel(action.pageNumber, action.panelNumber, onStep)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'attach_studio_references') {
         const { attachStudioReferences } = await import('./studioGuidance')
