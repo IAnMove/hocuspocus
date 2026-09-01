@@ -11,6 +11,8 @@ import unittest
 
 import numpy as np
 
+from tests.api_client_source import api_client_source
+
 
 _requires_torch = unittest.skipUnless(
     importlib.util.find_spec("torch") is not None,
@@ -73,7 +75,6 @@ _ADVANCED_SETTINGS_PATH = os.path.join(
 _EDIT_SUBMODE_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "Sidebar", "EditSubModeToggle.tsx",
 )
-_API_CLIENT_PATH = os.path.join(_ROOT, "ui", "src", "api", "client.ts")
 _LORA_SELECTOR_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "SettingsDrawer", "LoraSelector.tsx",
 )
@@ -3692,7 +3693,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         scail2 = _read(_SCAIL2_PATH)
         wan_handler = _read(_WAN_HANDLER_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
-        client = _read(_API_CLIENT_PATH)
+        client = api_client_source()
         magic_mask = _read(_MAGIC_MASK_PATH)
         sam3 = _read(_SAM3_PREPROCESSOR_PATH)
 
@@ -3849,7 +3850,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             _ROOT, "app", "models", "wan", "any2video.py",
         ))
         wgp = _read(_WGP_PATH)
-        client = _read(os.path.join(_ROOT, "ui", "src", "api", "client.ts"))
+        client = api_client_source()
 
         self.assertIn('"identity_image": identity_image', launch)
         self.assertIn('"scail2_clip_reference_path"', launch)
@@ -3917,7 +3918,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         store = _read(_STORE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         selector = _read(_SCAIL_RESOLUTION_SELECTOR_PATH)
-        client = _read(os.path.join(_ROOT, "ui", "src", "api", "client.ts"))
+        client = api_client_source()
 
         self.assertIn('"512p": (896, 512)', launch)
         self.assertIn('"704p": (1280, 704)', launch)
@@ -4091,9 +4092,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
-        client = _read(os.path.join(
-            _ROOT, "ui", "src", "api", "client.ts",
-        ))
+        client = api_client_source()
 
         self.assertIn('body.get("auto_face_detail") is not False', launch)
         self.assertIn(
@@ -4146,7 +4145,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         store = _read(_STORE_PATH)
         controls = _read(_REPAINT_CONTROLS_PATH)
         toggle = _read(_EDIT_SUBMODE_PATH)
-        client = _read(_API_CLIENT_PATH)
+        client = api_client_source()
 
         self.assertIn('@api.post("/api/v1/repaint")', launch)
         self.assertIn('@api.post("/api/v1/repaint/preview")', launch)

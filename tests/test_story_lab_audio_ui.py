@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from tests.api_client_source import api_client_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STORY = ROOT / "ui" / "src" / "features" / "stories" / "StoryLabPanel.tsx"
@@ -12,7 +14,7 @@ STORY_ADAPTATIONS = ROOT / "ui" / "src" / "features" / "stories" / "adaptations.
 STORY_ACTIVITY = ROOT / "ui" / "src" / "features" / "stories" / "activityLifecycle.ts"
 IMAGE_GENERATION = ROOT / "ui" / "src" / "lib" / "imageGeneration.ts"
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
-API_CLIENT = ROOT / "ui" / "src" / "api" / "client.ts"
+
 
 
 def test_lyria_prompt_does_not_require_an_optional_reference_song():
@@ -95,7 +97,7 @@ def test_story_lab_refresh_recovers_the_backend_job_without_opening_a_client_roo
 
 
 def test_story_lab_status_polling_survives_transient_mobile_disconnects():
-    source = API_CLIENT.read_text(encoding="utf-8")
+    source = api_client_source()
 
     assert "STORY_STATUS_RETRY_DELAYS_MS" in source
     assert "getStoryGenerationStatusResilient" in source

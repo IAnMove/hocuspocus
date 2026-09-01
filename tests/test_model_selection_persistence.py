@@ -5,10 +5,12 @@ import ast
 import os
 import unittest
 
+from tests.api_client_source import api_client_source
+
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LAUNCH_PATH = os.path.join(ROOT, "app", "_launch_runtime.py")
-CLIENT_PATH = os.path.join(ROOT, "ui", "src", "api", "client.ts")
+
 STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
 STORY_PATH = os.path.join(
     ROOT, "ui", "src", "features", "stories", "StoryLabPanel.tsx",
@@ -74,7 +76,7 @@ class TestModelSelectionPersistence(unittest.TestCase):
 
     def test_client_and_boot_hydration_use_server_preferences(self):
         launch = _source(LAUNCH_PATH)
-        client = _source(CLIENT_PATH)
+        client = api_client_source()
         store = _source(STORE_PATH)
 
         self.assertIn('@api.get("/api/v1/model-selections")', launch)

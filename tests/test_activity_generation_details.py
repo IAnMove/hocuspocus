@@ -2,17 +2,18 @@
 
 from pathlib import Path
 
+from tests.api_client_source import api_client_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
-CLIENT = ROOT / "ui" / "src" / "api" / "client.ts"
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 ACTIVITY = ROOT / "ui" / "src" / "components" / "ActivityFooter.tsx"
 
 
 def test_backend_status_and_reconnect_publish_frozen_generation_details():
     launch = LAUNCH.read_text(encoding="utf-8")
-    client = CLIENT.read_text(encoding="utf-8")
+    client = api_client_source()
     store = STORE.read_text(encoding="utf-8")
 
     assert "def _public_generation_details" in launch

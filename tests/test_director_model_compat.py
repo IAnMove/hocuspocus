@@ -24,6 +24,7 @@ from services.director.prompt_polish import (  # noqa: E402
     polish_prompts_third_pass,
     should_polish_director_video_prompts,
 )
+from tests.api_client_source import api_client_source  # noqa: E402
 from services.director.planners.short_film import (  # noqa: E402
     ShortFilmPlanner,
     _route_video_pass2_guide,
@@ -1878,7 +1879,6 @@ class TestDirectorH3GenerationContract(unittest.TestCase):
 
 class TestDirectorUICatalogContract(unittest.TestCase):
     def test_ui_preserves_backend_director_capabilities(self):
-        client_path = os.path.join(_ROOT_DIR, "ui", "src", "api", "client.ts")
         store_path = os.path.join(_ROOT_DIR, "ui", "src", "stores", "useStore.ts")
         types_path = os.path.join(_ROOT_DIR, "ui", "src", "types", "index.ts")
         chat_path = os.path.join(
@@ -1894,8 +1894,7 @@ class TestDirectorUICatalogContract(unittest.TestCase):
         )
         launch_path = os.path.join(_APP_DIR, "_launch_runtime.py")
         pipeline_path = os.path.join(_APP_DIR, "services", "director_pipeline.py")
-        with open(client_path, encoding="utf-8") as handle:
-            client = handle.read()
+        client = api_client_source()
         with open(store_path, encoding="utf-8") as handle:
             store = handle.read()
         with open(types_path, encoding="utf-8") as handle:
