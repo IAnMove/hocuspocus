@@ -53,7 +53,10 @@ else:
 ## Main Entry Points
 
 - `init(...) -> WanGPSession`
-  - Creates a reusable session and eagerly loads the runtime.
+  - Creates a reusable session and eagerly loads the runtime. If HocusPocus
+    already bound WanGP, it reuses that exact instance; in a standalone Python
+    process it performs the one authorized import and binds it for all later
+    calls.
 - `WanGPSession.submit(source) -> SessionJob`
   - Starts a job from a settings dict, a manifest list, or a saved `.json` / `.zip` file.
 - `WanGPSession.submit_task(settings) -> SessionJob`

@@ -15,6 +15,11 @@ from scripts.architecture_contracts import (
 
 WGP_ALLOWLIST = {
     ("app/_launch_runtime.py", "<module>", "import wgp"),
+    (
+        "app/services/generation/bootstrap.py",
+        "_import_wgp",
+        "importlib.import_module('wgp')",
+    ),
 }
 
 IGNORED_WGP_TREES = (
@@ -133,12 +138,18 @@ def test_wgp_import_detector_names_static_and_dynamic_forms() -> None:
 def test_first_party_wgp_imports_are_named_and_cannot_grow() -> None:
     found = _wgp_imports()
     generation_imports = {item for item in found if item[0].startswith("app/services/generation/")}
-    assert generation_imports == set(), (
-        "The WanGP wall must bind the live bootstrap instance and must not "
-        f"reimport wgp. found={sorted(generation_imports)!r}"
+    assert generation_imports == {
+        (
+            "app/services/generation/bootstrap.py",
+            "_import_wgp",
+            "importlib.import_module('wgp')",
+        ),
+    }, (
+        "Only the explicit standalone bootstrap may import WanGP inside the "
+        f"generation boundary. found={sorted(generation_imports)!r}"
     )
     assert found == WGP_ALLOWLIST, (
-        "First-party WanGP imports may only be the launch bootstrap. "
+        "First-party WanGP imports may only be the two explicit bootstraps. "
         f"Added={sorted(found - WGP_ALLOWLIST)!r}, "
         f"removed={sorted(WGP_ALLOWLIST - found)!r}"
     )
