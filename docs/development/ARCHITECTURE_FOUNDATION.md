@@ -41,12 +41,15 @@ statement. Upstream/vendor trees are excluded explicitly.
 The WanGP wall lives in `app/services/generation/`. Launch imports `wgp` once
 after the argv patch and calls `bind_wgp(wgp)`. Consumers read that live
 instance through `get_wgp()`, `ModelCatalog`, or `RuntimeConfig`. The wall
-must not reimport WanGP. Video concat stays in `services.mix_concat` and only
-uses `get_wgp()` to reach the already-bound helper.
+does not import WanGP for consumers. The documented standalone Python API is
+the single exception: `generation/bootstrap.py` may import once when a process
+starts through `shared.api.init()` instead of launch, then binds that exact
+`sys.modules["wgp"]` instance. Video concat stays in `services.mix_concat` and
+only uses `get_wgp()` to reach the already-bound helper.
 
-The remaining first-party allowlist is the launch bootstrap import. New
-static or dynamic `wgp` imports outside `app/models/**` and other vendor
-trees fail the gate.
+The remaining first-party allowlist contains exactly the launch bootstrap and
+the standalone API bootstrap. New static or dynamic `wgp` imports outside
+`app/models/**` and other vendor trees fail the gate.
 
 Run the contracts with:
 

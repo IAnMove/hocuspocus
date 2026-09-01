@@ -870,17 +870,9 @@ class WanGPSession:
                 sys.path.insert(0, str(self._root))
 
             with _pushd(self._root), _temporary_argv(argv):
-                from services.generation import bind_wgp, get_wgp
-                try:
-                    module = get_wgp()
-                except RuntimeError:
-                    module = sys.modules.get("wgp")
-                    if module is None:
-                        raise
-                    bind_wgp(module)
-                module_root = Path(module.__file__).resolve().parent
-                if module_root != self._root:
-                    raise RuntimeError(f"WanGP module already loaded from {module_root}, expected {self._root}")
+                from services.generation.bootstrap import get_or_bootstrap_wgp
+
+                module = get_or_bootstrap_wgp(expected_root=self._root)
                 if not hasattr(module, "app"):
                     module.app = module.WAN2GPApplication()
                 module.download_ffmpeg()

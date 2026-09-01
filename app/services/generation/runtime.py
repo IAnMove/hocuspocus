@@ -5,24 +5,33 @@ ports below; they must not `import wgp` themselves.
 """
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 _UNBOUND_MESSAGE = (
-    "generation.bind_wgp() was not called; launch bootstrap must import wgp first"
+    "generation.bind_wgp() was not called; bootstrap through launch or "
+    "shared.api.init() first"
 )
 
 _wgp = None
+_wgp_lock = threading.RLock()
 
 
 def bind_wgp(module) -> None:
     global _wgp
-    _wgp = module
+    if module is None:
+        raise ValueError("Cannot bind an empty WanGP runtime")
+    with _wgp_lock:
+        if _wgp is not None and _wgp is not module:
+            raise RuntimeError("A different WanGP runtime is already bound")
+        _wgp = module
 
 
 def get_wgp():
-    if _wgp is None:
-        raise RuntimeError(_UNBOUND_MESSAGE)
-    return _wgp
+    with _wgp_lock:
+        if _wgp is None:
+            raise RuntimeError(_UNBOUND_MESSAGE)
+        return _wgp
 
 
 class ModelCatalog:
