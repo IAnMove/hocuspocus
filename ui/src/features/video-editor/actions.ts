@@ -220,16 +220,17 @@ export async function trackAgentVideoEditorExport(): Promise<CommandResult> {
   const status = job.status === 'completed' ? 'completed'
     : job.status === 'failed' || job.status === 'cancelled' ? 'failed'
       : 'queued'
+  const owner = editorEntity()
   return editorResult({
     status,
     taskIds: [job.job_id],
-    artifacts: job.filename ? [{
-      id: job.filename,
-      kind: 'video',
-      owner: editorEntity(),
+    artifacts: [{
+      id: job.filename || `export-job:${job.job_id}`,
+      kind: job.filename ? 'video' : 'document',
+      owner,
       taskId: job.job_id,
-      uri: job.url || job.filename,
+      uri: job.url || job.filename || job.job_id,
       metadata: { status: job.status, message: job.message || '' },
-    }] : [],
+    }],
   })
 }
