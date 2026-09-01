@@ -15,7 +15,7 @@ import time
 import uuid
 from typing import Any, Callable
 
-from services.mix_concat import probe_duration_seconds
+from services.mix_concat import concatenate_multi_clip_videos, probe_duration_seconds
 from services.output_result_kind import classify_output_result_kind
 from services.video_editor import probe_audio
 
@@ -348,10 +348,6 @@ def remount_clips(
     if not planned:
         raise ValueError("No clips were planned for this remount.")
     paths = [str(item["path"]) for item in planned]
-    try:
-        from wgp import concatenate_multi_clip_videos
-    except ImportError:
-        from app.wgp import concatenate_multi_clip_videos  # type: ignore
     ok = concatenate_multi_clip_videos(
         paths,
         output_path,

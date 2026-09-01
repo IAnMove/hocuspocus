@@ -4,14 +4,51 @@ from pathlib import Path
 
 import pytest
 
+from types import SimpleNamespace
+
+from services.generation import bind_wgp, get_wgp
+from services.generation import runtime as generation_runtime
 from app.services.mix_concat import (
     build_hard_concat_filter,
     build_hold_crossfade_filter,
+    concatenate_multi_clip_videos,
     hold_crossfade_output_seconds,
     probe_audio_flags,
     probe_has_audio,
     should_use_hold_crossfade,
 )
+
+
+def test_concatenate_port_delegates_to_bound_wgp():
+    calls = []
+    previous = generation_runtime._wgp
+
+    def fake_concat(*args, **kwargs):
+        calls.append((args, kwargs))
+        return True
+
+    bind_wgp(SimpleNamespace(concatenate_multi_clip_videos=fake_concat))
+    try:
+        assert get_wgp().concatenate_multi_clip_videos is fake_concat
+        assert concatenate_multi_clip_videos(
+            ["a.mp4", "b.mp4"],
+            "out.mp4",
+            "song.wav",
+            abort_callback=None,
+        ) is True
+    finally:
+        generation_runtime._wgp = previous
+    assert calls == [
+        (
+            (["a.mp4", "b.mp4"], "out.mp4", "song.wav"),
+            {
+                "audio_start_sec": 0.0,
+                "abort_callback": None,
+                "pad_audio": False,
+                "audio_duration_sec": None,
+            },
+        )
+    ]
 
 
 def test_hold_crossfade_filter_covers_every_clip_and_xfade():

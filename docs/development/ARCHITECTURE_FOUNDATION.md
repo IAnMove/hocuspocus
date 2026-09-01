@@ -36,9 +36,17 @@ facade. These are measured values, not permanent targets.
 
 `tests/test_architecture_contracts.py` parses first-party Python with AST and
 names every currently tolerated `wgp` import by file, enclosing symbol and
-statement. Upstream/vendor trees are excluded explicitly. The allowlist may
-only shrink during the WanGP wall step; `app/services/generation/` is reserved
-for the future bound runtime facade.
+statement. Upstream/vendor trees are excluded explicitly.
+
+The WanGP wall lives in `app/services/generation/`. Launch imports `wgp` once
+after the argv patch and calls `bind_wgp(wgp)`. Consumers read that live
+instance through `get_wgp()`, `ModelCatalog`, or `RuntimeConfig`. The wall
+must not reimport WanGP. Video concat stays in `services.mix_concat` and only
+uses `get_wgp()` to reach the already-bound helper.
+
+The remaining first-party allowlist is the launch bootstrap import. New
+static or dynamic `wgp` imports outside `app/models/**` and other vendor
+trees fail the gate.
 
 Run the contracts with:
 

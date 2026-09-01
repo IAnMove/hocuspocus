@@ -371,3 +371,29 @@ def build_hard_concat_filter(
         + f"concat=n={count}:v=1:a=1[outv][outa]"
     )
     return filter_str, True
+
+
+def concatenate_multi_clip_videos(
+    clip_paths,
+    output_path,
+    audio_path=None,
+    audio_start_sec=0.0,
+    abort_callback=None,
+    pad_audio=False,
+    audio_duration_sec=None,
+):
+    """Join clips through the bound WanGP helper. This is a media port.
+
+    Concatenation is not part of the generation wall; the wall only supplies
+    the already-imported live instance.
+    """
+    from services.generation import get_wgp
+    return get_wgp().concatenate_multi_clip_videos(
+        clip_paths,
+        output_path,
+        audio_path,
+        audio_start_sec=audio_start_sec,
+        abort_callback=abort_callback,
+        pad_audio=pad_audio,
+        audio_duration_sec=audio_duration_sec,
+    )
