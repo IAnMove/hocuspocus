@@ -3219,11 +3219,11 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.queue.retry(action.taskId, action.confirm)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'select_workspace') {
-        const { selectAgentWorkspace } = await import('./workspaceActions')
-        results.push({ action, ok: true, message: await selectAgentWorkspace(action.workspaceName) })
+        const outcome = await defaultApplicationAdapters.workspace.select(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'create_workspace') {
-        const { createAgentWorkspace } = await import('./workspaceActions')
-        results.push({ action, ok: true, message: await createAgentWorkspace(action.workspaceName) })
+        const outcome = await defaultApplicationAdapters.workspace.create(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else {
         throw new Error(`No hay ejecutor para ${action.type}.`)
       }
