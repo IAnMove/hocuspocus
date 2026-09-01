@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hocuspocus.local/schemas/asset-manifest-v1.schema.json",
+  "title": "HocusPocus Asset Manifest",
+  "type": "object",
+  "required": ["schema", "schema_version", "asset", "origin", "execution", "generation", "timing", "lineage"],
+  "properties": {
+    "schema": { "const": "hocuspocus.asset-manifest" },
+    "schema_version": { "const": 1 },
+    "asset": {
+      "type": "object",
+      "required": ["id", "kind", "filename"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["image", "audio", "video", "scene", "model3d", "document", "other"] },
+        "filename": { "type": "string", "minLength": 1 },
+        "uri": { "type": "string" },
+        "media": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "origin": {
+      "type": "object",
+      "required": ["tool"],
+      "properties": {
+        "tool": { "type": "string", "minLength": 1 },
+        "capability": { "type": "string" },
+        "actor": { "enum": ["user", "wizard", "system", "unknown"] },
+        "workspace_id": { "type": ["string", "null"] },
+        "project": { "$ref": "#/$defs/entityRef" },
+        "production": { "$ref": "#/$defs/entityRef" }
+      },
+      "additionalProperties": true
+    },
+    "execution": {
+      "type": "object",
+      "required": ["status", "mode"],
+      "properties": {
+        "status": { "enum": ["prepared", "queued", "running", "completed", "partial", "failed", "cancelled"] },
+        "mode": { "enum": ["real", "plan", "simulate", "import"] },
+        "command_id": { "type": ["string", "null"] },
+        "workflow_id": { "type": ["string", "null"] },
+        "run_id": { "type": ["string", "null"] },
+        "task_id": { "type": ["string", "null"] },
+        "root_task_id": { "type": ["string", "null"] },
+        "job_id": { "type": ["string", "null"] },
+        "pipeline_id": { "type": ["string", "null"] },
+        "error": { "type": ["object", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "generation": {
+      "type": "object",
+      "required": ["prompts", "model", "parameters", "inputs"],
+      "properties": {
+        "prompts": { "type": "object" },
+        "model": { "type": "object" },
+        "parameters": { "type": "object" },
+        "inputs": { "type": "array", "items": { "$ref": "#/$defs/artifactRef" } }
+      },
+      "additionalProperties": true
+    },
+    "timing": {
+      "type": "object",
+      "properties": {
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "queued_at": { "type": ["string", "null"], "format": "date-time" },
+        "started_at": { "type": ["string", "null"], "format": "date-time" },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" },
+        "queue_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "inference_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "total_ms": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "lineage": {
+      "type": "object",
+      "required": ["parents", "transformations"],
+      "properties": {
+        "parents": { "type": "array", "items": { "$ref": "#/$defs/artifactRef" } },
+        "transformations": { "type": "array", "items": { "type": "object" } }
+      },
+      "additionalProperties": true
+    },
+    "technical": { "type": "object" },
+    "params": { "type": "object", "description": "Temporary legacy compatibility field." }
+  },
+  "$defs": {
+    "entityRef": {
+      "type": ["object", "null"],
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "artifactRef": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "uri": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
