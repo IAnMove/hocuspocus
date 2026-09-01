@@ -1,0 +1,90 @@
+# Domain model and asset provenance
+
+Status: accepted foundation (2026-09-02)
+
+This decision separates durable creative work from execution and from files.
+It extends the existing command plane; it does not create a second Wizard API.
+
+## Canonical nouns
+
+- **Project** is a durable creative document: Story, Series, episode, comic,
+  Video3D scene, character kit or editor project. A title is presentation; its
+  immutable ID is identity.
+- **Asset** is an imported or generated file plus a versioned provenance
+  manifest. Assets are globally discoverable and may be related to zero or
+  more projects and workspaces.
+- **Workspace** is an optional, explicit collection of references used to
+  group a collaboration or goal. It is not the identity of a project and must
+  not be inferred merely because a directory exists.
+- **Production** is a prepared output plan, such as a film, trailer, episode
+  assembly or music video.
+- **Run** is one execution attempt of a production or command. Retrying creates
+  a new run while retaining lineage to the prior attempt.
+- **Task** is a technical queued step belonging to a run.
+
+The identity chain is therefore:
+
+```text
+project ─┐
+workspace├──> production -> run -> task -> asset
+inputs ──┘                              -> asset
+```
+
+Every command and relationship propagates opaque IDs. Names, selected labels
+and `v1`-style display versions are never used to recover an identity that was
+already returned by the previous step.
+
+## Storage transition
+
+Existing workspace folders and `.meta.json` files remain readable. New APIs
+will expose registries/read models before any physical file move:
+
+1. add the asset manifest contract and legacy adapter;
+2. build a global asset catalog over canonical and legacy sidecars;
+3. expose project adapters over the existing Story/Series/Comic/etc. stores;
+4. expose Productions and Runs independently;
+5. add an explicit workspace registry containing references;
+6. replace implicit `active_workspace` fallbacks at mutating boundaries;
+7. place unclaimed legacy records in the virtual `Inbox / Legacy` collection.
+
+The migration must be additive and reversible. No old output is deleted or
+moved merely because its metadata cannot be upgraded.
+
+## Asset manifest v1
+
+Every newly generated or imported item eventually receives one adjacent
+`<stem>.meta.json` document conforming to
+`asset-manifest-v1.schema.json`. The canonical data records:
+
+- immutable asset ID, type, filename and media properties;
+- origin tool/capability/actor and optional project/workspace/production refs;
+- command, workflow, run, task, job and pipeline correlation IDs;
+- original/effective/negative/audio prompts and their language;
+- provider, model, revision, seed and effective parameters;
+- created, queued, started and completed times plus queue/inference/total time;
+- exact input assets and parent/transformation lineage;
+- execution mode, status, errors and application/contract versions.
+
+Secrets, credentials, authorization headers and tokens are recursively
+redacted. Absolute local paths are not part of the portable contract.
+Legacy top-level keys such as `params` may coexist during migration.
+
+## UI requirement: Extra info
+
+The existing **Extra info** action becomes the human-readable inspector for
+this manifest for every asset type. It must show well-formatted sections,
+relationships and timing, provide copy buttons for complete prompts and IDs,
+and offer the raw JSON as an advanced copy/download view. Missing legacy data
+is labelled as unavailable, never invented. This presentation is intentionally
+scheduled after the canonical manifest and catalog are stable.
+
+## Compatibility and acceptance
+
+- Existing sidecars are adapted in memory and are not rewritten on read.
+- Writing is atomic and preserves explicitly supplied legacy fields.
+- A retry never changes the ID of an existing asset; a distinct output gets a
+  distinct asset ID.
+- The contract stays independent of FastAPI, WanGP and model imports.
+- Tests cover redaction, timing, identity, legacy adaptation and atomic
+  round-trip before the first generator integration.
+
