@@ -582,12 +582,27 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async trackJob(action) {
       const { trackJob } = await import('../characters/adapters')
       const result = await trackJob({ kitName: action.kitName })
+      const { inspectCanonicalQueue } = await import('./queueActions')
+      const inspected: unknown = await inspectCanonicalQueue('active')
+      const queue = typeof inspected === 'string'
+        ? inspected
+        : (inspected && typeof inspected === 'object' && 'artifacts' in inspected
+          ? String((inspected as CommandResult).artifacts[0]?.metadata?.summary || '')
+          : '')
+      openAgentActivityDetails()
       const name = kitNameFromResult(result)
-      const count = result.taskIds.length
-      const queue = count
-        ? `${count} tarea${count === 1 ? '' : 's'} activa${count === 1 ? '' : 's'} en la cola canónica.`
-        : 'No hay tareas activas en la cola canónica.'
-      return kitOutcome(result, `Sigo el trabajo de “${name}”. ${queue}`)
+      const message = `Sigo el trabajo de “${name}”. ${queue}`
+      const target = entityTarget(result, name, 'character_kit')
+      return {
+        message,
+        target,
+        report: executionReport({
+          state: 'running',
+          message,
+          target,
+          recoverable: false,
+        }),
+      }
     },
   }
   adapters.queue = {
