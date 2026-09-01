@@ -1,14 +1,40 @@
 import { useStore } from '../../stores/useStore'
+import type { CommandResult } from '../../lib/commandContract'
+import { rememberedCharacterKitLibrary } from '../characters/session'
 import type { MediaFilter } from '../../types'
 import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentCommitSeriesCanonAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
-import type { AgentExecutionTarget } from './agentContract'
+import {
+  executionKey,
+  executionReport,
+  rememberExecution,
+  reuseExecution,
+  type AgentExecutionReport,
+  type AgentExecutionTarget,
+} from './agentContract'
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
 import { queueMusic } from './audioActions'
 import type { AgentPrepareAudioAction } from './agentActions'
 import type { AgentTab } from './capabilityRegistry'
-import type { AgentCreateVideoEditorProjectAction, AgentOpenVideoEditorProjectAction } from './videoEditorActions'
-import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
+import type {
+  AgentAddVideoEditorAudioAction,
+  AgentAddVideoEditorClipsAction,
+  AgentCreateVideoEditorProjectAction,
+  AgentExportVideoEditorAction,
+  AgentOpenVideoEditorProjectAction,
+  AgentOrderVideoEditorClipsAction,
+  AgentTrimVideoEditorClipAction,
+} from './videoEditorActions'
+import type {
+  AgentApplyCharacterKitPresetAction,
+  AgentAttachCharacterKitReferencesAction,
+  AgentBuildCharacterKitAction,
+  AgentCreateCharacterKitAction,
+  AgentOpenCharacterKitAction,
+  AgentOpenCharacterKitRigAction,
+  AgentTrackCharacterKitJobAction,
+  AgentUpdateCharacterKitAction,
+} from './characterKitActions'
 
 export interface AdapterOutcome {
   message: string
@@ -25,6 +51,7 @@ export interface AdapterOutcome {
   beatCount?: number
   downbeatCount?: number
   rhythmGrid?: AgentRhythmGrid
+  report?: AgentExecutionReport
 }
 
 export interface StudioAdapter {
@@ -64,11 +91,23 @@ export interface ComicAdapter {
   create(action: AgentCreateComicAction): Promise<AdapterOutcome>
   generate(action: AgentGenerateComicAction, expectedProjectId?: string): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }>
 }
-export interface VideoEditorAdapter { open(): Promise<AdapterOutcome>; create(action: AgentCreateVideoEditorProjectAction): Promise<AdapterOutcome>; openProject(action: AgentOpenVideoEditorProjectAction): Promise<AdapterOutcome> }
+export interface VideoEditorAdapter {
+  open(): Promise<AdapterOutcome>
+  create(action: AgentCreateVideoEditorProjectAction): Promise<AdapterOutcome>
+  openProject(action: AgentOpenVideoEditorProjectAction): Promise<AdapterOutcome>
+  addClips(action: AgentAddVideoEditorClipsAction): Promise<AdapterOutcome>
+  orderClips(action: AgentOrderVideoEditorClipsAction): Promise<AdapterOutcome>
+  trimClip(action: AgentTrimVideoEditorClipAction): Promise<AdapterOutcome>
+  addAudio(action: AgentAddVideoEditorAudioAction): Promise<AdapterOutcome>
+  validateTimeline(): Promise<AdapterOutcome>
+  exportProject(action: AgentExportVideoEditorAction): Promise<AdapterOutcome>
+  trackExport(): Promise<AdapterOutcome>
+}
 export interface CharacterKitAdapter {
   open(creator?: boolean): Promise<AdapterOutcome>
   create(action: AgentCreateCharacterKitAction): Promise<AdapterOutcome>
   openKit(action: AgentOpenCharacterKitAction): Promise<AdapterOutcome>
+  update(action: AgentUpdateCharacterKitAction): Promise<AdapterOutcome>
   attachReference(action: AgentAttachCharacterKitReferencesAction): Promise<AdapterOutcome>
   build(action: AgentBuildCharacterKitAction): Promise<AdapterOutcome>
   openRig(action: AgentOpenCharacterKitRigAction): Promise<AdapterOutcome>
@@ -165,6 +204,56 @@ async function navigate(tab: AgentTab): Promise<AdapterOutcome> {
   return {
     message: alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`,
     target: target(tab),
+  }
+}
+
+const SLICE_TABS: Record<string, AgentTab> = {
+  character_kit: 'character_kit',
+  character_creator: 'character_creator',
+  video_editor: 'video_editor',
+}
+
+async function applySliceNavigation(result: CommandResult): Promise<void> {
+  const destination = result.navigationTarget?.destination
+  const tab = destination ? SLICE_TABS[destination] : undefined
+  if (tab) await navigate(tab)
+}
+
+function kitNameFromResult(result: CommandResult): string {
+  const id = result.entities[0]?.id
+  const library = rememberedCharacterKitLibrary()
+  return (id && library?.kits[id]?.name) || id || 'Character Kit'
+}
+
+function entityTarget(result: CommandResult, title: string, fallbackKind = 'application_section'): AgentExecutionTarget {
+  const entity = result.entities[0]
+  return {
+    kind: entity?.kind || fallbackKind,
+    id: entity?.id || title,
+    title,
+  }
+}
+
+async function kitOutcome(result: CommandResult, message: string): Promise<AdapterOutcome> {
+  await applySliceNavigation(result)
+  return {
+    message,
+    target: entityTarget(result, kitNameFromResult(result), 'character_kit'),
+    taskId: result.taskIds[0],
+    pipelineId: result.pipelineIds[0],
+  }
+}
+
+async function editorOutcome(result: CommandResult, message: string, extra: Partial<AdapterOutcome> = {}): Promise<AdapterOutcome> {
+  await applySliceNavigation(result)
+  const id = result.entities[0]?.id || 'video_editor'
+  return {
+    message,
+    target: { kind: 'video_editor', id, title: id },
+    taskId: result.taskIds[0],
+    pipelineId: result.pipelineIds[0],
+    outputNames: result.artifacts.map(item => item.id),
+    ...extra,
   }
 }
 
@@ -332,16 +421,186 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       return { ...result, target: { kind: 'comic', id: project.id, title: project.title } }
     },
   }
-  adapters.videoEditor = { open: () => navigate('video_editor'), async create(action) { const { createAgentVideoEditorProject } = await import('./videoEditorActions'); const result = await createAgentVideoEditorProject(action); return { message: result.message, target: result.report.target! } }, async openProject(action) { const { openAgentVideoEditorProject } = await import('./videoEditorActions'); const result = await openAgentVideoEditorProject(action); return { message: result.message, target: result.report.target! } } }
+  adapters.videoEditor = {
+    open: () => navigate('video_editor'),
+    async create(action) {
+      const { createProject } = await import('../video-editor/adapters')
+      const result = await createProject({ projectName: action.projectName })
+      const name = result.entities[0]?.id || action.projectName.trim() || 'my_video'
+      return editorOutcome(result, `He creado el proyecto de Video Editor “${name}”.`)
+    },
+    async openProject(action) {
+      const { openProject } = await import('../video-editor/adapters')
+      const result = await openProject({ projectName: action.projectName })
+      const { loadEditorDraft } = await import('../video-editor/editorDraft')
+      const draft = loadEditorDraft(useStore.getState().activeWorkspace || 'default')
+      return editorOutcome(result, `He abierto Video Editor “${draft.projectName}” con ${draft.clips.length} clips.`)
+    },
+    async addClips(action) {
+      const { addClips } = await import('../video-editor/adapters')
+      const result = await addClips({ outputNames: action.outputNames })
+      const name = result.entities[0]?.id || 'Video Editor'
+      return editorOutcome(result, `He añadido ${action.outputNames.length} clips exactos a “${name}”.`)
+    },
+    async orderClips(action) {
+      const { orderClips } = await import('../video-editor/adapters')
+      const result = await orderClips({ clipNames: action.clipNames })
+      return editorOutcome(result, `He reordenado ${action.clipNames.length} clips.`)
+    },
+    async trimClip(action) {
+      const { trimClip } = await import('../video-editor/adapters')
+      const result = await trimClip({
+        clipName: action.clipName,
+        trimStart: action.trimStart,
+        trimEnd: action.trimEnd,
+      })
+      return editorOutcome(result, `He recortado “${action.clipName}” a ${action.trimStart}-${action.trimEnd}s.`)
+    },
+    async addAudio(action) {
+      const { addAudio } = await import('../video-editor/adapters')
+      const result = await addAudio({ clipName: action.clipName, outputName: action.outputName })
+      const name = result.entities[0]?.id || 'Video Editor'
+      return editorOutcome(result, `He configurado “${action.outputName}” como banda sonora de “${name}”.`)
+    },
+    async validateTimeline() {
+      const { validateTimeline } = await import('../video-editor/adapters')
+      const result = await validateTimeline()
+      const { loadEditorDraft } = await import('../video-editor/editorDraft')
+      const { sequenceTotalDuration } = await import('../video-editor/editorTimeline')
+      const draft = loadEditorDraft(useStore.getState().activeWorkspace || 'default')
+      const duration = sequenceTotalDuration(draft.clips)
+      return editorOutcome(result, `Línea de tiempo válida: ${draft.clips.length} clips, ${duration.toFixed(1)}s.`)
+    },
+    async exportProject(action) {
+      if (!action.confirm) throw new Error('Exportar requiere confirm=true.')
+      const { loadEditorDraft } = await import('../video-editor/editorDraft')
+      const { sequenceTotalDuration } = await import('../video-editor/editorTimeline')
+      const workspace = useStore.getState().activeWorkspace || 'default'
+      const draft = loadEditorDraft(workspace)
+      const key = executionKey({
+        workspace,
+        type: 'export_video_editor',
+        targetId: draft.projectName,
+        params: {
+          clips: draft.clips.map(clip => clip.name),
+          duration: sequenceTotalDuration(draft.clips),
+          soundtrack: draft.soundtrack ? {
+            name: draft.soundtrack.name,
+            source: draft.soundtrack.source,
+            trimStart: draft.soundtrack.trimStart,
+            trimEnd: draft.soundtrack.trimEnd,
+            volume: draft.soundtrack.volume,
+            loop: draft.soundtrack.loop,
+          } : null,
+        },
+      })
+      const reused = reuseExecution(key)
+      if (reused) {
+        return {
+          message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`,
+          target: reused.target || { kind: 'video_editor', id: draft.projectName, title: draft.projectName },
+          taskId: reused.taskId,
+          outputNames: reused.outputNames,
+          report: reused,
+        }
+      }
+      const { exportProject } = await import('../video-editor/adapters')
+      const result = await exportProject({ confirm: true })
+      const jobId = result.taskIds[0]
+      const message = `He encolado la exportación de “${draft.projectName}” (${jobId}).`
+      const report = executionReport({
+        state: 'queued',
+        message,
+        recoverable: true,
+        target: { kind: 'video_editor', id: draft.projectName, title: draft.projectName },
+        taskId: jobId,
+        executionKey: key,
+      })
+      rememberExecution(report)
+      return editorOutcome(result, message, { report })
+    },
+    async trackExport() {
+      const { trackExport } = await import('../video-editor/adapters')
+      const result = await trackExport()
+      const jobId = result.taskIds[0]
+      const artifact = result.artifacts[0]
+      const jobMessage = typeof artifact?.metadata?.message === 'string' ? artifact.metadata.message : ''
+      const jobStatus = typeof artifact?.metadata?.status === 'string' ? artifact.metadata.status : result.status
+      const state = result.status === 'failed' ? 'failed'
+        : result.status === 'completed' ? 'completed'
+          : jobStatus === 'queued' || jobStatus === 'waiting_resource' ? 'queued'
+            : 'running'
+      const message = `Exportación ${jobId}: ${jobStatus}. ${jobMessage}`
+      const report = executionReport({
+        state,
+        message,
+        recoverable: state === 'failed',
+        target: { kind: 'video_editor', id: result.entities[0]?.id || 'video_editor', title: result.entities[0]?.id || 'video_editor' },
+        taskId: jobId,
+        outputNames: result.artifacts.map(item => item.id),
+      })
+      return editorOutcome(result, message, { report })
+    },
+  }
   adapters.characterKit = {
     open: creator => navigate(creator ? 'character_creator' : 'character_kit'),
-    async create(action) { const { createAgentCharacterKit } = await import('./characterKitActions'); const result = await createAgentCharacterKit(action); return { message: result.message, target: result.report.target! } },
-    async openKit(action) { const { openAgentCharacterKit } = await import('./characterKitActions'); const result = await openAgentCharacterKit(action); return { message: result.message, target: result.report.target! } },
-    async attachReference(action) { const { attachAgentCharacterKitReferences } = await import('./characterKitActions'); const result = await attachAgentCharacterKitReferences(action); return { message: result.message, target: result.report.target! } },
-    async build(action) { const { buildAgentCharacterKit } = await import('./characterKitActions'); const result = await buildAgentCharacterKit(action); return { message: result.message, target: result.report.target! } },
-    async openRig(action) { const { openAgentCharacterKitRig } = await import('./characterKitActions'); const result = await openAgentCharacterKitRig(action); return { message: result.message, target: result.report.target! } },
-    async applyPreset(action) { const { applyAgentCharacterKitPreset } = await import('./characterKitActions'); const result = await applyAgentCharacterKitPreset(action); return { message: result.message, target: result.report.target! } },
-    async trackJob(action) { const { trackAgentCharacterKitJob } = await import('./characterKitActions'); const result = await trackAgentCharacterKitJob(action); return { message: result.message, target: result.report.target! } },
+    async create(action) {
+      const { createKit } = await import('../characters/adapters')
+      const result = await createKit({ name: action.name, style: action.style })
+      const name = kitNameFromResult(result)
+      const message = result.navigationTarget?.section === 'existing'
+        ? `He abierto el Character Kit existente “${name}”.`
+        : `He creado el Character Kit “${name}”. Todavía no he generado poses.`
+      return kitOutcome(result, message)
+    },
+    async openKit(action) {
+      const { openKit } = await import('../characters/adapters')
+      const result = await openKit({ kitName: action.kitName })
+      return kitOutcome(result, `He abierto Character Kit “${kitNameFromResult(result)}”.`)
+    },
+    async update(action) {
+      const { updateKit } = await import('../characters/adapters')
+      const result = await updateKit({
+        kitName: action.kitName,
+        name: action.name,
+        lookNotes: action.lookNotes,
+        style: action.style,
+      })
+      return kitOutcome(result, `He actualizado la identidad de “${kitNameFromResult(result)}”.`)
+    },
+    async attachReference(action) {
+      const { attachReference } = await import('../characters/adapters')
+      const result = await attachReference({ kitName: action.kitName, outputNames: action.outputNames })
+      return kitOutcome(
+        result,
+        `He adjuntado “${action.outputNames[0]}” como referencia de identidad de “${kitNameFromResult(result)}”.`,
+      )
+    },
+    async build(action) {
+      const { buildKit } = await import('../characters/adapters')
+      const result = await buildKit({ kitName: action.kitName })
+      return kitOutcome(result, `He montado el kit “${kitNameFromResult(result)}” con la pose base. No he lanzado generación.`)
+    },
+    async openRig(action) {
+      const { openRig } = await import('../characters/adapters')
+      const result = await openRig({ kitName: action.kitName })
+      return kitOutcome(result, `He abierto el Face Rig de “${kitNameFromResult(result)}”.`)
+    },
+    async applyPreset(action) {
+      const { applyPreset } = await import('../characters/adapters')
+      const result = await applyPreset({ kitName: action.kitName, presetId: action.presetId })
+      return kitOutcome(result, `He aplicado el preset “${action.presetId}” al Face Rig de “${kitNameFromResult(result)}”.`)
+    },
+    async trackJob(action) {
+      const { trackJob } = await import('../characters/adapters')
+      const result = await trackJob({ kitName: action.kitName })
+      const name = kitNameFromResult(result)
+      const count = result.taskIds.length
+      const queue = count
+        ? `${count} tarea${count === 1 ? '' : 's'} activa${count === 1 ? '' : 's'} en la cola canónica.`
+        : 'No hay tareas activas en la cola canónica.'
+      return kitOutcome(result, `Sigo el trabajo de “${name}”. ${queue}`)
+    },
   }
   adapters.queue = {
     async openActivity() {

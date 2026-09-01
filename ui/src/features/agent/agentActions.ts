@@ -3063,73 +3063,56 @@ export async function executeAgentActions(
         const { requestAgentSceneControl } = await import('./agentUiBus')
         results.push({ action, ok: true, message: await requestAgentSceneControl(action) })
       } else if (action.type === 'create_character_kit') {
-        const { createAgentCharacterKit } = await import('./characterKitActions')
-        const outcome = await createAgentCharacterKit(action)
+        const outcome = await defaultApplicationAdapters.characterKit.create(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'open_character_kit') {
-        const { openAgentCharacterKit } = await import('./characterKitActions')
-        const outcome = await openAgentCharacterKit(action)
+        const outcome = await defaultApplicationAdapters.characterKit.openKit(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'update_character_kit') {
-        const { updateAgentCharacterKit } = await import('./characterKitActions')
-        const outcome = await updateAgentCharacterKit(action)
+        const outcome = await defaultApplicationAdapters.characterKit.update(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'attach_character_kit_references') {
-        const { attachAgentCharacterKitReferences } = await import('./characterKitActions')
-        const outcome = await attachAgentCharacterKitReferences(action)
+        const outcome = await defaultApplicationAdapters.characterKit.attachReference(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'build_character_kit') {
-        const { buildAgentCharacterKit } = await import('./characterKitActions')
-        const outcome = await buildAgentCharacterKit(action)
+        const outcome = await defaultApplicationAdapters.characterKit.build(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'open_character_kit_rig') {
-        const { openAgentCharacterKitRig } = await import('./characterKitActions')
-        const outcome = await openAgentCharacterKitRig(action)
+        const outcome = await defaultApplicationAdapters.characterKit.openRig(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'apply_character_kit_preset') {
-        const { applyAgentCharacterKitPreset } = await import('./characterKitActions')
-        const outcome = await applyAgentCharacterKitPreset(action)
+        const outcome = await defaultApplicationAdapters.characterKit.applyPreset(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'track_character_kit_job') {
-        const { trackAgentCharacterKitJob } = await import('./characterKitActions')
-        const outcome = await trackAgentCharacterKitJob(action)
+        const outcome = await defaultApplicationAdapters.characterKit.trackJob(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'create_video_editor_project') {
-        const { createAgentVideoEditorProject } = await import('./videoEditorActions')
-        const outcome = await createAgentVideoEditorProject(action)
+        const outcome = await defaultApplicationAdapters.videoEditor.create(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'open_video_editor_project') {
-        const { openAgentVideoEditorProject } = await import('./videoEditorActions')
-        const outcome = await openAgentVideoEditorProject(action)
+        const outcome = await defaultApplicationAdapters.videoEditor.openProject(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'add_video_editor_clips') {
-        const { addAgentVideoEditorClips } = await import('./videoEditorActions')
-        const outcome = await addAgentVideoEditorClips(action)
+        const outcome = await defaultApplicationAdapters.videoEditor.addClips(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'order_video_editor_clips') {
-        const { orderAgentVideoEditorClips } = await import('./videoEditorActions')
-        const outcome = await orderAgentVideoEditorClips(action)
+        const outcome = await defaultApplicationAdapters.videoEditor.orderClips(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'trim_video_editor_clip') {
-        const { trimAgentVideoEditorClip } = await import('./videoEditorActions')
-        const outcome = await trimAgentVideoEditorClip(action)
+        const outcome = await defaultApplicationAdapters.videoEditor.trimClip(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'add_video_editor_audio') {
-        const { addAgentVideoEditorAudio } = await import('./videoEditorActions')
-        const outcome = await addAgentVideoEditorAudio(action)
+        const outcome = await defaultApplicationAdapters.videoEditor.addAudio(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'validate_video_editor_timeline') {
-        const { validateAgentVideoEditorTimeline } = await import('./videoEditorActions')
-        const outcome = await validateAgentVideoEditorTimeline()
+        const outcome = await defaultApplicationAdapters.videoEditor.validateTimeline()
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'export_video_editor') {
         if (!action.confirm) throw new Error('Exportar Video Editor requiere confirm=true.')
-        const { exportAgentVideoEditor } = await import('./videoEditorActions')
-        const outcome = await exportAgentVideoEditor(action)
+        const outcome = await defaultApplicationAdapters.videoEditor.exportProject(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'track_video_editor_export') {
-        const { trackAgentVideoEditorExport } = await import('./videoEditorActions')
-        const outcome = await trackAgentVideoEditorExport()
+        const outcome = await defaultApplicationAdapters.videoEditor.trackExport()
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'create_comic') {
         const { createFilledComic } = await import('./labActions')

@@ -1,5 +1,5 @@
 import type { AgentGenerateComicPanelAction } from './agentActions'
-import type { defineCapability, CapabilityExecutionOutcome } from './capabilityRegistry'
+import type { defineCapability } from './capabilityRegistry'
 import type {
   AgentAddVideoEditorAudioAction,
   AgentAddVideoEditorClipsAction,
@@ -39,20 +39,6 @@ function boundedNumber(value: unknown, minimum: number, maximum: number, fallbac
   const parsed = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(parsed)) return fallback
   return Math.min(maximum, Math.max(minimum, parsed))
-}
-
-function outcomeFromReport(
-  outcome: { message: string; report: NonNullable<CapabilityExecutionOutcome['report']> },
-): CapabilityExecutionOutcome {
-  return {
-    message: outcome.message,
-    report: outcome.report,
-    target: outcome.report.target,
-    taskId: outcome.report.taskId,
-    pipelineId: outcome.report.pipelineId,
-    outputNames: outcome.report.outputNames,
-    assetIds: outcome.report.assetIds,
-  }
 }
 
 export function registerEditorAuxCapabilities(register: typeof defineCapability): void {
@@ -156,9 +142,8 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
         : ['at least one Character Kit field is required']
     },
     async prepare(action) { return action },
-    async execute(action) {
-      const { updateAgentCharacterKit } = await import('./characterKitActions')
-      return outcomeFromReport(await updateAgentCharacterKit(action))
+    async execute(action, context) {
+      return context.adapters.characterKit.update(action)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -191,9 +176,8 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     validate(action) { return action.outputNames.length ? [] : ['at least one output is required'] },
     async prepare(action) { return action },
-    async execute(action) {
-      const { addAgentVideoEditorClips } = await import('./videoEditorActions')
-      return outcomeFromReport(await addAgentVideoEditorClips(action))
+    async execute(action, context) {
+      return context.adapters.videoEditor.addClips(action)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -226,9 +210,8 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     validate(action) { return action.clipNames.length ? [] : ['at least one clip is required'] },
     async prepare(action) { return action },
-    async execute(action) {
-      const { orderAgentVideoEditorClips } = await import('./videoEditorActions')
-      return outcomeFromReport(await orderAgentVideoEditorClips(action))
+    async execute(action, context) {
+      return context.adapters.videoEditor.orderClips(action)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -277,9 +260,8 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
         : ['clip name and a usable trim range are required']
     },
     async prepare(action) { return action },
-    async execute(action) {
-      const { trimAgentVideoEditorClip } = await import('./videoEditorActions')
-      return outcomeFromReport(await trimAgentVideoEditorClip(action))
+    async execute(action, context) {
+      return context.adapters.videoEditor.trimClip(action)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -315,9 +297,8 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     validate(action) { return action.outputName ? [] : ['audio output name is required'] },
     async prepare(action) { return action },
-    async execute(action) {
-      const { addAgentVideoEditorAudio } = await import('./videoEditorActions')
-      return outcomeFromReport(await addAgentVideoEditorAudio(action))
+    async execute(action, context) {
+      return context.adapters.videoEditor.addAudio(action)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -344,9 +325,8 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     resolve() { return { type: 'validate_video_editor_timeline' } },
     validate() { return [] },
     async prepare(action) { return action },
-    async execute() {
-      const { validateAgentVideoEditorTimeline } = await import('./videoEditorActions')
-      return outcomeFromReport(await validateAgentVideoEditorTimeline())
+    async execute(_action, context) {
+      return context.adapters.videoEditor.validateTimeline()
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -373,9 +353,8 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     resolve(raw) { return raw.confirm === true ? { type: 'export_video_editor', confirm: true } : null },
     validate(action) { return action.confirm === true ? [] : ['export confirmation is required'] },
     async prepare(action) { return action },
-    async execute(action) {
-      const { exportAgentVideoEditor } = await import('./videoEditorActions')
-      return outcomeFromReport(await exportAgentVideoEditor(action))
+    async execute(action, context) {
+      return context.adapters.videoEditor.exportProject(action)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -402,9 +381,8 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     resolve() { return { type: 'track_video_editor_export' } },
     validate() { return [] },
     async prepare(action) { return action },
-    async execute() {
-      const { trackAgentVideoEditorExport } = await import('./videoEditorActions')
-      return outcomeFromReport(await trackAgentVideoEditorExport())
+    async execute(_action, context) {
+      return context.adapters.videoEditor.trackExport()
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },

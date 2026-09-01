@@ -29,14 +29,10 @@ const SET_STATE_ALLOWLIST = [
 ]
 
 const SLICE_AGENT_IMPORT_ALLOWLIST = [
-  ['characters/actions.ts', '../agent/agentContract'],
-  ['characters/actions.ts', '../agent/queueActions'],
-  ['characters/actions.ts', '../agent/wizardLabSession'],
   ['series/SeriesEpisodePanel.tsx', '../agent/agentUiBus'],
   ['series/SeriesLabPanel.tsx', '../agent/agentUiBus'],
   ['series/SeriesReviewPanel.tsx', '../agent/agentUiBus'],
   ['stories/StoryLabPanel.tsx', '../agent/agentUiBus'],
-  ['video-editor/actions.ts', '../agent/agentContract'],
 ]
 
 const LEGACY_EXECUTE_ALLOWLIST = [
@@ -57,14 +53,6 @@ const LEGACY_EXECUTE_ALLOWLIST = [
   'select_workspace',
   'create_workspace',
   'generate_comic_panel',
-  'update_character_kit',
-  'add_video_editor_clips',
-  'order_video_editor_clips',
-  'trim_video_editor_clip',
-  'add_video_editor_audio',
-  'validate_video_editor_timeline',
-  'export_video_editor',
-  'track_video_editor_export',
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
@@ -246,7 +234,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
   assert.equal(registered.length, 73)
-  assert.equal(legacy.length, 25)
+  assert.equal(legacy.length, 17)
 })
 
 test('agentActions.ts and labActions.ts keep their current module graph until a slice PR shrinks it', () => {
