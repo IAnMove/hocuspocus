@@ -2971,43 +2971,39 @@ export async function executeAgentActions(
           }),
         })
       } else if (action.type === 'create_story') {
-        const { createFilledStory } = await import('./labActions')
-        results.push({ action, ok: true, message: await createFilledStory(action) })
+        const outcome = await defaultApplicationAdapters.storyLab.create(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'update_story') {
-        const { updateFilledStory } = await import('./labActions')
-        results.push({ action, ok: true, message: await updateFilledStory(action) })
+        const outcome = await defaultApplicationAdapters.storyLab.update(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'generate_story_section') {
-        const { generateStorySectionDraft } = await import('./labActions')
-        results.push({ action, ok: true, message: await generateStorySectionDraft(action, onStep) })
+        const outcome = await defaultApplicationAdapters.storyLab.generateProposal(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'apply_story_proposal') {
-        const { applyStoredStoryProposal } = await import('./labActions')
-        results.push({ action, ok: true, message: await applyStoredStoryProposal(action) })
+        const outcome = await defaultApplicationAdapters.storyLab.applyProposal(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'approve_story_section') {
-        const { approveStorySection } = await import('./labActions')
-        results.push({ action, ok: true, message: await approveStorySection(action) })
+        const outcome = await defaultApplicationAdapters.storyLab.approveSection(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'approve_story_visuals') {
-        const { approveStoryVisuals } = await import('./labActions')
-        results.push({ action, ok: true, message: await approveStoryVisuals(action) })
+        const outcome = await defaultApplicationAdapters.storyLab.approveVisuals(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'generate_story_visuals') {
-        const { generateStoryVisuals } = await import('./labActions')
-        const result = await generateStoryVisuals(action)
-        results.push({ action, ok: true, message: result.message })
+        const outcome = await defaultApplicationAdapters.storyLab.generateVisuals(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'stage_story_comic') {
-        const { stageStoryComic } = await import('./labActions')
-        results.push({ action, ok: true, message: await stageStoryComic(action) })
+        const outcome = await defaultApplicationAdapters.storyLab.stageComic(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'stage_story_video') {
-        const { stageStoryVideo } = await import('./labActions')
-        const message = await stageStoryVideo(action)
+        const outcome = await defaultApplicationAdapters.storyLab.stageVideo(action)
         stagedProductionId = useStore.getState().directorStoryProductionHandoff?.productionId || ''
-        results.push({ action, ok: true, message })
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'stage_story_music_video') {
-        const { stageStoryMusicVideo } = await import('./labActions')
-        const message = await stageStoryMusicVideo(action)
+        const outcome = await defaultApplicationAdapters.storyLab.stageMusicVideo(action)
         stagedProductionId = useStore.getState().directorStoryProductionHandoff?.productionId || ''
-        results.push({ action, ok: true, message })
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'start_director_production') {
-        const { startDirectorProduction } = await import('./labActions')
-        const outcome = await startDirectorProduction(action, stagedProductionId || undefined)
+        const outcome = await defaultApplicationAdapters.storyLab.startDirectorProduction(action, stagedProductionId || undefined)
         results.push({
           action,
           ok: true,
@@ -3021,7 +3017,7 @@ export async function executeAgentActions(
             executionKey: executionKey({
               workspace: useStore.getState().activeWorkspace || 'default',
               type: action.type,
-              targetId: outcome.target?.id || stagedProductionId,
+              targetId: outcome.target.id || stagedProductionId,
               params: action,
             }),
           }),

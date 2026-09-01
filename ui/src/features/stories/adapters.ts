@@ -77,6 +77,6 @@ export async function stageMusicVideo(command: StageStoryMusicVideoCommand) {
   return stageStoryMusicVideo(command)
 }
 
-export async function startProduction(command: StartDirectorProductionCommand, expectedProductionId?: string) {
-  return startDirectorProduction(command, expectedProductionId)
+export async function startProduction(command: StartDirectorProductionCommand) {
+  return startDirectorProduction(command)
 }

@@ -30,10 +30,6 @@ const SLICE_AGENT_IMPORT_ALLOWLIST = [
   ['series/SeriesEpisodePanel.tsx', '../agent/agentUiBus'],
   ['series/SeriesLabPanel.tsx', '../agent/agentUiBus'],
   ['series/SeriesReviewPanel.tsx', '../agent/agentUiBus'],
-  ['stories/actions.ts', '../agent/agentActions'],
-  ['stories/actions.ts', '../agent/agentContract'],
-  ['stories/actions.ts', '../agent/agentUiBus'],
-  ['stories/actions.ts', '../agent/labActionHelpers'],
   ['stories/StoryLabPanel.tsx', '../agent/agentUiBus'],
 ]
 
@@ -73,7 +69,6 @@ const AGENT_ACTIONS_IMPORTS = [
   './capabilityRunner',
   './characterKitActions',
   './commandContract',
-  './labActions',
   './queueActions',
   './sfxPack',
   './studioGuidance',

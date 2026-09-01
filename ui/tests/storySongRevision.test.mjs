@@ -113,10 +113,11 @@ test('song generation rebases its candidate when Story autosave wins the CAS rac
   })
 
   assert.deepEqual(putRevisions, [1, 2])
-  assert.equal(result.cueTitle, cue.title)
-  assert.equal(result.outputName, 'himno.wav')
+  const meta = result.artifacts[0].metadata
+  assert.equal(meta.cueTitle, cue.title)
+  assert.equal(meta.outputName, 'himno.wav')
   const savedCue = savedLibrary.projects[project.id].music.cues[0]
-  assert.equal(savedCue.selectedCandidateId, result.candidateId)
+  assert.equal(savedCue.selectedCandidateId, meta.candidateId)
   assert.equal(savedCue.candidates.length, 1)
-  assert.equal(savedCue.candidates[0].id, result.candidateId)
+  assert.equal(savedCue.candidates[0].id, meta.candidateId)
 })

@@ -1,22 +1,4 @@
-import { useStore } from '../../stores/useStore'
-import { applyMusicVideoDirectVideoDefaults, resolveMusicVideoVisualStyle } from './musicVideoLook'
-import type {
-  AgentApplyStoryProposalAction,
-  AgentApproveStorySectionAction,
-  AgentApproveStoryVisualsAction,
-  AgentConfigureStorySongAction,
-  AgentGenerateStoryVisualsAction,
-  AgentGenerateStorySectionAction,
-  AgentGenerateStorySongAction,
-  AgentStageStoryComicAction,
-  AgentStageStoryVideoAction,
-  AgentStageStoryMusicVideoAction,
-  AgentStartDirectorProductionAction,
-  AgentCreateStoryAction,
-  AgentUpdateStoryAction,
-} from '../agent/agentActions'
-import { bindDirectorProductionTarget, type AgentExecutionTarget } from '../agent/agentContract'
-import { notifyAgentStoryDraft, openAgentStorySection, requestAgentStoryVisualGeneration } from '../agent/agentUiBus'
+import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
 import {
   boundedDuration,
   creativeCharacters,
@@ -24,23 +6,49 @@ import {
   explicitMusicLanguage,
   normalizeName,
   outlineBeats,
-  showLab,
-} from '../agent/labActionHelpers'
+} from '../../lib/labHelpers'
+import { useStore } from '../../stores/useStore'
+import { applyMusicVideoDirectVideoDefaults, resolveMusicVideoVisualStyle } from './musicVideoLook'
+import type {
+  ApplyStoryProposalCommand,
+  ApproveStorySectionCommand,
+  ApproveStoryVisualsCommand,
+  ConfigureStorySongCommand,
+  CreateStoryCommand,
+  GenerateStorySectionCommand,
+  GenerateStorySongCommand,
+  GenerateStoryVisualsCommand,
+  StageStoryComicCommand,
+  StageStoryMusicVideoCommand,
+  StageStoryVideoCommand,
+  StartDirectorProductionCommand,
+  UpdateStoryCommand,
+} from './commands'
 
-export type {
-  AgentApplyStoryProposalAction,
-  AgentApproveStorySectionAction,
-  AgentApproveStoryVisualsAction,
-  AgentConfigureStorySongAction,
-  AgentCreateStoryAction,
-  AgentGenerateStorySectionAction,
-  AgentGenerateStorySongAction,
-  AgentGenerateStoryVisualsAction,
-  AgentStageStoryComicAction,
-  AgentStageStoryMusicVideoAction,
-  AgentStageStoryVideoAction,
-  AgentStartDirectorProductionAction,
-  AgentUpdateStoryAction,
+function storyResult(
+  workspaceId: string,
+  story: { id: string; title: string },
+  section: string,
+  message: string,
+  extra: Record<string, unknown> = {},
+): CommandResult {
+  const entity = { kind: 'story', id: story.id, workspaceId }
+  return commandResultFromSlice({
+    entity,
+    pipelineIds: typeof extra.pipelineId === 'string' && extra.pipelineId ? [extra.pipelineId] : undefined,
+    navigationTarget: {
+      destination: extra.destination === 'director' ? 'director' : 'story_lab',
+      section,
+      entity,
+    },
+    artifacts: [{
+      id: 'reply',
+      kind: 'document',
+      owner: entity,
+      uri: 'story:reply',
+      metadata: { summary: message, title: story.title, ...extra },
+    }],
+  })
 }
 
 async function saveActiveStoryProjectMutation(
@@ -91,11 +99,7 @@ async function saveActiveStoryProjectMutation(
   return library.projects[projectId]
 }
 
-export async function configureStorySong(action: AgentConfigureStorySongAction): Promise<{
-  message: string
-  cueId: string
-  cueTitle: string
-}> {
+export async function configureStorySong(action: ConfigureStorySongCommand): Promise<CommandResult> {
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, { normalizeStoryMusicModel, songWriteTarget }, { resolveStoryWritingProvider }, api] = await Promise.all([
     import('./store'), import('./musicModel'), import('./provider'), import('../../api/client'),
@@ -211,21 +215,16 @@ export async function configureStorySong(action: AgentConfigureStorySongAction):
   const savedCue = project.music.cues.find(item => item.id === cueId)
     || project.music.cues.find(item => item.kind === 'story')
   if (!savedCue) throw new Error('Story Lab guardó la ficha sin devolver el cue musical.')
-  showLab('stories')
-  openAgentStorySection('music')
-  return {
-    cueId: savedCue.id,
-    cueTitle: savedCue.title,
-    message: `He rellenado y guardado la canción “${savedCue.title}” en Story Lab → Music con ${project.music.model}, modo ${savedCue.instrumental ? 'instrumental' : 'vocal'} y la letra editable en ${savedCue.lyricsLanguage}.`,
-  }
+  return storyResult(
+    workspace,
+    project,
+    'music',
+    `He rellenado y guardado la canción “${savedCue.title}” en Story Lab → Music con ${project.music.model}, modo ${savedCue.instrumental ? 'instrumental' : 'vocal'} y la letra editable en ${savedCue.lyricsLanguage}.`,
+    { cueId: savedCue.id, cueTitle: savedCue.title },
+  )
 }
 
-export async function generateStorySong(action: AgentGenerateStorySongAction): Promise<{
-  message: string
-  candidateId: string
-  cueTitle: string
-  outputName: string
-}> {
+export async function generateStorySong(action: GenerateStorySongCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Generar la canción requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, { isAceStepMusicModel, ACE_STEP_MUSIC_MODEL }, api] = await Promise.all([
@@ -312,20 +311,19 @@ export async function generateStorySong(action: AgentGenerateStorySongAction): P
     if (!savedCue?.candidates.some(item => item.id === candidateId)) {
       throw new Error('Story Lab guardó la canción sin devolver el candidato generado.')
     }
-    showLab('stories')
-    openAgentStorySection('music')
-    return {
-      candidateId,
-      cueTitle: savedCue.title,
-      outputName: rendered.filename,
-      message: `ACE-Step ha generado “${savedCue.title}” y la versión v${version} ha quedado seleccionada en Story Lab → Music.`,
-    }
+    return storyResult(
+      workspace,
+      project,
+      'music',
+      `ACE-Step ha generado “${savedCue.title}” y la versión v${version} ha quedado seleccionada en Story Lab → Music.`,
+      { candidateId, cueTitle: savedCue.title, outputName: rendered.filename },
+    )
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
   }
 }
 
-export async function createFilledStory(action: AgentCreateStoryAction): Promise<string> {
+export async function createFilledStory(action: CreateStoryCommand): Promise<CommandResult> {
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, createStoryProject, normalizeStoryProject, storyId }, api] = await Promise.all([
     import('./store'),
@@ -346,15 +344,21 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
   ))
   if (action.projectType === 'music_video' && sameTitle?.projectType === 'music_video') {
     useStoryStore.setState({ project: sameTitle, dirty: false })
-    showLab('stories')
-    openAgentStorySection('overview')
-    return `El videoclip “${sameTitle.title}” ya existía; lo he abierto en Story Lab → Overview.`
+    return storyResult(
+      workspace,
+      sameTitle,
+      'overview',
+      `El videoclip “${sameTitle.title}” ya existía; lo he abierto en Story Lab → Overview.`,
+    )
   }
   if (duplicate && !(action.projectType === 'music_video' && duplicate.projectType !== 'music_video')) {
     useStoryStore.setState({ project: duplicate, dirty: false })
-    showLab('stories')
-    openAgentStorySection('overview')
-    return `La historia “${duplicate.title}” ya existía; la he abierto en Story Lab → Overview.`
+    return storyResult(
+      workspace,
+      duplicate,
+      'overview',
+      `La historia “${duplicate.title}” ya existía; la he abierto en Story Lab → Overview.`,
+    )
   }
 
   const base = createStoryProject(action.projectType || 'full_story')
@@ -477,12 +481,15 @@ export async function createFilledStory(action: AgentCreateStoryAction): Promise
     libraryConflicts: [],
   })
   await useStoryStore.getState().loadWorkspace(workspace)
-  showLab('stories')
-  openAgentStorySection('overview')
-  return `He creado y guardado “${project.title}” con ${characters.length} personajes, ${locations.length} localizaciones y ${beats.length} beats; está abierto en Story Lab → Overview.`
+  return storyResult(
+    workspace,
+    project,
+    'overview',
+    `He creado y guardado “${project.title}” con ${characters.length} personajes, ${locations.length} localizaciones y ${beats.length} beats; está abierto en Story Lab → Overview.`,
+  )
 }
 
-export async function updateFilledStory(action: AgentUpdateStoryAction): Promise<string> {
+export async function updateFilledStory(action: UpdateStoryCommand): Promise<CommandResult> {
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, { changedSections }, api] = await Promise.all([
     import('./store'),
@@ -616,7 +623,6 @@ export async function updateFilledStory(action: AgentUpdateStoryAction): Promise
     libraryConflicts: [],
   })
   await useStoryStore.getState().loadWorkspace(workspace)
-  showLab('stories')
   const section = sections.includes('structure')
     ? 'structure'
     : sections.includes('characters')
@@ -624,14 +630,18 @@ export async function updateFilledStory(action: AgentUpdateStoryAction): Promise
       : sections.includes('world')
         ? 'world'
         : 'overview'
-  openAgentStorySection(section)
-  return `He actualizado y guardado “${project.title}”: ${sections.join(', ')}. Está abierto en Story Lab → ${section}.`
+  return storyResult(
+    workspace,
+    project,
+    section,
+    `He actualizado y guardado “${project.title}”: ${sections.join(', ')}. Está abierto en Story Lab → ${section}.`,
+  )
 }
 
 export async function generateStorySectionDraft(
-  action: AgentGenerateStorySectionAction,
+  action: GenerateStorySectionCommand,
   onStep?: (message: string) => void,
-): Promise<string> {
+): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Generar una propuesta de Story Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore }, { resolveStoryWritingProvider }, api] = await Promise.all([
@@ -658,9 +668,7 @@ export async function generateStorySectionDraft(
   if (!premise) throw new Error(`“${project.title}” necesita una premisa o briefing antes de invocar al escritor.`)
 
   useStoryStore.setState({ project, dirty: false })
-  showLab('stories')
   const visibleSection = action.scope === 'all' ? 'overview' : action.scope
-  openAgentStorySection(visibleSection)
   const resultKey = `maestro-story-plan-result:${workspace}:${project.id}`
   const jobKey = `maestro-story-plan-job:${workspace}:${project.id}`
   window.localStorage.setItem(resultKey, JSON.stringify({
@@ -706,14 +714,19 @@ export async function generateStorySectionDraft(
       result,
       generateImagesAfterApply: false,
     }))
-    notifyAgentStoryDraft(project.id)
-    return `La propuesta de ${action.scope} para “${project.title}” está lista en Story Lab. Revísala y elige qué cambios aplicar; todavía no he modificado ni aprobado el canon.`
+    return storyResult(
+      workspace,
+      project,
+      visibleSection,
+      `La propuesta de ${action.scope} para “${project.title}” está lista en Story Lab. Revísala y elige qué cambios aplicar; todavía no he modificado ni aprobado el canon.`,
+      { notifyDraft: true },
+    )
   } finally {
     useStoryStore.getState().endProjectOperation(project.id)
   }
 }
 
-export async function applyStoredStoryProposal(action: AgentApplyStoryProposalAction): Promise<string> {
+export async function applyStoredStoryProposal(action: ApplyStoryProposalCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Aplicar una propuesta de Story Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, { changedSections, normalizeStoryCharacter }, api] = await Promise.all([
@@ -885,17 +898,20 @@ export async function applyStoredStoryProposal(action: AgentApplyStoryProposalAc
   window.localStorage.removeItem(resultKey)
   window.localStorage.removeItem(jobKey)
   await useStoryStore.getState().loadWorkspace(workspace)
-  showLab('stories')
   const reviewSections = new Set(['overview', 'world', 'characters', 'relationships', 'structure'])
   const visibleSection = typeof saved.scope === 'string' && reviewSections.has(saved.scope)
     ? saved.scope as 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
     : 'overview'
-  openAgentStorySection(visibleSection)
-  notifyAgentStoryDraft(project.id)
-  return `He aplicado y guardado la propuesta de “${project.title}” en: ${sections.join(', ')}. Sus aprobaciones afectadas vuelven a borrador.`
+  return storyResult(
+    workspace,
+    project,
+    visibleSection,
+    `He aplicado y guardado la propuesta de “${project.title}” en: ${sections.join(', ')}. Sus aprobaciones afectadas vuelven a borrador.`,
+    { notifyDraft: true },
+  )
 }
 
-export async function approveStorySection(action: AgentApproveStorySectionAction): Promise<string> {
+export async function approveStorySection(action: ApproveStorySectionCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Aprobar una sección de Story Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject }, { changedSections }, api] = await Promise.all([
@@ -957,9 +973,12 @@ export async function approveStorySection(action: AgentApproveStorySectionAction
   }
 
   if (target.approvals[action.section]?.version === target.sectionVersions[action.section]) {
-    showLab('stories')
-    openAgentStorySection(action.section)
-    return `Story Lab → ${action.section} ya estaba aprobado en la versión actual de “${target.title}”.`
+    return storyResult(
+      workspace,
+      target,
+      action.section,
+      `Story Lab → ${action.section} ya estaba aprobado en la versión actual de “${target.title}”.`,
+    )
   }
   const candidate = structuredClone(target)
   if (action.section === 'characters' && directVideo) {
@@ -1000,12 +1019,15 @@ export async function approveStorySection(action: AgentApproveStorySectionAction
     libraryConflicts: [],
   })
   await useStoryStore.getState().loadWorkspace(workspace)
-  showLab('stories')
-  openAgentStorySection(action.section)
-  return `He validado, aprobado y guardado Story Lab → ${action.section} para “${project.title}”.`
+  return storyResult(
+    workspace,
+    project,
+    action.section,
+    `He validado, aprobado y guardado Story Lab → ${action.section} para “${project.title}”.`,
+  )
 }
 
-export async function approveStoryVisuals(action: AgentApproveStoryVisualsAction): Promise<string> {
+export async function approveStoryVisuals(action: ApproveStoryVisualsCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Aprobar referencias visuales requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject }, { changedSections }, api] = await Promise.all([
@@ -1070,11 +1092,14 @@ export async function approveStoryVisuals(action: AgentApproveStoryVisualsAction
     labels.push(`${asset.name} → ${character.name}${character.primaryReferenceAssetId === asset.id ? ' (primaria)' : ''}`)
   }
 
-  showLab('stories')
-  openAgentStorySection('assets')
   if (!changed) {
     useStoryStore.setState({ project: target, dirty: false })
-    return `Las referencias solicitadas de “${target.title}” ya estaban vinculadas y aprobadas; he abierto Story Lab → Assets.`
+    return storyResult(
+      workspace,
+      target,
+      'assets',
+      `Las referencias solicitadas de “${target.title}” ya estaban vinculadas y aprobadas; he abierto Story Lab → Assets.`,
+    )
   }
 
   const normalized = normalizeStoryProject(candidate)
@@ -1110,10 +1135,15 @@ export async function approveStoryVisuals(action: AgentApproveStoryVisualsAction
     libraryConflicts: [],
   })
   await useStoryStore.getState().loadWorkspace(workspace)
-  return `He vinculado y aprobado ${labels.length} referencia${labels.length === 1 ? '' : 's'} en “${project.title}”: ${labels.join(' · ')}.`
+  return storyResult(
+    workspace,
+    project,
+    'assets',
+    `He vinculado y aprobado ${labels.length} referencia${labels.length === 1 ? '' : 's'} en “${project.title}”: ${labels.join(' · ')}.`,
+  )
 }
 
-export async function generateStoryVisuals(action: AgentGenerateStoryVisualsAction) {
+export async function generateStoryVisuals(action: GenerateStoryVisualsCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Generar referencias visuales de Story Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const { useStoryStore } = await import('./store')
@@ -1130,16 +1160,22 @@ export async function generateStoryVisuals(action: AgentGenerateStoryVisualsActi
     throw new Error(`La historia “${target.title}” ya tiene una operación visual activa.`)
   }
   useStoryStore.setState({ project: target, dirty: false })
-  showLab('stories')
-  openAgentStorySection('assets')
-  return requestAgentStoryVisualGeneration({
-    projectId: target.id,
-    scope: action.scope,
-    targetNames: action.targetNames,
-  })
+  return storyResult(
+    workspace,
+    target,
+    'assets',
+    `Generaré las referencias visuales de “${target.title}”.`,
+    {
+      visualRequest: {
+        projectId: target.id,
+        scope: action.scope,
+        targetNames: action.targetNames,
+      },
+    },
+  )
 }
 
-export async function stageStoryComic(action: AgentStageStoryComicAction): Promise<string> {
+export async function stageStoryComic(action: StageStoryComicCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Preparar una adaptación de cómic requiere confirm=true porque sustituye el borrador actual de Comics.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, adaptations, { useComicStore }, api] = await Promise.all([
@@ -1224,13 +1260,19 @@ export async function stageStoryComic(action: AgentStageStoryComicAction): Promi
     app.setDirectorSkill('comic')
     app.setSidebarOpen(true)
     window.dispatchEvent(new Event('maestro:director-open'))
-    return `He preparado “${comic.title}” como capítulo editable de ${action.pageCount} páginas × ${action.panelsPerPage} viñetas en Comic Director. No he generado imágenes.`
+    return storyResult(
+      workspace,
+      target,
+      'overview',
+      `He preparado “${comic.title}” como capítulo editable de ${action.pageCount} páginas × ${action.panelsPerPage} viñetas en Comic Director. No he generado imágenes.`,
+      { destination: 'comics', comicId: comic.id, comicTitle: comic.title },
+    )
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
   }
 }
 
-export async function stageStoryVideo(action: AgentStageStoryVideoAction): Promise<string> {
+export async function stageStoryVideo(action: StageStoryVideoCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Preparar una producción de vídeo requiere confirm=true porque sustituye el borrador actual de Director.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, adaptations, api] = await Promise.all([
@@ -1334,13 +1376,19 @@ export async function stageStoryVideo(action: AgentStageStoryVideoAction): Promi
     director.setMediaFilter('all')
     director.setSidebarOpen(true)
     window.dispatchEvent(new Event('maestro:director-open'))
-    return `He preparado “${title}” (${duration}s) en Short Film Director con el canon y las referencias aprobadas. No he iniciado ninguna generación.`
+    return storyResult(
+      workspace,
+      target,
+      'overview',
+      `He preparado “${title}” (${duration}s) en Short Film Director con el canon y las referencias aprobadas. No he iniciado ninguna generación.`,
+      { destination: 'director', productionId: production.id },
+    )
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
   }
 }
 
-export async function stageStoryMusicVideo(action: AgentStageStoryMusicVideoAction): Promise<string> {
+export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Preparar un videoclip requiere confirm=true porque sustituye el borrador actual de Director.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, adaptations, api, selection] = await Promise.all([
@@ -1527,16 +1575,21 @@ export async function stageStoryMusicVideo(action: AgentStageStoryMusicVideoActi
     director.setMediaFilter('all')
     director.setSidebarOpen(true)
     window.dispatchEvent(new Event('maestro:director-open'))
-    return `He preparado “${production.title}” en Music Video Director con la canción “${candidate.displayName || candidate.title || candidate.name}” y el cue “${resolvedCue.title}”. Estado: preparado. No lo he encolado ni iniciado.`
+    return storyResult(
+      workspace,
+      target,
+      'overview',
+      `He preparado “${production.title}” en Music Video Director con la canción “${candidate.displayName || candidate.title || candidate.name}” y el cue “${resolvedCue.title}”. Estado: preparado. No lo he encolado ni iniciado.`,
+      { destination: 'director', productionId: production.id },
+    )
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
   }
 }
 
 export async function startDirectorProduction(
-  action: AgentStartDirectorProductionAction,
-  expectedProductionId?: string,
-): Promise<{ message: string; pipelineId?: string; target?: AgentExecutionTarget }> {
+  action: StartDirectorProductionCommand,
+): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Iniciar una producción de Director requiere confirm=true porque consume cómputo.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject }, api] = await Promise.all([
@@ -1561,11 +1614,9 @@ export async function startDirectorProduction(
   if (!production || (production.kind !== 'film' && production.kind !== 'trailer' && production.kind !== 'music_video')) {
     throw new Error('La producción preparada ya no existe en el historial de Story Lab.')
   }
-  bindDirectorProductionTarget(expectedProductionId, production.id, production.title)
   if (action.kind && production.kind !== action.kind) {
     throw new Error(`La producción preparada es ${production.kind}, no ${action.kind}.`)
   }
-  const reportTarget = { kind: 'director_production', id: production.id, title: production.title }
   const existingPipelineId = typeof production.targetSnapshot?.pipelineId === 'string'
     ? production.targetSnapshot.pipelineId.trim() : ''
   if (existingPipelineId) {
@@ -1575,11 +1626,13 @@ export async function startDirectorProduction(
     director.setSidebarMode('director')
     director.setSidebarOpen(true)
     window.dispatchEvent(new Event('maestro:director-open'))
-    return {
-      pipelineId: existingPipelineId,
-      target: reportTarget,
-      message: `La producción “${production.title}” ya estaba iniciada en Director (pipeline ${existingPipelineId}); no la he duplicado.`,
-    }
+    return storyResult(
+      workspace,
+      target,
+      'overview',
+      `La producción “${production.title}” ya estaba iniciada en Director (pipeline ${existingPipelineId}); no la he duplicado.`,
+      { destination: 'director', pipelineId: existingPipelineId, productionId: production.id, productionTitle: production.title },
+    )
   }
   if (director.pipelineId) {
     throw new Error(`Director ya está vinculado al pipeline ${director.pipelineId}; no iniciaré otro sobre el mismo borrador.`)
@@ -1653,11 +1706,13 @@ export async function startDirectorProduction(
     } catch (error) {
       linkWarning = ` El pipeline sí está en marcha, pero no pude enlazarlo al historial de Story Lab: ${(error as Error).message}`
     }
-    return {
-      pipelineId,
-      target: reportTarget,
-      message: `He iniciado “${production.title}” en Director con el pipeline real ${pipelineId}. Está en marcha; todavía no está terminado.${linkWarning}`,
-    }
+    return storyResult(
+      workspace,
+      target,
+      'overview',
+      `He iniciado “${production.title}” en Director con el pipeline real ${pipelineId}. Está en marcha; todavía no está terminado.${linkWarning}`,
+      { destination: 'director', pipelineId, productionId: production.id, productionTitle: production.title },
+    )
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
   }
