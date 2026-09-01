@@ -1119,6 +1119,53 @@ test('character kit and video editor execute, reuse export id, and reject unsign
   }
 })
 
+test('track_video_editor_export keeps job status without a filename', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  clearExecutionMemory()
+  const originalFetch = globalThis.fetch
+  const originalLoadOutputs = useStore.getState().loadOutputs
+  useStore.setState({ loadOutputs: async () => {}, activeWorkspace: 'default' })
+  let job = {
+    job_id: 'export-88',
+    status: 'running',
+    progress: 40,
+    message: 'Codificando el corte',
+    filename: null,
+    url: null,
+    error: null,
+  }
+  globalThis.fetch = async (input, init) => {
+    const url = String(typeof input === 'string' ? input : input.url)
+    const method = init?.method || 'GET'
+    const json = body => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url.includes('/api/v1/video-editor/export/export-88') && method === 'GET') return json(job)
+    return json({})
+  }
+  window.localStorage.setItem('maestro-video-editor-export-v1:default', 'export-88')
+  try {
+    await executeAgentActions([{ type: 'create_video_editor_project', projectName: 'corte-final' }])
+    const running = await executeAgentActions([{ type: 'track_video_editor_export' }])
+    assert.equal(running[0].ok, true)
+    assert.equal(running[0].report.state, 'running')
+    assert.equal(running[0].report.taskId, 'export-88')
+    assert.match(running[0].message, /Codificando el corte/)
+    assert.deepEqual(running[0].report.outputNames || [], [])
+
+    job = { ...job, status: 'failed', message: 'FFmpeg se quedó sin disco', error: 'disk' }
+    const failed = await executeAgentActions([{ type: 'track_video_editor_export' }])
+    assert.equal(failed[0].report.state, 'failed')
+    assert.match(failed[0].message, /FFmpeg se quedó sin disco/)
+    assert.deepEqual(failed[0].report.outputNames || [], [])
+  } finally {
+    window.localStorage.removeItem('maestro-video-editor-export-v1:default')
+    globalThis.fetch = originalFetch
+    useStore.setState({ loadOutputs: originalLoadOutputs })
+    clearExecutionMemory()
+  }
+})
+
 test('track_character_kit_job inspects the canonical queue and stays running', async () => {
   const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
   const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')

@@ -513,20 +513,21 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const artifact = result.artifacts[0]
       const jobMessage = typeof artifact?.metadata?.message === 'string' ? artifact.metadata.message : ''
       const jobStatus = typeof artifact?.metadata?.status === 'string' ? artifact.metadata.status : result.status
-      const state = result.status === 'failed' ? 'failed'
-        : result.status === 'completed' ? 'completed'
+      const state = jobStatus === 'completed' || result.status === 'completed' ? 'completed'
+        : jobStatus === 'failed' || jobStatus === 'cancelled' || result.status === 'failed' ? 'failed'
           : jobStatus === 'queued' || jobStatus === 'waiting_resource' ? 'queued'
             : 'running'
-      const message = `Exportación ${jobId}: ${jobStatus}. ${jobMessage}`
+      const message = `Exportación ${jobId}: ${jobStatus}. ${jobMessage}`.trim()
+      const outputNames = result.artifacts.filter(item => item.kind === 'video').map(item => item.id)
       const report = executionReport({
         state,
         message,
         recoverable: state === 'failed',
         target: { kind: 'video_editor', id: result.entities[0]?.id || 'video_editor', title: result.entities[0]?.id || 'video_editor' },
         taskId: jobId,
-        outputNames: result.artifacts.map(item => item.id),
+        outputNames,
       })
-      return editorOutcome(result, message, { report })
+      return editorOutcome(result, message, { report, outputNames })
     },
   }
   adapters.characterKit = {
