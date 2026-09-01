@@ -86,7 +86,11 @@ class TestComicStoryReferences(unittest.TestCase):
                 namespace={
                     "HTTPException": HTTPException,
                     "_safe_join": safe_join,
-        "_workspace_dir": lambda _workspace=None: workspace,
+                    "_get_active_workspace": lambda: "default",
+                    "_workspace_dir": lambda _workspace=None: workspace,
+                    "execution_mode": types.SimpleNamespace(
+                        validate_remote_provider=lambda _workspace, _provider: None,
+                    ),
                     "base64": base64,
                     "json": json,
                     "os": os,

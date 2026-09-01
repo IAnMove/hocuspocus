@@ -51,6 +51,10 @@ class _HTTPException(Exception):
         self.detail = detail
 
 
+class _ExecutionModeError(ValueError):
+    pass
+
+
 def _base_namespace(tmp_path: Path) -> dict:
     jobs: dict[str, dict] = {}
     lock = threading.RLock()
@@ -63,6 +67,10 @@ def _base_namespace(tmp_path: Path) -> dict:
         "traceback": traceback,
         "uuid": uuid,
         "resource_scheduler": resource_scheduler,
+        "execution_mode": SimpleNamespace(
+            ExecutionModeError=_ExecutionModeError,
+            validate_remote_provider=lambda _workspace, _provider: None,
+        ),
         "wgp": SimpleNamespace(server_config={
             "services": {"minimax_api_key": "secret"},
         }),

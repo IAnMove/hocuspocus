@@ -820,6 +820,11 @@ export interface SystemConfig {
   // already-downloaded checkpoints; new downloads always go to Maestro's
   // own ckpts folder.
   model_folders: string[]
+  /** Boot-only acceptance policy. Never mutable from the browser. */
+  execution_mode?: 'real' | 'plan' | 'simulate'
+  execution_workspace?: string
+  execution_allow_paid?: boolean
+  execution_simulation_step_delay?: number
 }
 
 export interface ModelFolderCandidate {

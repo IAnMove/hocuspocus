@@ -173,8 +173,10 @@ class DirectorOrchestrator:
                     if result.auto_fixes:
                         print(f"[Director] Shot {shot.shot_id} auto-fixes: {result.auto_fixes}")
 
+        duration = production_plan.total_duration_sec
+        duration_label = f"{duration:.1f}s" if isinstance(duration, (int, float)) else "unknown duration"
         print(f"[Director] Plan complete: {len(production_plan.shots)} shots, "
-              f"{production_plan.total_duration_sec:.1f}s total")
+              f"{duration_label} total")
 
         return production_plan
 

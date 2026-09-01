@@ -11,6 +11,7 @@
     "test": "tsx --tsconfig tsconfig.app.json --test tests/*.test.mjs tests/*.test.tsx tests/*.test.ts",
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "test:e2e:headed": "playwright test -c e2e/playwright.config.ts --headed",
+    "test:e2e:wizard": "playwright test -c e2e/playwright.live.config.ts",
     "budget": "node scripts/check-build-budget.mjs",
     "check": "npm run test && npm run lint -- --max-warnings=0 && npm run build && npm run budget"
   },

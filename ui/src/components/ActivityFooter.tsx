@@ -155,6 +155,7 @@ function generationRecipe(task: CanonicalTask): string {
   const resolution = details.video_resolution || details.image_resolution || details.resolution
   const seed = details.seed
   const steps = details.video_steps || details.image_steps || details.steps || details.numInferenceSteps
+  if (details.simulated === true || details.execution_mode === 'simulate') parts.push('SIMULATED')
   if (resolution) parts.push(String(resolution))
   if (seed !== undefined) parts.push(`seed ${seed}`)
   if (steps !== undefined) parts.push(`${steps} steps`)

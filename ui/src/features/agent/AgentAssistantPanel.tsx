@@ -37,6 +37,20 @@ interface AgentAssistantPanelProps {
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const STORAGE_PREFIX = 'hocuspocus-agent-chat-v2:'
 
+declare global {
+  interface Window {
+    __HOCUSPOCUS_WIZARD_TRACE__?: Array<Record<string, unknown>>
+  }
+}
+
+function appendWizardTrace(entry: Record<string, unknown>): void {
+  // Ephemeral inspection hook for headed/manual acceptance runs. It is never
+  // persisted or sent to the backend; the durable conversation remains the
+  // product record. Keep a bounded list so normal sessions cannot grow it.
+  const trace = window.__HOCUSPOCUS_WIZARD_TRACE__ || []
+  window.__HOCUSPOCUS_WIZARD_TRACE__ = [...trace, entry].slice(-50)
+}
+
 const newId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 function normalizedChoice(value: unknown): string {
@@ -328,6 +342,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
     setBusy(true)
     setBusyMessage('Consultando el grimorio de HocusPocus…')
     setState('thinking')
+    const traceStartedAt = new Date().toISOString()
     try {
       if (pendingInput) {
         const answer = resolveWizardPendingAnswer(pendingInput, question)
@@ -369,6 +384,15 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
           if (mountedRef.current) setBusyMessage(message)
         })
       }
+      appendWizardTrace({
+        startedAt: traceStartedAt,
+        finishedAt: new Date().toISOString(),
+        workspace,
+        question,
+        llmAnswer: answer,
+        turn,
+        results,
+      })
       if (!mountedRef.current) return
       const cards = cardsFromResults(results)
       const actionReport = formatActionResults(results)
@@ -386,6 +410,13 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
     } catch (error) {
       if (!mountedRef.current) return
       const message = error instanceof Error ? error.message : String(error)
+      appendWizardTrace({
+        startedAt: traceStartedAt,
+        finishedAt: new Date().toISOString(),
+        workspace,
+        question,
+        error: message,
+      })
       const assistantMessage: AgentMessage = {
         id: newId(),
         role: 'assistant',

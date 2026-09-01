@@ -32,6 +32,10 @@ class _HTTPException(Exception):
         self.detail = detail
 
 
+class _ExecutionModeError(ValueError):
+    pass
+
+
 class _Request:
     def __init__(self, body: dict):
         self._body = copy.deepcopy(body)
@@ -246,6 +250,11 @@ def _harness(monkeypatch, tmp_path: Path, planner) -> tuple[dict, dict, float]:
     namespace = {
         "Request": object,
         "HTTPException": _HTTPException,
+        "execution_mode": SimpleNamespace(
+            ExecutionModeError=_ExecutionModeError,
+            validate_generation=lambda _workspace: None,
+            policy=lambda: SimpleNamespace(mode="real"),
+        ),
         "asyncio": asyncio,
         "copy": copy,
         "os": os,
