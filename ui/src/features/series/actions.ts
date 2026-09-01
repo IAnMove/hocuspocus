@@ -1,43 +1,60 @@
-import { useStore } from '../../stores/useStore'
-import type {
-  AgentApplySeriesPlanAction,
-  AgentAssembleSeriesEpisodeAction,
-  AgentCommitSeriesCanonAction,
-  AgentCreateSeriesEpisodeAction,
-  AgentGenerateSeriesPlanAction,
-  AgentRenderSeriesShotsAction,
-  AgentReviewSeriesAttemptsAction,
-  AgentUpdateSeriesEpisodeAction,
-} from '../agent/agentActions'
-
-export type {
-  AgentApplySeriesPlanAction,
-  AgentAssembleSeriesEpisodeAction,
-  AgentCommitSeriesCanonAction,
-  AgentCreateSeriesEpisodeAction,
-  AgentGenerateSeriesPlanAction,
-  AgentRenderSeriesShotsAction,
-  AgentReviewSeriesAttemptsAction,
-  AgentUpdateSeriesEpisodeAction,
-}
+import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
 import {
   boundedDuration,
   creativeCharacters,
   creativeLocations,
   normalizeName,
   outlineBeats,
-  showLab,
-} from '../agent/labActionHelpers'
-import {
-  clearAgentSeriesPlanJob,
-  notifyAgentSeriesAssemblyJob,
-  notifyAgentSeriesPlanJob,
-  notifyAgentSeriesRenderJob,
-  openAgentSeriesReviewView,
-  openAgentSeriesSection,
-} from '../agent/agentUiBus'
+} from '../../lib/labHelpers'
+import { useStore } from '../../stores/useStore'
+import type {
+  ApplySeriesPlanCommand,
+  AssembleSeriesEpisodeCommand,
+  CommitSeriesCanonCommand,
+  CreateSeriesEpisodeCommand,
+  GenerateSeriesPlanCommand,
+  RenderSeriesShotsCommand,
+  ReviewSeriesAttemptsCommand,
+  UpdateSeriesEpisodeCommand,
+} from './commands'
 
-export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisodeAction): Promise<string> {
+function seriesEpisodeResult(
+  workspaceId: string,
+  episode: { id: string; title: string },
+  section: 'episode' | 'review',
+  message: string,
+  extra: {
+    taskIds?: string[]
+    channel?: 'series_plan' | 'series_render' | 'series_assembly' | 'series_plan_clear'
+    job?: Record<string, unknown>
+    reviewView?: string
+  } = {},
+): CommandResult {
+  const entity = { kind: 'series_episode', id: episode.id, workspaceId }
+  return commandResultFromSlice({
+    entity,
+    taskIds: extra.taskIds,
+    navigationTarget: {
+      destination: 'series_lab',
+      section,
+      entity,
+      ...(extra.reviewView ? { anchor: extra.reviewView } : {}),
+    },
+    artifacts: [{
+      id: 'reply',
+      kind: 'document',
+      owner: entity,
+      uri: 'series:reply',
+      metadata: {
+        summary: message,
+        ...(extra.channel ? { channel: extra.channel } : {}),
+        ...(extra.job ? { job: extra.job } : {}),
+      },
+    }],
+  })
+}
+
+export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeCommand): Promise<CommandResult> {
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }, seriesModel] = await Promise.all([
     import('../../api/client'),
@@ -67,9 +84,12 @@ export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisode
     await useSeriesStore.getState().reload()
     await useSeriesStore.getState().openSeries(series.id)
     useSeriesStore.getState().openEpisode(existingEpisode.id)
-    showLab('series')
-    openAgentSeriesSection('episode')
-    return `El episodio “${existingEpisode.title}” ya existía; lo he abierto en Series Lab → Episode room.`
+    return seriesEpisodeResult(
+      workspace,
+      existingEpisode,
+      'episode',
+      `El episodio “${existingEpisode.title}” ya existía; lo he abierto en Series Lab → Episode room.`,
+    )
   }
 
   const characters = series.characters.length ? series.characters : creativeCharacters(action.characters).map((character, index) => ({
@@ -162,13 +182,16 @@ export async function createFilledSeriesEpisode(action: AgentCreateSeriesEpisode
   await useSeriesStore.getState().loadWorkspace(workspace)
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(createdEpisode.id)
-  showLab('series')
-  openAgentSeriesSection('episode')
   const canonResult = approvedCanon ? 'preparado y aprobado el canon editable necesario, y ' : ''
-  return `He ${createdSeries ? 'creado la serie, ' : ''}${canonResult}guardado el episodio “${createdEpisode.title}” con ${beats.length} beats; está abierto en Series Lab → Episode room.`
+  return seriesEpisodeResult(
+    workspace,
+    createdEpisode,
+    'episode',
+    `He ${createdSeries ? 'creado la serie, ' : ''}${canonResult}guardado el episodio “${createdEpisode.title}” con ${beats.length} beats; está abierto en Series Lab → Episode room.`,
+  )
 }
 
-export async function updateSeriesEpisode(action: AgentUpdateSeriesEpisodeAction): Promise<string> {
+export async function updateSeriesEpisode(action: UpdateSeriesEpisodeCommand): Promise<CommandResult> {
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
     import('../../api/client'),
@@ -222,12 +245,15 @@ export async function updateSeriesEpisode(action: AgentUpdateSeriesEpisodeAction
   if (action.outlineBeats.length && JSON.stringify(verified.outline.beats) !== JSON.stringify(action.outlineBeats)) {
     throw new Error('El backend no confirmó la nueva estructura del episodio.')
   }
-  showLab('series')
-  openAgentSeriesSection('episode')
-  return `He actualizado y guardado “${verified.title}” en la serie “${saved.title}”; conserva ${verified.script.length} escenas y ${verified.shots.length} tomas existentes.`
+  return seriesEpisodeResult(
+    workspace,
+    verified,
+    'episode',
+    `He actualizado y guardado “${verified.title}” en la serie “${saved.title}”; conserva ${verified.script.length} escenas y ${verified.shots.length} tomas existentes.`,
+  )
 }
 
-export async function generateSeriesPlan(action: AgentGenerateSeriesPlanAction): Promise<string> {
+export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Generar un plan de Series Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
@@ -266,8 +292,6 @@ export async function generateSeriesPlan(action: AgentGenerateSeriesPlanAction):
 
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
-  showLab('series')
-  openAgentSeriesSection('episode')
   const job = await api.startSeriesPlan(workspace, series.id, episode.id, {
     scope: action.scope,
     instruction: action.instruction,
@@ -278,11 +302,16 @@ export async function generateSeriesPlan(action: AgentGenerateSeriesPlanAction):
   if (job.seriesId !== series.id || job.episodeId !== episode.id) {
     throw new Error('Series Lab devolvió un job asociado a otro episodio; no lo mostraré como correcto.')
   }
-  notifyAgentSeriesPlanJob(job)
-  return `He iniciado el plan ${action.scope} de “${episode.title}” (${job.jobId}). El progreso y la propuesta recuperable están abiertos en Series Lab → Episode room; todavía no se ha aplicado ni renderizado.`
+  return seriesEpisodeResult(
+    workspace,
+    episode,
+    'episode',
+    `He iniciado el plan ${action.scope} de “${episode.title}” (${job.jobId}). El progreso y la propuesta recuperable están abiertos en Series Lab → Episode room; todavía no se ha aplicado ni renderizado.`,
+    { taskIds: [job.jobId], channel: 'series_plan', job: job as unknown as Record<string, unknown> },
+  )
 }
 
-export async function applySeriesPlan(action: AgentApplySeriesPlanAction): Promise<string> {
+export async function applySeriesPlan(action: ApplySeriesPlanCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Aplicar una propuesta de Series Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
@@ -332,13 +361,16 @@ export async function applySeriesPlan(action: AgentApplySeriesPlanAction): Promi
   await useSeriesStore.getState().reload()
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
-  clearAgentSeriesPlanJob(episode.id)
-  showLab('series')
-  openAgentSeriesSection('episode')
-  return `He aplicado el plan ${job.jobId} a “${applied.title}”: ${applied.outline.beats.length} beats, ${applied.script.length} escenas y ${applied.shots.length} tomas. No he renderizado ni comprometido el delta de canon.`
+  return seriesEpisodeResult(
+    workspace,
+    applied,
+    'episode',
+    `He aplicado el plan ${job.jobId} a “${applied.title}”: ${applied.outline.beats.length} beats, ${applied.script.length} escenas y ${applied.shots.length} tomas. No he renderizado ni comprometido el delta de canon.`,
+    { taskIds: [job.jobId], channel: 'series_plan_clear' },
+  )
 }
 
-export async function renderSeriesShots(action: AgentRenderSeriesShotsAction): Promise<string> {
+export async function renderSeriesShots(action: RenderSeriesShotsCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Renderizar tomas de Series Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
@@ -403,13 +435,16 @@ export async function renderSeriesShots(action: AgentRenderSeriesShotsAction): P
   if (job.workspace !== workspace || job.seriesId !== series.id || job.episodeId !== episode.id) {
     throw new Error('Series Lab devolvió un render job para otro destino; no se mostrará como correcto.')
   }
-  notifyAgentSeriesRenderJob(job)
-  showLab('series')
-  openAgentSeriesSection('review')
-  return `He encolado ${eligible.length} shots de “${episode.title}” (${job.jobId}) en modo ${action.mode}. El progreso recuperable está abierto en Series Lab → Render & review.`
+  return seriesEpisodeResult(
+    workspace,
+    episode,
+    'review',
+    `He encolado ${eligible.length} shots de “${episode.title}” (${job.jobId}) en modo ${action.mode}. El progreso recuperable está abierto en Series Lab → Render & review.`,
+    { taskIds: [job.jobId], channel: 'series_render', job: job as unknown as Record<string, unknown> },
+  )
 }
 
-export async function reviewSeriesAttempts(action: AgentReviewSeriesAttemptsAction): Promise<string> {
+export async function reviewSeriesAttempts(action: ReviewSeriesAttemptsCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Revisar intentos de Series Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
@@ -485,9 +520,12 @@ export async function reviewSeriesAttempts(action: AgentReviewSeriesAttemptsActi
     await useSeriesStore.getState().reload()
     await useSeriesStore.getState().openSeries(series.id)
     useSeriesStore.getState().openEpisode(episode.id)
-    showLab('series')
-    openAgentSeriesSection('review')
-    return `He aprobado ${selections.length} intento${selections.length === 1 ? '' : 's'} en “${episode.title}” y he abierto Render & Review.`
+    return seriesEpisodeResult(
+      workspace,
+      episode,
+      'review',
+      `He aprobado ${selections.length} intento${selections.length === 1 ? '' : 's'} en “${episode.title}” y he abierto Render & Review.`,
+    )
   }
 
   const shot = selectedShots[0]
@@ -511,12 +549,15 @@ export async function reviewSeriesAttempts(action: AgentReviewSeriesAttemptsActi
   await useSeriesStore.getState().reload()
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
-  showLab('series')
-  openAgentSeriesSection('review')
-  return `He rechazado el intento ${attempt.id} del shot ${shot.order} en “${episode.title}” y he abierto Render & Review.`
+  return seriesEpisodeResult(
+    workspace,
+    episode,
+    'review',
+    `He rechazado el intento ${attempt.id} del shot ${shot.order} en “${episode.title}” y he abierto Render & Review.`,
+  )
 }
 
-export async function assembleSeriesEpisode(action: AgentAssembleSeriesEpisodeAction): Promise<string> {
+export async function assembleSeriesEpisode(action: AssembleSeriesEpisodeCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Ensamblar un episodio de Series Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
@@ -564,13 +605,16 @@ export async function assembleSeriesEpisode(action: AgentAssembleSeriesEpisodeAc
   if (job.workspace !== workspace || job.seriesId !== series.id || job.episodeId !== episode.id) {
     throw new Error('Series Lab devolvió un ensamblado para otro destino; no se mostrará como correcto.')
   }
-  notifyAgentSeriesAssemblyJob(job)
-  showLab('series')
-  openAgentSeriesSection('review')
-  return `He iniciado el ensamblado ordenado de ${episode.shots.length} shots de “${episode.title}” (${job.jobId}). El progreso recuperable y la descarga están abiertos en Render & Review; no he comprometido el delta de canon.`
+  return seriesEpisodeResult(
+    workspace,
+    episode,
+    'review',
+    `He iniciado el ensamblado ordenado de ${episode.shots.length} shots de “${episode.title}” (${job.jobId}). El progreso recuperable y la descarga están abiertos en Render & Review; no he comprometido el delta de canon.`,
+    { taskIds: [job.jobId], channel: 'series_assembly', job: job as unknown as Record<string, unknown> },
+  )
 }
 
-export async function commitSeriesCanonDelta(action: AgentCommitSeriesCanonAction): Promise<string> {
+export async function commitSeriesCanonDelta(action: CommitSeriesCanonCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Comprometer cambios de canon requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([import('../../api/client'), import('./store')])
@@ -599,9 +643,12 @@ export async function commitSeriesCanonDelta(action: AgentCommitSeriesCanonActio
   await useSeriesStore.getState().reload()
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
-  showLab('series')
-  openAgentSeriesSection('review')
-  openAgentSeriesReviewView('finish')
-  return `He marcado ${selected.length} cambio${selected.length === 1 ? '' : 's'} de canon como ${value === 'accepted' ? 'aceptados' : 'rechazados'} en “${episode.title}”. Los demás permanecen pendientes.`
+  return seriesEpisodeResult(
+    workspace,
+    episode,
+    'review',
+    `He marcado ${selected.length} cambio${selected.length === 1 ? '' : 's'} de canon como ${value === 'accepted' ? 'aceptados' : 'rechazados'} en “${episode.title}”. Los demás permanecen pendientes.`,
+    { reviewView: 'finish' },
+  )
 }
 

@@ -3027,29 +3027,29 @@ export async function executeAgentActions(
           }),
         })
       } else if (action.type === 'create_series_episode') {
-        const { createFilledSeriesEpisode } = await import('./labActions')
-        results.push({ action, ok: true, message: await createFilledSeriesEpisode(action) })
+        const outcome = await defaultApplicationAdapters.seriesLab.createEpisode(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'update_series_episode') {
-        const { updateSeriesEpisode } = await import('./labActions')
-        results.push({ action, ok: true, message: await updateSeriesEpisode(action) })
+        const outcome = await defaultApplicationAdapters.seriesLab.updateEpisode(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'generate_series_plan') {
-        const { generateSeriesPlan } = await import('./labActions')
-        results.push({ action, ok: true, message: await generateSeriesPlan(action) })
+        const outcome = await defaultApplicationAdapters.seriesLab.generatePlan(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'apply_series_plan') {
-        const { applySeriesPlan } = await import('./labActions')
-        results.push({ action, ok: true, message: await applySeriesPlan(action) })
+        const outcome = await defaultApplicationAdapters.seriesLab.applyPlan(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'render_series_shots') {
-        const { renderSeriesShots } = await import('./labActions')
-        results.push({ action, ok: true, message: await renderSeriesShots(action) })
+        const outcome = await defaultApplicationAdapters.seriesLab.renderShots(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'review_series_attempts') {
-        const { reviewSeriesAttempts } = await import('./labActions')
-        results.push({ action, ok: true, message: await reviewSeriesAttempts(action) })
+        const outcome = await defaultApplicationAdapters.seriesLab.reviewAttempts(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'assemble_series_episode') {
-        const { assembleSeriesEpisode } = await import('./labActions')
-        results.push({ action, ok: true, message: await assembleSeriesEpisode(action) })
+        const outcome = await defaultApplicationAdapters.seriesLab.assembleEpisode(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'commit_series_canon') {
-        const { commitSeriesCanonDelta } = await import('./labActions')
-        results.push({ action, ok: true, message: await commitSeriesCanonDelta(action) })
+        const outcome = await defaultApplicationAdapters.seriesLab.commitCanon(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'open_3d_scene') {
         await defaultApplicationAdapters.video3d.open()
         const { requestAgentSceneControl } = await import('./agentUiBus')
