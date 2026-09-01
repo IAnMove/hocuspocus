@@ -117,7 +117,13 @@ export interface CharacterKitAdapter {
   applyPreset(action: AgentApplyCharacterKitPresetAction): Promise<AdapterOutcome>
   trackJob(action: AgentTrackCharacterKitJobAction): Promise<AdapterOutcome>
 }
-export interface QueueAdapter { openActivity(): Promise<AdapterOutcome> }
+export interface QueueAdapter {
+  openActivity(): Promise<AdapterOutcome>
+  inspect(scope: 'active' | 'all'): Promise<AdapterOutcome>
+  cancel(taskId: string, confirm: boolean): Promise<AdapterOutcome>
+  resume(taskId: string, confirm: boolean): Promise<AdapterOutcome>
+  retry(taskId: string, confirm: boolean): Promise<AdapterOutcome>
+}
 
 export interface Video3DAdapter {
   open(animate?: boolean): Promise<AdapterOutcome>
@@ -642,6 +648,25 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
         target: { kind: 'activity', id: 'activity', title: 'Activity' },
       }
     },
+    async inspect(scope) {
+      const { inspect } = await import('../studio/adapters')
+      return presentQueueSliceResult(await inspect({ scope }))
+    },
+    async cancel(taskId, confirm) {
+      if (!confirm) throw new Error('Cancelar requiere confirm=true tras una petición explícita del usuario.')
+      const { cancel } = await import('../studio/adapters')
+      return presentQueueSliceResult(await cancel({ taskId, confirm: true }))
+    },
+    async resume(taskId, confirm) {
+      if (!confirm) throw new Error('Reanudar requiere confirm=true tras una petición explícita del usuario.')
+      const { resume } = await import('../studio/adapters')
+      return presentQueueSliceResult(await resume({ taskId, confirm: true }))
+    },
+    async retry(taskId, confirm) {
+      if (!confirm) throw new Error('Reintentar requiere confirm=true tras una petición explícita del usuario.')
+      const { retry } = await import('../studio/adapters')
+      return presentQueueSliceResult(await retry({ taskId, confirm: true }))
+    },
   }
   adapters.video3d = {
     open: animate => navigate(animate ? 'animate_3d' : 'video_3d'),
@@ -769,6 +794,18 @@ async function presentSeriesSliceResult(result: CommandResult): Promise<AdapterO
     }
   }
   return { ...outcome, taskId: result.taskIds[0] }
+}
+
+async function presentQueueSliceResult(result: CommandResult): Promise<AdapterOutcome> {
+  openAgentActivityDetails()
+  const summary = typeof result.artifacts[0]?.metadata?.summary === 'string'
+    ? result.artifacts[0].metadata.summary
+    : 'He abierto Activity.'
+  return {
+    message: summary,
+    target: { kind: 'activity', id: result.entities[0]?.id || 'activity', title: 'Activity' },
+    taskId: result.taskIds[0],
+  }
 }
 
 async function presentComicSliceResult(result: CommandResult): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }> {

@@ -3189,20 +3189,20 @@ export async function executeAgentActions(
         const { configureStudioLoras } = await import('./studioGuidance')
         results.push({ action, ok: true, message: await configureStudioLoras(action) })
       } else if (action.type === 'inspect_queue') {
-        const { inspectCanonicalQueue } = await import('./queueActions')
-        results.push({ action, ok: true, message: await inspectCanonicalQueue(action.scope) })
+        const outcome = await defaultApplicationAdapters.queue.inspect(action.scope)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'cancel_task') {
         const { requestComicArtworkCancel } = await import('../comics/generateArtwork')
         const cancelledBatch = requestComicArtworkCancel()
         try {
-          const { cancelCanonicalQueueTask } = await import('./queueActions')
-          const message = await cancelCanonicalQueueTask(action.taskId, action.confirm)
+          const outcome = await defaultApplicationAdapters.queue.cancel(action.taskId, action.confirm)
           results.push({
             action,
             ok: true,
             message: cancelledBatch
-              ? `${message} También he pedido cancelar el lote de viñetas; las terminadas se conservan.`
-              : message,
+              ? `${outcome.message} También he pedido cancelar el lote de viñetas; las terminadas se conservan.`
+              : outcome.message,
+            report: outcome.report,
           })
         } catch (error) {
           if (!cancelledBatch) throw error
@@ -3213,11 +3213,11 @@ export async function executeAgentActions(
           })
         }
       } else if (action.type === 'resume_task') {
-        const { resumeCanonicalQueueTask } = await import('./queueActions')
-        results.push({ action, ok: true, message: await resumeCanonicalQueueTask(action.taskId, action.confirm) })
+        const outcome = await defaultApplicationAdapters.queue.resume(action.taskId, action.confirm)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'retry_task') {
-        const { retryCanonicalQueueTask } = await import('./queueActions')
-        results.push({ action, ok: true, message: await retryCanonicalQueueTask(action.taskId, action.confirm) })
+        const outcome = await defaultApplicationAdapters.queue.retry(action.taskId, action.confirm)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'select_workspace') {
         const { selectAgentWorkspace } = await import('./workspaceActions')
         results.push({ action, ok: true, message: await selectAgentWorkspace(action.workspaceName) })

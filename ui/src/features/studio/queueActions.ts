@@ -1,7 +1,24 @@
 import { cancelCanonicalTask, fetchCanonicalTasks, resumeCanonicalTask, retryCanonicalTask, type CanonicalTask } from '../../api/client'
-import { useStore } from '../../stores/useStore'
+import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
 import { canResumeCanonicalTask } from '../../lib/canonicalTaskEvents'
-import { openAgentActivityDetails } from '../agent/agentUiBus'
+import { useStore } from '../../stores/useStore'
+
+function queueResult(message: string, taskId?: string): CommandResult {
+  const workspace = workspaceId()
+  const entity = { kind: 'activity', id: taskId || 'activity', workspaceId: workspace }
+  return commandResultFromSlice({
+    entity,
+    taskIds: taskId ? [taskId] : [],
+    navigationTarget: { destination: 'activity', entity },
+    artifacts: [{
+      id: 'reply',
+      kind: 'document',
+      owner: entity,
+      uri: 'queue:reply',
+      metadata: { summary: message },
+    }],
+  })
+}
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 
@@ -65,15 +82,14 @@ function resolveRetryTask(tasks: CanonicalTask[], requestedId: string): Canonica
   return task
 }
 
-export async function inspectCanonicalQueue(scope: 'active' | 'all'): Promise<string> {
+export async function inspectCanonicalQueue(scope: 'active' | 'all'): Promise<CommandResult> {
   const result = await fetchCanonicalTasks(workspaceId(), scope === 'all' ? 'all' : 'active')
   const roots = result.tasks.filter(task => !task.parent_id)
   const active = roots.filter(task => ACTIVE.has(task.status))
-  openAgentActivityDetails()
   if (!roots.length) {
-    return scope === 'all'
+    return queueResult(scope === 'all'
       ? 'La cola canónica de este workspace está vacía. He abierto el historial de Activity.'
-      : 'No hay tareas activas. He abierto Activity por si quieres ver el historial.'
+      : 'No hay tareas activas. He abierto Activity por si quieres ver el historial.')
   }
   const waiting = active.filter(task => task.status === 'waiting_resource')
   const gpuWait = waiting.filter(task =>
@@ -87,10 +103,10 @@ export async function inspectCanonicalQueue(scope: 'active' | 'all'): Promise<st
     : waiting.length
       ? ` Hay ${waiting.length} tarea(s) esperando recurso.`
       : ''
-  return `Cola ${scope}: ${active.length} activa(s) de ${roots.length} visibles.${waitNote} He abierto Activity.\n${lines.join('\n')}`
+  return queueResult(`Cola ${scope}: ${active.length} activa(s) de ${roots.length} visibles.${waitNote} He abierto Activity.\n${lines.join('\n')}`)
 }
 
-export async function cancelCanonicalQueueTask(taskId: string, confirm: boolean): Promise<string> {
+export async function cancelCanonicalQueueTask(taskId: string, confirm: boolean): Promise<CommandResult> {
   if (!confirm) throw new Error('Cancelar requiere confirm=true tras una petición explícita del usuario.')
   const snapshot = await fetchCanonicalTasks(workspaceId(), 'all')
   const task = resolveTask(snapshot.tasks, taskId)
@@ -108,11 +124,13 @@ export async function cancelCanonicalQueueTask(taskId: string, confirm: boolean)
     }
     void useStore.getState().loadPipelineList(pipelineId || undefined)
   }
-  openAgentActivityDetails()
-  return `He pedido cancelar “${cancelled.title || task.title}” (${cancelled.id}); Activity muestra el estado ${cancelled.status}.`
+  return queueResult(
+    `He pedido cancelar “${cancelled.title || task.title}” (${cancelled.id}); Activity muestra el estado ${cancelled.status}.`,
+    cancelled.id,
+  )
 }
 
-export async function resumeCanonicalQueueTask(taskId: string, confirm: boolean): Promise<string> {
+export async function resumeCanonicalQueueTask(taskId: string, confirm: boolean): Promise<CommandResult> {
   if (!confirm) throw new Error('Reanudar requiere confirm=true tras una petición explícita del usuario.')
   const snapshot = await fetchCanonicalTasks(workspaceId(), 'all')
   const task = resolveTask(snapshot.tasks, taskId)
@@ -134,15 +152,19 @@ export async function resumeCanonicalQueueTask(taskId: string, confirm: boolean)
     void useStore.getState().loadSavedPipeline(pipelineId)
     void useStore.getState().loadPipelineList(pipelineId)
   }
-  openAgentActivityDetails()
-  return `He reanudado “${resumed.title || task.title}” (${resumed.id}); el estado actual es ${resumed.status}.`
+  return queueResult(
+    `He reanudado “${resumed.title || task.title}” (${resumed.id}); el estado actual es ${resumed.status}.`,
+    resumed.id,
+  )
 }
 
-export async function retryCanonicalQueueTask(taskId: string, confirm: boolean): Promise<string> {
+export async function retryCanonicalQueueTask(taskId: string, confirm: boolean): Promise<CommandResult> {
   if (!confirm) throw new Error('Reintentar requiere confirm=true tras una petición explícita del usuario.')
   const snapshot = await fetchCanonicalTasks(workspaceId(), 'all')
   const task = resolveRetryTask(snapshot.tasks, taskId)
   const retried = await retryCanonicalTask(task.id, workspaceId())
-  openAgentActivityDetails()
-  return `He reintentado “${retried.title || task.title}” (${retried.id}); Activity muestra el estado ${retried.status}.`
+  return queueResult(
+    `He reintentado “${retried.title || task.title}” (${retried.id}); Activity muestra el estado ${retried.status}.`,
+    retried.id,
+  )
 }
