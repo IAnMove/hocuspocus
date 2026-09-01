@@ -7,7 +7,6 @@
  * parent capability registry imports this file as a side effect.
  */
 import type { defineCapability, CapabilityDefinition, CapabilityExecutionContext, CapabilityExecutionOutcome } from './capabilityRegistry'
-import { executionKey, executionReport } from './agentContract'
 import type {
   AgentAction,
   AgentAttachStudioReferencesAction,
@@ -52,14 +51,6 @@ function stringArray(value: unknown, maxItems: number, maxLength: number): strin
 
 function studioTarget(mode: 'video' | 'image' | 'audio' | '3d', title: string) {
   return { kind: 'studio_form', id: mode, title: `Studio → ${title}` }
-}
-
-function studioOutcome(
-  mode: 'video' | 'image' | 'audio' | '3d',
-  title: string,
-  message: string,
-): CapabilityExecutionOutcome {
-  return { message, target: studioTarget(mode, title) }
 }
 
 function commonPresentation(anchors: string[]) {
@@ -195,64 +186,13 @@ function validType<T extends AgentAction>(type: T['type'], action: AgentAction):
   return action.type === type ? [] : [`${type} is invalid`]
 }
 
-async function bridge<TAction extends AgentAction>(
+async function bridgeSfx<TAction extends AgentAction>(
   action: TAction,
-  context: CapabilityExecutionContext,
+  _context: CapabilityExecutionContext,
 ): Promise<CapabilityExecutionOutcome> {
-  // Keep `context` in the signature so every Studio capability has the same
-  // adapter contract as the rest of the registry. The form itself is shared
-  // with the legacy runner through these explicit bridges.
-  if (action.type === 'prepare_video') {
-    const { prepareVideoForAgent } = await import('./agentActions')
-    return studioOutcome('video', 'Video', await prepareVideoForAgent(action))
-  }
-  if (action.type === 'prepare_image') {
-    const { prepareImageForAgent } = await import('./agentActions')
-    return studioOutcome('image', 'Image', await prepareImageForAgent(action))
-  }
-  if (action.type === 'prepare_audio') {
-    const { prepareAudioForAgent } = await import('./agentActions')
-    return studioOutcome('audio', 'Audio', await prepareAudioForAgent(action))
-  }
-  if (action.type === 'prepare_3d') {
-    const { prepare3dForAgent } = await import('./agentActions')
-    return studioOutcome('3d', '3D', await prepare3dForAgent(action))
-  }
-  if (action.type === 'queue_sfx_pack') {
-    const { queueSfxPackForAgent } = await import('./agentActions')
-    return { message: await queueSfxPackForAgent(action), target: studioTarget('audio', 'Audio → SFX') }
-  }
-  if (action.type === 'attach_studio_references') {
-    const { attachStudioReferencesForAgent } = await import('./agentActions')
-    return studioOutcome('image', 'Image / Video', await attachStudioReferencesForAgent(action))
-  }
-  if (action.type === 'configure_studio_loras') {
-    const { configureStudioLorasForAgent } = await import('./agentActions')
-    return studioOutcome('image', 'Image / Video', await configureStudioLorasForAgent(action))
-  }
-  if (action.type === 'start_generation') {
-    const { startPreparedGenerationForAgent } = await import('./agentActions')
-    const result = await startPreparedGenerationForAgent()
-    const target = { kind: 'generation_task', id: result.taskId || 'studio-generation', title: 'Studio generation' }
-    return {
-      message: result.message,
-      target,
-      taskId: result.taskId,
-      report: executionReport({
-        state: 'queued',
-        message: result.message,
-        target,
-        taskId: result.taskId,
-        recoverable: true,
-        executionKey: executionKey({
-          workspace: context.workspace || 'default',
-          type: action.type,
-          params: action,
-        }),
-      }),
-    }
-  }
-  throw new Error(`No hay puente Studio para ${action.type}.`)
+  if (action.type !== 'queue_sfx_pack') throw new Error(`No hay puente Studio para ${action.type}.`)
+  const { queueSfxPackForAgent } = await import('./agentActions')
+  return { message: await queueSfxPackForAgent(action), target: studioTarget('audio', 'Audio → SFX') }
 }
 
 /**
@@ -279,7 +219,7 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   resolve: videoAction,
   validate(action) { return action.prompt ? validType('prepare_video', action) : ['prompt is required'] },
   async prepare(action) { return action },
-  execute: bridge,
+  async execute(action, context) { return context.adapters.studio.prepareVideo(action) },
   correlate(_action, outcome) { return outcome.target },
   async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'prepared' },
@@ -297,7 +237,8 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'edit', confirmation: 'none', progress: 'Rellenando Studio → Image…',
   resolve: imageAction,
   validate(action) { return action.prompt ? validType('prepare_image', action) : ['prompt is required'] },
-  async prepare(action) { return action }, execute: bridge,
+  async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.studio.prepareImage(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message },
   presentation: commonPresentation(['prompt', 'model', 'generate']),
@@ -313,7 +254,8 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'edit', confirmation: 'none', progress: 'Rellenando Studio → Audio…',
   resolve: audioAction,
   validate(action) { return action.prompt ? validType('prepare_audio', action) : ['prompt is required'] },
-  async prepare(action) { return action }, execute: bridge,
+  async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.studio.prepareAudio(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message },
   presentation: commonPresentation(['audio-mode', 'prompt', 'model', 'generate']),
@@ -329,7 +271,8 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'edit', confirmation: 'none', progress: 'Rellenando Studio → 3D…',
   resolve: model3dAction,
   validate(action) { return action.prompt ? validType('prepare_3d', action) : ['prompt is required'] },
-  async prepare(action) { return action }, execute: bridge,
+  async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.studio.prepare3d(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message },
   presentation: commonPresentation(['prompt', 'model', 'generate']),
@@ -345,7 +288,7 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'compute', confirmation: 'required', progress: 'Encolando el pack de SFX…',
   resolve: sfxAction,
   validate(action) { return action.confirm === true && action.clips.length > 0 ? validType('queue_sfx_pack', action) : ['confirmed SFX clips are required'] },
-  async prepare(action) { return action }, execute: bridge,
+  async prepare(action) { return action }, execute: bridgeSfx,
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_sfx_pack', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: commonPresentation(['audio-mode', 'sfx-pack', 'queue']),
@@ -361,7 +304,8 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'compute', confirmation: 'required', progress: 'Enviando la generación de Studio a la cola…',
   resolve(raw) { return raw.type === 'start_generation' && raw.confirm === true ? { type: 'start_generation', confirm: true } : null },
   validate(action) { return validType('start_generation', action) },
-  async prepare(action) { return action }, execute: bridge,
+  async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.studio.startGeneration(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'generation_task', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: commonPresentation(['generate', 'queue']),
@@ -377,7 +321,8 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'edit', confirmation: 'none', progress: 'Adjuntando referencias a Studio…',
   resolve: referencesAction,
   validate(action) { return action.outputNames.length ? validType('attach_studio_references', action) : ['at least one exact output name is required'] },
-  async prepare(action) { return action }, execute: bridge,
+  async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.studio.attachReferences(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: commonPresentation(['references', 'prompt']),
@@ -393,7 +338,8 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'edit', confirmation: 'none', progress: 'Configurando LoRAs compatibles en Studio…',
   resolve: lorasAction,
   validate(action) { return action.loras.length || action.replaceExisting ? validType('configure_studio_loras', action) : ['LoRA selections or replace_existing are required'] },
-  async prepare(action) { return action }, execute: bridge,
+  async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.studio.configureLoras(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: commonPresentation(['loras', 'model']),
