@@ -22,8 +22,6 @@ const AGENT_ROOT = join(SRC, 'features/agent')
 const FEATURES_ROOT = join(SRC, 'features')
 
 const SET_STATE_ALLOWLIST = [
-  ['labActions.ts', 'stageStoryMusicVideo', 2],
-  ['labActions.ts', 'stageStoryVideo', 3],
   ['queueActions.ts', 'cancelCanonicalQueueTask', 1],
   ['queueActions.ts', 'resumeCanonicalQueueTask', 1],
 ]
@@ -32,6 +30,10 @@ const SLICE_AGENT_IMPORT_ALLOWLIST = [
   ['series/SeriesEpisodePanel.tsx', '../agent/agentUiBus'],
   ['series/SeriesLabPanel.tsx', '../agent/agentUiBus'],
   ['series/SeriesReviewPanel.tsx', '../agent/agentUiBus'],
+  ['stories/actions.ts', '../agent/agentActions'],
+  ['stories/actions.ts', '../agent/agentContract'],
+  ['stories/actions.ts', '../agent/agentUiBus'],
+  ['stories/actions.ts', '../agent/labActionHelpers'],
   ['stories/StoryLabPanel.tsx', '../agent/agentUiBus'],
 ]
 
@@ -81,22 +83,8 @@ const AGENT_ACTIONS_IMPORTS = [
 ]
 
 const LAB_ACTIONS_IMPORTS = [
-  '../../api/client',
-  '../../stores/useStore',
-  '../comics/store',
-  '../stories/adaptations',
-  '../stories/model',
-  '../stories/musicModel',
-  '../stories/musicVideoLook',
-  '../stories/musicVideoSelection',
-  '../stories/provider',
-  '../stories/store',
-  '../stories/types',
-  './agentActions',
-  './agentContract',
-  './agentUiBus',
+  '../stories/actions',
   './comicLabActions',
-  './labActionHelpers',
   './seriesLabActions',
 ]
 
@@ -210,7 +198,7 @@ test('useStore.setState in features/agent stays on the named allowlist outside a
     'Direct store writes in Agent Mode must shrink the allowlist when a function moves to a slice adapter, and must not grow. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(actual.reduce((total, row) => total + row[2], 0), 7)
+  assert.equal(actual.reduce((total, row) => total + row[2], 0), 2)
 })
 
 test('other feature slices do not import Agent Mode except the frozen UI-bus listeners', () => {
