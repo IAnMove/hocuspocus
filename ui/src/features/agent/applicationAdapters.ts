@@ -13,7 +13,7 @@ import {
   type AgentExecutionReport,
   type AgentExecutionTarget,
 } from './agentContract'
-import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
+import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, requestAgentStoryVisualGeneration, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
 import { queueMusic } from './audioActions'
 import type { AgentPrepareAudioAction } from './agentActions'
@@ -65,7 +65,7 @@ export interface StoryLabAdapter {
   open(): Promise<AdapterOutcome>
   create(action: AgentCreateStoryAction): Promise<AdapterOutcome>
   update(action: AgentUpdateStoryAction): Promise<AdapterOutcome>
-  generateProposal(action: AgentGenerateStorySectionAction): Promise<AdapterOutcome>
+  generateProposal(action: AgentGenerateStorySectionAction, onStep?: (message: string) => void): Promise<AdapterOutcome>
   applyProposal(action: AgentApplyStoryProposalAction): Promise<AdapterOutcome>
   approveSection(action: AgentApproveStorySectionAction): Promise<AdapterOutcome>
   approveVisuals(action: AgentApproveStoryVisualsAction): Promise<AdapterOutcome>
@@ -91,8 +91,8 @@ export interface SeriesLabAdapter {
 export interface ComicAdapter {
   open(): Promise<AdapterOutcome>
   create(action: AgentCreateComicAction): Promise<AdapterOutcome>
-  generate(action: AgentGenerateComicAction, expectedProjectId?: string): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }>
-  generatePanel(pageNumber: number, panelNumber: number): Promise<AdapterOutcome>
+  generate(action: AgentGenerateComicAction, expectedProjectId?: string, onStep?: (message: string) => void): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }>
+  generatePanel(pageNumber: number, panelNumber: number, onStep?: (message: string) => void): Promise<AdapterOutcome>
 }
 export interface VideoEditorAdapter {
   open(): Promise<AdapterOutcome>
@@ -272,81 +272,109 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   adapters.storyLab = {
     open: () => navigate('story_lab'),
     async create(action) {
-      const { createFilledStory } = await import('./labActions')
-      const message = await createFilledStory(action)
-      return storyOutcome(message)
+      const { create } = await import('../stories/adapters')
+      return presentStorySliceResult(await create(action))
     },
     async update(action) {
-      const { updateFilledStory } = await import('./labActions')
-      const message = await updateFilledStory(action)
-      return storyOutcome(message)
+      const { update } = await import('../stories/adapters')
+      return presentStorySliceResult(await update(action))
     },
-    async generateProposal(action) {
-      const { generateStorySectionDraft } = await import('./labActions')
-      const message = await generateStorySectionDraft(action)
-      return storyOutcome(message)
+    async generateProposal(action, onStep) {
+      const { generateProposal } = await import('../stories/adapters')
+      return presentStorySliceResult(await generateProposal(action, onStep))
     },
     async applyProposal(action) {
-      const { applyStoredStoryProposal } = await import('./labActions')
-      const message = await applyStoredStoryProposal(action)
-      return storyOutcome(message)
+      const { applyProposal } = await import('../stories/adapters')
+      return presentStorySliceResult(await applyProposal(action))
     },
     async approveSection(action) {
-      const { approveStorySection } = await import('./labActions')
-      const message = await approveStorySection(action)
-      return storyOutcome(message)
+      const { approveSection } = await import('../stories/adapters')
+      return presentStorySliceResult(await approveSection(action))
     },
     async approveVisuals(action) {
-      const { approveStoryVisuals } = await import('./labActions')
-      const message = await approveStoryVisuals(action)
-      return storyOutcome(message)
+      const { approveVisuals } = await import('../stories/adapters')
+      return presentStorySliceResult(await approveVisuals(action))
     },
     async generateVisuals(action) {
-      const { generateStoryVisuals } = await import('./labActions')
-      const result = await generateStoryVisuals(action)
-      return { ...await storyOutcome(result.message), assetIds: result.assetIds }
+      const { generateVisuals } = await import('../stories/adapters')
+      const result = await generateVisuals(action)
+      const presented = await presentStorySliceResult(result)
+      const request = result.artifacts[0]?.metadata?.visualRequest as {
+        projectId?: string
+        scope?: 'world' | 'locations' | 'characters' | 'all'
+        targetNames?: string[]
+      } | undefined
+      if (!request?.projectId || !request.scope) return presented
+      const visual = await requestAgentStoryVisualGeneration({
+        projectId: request.projectId,
+        scope: request.scope,
+        targetNames: request.targetNames || [],
+      })
+      return { ...presented, message: visual.message, assetIds: visual.assetIds }
     },
     async configureSong(action) {
-      const { configureStorySong } = await import('./labActions')
-      const result = await configureStorySong(action)
-      return { message: result.message, target: { kind: 'story_song', id: result.cueId, title: result.cueTitle } }
+      const { configureSong } = await import('../stories/adapters')
+      const result = await configureSong(action)
+      const presented = await presentStorySliceResult(result)
+      const cueId = String(result.artifacts[0]?.metadata?.cueId || presented.target.id)
+      const cueTitle = String(result.artifacts[0]?.metadata?.cueTitle || presented.target.title)
+      return { ...presented, target: { kind: 'story_song', id: cueId, title: cueTitle } }
     },
     async generateSong(action) {
-      const { generateStorySong } = await import('./labActions')
-      const result = await generateStorySong(action)
+      const { generateSong } = await import('../stories/adapters')
+      const result = await generateSong(action)
+      const presented = await presentStorySliceResult(result)
+      const meta = result.artifacts[0]?.metadata || {}
+      const candidateId = String(meta.candidateId || presented.target.id)
+      const cueTitle = String(meta.cueTitle || presented.target.title)
+      const outputName = typeof meta.outputName === 'string' ? meta.outputName : ''
       return {
-        message: result.message,
-        target: { kind: 'story_song', id: result.candidateId, title: result.cueTitle },
-        outputNames: [result.outputName],
+        ...presented,
+        target: { kind: 'story_song', id: candidateId, title: cueTitle },
+        outputNames: outputName ? [outputName] : presented.outputNames,
       }
     },
     async stageComic(action) {
-      const { stageStoryComic } = await import('./labActions')
-      const message = await stageStoryComic(action)
-      const [{ useStoryStore }, { useComicStore }] = await Promise.all([
-        import('../stories/store'), import('../comics/store'),
-      ])
-      const story = useStoryStore.getState().project
-      const comic = useComicStore.getState().project
-      const production = story?.productions.find(item => item.kind === 'comic' && item.targetId === comic?.id)
-      if (!story?.id || !comic?.id || !production?.id) throw new Error('Story Lab no correlacionó la producción de cómic con su proyecto editable.')
-      return { message, target: { kind: 'comic', id: comic.id, title: comic.title } }
+      const { stageComic } = await import('../stories/adapters')
+      const result = await stageComic(action)
+      const presented = await presentStorySliceResult(result)
+      const comicId = String(result.artifacts[0]?.metadata?.comicId || '')
+      const comicTitle = String(result.artifacts[0]?.metadata?.comicTitle || '')
+      if (!comicId) throw new Error('Story Lab no correlacionó la producción de cómic con su proyecto editable.')
+      return { ...presented, target: { kind: 'comic', id: comicId, title: comicTitle } }
     },
     async stageVideo(action) {
-      const { stageStoryVideo } = await import('./labActions')
-      const message = await stageStoryVideo(action)
-      return stagedDirectorOutcome(message)
+      const { stageVideo } = await import('../stories/adapters')
+      const result = await stageVideo(action)
+      const presented = await presentStorySliceResult(result)
+      return stagedDirectorOutcome(presented.message)
     },
     async stageMusicVideo(action) {
-      const { stageStoryMusicVideo } = await import('./labActions')
-      const message = await stageStoryMusicVideo(action)
-      return stagedDirectorOutcome(message)
+      const { stageMusicVideo } = await import('../stories/adapters')
+      const result = await stageMusicVideo(action)
+      const presented = await presentStorySliceResult(result)
+      return stagedDirectorOutcome(presented.message)
     },
     async startDirectorProduction(action, expectedProductionId) {
-      const { startDirectorProduction } = await import('./labActions')
-      const result = await startDirectorProduction(action, expectedProductionId)
-      if (!result.target) throw new Error('Director no devolvió el destino de producción verificado.')
-      return { message: result.message, target: result.target, pipelineId: result.pipelineId }
+      const { bindDirectorProductionTarget } = await import('./agentContract')
+      const { useStoryStore } = await import('../stories/store')
+      await useStoryStore.getState().loadWorkspace(useStore.getState().activeWorkspace || 'default')
+      const handoff = useStore.getState().directorStoryProductionHandoff
+      const stories = useStoryStore.getState()
+      const project = handoff ? stories.projects[handoff.projectId] || stories.project : stories.project
+      const production = project?.productions.find(item => item.id === handoff?.productionId)
+      if (!production) throw new Error('Director no devolvió el destino de producción verificado.')
+      bindDirectorProductionTarget(expectedProductionId, production.id, production.title)
+      const { startProduction } = await import('../stories/adapters')
+      const result = await startProduction(action)
+      const presented = await presentStorySliceResult(result)
+      const productionId = String(result.artifacts[0]?.metadata?.productionId || production.id)
+      const productionTitle = String(result.artifacts[0]?.metadata?.productionTitle || production.title)
+      return {
+        ...presented,
+        target: { kind: 'director_production', id: productionId, title: productionTitle },
+        pipelineId: result.pipelineIds[0],
+      }
     },
   }
   adapters.seriesLab = {
@@ -396,17 +424,17 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { create } = await import('../comics/adapters')
       return presentComicSliceResult(await create(action))
     },
-    async generate(action, expectedProjectId) {
+    async generate(action, expectedProjectId, onStep) {
       const { bindGenerateComicTarget } = await import('./agentContract')
       const { useComicStore } = await import('../comics/store')
       const current = useComicStore.getState().project
       bindGenerateComicTarget(expectedProjectId, current.id, current.title)
       const { generate } = await import('../comics/adapters')
-      return presentComicSliceResult(await generate(action))
+      return presentComicSliceResult(await generate(action, onStep))
     },
-    async generatePanel(pageNumber, panelNumber) {
+    async generatePanel(pageNumber, panelNumber, onStep) {
       const { generatePanel } = await import('../comics/adapters')
-      return presentComicSliceResult(await generatePanel(pageNumber, panelNumber))
+      return presentComicSliceResult(await generatePanel(pageNumber, panelNumber, onStep))
     },
   }
   adapters.videoEditor = {
@@ -664,6 +692,41 @@ async function storyOutcome(message: string): Promise<AdapterOutcome> {
   const project = useStoryStore.getState().project
   if (!project?.id) throw new Error('Story Lab no devolvió la historia canónica creada o actualizada.')
   return { message, target: { kind: 'story', id: project.id, title: project.title } }
+}
+
+async function presentStorySliceResult(result: CommandResult): Promise<AdapterOutcome> {
+  const destination = result.navigationTarget?.destination
+  if (destination === 'director') await navigate('director')
+  else if (destination === 'comics') await navigate('director')
+  else await navigate('story_lab')
+  const {
+    notifyAgentStoryDraft,
+    openAgentStorySection,
+  } = await import('./agentUiBus')
+  const section = result.navigationTarget?.section
+  if (
+    section === 'overview'
+    || section === 'world'
+    || section === 'characters'
+    || section === 'relationships'
+    || section === 'structure'
+    || section === 'assets'
+    || section === 'music'
+  ) {
+    openAgentStorySection(section)
+  }
+  const meta = result.artifacts[0]?.metadata || {}
+  if (meta.notifyDraft === true && result.entities[0]?.id) notifyAgentStoryDraft(result.entities[0].id)
+  const summary = typeof meta.summary === 'string' ? meta.summary : 'Story Lab listo.'
+  if (destination === 'director' || destination === 'comics') {
+    const title = typeof meta.title === 'string' ? meta.title : (result.entities[0]?.id || 'story')
+    return {
+      message: summary,
+      target: { kind: result.entities[0]?.kind || 'story', id: result.entities[0]?.id || title, title },
+      pipelineId: result.pipelineIds[0],
+    }
+  }
+  return { ...await storyOutcome(summary), pipelineId: result.pipelineIds[0] }
 }
 
 async function seriesEpisodeOutcome(message: string): Promise<AdapterOutcome> {

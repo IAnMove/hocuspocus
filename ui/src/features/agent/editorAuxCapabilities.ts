@@ -87,7 +87,7 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
     },
     async prepare(action) { return action },
     async execute(action, context) {
-      return context.adapters.comic.generatePanel(action.pageNumber, action.panelNumber)
+      return context.adapters.comic.generatePanel(action.pageNumber, action.panelNumber, context.onStep)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
