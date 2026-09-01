@@ -1,7 +1,7 @@
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
 import { comicArtworkInventory } from '../comics/generateArtwork'
 import { buildWizardContextSnapshot, buildWizardLabSnapshots, comicLabSnapshot, type BuildWizardContextOptions, type WizardContextSnapshot } from './wizardContext'
-import type { AspectRatio, ModelDef, ResolutionPreset } from '../../types'
+import type { AspectRatio, ResolutionPreset } from '../../types'
 import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
 import type { CommandEnvelope, CommandResult } from './commandContract'
 import {
@@ -2476,271 +2476,10 @@ const TAB_LABELS: Record<AgentTab, string> = {
   settings: 'Settings',
 }
 
-function visibleT2vModels(models: ModelDef[]): ModelDef[] {
-  const enabledModels = useStore.getState().enabledModels
-  const families = getFamiliesForMode('video', useStore.getState().families)
-  const familyIds = new Set(families.map(family => family.id))
-  const ordered = families.flatMap(family => getModelsForFamily(family.id, models, 'video'))
-  const orderedIds = new Set(ordered.map(model => model.model_type))
-  const extras = models.filter(model => familyIds.has(model.family) && !orderedIds.has(model.model_type))
-  return [...ordered, ...extras].filter(model => (
-    model.is_t2v
-    && !model.tool_only
-    && enabledModels.has(model.model_type)
-    && model.is_downloaded !== false
-  ))
-}
-
-async function prepareVideo(action: AgentPrepareVideoAction): Promise<string> {
-  let state = useStore.getState()
-  if (!state.modelsLoaded) await state.loadModels()
-
-  state = useStore.getState()
-  state.setSettingsOpen(false)
-  state.setDashboardOpen(false)
-  state.setSidebarMode('studio')
-  state.setSidebarOpen(true)
-  state.setGenerationMode('video')
-  state.setMediaFilter('videos')
-
-  state = useStore.getState()
-  const candidates = visibleT2vModels(state.models)
-  const requested = action.modelType
-    ? candidates.find(model => model.model_type === action.modelType)
-    : undefined
-  if (action.modelType && !requested) {
-    throw new Error(`El modelo ${action.modelType} no está instalado, habilitado o no admite texto a vídeo.`)
-  }
-  const current = candidates.find(model => model.model_type === state.params.model_type)
-  const selected = requested || current || candidates.find(model => model.is_downloaded) || candidates[0]
-  if (!selected) {
-    throw new Error('No hay ningún modelo texto-a-vídeo instalado y habilitado.')
-  }
-
-  if (state.params.model_type !== selected.model_type) state.selectModel(selected.model_type)
-  await useStore.getState().loadModelOptions(selected.model_type)
-
-  state = useStore.getState()
-  state.setStartImage(null)
-  state.setEndImage(null)
-  state.setPromptSchedulerEnabled(false)
-  state.setOutputCount(action.outputCount ?? 1)
-  if (action.aspectRatio) state.setAspectRatio(action.aspectRatio)
-  if (action.resolutionPreset) state.setResolutionPreset(action.resolutionPreset)
-  if (action.durationSeconds !== undefined) state.setDurationSeconds(action.durationSeconds)
-
-  const params: Record<string, unknown> = {
-    prompt: action.prompt,
-    image_mode: 0,
-    image_start: undefined,
-    image_end: undefined,
-    image_prompt_type: '',
-    minimax_h3_references: undefined,
-    h3_ref_videos: [],
-    h3_ref_audios: [],
-  }
-  if (action.resolution) params.resolution = action.resolution
-  if (action.negativePrompt !== undefined) params.negative_prompt = action.negativePrompt
-  if (action.seed !== undefined) params.seed = action.seed
-  if (action.inferenceSteps !== undefined) params.num_inference_steps = action.inferenceSteps
-  if (action.guidanceScale !== undefined) params.guidance_scale = action.guidanceScale
-  if (action.audioDirection !== undefined) params.h3_audio_prompt = action.audioDirection
-  if (action.turbo !== undefined) params.minimax_h3_turbo_mode = action.turbo
-  state.setParams(params)
-
-  return `He preparado Studio → Video con ${selected.name}, ${useStore.getState().durationSeconds.toFixed(1)} s y el prompt indicado.`
-}
-
-/**
- * Public bridge for the registered Studio capability.
- *
- * Keep the actual form mutation here so both the legacy action runner and the
- * canonical capability runner exercise exactly the same visible Studio UI.
- * The capability module imports this lazily to avoid an agentActions ↔
- * capabilityRegistry initialization cycle.
- */
-export async function prepareVideoForAgent(action: AgentPrepareVideoAction): Promise<string> {
-  return prepareVideo(action)
-}
-
-function visibleImageModels(models: ModelDef[]): ModelDef[] {
-  const enabledModels = useStore.getState().enabledModels
-  const families = getFamiliesForMode('image', useStore.getState().families)
-  const familyIds = new Set(families.map(family => family.id))
-  const ordered = families.flatMap(family => getModelsForFamily(family.id, models, 'image'))
-  const orderedIds = new Set(ordered.map(model => model.model_type))
-  const extras = models.filter(model => familyIds.has(model.family) && !orderedIds.has(model.model_type))
-  return [...ordered, ...extras].filter(model => (
-    !model.tool_only
-    && enabledModels.has(model.model_type)
-    && model.is_downloaded !== false
-  ))
-}
-
-async function prepareImage(action: AgentPrepareImageAction): Promise<string> {
-  let state = useStore.getState()
-  if (!state.modelsLoaded) await state.loadModels()
-
-  state = useStore.getState()
-  state.setSettingsOpen(false)
-  state.setDashboardOpen(false)
-  state.setSidebarMode('studio')
-  state.setSidebarOpen(true)
-  state.setGenerationMode('image')
-  state.setMediaFilter('images')
-
-  state = useStore.getState()
-  const candidates = visibleImageModels(state.models)
-  const requested = action.modelType
-    ? candidates.find(model => model.model_type === action.modelType)
-    : undefined
-  if (action.modelType && !requested) {
-    throw new Error(`El modelo ${action.modelType} no está instalado, habilitado o no admite texto a imagen.`)
-  }
-  const current = candidates.find(model => model.model_type === state.params.model_type)
-  const selected = requested || current || candidates.find(model => model.is_downloaded) || candidates[0]
-  if (!selected) {
-    throw new Error('No hay ningún modelo de imagen instalado y habilitado.')
-  }
-
-  if (state.params.model_type !== selected.model_type) state.selectModel(selected.model_type)
-  await useStore.getState().loadModelOptions(selected.model_type)
-
-  state = useStore.getState()
-  state.setStartImage(null)
-  state.setEndImage(null)
-  state.setOutputCount(action.outputCount ?? 1)
-  if (action.aspectRatio) state.setAspectRatio(action.aspectRatio)
-  if (action.resolutionPreset) state.setResolutionPreset(action.resolutionPreset)
-
-  const params: Record<string, unknown> = {
-    prompt: action.prompt,
-    image_mode: 1,
-    video_length: 1,
-    image_start: undefined,
-    image_end: undefined,
-    image_prompt_type: '',
-  }
-  if (action.resolution) params.resolution = action.resolution
-  if (action.negativePrompt !== undefined) params.negative_prompt = action.negativePrompt
-  if (action.seed !== undefined) params.seed = action.seed
-  if (action.inferenceSteps !== undefined) params.num_inference_steps = action.inferenceSteps
-  if (action.guidanceScale !== undefined) params.guidance_scale = action.guidanceScale
-  state.setParams(params)
-
-  const resolution = useStore.getState().params.resolution || useStore.getState().resolutionPreset
-  return `He preparado Studio → Image con ${selected.name}, ${resolution} y el prompt indicado.`
-}
-
-/** See prepareVideoForAgent: canonical registry entry point for Studio Image. */
-export async function prepareImageForAgent(action: AgentPrepareImageAction): Promise<string> {
-  return prepareImage(action)
-}
-
-let prepared3dPreset = 'balanced'
-
-async function prepare3d(action: AgentPrepare3dAction): Promise<string> {
-  let state = useStore.getState()
-  if (!state.modelsLoaded) await state.loadModels()
-  state = useStore.getState()
-  state.setSettingsOpen(false)
-  state.setDashboardOpen(false)
-  state.setSidebarMode('studio')
-  state.setSidebarOpen(true)
-  state.setGenerationMode('model3d')
-  state.setMediaFilter('model3d')
-
-  state = useStore.getState()
-  const families = getFamiliesForMode('model3d', state.families)
-  const candidates = families.flatMap(family => getModelsForFamily(family.id, state.models, 'model3d'))
-    .filter(model => !model.tool_only)
-  const requested = action.modelType
-    ? candidates.find(model => model.model_type === action.modelType)
-    : undefined
-  if (action.modelType && !requested) {
-    throw new Error(`El modelo 3D ${action.modelType} no está disponible.`)
-  }
-  const current = candidates.find(model => model.model_type === state.params.model_type)
-  const selected = requested || current || candidates[0]
-  if (!selected) throw new Error('No hay ningún modelo Hunyuan3D disponible.')
-  if (state.params.model_type !== selected.model_type) state.selectModel(selected.model_type)
-  useStore.getState().setParams({
-    prompt: action.prompt,
-    seed: action.seed ?? 1234,
-  })
-  prepared3dPreset = action.preset || 'balanced'
-  return `He preparado Studio → 3D con ${selected.name}, preset ${prepared3dPreset} y el prompt indicado. La pestaña 3D solo muestra resultados; la creación queda en Studio.`
-}
-
-/** See prepareVideoForAgent: canonical registry entry point for Studio 3D. */
-export async function prepare3dForAgent(action: AgentPrepare3dAction): Promise<string> {
-  return prepare3d(action)
-}
-
-async function startPreparedGeneration(): Promise<{ message: string; taskId?: string }> {
-  const state = useStore.getState()
-  if (state.generationMode === 'model3d') {
-    const { startHunyuan3DJob } = await import('../../api/client')
-    const job = await startHunyuan3DJob({
-      operation: 'generate',
-      model_id: String(state.params.model_type || ''),
-      prompt: String(state.params.prompt || ''),
-      workspace: state.activeWorkspace || 'default',
-      preset: prepared3dPreset,
-      seed: typeof state.params.seed === 'number' ? state.params.seed : 1234,
-    })
-    if (!job.job_id) throw new Error('Hunyuan3D devolvió éxito sin jobId; no considero la generación encolada.')
-    return {
-      taskId: job.job_id,
-      message: `He enviado el modelo 3D a Hunyuan3D (${job.job_id}). Aparecerá en la galería 3D al terminar.`,
-    }
-  }
-  const before = useStore.getState().jobs
-  const knownJobs = new Set(before)
-  await useStore.getState().startGeneration()
-  const created = useStore.getState().jobs.find(job => !knownJobs.has(job))
-  if (!created) throw new Error('HocusPocus no creó una tarea; revisa los requisitos del modelo y los campos visibles.')
-  if (created.status === 'failed') throw new Error(created.error || created.message || 'La generación no pudo entrar en cola.')
-  if (!created.id) throw new Error('HocusPocus devolvió éxito sin taskId; no considero la generación encolada.')
-  const mode = useStore.getState().generationMode
-  const kind = mode === 'image' ? 'imagen' : mode === 'audio' ? 'pista de audio' : 'vídeo'
-  return {
-    taskId: created.id,
-    message: `He enviado la ${kind} a la cola (${created.id}).`,
-  }
-}
-
-/**
- * Queue the form currently prepared by one of the Studio prepare actions.
- * This remains a single bridge so the registered and legacy runners cannot
- * drift in how they verify the returned task identity.
- */
-export async function startPreparedGenerationForAgent(): Promise<{ message: string; taskId?: string }> {
-  return startPreparedGeneration()
-}
-
-/** Canonical Studio Audio form bridge; the implementation stays lazy. */
-export async function prepareAudioForAgent(action: AgentPrepareAudioAction): Promise<string> {
-  const { prepareAudio } = await import('./audioActions')
-  return prepareAudio(action)
-}
-
 /** Canonical Studio SFX-pack bridge; the implementation stays lazy. */
 export async function queueSfxPackForAgent(action: AgentQueueSfxPackAction): Promise<string> {
   const { queueSfxPack } = await import('./audioActions')
   return queueSfxPack(action)
-}
-
-/** Canonical Studio references bridge; the implementation stays lazy. */
-export async function attachStudioReferencesForAgent(action: AgentAttachStudioReferencesAction): Promise<string> {
-  const { attachStudioReferences } = await import('./studioGuidance')
-  return attachStudioReferences(action)
-}
-
-/** Canonical Studio LoRA bridge; the implementation stays lazy. */
-export async function configureStudioLorasForAgent(action: AgentConfigureStudioLorasAction): Promise<string> {
-  const { configureStudioLoras } = await import('./studioGuidance')
-  return configureStudioLoras(action)
 }
 
 export async function executeAgentActions(
@@ -2977,44 +2716,28 @@ export async function executeAgentActions(
         openAgentSeriesSection(action.section)
         results.push({ action, ok: true, message: `He abierto Series Lab → ${action.section}.` })
       } else if (action.type === 'prepare_video') {
-        const message = await prepareVideo(action)
+        const outcome = await defaultApplicationAdapters.studio.prepareVideo(action)
         preparedStudio = true
-        results.push({ action, ok: true, message })
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'prepare_image') {
-        const message = await prepareImage(action)
+        const outcome = await defaultApplicationAdapters.studio.prepareImage(action)
         preparedStudio = true
-        results.push({ action, ok: true, message })
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'prepare_audio') {
-        const { prepareAudio } = await import('./audioActions')
-        const message = await prepareAudio(action)
+        const outcome = await defaultApplicationAdapters.studio.prepareAudio(action)
         preparedStudio = true
-        results.push({ action, ok: true, message })
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'prepare_3d') {
-        const message = await prepare3d(action)
+        const outcome = await defaultApplicationAdapters.studio.prepare3d(action)
         preparedStudio = true
-        results.push({ action, ok: true, message })
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'queue_sfx_pack') {
         const { queueSfxPack } = await import('./audioActions')
         results.push({ action, ok: true, message: await queueSfxPack(action) })
       } else if (action.type === 'start_generation') {
         if (!preparedStudio) throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
-        const outcome = await startPreparedGeneration()
-        results.push({
-          action,
-          ok: true,
-          message: outcome.message,
-          report: executionReport({
-            state: 'queued',
-            message: outcome.message,
-            taskId: outcome.taskId,
-            recoverable: false,
-            executionKey: executionKey({
-              workspace: useStore.getState().activeWorkspace || 'default',
-              type: action.type,
-              params: action,
-            }),
-          }),
-        })
+        const outcome = await defaultApplicationAdapters.studio.startGeneration(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'create_story') {
         const outcome = await defaultApplicationAdapters.storyLab.create(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
@@ -3183,11 +2906,11 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.comic.generatePanel(action.pageNumber, action.panelNumber, onStep)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'attach_studio_references') {
-        const { attachStudioReferences } = await import('./studioGuidance')
-        results.push({ action, ok: true, message: await attachStudioReferences(action) })
+        const outcome = await defaultApplicationAdapters.studio.attachReferences(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'configure_studio_loras') {
-        const { configureStudioLoras } = await import('./studioGuidance')
-        results.push({ action, ok: true, message: await configureStudioLoras(action) })
+        const outcome = await defaultApplicationAdapters.studio.configureLoras(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'inspect_queue') {
         const outcome = await defaultApplicationAdapters.queue.inspect(action.scope)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
