@@ -32,8 +32,6 @@ const SLICE_AGENT_IMPORT_ALLOWLIST = [
 ]
 
 const LEGACY_EXECUTE_ALLOWLIST = [
-  'attach_videoclip_alternative_song',
-  'mount_videoclip_alternative_song',
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
@@ -202,7 +200,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
   assert.equal(registered.length, 73)
-  assert.equal(legacy.length, 2)
+  assert.equal(legacy.length, 0)
 })
 
 test('agentActions.ts and labActions.ts keep their current module graph until a slice PR shrinks it', () => {

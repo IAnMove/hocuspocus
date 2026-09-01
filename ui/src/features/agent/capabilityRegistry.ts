@@ -277,10 +277,8 @@ defineCapability<AgentAttachVideoclipAlternativeSongAction>({
   },
   validate(action) { return action.videoclipName && action.audioOutputName ? [] : ['videoclip and audio names are required'] },
   async prepare(action) { return action },
-  async execute(action) {
-    const { attachAgentVideoclipAlternativeSong } = await import('./alternativeSongActions')
-    const outcome = await attachAgentVideoclipAlternativeSong(action)
-    return { message: outcome.message, report: outcome.report, target: outcome.report.target, outputNames: outcome.report.outputNames }
+  async execute(action, context) {
+    return context.adapters.videoclips.attachAlternativeSong(action)
   },
   correlate(_action, outcome) { return outcome.target },
   async track(_action, outcome) { return outcome },
@@ -316,10 +314,8 @@ defineCapability<AgentMountVideoclipAlternativeSongAction>({
   },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
   async prepare(action) { return action },
-  async execute(action) {
-    const { mountAgentVideoclipAlternativeSong } = await import('./alternativeSongActions')
-    const outcome = await mountAgentVideoclipAlternativeSong(action)
-    return { message: outcome.message, report: outcome.report, target: outcome.report.target, taskId: outcome.report.taskId, outputNames: outcome.report.outputNames }
+  async execute(action, context) {
+    return context.adapters.videoclips.mountAlternativeSong(action)
   },
   correlate(_action, outcome) { return outcome.target },
   async track(_action, outcome) { return outcome },
