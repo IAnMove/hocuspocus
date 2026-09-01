@@ -5,8 +5,8 @@ export async function create(command: CreateComicCommand) {
   return createFilledComic(command)
 }
 
-export async function generate(command: GenerateComicCommand, expectedProjectId?: string) {
-  return generateFilledComicArtwork(command, undefined, expectedProjectId)
+export async function generate(command: GenerateComicCommand) {
+  return generateFilledComicArtwork(command)
 }
 
 export async function generatePanel(pageNumber: number, panelNumber: number) {

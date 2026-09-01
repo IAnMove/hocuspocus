@@ -92,6 +92,7 @@ export interface ComicAdapter {
   open(): Promise<AdapterOutcome>
   create(action: AgentCreateComicAction): Promise<AdapterOutcome>
   generate(action: AgentGenerateComicAction, expectedProjectId?: string): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }>
+  generatePanel(pageNumber: number, panelNumber: number): Promise<AdapterOutcome>
 }
 export interface VideoEditorAdapter {
   open(): Promise<AdapterOutcome>
@@ -392,20 +393,20 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   adapters.comic = {
     open: () => navigate('comics'),
     async create(action) {
-      await navigate('comics')
-      const { createFilledComic } = await import('./labActions')
-      const message = await createFilledComic(action)
-      const { useComicStore } = await import('../comics/store')
-      const project = useComicStore.getState().project
-      return { message, target: { kind: 'comic', id: project.id, title: project.title } }
+      const { create } = await import('../comics/adapters')
+      return presentComicSliceResult(await create(action))
     },
     async generate(action, expectedProjectId) {
-      await navigate('comics')
-      const { generateFilledComicArtwork } = await import('./labActions')
-      const result = await generateFilledComicArtwork(action, undefined, expectedProjectId)
+      const { bindGenerateComicTarget } = await import('./agentContract')
       const { useComicStore } = await import('../comics/store')
-      const project = useComicStore.getState().project
-      return { ...result, target: { kind: 'comic', id: project.id, title: project.title } }
+      const current = useComicStore.getState().project
+      bindGenerateComicTarget(expectedProjectId, current.id, current.title)
+      const { generate } = await import('../comics/adapters')
+      return presentComicSliceResult(await generate(action))
+    },
+    async generatePanel(pageNumber, panelNumber) {
+      const { generatePanel } = await import('../comics/adapters')
+      return presentComicSliceResult(await generatePanel(pageNumber, panelNumber))
     },
   }
   adapters.videoEditor = {
@@ -689,6 +690,19 @@ async function presentSeriesSliceResult(result: CommandResult): Promise<AdapterO
     }
   }
   return { ...outcome, taskId: result.taskIds[0] }
+}
+
+async function presentComicSliceResult(result: CommandResult): Promise<AdapterOutcome & { state: 'completed' | 'partial' | 'failed' }> {
+  await navigate('comics')
+  const meta = result.artifacts[0]?.metadata || {}
+  const summary = typeof meta.summary === 'string' ? meta.summary : 'Comics listo.'
+  const title = typeof meta.title === 'string' ? meta.title : (result.entities[0]?.id || 'comic')
+  const state = result.status === 'partial' ? 'partial' : result.status === 'failed' ? 'failed' : 'completed'
+  return {
+    message: summary,
+    target: { kind: 'comic', id: result.entities[0]?.id || title, title },
+    state,
+  }
 }
 
 export const defaultApplicationAdapters = createDefaultApplicationAdapters()

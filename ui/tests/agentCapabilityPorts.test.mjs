@@ -52,7 +52,6 @@ const LEGACY_EXECUTE_ALLOWLIST = [
   'retry_task',
   'select_workspace',
   'create_workspace',
-  'generate_comic_panel',
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
@@ -241,7 +240,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
   assert.equal(registered.length, 73)
-  assert.equal(legacy.length, 17)
+  assert.equal(legacy.length, 16)
 })
 
 test('agentActions.ts and labActions.ts keep their current module graph until a slice PR shrinks it', () => {

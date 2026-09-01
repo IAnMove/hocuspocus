@@ -1,17 +1,43 @@
+import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
 import { useStore } from '../../stores/useStore'
-import type { AgentCreateComicAction, AgentGenerateComicAction } from '../agent/agentActions'
+import type { CreateComicCommand, GenerateComicCommand } from './commands'
 
-export type { AgentCreateComicAction, AgentGenerateComicAction }
-
-function showComics(): void {
-  const state = useStore.getState()
-  state.setSettingsOpen(false)
-  state.setDashboardOpen(false)
-  state.setMediaFilter('comics')
-  state.setSidebarOpen(false)
+function workspaceName(): string {
+  return useStore.getState().activeWorkspace || 'default'
 }
 
-export async function createFilledComic(action: AgentCreateComicAction): Promise<string> {
+function comicResult(
+  project: { id: string; title: string },
+  message: string,
+  extra: {
+    status?: CommandResult['status']
+    generated?: number
+    failed?: number
+    cancelled?: boolean
+  } = {},
+): CommandResult {
+  const entity = { kind: 'comic', id: project.id, workspaceId: workspaceName() }
+  return commandResultFromSlice({
+    status: extra.status,
+    entity,
+    navigationTarget: { destination: 'comics', entity },
+    artifacts: [{
+      id: 'reply',
+      kind: 'document',
+      owner: entity,
+      uri: 'comics:reply',
+      metadata: {
+        summary: message,
+        title: project.title,
+        ...(extra.generated == null ? {} : { generated: extra.generated }),
+        ...(extra.failed == null ? {} : { failed: extra.failed }),
+        ...(extra.cancelled == null ? {} : { cancelled: extra.cancelled }),
+      },
+    }],
+  })
+}
+
+export async function createFilledComic(action: CreateComicCommand): Promise<CommandResult> {
   const [{ useComicStore }, { comicId, projectFromPlan }] = await Promise.all([
     import('./store'),
     import('./model'),
@@ -159,7 +185,6 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
   }
   useComicStore.getState().setProject(project)
   useComicStore.setState({ dirty: true })
-  showComics()
   const stored = useComicStore.getState().project
   const storedPanels = stored.pages.reduce((sum, page) => (
     sum + page.elements.filter(element => element.type === 'panel' && !element.parentId).length
@@ -167,23 +192,22 @@ export async function createFilledComic(action: AgentCreateComicAction): Promise
   if (stored.pages.length !== requestedPages.length || storedPanels !== allPanels.length) {
     throw new Error(`El cómic guardado tiene ${stored.pages.length} páginas y ${storedPanels} viñetas; pediste ${requestedPages.length} páginas y ${allPanels.length} viñetas.`)
   }
-  return `He creado desde cero “${project.title}” con ${requestedPages.length} páginas, ${characters.length} personajes y ${allPanels.length} viñetas. Comic Director usará ${provider === 'minimax' ? 'MiniMax image-01' : imageModel || 'el modelo local seleccionado'}. No he generado imágenes todavía.`
+  return comicResult(
+    project,
+    `He creado desde cero “${project.title}” con ${requestedPages.length} páginas, ${characters.length} personajes y ${allPanels.length} viñetas. Comic Director usará ${provider === 'minimax' ? 'MiniMax image-01' : imageModel || 'el modelo local seleccionado'}. No he generado imágenes todavía.`,
+  )
 }
 
 export async function generateFilledComicArtwork(
-  action: AgentGenerateComicAction,
+  action: GenerateComicCommand,
   onProgress?: (message: string) => void,
-  expectedProjectId?: string,
-): Promise<{ message: string; state: 'completed' | 'partial' | 'failed'; generated: number; failed: number; cancelled: boolean }> {
-  showComics()
+): Promise<CommandResult> {
   const [{ useComicStore }, { comicId }, { generateDirectorArtwork }] = await Promise.all([
     import('./store'),
     import('./model'),
     import('./generateArtwork'),
   ])
-  const { bindGenerateComicTarget } = await import('../agent/agentContract')
   const state = useComicStore.getState()
-  bindGenerateComicTarget(expectedProjectId, state.project.id, state.project.title)
   if (!state.project.director) {
     const project = state.project
     const characters = (project.characters.length ? project.characters : [{
@@ -336,44 +360,50 @@ export async function generateFilledComicArtwork(
       onProgress?.(`${message} (${current}/${total})`)
     },
   })
-  const provider = useComicStore.getState().project.director?.provider
+  const project = useComicStore.getState().project
+  const provider = project.director?.provider
   const providerLabel = provider === 'minimax' ? 'MiniMax image-01' : 'el proveedor local configurado'
   if (!result.total) {
-    return { message: 'Todas las viñetas de este cómic ya tenían dibujo.', state: 'completed', generated: 0, failed: 0, cancelled: false }
+    return comicResult(project, 'Todas las viñetas de este cómic ya tenían dibujo.', {
+      status: 'completed', generated: 0, failed: 0, cancelled: false,
+    })
   }
   if (result.cancelled) {
-    return {
-      message: `He cancelado el lote con ${result.generated} viñetas terminadas y ${result.failed} fallidas; no he perdido lo ya dibujado.`,
-      state: result.generated > 0 ? 'partial' : 'failed',
-      generated: result.generated,
-      failed: result.failed,
-      cancelled: true,
-    }
+    return comicResult(
+      project,
+      `He cancelado el lote con ${result.generated} viñetas terminadas y ${result.failed} fallidas; no he perdido lo ya dibujado.`,
+      {
+        status: result.generated > 0 ? 'partial' : 'failed',
+        generated: result.generated,
+        failed: result.failed,
+        cancelled: true,
+      },
+    )
   }
   if (result.failed) {
-    return {
-      message: `He dibujado ${result.generated} viñetas con ${providerLabel} y han fallado ${result.failed}. Puedo reanudar desde la primera pendiente o reintentar las fallidas.`,
-      state: result.generated > 0 ? 'partial' : 'failed',
-      generated: result.generated,
-      failed: result.failed,
-      cancelled: false,
-    }
+    return comicResult(
+      project,
+      `He dibujado ${result.generated} viñetas con ${providerLabel} y han fallado ${result.failed}. Puedo reanudar desde la primera pendiente o reintentar las fallidas.`,
+      {
+        status: result.generated > 0 ? 'partial' : 'failed',
+        generated: result.generated,
+        failed: result.failed,
+        cancelled: false,
+      },
+    )
   }
-  return {
-    message: `He dibujado ${result.generated} viñetas con ${providerLabel}. Aparecen dentro de cada recuadro al terminar.`,
-    state: 'completed',
-    generated: result.generated,
-    failed: 0,
-    cancelled: false,
-  }
+  return comicResult(
+    project,
+    `He dibujado ${result.generated} viñetas con ${providerLabel}. Aparecen dentro de cada recuadro al terminar.`,
+    { status: 'completed', generated: result.generated, failed: 0, cancelled: false },
+  )
 }
 
 export async function generateComicPanelArtwork(
   pageNumber: number,
   panelNumber: number,
   onProgress?: (message: string) => void,
-): Promise<string> {
-  showComics()
+): Promise<CommandResult> {
   const [{ useComicStore }, { generateDirectorArtwork }] = await Promise.all([
     import('./store'),
     import('./generateArtwork'),
@@ -387,5 +417,8 @@ export async function generateComicPanelArtwork(
     onProgress: (message, current, total) => onProgress?.(`${message} (${current}/${total})`),
   })
   if (result.failed) throw new Error(`No pude regenerar la viñeta ${panelNumber} de la página ${pageNumber}.`)
-  return `He regenerado únicamente la viñeta ${panelNumber} de la página ${pageNumber}; las demás imágenes permanecen intactas (${result.generated}/${result.total}).`
+  return comicResult(
+    useComicStore.getState().project,
+    `He regenerado únicamente la viñeta ${panelNumber} de la página ${pageNumber}; las demás imágenes permanecen intactas (${result.generated}/${result.total}).`,
+  )
 }

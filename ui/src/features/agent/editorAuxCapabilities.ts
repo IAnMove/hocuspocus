@@ -86,17 +86,8 @@ export function registerEditorAuxCapabilities(register: typeof defineCapability)
         : ['page and panel numbers plus confirmation are required']
     },
     async prepare(action) { return action },
-    async execute(action) {
-      const [{ generateComicPanelArtwork }, { useComicStore }] = await Promise.all([
-        import('./labActions'),
-        import('../comics/store'),
-      ])
-      const message = await generateComicPanelArtwork(action.pageNumber, action.panelNumber)
-      const project = useComicStore.getState().project
-      return {
-        message,
-        target: { kind: 'comic', id: project.id, title: project.title },
-      }
+    async execute(action, context) {
+      return context.adapters.comic.generatePanel(action.pageNumber, action.panelNumber)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
