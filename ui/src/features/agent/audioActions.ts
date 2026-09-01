@@ -1,77 +1,16 @@
 import { useStore } from '../../stores/useStore'
 import type { AgentPrepareAudioAction, AgentQueueSfxPackAction } from './agentActions'
-import type { AgentSfxClip } from './sfxPack'
-
-const AUDIO_SUB_MODE_DEFAULTS: Record<AgentPrepareAudioAction['subMode'], string> = {
-  speech: 'kugelaudio_0_open',
-  music: 'ace_step_v1_5_xl_sft_lm_4b',
-  sfx: 'mmaudio_v2',
-}
-
-function openStudioAudio(subMode: AgentPrepareAudioAction['subMode']): void {
-  const state = useStore.getState()
-  state.setSettingsOpen(false)
-  state.setDashboardOpen(false)
-  state.setSidebarMode('studio')
-  state.setSidebarOpen(true)
-  state.setGenerationMode('audio')
-  state.setAudioSubMode(subMode)
-}
-
-async function selectAudioModel(preferred?: string, subMode: AgentPrepareAudioAction['subMode'] = 'sfx'): Promise<string> {
-  let state = useStore.getState()
-  if (!state.modelsLoaded) await state.loadModels()
-  state = useStore.getState()
-  const fallback = AUDIO_SUB_MODE_DEFAULTS[subMode]
-  const requested = preferred && state.models.some(model => model.model_type === preferred)
-    ? preferred
-    : state.params.model_type && state.models.some(model => model.model_type === state.params.model_type)
-      ? state.params.model_type
-      : fallback
-  if (requested && state.params.model_type !== requested) {
-    state.selectModel(requested)
-  }
-  const selected = useStore.getState().params.model_type || requested || fallback
-  const selectedModel = useStore.getState().models.find(model => model.model_type === selected)
-  return selectedModel?.name || selected
-}
-
-function applySfxClip(clip: AgentSfxClip, negativePrompt: string): void {
-  const state = useStore.getState()
-  state.setDurationSeconds(Math.max(1, Math.min(20, clip.durationSeconds)))
-  state.setParams({
-    prompt: clip.prompt,
-    MMAudio_prompt: clip.prompt,
-    MMAudio_neg_prompt: negativePrompt || 'music, speech, talking, vocals, long melody',
-    video_guide: undefined,
-  })
-}
+import { applySfxClip, openStudioAudio, prepareAudio as prepareStudioAudio, selectAudioModel } from '../studio/actions'
 
 export async function prepareAudio(action: AgentPrepareAudioAction): Promise<string> {
-  openStudioAudio(action.subMode)
-  const modelName = await selectAudioModel(action.modelType, action.subMode)
-  const state = useStore.getState()
-  if (action.subMode === 'sfx') {
-    applySfxClip({
-      name: 'sfx',
-      prompt: action.prompt,
-      durationSeconds: action.durationSeconds ?? 2,
-    }, action.negativePrompt || '')
-  } else {
-    state.setDurationSeconds(action.durationSeconds ?? state.durationSeconds)
-    state.setParams({
-      prompt: action.prompt,
-      negative_prompt: action.negativePrompt || '',
-    })
-  }
-  const duration = useStore.getState().durationSeconds
-  const room = action.subMode === 'sfx' ? 'SFX' : action.subMode === 'music' ? 'Music' : 'Speech'
-  return `He preparado Studio → Audio → ${room} con ${modelName}, ${duration.toFixed(0)} s y el prompt indicado. La pestaña Audios solo muestra resultados; la creación queda en Studio.`
+  const result = await prepareStudioAudio(action)
+  const summary = result.artifacts[0]?.metadata?.summary
+  return typeof summary === 'string' ? summary : 'Studio → Audio listo.'
 }
 
 export async function queueMusic(action: AgentPrepareAudioAction): Promise<{ message: string; taskId: string }> {
   if (action.subMode !== 'music') throw new Error('queueMusic solo acepta peticiones de música.')
-  await prepareAudio(action)
+  await prepareStudioAudio(action)
   const known = new Set(useStore.getState().jobs)
   await useStore.getState().startGeneration()
   const created = useStore.getState().jobs.find(job => !known.has(job))

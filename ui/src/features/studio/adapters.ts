@@ -1,10 +1,28 @@
 import {
+  attachStudioReferences,
+  configureStudioLoras,
+  prepare3d,
+  prepareAudio,
+  prepareImage,
+  prepareVideo,
+  startPreparedGeneration,
+} from './actions'
+import {
   cancelCanonicalQueueTask,
   inspectCanonicalQueue,
   resumeCanonicalQueueTask,
   retryCanonicalQueueTask,
 } from './queueActions'
-import type { InspectQueueCommand, QueueTaskCommand } from './commands'
+import type {
+  AttachStudioReferencesCommand,
+  ConfigureStudioLorasCommand,
+  InspectQueueCommand,
+  Prepare3dCommand,
+  PrepareAudioCommand,
+  PrepareImageCommand,
+  PrepareVideoCommand,
+  QueueTaskCommand,
+} from './commands'
 
 export async function inspect(command: InspectQueueCommand) {
   return inspectCanonicalQueue(command.scope)
@@ -20,4 +38,32 @@ export async function resume(command: QueueTaskCommand) {
 
 export async function retry(command: QueueTaskCommand) {
   return retryCanonicalQueueTask(command.taskId, command.confirm)
+}
+
+export async function prepareVideoForm(command: PrepareVideoCommand) {
+  return prepareVideo(command)
+}
+
+export async function prepareImageForm(command: PrepareImageCommand) {
+  return prepareImage(command)
+}
+
+export async function prepareAudioForm(command: PrepareAudioCommand) {
+  return prepareAudio(command)
+}
+
+export async function prepare3dForm(command: Prepare3dCommand) {
+  return prepare3d(command)
+}
+
+export async function startGeneration() {
+  return startPreparedGeneration()
+}
+
+export async function attachReferences(command: AttachStudioReferencesCommand) {
+  return attachStudioReferences(command)
+}
+
+export async function configureLoras(command: ConfigureStudioLorasCommand) {
+  return configureStudioLoras(command)
 }
