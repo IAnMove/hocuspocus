@@ -6,7 +6,7 @@
  * agentActions import and, in turn, avoids an initialization cycle when the
  * parent capability registry imports this file as a side effect.
  */
-import type { defineCapability, CapabilityDefinition, CapabilityExecutionContext, CapabilityExecutionOutcome } from './capabilityRegistry'
+import type { defineCapability, CapabilityDefinition, CapabilityExecutionOutcome } from './capabilityRegistry'
 import type {
   AgentAction,
   AgentAttachStudioReferencesAction,
@@ -188,7 +188,6 @@ function validType<T extends AgentAction>(type: T['type'], action: AgentAction):
 
 async function bridgeSfx<TAction extends AgentAction>(
   action: TAction,
-  _context: CapabilityExecutionContext,
 ): Promise<CapabilityExecutionOutcome> {
   if (action.type !== 'queue_sfx_pack') throw new Error(`No hay puente Studio para ${action.type}.`)
   const { queueSfxPackForAgent } = await import('./agentActions')
