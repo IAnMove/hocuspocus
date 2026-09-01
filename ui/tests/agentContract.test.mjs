@@ -600,6 +600,33 @@ test('a stale remote snapshot does not replace a newer local Wizard turn', async
   )
 })
 
+test('a busy workspace switch does not rebind or accept writes for another Wizard chat', async () => {
+  const {
+    isWizardConversationWriteCurrent,
+    shouldFollowWizardWorkspace,
+  } = await import('../src/features/agent/wizardConversationSync.ts')
+
+  assert.equal(shouldFollowWizardWorkspace({
+    activeWorkspace: 'consola-b',
+    conversationWorkspace: 'consola-b',
+    busy: false,
+  }), false)
+  assert.equal(shouldFollowWizardWorkspace({
+    activeWorkspace: 'consola-b',
+    conversationWorkspace: 'consola-a',
+    busy: true,
+  }), false)
+  assert.equal(shouldFollowWizardWorkspace({
+    activeWorkspace: 'consola-b',
+    conversationWorkspace: 'consola-a',
+    busy: false,
+  }), true)
+
+  assert.equal(isWizardConversationWriteCurrent('consola-a', 'consola-b'), false)
+  assert.equal(isWizardConversationWriteCurrent('consola-a', 'consola-a'), true)
+  assert.equal(isWizardConversationWriteCurrent('', 'consola-a'), false)
+})
+
 test('execution cards expose five controls and keep the same id on poll', async () => {
   const { cardFromReport, applyPollToCard } = await import('../src/features/agent/executionCards.ts')
   const card = cardFromReport({

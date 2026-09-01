@@ -14,7 +14,12 @@ import {
   type AgentActionResult,
 } from './agentActions'
 import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
-import { applyRemoteWizardConversation, WIZARD_WELCOME_TEXT } from './wizardConversationSync'
+import {
+  applyRemoteWizardConversation,
+  isWizardConversationWriteCurrent,
+  shouldFollowWizardWorkspace,
+  WIZARD_WELCOME_TEXT,
+} from './wizardConversationSync'
 import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
@@ -201,6 +206,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       messages,
       executions: cards,
     }).then(saved => {
+      if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
       conversationRevisionRef.current = saved.revision
     }).catch(async () => {
       // A second tab may have advanced the CAS revision. Re-read and merge by
@@ -208,7 +214,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       // backend revision. Local storage remains the fallback if this fails.
       try {
         const current = await fetchWizardConversation(conversationWorkspace)
-        if (!mountedRef.current || conversationWorkspaceRef.current !== conversationWorkspace) return
+        if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
         const choice = applyRemoteWizardConversation({
           localMessages: messagesRef.current,
           localRevision: conversationRevisionRef.current,
@@ -226,9 +232,10 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   }, [conversationWorkspace, hydratedWorkspace, messages])
 
   useEffect(() => {
+    if (workspace !== conversationWorkspace) return
     let cancelled = false
-    void fetchWizardConversation(workspace).then(payload => {
-      if (cancelled) return
+    void fetchWizardConversation(conversationWorkspace).then(payload => {
+      if (cancelled || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
       const choice = applyRemoteWizardConversation({
         localMessages: messagesRef.current,
         localRevision: conversationRevisionRef.current,
@@ -242,26 +249,21 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       // merge remote-only messages. Use a fresh array so the persistence
       // effect retries the canonical save with that revision.
       setMessages([...choice.messages] as AgentMessage[])
-      setHydratedWorkspace(workspace)
+      setHydratedWorkspace(conversationWorkspace)
     }).catch(() => {
       // Fall back to the local cache already loaded for this workspace.
-      if (!cancelled) setHydratedWorkspace(workspace)
+      if (!cancelled && isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) {
+        setHydratedWorkspace(conversationWorkspace)
+      }
     })
     return () => { cancelled = true }
-  }, [workspace])
+  }, [conversationWorkspace, workspace])
 
   useEffect(() => {
-    if (workspace === conversationWorkspace) return
+    if (!shouldFollowWizardWorkspace({ activeWorkspace: workspace, conversationWorkspace, busy })) return
     conversationRevisionRef.current = 0
     skipNextConversationSaveRef.current = false
     setHydratedWorkspace(null)
-    if (busy) {
-      // A Wizard action changed workspace while this turn was executing.
-      // Keep the visible turn alive and persist it in the destination so its
-      // real action result is not lost when the footer updates.
-      setConversationWorkspace(workspace)
-      return
-    }
     setMessages(readMessages(workspace))
     setConversationWorkspace(workspace)
     setState('idle')

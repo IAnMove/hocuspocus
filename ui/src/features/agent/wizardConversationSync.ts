@@ -88,3 +88,17 @@ export function applyRemoteWizardConversation(input: {
   }
   return { source: 'remote', messages: remoteMessages, revision: remoteRevision }
 }
+
+/** Follow the footer workspace only after the in-flight turn finishes. */
+export function shouldFollowWizardWorkspace(input: {
+  activeWorkspace: string
+  conversationWorkspace: string
+  busy: boolean
+}): boolean {
+  return input.activeWorkspace !== input.conversationWorkspace && !input.busy
+}
+
+/** Drop async conversation writes that finished after the owner changed. */
+export function isWizardConversationWriteCurrent(owner: string, current: string): boolean {
+  return Boolean(owner) && owner === current
+}
