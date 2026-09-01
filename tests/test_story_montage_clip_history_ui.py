@@ -1,12 +1,14 @@
 from pathlib import Path
 
+from tests.api_client_source import api_client_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 TIMELINE = ROOT / "ui" / "src" / "features" / "stories" / "StoryProductionTimeline.tsx"
 HANDOFF = ROOT / "ui" / "src" / "features" / "stories" / "directorClipHandoff.ts"
 MEDIA = ROOT / "ui" / "src" / "components" / "MainContent" / "MediaFeedItem.tsx"
 MAIN = ROOT / "ui" / "src" / "components" / "MainContent" / "MainContent.tsx"
-CLIENT = ROOT / "ui" / "src" / "api" / "client.ts"
+
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 
 
@@ -39,7 +41,7 @@ def test_creator_handoff_reduces_multiclip_metadata_to_one_exact_slot():
 def test_generated_video_can_be_selected_and_returns_to_story_montage():
     media = MEDIA.read_text(encoding="utf-8")
     main = MAIN.read_text(encoding="utf-8")
-    client = CLIENT.read_text(encoding="utf-8")
+    client = api_client_source()
 
     assert "Usar en Montaje · clip" in media
     assert "writeDirectorClipReplacementResult" in media

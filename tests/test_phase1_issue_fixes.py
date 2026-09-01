@@ -10,6 +10,8 @@ import types
 import unittest
 from unittest import mock
 
+from tests.api_client_source import api_client_source
+
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
@@ -46,7 +48,6 @@ _LORAS_MULTIPLIERS_PATH = os.path.join(
     "utils",
     "loras_mutipliers.py",
 )
-_CLIENT_PATH = os.path.join(_ROOT, "ui", "src", "api", "client.ts")
 _STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
 _INPUTS_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "Sidebar", "InputsPanel.tsx",
@@ -151,7 +152,7 @@ class TestOutpaintSampling(unittest.TestCase):
         )
 
     def test_frontend_sends_the_visible_advanced_values(self):
-        client = _read(_CLIENT_PATH)
+        client = api_client_source()
         store = _read(_STORE_PATH)
         for field in (
             "num_inference_steps?: number",
@@ -1722,7 +1723,7 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
 
     def test_ui_replaces_misleading_controls_with_one_recommended_toggle(self):
         controls = _read(_OUTPAINT_CONTROLS_PATH)
-        client = _read(_CLIENT_PATH)
+        client = api_client_source()
         store = _read(_STORE_PATH)
         self.assertIn("Preserve original scene", controls)
         self.assertIn("outpaintMaskPreserving: true", store)
@@ -2674,7 +2675,7 @@ class TestModelVisibilityPersistence(unittest.TestCase):
 
     def test_server_and_frontend_use_durable_visibility(self):
         launch = _read(_LAUNCH_PATH)
-        client = _read(_CLIENT_PATH)
+        client = api_client_source()
         store = _read(_STORE_PATH)
         self.assertIn('@api.get("/api/v1/model-visibility")', launch)
         self.assertIn('@api.put("/api/v1/model-visibility")', launch)

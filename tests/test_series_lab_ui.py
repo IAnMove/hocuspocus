@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from tests.api_client_source import api_client_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SERIES = ROOT / "ui" / "src" / "features" / "series"
@@ -99,7 +101,7 @@ def test_backend_authority_selection_restore_and_recovery_cards_are_wired():
 def test_episode_proposal_uses_readable_cards_and_manual_editing():
     panel = source("SeriesEpisodePanel.tsx")
     review = source("SeriesEpisodeProposalReview.tsx")
-    client = (ROOT / "ui" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
+    client = api_client_source()
     assert "SeriesEpisodeProposalReview" in panel
     assert "Generated proposal — review and edit" in review
     assert "Internal IDs remain protected" in review

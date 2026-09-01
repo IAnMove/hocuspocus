@@ -52,7 +52,8 @@ sequence used by CI. The build output is `ui/dist`; do not edit it manually.
 ## Architecture
 
 - `src/api/client.ts` is the typed HTTP boundary. Browser code should use it
-  instead of creating feature-specific URL conventions.
+  instead of creating feature-specific URL conventions. Slice modules live
+  beside it and are reexported from `client.ts`.
 - `src/stores/useStore.ts` is the public Zustand facade. Extracted reducers
   and slices live beside it and must preserve that facade for existing views.
 - `src/features/` owns large workflows such as Series Lab, Story Lab and the
