@@ -94,11 +94,7 @@ const AGENT_ACTIONS_IMPORTS = [
 const LAB_ACTIONS_IMPORTS = [
   '../../api/client',
   '../../stores/useStore',
-  '../comics/generateArtwork',
-  '../comics/model',
   '../comics/store',
-  '../series/model',
-  '../series/store',
   '../stories/adaptations',
   '../stories/model',
   '../stories/musicModel',
@@ -110,6 +106,9 @@ const LAB_ACTIONS_IMPORTS = [
   './agentActions',
   './agentContract',
   './agentUiBus',
+  './comicLabActions',
+  './labActionHelpers',
+  './seriesLabActions',
 ]
 
 function walk(dir) {
