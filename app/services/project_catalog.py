@@ -374,9 +374,18 @@ def scan_project_catalog(
     return {"projects": values[start:end], "total": total, "warnings": warnings}
 
 
+def find_project(
+    roots: Iterable[Mapping[str, Any]],
+    project_id: str,
+) -> dict[str, Any] | None:
+    result = scan_project_catalog(roots)
+    return next((item for item in result["projects"] if item["id"] == project_id), None)
+
+
 __all__ = [
     "PROJECT_KINDS", "SCHEMA_NAME", "SCHEMA_VERSION", "ProjectCatalogError",
     "adapt_character_kit_library", "adapt_project_file", "adapt_series_library",
     "adapt_story_library",
-    "build_project_record", "scan_project_catalog", "validate_project_record",
+    "build_project_record", "find_project", "scan_project_catalog",
+    "validate_project_record",
 ]

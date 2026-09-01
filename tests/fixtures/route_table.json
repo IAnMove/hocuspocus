@@ -2943,13 +2943,33 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/projects",
+      "endpoint": "list_projects",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/projects.py",
+      "ordinal": 294
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}",
+      "endpoint": "get_project",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/projects.py",
+      "ordinal": 295
+    },
+    {
+      "method": "GET",
       "path": "/classic",
       "endpoint": "_classic_redirect",
       "status_code": null,
       "response_model": null,
       "include_in_schema": false,
       "source": "app/_launch_runtime.py",
-      "ordinal": 294
+      "ordinal": 296
     },
     {
       "method": "GET",
@@ -2959,7 +2979,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 295
+      "ordinal": 297
     }
   ]
 }
