@@ -19,12 +19,6 @@ import {
   openAgentStorySection,
 } from './agentUiBus'
 import {
-  cancelCanonicalQueueTask,
-  inspectCanonicalQueue,
-  resumeCanonicalQueueTask,
-  retryCanonicalQueueTask,
-} from './queueActions'
-import {
   createAgentWorkspace,
   selectAgentWorkspace,
 } from './workspaceActions'
@@ -211,8 +205,8 @@ export function registerNavigationQueueCapabilities(
       return action.scope === 'active' || action.scope === 'all' ? [] : ['queue scope is invalid']
     },
     async prepare(action) { return action },
-    async execute(action) {
-      return { message: await inspectCanonicalQueue(action.scope), target: ACTIVITY_TARGET }
+    async execute(action, context) {
+      return context.adapters.queue.inspect(action.scope)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -243,18 +237,18 @@ export function registerNavigationQueueCapabilities(
     resolve(raw) { return queueMutation('cancel_task', raw) },
     validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
     async prepare(action) { return action },
-    async execute(action) {
+    async execute(action, context) {
       // Preserve the special Comic Director batch cancellation bridge from
       // the legacy action runner before touching the canonical task API.
       const { requestComicArtworkCancel } = await import('../comics/generateArtwork')
       const cancelledBatch = requestComicArtworkCancel()
       try {
-        const message = await cancelCanonicalQueueTask(action.taskId, action.confirm)
+        const outcome = await context.adapters.queue.cancel(action.taskId, action.confirm)
         return {
+          ...outcome,
           message: cancelledBatch
-            ? `${message} También he pedido cancelar el lote de viñetas; las terminadas se conservan.`
-            : message,
-          target: ACTIVITY_TARGET,
+            ? `${outcome.message} También he pedido cancelar el lote de viñetas; las terminadas se conservan.`
+            : outcome.message,
         }
       } catch (error) {
         if (!cancelledBatch) throw error
@@ -293,11 +287,8 @@ export function registerNavigationQueueCapabilities(
     resolve(raw) { return queueMutation('resume_task', raw) },
     validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
     async prepare(action) { return action },
-    async execute(action) {
-      return {
-        message: await resumeCanonicalQueueTask(action.taskId, action.confirm),
-        target: ACTIVITY_TARGET,
-      }
+    async execute(action, context) {
+      return context.adapters.queue.resume(action.taskId, action.confirm)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -328,11 +319,8 @@ export function registerNavigationQueueCapabilities(
     resolve(raw) { return queueMutation('retry_task', raw) },
     validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
     async prepare(action) { return action },
-    async execute(action) {
-      return {
-        message: await retryCanonicalQueueTask(action.taskId, action.confirm),
-        target: ACTIVITY_TARGET,
-      }
+    async execute(action, context) {
+      return context.adapters.queue.retry(action.taskId, action.confirm)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },

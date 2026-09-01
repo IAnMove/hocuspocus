@@ -22,8 +22,6 @@ const AGENT_ROOT = join(SRC, 'features/agent')
 const FEATURES_ROOT = join(SRC, 'features')
 
 const SET_STATE_ALLOWLIST = [
-  ['queueActions.ts', 'cancelCanonicalQueueTask', 1],
-  ['queueActions.ts', 'resumeCanonicalQueueTask', 1],
 ]
 
 const SLICE_AGENT_IMPORT_ALLOWLIST = [
@@ -44,10 +42,6 @@ const LEGACY_EXECUTE_ALLOWLIST = [
   'start_generation',
   'attach_studio_references',
   'configure_studio_loras',
-  'inspect_queue',
-  'cancel_task',
-  'resume_task',
-  'retry_task',
   'select_workspace',
   'create_workspace',
 ]
@@ -69,7 +63,6 @@ const AGENT_ACTIONS_IMPORTS = [
   './capabilityRunner',
   './characterKitActions',
   './commandContract',
-  './queueActions',
   './sfxPack',
   './studioGuidance',
   './videoEditorActions',
@@ -193,7 +186,7 @@ test('useStore.setState in features/agent stays on the named allowlist outside a
     'Direct store writes in Agent Mode must shrink the allowlist when a function moves to a slice adapter, and must not grow. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(actual.reduce((total, row) => total + row[2], 0), 2)
+  assert.equal(actual.reduce((total, row) => total + row[2], 0), 0)
 })
 
 test('other feature slices do not import Agent Mode except the frozen UI-bus listeners', () => {
@@ -223,7 +216,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
   assert.equal(registered.length, 73)
-  assert.equal(legacy.length, 16)
+  assert.equal(legacy.length, 12)
 })
 
 test('agentActions.ts and labActions.ts keep their current module graph until a slice PR shrinks it', () => {
