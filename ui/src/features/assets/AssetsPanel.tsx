@@ -64,7 +64,8 @@ export function AssetsPanel() {
 
   const load = useCallback(async (append = false, offset = 0) => {
     const request = ++requestRef.current
-    append ? setLoadingMore(true) : setLoading(true)
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     setError('')
     try {
       const result = await fetchAssets({
