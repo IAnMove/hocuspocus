@@ -4,7 +4,7 @@ import { rememberedCharacterKitLibrary } from '../characters/session'
 import type { SeriesAssemblyJob } from '../series/assemblyContract'
 import type { SeriesJobStatus } from '../series/types'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentCommitSeriesCanonAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentCommitSeriesCanonAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentCreateWorkspaceAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentSelectWorkspaceAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
 import {
   executionKey,
   executionReport,
@@ -124,6 +124,10 @@ export interface QueueAdapter {
   resume(taskId: string, confirm: boolean): Promise<AdapterOutcome>
   retry(taskId: string, confirm: boolean): Promise<AdapterOutcome>
 }
+export interface WorkspaceAdapter {
+  select(action: AgentSelectWorkspaceAction): Promise<AdapterOutcome>
+  create(action: AgentCreateWorkspaceAction): Promise<AdapterOutcome>
+}
 
 export interface Video3DAdapter {
   open(animate?: boolean): Promise<AdapterOutcome>
@@ -141,6 +145,7 @@ export interface WizardApplicationAdapters {
   videoEditor: VideoEditorAdapter
   characterKit: CharacterKitAdapter
   queue: QueueAdapter
+  workspace: WorkspaceAdapter
   openTab(tab: AgentTab): Promise<AdapterOutcome>
 }
 
@@ -668,6 +673,16 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       return presentQueueSliceResult(await retry({ taskId, confirm: true }))
     },
   }
+  adapters.workspace = {
+    async select(action) {
+      const { selectWorkspace } = await import('../workspaces/adapters')
+      return presentWorkspaceSliceResult(await selectWorkspace({ workspaceName: action.workspaceName }))
+    },
+    async create(action) {
+      const { createWorkspace } = await import('../workspaces/adapters')
+      return presentWorkspaceSliceResult(await createWorkspace({ workspaceName: action.workspaceName }))
+    },
+  }
   adapters.video3d = {
     open: animate => navigate(animate ? 'animate_3d' : 'video_3d'),
     async applyRhythm(action) {
@@ -805,6 +820,17 @@ async function presentQueueSliceResult(result: CommandResult): Promise<AdapterOu
     message: summary,
     target: { kind: 'activity', id: result.entities[0]?.id || 'activity', title: 'Activity' },
     taskId: result.taskIds[0],
+  }
+}
+
+async function presentWorkspaceSliceResult(result: CommandResult): Promise<AdapterOutcome> {
+  const summary = typeof result.artifacts[0]?.metadata?.summary === 'string'
+    ? result.artifacts[0].metadata.summary
+    : 'Workspace listo.'
+  const name = String(result.artifacts[0]?.metadata?.title || result.entities[0]?.id || 'workspace')
+  return {
+    message: summary,
+    target: { kind: 'workspace', id: result.entities[0]?.id || name, title: name },
   }
 }
 

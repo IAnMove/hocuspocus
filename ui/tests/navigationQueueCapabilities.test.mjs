@@ -132,3 +132,37 @@ test('section capabilities retain the visible lab navigation effect', async () =
   window.removeEventListener('hocuspocus:story-section', onStory)
   window.removeEventListener('hocuspocus:series-section', onSeries)
 })
+
+test('workspace capabilities execute through adapters instead of Agent Mode helpers', async () => {
+  const { registerNavigationQueueCapabilities } = await import('../src/features/agent/navigationQueueCapabilities.ts')
+  const definitions = new Map()
+  registerNavigationQueueCapabilities(definition => {
+    definitions.set(definition.name, definition)
+    return definition
+  })
+  const seen = []
+  const context = {
+    adapters: {
+      workspace: {
+        async select(action) {
+          seen.push(['select', action.workspaceName])
+          return { message: `He cambiado a “${action.workspaceName}”.`, target: { kind: 'workspace', id: action.workspaceName, title: action.workspaceName } }
+        },
+        async create(action) {
+          seen.push(['create', action.workspaceName])
+          return { message: `He creado “${action.workspaceName}”.`, target: { kind: 'workspace', id: action.workspaceName, title: action.workspaceName } }
+        },
+      },
+    },
+  }
+
+  const selected = await definitions.get('select_workspace').execute(
+    { type: 'select_workspace', workspaceName: 'Faro' }, context,
+  )
+  const created = await definitions.get('create_workspace').execute(
+    { type: 'create_workspace', workspaceName: 'Nuevo taller' }, context,
+  )
+  assert.equal(selected.message, 'He cambiado a “Faro”.')
+  assert.equal(created.message, 'He creado “Nuevo taller”.')
+  assert.deepEqual(seen, [['select', 'Faro'], ['create', 'Nuevo taller']])
+})
