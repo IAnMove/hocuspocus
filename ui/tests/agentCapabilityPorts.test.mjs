@@ -42,8 +42,6 @@ const LEGACY_EXECUTE_ALLOWLIST = [
   'start_generation',
   'attach_studio_references',
   'configure_studio_loras',
-  'select_workspace',
-  'create_workspace',
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
@@ -67,7 +65,6 @@ const AGENT_ACTIONS_IMPORTS = [
   './studioGuidance',
   './videoEditorActions',
   './wizardContext',
-  './workspaceActions',
 ]
 
 const LAB_ACTIONS_IMPORTS = [
@@ -216,7 +213,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
   assert.equal(registered.length, 73)
-  assert.equal(legacy.length, 12)
+  assert.equal(legacy.length, 10)
 })
 
 test('agentActions.ts and labActions.ts keep their current module graph until a slice PR shrinks it', () => {
