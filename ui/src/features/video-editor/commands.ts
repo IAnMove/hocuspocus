@@ -25,10 +25,10 @@ export interface AddVideoEditorAudioCommand {
   outputName: string
 }
 
-export interface ValidateVideoEditorTimelineCommand {}
+export type ValidateVideoEditorTimelineCommand = Record<string, never>
 
 export interface ExportVideoEditorCommand {
   confirm: true
 }
 
-export interface TrackVideoEditorExportCommand {}
+export type TrackVideoEditorExportCommand = Record<string, never>
