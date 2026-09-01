@@ -6,7 +6,7 @@ import { Pill, SectionCard, SeriesField } from './components'
 import { SeriesEpisodeProposalReview } from './SeriesEpisodeProposalReview'
 import { inputClass, primaryButton, secondaryButton, textareaClass } from './styles'
 import type { SeriesEpisode, SeriesJobStatus, SeriesProject } from './types'
-import { listenForAgentSeriesPlanJob } from '../agent/agentUiBus'
+import { listenForAgentSeriesPlanJob } from '../../lib/uiBus'
 
 export function SeriesEpisodePanel({
   workspace, series, episode, updateEpisode, saveNow, reload,

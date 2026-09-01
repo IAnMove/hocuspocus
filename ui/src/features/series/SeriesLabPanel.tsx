@@ -11,7 +11,7 @@ import { SeriesReviewPanel } from './SeriesReviewPanel'
 import { Pill } from './components'
 import { primaryButton, secondaryButton } from './styles'
 import type { SeriesJobStatus, SeriesProject } from './types'
-import { listenForAgentSeriesRenderJob, listenForAgentSeriesSection } from '../agent/agentUiBus'
+import { listenForAgentSeriesRenderJob, listenForAgentSeriesSection } from '../../lib/uiBus'
 
 type LabTab = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
 const tabs: Array<{ id: LabTab; label: string }> = [

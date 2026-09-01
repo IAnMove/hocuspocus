@@ -49,7 +49,7 @@ import type {
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
 import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, normalizeStoryMusicModel, songWriteTarget } from './musicModel'
-import { listenForAgentStoryDraft, listenForAgentStorySection, listenForAgentStoryVisualGeneration } from '../agent/agentUiBus'
+import { listenForAgentStoryDraft, listenForAgentStorySection, listenForAgentStoryVisualGeneration } from '../../lib/uiBus'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
