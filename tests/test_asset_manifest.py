@@ -9,6 +9,7 @@ from app.services.asset_manifest import (
     AssetManifestError,
     adapt_legacy_sidecar,
     build_asset_manifest,
+    infer_asset_kind,
     read_asset_manifest,
     write_asset_manifest,
 )
@@ -92,6 +93,7 @@ def test_atomic_round_trip_preserves_legacy_fields_and_asset_id(tmp_path: Path):
     assert raw["params"]["prompt"] == "a tower"
     assert loaded is not None
     assert loaded["asset"]["id"] == "asset_still"
+    assert "params" not in loaded
     assert not list(tmp_path.glob("*.tmp"))
 
 
@@ -148,6 +150,10 @@ def test_explicit_legacy_adapter_marks_origin(tmp_path: Path):
     )
     assert manifest["asset"]["kind"] == "model3d"
     assert manifest["technical"]["legacy_sidecar"] is True
+
+
+def test_scene_documents_are_classified_as_scenes():
+    assert infer_asset_kind("episode.scene.json") == "scene"
 
 
 @pytest.mark.parametrize(

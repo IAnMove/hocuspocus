@@ -37290,6 +37290,14 @@ api.include_router(create_canonical_tasks_router(
     control_task=_control_canonical_task,
 ))
 
+from routers.assets import create_assets_router
+
+api.include_router(create_assets_router(
+    list_workspaces=_list_workspaces,
+    workspace_dir=_workspace_dir,
+    uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
+))
+
 
 # ============================================================================
 # Mount Gradio classic UI at /classic
