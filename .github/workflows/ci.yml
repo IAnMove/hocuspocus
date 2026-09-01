@@ -4,6 +4,9 @@ name: CI
 # The clean-repo guard is the important one for a public repo: it fails
 # the build if mature/explicit prose or locally-generated model guides
 # ever leak into tracked source (see scripts/verify_clean_repo.py).
+#
+# GitHub Actions are pinned to commit SHAs (immutable). Version comments
+# are documentation only; do not use moving tags such as @v4 or @latest.
 on:
   push:
     branches: [main, dev]
@@ -14,11 +17,11 @@ on:
 jobs:
   guard:
     name: Clean-repo guard + Python checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
       - name: Clean-repo boundary guard
@@ -76,13 +79,14 @@ jobs:
 
   ui-check:
     name: UI tests + lint + type-check + build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: "20"
+          node-version: "24.18.0"
+          check-latest: false
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - name: Install UI deps
@@ -102,15 +106,16 @@ jobs:
 
   ui-e2e:
     name: UI E2E boot (Chromium + simulated API)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: "20"
+          node-version: "24.18.0"
+          check-latest: false
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - name: Install UI deps
@@ -124,7 +129,7 @@ jobs:
         run: npm run test:e2e
       - name: Upload Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: ui-e2e-artifacts
           path: |
