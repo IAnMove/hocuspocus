@@ -34,6 +34,7 @@ const SLICE_AGENT_IMPORT_ALLOWLIST = [
   ['series/SeriesLabPanel.tsx', '../agent/agentUiBus'],
   ['series/SeriesReviewPanel.tsx', '../agent/agentUiBus'],
   ['stories/StoryLabPanel.tsx', '../agent/agentUiBus'],
+  ['video-editor/actions.ts', '../agent/agentContract'],
 ]
 
 const LEGACY_EXECUTE_ALLOWLIST = [
