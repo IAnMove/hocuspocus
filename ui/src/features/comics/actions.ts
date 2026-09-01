@@ -149,7 +149,12 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
   const provider = action.imageProvider === 'minimax' ? 'minimax' as const
     : action.imageProvider === 'maestro' ? 'maestro' as const
       : studio.productionProfile.image.provider === 'minimax' ? 'minimax' as const : 'maestro' as const
-  const imageModel = action.imageModel || (provider === 'minimax' ? 'image-01' : studio.productionProfile.image.model || studio.selectedModelPerMode.image || '')
+  const localProfileModel = studio.productionProfile.image.provider === 'minimax'
+    ? ''
+    : studio.productionProfile.image.model
+  const imageModel = action.imageModel || (provider === 'minimax'
+    ? 'image-01'
+    : localProfileModel || studio.selectedModelPerMode.image || '')
   project.director = {
     planId,
     provider,

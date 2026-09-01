@@ -287,6 +287,22 @@ test('parses a confirmed Story music-video staging and start', async () => {
 
   const created = await reconcileAgentTurnWithRequest('crea el videoclip con la canción seleccionada', { reply: 'Lo preparo.', actions: [] })
   assert.deepEqual(created.actions.map(action => action.type), ['stage_story_music_video', 'start_director_production'])
+
+  const infinitive = await reconcileAgentTurnWithRequest(
+    'Genera una versión v2 y úsala para preparar el videoclip y ejecutarlo ahora en Director.',
+    { reply: 'Sólo generé la canción.', actions: [] },
+  )
+  assert.deepEqual(infinitive.actions.map(action => action.type), [
+    'stage_story_music_video', 'start_director_production',
+  ])
+
+  const versionChoice = await reconcileAgentTurnWithRequest(
+    'Genera la v2, usa esa versión —no la v1— para preparar el videoclip y ejecutarlo ahora.',
+    { reply: 'Sólo generé la canción.', actions: [] },
+  )
+  assert.deepEqual(versionChoice.actions.map(action => action.type), [
+    'stage_story_music_video', 'start_director_production',
+  ])
 })
 
 test('keeps a vocal Story song in the UI workflow before launching its videoclip', async () => {
@@ -355,6 +371,16 @@ test('runtime passes the persisted cue identity to song generation and videoclip
     assert.equal(received[0].cueTitle, 'El Himno del Sysadmin')
     assert.equal(received[1].cueTitle, 'El Himno del Sysadmin')
     assert.equal(received[1].songName, '')
+
+    const secondResults = await executeAgentActions([{
+      type: 'configure_story_song', targetStoryTitle: 'El Himno del Sysadmin 3', songTitle: 'El Himno del Sysadmin',
+      brief: 'Himno más intenso', style: 'metal con guitarras gemelas', lyrics: '[Verse]\nNoche', writeLyrics: false,
+      lyricsLanguage: 'Español', instrumental: false, model: 'ace_step_v1_5_xl_sft_lm_4b', durationSeconds: 75,
+    }, {
+      type: 'generate_story_song', targetStoryTitle: 'El Himno del Sysadmin 3', cueTitle: 'El Himno del Sysadmin', confirm: true,
+    }])
+    assert.equal(secondResults.every(result => result.ok), true)
+    assert.equal(received.filter(action => action.type === 'generate_story_song').length, 2)
   } finally {
     defaultApplicationAdapters.storyLab.configureSong = original.configureSong
     defaultApplicationAdapters.storyLab.generateSong = original.generateSong
@@ -717,6 +743,137 @@ test('parses a multi-page MiniMax comic and a confirmed all-images render', asyn
   assert.equal(pilot.actions[0].pilot, true)
 })
 
+test('an explicit local comic request overrides a conflicting MiniMax plan', async () => {
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const create = {
+    type: 'create_comic', title: 'Red encantada', synopsis: 'Una maga repara la red.',
+    language: 'Español', styleName: 'Fantasía', characters: [], pages: [{
+      title: 'Página 1', stage: 'Inicio', panels: [{ caption: '', dialogue: '', sfx: '', scene: 'La red falla.' }],
+    }], panels: [], imageProvider: 'minimax', imageModel: 'image-01',
+  }
+  const reconciled = await reconcileAgentTurnWithRequest(
+    'Crea un cómic y genera todas las imágenes usando el proveedor local.',
+    { reply: 'Uso MiniMax.', actions: [create] },
+  )
+
+  assert.deepEqual(reconciled.actions.map(action => action.type), ['create_comic', 'generate_comic'])
+  assert.equal(reconciled.actions[0].imageProvider, 'maestro')
+  assert.equal(reconciled.actions[0].imageModel, '')
+  assert.equal(reconciled.actions[1].imageProvider, 'maestro')
+  assert.equal(reconciled.actions[1].imageModel, '')
+})
+
+test('an explicit multi-page comic rebuilds a misrouted Studio image plan', async () => {
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const request = 'Crea desde cero un cómic titulado exactamente "La red encantada" con 3 páginas y 4 viñetas distintas por página sobre una maga que repara una red encantada. Rellena la UI de Comics y genera todas las imágenes usando el proveedor local.'
+  const reconciled = await reconcileAgentTurnWithRequest(request, {
+    reply: 'Preparo una imagen.',
+    actions: [
+      { type: 'prepare_image', prompt: 'a wizard', model: 'flux2_klein_9b' },
+      { type: 'start_generation', confirm: true },
+    ],
+  })
+
+  assert.deepEqual(reconciled.actions.map(action => action.type), ['create_comic', 'generate_comic'])
+  assert.equal(reconciled.actions[0].title, 'La red encantada')
+  assert.equal(reconciled.actions[0].pages.length, 3)
+  assert.ok(reconciled.actions[0].pages.every(page => page.panels.length === 4))
+  assert.equal(reconciled.actions[1].imageProvider, 'maestro')
+})
+
+test('music-video production negation keeps song setup but removes stage and start', async () => {
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const turn = {
+    reply: 'Creo todo.',
+    actions: [
+      {
+        type: 'create_story', title: 'Himno', creativeBrief: 'Metal', premise: 'Un himno.',
+        projectType: 'music_video', language: 'Español', characters: [], locations: [], outlineBeats: [],
+      },
+      {
+        type: 'configure_story_song', targetStoryTitle: 'Himno', songTitle: 'Himno', brief: 'Metal',
+        style: 'Heavy metal', lyrics: '[Verse]\nCódigo y metal', writeLyrics: false,
+        lyricsLanguage: 'Español', instrumental: false, model: 'ace_step_v1_5_xl_sft_lm_4b',
+      },
+      { type: 'generate_story_song', targetStoryTitle: 'Himno', cueTitle: 'Himno', confirm: true },
+      { type: 'stage_story_music_video', targetStoryTitle: 'Himno', songName: '', cueTitle: 'Himno', pacing: 'balanced', confirm: true },
+      { type: 'start_director_production', targetStoryTitle: 'Himno', kind: 'music_video', confirm: true },
+    ],
+  }
+  const reconciled = await reconcileAgentTurnWithRequest(
+    'Genera la primera versión de la canción. Todavía no prepares el videoclip.',
+    turn,
+  )
+
+  assert.deepEqual(reconciled.actions.map(action => action.type), [
+    'create_story', 'configure_story_song', 'generate_story_song',
+  ])
+})
+
+test('music-video negation repairs an omitted explicit song generation only', async () => {
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const configure = {
+    type: 'configure_story_song', targetStoryTitle: 'Himno', songTitle: 'Guardia nocturna', brief: 'Metal',
+    style: 'Heavy metal', lyrics: '[Verse]\nCódigo y metal', writeLyrics: false,
+    lyricsLanguage: 'Español', instrumental: false, model: 'ace_step_v1_5_xl_sft_lm_4b',
+  }
+  const reconciled = await reconcileAgentTurnWithRequest(
+    'Genera la primera versión de la canción. Todavía no prepares el videoclip.',
+    {
+      reply: 'La dejo lista.',
+      actions: [
+        configure,
+        { type: 'stage_story_music_video', targetStoryTitle: 'Himno', songName: '', cueTitle: 'inventado', pacing: 'balanced', confirm: true },
+        { type: 'start_director_production', targetStoryTitle: 'Himno', kind: 'music_video', confirm: true },
+      ],
+    },
+  )
+
+  assert.deepEqual(reconciled.actions.map(action => action.type), [
+    'configure_story_song', 'generate_story_song',
+  ])
+  assert.equal(reconciled.actions[1].targetStoryTitle, 'Himno')
+  assert.equal(reconciled.actions[1].cueTitle, 'Guardia nocturna')
+})
+
+test('music-video negation rebuilds omitted song setup from the created project', async () => {
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const create = {
+    type: 'create_story', title: 'Himno visible', creativeBrief: 'Metal de guardia', premise: 'Una guardia.',
+    projectType: 'music_video', language: 'Español', characters: [], locations: [], outlineBeats: [],
+  }
+  const reconciled = await reconcileAgentTurnWithRequest(
+    'Rellena una canción vocal completa en español y genera la primera versión de la canción. Todavía no prepares el videoclip.',
+    { reply: 'La forjo.', actions: [create] },
+  )
+
+  assert.deepEqual(reconciled.actions.map(action => action.type), [
+    'create_story', 'configure_story_song', 'generate_story_song',
+  ])
+  assert.equal(reconciled.actions[1].targetStoryTitle, 'Himno visible')
+  assert.equal(reconciled.actions[1].writeLyrics, true)
+  assert.equal(reconciled.actions[1].lyricsLanguage, 'Español')
+  assert.equal(reconciled.actions[1].model, 'ace_step_v1_5_xl_sft_lm_4b')
+  assert.equal(reconciled.actions[2].cueTitle, 'Himno visible')
+})
+
+test('an exact requested episode title overrides the LLM invention', async () => {
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const action = {
+    type: 'create_series_episode', seriesTitle: 'Turno de madrugada', seriesPremise: 'Comedia.',
+    seriesLogline: 'Una guardia.', episodeTitle: 'El café que no enfría', episodePremise: 'Incidente nocturno.',
+    episodeLogline: 'Todo falla.', genre: 'Comedia', tone: 'Seco', visualStyle: 'Sitcom',
+    worldSummary: 'Oficina.', theme: 'Equipo', ending: 'Amanece.', language: 'Español',
+    characters: [], locations: [], outlineBeats: ['Inicio', 'Fin'], createIfMissing: true, knownUniverse: false,
+  }
+  const reconciled = await reconcileAgentTurnWithRequest(
+    'Abre Series Lab y crea un episodio titulado exactamente "E2E Episodio 42".',
+    { reply: 'Hecho.', actions: [action] },
+  )
+
+  assert.equal(reconciled.actions[0].episodeTitle, 'E2E Episodio 42')
+})
+
 test('como nuevo is not a launch question, how-to stays read-only, and negation does not generate', async () => {
   const { reconcileAgentTurnWithRequest, isComicLaunchHowQuestion, isExplicitComicArtworkRequest } = await import('../src/features/agent/agentActions.ts')
   const history = [
@@ -841,8 +998,9 @@ test('start_generation reports the real taskId and an identical repeat reuses it
     },
   })
   try {
+    const prepare = { type: 'prepare_image', prompt: 'un faro al anochecer', resolutionPreset: 'auto', aspectRatio: 'auto', seed: -1, outputCount: 1 }
     const first = await executeAgentActions([
-      { type: 'prepare_image', prompt: 'un faro al anochecer', resolutionPreset: 'auto', aspectRatio: 'auto', seed: -1, outputCount: 1 },
+      prepare,
       { type: 'start_generation', confirm: true },
     ])
     assert.equal(first[0].ok, true)
@@ -850,10 +1008,21 @@ test('start_generation reports the real taskId and an identical repeat reuses it
     assert.equal(first[1].report.state, 'queued')
     assert.equal(first[1].report.taskId, 'job-studio-1')
     assert.equal(generationCalls, 1)
-    const second = await executeAgentActions([{ type: 'start_generation', confirm: true }])
-    assert.match(second[0].message, /Reutilizo/)
-    assert.equal(second[0].report.taskId, 'job-studio-1')
+    const second = await executeAgentActions([prepare, { type: 'start_generation', confirm: true }])
+    assert.match(second[1].message, /Reutilizo/)
+    assert.equal(second[1].report.taskId, 'job-studio-1')
     assert.equal(generationCalls, 1)
+
+    useStore.setState({
+      jobs: useStore.getState().jobs.map(job => (
+        job.id === 'job-studio-1' ? { ...job, status: 'failed', error: 'simulated failure' } : job
+      )),
+    })
+    const retry = await executeAgentActions([prepare, { type: 'start_generation', confirm: true }])
+    assert.equal(retry[1].ok, true)
+    assert.doesNotMatch(retry[1].message, /Reutilizo/)
+    assert.equal(retry[1].report.taskId, 'job-studio-2')
+    assert.equal(generationCalls, 2)
   } finally {
     useStore.setState(original)
     clearExecutionMemory()
@@ -1308,6 +1477,27 @@ test('repairs an explicit image request into prepare_image plus start_generation
   assert.equal(repaired.actions[0].prompt.includes('gato'), true)
 })
 
+test('repairs an explicit Studio audio request when the model only prepares it', async () => {
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const prepare = {
+    type: 'prepare_audio', subMode: 'music', prompt: 'Piano minimalista instrumental',
+    modelType: 'ace_step_v1_5_xl_sft_lm_4b', durationSeconds: 15,
+  }
+  const reconciled = await reconcileAgentTurnWithRequest(
+    'Abre Studio → Audio, rellena una canción instrumental de prueba y genérala ahora.',
+    { reply: 'La preparo.', actions: [{ type: 'open_tab', tab: 'audio' }, prepare] },
+  )
+
+  assert.deepEqual(reconciled.actions.map(action => action.type), ['open_tab', 'prepare_audio', 'start_generation'])
+  assert.equal(reconciled.actions[1].prompt, prepare.prompt)
+
+  const retry = await reconcileAgentTurnWithRequest(
+    'Abre de nuevo Studio → Audio, conserva los mismos valores visibles y lanza una nueva generación de audio. No reanudes la tarea fallida anterior.',
+    { reply: 'Mantengo la ficha.', actions: [{ type: 'open_tab', tab: 'audio' }, prepare] },
+  )
+  assert.deepEqual(retry.actions.map(action => action.type), ['open_tab', 'prepare_audio', 'start_generation'])
+})
+
 test('accepts compact open_tab aliases and queues an explicit game SFX pack', async () => {
   const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
   const compact = parseAgentTurn(JSON.stringify({
@@ -1446,6 +1636,12 @@ test('a video example fills a real prompt instead of asking, and a topical video
   const topical = await reconcileAgentTurnWithRequest('hazme un video de un mapache con chubasquero', { reply: '¿Qué estilo?', actions: [] })
   assert.deepEqual(topical.actions.map(action => action.type), ['prepare_video', 'start_generation'])
   assert.ok(topical.actions[0].prompt.includes('mapache'))
+
+  const studioPronoun = await reconcileAgentTurnWithRequest(
+    'Abre Studio → Video, rellena el formulario con un mago ante servidores y genéralo ahora.',
+    { reply: 'Lo preparo y lo disparo.', actions: [{ type: 'prepare_video', prompt: 'Mago ante servidores' }] },
+  )
+  assert.deepEqual(studioPronoun.actions.map(action => action.type), ['prepare_video', 'start_generation'])
 })
 
 test('genera el video reuses a prepared Studio prompt instead of asking for a topic', async () => {

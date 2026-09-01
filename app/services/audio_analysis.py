@@ -977,12 +977,25 @@ def plan_clip_structure(
 
     Returns a list of clip dicts with ``beat_count`` and ``duration_frames``.
     """
-    bpm = analysis.get("bpm", 120.0)
+    try:
+        bpm = float(analysis.get("bpm", 120.0))
+    except (TypeError, ValueError):
+        bpm = 120.0
+    if not math.isfinite(bpm) or bpm <= 0:
+        logger.warning("Invalid BPM %r while planning clips; using 120 BPM", analysis.get("bpm"))
+        bpm = 120.0
     beat_duration = 60.0 / bpm
     beats = analysis.get("beats", [])
     beat_times = sorted(b["time"] if isinstance(b, dict) else b.time for b in beats)
     sections = analysis.get("sections", [])
-    song_duration = total_duration or analysis.get("duration", 180.0)
+    raw_song_duration = total_duration if total_duration is not None else analysis.get("duration", 180.0)
+    try:
+        song_duration = float(raw_song_duration)
+    except (TypeError, ValueError):
+        song_duration = 180.0
+    if not math.isfinite(song_duration) or song_duration <= 0:
+        logger.warning("Invalid song duration %r while planning clips; using 180 seconds", raw_song_duration)
+        song_duration = 180.0
 
     if not beat_times:
         beat_times = [i * beat_duration for i in range(int(song_duration / beat_duration) + 1)]

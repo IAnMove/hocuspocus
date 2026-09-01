@@ -1854,7 +1854,7 @@ interface AppState {
   setSidebarMode: (mode: 'director' | 'studio') => void
   directorSetSpeakerMapping: (speakerId: string, name: string, role: SpeakerMapping['role']) => void
   directorInsertSpeakerMention: (speakerId: string) => void
-  directorUploadAndAnalyze: (file: File, opts?: { lyricsHint?: string; trimStart?: number; trimEnd?: number }) => Promise<void>
+  directorUploadAndAnalyze: (file: File, opts?: { lyricsHint?: string; trimStart?: number; trimEnd?: number; totalDuration?: number }) => Promise<void>
   // Music Video: generate-the-track source + song setup
   directorMusicSource: 'upload' | 'generate' | null
   directorSongDescription: string
@@ -1871,7 +1871,7 @@ interface AppState {
   setDirectorSongDuration: (v: number) => void
   directorWriteSong: () => Promise<void>
   directorGenerateTrack: () => Promise<void>
-  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string }) => Promise<void>
+  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string; totalDuration?: number }) => Promise<void>
   directorSetEnergyBias: (bias: number) => Promise<void>
   directorSetPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
   directorConfirmStructure: () => void
@@ -7565,6 +7565,7 @@ export const useStore = create<AppState>((set, get) => ({
         lyricsHint: opts?.lyricsHint,
         classifyLyricsHint: shouldTrim ? '' : opts?.lyricsHint,
         activityId,
+        totalDuration: opts?.totalDuration,
       })
     } catch (e: unknown) {
       if (analysisStarted) return
@@ -7728,6 +7729,9 @@ export const useStore = create<AppState>((set, get) => ({
         fps: get().modelOptions?.fps ?? 16,
         frames_steps: get().modelOptions?.frames_steps ?? 4,
         frames_minimum: get().modelOptions?.frames_minimum ?? 5,
+        total_duration: Number.isFinite(opts?.totalDuration) && Number(opts?.totalDuration) > 0
+          ? Number(opts?.totalDuration)
+          : undefined,
         // Authoritative: the Director's video model (modelOptions above may
         // belong to a music model — e.g. ACE-Step after generating a track —
         // whose fps fallback of 16 used to shrink clips by 16/25).
@@ -7891,6 +7895,7 @@ export const useStore = create<AppState>((set, get) => ({
       await get().directorAnalyzeAndPlan(r.audio_path, {
         transcribe: !instrumental,
         lyricsHint: instrumental ? undefined : (r.lyrics || lyrics || undefined),
+        totalDuration: s.directorSongDuration,
       })
       // Manual mode now pauses on the visible structure review. Auto mode
       // accepts the selected pacing profile and continues hands-free.

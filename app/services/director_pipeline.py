@@ -10160,11 +10160,25 @@ def _generate_minimax_director_image(
     reference_paths: list[str],
 ) -> str:
     """Generate one Director frame with the external MiniMax Image-01 API."""
-    from services import minimax_image_service
     try:
-        from services import resource_scheduler
+        from services import execution_mode, resource_scheduler
     except ImportError:  # pragma: no cover - package import mode
-        from app.services import resource_scheduler
+        from app.services import execution_mode, resource_scheduler
+    lane = resource_scheduler.remote_lane("minimax", "https://api.minimax.io")
+    if execution_mode.policy().simulated:
+        with resource_scheduler.coordinator.acquire(
+            lane,
+            task_id=f"simulated-minimax-image-{threading.get_ident()}-{time.time_ns()}",
+            description="Simulated MiniMax Image-01 Director frame",
+        ):
+            simulated = execution_mode.create_artifact(
+                {"generation_mode": "image", "prompt": prompt},
+                output_dir,
+                f"director-minimax-{time.time_ns()}",
+            )
+        return os.path.basename(simulated)
+
+    from services import minimax_image_service
 
     from services.provider_profile import resolve_minimax_key
     api_key = resolve_minimax_key(_wgp.server_config.get("services") or {}, "image")
@@ -10176,7 +10190,6 @@ def _generate_minimax_director_image(
             subject_reference = minimax_image_service.local_image_data_uri(path)
             break
     try:
-        lane = resource_scheduler.remote_lane("minimax", "https://api.minimax.io")
         with resource_scheduler.coordinator.acquire(
             lane,
             task_id=f"minimax-image-{threading.get_ident()}-{time.time_ns()}",

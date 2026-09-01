@@ -47,6 +47,29 @@ def test_profile_clips_cover_the_complete_song():
     assert all(left["end"] == right["start"] for left, right in zip(clips, clips[1:]))
 
 
+def test_missing_beats_and_zero_bpm_use_a_safe_fallback():
+    analysis = _analysis(duration=75.0)
+    analysis.update({"bpm": 0.0, "beats": []})
+
+    clips = plan_clip_structure(analysis, pacing_profile="balanced")
+
+    assert clips
+    assert clips[0]["start"] == 0.0
+    assert clips[-1]["end"] == 75.0
+    assert all(left["end"] == right["start"] for left, right in zip(clips, clips[1:]))
+
+
+def test_zero_duration_uses_a_safe_non_empty_fallback_timeline():
+    analysis = _analysis(duration=75.0)
+    analysis.update({"duration": 0.0, "bpm": 0.0, "beats": []})
+
+    clips = plan_clip_structure(analysis, pacing_profile="balanced")
+
+    assert clips
+    assert clips[0]["start"] == 0.0
+    assert clips[-1]["end"] == 180.0
+
+
 def test_structured_story_lyrics_are_authoritative():
     structure = structure_from_tagged_lyrics(
         "[Intro]\n(instrumental)\n[Verse 1]\nA seed crosses the empty sky\n"

@@ -1661,6 +1661,7 @@ const EXPLICIT_VIDEO_REQUESTS = [
   /\b(?:pon|poned)\b[^.!?\n]*\b(?:video|vídeo|clip)\b[^.!?\n]*\b(?:en\s+marcha|a\s+generar|en\s+cola)\b/i,
   /\b(?:manda|mandad|env[ií]a|enviad)\b[^.!?\n]*\b(?:video|vídeo|clip)\b[^.!?\n]*\b(?:cola|generaci[oó]n)\b/i,
   /\b(?:make|create|generate|render|launch|start|queue)\b[^.!?\n]*\b(?:video|clip)\b/i,
+  /\b(?:video|v[ií]deo|clip)\b[^.!?\n]*\b(?:gen[eé]ralo|l[aá]nzalo|enc[oó]lalo|ejec[uú]talo|render[ií]zalo|generate\s+it|launch\s+it|start\s+it|queue\s+it)\b/i,
 ]
 
 const NEGATED_VIDEO_REQUEST = /\b(?:no|sin|don['’]?t|do\s+not)\b[^.!?\n]{0,32}\b(?:hagas|generes|crees|lances|encoles|hacer|generar|crear|lanzar|encolar|make|create|generate|render|launch|start|queue)\b/i
@@ -1728,6 +1729,18 @@ export function isExplicitImageGenerationRequest(request: string): boolean {
   return EXPLICIT_IMAGE_REQUESTS.some(pattern => pattern.test(text))
 }
 
+const EXPLICIT_AUDIO_GENERATION_REQUESTS = [
+  /\b(?:gen[eé]ra(?:la|lo|r|d|me)?|crea(?:la|lo|r|d|me)?|lanza(?:la|lo|r|d)?|encola(?:la|lo|r|d)?)\b[^.!?\n]{0,120}\b(?:audio|canci[oó]n|m[uú]sica|voz|speech)\b/i,
+  /\b(?:audio|canci[oó]n|m[uú]sica|voz|speech)\b[^.!?\n]{0,160}\b(?:gen[eé]ra(?:la|lo|r|d|me)?|l[aá]nza(?:la|lo|r|d)?|enc[oó]la(?:la|lo|r|d)?)\b/i,
+]
+
+export function isExplicitAudioGenerationRequest(request: string): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_VIDEO_REQUEST.test(text) || MUSIC_VIDEO_CONTEXT.test(text)) return false
+  if (isExplicitSfxGenerationRequest(text)) return false
+  return EXPLICIT_AUDIO_GENERATION_REQUESTS.some(pattern => pattern.test(text))
+}
+
 const EXPLICIT_SFX_REQUESTS = [
   /\b(?:efectos?(?:\s+de\s+sonido)?|sfx|sound effects?|sonidos?)\b/i,
 ]
@@ -1751,14 +1764,15 @@ export function isExplicit3dGenerationRequest(request: string): boolean {
 
 const MUSIC_VIDEO_CONTEXT = /\b(?:videoclip|videoclips|music\s*videos?|clip\s+musical|canci[oó]n\s+visual)\b/i
 const MUSIC_VIDEO_STAGE_REQUESTS = [
-  /\b(?:prepara|preparad|abre|abrid|carga|cargad|monta|montad)\b[^.!?\n]*\b(?:videoclip|videoclips|music\s*videos?|clip\s+musical)\b/i,
+  /\b(?:prepara|preparad|preparar|abre|abrid|carga|cargad|monta|montad|montar)\b[^.!?\n]*\b(?:videoclip|videoclips|music\s*videos?|clip\s+musical)\b/i,
   /\b(?:hazme|hacedme|crea|cread|creame|créame)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical)\b/i,
 ]
 const MUSIC_VIDEO_START_REQUESTS = [
-  /\b(?:l[aá]nzalo|in[ií]cialo|arr[aá]ncalo|ejec[uú]talo)\b/i,
+  /\b(?:l[aá]nzalo|lanzarlo|in[ií]cialo|iniciarlo|arr[aá]ncalo|arrancarlo|ejec[uú]talo|ejecutarlo|enc[oó]lalo|encolarlo)\b/i,
   /\b(?:l[aá]nza|inicia|arranca|ejecuta|genera|encola)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical|producci[oó]n\s+musical)\b/i,
   /\b(?:hazme|hacedme|crea|cread|creame|créame)\b[^.!?\n]*\b(?:videoclip|music\s*video|clip\s+musical)\b/i,
 ]
+const NEGATED_MUSIC_VIDEO_PRODUCTION = /\b(?:(?:todav[ií]a|a[uú]n)\s+no|no)\s+(?:(?:quiero|queremos)\s+que\s+)?(?:(?:lo|la|el)\s+)?(?:prepares?|preparar|montes?|montar|inicies?|iniciar|arranques?|arrancar|ejecutes?|ejecutar|generes?|generar|encoles?|encolar)\b[^.!?\n]{0,48}\b(?:el\s+)?(?:videoclip|music\s*video|clip\s+musical)\b/i
 
 function inferMusicVideoContext(text: string, history: ExampleConversation[]): boolean {
   if (MUSIC_VIDEO_CONTEXT.test(text)) return true
@@ -1767,13 +1781,13 @@ function inferMusicVideoContext(text: string, history: ExampleConversation[]): b
 
 export function isExplicitMusicVideoStageRequest(request: string): boolean {
   const text = request.trim()
-  if (!text || NEGATED_VIDEO_REQUEST.test(text) || COMIC_LAUNCH_HOW.test(text)) return false
+  if (!text || NEGATED_VIDEO_REQUEST.test(text) || NEGATED_MUSIC_VIDEO_PRODUCTION.test(text) || COMIC_LAUNCH_HOW.test(text)) return false
   return MUSIC_VIDEO_STAGE_REQUESTS.some(pattern => pattern.test(text))
 }
 
 export function isExplicitMusicVideoStartRequest(request: string, history: ExampleConversation[] = []): boolean {
   const text = request.trim()
-  if (!text || NEGATED_VIDEO_REQUEST.test(text) || COMIC_LAUNCH_HOW.test(text)) return false
+  if (!text || NEGATED_VIDEO_REQUEST.test(text) || NEGATED_MUSIC_VIDEO_PRODUCTION.test(text) || COMIC_LAUNCH_HOW.test(text)) return false
   if (!MUSIC_VIDEO_START_REQUESTS.some(pattern => pattern.test(text))) return false
   return inferMusicVideoContext(text, history)
 }
@@ -1788,7 +1802,7 @@ export function isExplicitSfxGenerationRequest(request: string): boolean {
 const COMIC_LAUNCH_HOW = /\b(?:c[oó]mo\s+(?:lo|la|las|los|puedo|se|lanz\w*|gener\w*|dibuj\w*|render\w*)\b|how(?:\s+do(?:\s+i)?)?)\b/i
 const COMIC_LAUNCH_COMMAND = [
   /\b(?:l[aá]nzalo|dib[uú]jalo|p[ií]ntalo|generalo|regeneralo|render[ií]zalo)\b/i,
-  /\b(?:l[aá]nza|dibuja|pinta|genera|regenera|render(?:iza)?)\b[^.!?\n]*\b(?:c[oó]mic|vi[nñ]etas?|paneles?|p[aá]gina|artwork|dibujos?)\b/i,
+  /\b(?:l[aá]nza|dibuja|pinta|genera|regenera|render(?:iza)?)\b[^.!?\n]*\b(?:c[oó]mic|im[aá]genes?|vi[nñ]etas?|paneles?|p[aá]gina|artwork|dibujos?)\b/i,
   /\b(?:reintenta|reanuda|contin[uú]a)\b[^.!?\n]*\b(?:c[oó]mic|vi[nñ]etas?|fallid|pendientes|lote)\b/i,
   /\b(?:generate|regenerate|draw|render|launch|retry|resume)\b[^.!?\n]*\b(?:comic|panels?|page|artwork|failed)\b/i,
 ]
@@ -1848,6 +1862,40 @@ function inferComicContext(text: string, history: ExampleConversation[]): boolea
   ))
 }
 
+function comicCreateFallback(request: string): AgentCreateComicAction | undefined {
+  if (!/\b(?:hazme|hacedme|crea(?:me)?|cread|crear|make|create)\b[^.!?\n]{0,120}\b(?:c[oó]mic|tebeo)\b/i.test(request)) return undefined
+  const exactTitle = request.match(/\b(?:c[oó]mic|tebeo)\b[^.!?\n]{0,80}\btitulad[oa]\s+(?:exactamente\s+)?["“]([^"”]+)["”]/i)?.[1]?.trim()
+  const topic = request.match(/\b(?:sobre|acerca\s+de)\s+([^.!?\n]+)/i)?.[1]?.trim()
+    || request.match(/\b(?:c[oó]mic|tebeo)\s+de\s+([^.!?\n]+)/i)?.[1]?.trim()
+    || 'una aventura inventada por el usuario'
+  const pageCount = Math.min(24, Math.max(1, Number(request.match(/\b(\d{1,2})\s+p[aá]ginas?\b/i)?.[1] || 1)))
+  const panelsPerPage = Math.min(12, Math.max(1, Number(request.match(/\b(\d{1,2})\s+vi[nñ]etas?[^.!?\n]{0,40}\bpor\s+p[aá]gina\b/i)?.[1] || 4)))
+  const title = exactTitle || topic.slice(0, 100) || 'Nuevo cómic'
+  const pages: AgentComicPage[] = Array.from({ length: pageCount }, (_, pageIndex) => ({
+    title: `Página ${pageIndex + 1}`,
+    stage: `Etapa ${pageIndex + 1} de ${pageCount}`,
+    panels: Array.from({ length: panelsPerPage }, (_, panelIndex) => ({
+      caption: `Página ${pageIndex + 1} · Viñeta ${panelIndex + 1}`,
+      dialogue: '',
+      sfx: '',
+      scene: `${topic}. Momento ${panelIndex + 1} de la etapa ${pageIndex + 1}; composición distinta y continuidad visual con las demás viñetas.`,
+    })),
+  }))
+  return {
+    type: 'create_comic',
+    title,
+    synopsis: topic,
+    language: /\b(?:espa[nñ]ol|castellano)\b/i.test(request) ? 'Español' : '',
+    styleName: 'Dirección visual coherente con la petición del usuario',
+    characters: [],
+    panels: [],
+    pages,
+    imageProvider: 'profile',
+    imageModel: '',
+    factualBiography: /\b(?:biograf[ií]a|biogr[aá]fico|vida\s+de)\b/i.test(request),
+  }
+}
+
 /**
  * The LLM remains the planner, but an unmistakable user command must not turn
  * into a clarification loop. Repair that one high-value intent locally with
@@ -1860,6 +1908,16 @@ export async function reconcileAgentTurnWithRequest(
   history: ExampleConversation[] = [],
 ): Promise<AgentTurn> {
   const { maybeExampleTurn } = await import('./agentExamples')
+  const exactEpisodeTitle = request.match(/\bepisodio\s+titulad[oa]\s+(?:exactamente\s+)?["“]([^"”]+)["”]/i)?.[1]?.trim()
+  const preserveExactEpisodeTitle = (candidate: AgentTurn): AgentTurn => exactEpisodeTitle
+    ? {
+        ...candidate,
+        actions: candidate.actions.map(action => action.type === 'create_series_episode'
+          ? { ...action, episodeTitle: exactEpisodeTitle }
+          : action),
+      }
+    : candidate
+  turn = preserveExactEpisodeTitle(turn)
   if (isResumePreparedStudioVideoRequest(request)) {
     const existing = turn.actions.find(
       (action): action is AgentPrepareVideoAction => action.type === 'prepare_video',
@@ -1888,7 +1946,7 @@ export async function reconcileAgentTurnWithRequest(
     }
   }
   const exampleTurn = maybeExampleTurn(request, turn, history)
-  if (exampleTurn) return exampleTurn
+  if (exampleTurn) return preserveExactEpisodeTitle(exampleTurn)
   const rhythmic3dWorkflow = turn.actions.find(
     (action): action is AgentCreateRhythmic3dVideoAction => action.type === 'create_rhythmic_3d_video',
   )
@@ -1921,14 +1979,17 @@ export async function reconcileAgentTurnWithRequest(
     }
   }
   const plannedComic = turn.actions.find((action): action is AgentCreateComicAction => action.type === 'create_comic')
+    || comicCreateFallback(request)
   const compoundComicRender = Boolean(plannedComic) && /\b(?:genera|dibuja|pinta|render(?:iza)?|generate|draw|render)\b[^.!?\n]*\b(?:im[aá]genes|artwork|vi[nñ]etas?|paneles?)\b/i.test(request)
   if (isExplicitComicArtworkRequest(request, history) || compoundComicRender) {
     const create = plannedComic
     const requestedMiniMax = /\bminimax\b/i.test(request)
+    const requestedLocal = /\b(?:proveedor|modelo|generador)\s+local\b|\b(?:local|hocuspocus|maestro)\s+(?:provider|model|image\s+provider)\b/i.test(request)
+    const requestedProvider = requestedMiniMax ? 'minimax' as const : requestedLocal ? 'maestro' as const : 'keep' as const
     const intent = comicGenerateIntent(request)
     const generate: AgentGenerateComicAction = {
       type: 'generate_comic',
-      imageProvider: requestedMiniMax ? 'minimax' : 'keep',
+      imageProvider: requestedProvider,
       imageModel: requestedMiniMax ? 'image-01' : '',
       scope: intent.scope,
       pages: intent.pages,
@@ -1937,14 +1998,16 @@ export async function reconcileAgentTurnWithRequest(
       confirm: true,
     }
     if (create) {
-      const prepared = requestedMiniMax
+      const prepared = requestedProvider === 'minimax'
         ? { ...create, imageProvider: 'minimax' as const, imageModel: 'image-01' }
-        : create
+        : requestedProvider === 'maestro'
+          ? { ...create, imageProvider: 'maestro' as const, imageModel: '' }
+          : create
       const panels = (prepared.pages.length ? prepared.pages : [{ panels: prepared.panels }])
         .reduce((sum, page) => sum + page.panels.length, 0)
       const estimate = intent.pilot ? (prepared.pages[0]?.panels.length || prepared.panels.length) : panels
       return {
-        reply: `Crearé “${prepared.title}” con ${prepared.pages.length || 1} páginas reales y después dibujaré ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} con ${requestedMiniMax ? 'MiniMax image-01' : 'el proveedor elegido'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''}. 🪄`,
+        reply: `Crearé “${prepared.title}” con ${prepared.pages.length || 1} páginas reales y después dibujaré ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} con ${requestedMiniMax ? 'MiniMax image-01' : requestedLocal ? 'el proveedor local' : 'el proveedor elegido'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''}. 🪄`,
         actions: [prepared, generate],
       }
     }
@@ -1953,8 +2016,56 @@ export async function reconcileAgentTurnWithRequest(
       ? Math.max(1, Math.ceil(inventory.panels / Math.max(1, inventory.pages)))
       : intent.scope === 'failed' ? inventory.failed : inventory.pending
     return {
-      reply: `Voy a dibujar ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} del cómic abierto con ${requestedMiniMax ? 'MiniMax image-01' : 'su proveedor configurado'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''} (${inventory.completed}/${inventory.panels} ya listas). 🪄`,
+      reply: `Voy a dibujar ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} del cómic abierto con ${requestedMiniMax ? 'MiniMax image-01' : requestedLocal ? 'el proveedor local' : 'su proveedor configurado'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''} (${inventory.completed}/${inventory.panels} ya listas). 🪄`,
       actions: [generate],
+    }
+  }
+  if (NEGATED_MUSIC_VIDEO_PRODUCTION.test(request)) {
+    let safeActions = turn.actions.filter(action => (
+      action.type !== 'stage_story_music_video'
+      && action.type !== 'start_director_production'
+    ))
+    let songDraft = safeActions.find(
+      (action): action is AgentConfigureStorySongAction => action.type === 'configure_story_song',
+    )
+    const createdMusicVideo = safeActions.find(
+      (action): action is AgentCreateStoryAction => action.type === 'create_story' && action.projectType === 'music_video',
+    )
+    const explicitlyConfigureSong = /\b(?:rellena|rellenar|escribe|escribir|comp[oó]n|componer|prepara|preparar|crea|crear|genera|generar)\b[^.!?\n]{0,160}\bcanci[oó]n\b/i.test(request)
+    if (!songDraft && createdMusicVideo && explicitlyConfigureSong) {
+      songDraft = {
+        type: 'configure_story_song',
+        targetStoryTitle: createdMusicVideo.title,
+        songTitle: createdMusicVideo.title,
+        brief: createdMusicVideo.creativeBrief || createdMusicVideo.premise,
+        style: request.trim().slice(0, 4_000),
+        lyrics: '',
+        writeLyrics: true,
+        lyricsLanguage: createdMusicVideo.language || 'Español',
+        instrumental: false,
+        model: 'ace_step_v1_5_xl_sft_lm_4b',
+        durationSeconds: createdMusicVideo.durationSeconds || 90,
+      }
+      safeActions = [...safeActions, songDraft]
+    }
+    const explicitlyGenerateSong = /\bgenera(?:r|d|me)?\b[^.!?\n]{0,96}\b(?:primera\s+versi[oó]n\s+de\s+la\s+)?canci[oó]n\b/i.test(request)
+    const correlatedActions = songDraft
+      ? safeActions.map(action => action.type === 'generate_story_song'
+        ? { ...action, targetStoryTitle: songDraft.targetStoryTitle, cueTitle: songDraft.songTitle }
+        : action)
+      : safeActions
+    const actions = songDraft && explicitlyGenerateSong
+      && !correlatedActions.some(action => action.type === 'generate_story_song')
+      ? [...correlatedActions, {
+          type: 'generate_story_song' as const,
+          targetStoryTitle: songDraft.targetStoryTitle,
+          cueTitle: songDraft.songTitle,
+          confirm: true as const,
+        }]
+      : correlatedActions
+    return {
+      ...turn,
+      actions,
     }
   }
   const musicVideoStage = isExplicitMusicVideoStageRequest(request)
@@ -2086,6 +2197,23 @@ export async function reconcileAgentTurnWithRequest(
         taskId: existing?.taskId || (latest ? 'latest' : ''),
         confirm: true,
       }],
+    }
+  }
+  if (isExplicitAudioGenerationRequest(request)) {
+    const navigation = turn.actions
+      .filter((action): action is AgentOpenTabAction => action.type === 'open_tab')
+      .slice(0, MAX_ACTIONS - 2)
+    const prepare = turn.actions.find(
+      (action): action is AgentPrepareAudioAction => action.type === 'prepare_audio',
+    ) || {
+        type: 'prepare_audio',
+        subMode: /\b(?:voz|speech|tts)\b/i.test(request) ? 'speech' : 'music',
+        prompt: request.trim().slice(0, 8_000),
+        durationSeconds: 15,
+      } satisfies AgentPrepareAudioAction
+    return {
+      reply: 'Prepararé Studio → Audio con los valores visibles y enviaré la generación a la cola. 🪄',
+      actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
     }
   }
   if (isExplicitVideoGenerationRequest(request)) {
@@ -2482,13 +2610,19 @@ export async function executeAgentActions(
 ): Promise<AgentActionResult[]> {
   const results: AgentActionResult[] = []
   let preparedStudio = false
+  let preparedStudioAction: AgentPrepareVideoAction | AgentPrepareImageAction | AgentPrepareAudioAction | AgentPrepare3dAction | null = null
   let createdComicId = ''
   let stagedProductionId = ''
-  let configuredStorySong: { targetStoryTitle: string; cueTitle: string } | null = null
+  let configuredStorySong: {
+    targetStoryTitle: string
+    cueTitle: string
+    configuration: AgentConfigureStorySongAction
+  } | null = null
   const orderedActions = orderCompoundActions(actions)
   const failedActionTypes = new Set<string>()
   for (const plannedAction of orderedActions) {
     let action = plannedAction
+    let actionExecutionKey = ''
     // Runtime correlation is the final guard: the configure capability returns
     // the canonical cue title after persistence, so downstream steps consume
     // that identity even when the original LLM plan used a future candidate
@@ -2661,14 +2795,27 @@ export async function executeAgentActions(
           handoff?.productionId || 'producción abierta',
         )
       }
+      const keyParams = action.type === 'start_generation' && preparedStudioAction
+        ? { action, preparedStudioAction }
+        : action.type === 'generate_story_song' && configuredStorySong
+          ? { action, configuration: configuredStorySong.configuration }
+          : action
       const key = executionKey({
         workspace: useStore.getState().activeWorkspace || 'default',
         type: action.type,
         targetId,
-        params: action,
+        params: keyParams,
       })
+      actionExecutionKey = key
       const reused = reuseExecution(key)
-      if (reused) {
+      const reusedTaskId = String(reused?.taskId || '')
+      const reusedJob = reusedTaskId
+        ? useStore.getState().jobs.find(job => (
+            job.id === reusedTaskId || `task-generation-${job.id}` === reusedTaskId
+          ))
+        : undefined
+      const reusableTask = !reusedJob || !['failed', 'cancelled', 'canceled'].includes(reusedJob.status)
+      if (reused && reusableTask) {
         results.push({
           action,
           ok: true,
@@ -2692,11 +2839,13 @@ export async function executeAgentActions(
         if (action.type === 'prepare_video' || action.type === 'prepare_image'
           || action.type === 'prepare_audio' || action.type === 'prepare_3d') {
           preparedStudio = true
+          preparedStudioAction = action
         }
         if (action.type === 'configure_story_song' && registeredResult.report?.target?.title) {
           configuredStorySong = {
             targetStoryTitle: action.targetStoryTitle,
             cueTitle: registeredResult.report.target.title,
+            configuration: action,
           }
         }
       } else if (action.type === 'open_story_section') {
@@ -2712,18 +2861,22 @@ export async function executeAgentActions(
       } else if (action.type === 'prepare_video') {
         const outcome = await defaultApplicationAdapters.studio.prepareVideo(action)
         preparedStudio = true
+        preparedStudioAction = action
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'prepare_image') {
         const outcome = await defaultApplicationAdapters.studio.prepareImage(action)
         preparedStudio = true
+        preparedStudioAction = action
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'prepare_audio') {
         const outcome = await defaultApplicationAdapters.studio.prepareAudio(action)
         preparedStudio = true
+        preparedStudioAction = action
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'prepare_3d') {
         const outcome = await defaultApplicationAdapters.studio.prepare3d(action)
         preparedStudio = true
+        preparedStudioAction = action
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'queue_sfx_pack') {
         const outcome = await defaultApplicationAdapters.studio.queueSfxPack(action)
@@ -2974,6 +3127,7 @@ export async function executeAgentActions(
           }),
         })
       }
+      if (actionExecutionKey && last.report) last.report.executionKey = actionExecutionKey
       if (last.ok && isExpensiveAction(action.type) && last.report.executionKey) {
         rememberExecution(last.report)
       }

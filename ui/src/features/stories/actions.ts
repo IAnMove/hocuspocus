@@ -1461,30 +1461,45 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
 
   useStoryStore.getState().beginProjectOperation(target.id)
   try {
-    const project = normalizeStoryProject({
-      ...target,
-      revision: target.revision + 1,
-      productions: [...target.productions, production],
-      updatedAt: new Date().toISOString(),
+    const project = await saveActiveStoryProjectMutation(workspace, current, target.id, source => {
+      const latestTarget = applyMusicVideoDirectVideoDefaults(source.projectType === 'music_video'
+        ? source
+        : { ...source, projectType: 'music_video', musicVideoGenerationMode: 'direct_video' })
+      const latestCue = latestTarget.music.cues.find(item => item.id === resolvedCue.id)
+      const latestCandidate = latestCue?.candidates.find(item => item.id === candidate.id)
+      if (!latestCue || !latestCandidate) {
+        throw new Error('La canción seleccionada cambió mientras se preparaba el videoclip; vuelve a intentarlo con la versión visible en Story Lab.')
+      }
+      const latestResolvedCue = selection.effectiveStoryMusicCue(latestTarget, latestCue, latestCandidate)
+      const latestAdaptation = adaptations.buildMusicVideoAdaptation(latestTarget, latestResolvedCue, {
+        generationMode: latestTarget.musicVideoGenerationMode,
+      })
+      const reconciledProduction = {
+        ...production,
+        sourceVersion: latestTarget.revision,
+        sourceSnapshot: { ...structuredClone(latestTarget), productions: [] },
+        targetId: latestAdaptation.focusTargetId,
+        targetName: latestAdaptation.focusLabel,
+        targetSnapshot: {
+          ...production.targetSnapshot,
+          cueTitle: latestResolvedCue.title,
+          candidateName: latestCandidate.name,
+          candidateSource: latestCandidate.source,
+          provider: latestCandidate.provider,
+          model: latestCandidate.model,
+          lyrics: latestResolvedCue.lyrics,
+          focusKind: latestAdaptation.focusKind,
+          focusTargetId: latestAdaptation.focusTargetId,
+          sceneDescription: latestAdaptation.sceneDescription,
+        },
+      }
+      return normalizeStoryProject({
+        ...latestTarget,
+        revision: latestTarget.revision + 1,
+        productions: [...latestTarget.productions, reconciledProduction],
+        updatedAt: new Date().toISOString(),
+      })
     })
-    const library = await api.saveStoryLibrary(workspace, {
-      version: 2,
-      revision: current.libraryRevision,
-      activeId: project.id,
-      projects: { ...current.projects, [project.id]: project },
-    })
-    useStoryStore.setState({
-      workspace,
-      project: library.projects[project.id],
-      projects: library.projects,
-      libraryRevision: library.revision,
-      dirty: false,
-      hydrated: false,
-      loading: false,
-      saveError: null,
-      libraryConflicts: [],
-    })
-    await useStoryStore.getState().loadWorkspace(workspace)
 
     const director = useStore.getState()
     director.directorReset()
@@ -1558,7 +1573,10 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
     const audioBlob = await audioResponse.blob()
     await useStore.getState().directorUploadAndAnalyze(new File(
       [audioBlob], candidate.name, { type: audioBlob.type || 'audio/mpeg' },
-    ), { lyricsHint: resolvedCue.lyrics || undefined })
+    ), {
+      lyricsHint: resolvedCue.lyrics || undefined,
+      totalDuration: resolvedCue.durationSeconds,
+    })
     const afterAnalyze = useStore.getState()
     if (afterAnalyze.directorError) throw new Error(afterAnalyze.directorError)
     if (afterAnalyze.directorStep !== 'structure') {
@@ -1579,7 +1597,7 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
     window.dispatchEvent(new Event('maestro:director-open'))
     return storyResult(
       workspace,
-      target,
+      project,
       'overview',
       `He preparado “${production.title}” en Music Video Director con la canción “${candidate.displayName || candidate.title || candidate.name}” y el cue “${resolvedCue.title}”. Estado: preparado. No lo he encolado ni iniciado.`,
       { destination: 'director', productionId: production.id },

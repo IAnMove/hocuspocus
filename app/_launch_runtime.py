@@ -112,6 +112,9 @@ if _hf_token_path:
             import tempfile
             _hf_const.HF_TOKEN_PATH = os.path.join(tempfile.gettempdir(), "maestro_no_hf_token")
 
+# Reject an invalid acceptance policy before importing the heavyweight engine.
+from services import execution_mode
+
 # Now safe to import wgp - all module-level code will run with patched argv
 print("[HocusPocus Lab] Importing WanGP engine...")
 import wgp
@@ -226,6 +229,15 @@ from services.access_log_filter import install_quiet_access_filter
 install_quiet_access_filter()
 
 api = FastAPI(title="HocusPocus Lab API", version=APP_VERSION or "0.0.0")
+
+
+@api.exception_handler(execution_mode.ExecutionModeError)
+async def execution_mode_error_handler(
+    _request: Request,
+    exc: execution_mode.ExecutionModeError,
+):
+    """Keep policy refusals explicit across every specialist submission route."""
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 debug_trace.configure(
     enabled=lambda: bool(
@@ -565,6 +577,8 @@ def _new_generation_job(
     reserve_generation: bool = True,
 ) -> dict:
     frozen_params = copy.deepcopy(params)
+    execution_mode.validate_generation(workspace)
+    frozen_params["_execution_mode"] = execution_mode.policy().mode
     if _is_minimax_h3_model(frozen_params.get("model_type")):
         from services.minimax_h3_duration import (
             apply_h3_dialogue_duration,
@@ -637,6 +651,8 @@ def _register_manual_generation_job(job: dict) -> dict:
     if not job_id:
         raise ValueError("A manual generation job requires an id")
     params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    execution_mode.validate_generation(str(job.get("workspace") or _get_active_workspace()))
+    params["_execution_mode"] = execution_mode.policy().mode
     if not str(params.get("model_type") or "").strip():
         params["model_type"] = "post_processing"
     params.setdefault("generation_mode", "video")
@@ -706,6 +722,8 @@ def _public_generation_details(params: dict | None) -> dict:
 
     public_values = {
         "generation_mode": params.get("generation_mode"),
+        "execution_mode": params.get("_execution_mode"),
+        "simulated": params.get("_execution_mode") == "simulate",
         "resolution": params.get("resolution"),
         "seed": params.get("seed"),
         "steps": params.get("num_inference_steps"),
@@ -6675,6 +6693,12 @@ def get_system_config():
         # entries of checkpoints_paths. The app-owned entries ("ckpts", ".")
         # are managed automatically and never shown to the user.
         "model_folders": _get_linked_model_folders(),
+        # Boot-only acceptance policy. The UI may display this state but can
+        # never mutate it, so the Wizard cannot turn fake execution on.
+        "execution_mode": execution_mode.policy().mode,
+        "execution_workspace": execution_mode.policy().workspace,
+        "execution_allow_paid": execution_mode.policy().allow_paid,
+        "execution_simulation_step_delay": execution_mode.policy().step_delay,
     }
 
 
@@ -7417,6 +7441,10 @@ async def generate_model3d(request: Request):
     body = await request.json()
     workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
     _workspace_dir(workspace)
+    try:
+        execution_mode.validate_generation(workspace)
+    except execution_mode.ExecutionModeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     raw_images = body.get("images") or {}
     if not isinstance(raw_images, dict):
         raise HTTPException(status_code=400, detail="images must be an object keyed by front/left/right/back")
@@ -8506,6 +8534,10 @@ async def director_generate_music(request: Request):
     duration_seconds = body.get("duration_seconds")
     seed = body.get("seed")
     workspace = body.get("workspace") or _get_active_workspace()
+    try:
+        execution_mode.validate_generation(workspace)
+    except execution_mode.ExecutionModeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     if wgp.get_model_def(model_type) is None:
         raise HTTPException(status_code=400, detail=f"Unknown model: {model_type}")
@@ -10021,6 +10053,11 @@ async def director_pipeline_start(request: Request):
     _init_pipeline()
     from services.director_pipeline import get_pipeline, start_pipeline
     body = await request.json()
+    workspace = body.get("workspace") or _get_active_workspace()
+    try:
+        execution_mode.validate_generation(workspace)
+    except execution_mode.ExecutionModeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
         pid = start_pipeline(body)
     except ValueError as exc:
@@ -11113,6 +11150,15 @@ def _run_generation_with_preparation(job_id: str) -> bool:
 async def generate(request: Request):
     """Submit a generation job. Returns immediately with a job_id."""
     body = await request.json()
+    # Execution mode is a boot-time trust boundary, never a request option.
+    # Discard spoofed private fields before validating the captured workspace.
+    body.pop("_execution_mode", None)
+    requested_workspace = body.get("workspace") or _get_active_workspace()
+    try:
+        execution_mode.validate_generation(requested_workspace)
+    except execution_mode.ExecutionModeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    body["_execution_mode"] = execution_mode.policy().mode
     h3_window_plan_response = None
 
     is_sfx = body.get("sfx_mode")
@@ -18218,7 +18264,10 @@ async def repaint_endpoint(request: Request):
             return
         _run_repaint_shot_generation(job_id)
 
-    threading.Thread(target=_run_repaint, daemon=False).start()
+    if execution_mode.policy().simulated:
+        threading.Thread(target=_run_generation, args=(job_id,), daemon=False).start()
+    else:
+        threading.Thread(target=_run_repaint, daemon=False).start()
     return {
         "job_id": job_id,
         "status": "queued",
@@ -19649,7 +19698,11 @@ async def recast_endpoint(request: Request):
         else:
             _run_generation(job_id)
 
-    thread = threading.Thread(target=_run_recast, daemon=False)
+    thread = (
+        threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
+        if execution_mode.policy().simulated
+        else threading.Thread(target=_run_recast, daemon=False)
+    )
     thread.start()
 
     return {
@@ -21002,7 +21055,7 @@ async def outpaint_endpoint(request: Request):
 
     worker = (
         _prepare_and_run_outpaint
-        if official_outpaint and is_video
+        if official_outpaint and is_video and not execution_mode.policy().simulated
         else _run_generation
     )
     thread = threading.Thread(target=worker, args=(job_id,), daemon=False)
@@ -21462,7 +21515,12 @@ async def blend_endpoint(request: Request):
         }
         _register_manual_generation_job(job)
 
-        thread = threading.Thread(target=_run_blend_generation, args=(job_id,), daemon=False)
+        worker = (
+            _run_generation
+            if execution_mode.policy().simulated
+            else _run_blend_generation
+        )
+        thread = threading.Thread(target=worker, args=(job_id,), daemon=False)
         thread.start()
 
         return {
@@ -23477,7 +23535,8 @@ async def tools_upscale(request: Request):
         "workspace": workspace, "out_dir": _workspace_dir(workspace),
     }
     _register_manual_generation_job(job)
-    threading.Thread(target=_run_tool_upscale, args=(job_id,), daemon=False).start()
+    worker = _run_generation if execution_mode.policy().simulated else _run_tool_upscale
+    threading.Thread(target=worker, args=(job_id,), daemon=False).start()
     return {
         "job_id": job_id,
         "status": "queued",
@@ -23529,12 +23588,70 @@ async def tools_revoice(request: Request):
         "workspace": workspace, "out_dir": _workspace_dir(workspace),
     }
     _register_manual_generation_job(job)
-    threading.Thread(target=_run_tool_revoice, args=(job_id,), daemon=False).start()
+    worker = _run_generation if execution_mode.policy().simulated else _run_tool_revoice
+    threading.Thread(target=worker, args=(job_id,), daemon=False).start()
     return {
         "job_id": job_id,
         "status": "queued",
         **_generation_job_acceptance(job),
     }
+
+
+def _run_simulated_generation(job: dict, *, finalize: bool) -> bool:
+    """Replace only expensive inference while retaining the real job path."""
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+
+    def publish_progress(message: str, value: int, step: int, total: int) -> None:
+        update_job(
+            job,
+            message=message,
+            progress=value,
+            step=step,
+            total_steps=total,
+            phase="Simulated inference",
+        )
+
+    generated_path = execution_mode.create_artifact(
+        params,
+        job["out_dir"],
+        str(job["id"]),
+        progress=publish_progress,
+        cancelled=lambda: is_cancel_requested(job),
+    )
+    output_name = os.path.basename(generated_path)
+    record_job_outputs(job, [output_name])
+    sidecar = {
+        "params": params,
+        "generation_mode": params.get("generation_mode"),
+        "job_id": job.get("id"),
+        "task_id": job.get("task_id"),
+        "root_task_id": job.get("root_task_id") or job.get("task_id"),
+        "output_filename": output_name,
+        "generation_time": 0,
+        "created_at": time.time(),
+        "simulated": True,
+        "execution_mode": "simulate",
+    }
+    with open(os.path.splitext(generated_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
+        json.dump(sidecar, handle, ensure_ascii=False, indent=2)
+    if not finalize:
+        return update_job(
+            job,
+            progress=99,
+            step=0,
+            total_steps=0,
+            phase="Finalizing",
+            message="Simulated inference complete · finalizing…",
+        )
+    return finish_job(
+        job,
+        "completed",
+        progress=100,
+        step=0,
+        total_steps=0,
+        phase="",
+        message="Done · simulated artifact",
+    )
 
 
 def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
@@ -23565,6 +23682,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
             # excluded from gallery metadata and completion logs.
             start_time = float(job.get("started_at") or time.time())
             _persist_generation_job(job)
+            if execution_mode.policy().simulated:
+                return _run_simulated_generation(job, finalize=finalize)
             _cancel_h3_idle_release()
             legacy_h3_job = _is_legacy_h3_model(
                 job.get("params", {}).get("model_type")
@@ -27173,6 +27292,10 @@ def start_comic_minimax_job(body: dict):
     """Start one observable, cancellable MiniMax Image-01 request."""
     workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
     _workspace_dir(workspace)
+    try:
+        execution_mode.validate_remote_provider(workspace, "minimax-image")
+    except execution_mode.ExecutionModeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     job_id = f"minimax-image-{uuid.uuid4().hex[:12]}"
     now = time.time()
     job = {
@@ -27263,6 +27386,8 @@ def cancel_comic_minimax_job(job_id: str):
 @api.post("/api/v1/comics/generate/minimax")
 def generate_comic_minimax(body: dict):
     """Generate one comic panel with MiniMax image-01 and persist it."""
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    execution_mode.validate_remote_provider(workspace, "minimax-image")
     prompt = str(body.get("prompt") or "").strip()
     services = wgp.server_config.get("services", {})
     from services.provider_profile import resolve_minimax_key
@@ -27274,7 +27399,7 @@ def generate_comic_minimax(body: dict):
             api_key=api_key,
             prompt=prompt,
             aspect_ratio=aspect_ratio,
-            output_dir=_workspace_dir(),
+            output_dir=_workspace_dir(workspace),
             subject_reference=(
                 _comic_reference_image_file(str(subject)) if subject else ""
             ),
@@ -32375,6 +32500,10 @@ def start_story_music_candidates_job(body: dict):
 
     workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
     _workspace_dir(workspace)
+    try:
+        execution_mode.validate_remote_provider(workspace, "minimax-music")
+    except execution_mode.ExecutionModeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     model = str(body.get("model") or "music-3.0").strip()
     if model not in minimax_music_service.ALLOWED_MODELS:
         raise HTTPException(status_code=400, detail=f"Unsupported MiniMax Music model: {model}")
@@ -32525,6 +32654,7 @@ async def generate_story_music_candidates(body: dict):
 
     services = wgp.server_config.get("services", {})
     workspace = str(body.get("workspace") or _get_active_workspace())
+    execution_mode.validate_remote_provider(workspace, "minimax-music")
     model = str(body.get("model") or "music-3.0").strip()
     reference_audio_path = None
     if model in {"music-cover", "music-cover-free"}:

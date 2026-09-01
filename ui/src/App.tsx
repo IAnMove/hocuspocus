@@ -17,6 +17,7 @@ import { RecipesOverlay } from './components/Recipes/RecipesOverlay'
 import { BrandIdentity } from './components/BrandIdentity'
 import { HocusPocusIntro } from './components/HocusPocusIntro'
 import { LanAuthGate } from './components/LanAuthGate'
+import { ExecutionModeBanner } from './components/ExecutionModeBanner'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
 
@@ -159,6 +160,7 @@ function AppContent() {
 
   return (
     <div className="flex flex-col h-full w-full bg-bg-primary">
+      <ExecutionModeBanner />
       {/* Mobile header */}
       {isMobile && (
         <header className="h-12 shrink-0 px-4 border-b border-border flex items-center justify-between bg-bg-secondary">

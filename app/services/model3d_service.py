@@ -22,7 +22,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from . import resource_scheduler
+from . import execution_mode, resource_scheduler
 from .hunyuan3d.weight_integrity import dit_cache_root, purge_truncated_safetensors, truncated_safetensors
 from .minimax_image_service import MiniMaxImageError, generate_image as generate_minimax_image
 
@@ -720,9 +720,11 @@ def start_job(
     source_mesh_path: str | None = None,
     workspace: str = "default",
 ) -> dict[str, Any]:
+    execution_mode.validate_generation(workspace)
     profile = _active_profile()
     provider = str(body.get("provider") or profile.get("model3d_provider") or "local").strip().lower()
     if provider in {"meshy", "hi3d"}:
+        execution_mode.validate_remote_provider(workspace, provider)
         return _start_remote_job(
             provider=provider,
             body=body,
@@ -730,9 +732,11 @@ def start_job(
             output_dir=output_dir,
             workspace=workspace,
         )
-    runtime = installation_status()
-    if not runtime["installed"]:
-        raise RuntimeError(runtime["install_hint"])
+    request_data = _prepare_request(body, image_paths, source_mesh_path)
+    if not execution_mode.policy().simulated:
+        runtime = installation_status()
+        if not runtime["installed"]:
+            raise RuntimeError(runtime["install_hint"])
 
     with _lock:
         _prune_finished_jobs_locked()
@@ -740,7 +744,6 @@ def start_job(
     if active >= _MAX_ACTIVE_JOBS:
         raise ValueError("Too many queued 3D jobs; wait for the current ones to finish or cancel them")
 
-    request_data = _prepare_request(body, image_paths, source_mesh_path)
     job_id = uuid.uuid4().hex
     task_id = _canonical_task_id(job_id)
     job = {
@@ -910,6 +913,38 @@ def _spawn_worker_if_active(
 
 
 def _run_job_serialized(job_id: str, output_dir: str) -> None:
+    if execution_mode.policy().simulated:
+        with _lock:
+            job = _jobs.get(job_id) or {}
+            request_data = dict(job.get("request") or {})
+        if not request_data:
+            return
+        _update_job(
+            job_id, status="running", phase="simulated_inference",
+            progress=0.08, message="Simulating Hunyuan3D inference…",
+        )
+        try:
+            output = execution_mode.create_artifact(
+                {"generation_mode": "3d"}, output_dir, job_id,
+                progress=lambda message, value, _step, _total: _update_job(
+                    job_id, message=message, progress=value / 100.0,
+                    phase="simulated_inference",
+                ),
+                cancelled=lambda: bool((_jobs.get(job_id) or {}).get("cancel_requested")),
+            )
+            filename = os.path.basename(output)
+            _update_job(
+                job_id, status="completed", phase="completed", progress=1.0,
+                message="3D model ready · simulated artifact", filename=filename,
+                url=f"/api/v1/file/{filename}", simulated=True,
+            )
+        except InterruptedError:
+            _settle_cancelled_job(job_id)
+        except Exception as exc:
+            _update_job(
+                job_id, status="failed", phase="failed", message=str(exc), error=str(exc),
+            )
+        return
     python_path = _python_path()
     if not python_path:
         _update_job(job_id, status="failed", phase="failed", error="Hunyuan3D runtime is not installed")
