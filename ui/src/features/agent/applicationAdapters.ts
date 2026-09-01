@@ -5,6 +5,10 @@ import type { SeriesAssemblyJob } from '../series/assemblyContract'
 import type { SeriesJobStatus } from '../series/types'
 import type { MediaFilter } from '../../types'
 import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentAttachStudioReferencesAction, AgentCommitSeriesCanonAction, AgentConfigureStudioLorasAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentCreateWorkspaceAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentPrepare3dAction, AgentPrepareAudioAction, AgentPrepareImageAction, AgentPrepareVideoAction, AgentQueueSfxPackAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentSelectWorkspaceAction, AgentStartGenerationAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
+import type {
+  AgentAttachVideoclipAlternativeSongAction,
+  AgentMountVideoclipAlternativeSongAction,
+} from './alternativeSongActions'
 import {
   executionKey,
   executionReport,
@@ -135,6 +139,10 @@ export interface WorkspaceAdapter {
   select(action: AgentSelectWorkspaceAction): Promise<AdapterOutcome>
   create(action: AgentCreateWorkspaceAction): Promise<AdapterOutcome>
 }
+export interface VideoclipAdapter {
+  attachAlternativeSong(action: AgentAttachVideoclipAlternativeSongAction): Promise<AdapterOutcome>
+  mountAlternativeSong(action: AgentMountVideoclipAlternativeSongAction): Promise<AdapterOutcome>
+}
 
 export interface Video3DAdapter {
   open(animate?: boolean): Promise<AdapterOutcome>
@@ -153,6 +161,7 @@ export interface WizardApplicationAdapters {
   characterKit: CharacterKitAdapter
   queue: QueueAdapter
   workspace: WorkspaceAdapter
+  videoclips: VideoclipAdapter
   openTab(tab: AgentTab): Promise<AdapterOutcome>
 }
 
@@ -740,6 +749,34 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       return presentWorkspaceSliceResult(await createWorkspace({ workspaceName: action.workspaceName }))
     },
   }
+  adapters.videoclips = {
+    async attachAlternativeSong(action) {
+      const { attach } = await import('../videoclips/adapters')
+      return presentVideoclipSliceResult(await attach(action), 'prepared')
+    },
+    async mountAlternativeSong(action) {
+      const key = executionKey({
+        workspace: useStore.getState().activeWorkspace || 'default',
+        type: action.type,
+        targetId: action.videoclipName,
+        params: { audio: action.audioOutputName, songId: action.songId || '' },
+      })
+      const reused = reuseExecution(key)
+      if (reused) {
+        return {
+          message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`,
+          target: reused.target || { kind: 'video', id: action.videoclipName, title: action.videoclipName },
+          report: reused,
+          taskId: reused.taskId,
+          outputNames: reused.outputNames,
+        }
+      }
+      const { mount } = await import('../videoclips/adapters')
+      const presented = await presentVideoclipSliceResult(await mount(action), 'running')
+      if (presented.report) rememberExecution({ ...presented.report, executionKey: key })
+      return presented
+    },
+  }
   adapters.video3d = {
     open: animate => navigate(animate ? 'animate_3d' : 'video_3d'),
     async applyRhythm(action) {
@@ -895,6 +932,34 @@ async function presentStudioSliceResult(result: CommandResult, fallbackTitle: st
       title,
     },
     taskId: result.taskIds[0],
+  }
+}
+
+async function presentVideoclipSliceResult(
+  result: CommandResult,
+  fallbackState: 'prepared' | 'running' | 'completed',
+): Promise<AdapterOutcome> {
+  const summary = typeof result.artifacts[0]?.metadata?.summary === 'string'
+    ? result.artifacts[0].metadata.summary
+    : 'Videoclip listo.'
+  const title = String(result.artifacts[0]?.metadata?.title || result.entities[0]?.id || 'videoclip')
+  const outputName = typeof result.artifacts[0]?.metadata?.outputName === 'string'
+    ? result.artifacts[0].metadata.outputName
+    : undefined
+  const state = String(result.artifacts[0]?.metadata?.state || fallbackState)
+  const target = { kind: 'video' as const, id: result.entities[0]?.id || title, title }
+  return {
+    message: summary,
+    target,
+    taskId: result.taskIds[0],
+    outputNames: outputName ? [outputName] : undefined,
+    report: executionReport({
+      state: state === 'running' ? 'running' : state === 'failed' ? 'failed' : state === 'prepared' ? 'prepared' : 'completed',
+      message: summary,
+      target,
+      taskId: result.taskIds[0],
+      outputNames: outputName ? [outputName] : undefined,
+    }),
   }
 }
 
