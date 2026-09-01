@@ -6,7 +6,7 @@
  * agentActions import and, in turn, avoids an initialization cycle when the
  * parent capability registry imports this file as a side effect.
  */
-import type { defineCapability, CapabilityDefinition, CapabilityExecutionContext, CapabilityExecutionOutcome } from './capabilityRegistry'
+import type { defineCapability, CapabilityDefinition } from './capabilityRegistry'
 import type {
   AgentAction,
   AgentAttachStudioReferencesAction,
@@ -47,10 +47,6 @@ function stringArray(value: unknown, maxItems: number, maxLength: number): strin
       return value ? [value] : []
     })
     : []
-}
-
-function studioTarget(mode: 'video' | 'image' | 'audio' | '3d', title: string) {
-  return { kind: 'studio_form', id: mode, title: `Studio → ${title}` }
 }
 
 function commonPresentation(anchors: string[]) {
@@ -186,15 +182,6 @@ function validType<T extends AgentAction>(type: T['type'], action: AgentAction):
   return action.type === type ? [] : [`${type} is invalid`]
 }
 
-async function bridgeSfx<TAction extends AgentAction>(
-  action: TAction,
-  _context: CapabilityExecutionContext,
-): Promise<CapabilityExecutionOutcome> {
-  if (action.type !== 'queue_sfx_pack') throw new Error(`No hay puente Studio para ${action.type}.`)
-  const { queueSfxPackForAgent } = await import('./agentActions')
-  return { message: await queueSfxPackForAgent(action), target: studioTarget('audio', 'Audio → SFX') }
-}
-
 /**
  * Register the Studio family after the core registry has finished evaluating.
  *
@@ -288,7 +275,8 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'compute', confirmation: 'required', progress: 'Encolando el pack de SFX…',
   resolve: sfxAction,
   validate(action) { return action.confirm === true && action.clips.length > 0 ? validType('queue_sfx_pack', action) : ['confirmed SFX clips are required'] },
-  async prepare(action) { return action }, execute: bridgeSfx,
+  async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.studio.queueSfxPack(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_sfx_pack', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: commonPresentation(['audio-mode', 'sfx-pack', 'queue']),
