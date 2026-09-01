@@ -50,6 +50,21 @@ will expose registries/read models before any physical file move:
 The migration must be additive and reversible. No old output is deleted or
 moved merely because its metadata cannot be upgraded.
 
+## Project record v1
+
+The project registry is a portable read model over existing authoritative
+stores, not a replacement store. A record preserves the immutable project ID,
+kind and optional subtype, title, real revision when one exists, timestamps,
+parent relationship, workspace references and logical source locators. It
+never exposes an absolute host path.
+
+Initial adapters cover Story Lab, Series Lab, embedded series episodes,
+Comics, Video3D scenes and Character Kits. Legacy scene files without an ID
+receive a deterministic read-time identity derived from their workspace and
+filename; the source file is not rewritten. Video Editor drafts remain
+excluded until they have durable server-side storage: browser `localStorage`
+is not sufficient evidence for a global project registry.
+
 ## Asset manifest v1
 
 Every newly generated or imported item eventually receives one adjacent
@@ -87,4 +102,3 @@ scheduled after the canonical manifest and catalog are stable.
 - The contract stays independent of FastAPI, WanGP and model imports.
 - Tests cover redaction, timing, identity, legacy adaptation and atomic
   round-trip before the first generator integration.
-
