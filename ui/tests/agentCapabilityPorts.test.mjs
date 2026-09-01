@@ -29,6 +29,9 @@ const SET_STATE_ALLOWLIST = [
 ]
 
 const SLICE_AGENT_IMPORT_ALLOWLIST = [
+  ['characters/actions.ts', '../agent/agentContract'],
+  ['characters/actions.ts', '../agent/queueActions'],
+  ['characters/actions.ts', '../agent/wizardLabSession'],
   ['series/SeriesEpisodePanel.tsx', '../agent/agentUiBus'],
   ['series/SeriesLabPanel.tsx', '../agent/agentUiBus'],
   ['series/SeriesReviewPanel.tsx', '../agent/agentUiBus'],
