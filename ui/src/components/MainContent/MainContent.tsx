@@ -36,6 +36,8 @@ const CharacterCreatorPanel = lazy(() => import('../../features/characters/Chara
   .then(module => ({ default: module.CharacterCreatorPanel })))
 const AuditDevPanel = lazy(() => import('../../features/auditdev/AuditDevPanel')
   .then(module => ({ default: module.AuditDevPanel })))
+const AssetsPanel = lazy(() => import('../../features/assets/AssetsPanel')
+  .then(module => ({ default: module.AssetsPanel })))
 
 function PanelLoadingFallback() {
   return (
@@ -740,6 +742,7 @@ export function MainContent() {
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-[10px] md:text-xs text-text-muted hidden md:block">
             {mediaFilter === 'scene3d' ? '3D Video editor'
+              : mediaFilter === 'assets' ? 'Assets'
               : mediaFilter === 'animate3d' ? 'Rig & Animate'
               : mediaFilter === 'comics' ? 'Comic Studio'
               : mediaFilter === 'stories' ? 'Story Lab'
@@ -753,14 +756,16 @@ export function MainContent() {
               ? `${outputs.length} / ${outputsTotal} items`
               : `${outputs.length} ${outputs.length === 1 ? 'item' : 'items'}`}
           </div>
-          {mediaFilter !== 'styles' && <WorkspaceSelector />}
+          {mediaFilter !== 'styles' && mediaFilter !== 'assets' && <WorkspaceSelector />}
         </div>
       </div>
 
       {/* Content area: feed + thumbnails */}
       <div className="flex-1 flex flex-row gap-0 overflow-hidden relative">
         <Suspense fallback={<PanelLoadingFallback />}>
-        {mediaFilter === 'scene3d' ? (
+        {mediaFilter === 'assets' ? (
+          <AssetsPanel />
+        ) : mediaFilter === 'scene3d' ? (
           <div className="flex-1 overflow-y-auto p-4 md:p-8">
             <div className="max-w-[1600px] mx-auto">
               <SceneAnimatorPanel />

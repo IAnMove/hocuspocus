@@ -2923,13 +2923,33 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/assets",
+      "endpoint": "list_assets",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/assets.py",
+      "ordinal": 292
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/{asset_id}",
+      "endpoint": "get_asset",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/assets.py",
+      "ordinal": 293
+    },
+    {
+      "method": "GET",
       "path": "/classic",
       "endpoint": "_classic_redirect",
       "status_code": null,
       "response_model": null,
       "include_in_schema": false,
       "source": "app/_launch_runtime.py",
-      "ordinal": 292
+      "ordinal": 294
     },
     {
       "method": "GET",
@@ -2939,7 +2959,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 293
+      "ordinal": 295
     }
   ]
 }

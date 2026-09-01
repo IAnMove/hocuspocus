@@ -22,6 +22,10 @@ EXECUTION_STATUSES = frozenset({
     "prepared", "queued", "running", "completed", "partial", "failed", "cancelled",
 })
 EXECUTION_MODES = frozenset({"real", "plan", "simulate", "import"})
+_CANONICAL_FIELDS = (
+    "schema", "schema_version", "asset", "origin", "execution", "generation",
+    "timing", "lineage", "technical",
+)
 _SENSITIVE_KEYS = frozenset({
     "api_key", "apikey", "authorization", "credential", "credentials",
     "password", "secret", "token", "access_token", "refresh_token",
@@ -108,6 +112,8 @@ def infer_asset_kind(filename: str, generation_mode: Any = None) -> str:
     mode = aliases.get(mode, mode)
     if mode in ASSET_KINDS:
         return mode
+    if str(filename or "").casefold().endswith(".scene.json"):
+        return "scene"
     return _KIND_BY_EXTENSION.get(Path(filename).suffix.casefold(), "other")
 
 
@@ -301,7 +307,10 @@ def validate_asset_manifest(value: Mapping[str, Any]) -> dict[str, Any]:
         key not in lineage for key in ("parents", "transformations")
     ):
         raise AssetManifestError("Asset manifest has an invalid lineage block")
-    return _redact(dict(value))
+    # A sidecar may retain top-level legacy fields for old consumers. The
+    # canonical read model deliberately excludes those compatibility fields:
+    # they can contain host paths and are not part of the portable contract.
+    return _redact({key: value.get(key) for key in _CANONICAL_FIELDS if key in value})
 
 
 def adapt_legacy_sidecar(

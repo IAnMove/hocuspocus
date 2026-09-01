@@ -6,6 +6,7 @@ import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
 
 const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: string }[] = [
   { value: 'all', label: 'All', shortLabel: 'All' },
+  { value: 'assets', label: 'Assets', shortLabel: 'Assets', icon: 'layers' },
   { value: 'images', label: 'Images', shortLabel: 'Img' },
   { value: 'videos', label: 'Videos', shortLabel: 'Vid' },
   { value: 'videoclips', label: 'Videoclips', shortLabel: 'Clip' },
