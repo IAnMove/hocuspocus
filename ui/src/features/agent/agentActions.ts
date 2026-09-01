@@ -1697,14 +1697,21 @@ export function isExplicitVideoGenerationRequest(request: string): boolean {
   return EXPLICIT_VIDEO_REQUESTS.some(pattern => pattern.test(text))
 }
 
-const RESUME_PREPARED_VIDEO_REQUESTS = [
-  /\b(?:genera|generad|lanza|lanzad|encola|encolad|env[ií]a|enviad|start|queue|launch)\b[^.!?\n]{0,24}\b(?:el|la|este|esta|the)\s+(?:video|v[ií]deo|clip)\b/i,
-]
-
 export function isResumePreparedStudioVideoRequest(request: string): boolean {
   const text = request.trim()
   if (!text || NEGATED_VIDEO_REQUEST.test(text)) return false
-  return RESUME_PREPARED_VIDEO_REQUESTS.some(pattern => pattern.test(text))
+  const match = text.match(
+    /\b(?:genera|generad|lanza|lanzad|encola|encolad|env[ií]a|enviad|start|queue|launch)\b[^.!?\n]{0,24}\b(?:el|la|este|esta|the)\s+(?:video|v[ií]deo|clip)\b(.*)$/i,
+  )
+  if (!match) return false
+  const leftover = match[1]
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[¿?¡!.,:;]/g, ' ')
+    .replace(/\b(?:por favor|please|ya|ahora|now)\b/g, ' ')
+    .replace(/\s+/g, '')
+  return leftover.length === 0
 }
 
 const EXPLICIT_IMAGE_REQUESTS = [
@@ -1858,7 +1865,10 @@ export async function reconcileAgentTurnWithRequest(
       (action): action is AgentPrepareVideoAction => action.type === 'prepare_video',
     )
     const state = useStore.getState()
-    const prompt = existing?.prompt.trim() || String(state.params.prompt || '').trim()
+    const studioPrompt = state.generationMode === 'video'
+      ? String(state.params.prompt || '').trim()
+      : String(state.savedPromptPerMode?.video || '').trim()
+    const prompt = existing?.prompt.trim() || studioPrompt
     if (!prompt) {
       return {
         reply: 'Studio no tiene un prompt preparado. Dime la escena y la encolo.',
@@ -1868,10 +1878,9 @@ export async function reconcileAgentTurnWithRequest(
     const prepare: AgentPrepareVideoAction = existing || {
       type: 'prepare_video',
       prompt,
-      modelType: typeof state.params.model_type === 'string' ? state.params.model_type : undefined,
-      durationSeconds: state.durationSeconds,
-      resolutionPreset: state.resolutionPreset,
-      aspectRatio: state.aspectRatio,
+      durationSeconds: state.generationMode === 'video' ? state.durationSeconds : undefined,
+      resolutionPreset: state.generationMode === 'video' ? state.resolutionPreset : undefined,
+      aspectRatio: state.generationMode === 'video' ? state.aspectRatio : undefined,
     }
     return {
       reply: 'Lanzo a la cola el vídeo ya preparado en Studio. 🪄',
