@@ -3475,13 +3475,13 @@ def enhance_prompt(
 
         # Look up model-specific enhancer prompts (Scenema, Kugel, Qwen3-TTS,
         # Index-TTS2, Chatterbox, IndexTTS2 all set these on their model_def).
-        # Lazy import keeps llm_service.py importable in environments where
-        # wgp.py is unavailable (e.g. lightweight tooling, tests).
+        # The bound catalog is read at call time so llm_service stays importable
+        # in lightweight tooling and tests that never bootstrap WanGP.
         model_specific_monologue = None
         model_specific_dialogue = None
         if model_type:
             try:
-                from wgp import get_model_def
+                from services.generation import get_model_def
                 md = get_model_def(model_type)
                 if md:
                     model_specific_monologue = md.get("text_prompt_enhancer_instructions")

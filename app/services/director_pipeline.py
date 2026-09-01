@@ -8680,8 +8680,8 @@ def _run_pipeline(pid: str, resume: bool = False):
         _oom_info = None
         try:
             from services.oom_detect import detect_oom
-            import wgp as _wgp_mod
-            _coef = float(_wgp_mod.server_config.get("vram_safety_coefficient", 0.80))
+            from services.generation import RuntimeConfig
+            _coef = float(RuntimeConfig.get("vram_safety_coefficient", 0.80))
             _oom_info = detect_oom(e, _coef)
         except Exception:
             pass  # Never fail a failure handler

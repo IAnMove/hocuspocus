@@ -1117,8 +1117,8 @@ def load_lora_guides(video_loras: list[str] = None, image_loras: list[str] = Non
         if not loras or not model_type:
             continue
         try:
-            import wgp
-            lora_dir = wgp.get_lora_dir(model_type)
+            from services.generation import get_wgp
+            lora_dir = get_wgp().get_lora_dir(model_type)
         except Exception:
             continue
         for lora_name in loras:
@@ -1528,9 +1528,9 @@ def polish_prompts_third_pass(
         if not loras or not model_type:
             return ""
         try:
-            import wgp
+            from services.generation import get_wgp
             import json as _json
-            lora_dir = wgp.get_lora_dir(model_type)
+            lora_dir = get_wgp().get_lora_dir(model_type)
             trigger_lines: list[str] = []
             for lora_name in loras:
                 sidecar_path = os.path.join(lora_dir, os.path.splitext(lora_name)[0] + ".civitai.json")

@@ -15,19 +15,6 @@ from scripts.architecture_contracts import (
 
 WGP_ALLOWLIST = {
     ("app/_launch_runtime.py", "<module>", "import wgp"),
-    ("app/_launch_runtime.py", "rejoin_clips", "from wgp import concatenate_multi_clip_videos"),
-    ("app/services/alternative_songs.py", "remount_clips", "from wgp import concatenate_multi_clip_videos"),
-    ("app/services/director/prompt_polish.py", "load_lora_guides", "import wgp"),
-    ("app/services/director/prompt_polish.py", "polish_prompts_third_pass._build_lora_hints", "import wgp"),
-    ("app/services/director_pipeline.py", "_run_pipeline", "import wgp as _wgp_mod"),
-    ("app/services/enhance_guides.py", "get_enhance_guide", "from wgp import get_model_def"),
-    ("app/services/llm_service.py", "enhance_prompt", "from wgp import get_model_def"),
-    ("app/services/model3d_service.py", "_active_profile", "import wgp"),
-    ("app/services/model3d_service.py", "_minimax_api_key", "import wgp"),
-    ("app/services/model3d_service.py", "_services", "import wgp"),
-    ("app/shared/api.py", "WanGPSession._ensure_runtime", "importlib.import_module('wgp')"),
-    ("app/shared/magic_mask.py", "_ensure_sam3_assets", "import wgp"),
-    ("app/shared/magic_mask.py", "_video_to_numpy", "from wgp import get_resampled_video"),
 }
 
 IGNORED_WGP_TREES = (
@@ -146,8 +133,40 @@ def test_wgp_import_detector_names_static_and_dynamic_forms() -> None:
 def test_first_party_wgp_imports_are_named_and_cannot_grow() -> None:
     found = _wgp_imports()
     generation_imports = {item for item in found if item[0].startswith("app/services/generation/")}
-    assert found - generation_imports == WGP_ALLOWLIST, (
-        "First-party WanGP imports changed. Add no new site; Step 1 must remove named entries "
-        f"from the allowlist. Added={sorted(found - generation_imports - WGP_ALLOWLIST)!r}, "
+    assert generation_imports == set(), (
+        "The WanGP wall must bind the live bootstrap instance and must not "
+        f"reimport wgp. found={sorted(generation_imports)!r}"
+    )
+    assert found == WGP_ALLOWLIST, (
+        "First-party WanGP imports may only be the launch bootstrap. "
+        f"Added={sorted(found - WGP_ALLOWLIST)!r}, "
         f"removed={sorted(WGP_ALLOWLIST - found)!r}"
     )
+
+
+def test_launch_binds_live_wgp_immediately_after_bootstrap_import() -> None:
+    tree = ast.parse(
+        (ROOT / "app" / "_launch_runtime.py").read_text(encoding="utf-8"),
+        filename="app/_launch_runtime.py",
+    )
+    events: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.Import) and any(alias.name == "wgp" for alias in node.names):
+            events.append("import_wgp")
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "services.generation"
+            and any(alias.name == "bind_wgp" for alias in node.names)
+        ):
+            events.append("import_bind_wgp")
+        elif (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "bind_wgp"
+            and node.value.args
+            and isinstance(node.value.args[0], ast.Name)
+            and node.value.args[0].id == "wgp"
+        ):
+            events.append("bind_wgp")
+    assert events == ["import_wgp", "import_bind_wgp", "bind_wgp"]

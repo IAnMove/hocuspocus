@@ -97,12 +97,11 @@ def get_enhance_guide(model_type: str, generation_mode: str, has_images: bool = 
         Guide text for the LLM system prompt.
     """
     # 1. Per-model overrides via model_def.
-    # Lazy-import wgp + the shared loader because enhance_guides.py is
-    # imported early during server startup, before wgp's full model
-    # definitions are populated. Lazy keeps the import cheap.
+    # Read the bound WanGP catalog at call time: this module is imported
+    # during startup, before launch has populated model definitions.
     inline_delta = ""
     try:
-        from wgp import get_model_def
+        from services.generation import get_model_def
         md = get_model_def(model_type)
         if md:
             # 1a. Full-guide FILE override — a complete, standalone enhancer

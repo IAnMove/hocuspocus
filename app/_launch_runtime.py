@@ -115,6 +115,8 @@ if _hf_token_path:
 # Now safe to import wgp - all module-level code will run with patched argv
 print("[HocusPocus Lab] Importing WanGP engine...")
 import wgp
+from services.generation import bind_wgp
+bind_wgp(wgp)
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import debug_trace
 from routers.lan_auth import create_lan_auth_router
@@ -35110,7 +35112,7 @@ def rejoin_clips(body: dict):
     Body: { group_id: str, audio_file?: str }
     Finds all clip files matching the group_id and re-concatenates them.
     """
-    from wgp import concatenate_multi_clip_videos
+    from services.mix_concat import concatenate_multi_clip_videos
     group_id = body.get("group_id")
     if not group_id:
         raise HTTPException(status_code=400, detail="group_id is required")

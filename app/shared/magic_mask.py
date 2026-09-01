@@ -14,8 +14,8 @@ from shared.utils.utils import get_video_info, has_image_file_extension, rgb_bw_
 
 # Ported from upstream WanGP (v12.x). Upstream reads media through its
 # virtual-media layer and get_resampled_video_transparent; Maestro has
-# neither, so videos are decoded with wgp.get_resampled_video instead
-# (masks never need an alpha channel).
+# neither, so videos are decoded with the bound get_resampled_video
+# helper instead (masks never need an alpha channel).
 
 PROCESS_ID = "magic_mask"
 PROCESS_NAME = "Magic Mask"
@@ -74,8 +74,8 @@ def _video_to_numpy(video_path, max_time_seconds=None):
     frame_count = int(frame_count or 1)
     if max_time_seconds is not None:
         frame_count = min(frame_count, max(1, int(round(float(fps) * float(max_time_seconds)))))
-    from wgp import get_resampled_video
-    frames = get_resampled_video(video_path, 0, frame_count, fps, bridge="torch")
+    from services.generation import get_wgp
+    frames = get_wgp().get_resampled_video(video_path, 0, frame_count, fps, bridge="torch")
     if torch.is_tensor(frames):
         frames = frames.detach().cpu().numpy()
     elif hasattr(frames, "asnumpy"):
@@ -101,11 +101,11 @@ def _ensure_sam3_assets():
     not exist on a fresh install — the detection pre-step then died with
     FileNotFoundError before anything could download. process_files_def
     is existence-checked, so this is a few isfile() calls once the assets
-    are in place. Lazy wgp import: this module loads inside wgp's own
-    import cycle, but every SAM3 run happens long after wgp is up.
+    are in place. This module loads inside wgp's own import cycle, so the
+    bound runtime is read at call time — every SAM3 run happens after bind.
     """
-    import wgp
-    wgp.process_files_def(**query_download_def())
+    from services.generation import get_wgp
+    get_wgp().process_files_def(**query_download_def())
 
 
 def _run_sam3(

@@ -522,26 +522,26 @@ def _prune_finished_jobs_locked() -> None:
 
 def _minimax_api_key() -> str:
     try:
-        import wgp
+        from services.generation import RuntimeConfig
         from .provider_profile import resolve_minimax_key
-        return resolve_minimax_key(wgp.server_config.get("services") or {}, "image")
+        return resolve_minimax_key(RuntimeConfig.services(), "image")
     except Exception:
         return ""
 
 
 def _services() -> dict:
     try:
-        import wgp
-        return wgp.server_config.get("services") or {}
+        from services.generation import RuntimeConfig
+        return RuntimeConfig.services()
     except Exception:
         return {}
 
 
 def _active_profile() -> dict:
     try:
-        import wgp
+        from services.generation import RuntimeConfig
         from .provider_profile import alias_model3d_provider
-        raw = wgp.server_config.get("maestro_production_profile") or {}
+        raw = RuntimeConfig.get("maestro_production_profile") or {}
         image = raw.get("image") if isinstance(raw.get("image"), dict) else {}
         model3d = raw.get("model3d") if isinstance(raw.get("model3d"), dict) else {}
         return {
