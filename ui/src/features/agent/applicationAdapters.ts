@@ -1,6 +1,8 @@
 import { useStore } from '../../stores/useStore'
 import type { CommandResult } from '../../lib/commandContract'
 import { rememberedCharacterKitLibrary } from '../characters/session'
+import type { SeriesAssemblyJob } from '../series/assemblyContract'
+import type { SeriesJobStatus } from '../series/types'
 import type { MediaFilter } from '../../types'
 import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentCommitSeriesCanonAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
 import {
@@ -349,57 +351,42 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   adapters.seriesLab = {
     open: () => navigate('series_lab'),
     async createEpisode(action) {
-      const { createFilledSeriesEpisode } = await import('./labActions')
-      const message = await createFilledSeriesEpisode(action)
-      return seriesEpisodeOutcome(message)
+      const { createEpisode } = await import('../series/adapters')
+      return presentSeriesSliceResult(await createEpisode(action))
     },
     async updateEpisode(action) {
-      const { updateSeriesEpisode } = await import('./labActions')
-      const message = await updateSeriesEpisode(action)
-      return seriesEpisodeOutcome(message)
+      const { updateEpisode } = await import('../series/adapters')
+      return presentSeriesSliceResult(await updateEpisode(action))
     },
     async generatePlan(action) {
-      const { generateSeriesPlan } = await import('./labActions')
-      const message = await generateSeriesPlan(action)
-      const { getAgentSeriesPlanJob } = await import('./agentUiBus')
-      const job = getAgentSeriesPlanJob()
-      if (!job?.jobId) throw new Error('Series Lab no devolvió el job de planificación iniciado.')
-      const outcome = await seriesEpisodeOutcome(message)
-      if (job.episodeId !== outcome.target.id) throw new Error('El job de planificación no pertenece al episodio canónico abierto.')
-      return { ...outcome, taskId: job.jobId }
+      const { generatePlan } = await import('../series/adapters')
+      const outcome = await presentSeriesSliceResult(await generatePlan(action))
+      if (!outcome.taskId) throw new Error('Series Lab no devolvió el job de planificación iniciado.')
+      return outcome
     },
     async applyPlan(action) {
-      const { applySeriesPlan } = await import('./labActions')
-      const message = await applySeriesPlan(action)
-      return { ...await seriesEpisodeOutcome(message), taskId: action.jobId || undefined }
+      const { applyPlan } = await import('../series/adapters')
+      return presentSeriesSliceResult(await applyPlan(action))
     },
     async renderShots(action) {
-      const { renderSeriesShots } = await import('./labActions')
-      const message = await renderSeriesShots(action)
-      const { getAgentSeriesRenderJob } = await import('./agentUiBus')
-      const job = getAgentSeriesRenderJob()
-      if (!job?.jobId) throw new Error('Series Lab no devolvió el job de render iniciado.')
-      const outcome = await seriesEpisodeOutcome(message)
-      if (job.episodeId !== outcome.target.id) throw new Error('El job de render no pertenece al episodio canónico abierto.')
-      return { ...outcome, taskId: job.jobId }
+      const { renderShots } = await import('../series/adapters')
+      const outcome = await presentSeriesSliceResult(await renderShots(action))
+      if (!outcome.taskId) throw new Error('Series Lab no devolvió el job de render iniciado.')
+      return outcome
     },
     async reviewAttempts(action) {
-      const { reviewSeriesAttempts } = await import('./labActions')
-      return seriesEpisodeOutcome(await reviewSeriesAttempts(action))
+      const { reviewAttempts } = await import('../series/adapters')
+      return presentSeriesSliceResult(await reviewAttempts(action))
     },
     async commitCanon(action) {
-      const { commitSeriesCanonDelta } = await import('./labActions')
-      return seriesEpisodeOutcome(await commitSeriesCanonDelta(action))
+      const { commitCanon } = await import('../series/adapters')
+      return presentSeriesSliceResult(await commitCanon(action))
     },
     async assembleEpisode(action) {
-      const { assembleSeriesEpisode } = await import('./labActions')
-      const message = await assembleSeriesEpisode(action)
-      const { getAgentSeriesAssemblyJob } = await import('./agentUiBus')
-      const job = getAgentSeriesAssemblyJob()
-      if (!job?.jobId) throw new Error('Series Lab no devolvió el job de ensamblado iniciado.')
-      const outcome = await seriesEpisodeOutcome(message)
-      if (job.episodeId !== outcome.target.id) throw new Error('El job de ensamblado no pertenece al episodio canónico abierto.')
-      return { ...outcome, taskId: job.jobId }
+      const { assembleEpisode } = await import('../series/adapters')
+      const outcome = await presentSeriesSliceResult(await assembleEpisode(action))
+      if (!outcome.taskId) throw new Error('Series Lab no devolvió el job de ensamblado iniciado.')
+      return outcome
     },
   }
   adapters.comic = {
@@ -685,6 +672,39 @@ async function seriesEpisodeOutcome(message: string): Promise<AdapterOutcome> {
   const episode = series?.episodesById[state.activeEpisodeId]
   if (!series?.id || !episode?.id) throw new Error('Series Lab no devolvió el episodio canónico creado o actualizado.')
   return { message, target: { kind: 'series_episode', id: episode.id, title: `${series.title} · ${episode.title}` } }
+}
+
+async function presentSeriesSliceResult(result: CommandResult): Promise<AdapterOutcome> {
+  await navigate('series_lab')
+  const {
+    clearAgentSeriesPlanJob,
+    notifyAgentSeriesAssemblyJob,
+    notifyAgentSeriesPlanJob,
+    notifyAgentSeriesRenderJob,
+    openAgentSeriesReviewView,
+    openAgentSeriesSection,
+  } = await import('./agentUiBus')
+  const section = result.navigationTarget?.section
+  if (section === 'setup' || section === 'canon' || section === 'episode' || section === 'shots' || section === 'review') {
+    openAgentSeriesSection(section)
+  }
+  if (result.navigationTarget?.anchor === 'finish') openAgentSeriesReviewView('finish')
+  const meta = result.artifacts[0]?.metadata || {}
+  const channel = typeof meta.channel === 'string' ? meta.channel : ''
+  const job = meta.job && typeof meta.job === 'object' ? meta.job as Record<string, unknown> : null
+  if (channel === 'series_plan' && job) notifyAgentSeriesPlanJob(job as unknown as SeriesJobStatus)
+  if (channel === 'series_render' && job) notifyAgentSeriesRenderJob(job as unknown as SeriesJobStatus)
+  if (channel === 'series_assembly' && job) notifyAgentSeriesAssemblyJob(job as unknown as SeriesAssemblyJob)
+  if (channel === 'series_plan_clear') clearAgentSeriesPlanJob(result.entities[0]?.id || '')
+  const summary = typeof meta.summary === 'string' ? meta.summary : 'Series Lab listo.'
+  const outcome = await seriesEpisodeOutcome(summary)
+  if (channel === 'series_plan' || channel === 'series_render' || channel === 'series_assembly') {
+    const jobEpisodeId = typeof job?.episodeId === 'string' ? job.episodeId : ''
+    if (jobEpisodeId && jobEpisodeId !== outcome.target.id) {
+      throw new Error('El job de Series Lab no pertenece al episodio canónico abierto.')
+    }
+  }
+  return { ...outcome, taskId: result.taskIds[0] }
 }
 
 export const defaultApplicationAdapters = createDefaultApplicationAdapters()
