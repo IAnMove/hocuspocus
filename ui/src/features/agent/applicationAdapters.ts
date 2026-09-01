@@ -358,6 +358,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async startDirectorProduction(action, expectedProductionId) {
       const { bindDirectorProductionTarget } = await import('./agentContract')
       const { useStoryStore } = await import('../stories/store')
+      await useStoryStore.getState().loadWorkspace(useStore.getState().activeWorkspace || 'default')
       const handoff = useStore.getState().directorStoryProductionHandoff
       const stories = useStoryStore.getState()
       const project = handoff ? stories.projects[handoff.projectId] || stories.project : stories.project
@@ -696,7 +697,7 @@ async function storyOutcome(message: string): Promise<AdapterOutcome> {
 async function presentStorySliceResult(result: CommandResult): Promise<AdapterOutcome> {
   const destination = result.navigationTarget?.destination
   if (destination === 'director') await navigate('director')
-  else if (destination === 'comics') await navigate('comics')
+  else if (destination === 'comics') await navigate('director')
   else await navigate('story_lab')
   const {
     notifyAgentStoryDraft,
