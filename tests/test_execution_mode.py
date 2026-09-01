@@ -6,10 +6,27 @@ import shutil
 import struct
 import subprocess
 import wave
+from types import SimpleNamespace
 
 import pytest
 
 from services import execution_mode
+
+
+def _load_launch_function(name, namespace):
+    source = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(
+        encoding="utf-8",
+    )
+    tree = ast.parse(source, filename="app/_launch_runtime.py")
+    function = next(
+        node for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+    )
+    exec(
+        compile(ast.Module(body=[function], type_ignores=[]), "app/_launch_runtime.py", "exec"),
+        namespace,
+    )
+    return namespace[name]
 
 
 @pytest.fixture(autouse=True)
@@ -162,6 +179,26 @@ def test_director_minimax_frame_is_simulated_without_a_provider_call(monkeypatch
         reference_paths=[],
     )
     assert (tmp_path / output).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_simulated_worker_returns_cleanly_when_artifact_creation_is_cancelled(tmp_path):
+    def cancelled_artifact(*_args, **_kwargs):
+        raise InterruptedError("Simulated generation cancelled")
+
+    namespace = {
+        "execution_mode": SimpleNamespace(create_artifact=cancelled_artifact),
+        "update_job": lambda *_args, **_kwargs: True,
+        "is_cancel_requested": lambda _job: True,
+    }
+    worker = _load_launch_function("_run_simulated_generation", namespace)
+    job = {
+        "id": "cancelled-simulation",
+        "out_dir": str(tmp_path),
+        "params": {"generation_mode": "video"},
+    }
+
+    assert worker(job, finalize=True) is False
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_launch_runtime_has_one_global_policy_boundary_before_inference():

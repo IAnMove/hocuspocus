@@ -1498,6 +1498,35 @@ test('repairs an explicit Studio audio request when the model only prepares it',
   assert.deepEqual(retry.actions.map(action => action.type), ['open_tab', 'prepare_audio', 'start_generation'])
 })
 
+test('keeps Story Lab song generation out of the Studio Audio shortcut', async () => {
+  const { isExplicitAudioGenerationRequest, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const configure = {
+    type: 'configure_story_song', targetStoryTitle: 'Guardia nocturna', songTitle: 'Himno',
+    brief: 'Metal de guardia', style: 'Heavy metal', lyrics: '[Verse]\nCódigo y metal',
+    writeLyrics: false, lyricsLanguage: 'Español', instrumental: false,
+    model: 'ace_step_v1_5_xl_sft_lm_4b',
+  }
+
+  assert.equal(isExplicitAudioGenerationRequest('Genera una canción heavy metal en Story Lab.'), false)
+  assert.equal(isExplicitAudioGenerationRequest('Abre Studio → Audio y genera una canción heavy metal.'), true)
+  assert.equal(isExplicitAudioGenerationRequest('En Studio Audio genera una voz de prueba.'), true)
+
+  const reconciled = await reconcileAgentTurnWithRequest(
+    'En Story Lab crea una canción vocal heavy metal y genera su primera versión.',
+    {
+      reply: 'Forjaré la canción.',
+      actions: [
+        configure,
+        { type: 'generate_story_song', targetStoryTitle: 'Guardia nocturna', cueTitle: 'Himno', confirm: true },
+      ],
+    },
+  )
+
+  assert.deepEqual(reconciled.actions.map(action => action.type), [
+    'configure_story_song', 'generate_story_song',
+  ])
+})
+
 test('accepts compact open_tab aliases and queues an explicit game SFX pack', async () => {
   const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
   const compact = parseAgentTurn(JSON.stringify({

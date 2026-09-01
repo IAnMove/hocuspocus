@@ -23611,13 +23611,18 @@ def _run_simulated_generation(job: dict, *, finalize: bool) -> bool:
             phase="Simulated inference",
         )
 
-    generated_path = execution_mode.create_artifact(
-        params,
-        job["out_dir"],
-        str(job["id"]),
-        progress=publish_progress,
-        cancelled=lambda: is_cancel_requested(job),
-    )
+    try:
+        generated_path = execution_mode.create_artifact(
+            params,
+            job["out_dir"],
+            str(job["id"]),
+            progress=publish_progress,
+            cancelled=lambda: is_cancel_requested(job),
+        )
+    except InterruptedError:
+        # Cancellation is settled by _run_generation's finally block, after
+        # the simulated executor has stopped and shared cleanup has completed.
+        return False
     output_name = os.path.basename(generated_path)
     record_job_outputs(job, [output_name])
     sidecar = {

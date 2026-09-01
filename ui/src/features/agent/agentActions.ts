@@ -1733,11 +1733,17 @@ const EXPLICIT_AUDIO_GENERATION_REQUESTS = [
   /\b(?:gen[eé]ra(?:la|lo|r|d|me)?|crea(?:la|lo|r|d|me)?|lanza(?:la|lo|r|d)?|encola(?:la|lo|r|d)?)\b[^.!?\n]{0,120}\b(?:audio|canci[oó]n|m[uú]sica|voz|speech)\b/i,
   /\b(?:audio|canci[oó]n|m[uú]sica|voz|speech)\b[^.!?\n]{0,160}\b(?:gen[eé]ra(?:la|lo|r|d|me)?|l[aá]nza(?:la|lo|r|d)?|enc[oó]la(?:la|lo|r|d)?)\b/i,
 ]
+const STUDIO_AUDIO_CONTEXT = [
+  /\bstudio\s*(?:(?:→|->|›|\/|-)\s*)?audio\b/i,
+  /\baudio\s+(?:de|del|en)\s+studio\b/i,
+  /\b(?:pestaña|tab|secci[oó]n|modo|panel|formulario)\s+(?:de\s+)?audio\b/i,
+]
 
 export function isExplicitAudioGenerationRequest(request: string): boolean {
   const text = request.trim()
   if (!text || NEGATED_VIDEO_REQUEST.test(text) || MUSIC_VIDEO_CONTEXT.test(text)) return false
   if (isExplicitSfxGenerationRequest(text)) return false
+  if (!STUDIO_AUDIO_CONTEXT.some(pattern => pattern.test(text))) return false
   return EXPLICIT_AUDIO_GENERATION_REQUESTS.some(pattern => pattern.test(text))
 }
 
