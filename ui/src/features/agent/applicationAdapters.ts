@@ -4,7 +4,7 @@ import { rememberedCharacterKitLibrary } from '../characters/session'
 import type { SeriesAssemblyJob } from '../series/assemblyContract'
 import type { SeriesJobStatus } from '../series/types'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentCommitSeriesCanonAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentCreateWorkspaceAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentSelectWorkspaceAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentAttachStudioReferencesAction, AgentCommitSeriesCanonAction, AgentConfigureStudioLorasAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentCreateWorkspaceAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentPrepare3dAction, AgentPrepareAudioAction, AgentPrepareImageAction, AgentPrepareVideoAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentSelectWorkspaceAction, AgentStartGenerationAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
 import {
   executionKey,
   executionReport,
@@ -16,7 +16,6 @@ import {
 import { openAgentActivityDetails, requestAgentSceneControl, requestAgentSceneRhythm, requestAgentSceneWorkflow, requestAgentStoryVisualGeneration, type AgentSceneControlRequest, type AgentSceneWorkflowRequest } from './agentUiBus'
 import type { AgentRhythmGrid } from './agentUiBus'
 import { queueMusic } from './audioActions'
-import type { AgentPrepareAudioAction } from './agentActions'
 import type { AgentTab } from './capabilityRegistry'
 import type {
   AgentAddVideoEditorAudioAction,
@@ -59,6 +58,13 @@ export interface AdapterOutcome {
 export interface StudioAdapter {
   open(tab?: 'studio' | 'images' | 'videos' | 'audio' | '3d'): Promise<AdapterOutcome>
   queueMusic(action: AgentPrepareAudioAction): Promise<AdapterOutcome>
+  prepareVideo(action: AgentPrepareVideoAction): Promise<AdapterOutcome>
+  prepareImage(action: AgentPrepareImageAction): Promise<AdapterOutcome>
+  prepareAudio(action: AgentPrepareAudioAction): Promise<AdapterOutcome>
+  prepare3d(action: AgentPrepare3dAction): Promise<AdapterOutcome>
+  startGeneration(action: AgentStartGenerationAction): Promise<AdapterOutcome>
+  attachReferences(action: AgentAttachStudioReferencesAction): Promise<AdapterOutcome>
+  configureLoras(action: AgentConfigureStudioLorasAction): Promise<AdapterOutcome>
 }
 
 export interface StoryLabAdapter {
@@ -278,6 +284,52 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async queueMusic(action) {
       const result = await queueMusic(action)
       return { ...result, target: { kind: 'queue_task', id: result.taskId, title: 'Song generation' } }
+    },
+    async prepareVideo(action) {
+      const { prepareVideoForm } = await import('../studio/adapters')
+      return presentStudioSliceResult(await prepareVideoForm(action), 'Video')
+    },
+    async prepareImage(action) {
+      const { prepareImageForm } = await import('../studio/adapters')
+      return presentStudioSliceResult(await prepareImageForm(action), 'Image')
+    },
+    async prepareAudio(action) {
+      const { prepareAudioForm } = await import('../studio/adapters')
+      return presentStudioSliceResult(await prepareAudioForm(action), 'Audio')
+    },
+    async prepare3d(action) {
+      const { prepare3dForm } = await import('../studio/adapters')
+      return presentStudioSliceResult(await prepare3dForm(action), '3D')
+    },
+    async startGeneration(action) {
+      const { startGeneration } = await import('../studio/adapters')
+      const result = await startGeneration()
+      const presented = await presentStudioSliceResult(result, 'Studio generation')
+      const taskId = result.taskIds[0]
+      return {
+        ...presented,
+        taskId,
+        report: executionReport({
+          state: 'queued',
+          message: presented.message,
+          target: presented.target,
+          taskId,
+          recoverable: true,
+          executionKey: executionKey({
+            workspace: useStore.getState().activeWorkspace || 'default',
+            type: action.type,
+            params: action,
+          }),
+        }),
+      }
+    },
+    async attachReferences(action) {
+      const { attachReferences } = await import('../studio/adapters')
+      return presentStudioSliceResult(await attachReferences(action), 'Image / Video')
+    },
+    async configureLoras(action) {
+      const { configureLoras } = await import('../studio/adapters')
+      return presentStudioSliceResult(await configureLoras(action), 'Image / Video')
     },
   }
   adapters.storyLab = {
@@ -819,6 +871,24 @@ async function presentQueueSliceResult(result: CommandResult): Promise<AdapterOu
   return {
     message: summary,
     target: { kind: 'activity', id: result.entities[0]?.id || 'activity', title: 'Activity' },
+    taskId: result.taskIds[0],
+  }
+}
+
+async function presentStudioSliceResult(result: CommandResult, fallbackTitle: string): Promise<AdapterOutcome> {
+  await navigate('studio')
+  const summary = typeof result.artifacts[0]?.metadata?.summary === 'string'
+    ? result.artifacts[0].metadata.summary
+    : 'Studio listo.'
+  const title = String(result.artifacts[0]?.metadata?.title || fallbackTitle)
+  const mode = String(result.artifacts[0]?.metadata?.mode || 'studio')
+  return {
+    message: summary,
+    target: {
+      kind: mode === 'generation' ? 'generation_task' : 'studio_form',
+      id: result.entities[0]?.id || mode,
+      title,
+    },
     taskId: result.taskIds[0],
   }
 }

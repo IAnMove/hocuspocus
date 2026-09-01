@@ -34,18 +34,10 @@ const SLICE_AGENT_IMPORT_ALLOWLIST = [
 const LEGACY_EXECUTE_ALLOWLIST = [
   'attach_videoclip_alternative_song',
   'mount_videoclip_alternative_song',
-  'prepare_video',
-  'prepare_image',
-  'prepare_audio',
-  'prepare_3d',
   'queue_sfx_pack',
-  'start_generation',
-  'attach_studio_references',
-  'configure_studio_loras',
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
-  '../../api/client',
   '../../stores/useStore',
   '../../types',
   '../comics/generateArtwork',
@@ -62,7 +54,6 @@ const AGENT_ACTIONS_IMPORTS = [
   './characterKitActions',
   './commandContract',
   './sfxPack',
-  './studioGuidance',
   './videoEditorActions',
   './wizardContext',
 ]
@@ -213,7 +204,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
   assert.equal(registered.length, 73)
-  assert.equal(legacy.length, 10)
+  assert.equal(legacy.length, 3)
 })
 
 test('agentActions.ts and labActions.ts keep their current module graph until a slice PR shrinks it', () => {
