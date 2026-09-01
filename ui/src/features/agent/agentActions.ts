@@ -2476,12 +2476,6 @@ const TAB_LABELS: Record<AgentTab, string> = {
   settings: 'Settings',
 }
 
-/** Canonical Studio SFX-pack bridge; the implementation stays lazy. */
-export async function queueSfxPackForAgent(action: AgentQueueSfxPackAction): Promise<string> {
-  const { queueSfxPack } = await import('./audioActions')
-  return queueSfxPack(action)
-}
-
 export async function executeAgentActions(
   actions: AgentAction[],
   onStep?: (message: string) => void,
@@ -2732,8 +2726,8 @@ export async function executeAgentActions(
         preparedStudio = true
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'queue_sfx_pack') {
-        const { queueSfxPack } = await import('./audioActions')
-        results.push({ action, ok: true, message: await queueSfxPack(action) })
+        const outcome = await defaultApplicationAdapters.studio.queueSfxPack(action)
+        results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'start_generation') {
         if (!preparedStudio) throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
         const outcome = await defaultApplicationAdapters.studio.startGeneration(action)

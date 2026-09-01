@@ -5,6 +5,7 @@ import {
   prepareAudio,
   prepareImage,
   prepareVideo,
+  queueSfxPack,
   startPreparedGeneration,
 } from './actions'
 import {
@@ -21,6 +22,7 @@ import type {
   PrepareAudioCommand,
   PrepareImageCommand,
   PrepareVideoCommand,
+  QueueSfxPackCommand,
   QueueTaskCommand,
 } from './commands'
 
@@ -66,4 +68,8 @@ export async function attachReferences(command: AttachStudioReferencesCommand) {
 
 export async function configureLoras(command: ConfigureStudioLorasCommand) {
   return configureStudioLoras(command)
+}
+
+export async function queueSfx(command: QueueSfxPackCommand) {
+  return queueSfxPack(command)
 }

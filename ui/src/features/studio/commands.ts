@@ -67,3 +67,17 @@ export type ConfigureStudioLorasCommand = {
   loras: StudioLoraSelection[]
   replaceExisting: boolean
 }
+
+export type QueueSfxClip = {
+  name: string
+  prompt: string
+  durationSeconds: number
+}
+
+export type QueueSfxPackCommand = {
+  style: string
+  clips: QueueSfxClip[]
+  modelType?: string
+  negativePrompt?: string
+  confirm: true
+}

@@ -9,6 +9,7 @@ import type {
   PrepareAudioCommand,
   PrepareImageCommand,
   PrepareVideoCommand,
+  QueueSfxPackCommand,
 } from './commands'
 
 export type StudioSfxClip = {
@@ -111,6 +112,34 @@ export async function selectAudioModel(
   const selected = useStore.getState().params.model_type || requested || fallback
   const selectedModel = useStore.getState().models.find(model => model.model_type === selected)
   return selectedModel?.name || selected
+}
+
+export async function queueSfxPack(action: QueueSfxPackCommand): Promise<CommandResult> {
+  if (!action.confirm) throw new Error('Encolar el pack de SFX requiere confirm=true tras una petición explícita.')
+  if (!action.clips.length) throw new Error('El pack de SFX no incluye clips.')
+  openStudioAudio('sfx')
+  await selectAudioModel(action.modelType, 'sfx')
+  const ids: string[] = []
+  const negative = action.negativePrompt || 'music, speech, talking, vocals, long melody'
+  for (const clip of action.clips) {
+    applySfxClip(clip, negative)
+    const before = new Set(useStore.getState().jobs)
+    await useStore.getState().startGeneration()
+    const created = useStore.getState().jobs.find(job => !before.has(job))
+    if (!created) throw new Error(`HocusPocus no encoló el efecto ${clip.name}.`)
+    if (created.status === 'failed') throw new Error(created.error || created.message || `Falló ${clip.name}.`)
+    ids.push(`${clip.name}${created.id ? ` (${created.id})` : ''}`)
+  }
+  return studioResult(
+    'audio',
+    'Audio → SFX',
+    [
+      `He encolado **${ids.length} efectos SFX** en Studio → Audio → SFX.`,
+      'Irán detrás de lo que ya use la GPU y aparecerán en la galería Audios al terminar.',
+      '',
+      ...ids.map(id => `- ${id}`),
+    ].join('\n'),
+  )
 }
 
 export function applySfxClip(clip: StudioSfxClip, negativePrompt: string): void {

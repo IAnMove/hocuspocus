@@ -34,7 +34,6 @@ const SLICE_AGENT_IMPORT_ALLOWLIST = [
 const LEGACY_EXECUTE_ALLOWLIST = [
   'attach_videoclip_alternative_song',
   'mount_videoclip_alternative_song',
-  'queue_sfx_pack',
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
@@ -48,7 +47,6 @@ const AGENT_ACTIONS_IMPORTS = [
   './agentUiBus',
   './alternativeSongActions',
   './applicationAdapters',
-  './audioActions',
   './capabilityRegistry',
   './capabilityRunner',
   './characterKitActions',
@@ -204,7 +202,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
   assert.equal(registered.length, 73)
-  assert.equal(legacy.length, 3)
+  assert.equal(legacy.length, 2)
 })
 
 test('agentActions.ts and labActions.ts keep their current module graph until a slice PR shrinks it', () => {
