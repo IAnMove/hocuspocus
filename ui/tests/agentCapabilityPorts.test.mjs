@@ -25,10 +25,6 @@ const SET_STATE_ALLOWLIST = [
 ]
 
 const SLICE_AGENT_IMPORT_ALLOWLIST = [
-  ['series/SeriesEpisodePanel.tsx', '../agent/agentUiBus'],
-  ['series/SeriesLabPanel.tsx', '../agent/agentUiBus'],
-  ['series/SeriesReviewPanel.tsx', '../agent/agentUiBus'],
-  ['stories/StoryLabPanel.tsx', '../agent/agentUiBus'],
 ]
 
 const LEGACY_EXECUTE_ALLOWLIST = [
@@ -173,14 +169,13 @@ test('useStore.setState in features/agent stays on the named allowlist outside a
   assert.equal(actual.reduce((total, row) => total + row[2], 0), 0)
 })
 
-test('other feature slices do not import Agent Mode except the frozen UI-bus listeners', () => {
+test('other feature slices do not import Agent Mode', () => {
   const actual = sliceAgentImports()
   const { added, removed } = diffLists(actual, SLICE_AGENT_IMPORT_ALLOWLIST)
   assert.deepEqual(
     { actual, added, removed },
     { actual: SLICE_AGENT_IMPORT_ALLOWLIST, added: [], removed: [] },
-    'Story/Series (and later slices) may keep listening on agentUiBus until that bus moves. '
-      + 'They must not import agent domain modules. '
+    'Product slices must not import features/agent. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
 })

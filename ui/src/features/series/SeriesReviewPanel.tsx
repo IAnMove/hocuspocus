@@ -8,7 +8,7 @@ import { Pill, SectionCard } from './components'
 import { SeriesShotDurationControl } from './SeriesShotDurationControl'
 import { greenButton, primaryButton, secondaryButton } from './styles'
 import type { SeriesAssemblyJob, SeriesEpisode, SeriesJobStatus, SeriesProject, SeriesRenderAttempt, SeriesShot } from './types'
-import { listenForAgentSeriesAssemblyJob, listenForAgentSeriesReviewView } from '../agent/agentUiBus'
+import { listenForAgentSeriesAssemblyJob, listenForAgentSeriesReviewView } from '../../lib/uiBus'
 
 function AttemptPreview({ series, attempt, approved, onApprove, onReject }: {
   series: SeriesProject; attempt: SeriesRenderAttempt; approved: boolean; onApprove: () => void; onReject: () => void
