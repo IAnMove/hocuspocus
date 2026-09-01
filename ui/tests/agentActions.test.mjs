@@ -1468,6 +1468,29 @@ test('genera el video reuses a prepared Studio prompt instead of asking for a to
   assert.equal(resumed.actions[0].modelType, undefined)
   assert.equal(resumed.actions[1].confirm, true)
 
+  useStore.setState({
+    generationMode: 'video',
+    params: { ...useStore.getState().params, prompt: '' },
+    savedPromptPerMode: { ...useStore.getState().savedPromptPerMode, video: '' },
+  })
+  const asked = await reconcileAgentTurnWithRequest('genera el video', { reply: '¿De qué?', actions: [] })
+  assert.equal(asked.actions[0].type, 'open_tab')
+  assert.equal(asked.actions.some(action => action.type === 'start_generation'), false)
+  useStore.setState(original)
+})
+
+test('genera el video de un mapache uses the new topic instead of the prepared form', async () => {
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const original = {
+    generationMode: useStore.getState().generationMode,
+    params: useStore.getState().params,
+    savedPromptPerMode: useStore.getState().savedPromptPerMode,
+  }
+  useStore.setState({
+    generationMode: 'video',
+    params: { ...useStore.getState().params, prompt: 'Sheldon Cooper cuenta un chiste en su salón, bata verde, Bazinga.' },
+  })
   const topical = await reconcileAgentTurnWithRequest('genera el video de un mapache', { reply: '¿De qué?', actions: [] })
   assert.deepEqual(topical.actions.map(action => action.type), ['prepare_video', 'start_generation'])
   assert.ok(topical.actions[0].prompt.includes('mapache'))
@@ -1478,24 +1501,34 @@ test('genera el video reuses a prepared Studio prompt instead of asking for a to
   assert.ok(example.actions[0].prompt.length > 40)
   assert.equal(example.actions[0].prompt.includes('genera el video'), false)
   assert.equal(example.actions[0].prompt.includes('Sheldon'), false)
+  useStore.setState(original)
+})
 
-  useStore.setState({
-    generationMode: 'image',
-    params: { ...useStore.getState().params, model_type: 'image-only-model', prompt: 'un retrato de estudio' },
-    savedPromptPerMode: { ...useStore.getState().savedPromptPerMode, video: 'Sheldon Cooper cuenta un chiste en su salón, bata verde, Bazinga.' },
-  })
-  const afterModeSwitch = await reconcileAgentTurnWithRequest('genera el video', { reply: '¿De qué?', actions: [] })
-  assert.deepEqual(afterModeSwitch.actions.map(action => action.type), ['prepare_video', 'start_generation'])
-  assert.equal(afterModeSwitch.actions[0].prompt.includes('Sheldon'), true)
-  assert.equal(afterModeSwitch.actions[0].modelType, undefined)
+test('genera el video does not copy an incompatible I2V, audio or 3D model as T2V', async () => {
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const original = {
+    generationMode: useStore.getState().generationMode,
+    params: useStore.getState().params,
+    savedPromptPerMode: useStore.getState().savedPromptPerMode,
+  }
+  const prepared = 'Sheldon Cooper cuenta un chiste en su salón, bata verde, Bazinga.'
 
-  useStore.setState({
-    generationMode: 'video',
-    params: { ...useStore.getState().params, prompt: '' },
-    savedPromptPerMode: { ...useStore.getState().savedPromptPerMode, video: '' },
-  })
-  const asked = await reconcileAgentTurnWithRequest('genera el video', { reply: '¿De qué?', actions: [] })
-  assert.equal(asked.actions[0].type, 'open_tab')
-  assert.equal(asked.actions.some(action => action.type === 'start_generation'), false)
+  for (const [generationMode, modelType] of [
+    ['image', 'image-only-model'],
+    ['audio', 'ace_step_music'],
+    ['model3d', 'hunyuan3d'],
+    ['video', 'i2v-only-model'],
+  ]) {
+    useStore.setState({
+      generationMode,
+      params: { ...useStore.getState().params, model_type: modelType, prompt: generationMode === 'video' ? prepared : 'otro modo' },
+      savedPromptPerMode: { ...useStore.getState().savedPromptPerMode, video: prepared },
+    })
+    const turn = await reconcileAgentTurnWithRequest('genera el video', { reply: '¿De qué?', actions: [] })
+    assert.deepEqual(turn.actions.map(action => action.type), ['prepare_video', 'start_generation'])
+    assert.equal(turn.actions[0].modelType, undefined, `${generationMode}/${modelType} must not be copied as T2V`)
+    assert.equal(turn.actions[0].prompt.includes('Sheldon'), true)
+  }
   useStore.setState(original)
 })
