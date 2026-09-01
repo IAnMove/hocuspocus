@@ -1447,3 +1447,21 @@ test('a video example fills a real prompt instead of asking, and a topical video
   assert.deepEqual(topical.actions.map(action => action.type), ['prepare_video', 'start_generation'])
   assert.ok(topical.actions[0].prompt.includes('mapache'))
 })
+
+test('genera el video reuses a prepared Studio prompt instead of asking for a topic', async () => {
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  useStore.setState({
+    params: { ...useStore.getState().params, prompt: 'Sheldon Cooper cuenta un chiste en su salón, bata verde, Bazinga.' },
+    durationSeconds: 5.2,
+  })
+  const resumed = await reconcileAgentTurnWithRequest('genera el video', { reply: '¿De qué?', actions: [] })
+  assert.deepEqual(resumed.actions.map(action => action.type), ['prepare_video', 'start_generation'])
+  assert.equal(resumed.actions[0].prompt.includes('Sheldon'), true)
+  assert.equal(resumed.actions[1].confirm, true)
+
+  useStore.setState({ params: { ...useStore.getState().params, prompt: '' } })
+  const asked = await reconcileAgentTurnWithRequest('genera el video', { reply: '¿De qué?', actions: [] })
+  assert.equal(asked.actions[0].type, 'open_tab')
+  assert.equal(asked.actions.some(action => action.type === 'start_generation'), false)
+})

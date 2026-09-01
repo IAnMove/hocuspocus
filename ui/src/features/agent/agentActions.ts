@@ -1697,6 +1697,16 @@ export function isExplicitVideoGenerationRequest(request: string): boolean {
   return EXPLICIT_VIDEO_REQUESTS.some(pattern => pattern.test(text))
 }
 
+const RESUME_PREPARED_VIDEO_REQUESTS = [
+  /\b(?:genera|generad|lanza|lanzad|encola|encolad|env[ií]a|enviad|start|queue|launch)\b[^.!?\n]{0,24}\b(?:el|la|este|esta|the)\s+(?:video|v[ií]deo|clip)\b/i,
+]
+
+export function isResumePreparedStudioVideoRequest(request: string): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_VIDEO_REQUEST.test(text)) return false
+  return RESUME_PREPARED_VIDEO_REQUESTS.some(pattern => pattern.test(text))
+}
+
 const EXPLICIT_IMAGE_REQUESTS = [
   /\b(?:hazme|hacedme|generame|genérame|creame|créame)\b[^.!?\n]*\b(?:imagen|im[aá]genes|foto|fotos|retrato|ilustraci[oó]n)\b/i,
   /\b(?:haz|haced|genera|generad|crea|cread|lanza|lanzad|encola|encolad)\b[^.!?\n]*\b(?:imagen|im[aá]genes|foto|fotos|retrato|ilustraci[oó]n)\b/i,
@@ -1843,6 +1853,31 @@ export async function reconcileAgentTurnWithRequest(
   history: ExampleConversation[] = [],
 ): Promise<AgentTurn> {
   const { maybeExampleTurn } = await import('./agentExamples')
+  if (isResumePreparedStudioVideoRequest(request)) {
+    const existing = turn.actions.find(
+      (action): action is AgentPrepareVideoAction => action.type === 'prepare_video',
+    )
+    const state = useStore.getState()
+    const prompt = existing?.prompt.trim() || String(state.params.prompt || '').trim()
+    if (!prompt) {
+      return {
+        reply: 'Studio no tiene un prompt preparado. Dime la escena y la encolo.',
+        actions: [{ type: 'open_tab', tab: 'studio' }],
+      }
+    }
+    const prepare: AgentPrepareVideoAction = existing || {
+      type: 'prepare_video',
+      prompt,
+      modelType: typeof state.params.model_type === 'string' ? state.params.model_type : undefined,
+      durationSeconds: state.durationSeconds,
+      resolutionPreset: state.resolutionPreset,
+      aspectRatio: state.aspectRatio,
+    }
+    return {
+      reply: 'Lanzo a la cola el vídeo ya preparado en Studio. 🪄',
+      actions: [prepare, { type: 'start_generation', confirm: true }],
+    }
+  }
   const exampleTurn = maybeExampleTurn(request, turn, history)
   if (exampleTurn) return exampleTurn
   const rhythmic3dWorkflow = turn.actions.find(
