@@ -1,4 +1,4 @@
-import { fetchCanonicalTasks, fetchCharacterKitLibrary, fetchOutputs, saveCharacterKit } from '../../api/client'
+import { fetchCharacterKitLibrary, fetchOutputs, saveCharacterKit } from '../../api/client'
 import {
   createCharacterKit,
   type CharacterKit,
@@ -165,12 +165,9 @@ export async function applyAgentCharacterKitPreset(command: ApplyCharacterKitPre
 export async function trackAgentCharacterKitJob(command: TrackCharacterKitJobCommand): Promise<CommandResult> {
   const library = await loadLibrary()
   const kit = findKit(library, command.kitName)
-  const snapshot = await fetchCanonicalTasks(workspaceName(), 'active')
-  const taskIds = snapshot.tasks.filter(task => !task.parent_id).map(task => task.id)
+  const entity = { kind: 'character_kit', id: kit.id, workspaceId: workspaceName() }
   return commandResultFromSlice({
-    status: taskIds.length ? 'queued' : 'completed',
-    entity: { kind: 'character_kit', id: kit.id, workspaceId: workspaceName() },
-    taskIds,
-    navigationTarget: { destination: 'character_kit', entity: { kind: 'character_kit', id: kit.id, workspaceId: workspaceName() } },
+    entity,
+    navigationTarget: { destination: 'activity', entity },
   })
 }
