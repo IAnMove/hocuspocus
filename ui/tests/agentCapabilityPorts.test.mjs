@@ -52,7 +52,6 @@ const LEGACY_EXECUTE_ALLOWLIST = [
   'retry_task',
   'select_workspace',
   'create_workspace',
-  'generate_comic_panel',
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
@@ -159,13 +158,20 @@ function importSpecifiers(source) {
 
 function sliceAgentImports() {
   const found = []
+  const seen = new Set()
   for (const path of walk(FEATURES_ROOT)) {
     const rel = relative(FEATURES_ROOT, path).replaceAll('\\', '/')
     if (rel.startsWith('agent/')) continue
     const source = readFileSync(path, 'utf8')
     const pattern = /(?:from\s*|import\s*\()\s*['"]([^'"]*agent\/[^'"]+)['"]/g
     let match
-    while ((match = pattern.exec(source))) found.push([rel, match[1]])
+    while ((match = pattern.exec(source))) {
+      const row = [rel, match[1]]
+      const key = JSON.stringify(row)
+      if (seen.has(key)) continue
+      seen.add(key)
+      found.push(row)
+    }
   }
   return found.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]))
 }
@@ -234,7 +240,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
   assert.equal(registered.length, 73)
-  assert.equal(legacy.length, 17)
+  assert.equal(legacy.length, 16)
 })
 
 test('agentActions.ts and labActions.ts keep their current module graph until a slice PR shrinks it', () => {
