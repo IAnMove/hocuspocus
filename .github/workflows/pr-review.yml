@@ -3,6 +3,8 @@ name: PR Review
 # Heuristic review posted on every PR. No LLM and no Cursor usage-based
 # billing — this is the in-repo stand-in for a Cursor Automation / Bugbot
 # pass when those require a payment method.
+#
+# Actions are pinned to commit SHAs. Do not use moving tags such as @v4 or @latest.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -16,13 +18,13 @@ permissions:
 jobs:
   review:
     name: Analyze pull request
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
 
