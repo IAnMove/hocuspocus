@@ -26,7 +26,6 @@ const SET_STATE_ALLOWLIST = [
   ['labActions.ts', 'stageStoryVideo', 3],
   ['queueActions.ts', 'cancelCanonicalQueueTask', 1],
   ['queueActions.ts', 'resumeCanonicalQueueTask', 1],
-  ['workspaceActions.ts', 'authoritativeWorkspaces', 1],
 ]
 
 const SLICE_AGENT_IMPORT_ALLOWLIST = [
@@ -214,7 +213,7 @@ test('useStore.setState in features/agent stays on the named allowlist outside a
     'Direct store writes in Agent Mode must shrink the allowlist when a function moves to a slice adapter, and must not grow. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(actual.reduce((total, row) => total + row[2], 0), 8)
+  assert.equal(actual.reduce((total, row) => total + row[2], 0), 7)
 })
 
 test('other feature slices do not import Agent Mode except the frozen UI-bus listeners', () => {
