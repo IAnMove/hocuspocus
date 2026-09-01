@@ -18,10 +18,6 @@ import {
   openAgentSeriesSection,
   openAgentStorySection,
 } from './agentUiBus'
-import {
-  createAgentWorkspace,
-  selectAgentWorkspace,
-} from './workspaceActions'
 
 /**
  * The registry owns the concrete implementation of defineCapability. Keeping
@@ -350,11 +346,8 @@ export function registerNavigationQueueCapabilities(
     resolve(raw) { return workspaceName('select_workspace', raw) },
     validate(action) { return action.workspaceName.trim() ? [] : ['workspace name is required'] },
     async prepare(action) { return action },
-    async execute(action) {
-      return {
-        message: await selectAgentWorkspace(action.workspaceName),
-        target: { kind: 'workspace', id: action.workspaceName, title: action.workspaceName },
-      }
+    async execute(action, context) {
+      return context.adapters.workspace.select(action)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
@@ -384,11 +377,8 @@ export function registerNavigationQueueCapabilities(
     resolve(raw) { return workspaceName('create_workspace', raw) },
     validate(action) { return action.workspaceName.trim() ? [] : ['workspace name is required'] },
     async prepare(action) { return action },
-    async execute(action) {
-      return {
-        message: await createAgentWorkspace(action.workspaceName),
-        target: { kind: 'workspace', id: action.workspaceName, title: action.workspaceName },
-      }
+    async execute(action, context) {
+      return context.adapters.workspace.create(action)
     },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
