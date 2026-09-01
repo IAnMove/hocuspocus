@@ -115,7 +115,7 @@ if _hf_token_path:
 # Now safe to import wgp - all module-level code will run with patched argv
 print("[HocusPocus Lab] Importing WanGP engine...")
 import wgp
-from services.generation import bind_wgp
+from services.generation import bind_wgp, get_model_def
 bind_wgp(wgp)
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import debug_trace
@@ -7048,143 +7048,13 @@ def _nsfw_allowed() -> bool:
     return bool(wgp.server_config.get("services", {}).get("nsfw_mode", False))
 
 
-@api.get("/api/v1/recipes")
-def list_recipes_route():
-    """List recipe cards (bundled + user). NSFW recipes hidden unless mature."""
-    from services import recipes
-    return {"recipes": recipes.list_recipes(nsfw_allowed=_nsfw_allowed())}
-
-
-@api.get("/api/v1/recipes/{rid}")
-def get_recipe_route(rid: str):
-    from services import recipes
-    recipe = recipes.get_recipe(rid)
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-    if recipe.get("nsfw") and not _nsfw_allowed():
-        raise HTTPException(status_code=404, detail="Recipe not found")
-    return recipe
-
-
-@api.get("/api/v1/recipes/{rid}/thumbnail")
-def get_recipe_thumbnail_route(rid: str):
-    from services import recipes
-    path = recipes.get_recipe_thumbnail_path(rid)
-    if not path:
-        raise HTTPException(status_code=404, detail="No thumbnail")
-    return FileResponse(path, media_type="image/jpeg")
-
-
-@api.post("/api/v1/recipes/save-from-output")
-async def save_recipe_from_output_route(request: Request):
-    """Create a user recipe from an existing gallery output.
-
-    Body: { output_name, name, description, nsfw? }. The output's sidecar
-    supplies model + LoRAs + settings; the media file supplies the
-    thumbnail. LoRA source URLs are recovered from the loras_url_cache so
-    the recipe can re-fetch them on another machine.
-    """
-    from services import recipes
-
-    body = await request.json()
-    output_name = body.get("output_name", "")
-    name = (body.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Recipe name is required")
-
-    out_dir = _workspace_dir()
-    media_path = _safe_join(out_dir, output_name) if output_name else None
-    if not media_path or not os.path.isfile(media_path):
-        raise HTTPException(status_code=400, detail="Output file not found")
-
-    # Pull params from the sidecar (same source Load Settings uses).
-    meta_path = os.path.join(out_dir, os.path.splitext(output_name)[0] + ".meta.json")
-    params: dict = {}
-    if os.path.isfile(meta_path):
-        try:
-            with open(meta_path, "r", encoding="utf-8") as f:
-                params = (json.load(f) or {}).get("params", {}) or {}
-        except Exception:
-            params = {}
-    if not params:
-        raise HTTPException(status_code=400, detail="No settings metadata for this output")
-
-    # Derive mode from the model family.
-    model_type = params.get("model_type", "")
-    mode = "video"
-    try:
-        md = wgp.get_model_def(model_type) or {}
-        family = (md.get("family") or "").lower()
-        if md.get("image_outputs") or family in ("flux", "qwen", "z_image", "hidream"):
-            mode = "image"
-        elif md.get("audio_only") or family in ("ace_step", "tts"):
-            mode = "audio"
-    except Exception:
-        pass
-
-    # Build LoRA pointers: filename + multiplier (+ source url/size from the
-    # url cache when known, so the recipe is portable to another install).
-    loras = _recipe_loras_from_params(params)
-
-    prompt_example = params.get("_tts_original_prompt") or params.get("prompt", "") or ""
-
-    card = recipes.save_recipe_from_params(
-        name=name,
-        description=body.get("description", ""),
-        params=params,
-        mode=mode,
-        loras=loras,
-        prompt_example=prompt_example,
-        source_media=media_path,
-        nsfw=bool(body.get("nsfw", False)),
-    )
-    return card
-
-
-def _recipe_loras_from_params(params: dict) -> list[dict]:
-    """Turn a generation's activated_loras + multipliers into recipe LoRA
-    pointers, enriching with source URL / size from the url cache when we
-    have it (so recipes re-fetch on other machines)."""
-    activated = params.get("activated_loras", []) or []
-    mults = (params.get("loras_multipliers", "") or "").split()
-    url_cache = {}
-    try:
-        cache_path = os.path.join(os.getcwd(), "loras_url_cache.json")
-        if os.path.isfile(cache_path):
-            with open(cache_path, "r", encoding="utf-8") as f:
-                url_cache = json.load(f) or {}
-    except Exception:
-        url_cache = {}
-    out = []
-    for i, fname in enumerate(activated):
-        base = os.path.basename(str(fname))
-        entry = {"filename": base, "multiplier": mults[i] if i < len(mults) else "1.0"}
-        info = url_cache.get(base) or url_cache.get(fname)
-        if isinstance(info, dict):
-            if info.get("download_url"):
-                entry["source_url"] = info["download_url"]
-            if info.get("size_mb"):
-                entry["size_mb"] = info["size_mb"]
-        out.append(entry)
-    return out
-
-
-@api.post("/api/v1/recipes/import")
-async def import_recipe_route(request: Request):
-    from services import recipes
-    body = await request.json()
-    try:
-        return recipes.import_recipe(body)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@api.delete("/api/v1/recipes/{rid}")
-def delete_recipe_route(rid: str):
-    from services import recipes
-    if not recipes.delete_recipe(rid):
-        raise HTTPException(status_code=400, detail="Recipe not found or is a built-in (can't delete)")
-    return {"status": "deleted"}
+from routers.recipes import create_recipes_router
+api.include_router(create_recipes_router(
+    workspace_dir=_workspace_dir,
+    nsfw_allowed=_nsfw_allowed,
+    get_model_def=get_model_def,
+    safe_join=_safe_join,
+))
 
 
 @api.get("/api/v1/system/preflight")
