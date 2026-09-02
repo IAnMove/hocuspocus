@@ -110,7 +110,7 @@ export function AssetsPanel() {
   const inspect = async (asset: AssetCatalogItem) => {
     setInspectorLoading(true); setError('')
     try { setInspecting(await fetchAsset(asset.id)) }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo cargar Extra info') }
+    catch (reason) { setError(reason instanceof Error ? reason.message : tActivity('inspector.loadFailed')) }
     finally { setInspectorLoading(false) }
   }
 
@@ -210,14 +210,82 @@ export function AssetsPanel() {
 
 function AssetExtraInfoDialog({ asset, loading, onClose }: { asset: AssetCatalogItem | null; loading: boolean; onClose: () => void }) {
   const { t: tActivity } = useUiTranslation('activity')
+  const { t: tCommon } = useUiTranslation('common')
   const manifest = asset?.manifest || {}
   const prompts = (manifest.generation as { prompts?: Record<string, unknown> } | undefined)?.prompts || {}
   const timing = (manifest.timing as Record<string, unknown> | undefined) || {}
   const raw = asset ? JSON.stringify(manifest, null, 2) : ''
   const copy = async (value: string) => { await navigator.clipboard?.writeText(value) }
-  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="asset-extra-info-title" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary shadow-2xl"><header className="flex items-center justify-between border-b border-border p-3"><div><h2 id="asset-extra-info-title" className="text-sm font-semibold text-text-primary">{tActivity('extraInfo')}</h2><p className="text-[10px] text-text-muted">{asset?.filename || 'Cargando metadata…'}</p></div><button onClick={onClose} className="rounded px-2 py-1 text-xs text-text-muted hover:bg-bg-hover">Cerrar</button></header>{loading || !asset ? <div className="flex items-center justify-center gap-2 p-12 text-xs text-text-muted"><Loader2 size={15} className="animate-spin" /> Leyendo manifest…</div> : <div className="space-y-4 overflow-y-auto p-4 text-xs"><InfoSection title="Identidad" values={{ asset_id: asset.id, kind: asset.kind, metadata_status: asset.metadata_status, locations: asset.workspace_ids.join(', ') }} /><InfoSection title="Origen y ejecución" values={{ tool: asset.origin.tool, capability: asset.origin.capability, run_id: asset.execution.run_id, task_id: asset.execution.task_id, job_id: asset.execution.job_id, pipeline_id: asset.execution.pipeline_id, status: asset.execution.status }} /><InfoSection title="Modelo y tiempos" values={{ provider: asset.model.provider, model: asset.model.id, created_at: timing.created_at, queued_at: timing.queued_at, started_at: timing.started_at, completed_at: timing.completed_at, queue_seconds: timing.queue_seconds, inference_seconds: timing.inference_seconds, total_seconds: timing.total_seconds }} />{Object.entries(prompts).map(([name, value]) => typeof value === 'string' && value ? <section key={name} className="rounded-lg border border-border bg-bg-primary p-3"><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold text-text-primary">Prompt · {name}</h3><button onClick={() => void copy(value)} className="text-[10px] text-accent-blue">Copiar</button></div><pre className="whitespace-pre-wrap break-words text-[11px] text-text-secondary">{value}</pre></section> : null)}<section className="rounded-lg border border-border bg-bg-primary p-3"><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold text-text-primary">JSON completo</h3><button onClick={() => void copy(raw)} className="text-[10px] text-accent-blue">Copiar JSON</button></div><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words text-[10px] text-text-muted">{raw || 'Metadata no disponible'}</pre></section></div>}</div></div>
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="asset-extra-info-title"
+      onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}
+    >
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary shadow-2xl">
+        <header className="flex items-center justify-between border-b border-border p-3">
+          <div>
+            <h2 id="asset-extra-info-title" className="text-sm font-semibold text-text-primary">{tActivity('extraInfo')}</h2>
+            <p className="text-[10px] text-text-muted">{asset?.filename || tActivity('inspector.loadingAsset')}</p>
+          </div>
+          <button onClick={onClose} className="rounded px-2 py-1 text-xs text-text-muted hover:bg-bg-hover">{tCommon('actions.close')}</button>
+        </header>
+        {loading || !asset ? (
+          <div className="flex items-center justify-center gap-2 p-12 text-xs text-text-muted">
+            <Loader2 size={15} className="animate-spin" /> {tActivity('inspector.readingManifest')}
+          </div>
+        ) : (
+          <div className="space-y-4 overflow-y-auto p-4 text-xs">
+            <InfoSection
+              title={tActivity('inspector.identity')}
+              values={{ asset_id: asset.id, kind: asset.kind, metadata_status: asset.metadata_status, locations: asset.workspace_ids.join(', ') }}
+            />
+            <InfoSection
+              title={tActivity('inspector.origin')}
+              values={{ tool: asset.origin.tool, capability: asset.origin.capability, run_id: asset.execution.run_id, task_id: asset.execution.task_id, job_id: asset.execution.job_id, pipeline_id: asset.execution.pipeline_id, status: asset.execution.status }}
+            />
+            <InfoSection
+              title={tActivity('inspector.modelTiming')}
+              values={{ provider: asset.model.provider, model: asset.model.id, created_at: timing.created_at, queued_at: timing.queued_at, started_at: timing.started_at, completed_at: timing.completed_at, queue_seconds: timing.queue_seconds, inference_seconds: timing.inference_seconds, total_seconds: timing.total_seconds }}
+            />
+            {Object.entries(prompts).map(([name, value]) => typeof value === 'string' && value ? (
+              <section key={name} className="rounded-lg border border-border bg-bg-primary p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="font-semibold text-text-primary">{tActivity('inspector.prompt', { name })}</h3>
+                  <button onClick={() => void copy(value)} className="text-[10px] text-accent-blue">{tActivity('inspector.copy')}</button>
+                </div>
+                <pre className="whitespace-pre-wrap break-words text-[11px] text-text-secondary">{value}</pre>
+              </section>
+            ) : null)}
+            <section className="rounded-lg border border-border bg-bg-primary p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="font-semibold text-text-primary">{tActivity('inspector.fullJson')}</h3>
+                <button onClick={() => void copy(raw)} className="text-[10px] text-accent-blue">{tActivity('inspector.copyJson')}</button>
+              </div>
+              <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words text-[10px] text-text-muted">{raw || tActivity('inspector.unavailable')}</pre>
+            </section>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function InfoSection({ title, values }: { title: string; values: Record<string, unknown> }) {
-  return <section className="rounded-lg border border-border bg-bg-primary p-3"><h3 className="mb-2 font-semibold text-text-primary">{title}</h3><dl className="grid gap-1 sm:grid-cols-2">{Object.entries(values).map(([name, value]) => <div key={name} className="grid grid-cols-[7rem_1fr] gap-2"><dt className="text-text-muted">{name}</dt><dd className="break-all text-text-secondary">{value == null || value === '' ? 'No disponible' : String(value)}</dd></div>)}</dl></section>
+  const { t: tActivity } = useUiTranslation('activity')
+  return (
+    <section className="rounded-lg border border-border bg-bg-primary p-3">
+      <h3 className="mb-2 font-semibold text-text-primary">{title}</h3>
+      <dl className="grid gap-1 sm:grid-cols-2">
+        {Object.entries(values).map(([name, value]) => (
+          <div key={name} className="grid grid-cols-[7rem_1fr] gap-2">
+            <dt className="text-text-muted">{name}</dt>
+            <dd className="break-all text-text-secondary">{value == null || value === '' ? tActivity('inspector.unavailable') : String(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
 }

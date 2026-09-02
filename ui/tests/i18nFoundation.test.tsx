@@ -70,6 +70,9 @@ test('required glossary keys exist in both languages', async () => {
   assert.equal(i18n.t('entities.outputFolder', { ns: 'navigation', lng: 'es' }), 'Carpeta de salida')
   assert.equal(i18n.t('outputFolder.uploads', { ns: 'navigation', lng: 'es' }), 'Subidas')
   assert.equal(i18n.t('extraInfo', { ns: 'activity', lng: 'es' }), 'Información adicional')
+  assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'en' }), 'Could not load Extra info')
+  assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'es' }), 'No se pudo cargar Información adicional')
+  assert.equal(i18n.t('actions.close', { ns: 'common', lng: 'es' }), 'Cerrar')
 })
 
 test('missing keys fall back to english without throwing', async () => {
@@ -202,4 +205,38 @@ test('catalogs do not rename technical ids', async () => {
 
 test('migrated chrome no longer hardcodes the pilot phrases', () => {
   assert.deepEqual(forbiddenLiterals(), [])
+})
+
+test('Extra info chrome and the Assets inspector use the activity catalog', async () => {
+  const fs = await import('node:fs/promises')
+  const files = [
+    '../src/components/MainContent/VideoExtraInfoDialog.tsx',
+    '../src/components/MainContent/MediaFeedItem.tsx',
+    '../src/components/MainContent/VideoInfoBar.tsx',
+    '../src/features/assets/AssetsPanel.tsx',
+  ]
+  for (const file of files) {
+    const source = await fs.readFile(new URL(file, import.meta.url), 'utf8')
+    assert.match(source, /t(?:Activity)?\('extraInfo'\)/, file)
+    assert.doesNotMatch(source, />Extra info</, file)
+    assert.doesNotMatch(source, /['"`]Extra info['"`]/, file)
+    assert.doesNotMatch(source, /^\s*Extra info\s*$/m, file)
+  }
+  const panel = await fs.readFile(new URL('../src/features/assets/AssetsPanel.tsx', import.meta.url), 'utf8')
+  for (const key of [
+    'inspector.loadingAsset',
+    'inspector.readingManifest',
+    'inspector.identity',
+    'inspector.origin',
+    'inspector.modelTiming',
+    'inspector.copy',
+    'inspector.copyJson',
+    'inspector.fullJson',
+    'inspector.unavailable',
+    'inspector.loadFailed',
+    'inspector.prompt',
+  ]) {
+    assert.match(panel, new RegExp(`tActivity\\('${key.replace('.', '\\.')}'`), key)
+  }
+  assert.match(panel, /tCommon\('actions\.close'\)/)
 })

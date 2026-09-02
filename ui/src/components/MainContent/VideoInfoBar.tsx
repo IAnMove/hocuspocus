@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Sparkles, Mic, BadgeInfo, Music2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { getStoredAssetUrl } from '../../api/client'
 import { modelDisplayName } from '../../lib/modelDisplay'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
@@ -8,6 +9,7 @@ import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { AlternativeSongsDialog, canRemountVideoclip } from './AlternativeSongsDialog'
 
 export function VideoInfoBar() {
+  const { t } = useUiTranslation('activity')
   const outputs = useStore(s => s.filteredOutputs())
   const selectedOutput = useStore(s => s.selectedOutput)
   const meta = useStore(s => s.selectedOutputMeta)
@@ -211,7 +213,7 @@ export function VideoInfoBar() {
               title="Generate descriptions and social copy from saved prompts"
             >
               <BadgeInfo size={14} />
-              Extra info
+              {t('extraInfo')}
             </button>
             {canRemountVideoclip(selected) && (
               <button

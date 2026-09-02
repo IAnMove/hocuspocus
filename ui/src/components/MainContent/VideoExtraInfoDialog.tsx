@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { BadgeInfo, CalendarDays, Check, Clock3, Copy, FileVideo2, Languages, Loader2, MessageSquareText, RefreshCw, SlidersHorizontal, Sparkles, X, Youtube } from 'lucide-react'
 import { fetchVideoExtraInfo, generateVideoExtraInfo } from '../../api/client'
+import { useUiTranslation } from '../../i18n'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
 import type { VideoClipInfo, VideoExtraInfo, VideoExtraInfoStatus } from '../../types'
 
@@ -110,6 +111,7 @@ function clipInfoAsText(clip: VideoClipInfo) {
 }
 
 export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose: () => void }) {
+  const { t } = useUiTranslation('activity')
   const [language, setLanguage] = useState(initialLanguage)
   const [status, setStatus] = useState<VideoExtraInfoStatus | null>(null)
   const [data, setData] = useState<VideoExtraInfo | null>(null)
@@ -192,7 +194,7 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
             <BadgeInfo size={18} />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 id="video-extra-info-title" className="text-sm font-semibold text-text-primary">Extra info</h2>
+            <h2 id="video-extra-info-title" className="text-sm font-semibold text-text-primary">{t('extraInfo')}</h2>
             <p className="mt-1 truncate text-[11px] text-text-muted" title={name}>{name}</p>
           </div>
           <button
