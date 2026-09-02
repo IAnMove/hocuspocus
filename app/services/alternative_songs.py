@@ -51,6 +51,54 @@ def _clean_text(value: Any) -> str | None:
     return text or None
 
 
+def _physical_output_folder(value: Any) -> str | None:
+    """Physical output-folder name; never an absolute host path or a Workspace id."""
+    text = _clean_text(value)
+    if not text:
+        return None
+    name = os.path.basename(text.replace("\\", "/"))
+    return name or None
+
+
+def _workspace_collection_id(value: Any) -> str | None:
+    """Keep a real Workspace collection ID; folder names are not collections."""
+    text = _clean_text(value)
+    if not text or os.path.basename(text.replace("\\", "/")) != text:
+        return None
+    if text.startswith("workspace_"):
+        return text
+    return None
+
+
+def _sidecar_location(
+    payload: dict[str, Any],
+    payload_origin: dict[str, Any] | None,
+    disk_origin: dict[str, Any] | None,
+) -> tuple[str | None, str | None]:
+    payload_origin = payload_origin or {}
+    disk_origin = disk_origin or {}
+    folder = (
+        _physical_output_folder(payload.get("output_folder"))
+        or _physical_output_folder(payload_origin.get("output_folder"))
+        or _physical_output_folder(disk_origin.get("output_folder"))
+        or _physical_output_folder(payload.get("workspace"))
+    )
+    collection = (
+        _workspace_collection_id(payload.get("workspace_id"))
+        or _workspace_collection_id(payload_origin.get("workspace_id"))
+        or _workspace_collection_id(disk_origin.get("workspace_id"))
+    )
+    if not folder:
+        legacy = (
+            _physical_output_folder(payload.get("workspace_id"))
+            or _physical_output_folder(payload_origin.get("workspace_id"))
+            or _physical_output_folder(disk_origin.get("workspace_id"))
+        )
+        if legacy and legacy != collection:
+            folder = legacy
+    return collection, folder
+
+
 def _v1_origin(document: Any) -> dict[str, Any] | None:
     if not isinstance(document, dict) or document.get("schema") != SCHEMA_NAME:
         return None
@@ -78,7 +126,8 @@ def save_sidecar(video_path: str, sidecar: dict[str, Any], *, tool: str | None =
     payload or existing v1 file is preserved so series-assembly/director/studio
     are not rewritten. If only a director pipeline id is present, tool is
     omitted so publish can attribute director. Actor is never invented as
-    ``user``; missing workspace stays unset instead of ``default``.
+    ``user``. A payload ``workspace`` string is the physical output folder,
+    not a Workspace collection.
     """
     payload = sidecar if isinstance(sidecar, dict) else {}
     payload_origin = _v1_origin(payload)
@@ -95,15 +144,12 @@ def save_sidecar(video_path: str, sidecar: dict[str, Any], *, tool: str | None =
     )
     if resolved_tool is None and _has_director_pipeline(payload):
         resolved_tool = None
-    workspace_id = (
-        _clean_text(payload.get("workspace"))
-        or _clean_text((payload_origin or {}).get("workspace_id"))
-        or _clean_text((disk_origin or {}).get("workspace_id"))
-    )
+    collection, folder = _sidecar_location(payload, payload_origin, disk_origin)
     publish_generation_sidecar(
         video_path,
         payload,
-        workspace_id=workspace_id,
+        workspace_id=collection,
+        output_folder=folder,
         tool=resolved_tool,
     )
 
@@ -366,6 +412,7 @@ def write_mounted_sidecar(
             "alternative_song_id": song.get("id"),
             "alternative_audio_name": song.get("audio_name"),
             "model_type": parent_params.get("model_type") or "ffmpeg_remount",
+            "provider": parent_params.get("provider") or "ffmpeg",
             "resolution": parent_params.get("resolution") or "",
         },
         "result_kind": "music_video",
@@ -375,6 +422,21 @@ def write_mounted_sidecar(
         "created_at": time.time(),
         "parent_output": parent_name,
     }
+    pipeline_id = (
+        _clean_text(parent_sidecar.get("pipeline_id"))
+        or _clean_text(parent_sidecar.get("director_pipeline_id"))
+        or _clean_text(parent_params.get("pipeline_id"))
+        or _clean_text(parent_params.get("director_pipeline_id"))
+        or _clean_text(parent_params.get("_director_pipeline_id"))
+    )
+    if pipeline_id:
+        payload["pipeline_id"] = pipeline_id
+        payload["director_pipeline_id"] = pipeline_id
+        payload["params"]["director_pipeline_id"] = pipeline_id
+    for key in ("task_id", "root_task_id"):
+        value = _clean_text(parent_sidecar.get(key)) or _clean_text(parent_params.get(key))
+        if value:
+            payload[key] = value
     save_sidecar(output_path, payload, tool="alternative-songs")
     song["status"] = "mounted"
     song["mounted_output"] = os.path.basename(output_path)

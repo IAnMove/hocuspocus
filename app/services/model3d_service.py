@@ -508,6 +508,15 @@ def _canonical_task_id(job_id: str) -> str:
     return f"task-model3d-{job_id}"
 
 
+def _physical_output_folder(value: Any) -> str | None:
+    """Physical output-folder name; never an absolute host path or a Workspace id."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    name = os.path.basename(text.replace("\\", "/"))
+    return name or None
+
+
 def _prune_finished_jobs_locked() -> None:
     """Drop old terminal jobs; callers must hold _lock."""
     now = time.time()
@@ -1132,13 +1141,15 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 "params": {
                     **request_data["settings"],
                     "model_id": model_id,
+                    "model_type": model_id,
+                    "provider": current_job.get("provider") or "hunyuan3d",
                     "operation": operation,
                     "source_model": os.path.basename(request_data["source_mesh"]) if request_data.get("source_mesh") else None,
                     "preset": request_data["preset"],
                     "images": request_data["images"],
                 },
             },
-            workspace_id=current_job.get("workspace"),
+            output_folder=_physical_output_folder(current_job.get("workspace")),
             tool="model3d",
         )
         _update_job(

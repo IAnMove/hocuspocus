@@ -31,6 +31,7 @@ from services.asset_manifest import (  # noqa: E402
     publish_generation_sidecar,
     read_asset_manifest,
 )
+from services.generation_provenance import provenance_from_manifest  # noqa: E402
 from services.output_result_kind import classify_output_result_kind  # noqa: E402
 
 
@@ -220,6 +221,8 @@ class AlternativeSongSidecarTests(unittest.TestCase):
             self.assertEqual(loaded["origin"]["tool"], "series-assembly")
             self.assertEqual(loaded["asset"]["id"], before["asset"]["id"])
             self.assertEqual(raw["params"]["alternative_songs"][0]["audio_name"], "en.mp3")
+            self.assertEqual(loaded["origin"]["output_folder"], "lab")
+            self.assertIn(loaded["origin"].get("workspace_id"), (None, ""))
 
     def test_write_mounted_sidecar_publishes_alternative_songs_origin(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -250,15 +253,109 @@ class AlternativeSongSidecarTests(unittest.TestCase):
                 workspace="night-shift",
             )
             raw = json.loads(Path(sidecar_path(output)).read_text(encoding="utf-8"))
-            loaded = read_asset_manifest(output, workspace_id="night-shift")
+            loaded = read_asset_manifest(output)
             self.assertEqual(raw["schema"], SCHEMA_NAME)
             self.assertEqual(raw["parent_output"], "clip.mp4")
             self.assertEqual(raw["params"]["parent_output"], "clip.mp4")
             self.assertEqual(song["status"], "mounted")
             self.assertIsNotNone(loaded)
             self.assertEqual(loaded["origin"]["tool"], "alternative-songs")
-            self.assertEqual(loaded["origin"]["workspace_id"], "night-shift")
+            self.assertEqual(loaded["origin"]["output_folder"], "night-shift")
+            self.assertIn(loaded["origin"].get("workspace_id"), (None, ""))
             self.assertEqual(loaded["origin"]["actor"], "unknown")
+            self.assertEqual(loaded["execution"]["job_id"], "alt-song-1")
+            self.assertEqual(loaded["generation"]["model"]["id"], "ffmpeg_remount")
+            self.assertEqual(loaded["generation"]["model"]["provider"], "ffmpeg")
+            proven = provenance_from_manifest(loaded)
+            self.assertEqual(proven["tool"], "alternative-songs")
+            self.assertEqual(proven["output_folder"], "night-shift")
+            self.assertIsNone(proven["workspace_id"])
+            self.assertEqual(proven["command"]["job_id"], "alt-song-1")
+
+    def test_save_sidecar_folder_name_does_not_invent_workspace_collection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video = os.path.join(tmp, "clip.mp4")
+            Path(video).write_bytes(b"video")
+            sidecar = load_sidecar(video)
+            attach_song(sidecar, audio_name="en.mp3", duration_seconds=9)
+            sidecar["workspace"] = "night-shift"
+            save_sidecar(video, sidecar)
+            loaded = read_asset_manifest(video)
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded["origin"]["output_folder"], "night-shift")
+            self.assertIn(loaded["origin"].get("workspace_id"), (None, ""))
+            self.assertEqual(loaded["origin"]["actor"], "unknown")
+
+    def test_save_sidecar_preserves_real_workspace_collection_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video = os.path.join(tmp, "clip.mp4")
+            Path(video).write_bytes(b"video")
+            publish_generation_sidecar(
+                video,
+                {
+                    "generation_mode": "video",
+                    "params": {
+                        "pipeline_type": "music_video",
+                        "director_pipeline_id": "pipe-9",
+                    },
+                    "pipeline_id": "pipe-9",
+                },
+                workspace_id="workspace_abc123",
+                output_folder="night-shift",
+                tool="director",
+            )
+            sidecar = load_sidecar(video)
+            attach_song(sidecar, audio_name="en.mp3", duration_seconds=9)
+            save_sidecar(video, sidecar)
+            loaded = read_asset_manifest(video)
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded["origin"]["tool"], "director")
+            self.assertEqual(loaded["origin"]["workspace_id"], "workspace_abc123")
+            self.assertEqual(loaded["origin"]["output_folder"], "night-shift")
+            self.assertEqual(loaded["execution"]["pipeline_id"], "pipe-9")
+
+    def test_write_mounted_sidecar_copies_director_pipeline_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = os.path.join(tmp, "clip_en_mv.mp4")
+            Path(output).write_bytes(b"video")
+            parent_sidecar = {
+                "pipeline_id": "pipe-44",
+                "director_pipeline_id": "pipe-44",
+                "task_id": "task-director-pipe-44",
+                "root_task_id": "task-director-pipe-44",
+                "params": {
+                    "pipeline_type": "music_video",
+                    "model_type": "minimax_h3",
+                    "director_pipeline_id": "pipe-44",
+                    "resolution": "720p",
+                },
+            }
+            song = attach_song({"params": {}}, audio_name="en.mp3", duration_seconds=9)
+            planned = [{
+                "name": "shot.mp4",
+                "path": os.path.join(tmp, "shot.mp4"),
+                "duration": 4,
+                "used": 4,
+                "extra": False,
+            }]
+            write_mounted_sidecar(
+                output_path=output,
+                parent_name="clip.mp4",
+                parent_sidecar=parent_sidecar,
+                song=song,
+                planned=planned,
+                job_id="alt-song-2",
+                workspace="night-shift",
+            )
+            loaded = read_asset_manifest(output)
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded["origin"]["tool"], "alternative-songs")
+            self.assertEqual(loaded["origin"]["output_folder"], "night-shift")
+            self.assertIn(loaded["origin"].get("workspace_id"), (None, ""))
+            self.assertEqual(loaded["execution"]["job_id"], "alt-song-2")
+            self.assertEqual(loaded["execution"]["pipeline_id"], "pipe-44")
+            self.assertEqual(loaded["execution"]["task_id"], "task-director-pipe-44")
+            self.assertEqual(loaded["execution"]["root_task_id"], "task-director-pipe-44")
 
 
 if __name__ == "__main__":

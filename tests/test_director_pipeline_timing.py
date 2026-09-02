@@ -8,6 +8,7 @@ from app.services.asset_manifest import (
     publish_generation_sidecar,
     read_asset_manifest,
 )
+from app.services.generation_provenance import provenance_from_manifest
 
 
 def test_pipeline_timing_metadata_normalizes_live_terminal_state():
@@ -88,6 +89,12 @@ def test_final_output_sidecar_persists_total_and_phase_timings(tmp_path: Path):
     assert saved["schema"] == SCHEMA_NAME
     assert saved["origin"]["tool"] == "director"
     assert saved["origin"]["actor"] == "unknown"
+    assert saved["origin"].get("workspace_id") in (None, "")
+    assert saved["pipeline_id"] == "timed-final"
+    loaded = read_asset_manifest(tmp_path / "final.mp4")
+    assert loaded is not None
+    assert loaded["execution"]["pipeline_id"] == "timed-final"
+    assert loaded["origin"]["tool"] == "director"
 
 
 def test_final_output_timing_preserves_canonical_asset_id(tmp_path: Path):
@@ -106,6 +113,9 @@ def test_final_output_timing_preserves_canonical_asset_id(tmp_path: Path):
     pipeline = {
         "id": "timed-stable",
         "workspace": "night-shift",
+        "job_id": "job-stable",
+        "task_id": "task-director-timed-stable",
+        "root_task_id": "task-director-timed-stable",
         "created_at": 100.0,
         "_completed_at": 410.0,
         "_prompt_generation_time_sec": 10.0,
@@ -122,7 +132,7 @@ def test_final_output_timing_preserves_canonical_asset_id(tmp_path: Path):
     )
 
     saved = json.loads((tmp_path / "final.meta.json").read_text(encoding="utf-8"))
-    loaded = read_asset_manifest(media, workspace_id="night-shift")
+    loaded = read_asset_manifest(media)
     assert saved["schema"] == SCHEMA_NAME
     assert saved["asset"]["id"] == original_id
     assert saved["director_pipeline_id"] == "timed-stable"
@@ -131,9 +141,20 @@ def test_final_output_timing_preserves_canonical_asset_id(tmp_path: Path):
     assert loaded["asset"]["id"] == original_id
     assert loaded["origin"]["tool"] == "director"
     assert loaded["origin"]["actor"] == "unknown"
-    assert loaded["origin"]["workspace_id"] == "night-shift"
+    assert loaded["origin"]["output_folder"] == "night-shift"
+    assert loaded["origin"].get("workspace_id") in (None, "")
     assert loaded["origin"].get("project") is None
     assert loaded["origin"].get("production") is None
+    assert loaded["execution"]["pipeline_id"] == "timed-stable"
+    assert loaded["execution"]["job_id"] == "job-stable"
+    assert loaded["execution"]["task_id"] == "task-director-timed-stable"
+    assert loaded["execution"]["root_task_id"] == "task-director-timed-stable"
+    proven = provenance_from_manifest(loaded)
+    assert proven["tool"] == "director"
+    assert proven["output_folder"] == "night-shift"
+    assert proven["workspace_id"] is None
+    assert proven["command"]["pipeline_id"] == "timed-stable"
+    assert proven["command"]["job_id"] == "job-stable"
 
 
 def test_output_enrichment_restores_missing_model_and_resolution():
@@ -262,17 +283,19 @@ def test_director_assembly_sidecar_publishes_canonical_manifest(tmp_path: Path):
     )
     published = tmp_path / "minimax_h3_pipe-22_multiclip.meta.json"
     raw = json.loads(published.read_text(encoding="utf-8"))
-    loaded = read_asset_manifest(first, workspace_id="night-shift")
+    loaded = read_asset_manifest(first)
 
     assert raw["schema"] == SCHEMA_NAME
     assert raw["params"]["director_pipeline_id"] == "pipe-22"
+    assert raw["pipeline_id"] == "pipe-22"
     assert raw["generation_mode"] == "video"
     assert raw["result_kind"] == "video"
     assert "secret" not in published.read_text(encoding="utf-8")
     assert loaded is not None
     assert loaded["origin"]["tool"] == "director"
     assert loaded["origin"]["actor"] == "unknown"
-    assert loaded["origin"]["workspace_id"] == "night-shift"
+    assert loaded["origin"]["output_folder"] == "night-shift"
+    assert loaded["origin"].get("workspace_id") in (None, "")
     assert loaded["origin"].get("project") is None
     assert loaded["origin"].get("production") is None
     assert loaded["execution"]["pipeline_id"] == "pipe-22"
@@ -284,5 +307,5 @@ def test_director_assembly_sidecar_publishes_canonical_manifest(tmp_path: Path):
     director_pipeline._write_director_assembly_sidecar(
         str(second), sidecar, "night-shift",
     )
-    assert read_asset_manifest(first, workspace_id="night-shift")["asset"]["id"] == first_id
-    assert read_asset_manifest(second, workspace_id="night-shift")["asset"]["id"] != first_id
+    assert read_asset_manifest(first)["asset"]["id"] == first_id
+    assert read_asset_manifest(second)["asset"]["id"] != first_id
