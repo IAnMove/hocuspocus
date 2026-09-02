@@ -6,6 +6,7 @@ import {
   type StoryLabSectionTabProps,
 } from './storyLabChrome'
 import { storyRenderStyle } from './model'
+import { storyContentLanguagePatch, storySpokenLanguagePatch } from './languageIntent'
 import { StoryProviderPanel } from './StoryProviderPanel'
 import type { StoryProject } from './types'
 
@@ -165,13 +166,13 @@ export function StoryOverviewTab({
             <EditableLanguageInput
               className={`${input} ${requiredInput} mt-1`}
               value={project.language}
-              onChange={language => patch({ language })}
+              onChange={language => patch(storyContentLanguagePatch(project, language))}
               required
             />
           </label>
           <label className="block text-[10px] text-violet-200">
             {t('overview.spokenLanguage')}
-            <select className={`${input} mt-1`} value={project.spokenLanguage} onChange={event => patch({ spokenLanguage: event.target.value })}>
+            <select className={`${input} mt-1`} value={project.spokenLanguage} onChange={event => patch(storySpokenLanguagePatch(project, event.target.value))}>
               <option value="">{t('overview.spokenAuto')}</option>
               <option value="Español de España">Español de España</option>
               <option value="Español latinoamericano">Español latinoamericano</option>

@@ -800,7 +800,7 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
     context = {
         "series": {
             key: series.get(key) for key in (
-                "title", "logline", "premise", "format", "language", "spokenLanguage", "genre", "tone",
+                "title", "logline", "premise", "format", "language", "spokenLanguage", "languageIntent", "genre", "tone",
                 "audience", "visualStyle", "characterVisualStyle", "cameraLanguage",
                 "allowClipText", "sourceMode", "masterUniversePrompt",
             )

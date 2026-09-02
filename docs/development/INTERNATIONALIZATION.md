@@ -67,9 +67,49 @@ Keys are semantic, never the English sentence:
 | Uploads | Subidas |
 | Extra info | Información adicional |
 
-Do not translate IDs, schema names, API paths, capability names, action types, filenames, model names, user prompts or generated content.
+Do not translate IDs, schema names, API paths, capability names, action types, filenames, model names, user prompts, protected literal segments or generated content.
 
 Internal state `running` stays `running`. Presentation: EN “Running”, ES “En marcha” (`common.status.running`).
+
+## Wizard and generated-content languages
+
+UI locale is presentation state only. It must never choose the language of a
+Wizard reply, a story, dialogue, lyrics or a provider prompt. Creative actions
+use the shared `LanguageIntent` contract in `ui/src/lib/languageIntent.ts`:
+
+- `conversationLanguage`: ISO tag for the language used by the user in the
+  current turn; the Wizard replies in it.
+- `contentLanguage`: language of reader-facing authored material.
+- `spokenLanguage`: language/accent for dialogue, narration or singing.
+- `technicalPromptLanguage`: `en` by default; provider-facing camera, visual,
+  music and production direction is written in English.
+- `verbatimSegments`: exact dialogue, lyrics, subtitles, visible text and names
+  that must never be translated or normalized.
+
+The capability registry advertises this contract as `language_intent` and
+normalizes its snake_case LLM payload to camelCase application state. Story,
+Series and Comics persist it with the project; legacy documents derive it from
+their existing `language` and `spokenLanguage` fields. Provider prompt
+compilation includes only literals relevant to that medium: lyrics are sent to
+music, for example, but are not injected into image prompts.
+
+The LLM is not the only protection boundary. Before execution, the client also
+extracts explicitly cued quoted dialogue, lyrics, subtitles, visible text and
+names from the current user turn. It ignores quotations introduced as a
+technical `style` or `prompt`, merges the protected text into every relevant
+creative action and lets an explicitly named dialogue/lyric language override
+an inconsistent spoken-language guess. Literal spacing is preserved exactly.
+
+Successive project actions merge exact segments by kind, language, speaker and
+text instead of silently discarding earlier authored lines. Removing or
+rewriting authored text remains an explicit project edit, never a side effect
+of changing the spoken language.
+
+Mixed-language example: with a German UI, a French request for an English
+scene whose wizard says `¡Hola, mundo!` produces a French chat reply, English
+technical direction, Spanish spoken-language metadata and an exact protected
+Spanish dialogue segment. Ambiguity should pause the Wizard only when it would
+materially change the result; UI locale is never evidence for resolving it.
 
 ## How to add a key
 
@@ -81,7 +121,7 @@ Internal state `running` stays `running`. Presentation: EN “Running”, ES “
 
 ## What not to translate
 
-- User-written prompts and generated media metadata
+- User-written prompts, protected literal segments and generated media metadata
 - Model names, LoRA filenames, enum/API contract values
 - Routes, JSON keys, capability `type` strings
 - Python backend errors in this phase (see below)

@@ -41,6 +41,12 @@ async function prepareWorkspace(request: APIRequestContext): Promise<SystemConfi
   return config
 }
 
+function wizardPanel(page: Page) {
+  return page.locator(
+    '[role="dialog"][aria-label="Ask to the Wizard"], [role="region"][aria-label="Ask to the Wizard"]',
+  ).first()
+}
+
 async function openApp(page: Page) {
   await page.addInitScript(() => {
     window.localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
@@ -48,22 +54,30 @@ async function openApp(page: Page) {
   await page.goto('/')
   const skip = page.getByRole('button', { name: 'Skip' })
   await skip.click({ timeout: 8_000 }).catch(() => undefined)
-  await expect(page.getByTestId('execution-mode-banner')).toContainText(expectedMode)
-  await page.getByTitle('Ask to the Wizard about the app or current task queue').click()
-  const dialog = page.getByRole('dialog', { name: 'Ask to the Wizard' })
-  await expect(dialog).toBeVisible()
-  await dialog.getByRole('button', { name: 'Clear Ask to the Wizard conversation' }).click()
-  await expect(dialog.getByText('Saludos, creador. Soy el mago de HocusPocus', { exact: false })).toBeVisible()
+  if (expectedMode === 'real') {
+    await expect(page.getByTestId('execution-mode-banner')).toHaveCount(0)
+  } else {
+    await expect(page.getByTestId('execution-mode-banner')).toContainText(expectedMode)
+  }
+  const panel = wizardPanel(page)
+  if (!await panel.isVisible()) {
+    const expand = page.getByRole('button', { name: 'Expand Ask to the Wizard' })
+    if (await expand.isVisible()) await expand.click()
+    else await page.getByTitle('Ask to the Wizard about the app or current task queue').click()
+  }
+  await expect(panel).toBeVisible()
+  await panel.getByRole('button', { name: 'Clear Ask to the Wizard conversation' }).click()
+  await expect(panel.getByText('Saludos, creador. Soy el mago de HocusPocus', { exact: false })).toBeVisible()
 }
 
 async function ask(page: Page, prompt: string, options: { allowFailure?: boolean } = {}): Promise<string> {
-  const dialog = page.getByRole('dialog', { name: 'Ask to the Wizard' })
-  const input = dialog.getByPlaceholder('Ask HocusPocus for a spell…')
+  const panel = wizardPanel(page)
+  const input = panel.getByPlaceholder('Ask HocusPocus for a spell…')
   await input.fill(prompt)
-  await dialog.getByRole('button', { name: 'Ask to the Wizard', exact: true }).click()
+  await panel.getByRole('button', { name: 'Ask to the Wizard', exact: true }).click()
   await expect(input).toBeDisabled()
   await expect(input).toBeEnabled({ timeout: 25 * 60_000 })
-  const transcript = (await dialog.textContent()) || ''
+  const transcript = (await panel.textContent()) || ''
   expect(transcript).not.toContain('No he podido consultar el LLM')
   if (!options.allowFailure) expect(transcript).not.toContain('No se pudo')
   return transcript
@@ -200,6 +214,42 @@ test('wizard: Studio UI → canonical queue → generated video', async ({ page,
   await attachEvidence(page, request, testInfo, transcript)
 })
 
+test('wizard: UI locale, conversation, content, speech and provider prompt stay independent', async ({ page, request }, testInfo) => {
+  test.skip(!['full', 'language'].includes(scenario), `scenario=${scenario}`)
+  const transcript = await ask(page,
+    'Réponds-moi en français. Ouvre Studio → Vidéo et remplis visiblement un plan de cinq secondes: an English technical description of an adult animated fantasy observatory, but the wizard must say exactly "¡Hola, mundo!" in Spanish. Ne génère rien.',
+  )
+  const trace = await page.evaluate(() => (
+    window as Window & { __HOCUSPOCUS_WIZARD_TRACE__?: Array<Record<string, unknown>> }
+  ).__HOCUSPOCUS_WIZARD_TRACE__ || []) as Array<{
+    turn?: { conversationLanguage?: string; actions?: Array<{
+      type?: string
+      languageIntent?: {
+        conversationLanguage?: string
+        contentLanguage?: string
+        spokenLanguage?: string
+        technicalPromptLanguage?: string
+        verbatimSegments?: Array<{ kind?: string; text?: string; language?: string }>
+      }
+    }> }
+  }>
+  const turn = trace.at(-1)?.turn
+  const prepare = turn?.actions?.find(action => action.type === 'prepare_video')
+  expect(turn?.conversationLanguage).toBe('fr')
+  expect(prepare?.languageIntent?.spokenLanguage?.toLocaleLowerCase()).toMatch(/^(?:es(?:-|$)|.*espa|.*spanish)/)
+  expect(prepare?.languageIntent?.technicalPromptLanguage).toBe('en')
+  expect(prepare?.languageIntent?.verbatimSegments).toContainEqual(expect.objectContaining({
+    kind: 'dialogue', text: '¡Hola, mundo!', language: 'es',
+  }))
+  await expect(page.locator('[lang="fr"]').last()).toBeVisible()
+  const visiblePrompt = page.getByPlaceholder('Describe your video...')
+  await expect(visiblePrompt).toHaveValue(/HOCUSPOCUS LANGUAGE CONTRACT/)
+  await expect(visiblePrompt).toHaveValue(/Technical direction language: English/)
+  await expect(visiblePrompt).toHaveValue(/¡Hola, mundo!/)
+  expect(transcript).toMatch(/vidéo|prépar|studio/i)
+  await attachEvidence(page, request, testInfo, transcript)
+})
+
 test('wizard: vocal Spanish song → selected version → music-video Director', async ({ page, request }, testInfo) => {
   test.skip(!['full', 'music-video'].includes(scenario), `scenario=${scenario}`)
   const title = `E2E Himno Sysadmin ${Date.now()}`
@@ -218,12 +268,14 @@ test('wizard: vocal Spanish song → selected version → music-video Director',
   await waitForCompletedDirectorPipeline(request, beforeDirector)
   const transcript = `${firstTranscript}\n\n--- VERSION 2 + DIRECTOR ---\n\n${secondTranscript}`
   const library = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(String(config.execution_workspace))}`) as {
-    projects: Record<string, { title: string; projectType?: string; music?: { cues?: Array<{ lyrics?: string; selectedCandidateId?: string; candidates?: Array<{ id: string; version?: number }> }> } }>
+    projects: Record<string, { title: string; projectType?: string; languageIntent?: { technicalPromptLanguage?: string; spokenLanguage?: string }; music?: { cues?: Array<{ style?: string; lyrics?: string; selectedCandidateId?: string; candidates?: Array<{ id: string; version?: number }> }> } }>
   }
   const project = Object.values(library.projects).find(item => item.title === title)
   expect(project?.projectType).toBe('music_video')
+  expect(project?.languageIntent?.technicalPromptLanguage).toBe('en')
   expect(project?.music?.cues?.some(cue => Boolean(cue.lyrics?.trim()))).toBeTruthy()
   const cue = project?.music?.cues?.find(item => Boolean(item.selectedCandidateId))
+  expect(cue?.style?.trim().length).toBeGreaterThan(10)
   expect(cue?.candidates?.length).toBeGreaterThanOrEqual(2)
   const latest = [...(cue?.candidates || [])].sort((left, right) => Number(right.version || 0) - Number(left.version || 0))[0]
   expect(cue?.selectedCandidateId).toBe(latest?.id)

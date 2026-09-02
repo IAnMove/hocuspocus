@@ -1,4 +1,5 @@
 import type { CreativeCharacter, CreativeLocation } from '../../lib/labHelpers'
+import type { LanguageIntent } from '../../lib/languageIntent'
 
 export interface CreateStoryCommand {
   title: string
@@ -18,6 +19,7 @@ export interface CreateStoryCommand {
   locations: CreativeLocation[]
   outlineBeats: string[]
   durationSeconds?: number
+  languageIntent?: LanguageIntent
 }
 
 export interface UpdateStoryCommand {
@@ -38,6 +40,7 @@ export interface UpdateStoryCommand {
   locations: CreativeLocation[]
   outlineBeats: string[]
   durationSeconds?: number
+  languageIntent?: LanguageIntent
 }
 
 export interface GenerateStorySectionCommand {
@@ -45,6 +48,7 @@ export interface GenerateStorySectionCommand {
   scope: 'all' | 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
   instruction: string
   confirm: true
+  languageIntent?: LanguageIntent
 }
 
 export interface ApplyStoryProposalCommand {
@@ -84,6 +88,7 @@ export interface StageStoryComicCommand {
   pageCount: number
   panelsPerPage: number
   confirm: true
+  languageIntent?: LanguageIntent
 }
 
 export interface StageStoryVideoCommand {
@@ -92,6 +97,7 @@ export interface StageStoryVideoCommand {
   direction: string
   durationSeconds?: number
   confirm: true
+  languageIntent?: LanguageIntent
 }
 
 export interface StartDirectorProductionCommand {
@@ -110,6 +116,7 @@ export interface StageStoryMusicVideoCommand {
   cueId?: string
   pacing: 'cinematic' | 'balanced' | 'rhythmic'
   confirm: true
+  languageIntent?: LanguageIntent
 }
 
 export interface ConfigureStorySongCommand {
@@ -124,6 +131,7 @@ export interface ConfigureStorySongCommand {
   instrumental: boolean
   model: 'music-3.0' | 'music-2.6' | 'ace_step_v1_5_xl_sft_lm_4b'
   durationSeconds?: number
+  languageIntent?: LanguageIntent
 }
 
 export interface GenerateStorySongCommand {

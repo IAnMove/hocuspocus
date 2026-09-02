@@ -44,6 +44,27 @@ import { registerStudioCapabilities } from './studioCapabilities'
 import { registerNavigationQueueCapabilities } from './navigationQueueCapabilities'
 import { registerEditorAuxCapabilities } from './editorAuxCapabilities'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
+import {
+  LANGUAGE_INTENT_SCHEMA,
+  compileProviderPrompt,
+  extractVerbatimSegments,
+  hasLanguageIntent,
+  mergeLanguageIntent,
+  normalizeConversationLanguageTag,
+  normalizeLanguageIntent,
+  type LanguageIntent,
+} from '../../lib/languageIntent'
+import { detectUiLanguage } from '../../i18n/language'
+
+export {
+  extractVerbatimSegments,
+  LANGUAGE_INTENT_SCHEMA,
+  mergeLanguageIntent,
+  normalizeConversationLanguageTag,
+  normalizeLanguageIntent,
+}
+export type { LanguageIntent }
+export const currentAgentInterfaceLanguage = detectUiLanguage
 
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
@@ -109,12 +130,41 @@ export interface CapabilityDefinition<TAction extends AgentAction = AgentAction>
 
 const definitions = new Map<string, CapabilityDefinition>()
 
+const LANGUAGE_AWARE_CAPABILITIES = new Set<AgentAction['type']>([
+  'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d',
+  'create_story', 'update_story', 'generate_story_section', 'stage_story_comic',
+  'stage_story_video', 'configure_story_song', 'stage_story_music_video',
+  'create_series_episode', 'update_series_episode', 'generate_series_plan',
+  'create_rhythmic_3d_video', 'create_comic',
+])
+
+export function isLanguageAwareCapability(type: AgentAction['type']): boolean {
+  return LANGUAGE_AWARE_CAPABILITIES.has(type)
+}
+
+function languageAwareSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const properties = schema.properties && typeof schema.properties === 'object'
+    ? schema.properties as Record<string, unknown>
+    : {}
+  return {
+    ...schema,
+    properties: { ...properties, language_intent: LANGUAGE_INTENT_SCHEMA },
+  }
+}
+
 export function defineCapability<TAction extends AgentAction>(
   definition: CapabilityDefinition<TAction>,
 ): CapabilityDefinition<TAction> {
   if (definitions.has(definition.name)) throw new Error(`Duplicate capability: ${definition.name}`)
-  definitions.set(definition.name, definition as CapabilityDefinition)
-  return definition
+  const languageAware = LANGUAGE_AWARE_CAPABILITIES.has(definition.name)
+  const registered = languageAware ? {
+    ...definition,
+    parameters: definition.parameters.includes('language_intent')
+      ? definition.parameters : [...definition.parameters, 'language_intent'],
+    inputSchema: languageAwareSchema(definition.inputSchema),
+  } : definition
+  definitions.set(definition.name, registered as CapabilityDefinition)
+  return registered as CapabilityDefinition<TAction>
 }
 
 function text(value: unknown, maxLength: number): string {
@@ -463,7 +513,11 @@ defineCapability<AgentCreateRhythmic3dVideoAction>({
     if (action.confirm !== true) errors.push('confirmation is required')
     return errors
   },
-  async prepare(action) { return action },
+  async prepare(action) {
+    return action.languageIntent && action.musicPrompt
+      ? { ...action, musicPrompt: compileProviderPrompt(action.musicPrompt, action.languageIntent, { medium: 'music' }) }
+      : action
+  },
   async execute(action, context) {
     const { startRhythmic3dWorkflow } = await import('./rhythmic3dWorkflow')
     const workflow = await startRhythmic3dWorkflow(action, context.adapters)
@@ -518,10 +572,10 @@ defineCapability<AgentUpdateStoryAction>({
   resolve(raw) {
     const fields = storyFields(raw)
     const action: AgentUpdateStoryAction = { type: 'update_story', targetStoryTitle: text(raw.target_story_title, 300), ...fields }
-    const hasPatch = action.title || action.creativeBrief || action.premise || action.logline || action.synopsis || action.theme || action.ending || action.genre || action.tone || action.visualStyle || action.worldSummary || action.language || action.characters.length || action.locations.length || action.outlineBeats.length || action.durationSeconds !== undefined
+    const hasPatch = action.title || action.creativeBrief || action.premise || action.logline || action.synopsis || action.theme || action.ending || action.genre || action.tone || action.visualStyle || action.worldSummary || action.language || action.characters.length || action.locations.length || action.outlineBeats.length || action.durationSeconds !== undefined || hasLanguageIntent(raw.language_intent)
     return hasPatch ? action : null
   },
-  validate(action) { return action.targetStoryTitle || action.title || action.premise ? [] : ['a target story or a patch is required'] }, async prepare(action) { return action },
+  validate(action) { return action.targetStoryTitle || action.title || action.premise || action.languageIntent ? [] : ['a target story or a patch is required'] }, async prepare(action) { return action },
   async execute(action, context) { return context.adapters.storyLab.update(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'story_lab', anchors: ['overview', 'characters', 'world', 'structure'], replay: 'atomic' },
@@ -663,9 +717,9 @@ defineCapability<AgentUpdateSeriesEpisodeAction>({
   resolve(raw) {
     const fields = seriesEpisodeFields(raw)
     const action: AgentUpdateSeriesEpisodeAction = { type: 'update_series_episode', seriesTitle: fields.seriesTitle, targetEpisodeTitle: text(raw.target_episode_title, 300), episodeTitle: fields.episodeTitle, episodePremise: fields.episodePremise, episodeLogline: fields.episodeLogline, outlineBeats: fields.outlineBeats, targetDurationSeconds: fields.targetDurationSeconds }
-    return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined ? action : null
+    return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined || hasLanguageIntent(raw.language_intent) ? action : null
   },
-  validate(action) { return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined ? [] : ['an episode patch is required'] }, async prepare(action) { return action },
+  validate(action) { return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined || action.languageIntent ? [] : ['an episode patch is required'] }, async prepare(action) { return action },
   async execute(action, context) { return context.adapters.seriesLab.updateEpisode(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'series_lab', anchors: ['episode'], replay: 'atomic' },
@@ -1064,8 +1118,17 @@ export function parseRegisteredCapability(
 ): AgentAction | null | undefined {
   const definition = definitions.get(name)
   if (!definition) return undefined
-  const action = definition.resolve(raw)
-  return action && definition.validate(action).length === 0 ? action : null
+  const resolved = definition.resolve(raw)
+  if (!resolved) return null
+  let action: AgentAction = resolved
+  if (!LANGUAGE_AWARE_CAPABILITIES.has(action.type)) {
+    return definition.validate(action).length ? null : action
+  }
+  const rawIntent = raw.language_intent
+  if (rawIntent && typeof rawIntent === 'object' && !Array.isArray(rawIntent)) {
+    action = { ...action, languageIntent: normalizeLanguageIntent(rawIntent) } as AgentAction
+  }
+  return definition.validate(action).length ? null : action
 }
 
 export async function executeRegisteredCapability(

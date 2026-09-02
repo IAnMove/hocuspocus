@@ -8,6 +8,7 @@ import { greenButton, inputClass, primaryButton, secondaryButton, selectClass, t
 import type { SeriesJobStatus, SeriesProject } from './types'
 import { useUiTranslation } from '../../i18n'
 import { SpokenLanguageOptions } from '../../i18n/SpokenLanguageOptions'
+import { seriesContentLanguagePatch, seriesSpokenLanguagePatch } from './languageIntent'
 
 export function SeriesSetupPanel({
   workspace, series, update, saveNow, replaceSeries, job, setJob,
@@ -253,8 +254,8 @@ export function SeriesSetupPanel({
           </select></SeriesField>
           <SeriesField label={t('identity.premise')} required><textarea className={textareaClass} value={series.premise} onChange={event => patch({ premise: event.target.value })} /></SeriesField>
           <SeriesField label={t('identity.logline')}><textarea className={textareaClass} value={series.logline} onChange={event => patch({ logline: event.target.value })} /></SeriesField>
-          <SeriesField label={t('identity.language')}><input className={inputClass} value={series.language} onChange={event => patch({ language: event.target.value })} /></SeriesField>
-          <SeriesField label={t('library.spoken')} hint={t('library.spokenHint')}><select className={selectClass} value={series.spokenLanguage} onChange={event => patch({ spokenLanguage: event.target.value })}><SpokenLanguageOptions /></select></SeriesField>
+          <SeriesField label={t('identity.language')}><input className={inputClass} value={series.language} onChange={event => patch(seriesContentLanguagePatch(series, event.target.value))} /></SeriesField>
+          <SeriesField label={t('library.spoken')} hint={t('library.spokenHint')}><select className={selectClass} value={series.spokenLanguage} onChange={event => patch(seriesSpokenLanguagePatch(series, event.target.value))}><SpokenLanguageOptions /></select></SeriesField>
           <SeriesField label={t('identity.duration')} hint={t('identity.durationHint')}><input className={inputClass} type="number" min={15} max={3600} value={series.defaultEpisodeDurationSeconds} onChange={event => patch({ defaultEpisodeDurationSeconds: Number(event.target.value) })} /></SeriesField>
           <SeriesField label={t('identity.genre')}><input className={inputClass} value={series.genre} onChange={event => patch({ genre: event.target.value })} /></SeriesField>
           <SeriesField label={t('identity.tone')}><input className={inputClass} value={series.tone} onChange={event => patch({ tone: event.target.value })} /></SeriesField>
