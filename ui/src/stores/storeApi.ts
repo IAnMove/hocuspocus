@@ -6,23 +6,22 @@ export type SliceSet<T> = (
 
 export type SliceGet<T> = () => T
 
-export type SliceCreator<T> = (set: SliceSet<T>, get: SliceGet<T>) => T
+export type SliceCreator<TSlice, THost extends TSlice = TSlice> = (
+  set: SliceSet<THost>,
+  get: SliceGet<THost>,
+) => TSlice
 
 /**
  * Bind a slice to the full store. `TStore` must include the slice keys, so a
  * `Partial<TSlice>` is a valid store update without `as never`.
+ *
+ * `THost` defaults to the slice itself. A slice may declare a wider host when
+ * it reads or writes sibling fields without owning those domains.
  */
 export function bindSlice<TSlice extends object, TStore extends TSlice>(
   set: SliceSet<TStore>,
   get: SliceGet<TStore>,
-  create: SliceCreator<TSlice>,
+  create: SliceCreator<TSlice, TStore>,
 ): TSlice {
-  const sliceSet: SliceSet<TSlice> = partial => {
-    if (typeof partial === 'function') {
-      set(state => partial(state) as Partial<TStore>)
-      return
-    }
-    set(partial as Partial<TStore>)
-  }
-  return create(sliceSet, get)
+  return create(set, get)
 }
