@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api/client'
+import { useUiTranslation } from '../../i18n'
 import { inputClass } from './styles'
 import type { SeriesProject, SeriesShot } from './types'
 
@@ -17,6 +18,7 @@ export function SeriesShotDurationControl({
   shot: SeriesShot
   onChange: (shot: SeriesShot) => void
 }) {
+  const { t } = useUiTranslation('seriesLab')
   const [calculating, setCalculating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const onChangeRef = useRef(onChange)
@@ -76,9 +78,9 @@ export function SeriesShotDurationControl({
 
   if (!hasDialogue) {
     return <label className="text-[10px] text-text-muted">
-      Clip solicitado
+      {t('duration.requestedClip')}
       <select
-        aria-label={`Clip solicitado para shot ${shot.order}`}
+        aria-label={t('duration.shotAria', { order: shot.order })}
         className={`mt-1 ${inputClass}`}
         value={nextSilentDuration(shot.durationSeconds)}
         onChange={event => onChange({
@@ -88,22 +90,22 @@ export function SeriesShotDurationControl({
           referenceManifest: undefined,
         })}
       >
-        {SILENT_DURATIONS.map(duration => <option key={duration} value={duration}>{duration} segundos</option>)}
+        {SILENT_DURATIONS.map(duration => <option key={duration} value={duration}>{t('duration.seconds', { count: duration })}</option>)}
       </select>
-      <span className="mt-1 block text-[9px] text-text-muted">Sin diálogo: duración visual editable.</span>
+      <span className="mt-1 block text-[9px] text-text-muted">{t('review.noDialogueDuration')}</span>
     </label>
   }
 
   const contract = shot.dialogueDuration
   return <div className="rounded-lg border border-border bg-bg-secondary p-2 text-[10px]" aria-live="polite">
     <div className="flex flex-wrap gap-x-3 gap-y-1">
-      <span className="text-text-muted">Voz estimada: <strong className="text-text-primary">{contract ? `${contract.estimatedVoiceSeconds.toFixed(3)} s` : 'calculando…'}</strong></span>
-      <span className="text-text-muted">Clip solicitado: <strong className="text-text-primary">{contract ? `${contract.requestedClipSeconds.toFixed(3)} s` : 'calculando…'}</strong></span>
-      {contract && <span className="text-text-muted">{contract.syllableCount} sílabas · {contract.secondsPerSyllable.toFixed(2)} s/sílaba</span>}
+      <span className="text-text-muted">{t('duration.estimatedVoice')}: <strong className="text-text-primary">{contract ? `${contract.estimatedVoiceSeconds.toFixed(3)} s` : t('duration.calculating')}</strong></span>
+      <span className="text-text-muted">{t('duration.requestedClip')}: <strong className="text-text-primary">{contract ? `${contract.requestedClipSeconds.toFixed(3)} s` : t('duration.calculating')}</strong></span>
+      {contract && <span className="text-text-muted">{t('review.syllables', { count: contract.syllableCount, rate: contract.secondsPerSyllable.toFixed(2) })}</span>}
     </div>
-    {calculating && <p className="mt-1 text-violet-300">Recalculando al cambiar el diálogo…</p>}
-    {contract?.minimumLimited && <p className="mt-1 text-text-muted">El mínimo nativo del modelo deja margen visual no hablado.</p>}
-    {contract?.requiresSplit && <p className="mt-1 text-red-300">El diálogo supera el máximo de un clip; divídelo antes de renderizar.</p>}
+    {calculating && <p className="mt-1 text-violet-300">{t('review.recalculating')}</p>}
+    {contract?.minimumLimited && <p className="mt-1 text-text-muted">{t('review.minimumLimited')}</p>}
+    {contract?.requiresSplit && <p className="mt-1 text-red-300">{t('review.requiresSplit')}</p>}
     {error && <p className="mt-1 text-red-300">{error}</p>}
   </div>
 }

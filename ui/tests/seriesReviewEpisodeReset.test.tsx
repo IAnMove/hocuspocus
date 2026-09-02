@@ -104,7 +104,7 @@ test('Series Review pauses and clears episode-owned state when the episode chang
   await screen.findByText('Episode 1 assembly is ready')
   fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
   assert.ok(screen.getByText(/Edit source data · shot 1/))
-  fireEvent.click(screen.getByRole('button', { name: /Finalizar y canon/ }))
+  fireEvent.click(screen.getByRole('button', { name: /Finish and canon/ }))
   fireEvent.click(screen.getByRole('button', { name: 'accepted' }))
   assert.match(screen.getByRole('button', { name: 'accepted' }).className, /bg-violet/)
 
@@ -115,9 +115,9 @@ test('Series Review pauses and clears episode-owned state when the episode chang
   assert.equal(screen.queryByText('Episode 1 assembly is ready'), null)
   assert.equal(screen.queryByText(/Edit source data/), null)
   assert.ok(screen.getAllByText('Action 2').length >= 1)
-  assert.ok(screen.getByRole('button', { name: /Montaje ordenado/ }))
+  assert.ok(screen.getByRole('button', { name: /Ordered episode assembly/ }))
 
-  fireEvent.click(screen.getByRole('button', { name: /Finalizar y canon/ }))
+  fireEvent.click(screen.getByRole('button', { name: /Finish and canon/ }))
   assert.doesNotMatch(screen.getByRole('button', { name: 'accepted' }).className, /bg-violet/)
   assert.match(screen.getByRole('button', { name: 'pending' }).className, /bg-violet/)
 })

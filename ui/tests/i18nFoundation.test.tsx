@@ -73,6 +73,10 @@ test('required glossary keys exist in both languages', async () => {
     ['storyLab', 'compact.musicTitle'],
     ['storyLab', 'assembly.title'],
     ['storyLab', 'library.storypack'],
+    ['storyLab', 'issues.approveConcept'],
+    ['director', 'queueRecovery.resumeQueue'],
+    ['seriesLab', 'review.orderedAssembly'],
+    ['common', 'welcome.enter'],
   ]
   for (const language of ['en', 'es']) {
     await i18n.changeLanguage(language)
@@ -243,7 +247,7 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
 
 test('resources register the extraInfo and storyLab namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)

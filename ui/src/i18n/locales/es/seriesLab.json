@@ -1,0 +1,28 @@
+{
+  "tabs": {
+    "setup": "1 · Preparación",
+    "canon": "2 · Canon",
+    "episode": "3 · Sala del episodio",
+    "shots": "4 · Planos",
+    "review": "5 · Render y revisión"
+  },
+  "review": {
+    "orderedAssembly": "Montaje ordenado",
+    "historyAttempts": "Historial e intentos",
+    "finishCanon": "Finalizar y canon",
+    "assemblyTitle": "Montaje ordenado del episodio",
+    "assemblyDescription": "{{ready}}/{{total}} posiciones tienen vídeo. Al terminar una regeneración correcta, el nuevo intento sustituye automáticamente al anterior en esta posición; el antiguo queda en Historial.",
+    "noDialogueDuration": "Sin diálogo: duración visual editable.",
+    "syllables": "{{count}} sílabas · {{rate}} s/sílaba",
+    "recalculating": "Recalculando al cambiar el diálogo…",
+    "minimumLimited": "El mínimo nativo del modelo deja margen visual no hablado.",
+    "requiresSplit": "El diálogo supera el máximo de un clip; divídelo antes de renderizar."
+  },
+  "duration": {
+    "seconds": "{{count}} segundos",
+    "estimatedVoice": "Voz estimada",
+    "requestedClip": "Clip solicitado",
+    "calculating": "calculando…",
+    "shotAria": "Clip solicitado para shot {{order}}"
+  }
+}

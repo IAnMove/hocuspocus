@@ -9,6 +9,7 @@ import { SeriesShotDurationControl } from './SeriesShotDurationControl'
 import { greenButton, primaryButton, secondaryButton } from './styles'
 import type { SeriesAssemblyJob, SeriesEpisode, SeriesJobStatus, SeriesProject, SeriesRenderAttempt, SeriesShot } from './types'
 import { listenForAgentSeriesAssemblyJob, listenForAgentSeriesReviewView } from '../../lib/uiBus'
+import { useUiTranslation } from '../../i18n'
 
 function AttemptPreview({ series, attempt, approved, onApprove, onReject }: {
   series: SeriesProject; attempt: SeriesRenderAttempt; approved: boolean; onApprove: () => void; onReject: () => void
@@ -39,6 +40,7 @@ export function SeriesReviewPanel({
   updateEpisode: (updater: (episode: SeriesEpisode) => SeriesEpisode) => void
   saveNow: () => Promise<SeriesProject | null>
 }) {
+  const { t } = useUiTranslation('seriesLab')
   const setMediaFilter = useStore(state => state.setMediaFilter)
   const [error, setError] = useState<string | null>(null)
   const [decisions, setDecisions] = useState<Record<string, 'pending' | 'accepted' | 'rejected'>>({})
@@ -312,9 +314,9 @@ export function SeriesReviewPanel({
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
     <div className="sticky top-0 z-10 flex flex-wrap gap-2 rounded-xl border border-border bg-bg-secondary/95 p-2 shadow-lg backdrop-blur">
       {([
-        ['assembly', 'Montaje ordenado', `${playable.length}/${episode.shots.length}`],
-        ['history', 'Historial e intentos', `${episode.shots.reduce((total, shot) => total + shot.attempts.length, 0)}`],
-        ['finish', 'Finalizar y canon', `${approved.length}/${episode.shots.length}`],
+        ['assembly', t('review.orderedAssembly'), `${playable.length}/${episode.shots.length}`],
+        ['history', t('review.historyAttempts'), `${episode.shots.reduce((total, shot) => total + shot.attempts.length, 0)}`],
+        ['finish', t('review.finishCanon'), `${approved.length}/${episode.shots.length}`],
       ] as const).map(([id, label, count]) => <button key={id} className={`rounded-lg border px-3 py-2 text-xs ${reviewView === id ? 'border-violet-400 bg-violet-500/20 text-violet-100' : 'border-border bg-bg-primary text-text-muted hover:bg-bg-hover'}`} onClick={() => setReviewView(id)}>{label}<span className="ml-2 rounded bg-black/20 px-1.5 py-0.5 text-[9px]">{count}</span></button>)}
     </div>
     <SectionCard title="Durable render queue" description="Completed shots survive cancellation and restart. Approved shots are never included in bulk missing/failed runs.">
@@ -338,7 +340,7 @@ export function SeriesReviewPanel({
       <div className="space-y-3">{sortedShots.map(shot => { const latest = [...shot.attempts].reverse()[0]; const approvedAttempt = shot.attempts.find(attempt => attempt.id === shot.approvedAttemptId); const primaryAttempts = [approvedAttempt, latest].filter((attempt, index, values): attempt is SeriesRenderAttempt => Boolean(attempt) && values.findIndex(value => value?.id === attempt?.id) === index); const history = shot.attempts.filter(attempt => !primaryAttempts.some(primary => primary.id === attempt.id)); return <div key={shot.id} className="rounded-xl border border-border p-3"><div className="mb-2 flex flex-wrap items-center gap-2"><Pill tone="blue">Shot {shot.order}</Pill><span className="min-w-0 flex-1 text-xs text-text-secondary">{shot.action}</span>{shot.approvedAttemptId && <Pill tone="green">approved</Pill>}<button className={secondaryButton} onClick={() => beginEdit(shot)}><Edit3 size={12} />Edit & regenerate</button></div><div className="grid gap-2 xl:grid-cols-2">{primaryAttempts.map(attempt => <AttemptPreview key={attempt.id} series={series} attempt={attempt} approved={shot.approvedAttemptId === attempt.id} onApprove={() => void approve(shot.id, attempt.id)} onReject={() => void reject(shot.id, attempt.id)} />)}</div>{history.length > 0 && <details className="mt-2"><summary className="cursor-pointer text-[10px] text-text-muted">Show {history.length} older attempt{history.length === 1 ? '' : 's'}</summary><div className="mt-2 grid gap-2 xl:grid-cols-2">{history.map(attempt => <AttemptPreview key={attempt.id} series={series} attempt={attempt} approved={false} onApprove={() => void approve(shot.id, attempt.id)} onReject={() => void reject(shot.id, attempt.id)} />)}</div></details>}{!shot.attempts.length && <p className="text-[10px] text-text-muted">No render attempt yet.</p>}</div> })}</div>
     </SectionCard>}
 
-    {reviewView === 'assembly' && <SectionCard title="Montaje ordenado del episodio" description={`${playable.length}/${episode.shots.length} posiciones tienen vídeo. Al terminar una regeneración correcta, el nuevo intento sustituye automáticamente al anterior en esta posición; el antiguo queda en Historial.`}>
+    {reviewView === 'assembly' && <SectionCard title={t('review.assemblyTitle')} description={t('review.assemblyDescription', { ready: playable.length, total: episode.shots.length })}>
       <div className="flex flex-wrap gap-2">
         <button className={greenButton} disabled={!approvable.length || Boolean(approvalProgress)} onClick={() => void approveAll()}>
           {approvalProgress ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}

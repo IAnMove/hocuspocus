@@ -561,7 +561,9 @@ export function StoryLabPanel() {
     })
     setNotice({
       kind: 'ok',
-      text: `Formato de vídeo actualizado: ${aspectLabel} · ${format.aspectRatio} · ${format.resolution} · ${outputSize}.`,
+      text: t('notice.videoFormatUpdated', {
+        aspect: aspectLabel, ratio: format.aspectRatio, resolution: format.resolution, size: outputSize,
+      }),
     })
   }
 
@@ -2466,32 +2468,32 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'error',
         text: legacyVideoOverridePending
-          ? 'Restaurando el modelo y formato anterior de esta Story. Inténtalo de nuevo en un momento.'
-          : 'Comprobando los formatos compatibles del modelo de vídeo. Inténtalo de nuevo en un momento.',
+          ? t('notice.restoringPreviousModel')
+          : t('notice.checkingVideoFormats'),
       })
       return
     }
     if (!project.synopsis.trim() || !project.characters.length) {
-      setNotice({ kind: 'error', text: 'El tráiler necesita una sinopsis y al menos un personaje.' })
+      setNotice({ kind: 'error', text: t('notice.trailerNeedSynopsis') })
       return
     }
     if (trailerTitleCards && !project.allowClipText) {
       setNotice({
         kind: 'error',
-        text: 'Activa “Permitir texto visible” en Story para generar cartelas; o selecciona “Sin cartelas”.',
+        text: t('notice.trailerNeedVisibleText'),
       })
       return
     }
     if (!directVideoMasterReady) {
-      setNotice({ kind: 'error', text: 'El vídeo directo necesita un prompt maestro de mundo y estilo.' })
+      setNotice({ kind: 'error', text: t('notice.directVideoNeedMaster') })
       return
     }
     if (!directReferenceVideoReady) {
       setNotice({
         kind: 'error',
         text: directReferenceVideoSupported
-          ? 'Aprueba al menos una imagen antes de usar referencias directas.'
-          : 'Elige un modelo MiniMax H3 antes de usar referencias directas.',
+          ? t('notice.approveImageBeforeDirectRefs')
+          : t('notice.chooseH3BeforeDirectRefs'),
       })
       return
     }
@@ -2505,11 +2507,11 @@ export function StoryLabPanel() {
     const confirmed = autoStart
       ? window.confirm(
         directVideo
-          ? `¿Generar el tráiler de “${project.title}” (${trailerDuration}s) como T2V puro? No se crearán ni enviarán imágenes o referencias.`
-          : `¿Generar el tráiler épico completo de “${project.title}” (${trailerDuration}s)? El borrador actual de Director se sustituirá y la generación puede consumir créditos.`,
+          ? t('notice.generateTrailerT2vConfirm', { title: project.title, seconds: trailerDuration })
+          : t('notice.generateTrailerFullConfirm', { title: project.title, seconds: trailerDuration }),
       )
       : !hasDirectorWork || window.confirm(
-        '¿Abrir este tráiler en Director? El borrador actual de Director se sustituirá.',
+        t('notice.openTrailerConfirm'),
       )
     if (!confirmed) return
     beginProjectOperation(sourceProjectId)
@@ -2574,14 +2576,14 @@ export function StoryLabPanel() {
         kind: 'ok',
         text: directVideo
           ? autoStart
-            ? 'El tráiler T2V está ejecutándose en Director sin imágenes ni referencias.'
-            : 'El tráiler T2V está abierto en Director; sólo se han cargado el guion visual y el prompt maestro.'
+            ? t('notice.trailerT2vRunning')
+            : t('notice.trailerT2vOpen')
           : autoStart
-            ? 'El tráiler está ejecutándose en Director y queda recuperable en Montaje.'
-            : 'El arco, canon y referencias del tráiler están cargados en Director para revisar y editar.',
+            ? t('notice.trailerRunningRecoverable')
+            : t('notice.trailerLoadedForReview'),
       })
     } catch (error) {
-      setNotice({ kind: 'error', text: `No se pudo preparar el tráiler: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.trailerPrepareFailed', { message: (error as Error).message }) })
     } finally {
       endProjectOperation(sourceProjectId)
       setProductionBusy(null)
@@ -3993,7 +3995,7 @@ export function StoryLabPanel() {
     )
     if (hasWork && !window.confirm(
       production.kind === 'trailer'
-        ? '¿Reabrir este tráiler? El borrador actual de Director se sustituirá.'
+        ? t('notice.reopenTrailerConfirm')
         : 'Reopen this film staging? The current Director draft will be replaced.',
     )) return
     const direction = typeof production.targetSnapshot?.direction === 'string'
@@ -4112,23 +4114,23 @@ export function StoryLabPanel() {
     if (project.projectType === 'full_story' && project.relationships.length) required.push('relationships')
     const sectionLabels: Record<keyof StoryProject['approvals'], string> = {
       overview: project.projectType === 'music_video'
-        ? 'Aprobar canción e historia visual'
-        : project.projectType === 'trailer' ? 'Aprobar concepto del tráiler' : 'Aprobar concepto',
+        ? t('issues.approveSongAndVisual')
+        : project.projectType === 'trailer' ? t('issues.approveTrailerConcept') : t('issues.approveConcept'),
       world: project.projectType === 'music_video'
-        ? 'Aprobar entorno y dirección visual'
-        : project.projectType === 'trailer' ? 'Aprobar mundo cinematográfico' : 'Aprobar mundo',
-      characters: project.projectType === 'trailer' ? 'Aprobar protagonistas' : 'Aprobar conjunto de personajes',
-      relationships: 'Aprobar relaciones',
+        ? t('issues.approveMusicWorld')
+        : project.projectType === 'trailer' ? t('issues.approveTrailerWorld') : t('issues.approveWorld'),
+      characters: project.projectType === 'trailer' ? t('issues.approveLeads') : t('issues.approveCast'),
+      relationships: t('issues.approveRelationships'),
       structure: project.projectType === 'music_video'
-        ? 'Aprobar momentos visuales'
-        : project.projectType === 'trailer' ? 'Aprobar arco del tráiler' : 'Aprobar estructura',
+        ? t('issues.approveVisualMoments')
+        : project.projectType === 'trailer' ? t('issues.approveTrailerArc') : t('issues.approveStructure'),
     }
     const issues: ProductionReviewIssue[] = required
       .filter(section => section !== 'characters' && !isApproved(section))
       .map(section => ({
         id: `section:${section}`,
         label: sectionLabels[section],
-        detail: 'Abre la sección, revisa el contenido y pulsa Aprobar.',
+        detail: t('issues.openSectionDetail'),
         tab: section as StoryTab,
         anchorId: `story-review-${section}`,
       }))
@@ -4139,15 +4141,15 @@ export function StoryLabPanel() {
         || project.assets[character.primaryReferenceAssetId]?.approval !== 'approved'
       )))
     if (incompleteCharacters.length) {
-      const names = incompleteCharacters.map(character => character.name || 'Sin nombre').join(', ')
+      const names = incompleteCharacters.map(character => character.name || t('issues.unnamed')).join(', ')
       issues.push({
         id: 'characters:items',
         label: requiresVisualIdentities
-          ? `Revisar identidades: ${names}`
-          : `Aprobar descripciones: ${names}`,
+          ? t('issues.reviewIdentities', { names })
+          : t('issues.approveDescriptions', { names }),
         detail: requiresVisualIdentities
-          ? 'Cada personaje necesita una imagen principal aprobada y su identidad confirmada.'
-          : 'En vídeo directo no hacen falta imágenes; Aprobar conjunto confirma todas las descripciones de una vez.',
+          ? t('issues.identitiesDetail')
+          : t('issues.descriptionsDetail'),
         tab: 'characters',
         anchorId: `story-review-character-${incompleteCharacters[0].id}`,
       })
@@ -4155,7 +4157,7 @@ export function StoryLabPanel() {
       issues.push({
         id: 'section:characters',
         label: sectionLabels.characters,
-        detail: 'Las fichas individuales están listas; sólo falta confirmar el conjunto.',
+        detail: t('issues.confirmSetDetail'),
         tab: 'characters',
         anchorId: 'story-review-characters',
       })

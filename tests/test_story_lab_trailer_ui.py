@@ -117,7 +117,7 @@ def test_trailer_orientation_can_override_the_global_landscape_default_inline():
     assert "if (project.provider.useGlobalProfile) return" not in handler
     assert "Formato seleccionado" in source
     assert "aria-pressed={aspectRatio === option.value}" in source
-    assert "Formato de vídeo actualizado:" in handler
+    assert "t('notice.videoFormatUpdated'" in handler
 
 
 def test_trailer_supports_text_only_direct_video_without_visual_inputs():

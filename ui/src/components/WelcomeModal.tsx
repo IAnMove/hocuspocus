@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Sparkles, Download, Cpu, X } from 'lucide-react'
+import { useUiTranslation } from '../i18n'
 import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
 
 const SEEN_KEY = 'hocuspocus_welcome_seen_v1'
@@ -14,6 +15,7 @@ const SEEN_KEY = 'hocuspocus_welcome_seen_v1'
  * it can render instantly on first paint.
  */
 export function WelcomeModal() {
+  const { t } = useUiTranslation('common')
   const [open, setOpen] = useState(() => safeStorageGet('local', SEEN_KEY) !== '1')
 
   if (!open) return null
@@ -35,29 +37,23 @@ export function WelcomeModal() {
             <Sparkles size={22} className="text-accent-blue" />
           </div>
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-text-primary">Novedades de HocusPocus</h2>
+            <h2 className="text-base font-semibold text-text-primary">{t('welcome.title')}</h2>
             <p className="text-xs text-text-muted mt-0.5">
-              Tu estudio local de IA para vídeo, imágenes, audio y 3D. Estas son las claves
-              para arrancar bien una producción.
+              {t('welcome.subtitle')}
             </p>
           </div>
-          <button onClick={dismiss} className="p-1 rounded text-text-muted hover:text-text-primary" aria-label="Close">
+          <button onClick={dismiss} className="p-1 rounded text-text-muted hover:text-text-primary" aria-label={t('welcome.closeAria')}>
             <X size={16} />
           </button>
         </div>
 
         {/* Points */}
         <div className="px-6 pb-2 space-y-3.5">
-          <Row icon={<Download size={16} className="text-accent-blue" />} title="Models download on first use">
-            The install set up the app, not the model weights. The first time you use a
-            given model, its files download once — often <span className="text-text-secondary">tens of GB</span> for
-            a video model — before anything appears. Later runs are fast. Watch progress
-            at the bottom-right; the very first video can take a while.
+          <Row icon={<Download size={16} className="text-accent-blue" />} title={t('welcome.modelsTitle')}>
+            {t('welcome.modelsBody')}
           </Row>
-          <Row icon={<Cpu size={16} className="text-accent-blue" />} title="Director runs on a local LLM">
-            Director mode plans your video with a local language model (Gemma 4, ~5 GB,
-            downloaded on first Director use) — nothing is sent to the cloud. You can
-            switch models, or plug in an external API, under Settings → Services.
+          <Row icon={<Cpu size={16} className="text-accent-blue" />} title={t('welcome.directorTitle')}>
+            {t('welcome.directorBody')}
           </Row>
         </div>
 
@@ -67,7 +63,7 @@ export function WelcomeModal() {
             onClick={dismiss}
             className="px-5 py-2 text-xs bg-accent-blue text-white rounded-lg hover:bg-accent-blue-hover transition-colors font-medium"
           >
-            Entrar al estudio
+            {t('welcome.enter')}
           </button>
         </div>
       </div>

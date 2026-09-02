@@ -17,6 +17,8 @@ Typed JSON under `ui/src/i18n/locales/<lng>/<namespace>.json`.
 | `activity` | Activity footer, Inbox / Legacy, Extra info inspector, Assets catalog chrome |
 | `extraInfo` | Video Extra info dialog body (title stays `activity.extraInfo`) |
 | `storyLab` | Story Lab section chrome, world/characters/relationships/structure tabs, reference gallery and editors |
+| `director` | Director queue recovery and related chrome |
+| `seriesLab` | Series Lab tabs, review assembly and shot-duration chrome |
 
 Add a namespace only when a new product surface needs its own file. Do not grow a single giant JSON.
 
