@@ -1236,6 +1236,22 @@ def persist_pipeline_output_timing(
             pass
 
 
+def _write_director_assembly_sidecar(
+    final_path: str,
+    sidecar: Mapping[str, Any],
+    workspace_id: Optional[str] = None,
+) -> None:
+    """Publish a v1 asset manifest for the assembled Director video."""
+    from services.asset_manifest import publish_generation_sidecar
+
+    publish_generation_sidecar(
+        final_path,
+        sidecar,
+        workspace_id=workspace_id,
+        tool="director",
+    )
+
+
 def _final_pipeline_output_name(output_files: list[str]) -> str:
     """Choose the assembled deliverable from a Director output list."""
     names = [str(name or "") for name in output_files if str(name or "")]
@@ -13426,8 +13442,7 @@ def _run_minimax_h3_story_video(
         "result_kind": result_kind,
         "created_at": time.time(),
     }
-    with open(os.path.splitext(final_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
-        json.dump(sidecar, handle, indent=2)
+    _write_director_assembly_sidecar(final_path, sidecar, workspace)
     return [*outputs, final_name]
 
 
