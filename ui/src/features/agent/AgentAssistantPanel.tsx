@@ -36,6 +36,13 @@ interface AgentAssistantPanelProps {
   embedded?: boolean
 }
 
+function agentPanelPresentation(embedded: boolean, expanded: boolean) {
+  if (embedded && !expanded) {
+    return { role: 'region' as const, ariaModal: undefined, autoFocus: false }
+  }
+  return { role: 'dialog' as const, ariaModal: 'true' as const, autoFocus: !embedded }
+}
+
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const STORAGE_PREFIX = 'hocuspocus-agent-chat-v2:'
 
@@ -145,6 +152,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   messagesRef.current = messages
   const activeCount = useMemo(() => tasks.filter(task => ACTIVE.has(task.status) && !task.parent_id).length, [tasks])
   const latestTask = useMemo(() => [...tasks].sort((left, right) => right.updated_at - left.updated_at)[0], [tasks])
+  const panelPresentation = agentPanelPresentation(embedded, expanded)
 
   useEffect(() => {
     mountedRef.current = true
@@ -449,8 +457,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
 
   const panel = (
     <section
-      role={embedded && !expanded ? 'region' : 'dialog'}
-      aria-modal={embedded && !expanded ? undefined : 'true'}
+      role={panelPresentation.role}
+      aria-modal={panelPresentation.ariaModal}
       aria-label={t('title')}
       data-expanded={expanded ? 'true' : 'false'}
       className={`hp-agent-panel z-[100] flex flex-col overflow-hidden border border-amber-200/20 bg-[#0d0b13]/95 shadow-2xl backdrop-blur-xl ${expanded
@@ -579,7 +587,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         <div className="flex items-end gap-2 rounded-xl border border-white/10 bg-black/25 p-2 focus-within:border-amber-200/35">
           <Sparkles size={14} className="mb-1 shrink-0 text-amber-200/55" />
           <textarea
-            autoFocus={!embedded}
+            autoFocus={panelPresentation.autoFocus}
             rows={2}
             value={draft}
             disabled={busy}
