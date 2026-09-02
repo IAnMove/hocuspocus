@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Clapperboard, Film, Settings, X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { GenerationModeSelector } from './GenerationModeSelector'
@@ -38,7 +38,6 @@ import { BrandIdentity } from '../BrandIdentity'
 export function Sidebar() {
   const [toolsCollapsed, setToolsCollapsed] = useState(() =>
     window.localStorage.getItem('hocuspocus-tools-sidebar-collapsed') === 'true')
-  const toggleSettings = useStore(s => s.toggleSettings)
   const generationMode = useStore(s => s.generationMode)
   const imageMode = useStore(s => s.params.image_mode)
   const modelOptions = useStore(s => s.modelOptions)
@@ -46,8 +45,7 @@ export function Sidebar() {
   const appVersion = useStore(s => s.systemConfig?.app_version)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
   const setSidebarMode = useStore(s => s.setSidebarMode)
-  const setDashboardOpen = useStore(s => s.setDashboardOpen)
-  const setMediaFilter = useStore(s => s.setMediaFilter)
+  const setSettingsOpen = useStore(s => s.setSettingsOpen)
   const editSubMode = useStore(s => s.editSubMode)
   const modelType = useStore(s => s.params.model_type)
   const openLoraBrowser = useStore(s => s.setLoraBrowserOpen)
@@ -83,8 +81,17 @@ export function Sidebar() {
       setToolsSidebarCollapsed(false)
       setSidebarOpen(true)
     }
+    const openSettings = () => {
+      setToolsSidebarCollapsed(false)
+      setSidebarOpen(true)
+      setSettingsOpen(true)
+    }
     window.addEventListener('hocuspocus:studio-open', openStudio)
-    return () => window.removeEventListener('hocuspocus:studio-open', openStudio)
+    window.addEventListener('hocuspocus:settings-open', openSettings)
+    return () => {
+      window.removeEventListener('hocuspocus:studio-open', openStudio)
+      window.removeEventListener('hocuspocus:settings-open', openSettings)
+    }
   // The event bridge deliberately tracks stable Zustand actions only.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -268,9 +275,6 @@ export function Sidebar() {
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <BrandIdentity appVersion={appVersion} />
             <div className="flex items-center gap-1.5">
-              <button onClick={() => setDashboardOpen(true)} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary" title="Director"><Clapperboard size={16} /></button>
-              <button onClick={() => { setMediaFilter('videoeditor'); setSidebarOpen(false) }} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary" title="Video Editor"><Film size={16} /></button>
-              <button onClick={toggleSettings} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary" title="Settings"><Settings size={16} /></button>
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
@@ -312,15 +316,6 @@ export function Sidebar() {
         <BrandIdentity appVersion={appVersion} />
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-text-secondary">Studio & tools</span>
-          <button onClick={() => setDashboardOpen(true)} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors" title="Director" aria-label="Open Director"><Clapperboard size={16} /></button>
-          <button onClick={() => setMediaFilter('videoeditor')} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors" title="Video Editor" aria-label="Open Video Editor"><Film size={16} /></button>
-          <button
-            onClick={toggleSettings}
-            className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-            title="Settings"
-          >
-            <Settings size={16} />
-          </button>
           <button
             onClick={() => setToolsSidebarCollapsed(true)}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Activity, BookOpen, Boxes, ChevronDown, FolderKanban,
-  Library, MonitorPlay, Search, Sparkles, Video, WandSparkles, X,
+  Activity, BookOpen, Boxes, ChevronDown, Clapperboard, FolderKanban, Languages,
+  Library, MonitorPlay, Search, Settings, Sparkles, Video, WandSparkles, X,
 } from 'lucide-react'
-import { useUiTranslation } from '../../i18n'
+import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
 
@@ -83,7 +83,7 @@ function NavigationMenu({ title, items, activeValue }: { title: string; items: M
 }
 
 export function TabFilter() {
-  const { t } = useUiTranslation('navigation')
+  const { t, i18n } = useUiTranslation('navigation')
   const mediaFilter = useStore(s => s.mediaFilter)
   const setMediaFilter = useStore(s => s.setMediaFilter)
   const developerMode = useStore(s => s.developerMode)
@@ -93,6 +93,7 @@ export function TabFilter() {
   const [draftQuery, setDraftQuery] = useState(searchQuery)
   const searchRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<number | null>(null)
+  const language: UiLanguage = String(i18n.resolvedLanguage || i18n.language).startsWith('es') ? 'es' : 'en'
 
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus()
@@ -109,6 +110,8 @@ export function TabFilter() {
     { value: 'stories', label: t('tabs.storyLab'), description: t('descriptions.storyLab'), icon: <BookOpen size={15} />, action: () => openFilter('stories') },
     { value: 'series', label: t('tabs.seriesLab'), description: t('descriptions.seriesLab'), icon: <Library size={15} />, action: () => openFilter('series') },
     { value: 'comics', label: t('tabs.comics'), description: t('descriptions.comics'), icon: <BookOpen size={15} />, action: () => openFilter('comics') },
+    { label: t('labs.director'), description: t('descriptions.director'), icon: <Clapperboard size={15} />, action: () => useStore.getState().setDashboardOpen(true) },
+    { value: 'videoeditor', label: t('tabs.videoEditor'), description: t('descriptions.editor'), icon: <Video size={15} />, action: () => openFilter('videoeditor') },
     { value: 'scene3d', label: t('tabs.scene3d'), description: t('descriptions.video3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('scene3d') },
     { value: 'characters', label: t('tabs.characters'), description: t('descriptions.characters'), icon: <WandSparkles size={15} />, action: () => openFilter('characters') },
   ]
@@ -150,7 +153,7 @@ export function TabFilter() {
       <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.workspaces.value} icon={<FolderKanban size={14} />} label={t('tabs.workspaces')} onClick={() => openFilter(PRIMARY_DESTINATIONS.workspaces.value)} />
       <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.activity.value} icon={<Activity size={14} />} label={t('primary.activity')} ariaLabel={`${t('tabs.runs')} · ${t('primary.activity')}`} onClick={() => openFilter(PRIMARY_DESTINATIONS.activity.value)} />
 
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-1">
         {searchOpen ? (
           <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary px-2 py-0.5">
             <Search size={12} className="shrink-0 text-text-muted" />
@@ -162,6 +165,16 @@ export function TabFilter() {
             <Search size={14} />
           </button>
         )}
+        <label className="flex items-center gap-1 rounded-lg px-2 py-1 text-text-muted hover:bg-bg-hover" title="Interface language">
+          <Languages size={14} />
+          <select value={language} onChange={event => { void setUiLanguage(event.target.value as UiLanguage) }} className="cursor-pointer bg-transparent text-[10px] font-medium text-text-secondary outline-none" aria-label="Quick interface language">
+            <option value="es">ES</option>
+            <option value="en">EN</option>
+          </select>
+        </label>
+        <button type="button" onClick={() => window.dispatchEvent(new Event('hocuspocus:settings-open'))} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-bg-hover hover:text-text-primary" aria-label="Settings">
+          <Settings size={14} /><span>Settings</span>
+        </button>
       </div>
     </nav>
   )

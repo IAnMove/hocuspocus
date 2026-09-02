@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowUp, Loader2, Maximize2, Minimize2, Sparkles, Trash2, X } from 'lucide-react'
+import { ArrowUp, Loader2, Maximize2, Minimize2, PanelLeftClose, Sparkles, Trash2 } from 'lucide-react'
 import { fetchWizardConversation, generateLlmText, saveWizardConversation, subscribeCanonicalTaskEvents, type CanonicalTask } from '../../api/client'
 import { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 import { buildAgentTurnPrompt, HOCUSPOCUS_AGENT_SYSTEM_PROMPT, type AgentConversationEntry } from './agentKnowledge'
@@ -464,10 +464,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         <div className="relative flex items-center gap-3">
           <AgentAvatar state={state} size={48} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="hp-wordmark text-lg font-semibold text-amber-50">{t('title')}</h2>
-              <span className="rounded-full border border-amber-200/20 bg-amber-200/10 px-1.5 py-0.5 text-[8px] uppercase tracking-wider text-amber-100/70">Guía · acciones</span>
-            </div>
+            <h2 className="hp-wordmark max-w-36 whitespace-normal text-xl font-semibold leading-[1.05] text-amber-50">{t('title')}</h2>
             <p className="truncate text-[10px] text-white/45">Workspace: {workspace}</p>
           </div>
           <button
@@ -481,7 +478,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
           <button type="button" onClick={clearConversation} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('clear')} aria-label={t('clear')}><Trash2 size={13} /></button>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('close')} aria-label={t('close')}><X size={14} /></button>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('close')} aria-label={t('close')}><PanelLeftClose size={15} /></button>
         </div>
         <div className="relative mt-2 flex items-center gap-2 text-[9px] text-white/45">
           <span className={`h-1.5 w-1.5 rounded-full ${activeCount ? 'animate-pulse bg-blue-300' : 'bg-emerald-300'}`} />

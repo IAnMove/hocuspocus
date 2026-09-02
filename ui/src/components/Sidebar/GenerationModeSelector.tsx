@@ -1,4 +1,4 @@
-import { Image, Video, AudioLines, Wand2, Wrench, Box } from 'lucide-react'
+import { Image, Video, AudioLines, Wand2, Wrench, Box, Settings } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import type { GenerationMode } from '../../types'
 
@@ -14,6 +14,7 @@ const modes: { value: GenerationMode; label: string; icon: typeof Image }[] = [
 export function GenerationModeSelector() {
   const generationMode = useStore(s => s.generationMode)
   const setGenerationMode = useStore(s => s.setGenerationMode)
+  const setSettingsOpen = useStore(s => s.setSettingsOpen)
 
   return (
     <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border" data-wizard-anchor="mode">
@@ -35,6 +36,15 @@ export function GenerationModeSelector() {
           </button>
         )
       })}
+      <button
+        type="button"
+        onClick={() => setSettingsOpen(true)}
+        className="flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-xs text-text-secondary transition-all hover:text-text-primary"
+        title="Settings"
+      >
+        <Settings size={14} />
+        <span>Settings</span>
+      </button>
     </div>
   )
 }
