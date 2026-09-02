@@ -77,11 +77,15 @@ def test_review_is_thumbnail_first_and_exposes_ordered_editable_attempt_history(
 
 
 def test_story_productions_have_an_in_place_ordered_clip_timeline():
-    story = (ROOT / "ui" / "src" / "features" / "stories" / "StoryLabPanel.tsx").read_text(encoding="utf-8")
+    tabs = (ROOT / "ui" / "src" / "features" / "stories" / "storyLabTabs.ts").read_text(encoding="utf-8")
+    assembly = (ROOT / "ui" / "src" / "features" / "stories" / "StoryAssemblyTab.tsx").read_text(encoding="utf-8")
     timeline = (ROOT / "ui" / "src" / "features" / "stories" / "StoryProductionTimeline.tsx").read_text(encoding="utf-8")
-    assert "StoryProductionTimeline" in story
-    assert "{ id: 'assembly', label: 'Montaje', icon: Play }" in story
-    assert "initiallyOpen={index === 0}" in story
+    catalog_es = (ROOT / "ui" / "src" / "i18n" / "locales" / "es" / "storyLab.json").read_text(encoding="utf-8")
+    assert "id: 'assembly'" in tabs
+    assert "icon: Play" in tabs
+    assert "StoryProductionTimeline" in assembly
+    assert "initiallyOpen={index === 0}" in assembly
+    assert '"assembly": "Montaje"' in catalog_es
     assert "View ordered clips" in timeline and "Play all" in timeline
     assert "Edit/regenerate clips" in timeline and "Join clips" in timeline
     assert "fetchSavedPipeline" in timeline

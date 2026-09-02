@@ -47,7 +47,7 @@ test('Story Lab navigation exposes every section in a scrollable mobile row', as
   assert.match(navigation.className, /md:overflow-y-auto/)
   assert.equal(screen.getAllByRole('button').length, tabs.length)
   assert.equal(screen.getByRole('button', { name: 'Story' }).getAttribute('aria-current'), 'page')
-  assert.equal(screen.getByText('Desliza para más secciones').getAttribute('aria-hidden'), 'true')
+  assert.equal(screen.getByText('Swipe for more sections').getAttribute('aria-hidden'), 'true')
   assert.match(screen.getByText('Desktop guidance').parentElement?.className || '', /hidden/)
 
   fireEvent.click(screen.getByRole('button', { name: 'Music' }))
@@ -109,6 +109,8 @@ test('Story Lab panel uses shared editors instead of passing component props', a
   assert.match(panel, /import \{ CompactVideoWorkspace \} from '\.\/CompactVideoWorkspace'/)
   assert.match(panel, /import \{ StoryOverviewTab \} from '\.\/StoryOverviewTab'/)
   assert.match(panel, /import \{ StoryAssetsTab \} from '\.\/StoryAssetsTab'/)
+  assert.match(panel, /import \{ StoryAssemblyTab \} from '\.\/StoryAssemblyTab'/)
+  assert.match(panel, /import \{ StoryLabLibraryChrome \} from '\.\/StoryLabLibraryChrome'/)
   assert.equal(panel.includes('function ReferenceGallery'), false)
   assert.equal(panel.includes('function Choice'), false)
   assert.equal(panel.includes('Canción e historia visual'), false)
@@ -354,6 +356,24 @@ function sampleMusicCue() {
     candidates: [] as Array<Record<string, unknown>>,
   }
 }
+
+test('Story Lab assembly tab and library chrome are extracted with i18n', async () => {
+  const { readFileSync } = await import('node:fs')
+  const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
+  const tab = readFileSync(new URL('../src/features/stories/StoryAssemblyTab.tsx', import.meta.url), 'utf8')
+  const chrome = readFileSync(new URL('../src/features/stories/StoryLabLibraryChrome.tsx', import.meta.url), 'utf8')
+  const tabs = readFileSync(new URL('../src/features/stories/storyLabTabs.ts', import.meta.url), 'utf8')
+  assert.match(panel, /<StoryAssemblyTab/)
+  assert.match(panel, /<StoryLabLibraryChrome/)
+  assert.equal(panel.includes('Montaje de producciones'), false)
+  assert.equal(panel.includes('Smart assets'), false)
+  assert.equal(panel.includes('Preparar historia completa · solo texto'), false)
+  assert.match(tab, /t\('assembly.title'\)/)
+  assert.match(tab, /t\('assembly.reopen'\)/)
+  assert.match(chrome, /t\('library.storypack'\)/)
+  assert.match(tabs, /id: 'assembly'/)
+  assert.match(tabs, /id: 'trailer'/)
+})
 
 test('Story Lab assets tab is extracted with i18n chrome', async () => {
   const { readFileSync } = await import('node:fs')

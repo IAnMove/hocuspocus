@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 STORIES = ROOT / "ui" / "src" / "features" / "stories"
 PANEL = STORIES / "StoryLabPanel.tsx"
+TABS = STORIES / "storyLabTabs.ts"
 TRAILER = STORIES / "StoryTrailerTab.tsx"
 COMPACT = STORIES / "CompactVideoWorkspace.tsx"
 VIDEO_FORMAT = STORIES / "storyLabVideoFormat.ts"
@@ -22,7 +23,7 @@ CATALOG_ES = ROOT / "ui" / "src" / "i18n" / "locales" / "es" / "storyLab.json"
 def story_lab_trailer_ui() -> str:
     extracted = sorted(STORIES.glob("StoryTrailer*.tsx")) + sorted(STORIES.glob("Compact*.tsx"))
     return "\n".join(path.read_text(encoding="utf-8") for path in (
-        PANEL, TRAILER, COMPACT, VIDEO_FORMAT, VIDEO_CONTROLS, CATALOG_EN, CATALOG_ES, *extracted,
+        PANEL, TABS, TRAILER, COMPACT, VIDEO_FORMAT, VIDEO_CONTROLS, CATALOG_EN, CATALOG_ES, *extracted,
     ))
 
 
@@ -38,13 +39,19 @@ def test_trailer_is_a_standalone_story_project_type_without_music():
     types = TYPES.read_text(encoding="utf-8")
     model = MODEL.read_text(encoding="utf-8")
     panel = PANEL.read_text(encoding="utf-8")
+    tabs = TABS.read_text(encoding="utf-8")
+    catalog_en = CATALOG_EN.read_text(encoding="utf-8")
+    catalog_es = CATALOG_ES.read_text(encoding="utf-8")
     backend = ROOT.joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
 
     assert "'full_story' | 'music_video' | 'trailer' | 'quick_video'" in types
     assert "projectType === 'trailer' ? 60" in model
-    assert "{ id: 'trailer', label: 'Tráiler cinematográfico'" in panel
-    assert "{ id: 'trailer', label: 'Crear tráiler'" in panel
-    assert "No escribirá ni exigirá una canción" in CATALOG_ES.read_text(encoding="utf-8")
+    assert "id: 'trailer'" in tabs
+    assert '"label": "Cinematic trailer"' in catalog_en
+    assert '"label": "Tráiler cinematográfico"' in catalog_es
+    assert '"createTrailer": "Create trailer"' in catalog_en
+    assert '"createTrailer": "Crear tráiler"' in catalog_es
+    assert "No escribirá ni exigirá una canción" in catalog_es
     assert "musicVideoGenerationMode: 'image_guided' as const" in panel
     assert "project.projectType === 'trailer' ? 'trailer' : 'productions'" in panel
     assert 'if project_type in {"trailer", "quick_video"}' in backend
@@ -66,10 +73,12 @@ def test_trailer_adapter_enforces_a_story_arc_without_revealing_the_ending():
 
 def test_story_lab_exposes_editable_trailer_controls_and_timed_preview():
     source = story_lab_trailer_ui()
-    panel = PANEL.read_text(encoding="utf-8")
+    tabs = TABS.read_text(encoding="utf-8")
     trailer = source
 
-    assert "{ id: 'trailer', label: 'Tráiler'" in panel
+    assert "id: 'trailer'" in tabs
+    assert '"trailer": "Trailer"' in CATALOG_EN.read_text(encoding="utf-8")
+    assert '"trailer": "Tráiler"' in CATALOG_ES.read_text(encoding="utf-8")
     assert "Creador de tráileres cinematográficos" in source
     assert "TRAILER_ARC.map" in trailer
     assert "setTrailerDuration" in trailer

@@ -45,6 +45,10 @@ const PILOT_FILES = [
   'src/features/workspaceCollections/WorkspaceCollectionsPanel.tsx',
   'src/features/workspaces/WorkspacesPanel.tsx',
   'src/features/stories/storyLabChrome.tsx',
+  'src/features/stories/StoryLabNavigation.tsx',
+  'src/features/stories/storyLabTabs.ts',
+  'src/features/stories/StoryLabLibraryChrome.tsx',
+  'src/features/stories/StoryAssemblyTab.tsx',
   'src/features/stories/StoryOverviewTab.tsx',
   'src/features/stories/StoryAssetsTab.tsx',
   'src/features/stories/StoryAssetsImporter.tsx',
@@ -107,6 +111,11 @@ const FORBIDDEN = [
   'Cinematic trailer creator',
   'Generate / refresh Lyria prompt',
   'Import custom MP3',
+  'Montaje de producciones',
+  'Smart assets',
+  'Guided · approve stages',
+  'Preparar historia completa · solo texto',
+  'Desliza para más secciones',
 ]
 
 export function forbiddenLiterals() {
