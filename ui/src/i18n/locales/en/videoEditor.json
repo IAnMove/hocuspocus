@@ -1,4 +1,115 @@
 {
+  "toolbar": {
+    "aria": "Video editor tools",
+    "projectName": "Project name",
+    "import": "Import",
+    "fromHocusPocus": "From HocusPocus",
+    "exportMp4": "Export MP4",
+    "cancelling": "Cancelling…"
+  },
+  "empty": {
+    "drop": "Drop videos here or click to import",
+    "formats": "MP4, WebM, MOV, MKV, AVI · up to 500 MB each",
+    "firstVideo": "Add your first video"
+  },
+  "playback": {
+    "play": "Play",
+    "pause": "Pause",
+    "playTitle": "Play from the selected clip, transition, or playhead",
+    "restartTitle": "Return to the beginning",
+    "playheadAria": "Timeline playhead",
+    "playheadValue": "{{time}} seconds",
+    "playheadSeconds": "Playhead seconds",
+    "split": "Split",
+    "splitTitle": "Split the clip at the current playhead",
+    "screenshot": "Take screenshot",
+    "screenshotTitle": "Save the exact current source frame as a reusable PNG in HocusPocus Outputs",
+    "screenshotSaved": "Saved {{filename}} at {{time}} · {{width}}×{{height}}"
+  },
+  "preview": {
+    "aria": "Export preview {{width}} by {{height}} pixels, {{aspect}}",
+    "label": "Export preview"
+  },
+  "inspector": {
+    "aria": "Video editor inspector",
+    "output": "Output",
+    "frameRate": "Frame rate",
+    "fps": "{{value}} FPS",
+    "remove": "Remove",
+    "removeTitle": "Remove this video from the timeline",
+    "redoInVideoCreation": "Redo in Video Creation",
+    "redoInVideoCreationTitle": "Load this clip’s prompt, model, duration and format into Video Creation so you can pick its replacement afterwards",
+    "loadingGenerationSettings": "Loading generation settings…"
+  },
+  "timeline": {
+    "aria": "Video editor timeline",
+    "summary_one": "Timeline · {{count}} clip · {{duration}}",
+    "summary_other": "Timeline · {{count}} clips · {{duration}}",
+    "soundtrack": "Soundtrack: {{name}}",
+    "loop": "loop",
+    "allGaps": "All gaps",
+    "defaultTransition": "Default transition for all gaps",
+    "applyToAll": "Apply to all",
+    "selectClip": "Select clip {{n}}: {{name}}",
+    "trimStart": "Trim start of {{name}}",
+    "trimEnd": "Trim end of {{name}}",
+    "removeNamed": "Remove {{name}} from the timeline",
+    "selectTransition": "Select transition {{n}}",
+    "transition": "Transition",
+    "transitionNamed": "Transition: {{label}}",
+    "addClip": "Add clip",
+    "moveToEnd": "Move to end"
+  },
+  "picker": {
+    "title": "Add HocusPocus videos",
+    "closeAria": "Close HocusPocus video picker",
+    "listAria": "HocusPocus videos",
+    "empty": "No videos found in workspace “{{workspace}}”.",
+    "loadMore": "Load {{count}} more",
+    "selectAllShown": "Select all shown",
+    "clear": "Clear",
+    "hint": "{{count}} selected · click to toggle, Shift-click for a range",
+    "addVideos": "Add videos",
+    "addCount_one": "Add {{count}} video",
+    "addCount_other": "Add {{count}} videos"
+  },
+  "status": {
+    "reconnecting": "Reconnecting to export…",
+    "submitting": "Submitting export…",
+    "cancellingFfmpeg": "Cancelling at the next FFmpeg safe boundary…",
+    "importing": "Importing video…",
+    "importingNamed": "Importing {{current}} of {{total}}: {{name}}",
+    "addingNamed": "Adding {{current}} of {{total}}: {{name}}",
+    "openingSeriesShot": "Opening Series shot {{current}}/{{total}}",
+    "openingNamed": "Opening {{name}}",
+    "replacingClip": "Replacing clip {{n}}: {{name}}",
+    "download": "Download {{filename}}"
+  },
+  "errors": {
+    "chooseVideos": "Choose one or more video files.",
+    "selectVideos": "Select one or more videos.",
+    "splitPlayhead": "Move the playhead inside the clip, away from the very start and end, then Split.",
+    "playback": "The browser could not start timeline playback.",
+    "noValidClips": "No valid clips remain. Restore a source with a finite duration before exporting.",
+    "handoffEmpty": "The editor hand-off does not contain any valid video sources. It is still available to retry.",
+    "handoffOpen": "Could not open the hand-off: {{message}}. The hand-off and current draft were kept; Retry when the source is available.",
+    "handoffRetry": "Could not retry the hand-off: {{message}}",
+    "draftSave": "The editor draft could not be saved. The hand-off was kept for Retry.",
+    "reconnectExport": "Could not reconnect to export {{jobId}}: {{message}}",
+    "slotGone": "Original position {{n}} is no longer available in the montage.",
+    "replaceFailed": "Could not replace clip {{n}}: {{message}}",
+    "noReusableSettings": "This clip does not keep reusable generation settings.",
+    "openInVideoCreation": "Could not open the clip in Video Creation: {{message}}"
+  },
+  "confirm": {
+    "replaceMontage_one": "The editor already contains {{count}} clip. Replace this montage with the hand-off?",
+    "replaceMontage_other": "The editor already contains {{count}} clips. Replace this montage with the hand-off?",
+    "addHandoff_one": "The editor already contains {{count}} clip. Add the hand-off to this montage?",
+    "addHandoff_other": "The editor already contains {{count}} clips. Add the hand-off to this montage?"
+  },
+  "actions": {
+    "retryHandoff": "Retry hand-off"
+  },
   "timeCard": {
     "default": "Moments later…",
     "label": "Card text",

@@ -29,6 +29,7 @@ const dom = installDom()
 
 test('Video Editor persists one export per workspace and reconnects after remount', { concurrency: false }, async () => {
   const { render, screen, waitFor, cleanup, fireEvent } = await import('@testing-library/react')
+  const { setUiLanguage } = await import('../src/i18n/index.ts')
   const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
   dom.window.localStorage.clear()
   dom.window.localStorage.setItem('maestro-video-editor-draft-v1', JSON.stringify({
@@ -46,6 +47,10 @@ test('Video Editor persists one export per workspace and reconnects after remoun
   const jobId = 'export-persistent-42'
   let postCount = 0
   let statusCount = 0
+  let releaseFirstStatus: (() => void) | null = null
+  const firstStatusPending = new Promise<void>(resolve => {
+    releaseFirstStatus = resolve
+  })
   const previousFetch = globalThis.fetch
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
@@ -61,6 +66,7 @@ test('Video Editor persists one export per workspace and reconnects after remoun
     }
     if (url.includes(`/api/v1/video-editor/export/${jobId}`)) {
       statusCount += 1
+      if (statusCount === 1) await firstStatusPending
       return {
         ok: true,
         json: async () => ({
@@ -80,6 +86,11 @@ test('Video Editor persists one export per workspace and reconnects after remoun
     await waitFor(() => assert.equal(postCount, 1))
     await waitFor(() => assert.ok(statusCount >= 1))
     assert.equal(dom.window.localStorage.getItem('maestro-video-editor-export-v1:default'), jobId)
+    await setUiLanguage('es')
+    await screen.findByRole('button', { name: 'Exportar MP4' })
+    assert.equal(statusCount, 1)
+    releaseFirstStatus?.()
+    await screen.findByText('Rendering')
     first.unmount()
     first = null
 
@@ -92,6 +103,7 @@ test('Video Editor persists one export per workspace and reconnects after remoun
     first?.unmount()
     second?.unmount()
     cleanup()
+    await setUiLanguage('en')
     globalThis.fetch = previousFetch
   }
 })
