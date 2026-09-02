@@ -449,6 +449,7 @@ from services.job_lifecycle import (
     unregister_abort_state,
     update_job,
 )
+from services.asset_manifest import publish_generation_sidecar
 from services import resource_scheduler
 
 _jobs: dict = {}
@@ -22841,10 +22842,13 @@ def _run_sfx_generation(job: dict, raw_params: dict, start_time: float):
                 "generation_time": round(elapsed),
                 "created_at": time.time(),
             }
-            meta_path = os.path.join(out_dir, os.path.splitext(fname)[0] + ".meta.json")
             try:
-                with open(meta_path, "w", encoding="utf-8") as f:
-                    json.dump(sidecar, f, indent=2)
+                publish_generation_sidecar(
+                    os.path.join(out_dir, fname),
+                    sidecar,
+                    workspace_id=job.get("workspace"),
+                    tool="studio-sfx",
+                )
             except Exception:
                 pass
 
@@ -23637,8 +23641,12 @@ def _run_simulated_generation(job: dict, *, finalize: bool) -> bool:
         "simulated": True,
         "execution_mode": "simulate",
     }
-    with open(os.path.splitext(generated_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
-        json.dump(sidecar, handle, ensure_ascii=False, indent=2)
+    publish_generation_sidecar(
+        generated_path,
+        sidecar,
+        workspace_id=job.get("workspace"),
+        tool="studio",
+    )
     if not finalize:
         return update_job(
             job,
@@ -23838,9 +23846,12 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 for path in generated:
                     file_sidecar = dict(sidecar)
                     file_sidecar["output_filename"] = os.path.basename(path)
-                    meta_path = os.path.splitext(path)[0] + ".meta.json"
-                    with open(meta_path, "w", encoding="utf-8") as handle:
-                        json.dump(file_sidecar, handle, indent=2)
+                    publish_generation_sidecar(
+                        path,
+                        file_sidecar,
+                        workspace_id=job.get("workspace"),
+                        tool="studio-h3-legacy",
+                    )
 
                 if not finalize:
                     return update_job(
@@ -24467,12 +24478,13 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                     else:
                         file_sidecar.pop("director_clip_index", None)
                     file_sidecar["output_filename"] = fname
-                    meta_path = os.path.join(
-                        out_dir, os.path.splitext(fname)[0] + ".meta.json",
-                    )
                     try:
-                        with open(meta_path, "w", encoding="utf-8") as f:
-                            json.dump(file_sidecar, f, indent=2)
+                        publish_generation_sidecar(
+                            os.path.join(out_dir, fname),
+                            file_sidecar,
+                            workspace_id=job.get("workspace"),
+                            tool="studio",
+                        )
                     except Exception:
                         pass
 

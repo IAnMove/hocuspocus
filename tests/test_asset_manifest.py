@@ -6,10 +6,12 @@ from pathlib import Path
 import pytest
 
 from app.services.asset_manifest import (
+    SCHEMA_NAME,
     AssetManifestError,
     adapt_legacy_sidecar,
     build_asset_manifest,
     infer_asset_kind,
+    publish_generation_sidecar,
     read_asset_manifest,
     write_asset_manifest,
 )
@@ -182,6 +184,47 @@ def test_legacy_director_sidecar_preserves_pipeline_identity(
     manifest = adapt_legacy_sidecar(output, legacy)
 
     assert manifest["execution"]["pipeline_id"] == expected_pipeline_id
+
+
+def test_generate_publish_writes_canonical_manifest_and_keeps_gallery_keys(tmp_path: Path):
+    first = tmp_path / "choir.mp4"
+    second = tmp_path / "choir-take-2.mp4"
+    first.write_bytes(b"video-a")
+    second.write_bytes(b"video-b")
+    sidecar = {
+        "params": {"prompt": "un coro en la sala de servidores", "model_type": "minimax_h3", "api_key": "secret"},
+        "generation_mode": "video",
+        "job_id": "job-sim-1",
+        "task_id": "task-1",
+        "simulated": True,
+        "created_at": 1_700_000_100,
+    }
+
+    published = publish_generation_sidecar(
+        first, sidecar, workspace_id="night-shift", tool="studio",
+    )
+    raw = json.loads(published.read_text(encoding="utf-8"))
+    loaded = read_asset_manifest(first, workspace_id="night-shift")
+
+    assert raw["schema"] == SCHEMA_NAME
+    assert raw["params"]["prompt"] == "un coro en la sala de servidores"
+    assert raw["job_id"] == "job-sim-1"
+    assert "secret" not in published.read_text(encoding="utf-8")
+    assert str(tmp_path) not in published.read_text(encoding="utf-8")
+    assert loaded is not None
+    assert loaded["asset"]["kind"] == "video"
+    assert loaded["asset"]["id"].startswith("asset_")
+    assert loaded["origin"]["tool"] == "studio"
+    assert loaded["origin"]["workspace_id"] == "night-shift"
+    assert loaded["execution"]["mode"] == "simulate"
+    assert loaded["execution"]["job_id"] == "job-sim-1"
+    assert loaded["technical"]["published_on_generate"] is True
+    assert "legacy_sidecar" not in loaded["technical"]
+
+    retry = publish_generation_sidecar(first, sidecar, workspace_id="night-shift", tool="studio")
+    other = publish_generation_sidecar(second, sidecar, workspace_id="night-shift", tool="studio")
+    assert json.loads(retry.read_text(encoding="utf-8"))["asset"]["id"] == raw["asset"]["id"]
+    assert json.loads(other.read_text(encoding="utf-8"))["asset"]["id"] != raw["asset"]["id"]
 
 
 def test_non_finite_metadata_is_normalized_to_valid_json(tmp_path: Path):

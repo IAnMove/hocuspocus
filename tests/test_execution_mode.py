@@ -1,16 +1,19 @@
 import ast
 import importlib
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
 import subprocess
+import time
 import wave
 from types import SimpleNamespace
 
 import pytest
 
 from services import execution_mode
+from services.asset_manifest import SCHEMA_NAME, publish_generation_sidecar, read_asset_manifest
 
 
 def _load_launch_function(name, namespace):
@@ -201,6 +204,53 @@ def test_simulated_worker_returns_cleanly_when_artifact_creation_is_cancelled(tm
     assert list(tmp_path.iterdir()) == []
 
 
+def test_simulated_generation_writes_canonical_asset_manifest(tmp_path):
+    artifact = tmp_path / "clip.mp4"
+
+    def create_artifact(*_args, **_kwargs):
+        artifact.write_bytes(b"video")
+        return str(artifact)
+
+    recorded = []
+    namespace = {
+        "execution_mode": SimpleNamespace(create_artifact=create_artifact),
+        "update_job": lambda *_args, **_kwargs: True,
+        "is_cancel_requested": lambda _job: False,
+        "record_job_outputs": lambda _job, names: recorded.extend(names),
+        "finish_job": lambda *_args, **_kwargs: True,
+        "publish_generation_sidecar": publish_generation_sidecar,
+        "os": os,
+        "time": time,
+    }
+    worker = _load_launch_function("_run_simulated_generation", namespace)
+    job = {
+        "id": "sim-job-1",
+        "out_dir": str(tmp_path),
+        "workspace": "night-shift",
+        "task_id": "task-1",
+        "root_task_id": "task-1",
+        "params": {
+            "generation_mode": "video",
+            "prompt": "un coro en la sala de servidores",
+            "model_type": "minimax_h3",
+        },
+    }
+
+    assert worker(job, finalize=True) is True
+    assert recorded == ["clip.mp4"]
+    sidecar = tmp_path / "clip.meta.json"
+    raw = json.loads(sidecar.read_text(encoding="utf-8"))
+    loaded = read_asset_manifest(artifact, workspace_id="night-shift")
+    assert raw["schema"] == SCHEMA_NAME
+    assert raw["params"]["prompt"] == "un coro en la sala de servidores"
+    assert raw["job_id"] == "sim-job-1"
+    assert loaded is not None
+    assert loaded["asset"]["kind"] == "video"
+    assert loaded["origin"]["workspace_id"] == "night-shift"
+    assert loaded["execution"]["mode"] == "simulate"
+    assert loaded["technical"]["published_on_generate"] is True
+
+
 def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     source = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(
         encoding="utf-8",
@@ -224,3 +274,18 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         assert "execution_mode.policy().simulated" in route
         assert real_worker in route
         assert "_run_generation" in route
+    tree = ast.parse(source)
+
+    def function_source(name):
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == name:
+                return ast.get_source_segment(source, node)
+        raise AssertionError(name)
+
+    for name in ("_run_simulated_generation", "_write_output_sidecars", "_run_sfx_generation"):
+        body = function_source(name)
+        assert "publish_generation_sidecar" in body
+        assert "json.dump" not in body
+    h3_slice = source.split("generated = minimax_h3_service.generate", 1)[1].split("if not finalize:", 1)[0]
+    assert "publish_generation_sidecar" in h3_slice
+    assert "json.dump" not in h3_slice
