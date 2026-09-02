@@ -26632,6 +26632,17 @@ api.include_router(create_character_kit_face_router(
 ))
 
 
+def _write_scene_recording_sidecar(output_path, sidecar, workspace_id):
+    from services.asset_manifest import publish_generation_sidecar
+
+    publish_generation_sidecar(
+        output_path,
+        sidecar,
+        workspace_id=workspace_id,
+        tool="scene-animator-3d",
+    )
+
+
 @api.post("/api/v1/scenes/recordings")
 async def save_scene_recording(
     file: UploadFile = File(...),
@@ -26784,8 +26795,7 @@ async def save_scene_recording(
         "output_filename": output_name,
     }
     try:
-        with open(os.path.splitext(output_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
-            json.dump(sidecar, handle, ensure_ascii=False, indent=2)
+        _write_scene_recording_sidecar(output_path, sidecar, details.get("workspace"))
     except Exception as error:
         try:
             os.remove(output_path)
@@ -35527,6 +35537,17 @@ def serve_video_editor_thumbnail(source: str):
     )
 
 
+def _write_video_editor_screenshot_sidecar(output_path, sidecar, workspace_id):
+    from services.asset_manifest import publish_generation_sidecar
+
+    publish_generation_sidecar(
+        output_path,
+        sidecar,
+        workspace_id=workspace_id,
+        tool="video-editor-screenshot",
+    )
+
+
 @api.post("/api/v1/video-editor/screenshot")
 def capture_video_editor_frame(body: dict):
     """Save the current source-video frame as a reusable Maestro image output."""
@@ -35575,12 +35596,9 @@ def capture_video_editor_frame(body: dict):
             "generation_mode": "image",
             "created_at": time.time(),
         }
-        meta_path = os.path.join(
-            out_dir,
-            os.path.splitext(output_name)[0] + ".meta.json",
+        _write_video_editor_screenshot_sidecar(
+            output_path, sidecar, body.get("workspace"),
         )
-        with open(meta_path, "w", encoding="utf-8") as handle:
-            json.dump(sidecar, handle, indent=2, ensure_ascii=False)
         return {
             "filename": output_name,
             "url": f"/api/v1/file/{output_name}",
@@ -35613,6 +35631,17 @@ def _video_editor_task_identity(body: dict, job_id: str) -> tuple[str, str, str 
     task_id = supplied_task_id or f"task-video-editor-{job_id}"
     root_task_id = supplied_root_id or supplied_parent_id or task_id
     return task_id, root_task_id, supplied_parent_id or None
+
+
+def _write_video_editor_export_sidecar(output_path, sidecar, workspace_id):
+    from services.asset_manifest import publish_generation_sidecar
+
+    publish_generation_sidecar(
+        output_path,
+        sidecar,
+        workspace_id=workspace_id,
+        tool="video-editor",
+    )
 
 
 def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path: str) -> None:
@@ -35820,9 +35849,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
             "workspace": workspace,
             "created_at": time.time(),
         }
-        meta_path = os.path.join(out_dir, os.path.splitext(output_name)[0] + ".meta.json")
-        with open(meta_path, "w", encoding="utf-8") as handle:
-            json.dump(sidecar, handle, indent=2, ensure_ascii=False)
+        _write_video_editor_export_sidecar(output_path, sidecar, workspace)
 
         completed = _video_editor_job_update(
             job_id,
@@ -36047,6 +36074,17 @@ def start_video_editor_export(body: dict):
     return _public_video_editor_job(snapshot)
 
 
+def _write_comic_animatic_sidecar(output_path, sidecar, workspace_id):
+    from services.asset_manifest import publish_generation_sidecar
+
+    publish_generation_sidecar(
+        output_path,
+        sidecar,
+        workspace_id=workspace_id,
+        tool="comic-animatic",
+    )
+
+
 def _run_comic_animatic(job_id: str, body: dict, output_path: str) -> None:
     from services.video_editor import render_comic_animatic
 
@@ -36199,27 +36237,27 @@ def _run_comic_animatic(job_id: str, body: dict, output_path: str) -> None:
             return
 
         output_name = os.path.basename(output_path)
-        with open(os.path.splitext(output_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
-            json.dump({
-                "params": {
-                    "source": "comic_animatic",
-                    "comic_animatic": {
-                        "version": 1,
-                        "comic_id": body.get("comic_id"),
-                        "comic_title": body.get("comic_title"),
-                        "width": body["width"], "height": body["height"], "fps": body["fps"],
-                        "transition": body["transition"],
-                        "transition_duration": body["transition_duration"],
-                        "panels": [{key: value for key, value in panel.items() if key != "resolved_path"} for panel in panels],
-                    },
+        sidecar = {
+            "params": {
+                "source": "comic_animatic",
+                "comic_animatic": {
+                    "version": 1,
+                    "comic_id": body.get("comic_id"),
+                    "comic_title": body.get("comic_title"),
+                    "width": body["width"], "height": body["height"], "fps": body["fps"],
+                    "transition": body["transition"],
+                    "transition_duration": body["transition_duration"],
+                    "panels": [{key: value for key, value in panel.items() if key != "resolved_path"} for panel in panels],
                 },
-                "generation_mode": "video",
-                "job_id": job_id,
-                "task_id": task_id,
-                "root_task_id": str(job["root_task_id"]),
-                "workspace": workspace,
-                "created_at": time.time(),
-            }, handle, indent=2, ensure_ascii=False)
+            },
+            "generation_mode": "video",
+            "job_id": job_id,
+            "task_id": task_id,
+            "root_task_id": str(job["root_task_id"]),
+            "workspace": workspace,
+            "created_at": time.time(),
+        }
+        _write_comic_animatic_sidecar(output_path, sidecar, workspace)
         completed = _video_editor_job_update(
             job_id,
             status="completed",

@@ -376,6 +376,117 @@ def test_edit_shot_sidecar_publishes_canonical_manifest_without_invented_actor(
     assert read_asset_manifest(other, workspace_id="lab")["origin"]["tool"] == tool
 
 
+@pytest.mark.parametrize(
+    ("writer_name", "tool", "filename", "sidecar"),
+    [
+        (
+            "_write_scene_recording_sidecar",
+            "scene-animator-3d",
+            "scene.mp4",
+            {
+                "params": {
+                    "model_type": "scene-animator-3d",
+                    "generation_mode": "3d-scene-compositor",
+                    "prompt": "a 3d scene",
+                },
+                "generation_mode": "video",
+                "tool": "scene-animator-3d",
+                "generation_time": 1.5,
+                "created_at": 1_700_000_100,
+                "output_filename": "scene.mp4",
+            },
+        ),
+        (
+            "_write_video_editor_screenshot_sidecar",
+            "video-editor-screenshot",
+            "frame.png",
+            {
+                "params": {
+                    "video_editor_screenshot": {
+                        "version": 1,
+                        "source": "clip.mp4",
+                        "source_name": "clip.mp4",
+                        "time": 1.25,
+                    },
+                    "source": "video_editor_screenshot",
+                },
+                "generation_mode": "image",
+                "created_at": 1_700_000_100,
+            },
+        ),
+        (
+            "_write_video_editor_export_sidecar",
+            "video-editor",
+            "edited.mp4",
+            {
+                "params": {
+                    "video_editor": {"version": 2, "width": 1280, "height": 720, "fps": 30},
+                    "source": "video_editor",
+                },
+                "generation_mode": "video",
+                "job_id": "video-edit-1",
+                "task_id": "task-video-editor-1",
+                "root_task_id": "task-root-1",
+                "workspace": "lab",
+                "created_at": 1_700_000_100,
+            },
+        ),
+        (
+            "_write_comic_animatic_sidecar",
+            "comic-animatic",
+            "animatic.mp4",
+            {
+                "params": {
+                    "source": "comic_animatic",
+                    "comic_animatic": {"version": 1, "comic_id": "comic-1"},
+                },
+                "generation_mode": "video",
+                "job_id": "video-edit-2",
+                "task_id": "task-video-editor-2",
+                "root_task_id": "task-root-2",
+                "workspace": "lab",
+                "created_at": 1_700_000_100,
+            },
+        ),
+    ],
+)
+def test_editor_gallery_sidecar_publishes_canonical_manifest_without_invented_actor(
+    tmp_path, writer_name, tool, filename, sidecar,
+):
+    artifact = tmp_path / filename
+    artifact.write_bytes(b"media")
+    write = _load_launch_function(
+        writer_name,
+        {
+            "os": os,
+            "time": time,
+            "publish_generation_sidecar": publish_generation_sidecar,
+        },
+    )
+    write(str(artifact), sidecar, "lab")
+    loaded = read_asset_manifest(artifact, workspace_id="lab")
+    raw = json.loads(artifact.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    assert loaded is not None
+    assert raw["schema"] == SCHEMA_NAME
+    for key, value in sidecar.items():
+        assert raw[key] == value
+    assert loaded["origin"]["tool"] == tool
+    assert loaded["origin"]["actor"] == "unknown"
+    assert loaded["origin"]["workspace_id"] == "lab"
+    if "job_id" in sidecar:
+        assert loaded["execution"]["job_id"] == sidecar["job_id"]
+        assert loaded["execution"]["task_id"] == sidecar["task_id"]
+        assert loaded["execution"]["root_task_id"] == sidecar["root_task_id"]
+    first_id = loaded["asset"]["id"]
+    write(str(artifact), sidecar, "lab")
+    assert read_asset_manifest(artifact, workspace_id="lab")["asset"]["id"] == first_id
+    other = tmp_path / f"other-{filename}"
+    other.write_bytes(b"media-b")
+    write(str(other), sidecar, "lab")
+    assert read_asset_manifest(other, workspace_id="lab")["asset"]["id"] != first_id
+    assert read_asset_manifest(other, workspace_id="lab")["origin"]["tool"] == tool
+
+
 def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     source = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(
         encoding="utf-8",
@@ -415,6 +526,10 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         "_write_recast_shot_aware_sidecar",
         "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
+        "_write_scene_recording_sidecar",
+        "_write_video_editor_screenshot_sidecar",
+        "_write_video_editor_export_sidecar",
+        "_write_comic_animatic_sidecar",
     ):
         body = function_source(name)
         assert "publish_generation_sidecar" in body

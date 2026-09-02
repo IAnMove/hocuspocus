@@ -26,6 +26,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from services.asset_manifest import SCHEMA_NAME
+
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
@@ -159,10 +161,17 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
             } for index, clip in enumerate(clips)],
         },
     )
-    services_module = _module("services", video_editor=video_editor_module)
+    import services.asset_manifest as asset_manifest_module
+
+    services_module = _module(
+        "services",
+        video_editor=video_editor_module,
+        asset_manifest=asset_manifest_module,
+    )
     services_module.__path__ = []
     monkeypatch.setitem(sys.modules, "services", services_module)
     monkeypatch.setitem(sys.modules, "services.video_editor", video_editor_module)
+    monkeypatch.setitem(sys.modules, "services.asset_manifest", asset_manifest_module)
 
     def workspace_dir(workspace=None) -> str:
         workspace_calls.append(workspace)
@@ -209,8 +218,10 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
         "_remove_video_editor_output_bundle",
         "_finish_video_editor_cancelled",
         "_video_editor_task_identity",
+        "_write_video_editor_export_sidecar",
         "_run_video_editor_export",
         "start_video_editor_export",
+        "_write_comic_animatic_sidecar",
         "_run_comic_animatic",
         "start_comic_animatic",
         "cancel_video_editor_export",
@@ -430,13 +441,18 @@ def test_progress_and_terminal_publish_without_get_and_sidecar_keeps_task_hierar
     assert output_path.exists()
     assert sidecar_path.exists()
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["schema"] == SCHEMA_NAME
+    assert sidecar["origin"]["actor"] == "unknown"
     assert sidecar["job_id"] == response["job_id"]
     assert sidecar["task_id"] == response["task_id"]
     assert sidecar["root_task_id"] == response["root_task_id"]
     if render_kind == "export":
+        assert sidecar["origin"]["tool"] == "video-editor"
         editor = sidecar["params"]["video_editor"]
         assert editor["version"] == 2
         assert editor["source_manifest"]["clips"][0]["source"] == "clip.mp4"
+    else:
+        assert sidecar["origin"]["tool"] == "comic-animatic"
 
 
 def test_canonical_adapter_exposes_real_lane_cancel_contract_and_control_route():
