@@ -19,6 +19,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.asset_manifest import publish_generation_sidecar
 from services.series_assembly import episode_assembly_plan
 from services.series_jobs import SeriesJobStore
 from services.task_manager import get_cancellation_token, get_task_registry
@@ -34,6 +35,27 @@ def _remove_assembly_artifacts(output_path: str | None) -> None:
                 os.remove(path)
         except OSError:
             pass
+
+
+def _write_assembly_sidecar(output_path: str, job: dict[str, Any]) -> None:
+    workspace = job.get("workspace")
+    publish_generation_sidecar(
+        output_path,
+        {
+            "generation_mode": "video",
+            "result_kind": "series_episode",
+            "created_at": time.time(),
+            "params": {
+                "result_kind": "series_episode",
+                "pipeline_type": "series_episode",
+                "seriesId": job.get("seriesId"),
+                "episodeId": job.get("episodeId"),
+                "assemblyJobId": job.get("jobId"),
+            },
+        },
+        workspace_id=str(workspace) if workspace else None,
+        tool="series-assembly",
+    )
 
 
 PUBLIC_JOB_KEYS = (
@@ -352,20 +374,7 @@ def create_series_assembly_router(
                 raise RuntimeError("ffmpeg could not join the approved Series clips")
             if not os.path.isfile(output_path):
                 raise RuntimeError("Series assembly finished without an output file")
-            meta_path = os.path.splitext(output_path)[0] + ".meta.json"
-            with open(meta_path, "w", encoding="utf-8") as handle:
-                json.dump({
-                    "generation_mode": "video",
-                    "result_kind": "series_episode",
-                    "created_at": time.time(),
-                    "params": {
-                        "result_kind": "series_episode",
-                        "pipeline_type": "series_episode",
-                        "seriesId": job.get("seriesId"),
-                        "episodeId": job.get("episodeId"),
-                        "assemblyJobId": job_id,
-                    },
-                }, handle, indent=2)
+            _write_assembly_sidecar(output_path, job)
             if token.is_cancelled():
                 _remove_assembly_artifacts(output_path)
                 update(
