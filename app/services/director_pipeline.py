@@ -1206,6 +1206,11 @@ def persist_pipeline_output_timing(
     if pipeline_id:
         params.setdefault("director_pipeline_id", str(pipeline_id))
         metadata.setdefault("director_pipeline_id", str(pipeline_id))
+        metadata.setdefault("pipeline_id", str(pipeline_id))
+    for key in ("job_id", "task_id", "root_task_id"):
+        value = pipeline.get(key)
+        if value:
+            metadata.setdefault(key, str(value))
     snapshot = pipeline.get("params") if isinstance(pipeline.get("params"), dict) else {}
     from services.output_result_kind import result_kind_for_pipeline
     result_kind = result_kind_for_pipeline(snapshot)
@@ -1221,7 +1226,7 @@ def persist_pipeline_output_timing(
         publish_generation_sidecar(
             os.path.join(out_dir, filename),
             metadata,
-            workspace_id=pipeline.get("workspace") or None,
+            output_folder=_physical_output_folder(pipeline.get("workspace")),
             tool="director",
         )
         return True
@@ -1233,18 +1238,39 @@ def persist_pipeline_output_timing(
         return False
 
 
+def _physical_output_folder(value: Any) -> Optional[str]:
+    """Physical output-folder name; never an absolute host path or a Workspace id."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    name = os.path.basename(text.replace("\\", "/"))
+    return name or None
+
+
 def _write_director_assembly_sidecar(
     final_path: str,
     sidecar: Mapping[str, Any],
-    workspace_id: Optional[str] = None,
+    output_folder: Optional[str] = None,
 ) -> None:
     """Publish a v1 asset manifest for the assembled Director video."""
     from services.asset_manifest import publish_generation_sidecar
 
+    payload = dict(sidecar)
+    params = payload.get("params") if isinstance(payload.get("params"), Mapping) else {}
+    pipeline_id = (
+        payload.get("pipeline_id")
+        or payload.get("director_pipeline_id")
+        or params.get("pipeline_id")
+        or params.get("director_pipeline_id")
+        or params.get("_director_pipeline_id")
+    )
+    if pipeline_id:
+        payload.setdefault("pipeline_id", str(pipeline_id))
+        payload.setdefault("director_pipeline_id", str(pipeline_id))
     publish_generation_sidecar(
         final_path,
-        sidecar,
-        workspace_id=workspace_id,
+        payload,
+        output_folder=_physical_output_folder(output_folder),
         tool="director",
     )
 
@@ -13438,6 +13464,8 @@ def _run_minimax_h3_story_video(
         "generation_mode": "video",
         "result_kind": result_kind,
         "created_at": time.time(),
+        "pipeline_id": pid,
+        "director_pipeline_id": pid,
     }
     _write_director_assembly_sidecar(final_path, sidecar, workspace)
     return [*outputs, final_name]

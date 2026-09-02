@@ -6,6 +6,7 @@ import pytest
 
 from app.services import model3d_service, rig_service
 from app.services.asset_manifest import SCHEMA_NAME, AssetManifestError, read_asset_manifest
+from app.services.generation_provenance import provenance_from_manifest
 
 
 class _DeferredThread:
@@ -121,7 +122,22 @@ def test_model3d_job_and_sidecar_share_the_canonical_task_identity(tmp_path, mon
     assert loaded is not None
     assert loaded["origin"]["tool"] == "model3d"
     assert loaded["origin"]["actor"] == "unknown"
-    assert loaded["origin"]["workspace_id"] == "studio-a"
+    assert loaded["origin"]["output_folder"] == "studio-a"
+    assert loaded["origin"].get("workspace_id") in (None, "")
+    assert loaded["execution"]["job_id"] == job_id
+    assert loaded["execution"]["task_id"] == expected_task_id
+    assert loaded["execution"]["root_task_id"] == expected_task_id
+    assert loaded["generation"]["model"]["id"] == "hunyuan3d-2-turbo"
+    assert loaded["generation"]["model"]["provider"] == "hunyuan3d"
+    proven = provenance_from_manifest(loaded)
+    assert proven["tool"] == "model3d"
+    assert proven["actor"] == "unknown"
+    assert proven["output_folder"] == "studio-a"
+    assert proven["workspace_id"] is None
+    assert proven["command"]["job_id"] == job_id
+    assert proven["command"]["task_id"] == expected_task_id
+    assert proven["provider"] == "hunyuan3d"
+    assert proven["model_id"] == "hunyuan3d-2-turbo"
 
 
 def test_rig_job_and_sidecar_share_the_canonical_task_identity(tmp_path, monkeypatch):
@@ -174,7 +190,22 @@ def test_rig_job_and_sidecar_share_the_canonical_task_identity(tmp_path, monkeyp
     assert loaded is not None
     assert loaded["origin"]["tool"] == "rig"
     assert loaded["origin"]["actor"] == "unknown"
-    assert loaded["origin"]["workspace_id"] == "studio-b"
+    assert loaded["origin"]["output_folder"] == "studio-b"
+    assert loaded["origin"].get("workspace_id") in (None, "")
+    assert loaded["execution"]["job_id"] == job_id
+    assert loaded["execution"]["task_id"] == expected_task_id
+    assert loaded["execution"]["root_task_id"] == expected_task_id
+    assert loaded["generation"]["model"]["id"] == "rig-procedural"
+    assert loaded["generation"]["model"]["provider"] == "local"
+    proven = provenance_from_manifest(loaded)
+    assert proven["tool"] == "rig"
+    assert proven["actor"] == "unknown"
+    assert proven["output_folder"] == "studio-b"
+    assert proven["workspace_id"] is None
+    assert proven["command"]["job_id"] == job_id
+    assert proven["command"]["task_id"] == expected_task_id
+    assert proven["provider"] == "local"
+    assert proven["model_id"] == "rig-procedural"
 
 
 def test_model3d_keeps_generated_file_when_sidecar_publish_fails(tmp_path, monkeypatch):

@@ -312,6 +312,15 @@ def _canonical_task_id(job_id: str) -> str:
     return f"task-rig-{job_id}"
 
 
+def _physical_output_folder(value: Any) -> str | None:
+    """Physical output-folder name; never an absolute host path or a Workspace id."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    name = os.path.basename(text.replace("\\", "/"))
+    return name or None
+
+
 def _prune_finished_jobs_locked() -> None:
     now = time.time()
     finished = sorted(
@@ -735,6 +744,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 "created_at": time.time(),
                 "params": {
                     "model_type": f"rig-{request_data['engine']}",
+                    "provider": "local",
                     "rigged": True,
                     "rig_engine": request_data["engine"],
                     "rig_profile": request_data.get("rig_profile", DEFAULT_RIG_PROFILE),
@@ -746,7 +756,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                     "prompt": f"Rigged from {source.name}",
                 },
             },
-            workspace_id=current_job.get("workspace"),
+            output_folder=_physical_output_folder(current_job.get("workspace")),
             tool="rig",
         )
         # Reuse the source's gallery preview for the rigged copy.
