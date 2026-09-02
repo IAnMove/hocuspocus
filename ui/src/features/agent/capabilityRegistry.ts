@@ -64,6 +64,7 @@ export interface CapabilityExecutionOutcome {
   message: string
   report?: AgentExecutionReport
   target?: AgentExecutionTarget
+  projectTarget?: AgentExecutionTarget
   taskId?: string
   pipelineId?: string
   outputNames?: string[]

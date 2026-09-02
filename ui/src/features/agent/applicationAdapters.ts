@@ -44,6 +44,7 @@ import type {
 export interface AdapterOutcome {
   message: string
   target: AgentExecutionTarget
+  projectTarget?: AgentExecutionTarget
   taskId?: string
   pipelineId?: string
   outputNames?: string[]
@@ -395,7 +396,13 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const presented = await presentStorySliceResult(result)
       const cueId = String(result.artifacts[0]?.metadata?.cueId || presented.target.id)
       const cueTitle = String(result.artifacts[0]?.metadata?.cueTitle || presented.target.title)
-      return { ...presented, target: { kind: 'story_song', id: cueId, title: cueTitle } }
+      const storyId = String(result.entities[0]?.id || '')
+      const storyTitle = String(result.artifacts[0]?.metadata?.title || storyId)
+      return {
+        ...presented,
+        target: { kind: 'story_song', id: cueId, title: cueTitle },
+        projectTarget: storyId ? { kind: 'story', id: storyId, title: storyTitle } : undefined,
+      }
     },
     async generateSong(action) {
       const { generateSong } = await import('../stories/adapters')

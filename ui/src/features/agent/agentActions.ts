@@ -2892,8 +2892,8 @@ export async function executeAgentActions(
           createdStoryTitle = registeredResult.report.target.title
         }
         if (action.type === 'configure_story_song' && registeredResult.report?.target?.title) {
-          const { useStoryStore } = await import('../stories/store')
-          const configuredProject = useStoryStore.getState().project
+          const configuredProject = registeredResult.report.projectTarget
+          if (!configuredProject?.id) throw new Error('Story Lab no devolvió el ID exacto de la historia configurada.')
           configuredStorySong = {
             targetStoryId: configuredProject.id,
             targetStoryTitle: configuredProject.title,

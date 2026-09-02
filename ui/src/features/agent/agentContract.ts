@@ -19,6 +19,7 @@ export interface AgentExecutionReport {
   state: AgentExecutionState
   message: string
   target?: AgentExecutionTarget
+  projectTarget?: AgentExecutionTarget
   taskId?: string
   pipelineId?: string
   outputNames?: string[]
@@ -107,6 +108,7 @@ export function executionReport(input: Partial<AgentExecutionReport> & Pick<Agen
     state: input.state,
     message: input.message,
     target: input.target,
+    projectTarget: input.projectTarget,
     taskId: input.taskId,
     pipelineId: input.pipelineId,
     outputNames: input.outputNames,

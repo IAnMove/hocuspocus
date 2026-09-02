@@ -351,6 +351,7 @@ test('runtime passes the persisted cue identity to song generation and videoclip
   clearExecutionMemory()
   defaultApplicationAdapters.storyLab.configureSong = async action => ({
     message: 'Cue saved', target: { kind: 'story_song', id: 'cue-real', title: 'El Himno del Sysadmin' },
+    projectTarget: { kind: 'story', id: 'story-real', title: 'El Himno del Sysadmin 3' },
   })
   defaultApplicationAdapters.storyLab.generateSong = async action => {
     received.push(action)
@@ -406,7 +407,7 @@ test('a Wizard turn stops and asks when its output-folder context changes mid-fl
   useStore.setState({ activeWorkspace: 'alpha' })
   defaultApplicationAdapters.storyLab.configureSong = async () => {
     useStore.setState({ activeWorkspace: 'beta' })
-    return { message: 'Cue saved', target: { kind: 'story_song', id: 'cue-real', title: 'Cue' } }
+    return { message: 'Cue saved', target: { kind: 'story_song', id: 'cue-real', title: 'Cue' }, projectTarget: { kind: 'story', id: 'story-real', title: 'Story' } }
   }
   try {
     const results = await executeAgentActions([{
