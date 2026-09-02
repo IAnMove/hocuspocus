@@ -20,9 +20,13 @@ import {
   parseRegisteredCapability,
 } from '../src/features/agent/capabilityRegistry'
 import { changedSections, createStoryProject, normalizeStoryProject } from '../src/features/stories/model'
-import { seedStoryLanguageIntent } from '../src/features/stories/languageIntent'
+import { applyLegacyStoryLanguage, seedStoryLanguageIntent } from '../src/features/stories/languageIntent'
 import { createComicProject, normalizeComicProject } from '../src/features/comics/model'
 import { normalizeSeriesProject } from '../src/features/series/model'
+import {
+  resolveSeriesLanguageIntent,
+  seriesLanguageIntentAffectsCanon,
+} from '../src/features/series/languageIntent'
 
 const mixedIntent = normalizeLanguageIntent({
   conversation_language: 'fr',
@@ -237,6 +241,43 @@ test('a legacy Story language selection seeds the durable contract', () => {
   const selected = seedStoryLanguageIntent(base, 'Français', undefined)
   assert.equal(selected.languageIntent.contentLanguage, 'Français')
   assert.equal(selected.languageIntent.spokenLanguage, 'Français')
+})
+
+test('a legacy Story language update keeps legacy fields and the durable contract synchronized', () => {
+  const base = createStoryProject()
+  const selected = applyLegacyStoryLanguage(base, 'Français', undefined)
+  assert.equal(selected.language, 'Français')
+  assert.equal(selected.spokenLanguage, 'Français')
+  assert.equal(selected.languageIntent.contentLanguage, 'Français')
+  assert.equal(selected.languageIntent.spokenLanguage, 'Français')
+
+  const explicitSpeech = applyLegacyStoryLanguage(base, 'English', normalizeLanguageIntent({
+    spoken_language: 'Español',
+  }))
+  assert.equal(explicitSpeech.languageIntent.contentLanguage, 'English')
+  assert.equal(explicitSpeech.languageIntent.spokenLanguage, 'Español')
+})
+
+test('Series language resolution invalidates canon only for production-relevant changes', () => {
+  const series = normalizeSeriesProject({
+    id: 'series-language', title: 'Night Shift', language: 'Español', spokenLanguage: 'Español',
+  })
+  assert.ok(series)
+
+  const conversationOnly = resolveSeriesLanguageIntent(series!, '', normalizeLanguageIntent({
+    conversation_language: 'fr',
+  }))
+  assert.equal(seriesLanguageIntentAffectsCanon(series!, conversationOnly), false)
+
+  const protectedDialogue = resolveSeriesLanguageIntent(series!, '', normalizeLanguageIntent({
+    verbatim_segments: [{ kind: 'dialogue', text: '¡Hola!', language: 'es' }],
+  }))
+  assert.equal(seriesLanguageIntentAffectsCanon(series!, protectedDialogue), true)
+
+  const legacySelection = resolveSeriesLanguageIntent(series!, 'Français', undefined)
+  assert.equal(legacySelection.contentLanguage, 'Français')
+  assert.equal(legacySelection.spokenLanguage, 'Français')
+  assert.equal(seriesLanguageIntentAffectsCanon(series!, legacySelection), true)
 })
 
 test('changing only protected Story literals is a real persisted overview change', () => {

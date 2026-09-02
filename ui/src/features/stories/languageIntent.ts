@@ -37,3 +37,22 @@ export function seedStoryLanguageIntent(
     languageIntent,
   }
 }
+
+export function applyLegacyStoryLanguage(
+  project: StoryProject,
+  language: string,
+  explicitIntent: LanguageIntent | undefined,
+): StoryProject {
+  if (!language) return project
+  const spokenLanguage = explicitIntent?.spokenLanguage || language
+  return {
+    ...project,
+    language,
+    spokenLanguage,
+    languageIntent: {
+      ...project.languageIntent,
+      contentLanguage: language,
+      spokenLanguage,
+    },
+  }
+}

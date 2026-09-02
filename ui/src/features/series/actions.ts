@@ -8,6 +8,7 @@ import {
 } from '../../lib/labHelpers'
 import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
+import { resolveSeriesLanguageIntent, seriesLanguageIntentAffectsCanon } from './languageIntent'
 import type {
   ApplySeriesPlanCommand,
   AssembleSeriesEpisodeCommand,
@@ -112,18 +113,15 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
     purpose: location.purpose,
     description: location.description,
   }))
-  const languageIntent = mergeLanguageIntent(series.languageIntent, action.languageIntent, {
-    contentLanguage: action.language || series.language,
-    spokenLanguage: action.language || series.spokenLanguage,
-    technicalPromptLanguage: 'en',
-  })
+  const languageIntent = resolveSeriesLanguageIntent(series, action.language, action.languageIntent)
+  const languageSetupChanged = seriesLanguageIntentAffectsCanon(series, languageIntent)
   const needsSetup = createdSeries
     || !series.premise.trim()
     || !series.visualStyle.trim()
     || !series.canon.worldSummary.trim()
     || !series.characters.length
     || !series.locations.length
-    || Boolean(action.languageIntent)
+    || languageSetupChanged
   if (needsSetup) {
     const patched = {
       ...series,
@@ -217,19 +215,6 @@ export async function updateSeriesEpisode(action: UpdateSeriesEpisodeCommand): P
   if (!series) throw new Error(action.seriesTitle
     ? `No existe la serie “${action.seriesTitle}” en este workspace.`
     : 'No hay una serie activa que modificar.')
-  if (action.languageIntent) {
-    const languageIntent = mergeLanguageIntent(series.languageIntent, action.languageIntent)
-    series = await api.saveSeriesProject(workspace, {
-      ...series,
-      language: languageIntent.contentLanguage || series.language,
-      spokenLanguage: languageIntent.spokenLanguage || series.spokenLanguage,
-      languageIntent,
-      updatedAt: new Date().toISOString(),
-    }, series.revision)
-    useSeriesStore.setState({ hydrated: false })
-    await useSeriesStore.getState().loadWorkspace(workspace)
-  }
-
   const episodeMatches = action.targetEpisodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
     : []
@@ -245,6 +230,19 @@ export async function updateSeriesEpisode(action: UpdateSeriesEpisodeCommand): P
   if (!episode) throw new Error(action.targetEpisodeTitle
     ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
     : `“${series.title}” necesita un episodio activo o un único episodio para poder inferir el destino.`)
+
+  if (action.languageIntent) {
+    const languageIntent = mergeLanguageIntent(series.languageIntent, action.languageIntent)
+    series = await api.saveSeriesProject(workspace, {
+      ...series,
+      language: languageIntent.contentLanguage || series.language,
+      spokenLanguage: languageIntent.spokenLanguage || series.spokenLanguage,
+      languageIntent,
+      updatedAt: new Date().toISOString(),
+    }, series.revision)
+    useSeriesStore.setState({ hydrated: false })
+    await useSeriesStore.getState().loadWorkspace(workspace)
+  }
 
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)

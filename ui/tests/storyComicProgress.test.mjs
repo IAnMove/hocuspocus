@@ -320,7 +320,7 @@ test('Story generation persists a new language contract before calling the write
 
 test('Series validation rejects before persisting a new language contract', { concurrency: false }, async t => {
   const workspace = 'wizard-series-language-validation'
-  const [{ useStore }, { useSeriesStore }, { normalizeSeriesProject }, { generateSeriesPlan }] = await Promise.all([
+  const [{ useStore }, { useSeriesStore }, { normalizeSeriesProject }, { generateSeriesPlan, updateSeriesEpisode }] = await Promise.all([
     import('../src/stores/useStore.ts'),
     import('../src/features/series/store.ts'),
     import('../src/features/series/model.ts'),
@@ -372,6 +372,20 @@ test('Series validation rejects before persisting a new language contract', { co
     },
   }), /necesita una premisa/)
   assert.deepEqual(writes, [], 'invalid planning must not persist language intent')
+
+  await assert.rejects(updateSeriesEpisode({
+    seriesTitle: series.title,
+    targetEpisodeTitle: 'Missing episode',
+    episodeTitle: '',
+    episodePremise: '',
+    episodeLogline: '',
+    outlineBeats: [],
+    languageIntent: {
+      conversationLanguage: 'fr', contentLanguage: 'en', spokenLanguage: 'es',
+      technicalPromptLanguage: 'en', verbatimSegments: [],
+    },
+  }), /No existe el episodio/)
+  assert.deepEqual(writes, [], 'invalid episode updates must not persist language intent')
 })
 
 test('generate_story_section, generate_comic and generate_comic_panel publish onStep progress', { concurrency: false }, async t => {

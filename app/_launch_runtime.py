@@ -27822,7 +27822,7 @@ def put_series_project_endpoint(series_id: str, body: dict):
                 )
             updated = normalize_series_project({**raw_series, "id": series_id}, series_id, workspace)
             canon_inputs = (
-                "title", "premise", "logline", "format", "language", "spokenLanguage",
+                "title", "premise", "logline", "format", "language", "spokenLanguage", "languageIntent",
                 "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience",
                 "visualStyle", "characterVisualStyle", "cameraLanguage", "sourceMode",
                 "masterUniversePrompt", "characters", "relationships", "locations", "props",

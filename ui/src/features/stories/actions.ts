@@ -9,7 +9,7 @@ import {
 } from '../../lib/labHelpers'
 import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
-import { applyStoryLanguageIntent, seedStoryLanguageIntent } from './languageIntent'
+import { applyLegacyStoryLanguage, applyStoryLanguageIntent, seedStoryLanguageIntent } from './languageIntent'
 import { applyMusicVideoDirectVideoDefaults, resolveMusicVideoVisualStyle } from './musicVideoLook'
 import type {
   ApplyStoryProposalCommand,
@@ -558,10 +558,7 @@ export async function updateFilledStory(action: UpdateStoryCommand): Promise<Com
   if (action.tone) candidate.tone = action.tone
   if (action.visualStyle) candidate.visualStyle = action.visualStyle
   if (action.worldSummary) candidate.world.summary = action.worldSummary
-  if (action.language) {
-    candidate.language = action.language
-    if (!action.languageIntent?.spokenLanguage) candidate.spokenLanguage = action.language
-  }
+  if (action.language) Object.assign(candidate, applyLegacyStoryLanguage(candidate, action.language, action.languageIntent))
   if (action.languageIntent) {
     Object.assign(candidate, applyStoryLanguageIntent(candidate, action.languageIntent))
   }

@@ -1,5 +1,7 @@
 """Language intent remains canonical at backend persistence boundaries."""
 
+from pathlib import Path
+
 from services.language_intent import normalize_language_intent
 from services.series_library import create_series_project, normalize_series_project
 from services.story_library import normalize_story_library
@@ -62,3 +64,11 @@ def test_series_creation_and_normalization_always_return_language_intent():
     normalized = normalize_series_project(created, created["id"], "default")
     assert normalized["languageIntent"]["contentLanguage"] == "Deutsch"
     assert normalized["languageIntent"]["verbatimSegments"][0]["text"] == "hola"
+
+
+def test_series_save_treats_language_intent_as_a_canon_input():
+    launch = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
+    source = launch.read_text(encoding="utf-8")
+    endpoint = source.split("def put_series_project_endpoint", 1)[1]
+    canon_inputs = endpoint.split("canon_inputs = (", 1)[1].split(")", 1)[0]
+    assert '"languageIntent"' in canon_inputs
