@@ -90,3 +90,61 @@ test('intro holds the plate back until the art is ready', { concurrency: false }
     cleanup()
   }
 })
+
+test('the wordmark tracks in per glyph, off the layout path', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { HocusPocusIntro } = await import('../src/components/HocusPocusIntro.tsx')
+
+  try {
+    const { container } = render(<HocusPocusIntro onComplete={() => {}} />)
+    const glyphs = [...container.querySelectorAll('.hp-intro-glyph')]
+    assert.equal(glyphs.length, 'HocusPocus'.length)
+    assert.equal(glyphs.map(glyph => glyph.textContent).join(''), 'HocusPocus')
+    // Splitting the word is a visual device only: the heading still
+    // announces its name in one piece.
+    assert.ok(screen.getByRole('heading', { name: 'HocusPocus' }))
+    // The entrance is a transform per glyph rather than an animated
+    // letter-spacing, so it never reflows the copy column: offsets are
+    // symmetric around the centre of the word and collapse to zero.
+    const offsets = glyphs.map(glyph => Number.parseFloat(
+      (glyph as HTMLElement).style.getPropertyValue('--hp-glyph-offset'),
+    ))
+    assert.ok(offsets[0] < 0)
+    assert.ok(offsets[offsets.length - 1] > 0)
+    assert.ok(Math.abs(offsets.reduce((sum, offset) => sum + offset, 0)) < 1e-6)
+  } finally {
+    cleanup()
+  }
+})
+
+test('the plate drops its full-screen effects above the pixel budget', { concurrency: false }, async () => {
+  const { render, cleanup } = await import('@testing-library/react')
+  const { HocusPocusIntro, INTRO_RICH_PIXEL_BUDGET } =
+    await import('../src/components/HocusPocusIntro.tsx')
+  const viewport = (width: number, height: number, dpr: number) => {
+    for (const [key, value] of Object.entries({ innerWidth: width, innerHeight: height, devicePixelRatio: dpr })) {
+      Object.defineProperty(window, key, { configurable: true, value })
+    }
+  }
+  const original = {
+    innerWidth: window.innerWidth,
+    innerHeight: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio,
+  }
+
+  try {
+    viewport(1920, 1080, 1)
+    assert.ok(1920 * 1080 <= INTRO_RICH_PIXEL_BUDGET)
+    const laptop = render(<HocusPocusIntro onComplete={() => {}} />)
+    assert.equal(laptop.container.querySelector('.hp-intro-root')?.getAttribute('data-tier'), 'rich')
+    cleanup()
+
+    // 4K, where the exit blur and the soft-light grain are what stutters.
+    viewport(3840, 2160, 1)
+    const panel = render(<HocusPocusIntro onComplete={() => {}} />)
+    assert.equal(panel.container.querySelector('.hp-intro-root')?.getAttribute('data-tier'), 'lite')
+  } finally {
+    viewport(original.innerWidth, original.innerHeight, original.devicePixelRatio)
+    cleanup()
+  }
+})

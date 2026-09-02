@@ -14,6 +14,34 @@ export const INTRO_FADE_MS = 520
 /** Cap on waiting for the art to decode. A splash that stalls on a cold
  *  cache is worse than one that starts a beat early. */
 export const INTRO_ASSET_TIMEOUT_MS = 1500
+/** Physical pixels above which the plate drops its two full-screen,
+ *  per-pixel effects (the exit blur and the soft-light grain). Both cost
+ *  in proportion to the window, so a 4K panel (~8.3M px) pays around
+ *  four times what a 1080p one does for the same dissolve — which is
+ *  where the stutter came from. A 16" laptop at 2x (~7.7M) still gets
+ *  the full plate. */
+export const INTRO_RICH_PIXEL_BUDGET = 8_000_000
+
+/** How much of the choreography this window can afford. Everything else
+ *  in the intro is transform/opacity only, so it survives a busy main
+ *  thread; these two effects are the ones that scale with resolution. */
+function introQualityTier(): 'rich' | 'lite' {
+  const dpr = window.devicePixelRatio || 1
+  return window.innerWidth * window.innerHeight * dpr * dpr > INTRO_RICH_PIXEL_BUDGET
+    ? 'lite'
+    : 'rich'
+}
+
+/** The wordmark tracks in glyph by glyph. Animating `letter-spacing`
+ *  reflowed the copy column on every frame, and the intro plays while
+ *  the whole studio mounts behind it — exactly the frames the main
+ *  thread cannot spare. Each glyph carries its own starting offset
+ *  instead, so the same beat runs entirely on the compositor. */
+const WORDMARK = 'HocusPocus'
+/** Matches the tracking the old `letter-spacing` keyframe started from. */
+const WORDMARK_TRACKING_EM = 0.26
+const WORDMARK_STAGGER_MS = 26
+const WORDMARK_DELAY_MS = 900
 
 /** Embers drifting off the quill, positioned as a fraction of the art
  *  box so they stay with the light at any window size. Scattered by
@@ -56,6 +84,9 @@ export function HocusPocusIntro({ onComplete, version }: HocusPocusIntroProps) {
       ? INTRO_REDUCED_DURATION_MS
       : INTRO_DURATION_MS
   ))
+  // Same reasoning: a resize that crossed the budget mid-plate would
+  // swap effects in and out under the viewer.
+  const [tier] = useState(introQualityTier)
 
   const finish = useCallback(() => {
     if (finishedRef.current) return
@@ -112,6 +143,7 @@ export function HocusPocusIntro({ onComplete, version }: HocusPocusIntroProps) {
       onClick={finish}
       data-run={ready ? 'true' : 'false'}
       data-leaving={leaving ? 'true' : 'false'}
+      data-tier={tier}
       style={{ '--hp-intro-fade': `${INTRO_FADE_MS}ms` } as CSSProperties}
       className="hp-intro-root fixed inset-0 z-[200] isolate overflow-hidden bg-[#07060b]"
     >
@@ -168,11 +200,29 @@ export function HocusPocusIntro({ onComplete, version }: HocusPocusIntroProps) {
             >
               Forge stories. Shape worlds.
             </p>
+            {/* aria-label carries the name so the split into glyphs stays
+                purely visual. The shadow lives in CSS as a text-shadow:
+                a `filter` on this element would force its animating
+                children into one render surface and repaint the whole
+                word every frame. */}
             <h1
-              style={{ animationDelay: '900ms' }}
-              className="hp-wordmark hp-intro-wordmark mt-3 text-[clamp(2.75rem,7vw,5.5rem)] font-semibold leading-[0.95] text-white drop-shadow-[0_2px_40px_rgba(0,0,0,0.65)]"
+              aria-label={WORDMARK}
+              className="hp-wordmark hp-intro-wordmark mt-3 text-[clamp(2.75rem,7vw,5.5rem)] font-semibold leading-[0.95] text-white"
             >
-              HocusPocus
+              {[...WORDMARK].map((glyph, index) => (
+                <span
+                  key={`${glyph}-${index}`}
+                  className="hp-intro-glyph"
+                  style={{
+                    animationDelay: `${WORDMARK_DELAY_MS + index * WORDMARK_STAGGER_MS}ms`,
+                    '--hp-glyph-offset': `${(
+                      (index - (WORDMARK.length - 1) / 2) * WORDMARK_TRACKING_EM
+                    ).toFixed(3)}em`,
+                  } as CSSProperties}
+                >
+                  {glyph}
+                </span>
+              ))}
             </h1>
             <div
               aria-hidden="true"
