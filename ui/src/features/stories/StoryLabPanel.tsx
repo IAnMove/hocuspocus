@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
-  BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, ExternalLink, Film, ImagePlus, Loader2,
-  Languages, Music, Network, Palette, Play, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
+  BookOpen, Boxes, Check, ChevronRight, Download, Film, ImagePlus, Loader2,
+  Music, Network, Palette, Play, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
 import { generateImageAsset } from '../../lib/imageGeneration'
-import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
-import { getOutputReference } from '../../lib/outputReference'
+import { MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
 import { StoryProductionTimeline } from './StoryProductionTimeline'
 import { StoryLabNavigation } from './StoryLabNavigation'
@@ -17,20 +16,29 @@ import { StoryRelationshipsTab } from './StoryRelationshipsTab'
 import { StoryWorldTab } from './StoryWorldTab'
 import { StoryCharactersTab } from './StoryCharactersTab'
 import { StoryStructureTab } from './StoryStructureTab'
-import { ReferenceGallery } from './ReferenceGallery'
-import { LocationEditor } from './LocationEditor'
+import { StoryMusicTab } from './StoryMusicTab'
+import { StoryTrailerTab } from './StoryTrailerTab'
+import { StoryProductionsTab } from './StoryProductionsTab'
+import { CompactVideoWorkspace } from './CompactVideoWorkspace'
 import { StoryLabVisualsProvider } from './StoryLabVisualsProvider'
-import { emptyCharacter, moveItem, pruneUnusedAssets } from './storyLabEditors'
-import { button, input, panel, requiredInput, Field, SectionHeader } from './storyLabChrome'
+import { emptyCharacter, pruneUnusedAssets } from './storyLabEditors'
+import {
+  button, input, panel, requiredInput, Field, SectionHeader, requiredPreparationButton,
+  type ProductionReviewIssue, type StoryGenerationOptions, type StoryLabTab as StoryTab,
+} from './storyLabChrome'
+import {
+  STORY_VIDEO_ASPECTS, savedStoryVideoAspect, savedStoryVideoResolution,
+} from './storyLabVideoFormat'
+import {
+  MINIMAX_LYRIC_SECTION, musicCandidateDisplayName, nextMusicCandidateVersion, storyProjectPremise, storySongBrief,
+} from './storyLabMusic'
 import { readDirectorClipReplacementResult } from './directorClipHandoff'
-import { AudioRangeSelector } from './AudioRangeSelector'
 import { createStoryActivityLifecycle } from './activityLifecycle'
 import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
 import { syncTrailerDuration, trailerDurationForProject } from './trailerDefaults'
 import { resolveStoryWritingProvider } from './provider'
 import { StoryLibraryConflictNotice } from './StoryLibraryConflictNotice'
-import { QuickVideoBatchPanel } from './QuickVideoBatchPanel'
 import {
   buildComicAdaptation,
   buildMusicVideoAdaptation,
@@ -51,16 +59,14 @@ import {
   storyRenderStyle,
 } from './model'
 import type {
-  StoryAssetKind, StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
+  StoryAssetKind, StoryBeat, StoryGenerationScope, StoryLocation, StoryProject,
   StoryImageProvider, StoryMusicCandidate, StoryMusicCue, StoryProjectType, StoryRelationship, StoryVisualAsset,
   StoryTrailerFormat, StoryTrailerIntensity, StoryTrailerNarration, StoryTrailerSpoiler, StoryWritingProvider,
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
-import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, normalizeStoryMusicModel, songWriteTarget } from './musicModel'
+import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, songWriteTarget } from './musicModel'
 import { listenForAgentStoryDraft, listenForAgentStorySection, listenForAgentStoryVisualGeneration } from '../../lib/uiBus'
 
-const requiredPreparationButton = 'border-violet-400/70 bg-violet-500/10 text-violet-200 shadow-[0_0_14px_rgba(139,92,246,0.22)] hover:border-violet-300 hover:bg-violet-500/20 hover:text-violet-100 disabled:shadow-none'
-const completeGenerationButton = 'border-emerald-400/70 bg-emerald-500/10 text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.24)] hover:border-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100 disabled:shadow-none'
 const storyLookupName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
 const CHARACTER_IDENTITY_REFERENCE_LOCK = [
   'CHARACTER IDENTITY REFERENCE: show exactly one character in a clear medium close-up or chest-up portrait.',
@@ -165,71 +171,6 @@ function styleConversionPrompt(
   ].filter(Boolean).join(' ')
 }
 
-function storySongBrief(
-  project: StoryProject,
-  durationSeconds: number,
-  lyricsLanguage = project.language,
-): string {
-  const cast = project.characters.slice(0, 5).map(character =>
-    `${character.name}: ${character.desire}; arc: ${character.arc}`).join(' | ')
-  const beats = project.beats.map(beat => `${beat.title}: ${beat.summary}`).join(' → ')
-  return [
-    `Create an original theme song that tells the story “${project.title}”.`,
-    `Write all lyrics in ${lyricsLanguage}. Target approximately ${durationSeconds} seconds.`,
-    `Genre and emotional direction: ${project.genre}; ${project.tone}. Theme: ${project.theme}.`,
-    `Premise: ${storyProjectPremise(project)}. Synopsis: ${project.synopsis}. Ending: ${project.ending}.`,
-    cast ? `Character journeys: ${cast}.` : '',
-    beats ? `Narrative progression: ${beats}.` : '',
-    project.world.visualLanguage ? `Choose music that feels native to this visual world: ${project.world.visualLanguage}.` : '',
-    'Use a memorable recurring chorus, concrete story imagery, and a clear emotional progression; do not merely summarize the synopsis.',
-  ].filter(Boolean).join('\n')
-}
-
-const MINIMAX_LYRIC_SECTION = /^\[(Intro|Verse|Pre Chorus|Chorus|Post Chorus|Interlude|Bridge|Transition|Build Up|Break|Hook|Inst|Solo|Outro)\]\s*$/m
-
-function miniMaxCuePayload(cue: StoryMusicCue, model: StoryProject['music']['model']): string {
-  return JSON.stringify({
-    model,
-    prompt: cue.style.trim().slice(0, 300),
-    lyrics: cue.instrumental ? '' : cue.lyrics,
-    instrumental: cue.instrumental,
-    count: 1,
-  }, null, 2)
-}
-
-function musicCandidateDisplayName(
-  candidate: StoryMusicCandidate,
-  title: string,
-  fallbackLanguage: string,
-  fallbackVersion: number,
-): string {
-  if (candidate.displayName?.trim()) return candidate.displayName
-  const language = candidate.language?.trim() || fallbackLanguage.trim() || 'Original'
-  const version = candidate.version || fallbackVersion
-  return `${candidate.title?.trim() || title.trim() || 'Story song'} · ${language} · v${version}`
-}
-
-function nextMusicCandidateVersion(
-  candidates: StoryMusicCandidate[],
-  language: string,
-  fallbackLanguage: string,
-): number {
-  const normalizedLanguage = (language || fallbackLanguage).trim().toLocaleLowerCase()
-  return candidates.reduce((highest, candidate, index) => {
-    const candidateLanguage = (candidate.language || fallbackLanguage).trim().toLocaleLowerCase()
-    if (candidateLanguage !== normalizedLanguage) return highest
-    return Math.max(highest, candidate.version || index + 1)
-  }, 0) + 1
-}
-
-type StoryTab = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'trailer' | 'productions' | 'assembly'
-type ProductionReviewIssue = {
-  id: string
-  label: string
-  detail: string
-  tab: StoryTab
-  anchorId: string
-}
 type StyledReferenceTarget = {
   target: { kind: 'world' | 'character' | 'location'; id?: string }
   label: string
@@ -243,7 +184,6 @@ type PendingDraft = {
   replaceCollections: boolean
   generateImagesAfterApply: boolean
 }
-type StoryGenerationOptions = { generateImages?: boolean }
 type MusicVideoGenerationSettings = {
   imageModel: string
   videoModel: string
@@ -256,121 +196,6 @@ type MusicVideoGenerationSettings = {
   writingBaseUrl: string
 }
 
-const STORY_VIDEO_RESOLUTIONS: ResolutionPreset[] = ['480p', '540p', '720p', '1080p']
-const STORY_VIDEO_SAVED_RESOLUTIONS: ResolutionPreset[] = [...STORY_VIDEO_RESOLUTIONS, '768p']
-const STORY_VIDEO_ASPECTS: Array<{ value: AspectRatio; label: string; detail: string }> = [
-  { value: '16:9', label: 'Landscape', detail: '16:9 · standard video' },
-  { value: '9:16', label: 'Portrait / Shorts', detail: '9:16 · vertical video' },
-]
-
-function savedStoryVideoResolution(value: unknown, fallback: ResolutionPreset): ResolutionPreset {
-  return STORY_VIDEO_SAVED_RESOLUTIONS.includes(value as ResolutionPreset)
-    ? value as ResolutionPreset
-    : fallback
-}
-
-function savedStoryVideoAspect(value: unknown, fallback: AspectRatio): AspectRatio {
-  return STORY_VIDEO_ASPECTS.some(option => option.value === value)
-    ? value as AspectRatio
-    : fallback
-}
-
-function StoryVideoFormatControls({
-  videoModel,
-  resolution,
-  aspectRatio,
-  options,
-  disabled,
-  inherited,
-  adjusted,
-  onChange,
-}: {
-  videoModel: string
-  resolution: ResolutionPreset
-  aspectRatio: AspectRatio
-  options: ModelOptions | null
-  disabled: boolean
-  inherited: boolean
-  adjusted: boolean
-  onChange: (resolution: ResolutionPreset, aspectRatio: AspectRatio) => void
-}) {
-  const modelOrder = (options?.resolution_preset_order || [])
-    .filter(preset => preset !== 'auto' && (preset !== '768p' || videoModel === 'minimax_h3_legacy'))
-  const availablePresets = modelOrder.length > 0
-    ? modelOrder
-    : STORY_VIDEO_RESOLUTIONS
-  const visiblePresets = availablePresets.includes(resolution)
-    ? availablePresets
-    : [resolution, ...availablePresets].filter(preset => preset !== 'auto')
-  const outputSize = resolveResolution(options, resolution, aspectRatio)
-  const selectedConfig = options?.resolution_presets?.[resolution]
-  const selectedAspect = STORY_VIDEO_ASPECTS.find(option => option.value === aspectRatio)
-    || STORY_VIDEO_ASPECTS[0]
-
-  return (
-    <div className="rounded-lg border border-border bg-bg-tertiary/35 p-2.5 space-y-2 sm:col-span-2">
-      <div className="grid gap-2 sm:grid-cols-2">
-        <label className="block text-[10px] text-text-muted">Resolución
-          <select
-            className={`${input} mt-1`}
-            value={resolution}
-            disabled={disabled}
-            onChange={event => onChange(event.target.value as ResolutionPreset, aspectRatio)}
-          >
-            {visiblePresets.map(preset => (
-              <option key={preset} value={preset}>
-                {options?.resolution_presets?.[preset]?.label || preset}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div>
-          <span className="block text-[10px] text-text-muted">Formato de pantalla</span>
-          <div className="mt-1 grid grid-cols-2 gap-1.5">
-            {STORY_VIDEO_ASPECTS.map(option => (
-              <button
-                key={option.value}
-                type="button"
-                disabled={disabled}
-                aria-pressed={aspectRatio === option.value}
-                onClick={() => onChange(resolution, option.value)}
-                className={`${button} min-h-12 flex-col ${aspectRatio === option.value ? 'border-2 border-accent-blue bg-accent-blue/15 text-text-primary ring-1 ring-accent-blue/30' : ''}`}
-              >
-                <span className="flex items-center gap-1">{aspectRatio === option.value && <Check size={11} />} {option.label}</span>
-                <span className="text-[9px] text-text-muted">{option.detail}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="rounded-md border border-accent-blue/35 bg-accent-blue/10 px-2.5 py-2">
-        <p className="text-[9px] uppercase tracking-wide text-accent-blue">Formato seleccionado</p>
-        <p className="mt-0.5 text-[11px] font-semibold text-text-primary">
-          {selectedAspect.label} · {aspectRatio} · {resolution} · {outputSize}
-        </p>
-      </div>
-      {inherited ? (
-        <p className="text-[9px] leading-relaxed text-emerald-300">
-          Heredado del perfil global. Al elegir resolución u orientación se guardará automáticamente como ajuste propio de esta Story.
-        </p>
-      ) : disabled ? (
-        <p className="text-[9px] leading-relaxed text-text-muted">
-          Comprobando las resoluciones y orientaciones compatibles con este modelo…
-        </p>
-      ) : null}
-      {adjusted && (
-        <p className="text-[9px] leading-relaxed text-amber-300">
-          Este modelo no admite el lienzo solicitado; Story Lab ha seleccionado el formato compatible más cercano.
-        </p>
-      )}
-      {selectedConfig?.hint && (
-        <p className={`text-[9px] leading-relaxed ${selectedConfig.experimental ? 'text-amber-300' : 'text-text-muted'}`}>
-          {selectedConfig.hint}
-        </p>
-      )}
-    </div>
-  )
-}
 const storyJobKey = (workspace: string, projectId: string) =>
   `maestro-story-plan-job:${workspace}:${projectId}`
 const storyResultKey = (workspace: string, projectId: string) =>
@@ -393,15 +218,6 @@ const STORY_PROJECT_TYPES: Array<{ id: StoryProjectType; label: string; descript
   { id: 'trailer', label: 'Tráiler cinematográfico', description: 'Tráiler de película con tensión, montaje y gancho final; no requiere canción.' },
   { id: 'quick_video', label: 'Vídeo rápido', description: 'Diálogo, meme, parodia, sketch, viral o anuncio breve.' },
 ]
-
-const TRAILER_ARC = [
-  { label: 'Impacto inicial', start: 0, end: 10, detail: 'Una imagen, sonido o frase que abre una pregunta.' },
-  { label: 'Promesa', start: 10, end: 30, detail: 'Mundo, protagonista y deseo emocional.' },
-  { label: 'Ruptura', start: 30, end: 50, detail: 'Amenaza central y apuestas comprensibles.' },
-  { label: 'Escalada', start: 50, end: 80, detail: 'Montaje causal, variedad visual y ritmo creciente.' },
-  { label: 'Respiración', start: 80, end: 90, detail: 'Contraste íntimo o caída casi al silencio.' },
-  { label: 'Gancho final', start: 90, end: 100, detail: 'La imagen o frase más potente, sin resolver la historia.' },
-] as const
 
 function storyStyledReferenceTargets(
   project: StoryProject,
@@ -433,40 +249,6 @@ function storyStyledReferenceTargets(
     })
   }
   return targets
-}
-
-function storyProjectPremise(project: StoryProject): string {
-  const sourceBrief = project.creativeBrief.generalIdea.trim()
-  if (project.projectType === 'music_video') {
-    return [
-      sourceBrief,
-      project.creativeBrief.context,
-      project.creativeBrief.performer && `Artista o creador: ${project.creativeBrief.performer}`,
-      project.creativeBrief.musicStyle && `Estilo musical: ${project.creativeBrief.musicStyle}`,
-      project.creativeBrief.songStory && `La canción cuenta: ${project.creativeBrief.songStory}`,
-    ].filter(Boolean).join('\n')
-  }
-  if (project.projectType === 'quick_video') {
-    return [
-      sourceBrief,
-      project.creativeBrief.context,
-      project.creativeBrief.subjects && `Protagonistas: ${project.creativeBrief.subjects}`,
-      project.creativeBrief.setting && `Lugar: ${project.creativeBrief.setting}`,
-      project.creativeBrief.action && `Acción o diálogo: ${project.creativeBrief.action}`,
-      `Formato: ${project.creativeBrief.quickFormat}`,
-    ].filter(Boolean).join('\n')
-  }
-  if (project.projectType === 'trailer') {
-    return [
-      sourceBrief,
-      project.creativeBrief.context,
-      project.creativeBrief.subjects && `Protagonistas: ${project.creativeBrief.subjects}`,
-      project.creativeBrief.setting && `Mundo y localizaciones: ${project.creativeBrief.setting}`,
-      project.creativeBrief.action && `Conflicto y promesa del tráiler: ${project.creativeBrief.action}`,
-      `Duración objetivo del tráiler: ${project.creativeBrief.durationSeconds}s`,
-    ].filter(Boolean).join('\n')
-  }
-  return [sourceBrief, project.premise].filter(Boolean).join('\n')
 }
 
 function draftPaths(result: Record<string, unknown>): string[] {
@@ -5034,17 +4816,9 @@ export function StoryLabPanel() {
                     project={project}
                     update={update}
                     busy={busy}
-                    imageBusy={imageBusy}
-                    referenceBatchBusy={referenceBatchBusy}
                     generateSection={generate}
                     approveSection={approve}
                     isSectionApproved={isApproved}
-                    generateVisual={generateVisual}
-                    upload={target => {
-                      setUploadTarget(target)
-                      uploadRef.current?.click()
-                    }}
-                    removeReference={removeReference}
                     navigate={setTab}
                     requiresVisualIdentities={!directVideo}
                   />
@@ -5412,1265 +5186,180 @@ export function StoryLabPanel() {
             )}
 
             {tab === 'music' && (
-              <>
-                <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-3 mb-4">
-                  <div>
-                    <h2 className="text-lg font-semibold text-text-primary">Music bible</h2>
-                    <p className="text-xs text-text-muted mt-1">
-                      {project.projectType === 'music_video'
-                        ? 'One LLM-authored song built from the creative brief, ready to edit, generate and turn into a videoclip. No MiniMax music credits are used until you generate audio.'
-                        : 'LLM-authored ambience, character presentation themes and three story songs. Suggestions cost no MiniMax music credits until you generate audio.'}
-                    </p>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-2 xl:max-w-[920px]">
-                    <input className={`${input} sm:w-72`} value={instruction}
-                      onChange={event => setInstruction(event.target.value)}
-                      placeholder="Optional music direction…" />
-                    {project.projectType === 'music_video' ? <>
-                      <button className={`${button} border-violet-400/60 bg-violet-500/10 text-violet-200`}
-                        disabled={Boolean(busy || musicQueue || musicCueBusy) || !musicWritingReady}
-                        onClick={() => void createNewMusicVideoSong(false)}>
-                        {newSongAction === 'prompts' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />}
-                        Generar prompts de una nueva canción
-                      </button>
-                      <button className={`${button} ${completeGenerationButton}`}
-                        disabled={Boolean(busy || musicQueue || musicCueBusy) || !musicWritingReady || !servicesConfig?.minimax_api_key_set}
-                        onClick={() => void createNewMusicVideoSong(true)}
-                        title={servicesConfig?.minimax_api_key_set
-                          ? 'Crea prompts y letra nuevos y genera inmediatamente una canción con MiniMax'
-                          : 'Configura la clave de MiniMax en Settings → Services'}>
-                        {newSongAction === 'audio' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
-                        Generar nueva canción
-                      </button>
-                      <button className={button} disabled={Boolean(busy || musicQueue || musicCueBusy)} onClick={() => {
-                        customMusicUploadCueId.current = project.music.cues.find(cue => cue.kind === 'story')?.id || ''
-                        customMusicUploadRef.current?.click()
-                      }}>
-                        <Upload size={13} /> Import custom MP3
-                      </button>
-                    </> : <>
-                      <button className={button} disabled={Boolean(busy || musicQueue)} onClick={() => generate('music')}>
-                        {busy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate LLM suggestions
-                      </button>
-                      {musicQueue ? (
-                        <button className={`${button} border-red-400/60 text-red-300`} onClick={cancelMusicQueue} disabled={musicQueue.cancelling === true}>
-                          {musicQueue.cancelling ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                          {musicQueue.cancelling ? 'Cancelling active request…' : `Cancel queue ${musicQueue.index + 1}/${musicQueue.ids.length}`}
-                        </button>
-                      ) : (
-                        <button className={`${button} ${completeGenerationButton}`}
-                          disabled={Boolean(busy || musicCueBusy) || !project.music.cues.length || !servicesConfig?.minimax_api_key_set}
-                          onClick={() => void generateAllMusicCues()}>
-                          <Music size={13} /> Generate all sequentially
-                        </button>
-                      )}
-                    </>}
-                  </div>
-                </div>
-
-                {project.projectType === 'music_video' && (
-                  <p className="-mt-2 mb-4 text-right text-[9px] text-text-muted">
-                    “Prompts” no genera audio. “Nueva canción” reescribe prompt y letra y lanza una nueva versión automáticamente; las canciones anteriores se conservan.
-                  </p>
-                )}
-
-                <div className={`${panel} mb-4 grid md:grid-cols-[1fr_1fr_2fr] gap-3 items-end`}>
-                  <label className="block text-[10px] text-text-muted">Song model
-                    <select className={`${input} mt-1`} value={project.music.model}
-                      onChange={event => patch({ music: { ...project.music, model: normalizeStoryMusicModel(event.target.value) } })}>
-                      <option value={ACE_STEP_MUSIC_MODEL}>ACE-Step 1.5 XL · default</option>
-                      <option value="music-3.0">MiniMax Music 3.0 · unavailable to new accounts</option>
-                      <option value="music-2.6">MiniMax Music 2.6</option>
-                    </select>
-                  </label>
-                  <div className="text-[10px] text-text-muted">
-                    One audio result per proposal and click. Repeating a cue adds another candidate without deleting the previous one.
-                  </div>
-                  <div className={`rounded-md border px-3 py-2 text-[10px] ${servicesConfig?.minimax_api_key_set ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/40 text-amber-300'}`}>
-                    {servicesConfig?.minimax_api_key_set
-                      ? 'MiniMax is configured. Audio generation is available and always remains explicit.'
-                      : 'Configure the shared MiniMax key in Settings → Services before generating audio.'}
-                  </div>
-                </div>
-
-                <div className={`${panel} mb-4 border-purple-500/30 bg-purple-500/5`}>
-                  <div className="mb-2 flex items-start gap-2">
-                    <Palette size={17} className="mt-0.5 shrink-0 text-purple-300" />
-                    <div>
-                      <h3 className="text-xs font-semibold text-purple-200">Create a new version of every music proposal</h3>
-                      <p className="mt-0.5 text-[9px] text-text-muted">Changes style, language, or both. Prompts and lyrics are rewritten sequentially; generated audio candidates are never deleted.</p>
-                    </div>
-                  </div>
-                  <div className="grid md:grid-cols-[1fr_0.7fr_auto] gap-2 items-end">
-                    <label className="block text-[10px] text-text-muted">New style · optional
-                      <input className={`${input} mt-1`} value={musicVersionStyle.all || ''}
-                        onChange={event => setMusicVersionStyle(current => ({ ...current, all: event.target.value }))}
-                        placeholder="Rap, boom bap, female flow, dark bass…" />
-                    </label>
-                    <label className="block text-[10px] text-text-muted">New lyrics language · optional
-                      <input className={`${input} mt-1`} value={musicVersionLanguage.all || ''}
-                        onChange={event => setMusicVersionLanguage(current => ({ ...current, all: event.target.value }))}
-                        placeholder="Spanish, Japanese…" />
-                    </label>
-                    <button className={`${button} border-purple-500/60 text-purple-200`}
-                      disabled={Boolean(busy || musicQueue || musicCueBusy) || !musicWritingReady || !project.music.cues.length}
-                      onClick={() => void createAllMusicCueVersions()}>
-                      {musicCueBusy === 'version:all' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />}
-                      Rewrite all drafts
-                    </button>
-                  </div>
-                </div>
-
-                {(['world', 'character', 'story'] as const).map(kind => {
-                  const cues = project.music.cues.filter(cue => cue.kind === kind)
-                  if (!cues.length) return null
-                  const heading = kind === 'world' ? 'World ambience'
-                    : kind === 'character' ? 'Character presentation themes' : 'Three songs of the Story'
-                  return (
-                    <section key={kind} className="mb-5">
-                      <h3 className="mb-2 text-sm font-semibold text-text-primary">{heading}</h3>
-                      <div className="space-y-3">
-                        {cues.map(cue => {
-                          const targetName = cue.kind === 'character'
-                            ? project.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
-                            : cue.kind === 'world' ? (project.title || 'Story world') : cue.targetId
-                          const generatingAudio = musicCueBusy === `audio:${cue.id}`
-                          const adapting = musicCueBusy === `llm:${cue.id}`
-                          const translating = musicCueBusy === `translate:${cue.id}`
-                          const versioning = musicCueBusy === `version:${cue.id}`
-                          const queued = musicQueue?.ids.includes(cue.id)
-                          return (
-                            <article key={cue.id} className={`${panel} space-y-3 ${generatingAudio ? 'border-pink-500/60' : ''}`}>
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <span className="text-[9px] uppercase tracking-wide text-pink-300">{kind} · {targetName}</span>
-                                  <input className={`${input} mt-1 font-medium`} value={cue.title}
-                                    onChange={event => patchMusicCue(cue.id, { title: event.target.value })}
-                                    aria-label={`Music title for ${targetName}`} />
-                                </div>
-                                {queued && <span className="rounded bg-pink-500/10 px-2 py-1 text-[9px] text-pink-300">queued</span>}
-                              </div>
-                              <div className="grid xl:grid-cols-[minmax(0,0.85fr)_minmax(360px,1.15fr)] gap-3">
-                                <div className="space-y-2.5">
-                                  <Field label="Purpose in this Story" value={cue.purpose}
-                                    onChange={purpose => patchMusicCue(cue.id, { purpose })} rows={2} />
-                                  <Field label="Example song · editable LLM input" value={cue.referenceSong}
-                                    onChange={referenceSong => patchMusicCue(cue.id, { referenceSong })} rows={2}
-                                    placeholder="Song title — Artist" />
-                                  <p className="text-[9px] text-text-muted">The LLM uses only high-level tempo, instrumentation and emotional architecture; the resulting melody and wording must be original.</p>
-                                  <Field label="Desired style + Story role · editable LLM input" value={cue.brief}
-                                    onChange={brief => patchMusicCue(cue.id, { brief })} rows={3} />
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <label className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[10px] text-text-secondary">
-                                      <input type="checkbox" checked={cue.instrumental}
-                                        onChange={event => patchMusicCue(cue.id, { instrumental: event.target.checked })} />
-                                      Instrumental
-                                    </label>
-                                    <label className="block text-[10px] text-text-muted">Target duration for lyrics · seconds
-                                      <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
-                                        value={cue.durationSeconds}
-                                        onChange={event => patchMusicCue(cue.id, { durationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) })} />
-                                    </label>
-                                  </div>
-                                  <p className="text-[9px] text-text-muted">MiniMax has no exact duration setting; this guides the LLM’s lyric length, while the rendered track can vary with tempo and arrangement.</p>
-                                  <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
-                                    onClick={() => void adaptMusicCueWithLlm(cue.id)}>
-                                    {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Adapt provider prompt{cue.instrumental ? '' : ' + lyrics'} with LLM
-                                  </button>
-                                  <div className="space-y-2 rounded-lg border border-purple-500/30 bg-purple-500/5 p-2.5">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-200"><Palette size={12} /> Create a completely new version</div>
-                                    <input className={input} value={musicVersionStyle[cue.id] || ''}
-                                      onChange={event => setMusicVersionStyle(current => ({ ...current, [cue.id]: event.target.value }))}
-                                      placeholder="New style, e.g. cinematic rap / boom bap…" />
-                                    <input className={input} value={musicVersionLanguage[cue.id] || ''}
-                                      onChange={event => setMusicVersionLanguage(current => ({ ...current, [cue.id]: event.target.value }))}
-                                      placeholder={`New language, optional · current: ${cue.lyricsLanguage || project.language}`} />
-                                    <button className={`${button} w-full border-purple-500/60 text-purple-200`}
-                                      disabled={Boolean(musicCueBusy || musicQueue) || !musicWritingReady}
-                                      onClick={() => void createMusicCueVersion(cue.id)}>
-                                      {versioning ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Rewrite style{cue.instrumental ? '' : ' + lyrics'}
-                                    </button>
-                                    <p className="text-[9px] text-text-muted">Leave either field empty to retain its current value. Existing generated tracks remain available below.</p>
-                                  </div>
-                                </div>
-                                <div className="space-y-3">
-                                <div className="space-y-2.5 rounded-lg border border-pink-500/30 bg-pink-500/5 p-3">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                      <h4 className="text-xs font-semibold text-pink-200">Exact MiniMax request · editable</h4>
-                                      <p className="mt-0.5 text-[9px] text-text-muted">HocusPocus sends style and lyrics as separate fields. Editing these fields changes the next request.</p>
-                                    </div>
-                                    <span className="shrink-0 rounded border border-pink-500/30 px-2 py-1 text-[9px] text-pink-200">{project.music.model}</span>
-                                  </div>
-                                  <Field required label={`prompt · ${cue.style.trim().length}/300 characters`} value={cue.style}
-                                    onChange={style => patchMusicCue(cue.id, { style })} rows={3} />
-                                  <p className="text-[9px] text-text-muted">Genre, mood, instruments, voice, tempo and production. Anything after character 300 is not sent.</p>
-                                  {!cue.instrumental && <Field required label="lyrics · structured separately" value={cue.lyrics}
-                                    onChange={lyrics => patchMusicCue(cue.id, { lyrics })} rows={10} />}
-                                  {!cue.instrumental && (
-                                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                                      <label className="block text-[10px] text-text-muted">Translate lyrics to
-                                        <input className={`${input} mt-1`} value={lyricsTranslationLanguage[cue.id] || ''}
-                                          onChange={event => setLyricsTranslationLanguage(current => ({ ...current, [cue.id]: event.target.value }))}
-                                          placeholder="English, French, Japanese…" />
-                                      </label>
-                                      <button className={`${button} self-end`} disabled={Boolean(musicCueBusy || musicQueue) || !musicWritingReady || !cue.lyrics.trim()}
-                                        onClick={() => void translateMusicCueLyrics(cue.id)}>
-                                        {translating ? <Loader2 size={13} className="animate-spin" /> : <Languages size={13} />} Translate
-                                      </button>
-                                    </div>
-                                  )}
-                                  {!cue.instrumental && <p className="text-[9px] text-text-muted">Uses the selected Story Lab LLM and replaces these editable lyrics. MiniMax section tags stay unchanged.</p>}
-                                  {!cue.instrumental && cue.lyrics.trim() && !MINIMAX_LYRIC_SECTION.test(cue.lyrics) && (
-                                    <p className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[9px] text-amber-200">
-                                      These lyrics have no supported section tags. Use the LLM adaptation or add [Verse], [Pre Chorus], [Chorus], [Bridge] and [Outro] before generating.
-                                    </p>
-                                  )}
-                                  <details className="rounded border border-border bg-bg-tertiary/70 p-2">
-                                    <summary className="cursor-pointer text-[9px] text-text-secondary">Inspect the complete HocusPocus → MiniMax payload</summary>
-                                    <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-[9px] text-text-muted">{miniMaxCuePayload(cue, project.music.model)}</pre>
-                                  </details>
-                                  <div className="grid sm:grid-cols-3 gap-2">
-                                    <button className={button} onClick={() => {
-                                      void navigator.clipboard.writeText(miniMaxCuePayload(cue, project.music.model))
-                                      setNotice({ kind: 'ok', text: `MiniMax payload for “${cue.title}” copied.` })
-                                    }}><Copy size={12} /> Copy exact payload</button>
-                                    <button className={`${button} ${completeGenerationButton}`}
-                                      disabled={Boolean(musicCueBusy || musicQueue) || !servicesConfig?.minimax_api_key_set || !cue.style.trim() || (!cue.instrumental && (!cue.lyrics.trim() || !MINIMAX_LYRIC_SECTION.test(cue.lyrics)))}
-                                      onClick={() => void generateMusicCueAudio(cue.id)}>
-                                      {generatingAudio ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />} Generate this track
-                                    </button>
-                                    <button className={button} disabled={Boolean(musicCueBusy || musicQueue)} onClick={() => {
-                                      customMusicUploadCueId.current = cue.id
-                                      customMusicUploadRef.current?.click()
-                                    }}><Upload size={12} /> Import custom MP3</button>
-                                  </div>
-                                </div>
-                                <div className="space-y-2.5 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                      <h4 className="text-xs font-semibold text-blue-200">Google Lyria 3 Pro · manual workflow</h4>
-                                      <p className="mt-0.5 text-[9px] text-text-muted">The LLM prepares the prompt here. Copy it to Google AI Studio, generate there, then import the MP3 result.</p>
-                                    </div>
-                                    <span className="shrink-0 rounded border border-blue-500/30 px-2 py-1 text-[9px] text-blue-200">lyria-3-pro-preview</span>
-                                  </div>
-                                  <Field label="Paste-ready Lyria prompt · editable" value={cue.lyriaPrompt}
-                                    onChange={lyriaPrompt => patchMusicCue(cue.id, { lyriaPrompt })} rows={14}
-                                    placeholder="Generate provider prompts with the LLM to create a timed composition breakdown…" />
-                                  <p className="text-[9px] text-text-muted">Uses contiguous timestamps, section names, intensity, arrangement and separated lyrics. Lyria Pro targets up to about 3:00; longer Story durations are condensed in this prompt.</p>
-                                  <div className="grid sm:grid-cols-2 gap-2">
-                                    <button className={button} disabled={Boolean(musicCueBusy || musicQueue) || !musicWritingReady}
-                                      onClick={() => void adaptMusicCueWithLlm(cue.id, true)}>
-                                      {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate / refresh Lyria prompt
-                                    </button>
-                                    <button className={button} disabled={!cue.lyriaPrompt.trim()} onClick={() => {
-                                      void navigator.clipboard.writeText(cue.lyriaPrompt)
-                                      setNotice({ kind: 'ok', text: `Lyria prompt for “${cue.title}” copied.` })
-                                    }}><Copy size={12} /> Copy Lyria prompt</button>
-                                    <a className={button} href="https://aistudio.google.com/u/1/new_music?model=lyria-3-pro-preview"
-                                      target="_blank" rel="noreferrer">
-                                      <ExternalLink size={12} /> Open Lyria in Google AI Studio
-                                    </a>
-                                    <button className={button} disabled={Boolean(musicCueBusy || musicQueue)} onClick={() => {
-                                      lyriaUploadCueId.current = cue.id
-                                      lyriaUploadRef.current?.click()
-                                    }}><Upload size={12} /> Import generated audio</button>
-                                  </div>
-                                </div>
-                                </div>
-                              </div>
-                              {cue.candidates.length > 0 && (
-                                <div className="space-y-2 border-t border-border pt-2">
-                                  {cue.candidates.map(candidate => {
-                                    const selected = cue.selectedCandidateId === candidate.id
-                                    const label = musicCandidateDisplayName(candidate, cue.title, cue.lyricsLanguage || project.language, cue.candidates.indexOf(candidate) + 1)
-                                    return (
-                                      <div key={candidate.id} className={`rounded border p-2 space-y-1.5 ${selected ? 'border-pink-400 bg-pink-500/5' : 'border-border'}`}>
-                                        <button type="button" className="w-full flex items-center justify-between gap-2 text-left text-[10px]"
-                                          onClick={() => patchMusicCue(cue.id, { selectedCandidateId: candidate.id })}>
-                                          <span className="text-text-primary">{label} · {candidate.model}</span>
-                                          <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
-                                        </button>
-                                        <audio src={api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)} controls preload="metadata" className="w-full h-8" />
-                                        <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue) || !storyVideoConfigurationReady}
-                                          onClick={() => void openMusicalTrailer(candidate.id)}>
-                                          <Film size={12} /> Use in musical trailer
-                                        </button>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              )}
-                            </article>
-                          )
-                        })}
-                      </div>
-                    </section>
-                  )
-                })}
-
-                {!project.music.cues.length && (
-                  <div className={`${panel} mb-5 py-12 text-center`}>
-                    <Music size={30} className="mx-auto mb-3 text-pink-400" />
-                    <p className="text-sm text-text-primary">No music bible yet</p>
-                    <p className="mt-1 text-xs text-text-muted">Generate the complete Story or click “Generate LLM suggestions” here. No MiniMax music credits are used at this stage.</p>
-                  </div>
-                )}
-
-                <details className={`${panel} group`}>
-                  <summary className="cursor-pointer list-none flex items-center justify-between gap-2">
-                    <span>
-                      <span className="block text-sm font-semibold text-text-primary">Manual song / cover and musical trailer</span>
-                      <span className="block text-[10px] text-text-muted mt-1">The original free-form workflow remains available for a custom song outside the LLM suggestions.</span>
-                    </span>
-                    <ChevronDown size={15} className="group-open:rotate-180 transition-transform" />
-                  </summary>
-                  <div className="mt-4 grid lg:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <label className="block text-[10px] text-text-muted">Mode
-                          <select className={`${input} mt-1`} value={project.music.mode}
-                            onChange={event => patch({ music: { ...project.music, mode: event.target.value === 'cover' ? 'cover' : 'original' } })}>
-                            <option value="original">Original song</option><option value="cover">Cover</option>
-                          </select>
-                        </label>
-                        <label className="block text-[10px] text-text-muted">Candidates
-                          <select className={`${input} mt-1`} value={project.music.candidateCount}
-                            onChange={event => patch({ music: { ...project.music, candidateCount: Number(event.target.value) === 3 ? 3 : 2 } })}>
-                            <option value={2}>2</option><option value={3}>3</option>
-                          </select>
-                        </label>
-                      </div>
-                      {project.music.mode === 'cover' && <>
-                        <input ref={musicCoverRef} type="file" accept="audio/*" className="hidden"
-                          onChange={event => void uploadCoverReference(event.target.files?.[0])} />
-                        <button className={`${button} w-full`} disabled={productionBusy === 'music'} onClick={() => musicCoverRef.current?.click()}>
-                          <Upload size={13} /> {project.music.coverReferenceName ? `Replace ${project.music.coverReferenceName}` : 'Upload cover reference'}
-                        </button>
-                      </>}
-                      <Field label="Song brief" value={project.music.brief || storySongBrief(project, project.music.targetDurationSeconds)}
-                        onChange={brief => patch({ music: { ...project.music, brief } })} rows={5} />
-                      <button className={`${button} w-full`} disabled={productionBusy === 'music'} onClick={() => void writeStorySong()}>
-                        <Sparkles size={13} /> Write prompt + lyrics with LLM
-                      </button>
-                      <Field label="Source lyrics / structure to adapt" value={project.music.sourceLyrics}
-                        onChange={sourceLyrics => patch({ music: { ...project.music, sourceLyrics } })} rows={5} />
-                      <button className={`${button} w-full`} disabled={productionBusy === 'music' || !project.music.sourceLyrics.trim()}
-                        onClick={() => void adaptStoryLyrics()}><Sparkles size={13} /> Adapt lyrics to this Story</button>
-                    </div>
-                    <div className="space-y-2">
-                      <Field required label="Final MiniMax prompt · English · max 300 characters" value={project.music.style}
-                        onChange={style => patch({ music: { ...project.music, style } })} rows={3} />
-                      <Field required label="Editable lyrics" value={project.music.lyrics}
-                        onChange={lyrics => patch({ music: { ...project.music, lyrics } })} rows={8} />
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                        <label className="block text-[10px] text-text-muted">Translate lyrics to
-                          <input className={`${input} mt-1`} value={lyricsTranslationLanguage.manual || ''}
-                            onChange={event => setLyricsTranslationLanguage(current => ({ ...current, manual: event.target.value }))}
-                            placeholder="English, French, Japanese…" />
-                        </label>
-                        <button className={`${button} self-end`} disabled={productionBusy === 'music' || !musicWritingReady || !project.music.lyrics.trim()}
-                          onClick={() => void translateManualSongLyrics()}><Languages size={13} /> Translate</button>
-                      </div>
-                      <p className="text-[9px] text-text-muted">Uses the selected Story Lab LLM and replaces the editable lyrics, preserving MiniMax section tags.</p>
-                      <div className="space-y-2 rounded-lg border border-purple-500/30 bg-purple-500/5 p-2.5">
-                        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-200"><Palette size={12} /> Create a completely new manual version</div>
-                        <div className="grid sm:grid-cols-2 gap-2">
-                          <input className={input} value={musicVersionStyle.manual || ''}
-                            onChange={event => setMusicVersionStyle(current => ({ ...current, manual: event.target.value }))}
-                            placeholder="New style, e.g. rap…" />
-                          <input className={input} value={musicVersionLanguage.manual || ''}
-                            onChange={event => setMusicVersionLanguage(current => ({ ...current, manual: event.target.value }))}
-                            placeholder={`Language · ${project.music.lyricsLanguage || project.language}`} />
-                        </div>
-                        <button className={`${button} w-full border-purple-500/60 text-purple-200`}
-                          disabled={productionBusy === 'music' || !musicWritingReady}
-                          onClick={() => void createManualSongVersion()}><RefreshCcw size={13} /> Rewrite style + lyrics</button>
-                        <p className="text-[9px] text-text-muted">Use either field or both. The current draft supplies the Story meaning, but its arrangement and sung lines are rebuilt from scratch.</p>
-                      </div>
-                      <label className="block text-[10px] text-text-muted">Target duration for lyrics · seconds
-                        <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
-                          value={project.music.targetDurationSeconds}
-                          onChange={event => patch({ music: { ...project.music, targetDurationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) } })} />
-                      </label>
-                      <p className="text-[9px] text-text-muted">MiniMax Music does not expose an exact duration parameter; the target guides lyric writing and the render can vary.</p>
-                      <button className={`${button} ${completeGenerationButton} w-full`}
-                        disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
-                        onClick={() => void generateMinimaxSongs()}><Music size={13} /> Generate manual candidates</button>
-                      {project.music.candidates.map(candidate => (
-                        <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">
-                          <span className="text-[10px] text-text-primary">{musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1)} · {candidate.model}</span>
-                          <audio src={api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)} controls preload="metadata" className="w-full h-8" />
-                          <button className={`${button} w-full`} disabled={!storyVideoConfigurationReady} onClick={() => void openMusicalTrailer(candidate.id)}><Film size={12} /> Use in musical trailer</button>
-                        </div>
-                      ))}
-                      <button className={`${button} w-full`} disabled={!storyVideoConfigurationReady} onClick={() => void openMusicalTrailer()}>
-                        <ChevronRight size={13} /> Open Musical Video Director
-                      </button>
-                    </div>
-                  </div>
-                </details>
-              </>
+              <StoryMusicTab
+                project={project}
+                patch={patch}
+                instruction={instruction}
+                setInstruction={setInstruction}
+                busy={busy}
+                productionBusy={productionBusy}
+                musicQueue={musicQueue}
+                musicCueBusy={musicCueBusy}
+                newSongAction={newSongAction}
+                musicWritingReady={musicWritingReady}
+                minimaxConfigured={Boolean(servicesConfig?.minimax_api_key_set)}
+                storyVideoConfigurationReady={storyVideoConfigurationReady}
+                workspace={activeWorkspace}
+                musicVersionStyle={musicVersionStyle}
+                setMusicVersionStyle={setMusicVersionStyle}
+                musicVersionLanguage={musicVersionLanguage}
+                setMusicVersionLanguage={setMusicVersionLanguage}
+                lyricsTranslationLanguage={lyricsTranslationLanguage}
+                setLyricsTranslationLanguage={setLyricsTranslationLanguage}
+                generate={generate}
+                generateAllMusicCues={generateAllMusicCues}
+                cancelMusicQueue={cancelMusicQueue}
+                createNewMusicVideoSong={createNewMusicVideoSong}
+                createAllMusicCueVersions={createAllMusicCueVersions}
+                patchMusicCue={patchMusicCue}
+                adaptMusicCueWithLlm={adaptMusicCueWithLlm}
+                createMusicCueVersion={createMusicCueVersion}
+                translateMusicCueLyrics={translateMusicCueLyrics}
+                generateMusicCueAudio={generateMusicCueAudio}
+                openMusicalTrailer={openMusicalTrailer}
+                onImportCustomMp3={cueId => {
+                  customMusicUploadCueId.current = cueId
+                  customMusicUploadRef.current?.click()
+                }}
+                onImportLyria={cueId => {
+                  lyriaUploadCueId.current = cueId
+                  lyriaUploadRef.current?.click()
+                }}
+                onCopied={text => setNotice({ kind: 'ok', text })}
+                musicCoverRef={musicCoverRef}
+                uploadCoverReference={uploadCoverReference}
+                writeStorySong={writeStorySong}
+                adaptStoryLyrics={adaptStoryLyrics}
+                translateManualSongLyrics={translateManualSongLyrics}
+                createManualSongVersion={createManualSongVersion}
+                generateMinimaxSongs={generateMinimaxSongs}
+              />
             )}
 
             {tab === 'trailer' && (
-              <div className="space-y-4">
-                <div className="overflow-hidden rounded-2xl border border-amber-400/30 bg-gradient-to-br from-amber-500/10 via-bg-secondary to-purple-500/10 p-4 md:p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="max-w-2xl">
-                      <div className="mb-2 flex items-center gap-2 text-amber-200"><Film size={22} /><span className="text-[10px] font-semibold uppercase tracking-[0.2em]">Story Lab · Trailer Creator</span></div>
-                      <h2 className="text-xl font-semibold text-text-primary">Creador de tráileres cinematográficos</h2>
-                      <p className="mt-2 text-xs leading-relaxed text-text-muted">Convierte el canon de esta Story en clips ordenados que cuentan una mini-historia épica: presentación, amenaza, escalada, respiración y un gancho final que no revela el desenlace.</p>
-                    </div>
-                    <div className="grid min-w-56 grid-cols-2 gap-2 text-center text-[10px]">
-                      <div className="rounded-lg border border-border bg-bg-primary/50 p-2"><span className="block text-lg font-semibold text-amber-200">{trailerDuration}s</span>duración objetivo</div>
-                      <div className="rounded-lg border border-border bg-bg-primary/50 p-2"><span className="block text-lg font-semibold text-purple-200">6</span>fases narrativas</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
-                  <div className={`${panel} space-y-4`}>
-                    <div><h3 className="text-sm font-semibold text-text-primary">Dirección narrativa</h3><p className="mt-1 text-[10px] text-text-muted">Todo es editable antes de abrir Director o gastar créditos.</p></div>
-                    <label className="block text-[10px] text-text-muted">Qué debe prometer este tráiler
-                      <textarea className={`${input} mt-1`} rows={4} value={trailerDirection} onChange={event => { markTrailerTouched(); setTrailerDirection(event.target.value) }} aria-label="Trailer creative direction" />
-                    </label>
-                    <label className="block text-[10px] text-text-muted">Tagline final opcional
-                      <input className={`${input} mt-1`} value={trailerTagline} onChange={event => { markTrailerTouched(); setTrailerTagline(event.target.value) }} placeholder={project.logline || 'Una última frase memorable…'} />
-                    </label>
-                    <div>
-                      <p className="mb-1.5 text-[10px] text-text-muted">Duración</p>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {[30, 45, 60, 90].map(seconds => <button key={seconds} type="button" className={`${button} ${trailerDuration === seconds ? 'border-amber-400/70 bg-amber-500/10 text-amber-100' : ''}`} onClick={() => { markTrailerTouched(); setTrailerDuration(seconds) }}>{seconds}s</button>)}
-                      </div>
-                      <input className={`${input} mt-2`} type="number" min={15} max={180} step={5} value={trailerDuration} onChange={event => { markTrailerTouched(); setTrailerDuration(Math.max(15, Math.min(180, Number(event.target.value) || 60))) }} />
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className="block text-[10px] text-text-muted">Formato
-                        <select className={`${input} mt-1`} value={trailerFormat} onChange={event => { markTrailerTouched(); setTrailerFormat(event.target.value as StoryTrailerFormat) }}>
-                          <option value="theatrical">Theatrical · arco completo</option>
-                          <option value="teaser">Teaser · misterio</option>
-                          <option value="character">Personaje · arco emocional</option>
-                        </select>
-                      </label>
-                      <label className="block text-[10px] text-text-muted">Voces
-                        <select className={`${input} mt-1`} value={trailerNarration} onChange={event => { markTrailerTouched(); setTrailerNarration(event.target.value as StoryTrailerNarration) }}>
-                          <option value="hybrid">Narrador + diálogo selectivo</option>
-                          <option value="voice_over">Voz en off principal</option>
-                          <option value="dialogue">Solo diálogo de personajes</option>
-                          <option value="visual">Solo imagen, música y efectos</option>
-                        </select>
-                      </label>
-                      <label className="block text-[10px] text-text-muted">Nivel de revelación
-                        <select className={`${input} mt-1`} value={trailerSpoiler} onChange={event => { markTrailerTouched(); setTrailerSpoiler(event.target.value as StoryTrailerSpoiler) }}>
-                          <option value="mystery">Misterio · protege casi todo</option>
-                          <option value="balanced">Equilibrado · premisa y apuestas</option>
-                          <option value="revealing">Revelador · grandes set pieces</option>
-                        </select>
-                      </label>
-                      <label className="block text-[10px] text-text-muted">Curva de intensidad
-                        <select className={`${input} mt-1`} value={trailerIntensity} onChange={event => { markTrailerTouched(); setTrailerIntensity(event.target.value as StoryTrailerIntensity) }}>
-                          <option value="rising">Creciente · clásico épico</option>
-                          <option value="relentless">Implacable · urgencia continua</option>
-                          <option value="prestige">Prestige · atmósfera y escala</option>
-                        </select>
-                      </label>
-                    </div>
-                    <label className={`flex items-start gap-2 rounded-md border p-2 ${trailerTitleCards && !project.allowClipText ? 'border-amber-400/50 bg-amber-500/10' : 'border-border bg-bg-primary/30'}`}>
-                      <input type="checkbox" checked={trailerTitleCards} onChange={event => { markTrailerTouched(); setTrailerTitleCards(event.target.checked) }} className="mt-0.5 accent-amber-400" />
-                      <span><span className="block text-[10px] font-medium text-text-primary">Cartelas mínimas: gancho, título y tagline</span><span className="block text-[9px] text-text-muted">Nunca convierte el diálogo en subtítulos. Requiere “Permitir texto visible” en Story.</span></span>
-                    </label>
-                    {trailerTitleCards && !project.allowClipText && <button type="button" className={`${button} w-full border-amber-400/50 text-amber-200`} onClick={() => patch({ allowClipText: true })}>Permitir texto visible en esta Story</button>}
-                  </div>
-
-                  <div className={`${panel} space-y-3`}>
-                    <div><h3 className="text-sm font-semibold text-text-primary">Arco temporal</h3><p className="mt-1 text-[10px] text-text-muted">Los segundos se recalculan al cambiar la duración.</p></div>
-                    {TRAILER_ARC.map((phase, index) => {
-                      const start = Math.round(trailerDuration * phase.start / 100)
-                      const end = Math.round(trailerDuration * phase.end / 100)
-                      return <div key={phase.label} className="grid grid-cols-[2rem_minmax(0,1fr)_3.5rem] items-start gap-2 rounded-lg border border-border bg-bg-primary/35 p-2.5">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/15 text-[10px] font-semibold text-amber-200">{index + 1}</span>
-                        <span><span className="block text-[10px] font-medium text-text-primary">{phase.label}</span><span className="mt-0.5 block text-[9px] leading-relaxed text-text-muted">{phase.detail}</span></span>
-                        <span className="text-right text-[9px] font-medium text-amber-200">{start}–{end}s</span>
-                      </div>
-                    })}
-                  </div>
-                </div>
-
-                <div className={`${panel} space-y-4`}>
-                  <div><h3 className="text-sm font-semibold text-text-primary">Producción de clips</h3><p className="mt-1 text-[10px] text-text-muted">Usa el mismo pipeline recuperable del montaje: clips ordenados, Play all, edición/regeneración en su posición y unión final.</p></div>
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <div className="rounded-lg border border-border bg-bg-primary/30 p-3 space-y-2">
-                      <p className="text-[10px] font-medium text-text-primary">Guía visual</p>
-                      <p className="text-[9px] leading-relaxed text-text-muted">Elige fotogramas generados, referencias aprobadas o texto puro sin imágenes.</p>
-                      <div className="grid gap-1.5 md:grid-cols-3">
-                        <button type="button" className={`${button} flex-col ${!directVideo && !directReferenceVideo ? 'border-purple-400/60 text-purple-200' : ''}`} onClick={() => patch({ musicVideoGenerationMode: 'image_guided' })}><span>Imágenes iniciales</span><span className="text-[9px] text-text-muted">Genera start frames</span></button>
-                        <button type="button" className={`${button} flex-col ${directReferenceVideo ? 'border-violet-400/70 bg-violet-500/10 text-violet-200' : ''}`} onClick={() => patch({ musicVideoGenerationMode: 'direct_references' })}><span>Referencias directas</span><span className="text-[9px] text-text-muted">H3 Ref2VA</span></button>
-                        <button type="button" className={`${button} flex-col ${directVideo ? 'border-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-200' : ''}`} onClick={() => patch({ musicVideoGenerationMode: 'direct_video', protagonistConsistency: false })}><span>Vídeo directo</span><span className="text-[9px] text-text-muted">T2V · sin imágenes</span></button>
-                      </div>
-                      {project.protagonistConsistency && <p className="text-[9px] text-amber-300">Al elegir T2V puro se desactivará la consistencia visual estricta del protagonista, porque no se enviarán imágenes.</p>}
-                      {directReferenceVideo && <div className={`rounded-md border p-2 text-[9px] leading-relaxed ${directReferenceVideoReady ? 'border-emerald-500/35 bg-emerald-500/5 text-emerald-100' : 'border-amber-500/40 bg-amber-500/5 text-amber-200'}`}>
-                        {directReferenceVideoReady
-                          ? `${approvedVisualReferenceCount} referencia${approvedVisualReferenceCount === 1 ? '' : 's'} aprobada${approvedVisualReferenceCount === 1 ? '' : 's'} se enviará${approvedVisualReferenceCount === 1 ? '' : 'n'} directamente a H3; no se generarán start frames.`
-                          : directReferenceVideoSupported
-                            ? 'Aprueba al menos una imagen en Imágenes antes de generar.'
-                            : 'Elige un modelo MiniMax H3; Ref2VA no está disponible con otros modelos.'}
-                      </div>}
-                      {directVideo && <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 p-2 space-y-2">
-                        <p className="text-[10px] font-medium text-fuchsia-200">T2V puro · sin imágenes ni referencias</p>
-                        <p className="text-[9px] leading-relaxed text-text-muted">Director repetirá este contrato visual en cada clip y sólo añadirá la situación concreta del tráiler.</p>
-                        <label className="block text-[9px] text-violet-200">Prompt maestro de mundo y estilo<span className="ml-1 text-violet-300" title="Required">●</span>
-                          <textarea className={`${input} ${requiredInput} mt-1 min-h-32 resize-y leading-relaxed`} value={project.directVideoMasterPrompt}
-                            onChange={event => patch({ directVideoMasterPromptMode: 'custom', directVideoMasterPrompt: event.target.value })}
-                            placeholder="Define el mundo, personajes y estilo que deben repetirse en todos los clips" required aria-required="true" />
-                        </label>
-                        <span className={`block text-[9px] leading-relaxed ${directVideoMasterReady ? 'text-fuchsia-200/80' : 'text-amber-300'}`}>
-                          {directVideoMasterReady ? 'No se ejecutará el modelo de imagen ni se enviarán referencias a H3.' : 'Completa este prompt antes de generar.'}
-                        </span>
-                      </div>}
-                      <label className={`flex items-start gap-2 pt-1 ${directVideo ? 'opacity-45' : ''}`}><input type="checkbox" disabled={directVideo} checked={trailerPreserveVisualStyle} onChange={event => { markTrailerTouched(); setTrailerPreserveVisualStyle(event.target.checked) }} className="mt-0.5 accent-purple-400" /><span><span className="block text-[10px] text-text-primary">Conservar el estilo visual de Story</span><span className="block text-[9px] text-text-muted">{directVideo ? 'En T2V el estilo procede exclusivamente del prompt maestro.' : 'Mantiene medio, paleta, diseño y referencias aprobadas.'}</span></span></label>
-                    </div>
-                    <div className="rounded-lg border border-border bg-bg-primary/30 p-3 space-y-2">
-                      <label className="block text-[10px] text-text-muted">Modelo de imagen
-                        <select className={`${input} mt-1`} value={filmImageModel} disabled={directVideo || directReferenceVideo} onChange={event => selectDirectorImageModel(event.target.value)}>
-                          {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>}
-                          <optgroup label="External API"><option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option></optgroup>
-                          <optgroup label="HocusPocus local">{selectableImageModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}</option>)}</optgroup>
-                        </select>
-                      </label>
-                      <label className="block text-[10px] text-text-muted">Modelo de vídeo
-                        <select className={`${input} mt-1`} value={filmVideoModel} disabled={project.provider.useGlobalProfile || !storyVideoOptionsReady} onChange={event => selectStoryVideoModel(event.target.value)}>
-                          {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>}
-                          {selectableVideoModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}</option>)}
-                        </select>
-                      </label>
-                    </div>
-                  </div>
-                  <StoryVideoFormatControls videoModel={filmVideoModel} resolution={storyVideoResolution} aspectRatio={storyVideoAspectRatio} options={storyVideoOptions} disabled={!storyVideoOptionsReady} inherited={project.provider.useGlobalProfile} adjusted={storyVideoFormat.adjusted} onChange={setStoryVideoFormat} />
-                  {trailerProductionIssues.length > 0 && <div className="rounded-md border border-amber-400/30 bg-amber-500/10 p-2 text-[10px] text-amber-200">Revisa {trailerProductionIssues.length} requisito{trailerProductionIssues.length === 1 ? '' : 's'} de Story antes de generar.</div>}
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(trailerProductionIssues.length) || Boolean(productionBusy) || !filmGenerationImageReady || !directReferenceVideoReady || !directVideoMasterReady || !storyVideoConfigurationReady || (trailerTitleCards && !project.allowClipText)} onClick={() => void stageTrailer(true)}>{productionBusy === 'trailer' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generar tráiler completo</button>
-                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(trailerProductionIssues.length) || Boolean(productionBusy) || !directVideoMasterReady || !storyVideoConfigurationReady || (trailerTitleCards && !project.allowClipText)} onClick={() => void stageTrailer(false)}><ChevronRight size={13} /> Abrir y revisar en Director</button>
-                  </div>
-                  <p className="text-[9px] text-text-muted">La generación completa crea un trabajo recuperable. “Imágenes iniciales” consume imagen y vídeo; Ref2VA y T2V puro omiten el modelo de imagen.</p>
-                </div>
-              </div>
+              <StoryTrailerTab
+                project={project}
+                patch={patch}
+                trailerDuration={trailerDuration}
+                setTrailerDuration={setTrailerDuration}
+                trailerDirection={trailerDirection}
+                setTrailerDirection={setTrailerDirection}
+                trailerTagline={trailerTagline}
+                setTrailerTagline={setTrailerTagline}
+                trailerFormat={trailerFormat}
+                setTrailerFormat={setTrailerFormat}
+                trailerNarration={trailerNarration}
+                setTrailerNarration={setTrailerNarration}
+                trailerSpoiler={trailerSpoiler}
+                setTrailerSpoiler={setTrailerSpoiler}
+                trailerIntensity={trailerIntensity}
+                setTrailerIntensity={setTrailerIntensity}
+                trailerTitleCards={trailerTitleCards}
+                setTrailerTitleCards={setTrailerTitleCards}
+                trailerPreserveVisualStyle={trailerPreserveVisualStyle}
+                setTrailerPreserveVisualStyle={setTrailerPreserveVisualStyle}
+                markTrailerTouched={markTrailerTouched}
+                directVideo={directVideo}
+                directReferenceVideo={directReferenceVideo}
+                approvedVisualReferenceCount={approvedVisualReferenceCount}
+                directReferenceVideoReady={directReferenceVideoReady}
+                directReferenceVideoSupported={directReferenceVideoSupported}
+                directVideoMasterReady={directVideoMasterReady}
+                filmImageModel={filmImageModel}
+                filmVideoModel={filmVideoModel}
+                selectableImageModels={selectableImageModels}
+                selectableVideoModels={selectableVideoModels}
+                selectedFilmImageModel={selectedFilmImageModel}
+                selectedFilmVideoModel={selectedFilmVideoModel}
+                selectDirectorImageModel={selectDirectorImageModel}
+                selectStoryVideoModel={selectStoryVideoModel}
+                storyVideoOptionsReady={storyVideoOptionsReady}
+                storyVideoConfigurationReady={storyVideoConfigurationReady}
+                storyVideoResolution={storyVideoResolution}
+                storyVideoAspectRatio={storyVideoAspectRatio}
+                storyVideoOptions={storyVideoOptions}
+                storyVideoAdjusted={storyVideoFormat.adjusted}
+                setStoryVideoFormat={setStoryVideoFormat}
+                trailerProductionIssues={trailerProductionIssues}
+                productionBusy={productionBusy}
+                filmGenerationImageReady={filmGenerationImageReady}
+                stageTrailer={stageTrailer}
+              />
             )}
 
             {tab === 'productions' && (
-              <>
-                <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-text-primary">{project.projectType === 'music_video' ? 'Generar videoclip' : project.projectType === 'quick_video' ? 'Generar vídeo rápido' : 'Productions'}</h2>
-                  <p className="text-xs text-text-muted mt-1">{project.projectType === 'full_story'
-                    ? 'Adapt the same approved material without destroying the source story.'
-                    : 'Revisa los modelos, el formato y las referencias aprobadas antes de iniciar Director.'}</p>
-                </div>
-                <div className="grid md:grid-cols-2 gap-4">
-                  {project.projectType === 'full_story' && (
-                  <div className={`${panel} space-y-3`}>
-                    <BookOpen size={26} className="text-accent-blue" />
-                    <h3 className="font-semibold text-text-primary">Comic adaptation</h3>
-                    <p className="text-xs text-text-muted">Creates a self-contained chapter inside the master canon. Director receives every arc, relationship, location and approved identity image.</p>
-                    <textarea className={input} rows={4} value={comicDirection} onChange={event => setComicDirection(event.target.value)} aria-label="Comic chapter direction" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="block text-[10px] text-text-muted">Pages
-                        <input
-                          className={`${input} mt-1`}
-                          type="number"
-                          min={1}
-                          max={100}
-                          value={comicPageCount}
-                          onChange={event => setComicPageCount(Math.max(1, Math.min(100, Number(event.target.value) || 1)))}
-                        />
-                      </label>
-                      <label className="block text-[10px] text-text-muted">Panels per page
-                        <input
-                          className={`${input} mt-1`}
-                          type="number"
-                          min={1}
-                          max={12}
-                          value={comicPanelsPerPage}
-                          onChange={event => setComicPanelsPerPage(Math.max(1, Math.min(12, Number(event.target.value) || 1)))}
-                        />
-                      </label>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {[4, 12, 24].map(count => (
-                        <button
-                          key={count}
-                          type="button"
-                          className={`${button} ${comicPageCount === count ? 'border-accent-blue text-accent-blue' : ''}`}
-                          onClick={() => setComicPageCount(count)}
-                        >
-                          {count === 4 ? '4 · quick test' : `${count} pages`}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[9px] text-text-muted">
-                      Planned size: {comicPageCount * comicPanelsPerPage} panels. Longer chapters take proportionally more planning time and image credits.
-                    </p>
-                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={() => stageComic(true)}><Sparkles size={13} /> Generate complete comic chapter</button>
-                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={() => stageComic(false)}><ChevronRight size={13} /> Open in Comic Director</button>
-                    <p className="text-[9px] text-text-muted">Complete generation creates the plan and artwork and may consume provider credits. Director mode lets you review every field first.</p>
-                  </div>
-                  )}
-                  {project.projectType !== 'music_video' && (
-                  <div className={`${panel} space-y-3`}>
-                    <Film size={26} className="text-purple-400" />
-                    <h3 className="font-semibold text-text-primary">{project.projectType === 'quick_video' ? 'Vídeo rápido' : 'Film adaptation'}</h3>
-                    <p className="text-xs text-text-muted">{project.projectType === 'quick_video'
-                      ? 'Convierte directamente el concepto, diálogo y 3–8 momentos en un vídeo ensamblado, conservando protagonistas, lugar y estilo.'
-                      : 'Creates a short narrative episode instead of compressing the whole story. The cast, world and visual references remain attached.'}</p>
-                    <textarea className={input} rows={4} value={filmDirection} onChange={event => setFilmDirection(event.target.value)} aria-label="Short-film episode direction" />
-                    <label className="block text-[10px] text-text-muted">Target duration · seconds
-                      <input
-                        className={`${input} mt-1`}
-                        type="number"
-                        min={10}
-                        max={1800}
-                        step={5}
-                        value={filmDuration}
-                        onChange={event => setFilmDuration(Math.max(10, Math.min(1800, Number(event.target.value) || 45)))}
-                      />
-                    </label>
-                    <div className="rounded-md border border-violet-500/25 bg-violet-500/5 p-2.5 space-y-2">
-                      <p className="text-[10px] font-medium text-violet-100">Visual guidance</p>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          className={`${button} flex-col ${!directReferenceVideo ? 'border-purple-400/60 text-purple-200' : ''}`}
-                          onClick={() => patch({ musicVideoGenerationMode: 'image_guided' })}
-                        >
-                          <span>Generate start images</span>
-                          <span className="text-[9px] text-text-muted">Traditional image-guided pipeline</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`${button} flex-col ${directReferenceVideo ? 'border-violet-400/70 bg-violet-500/10 text-violet-200' : ''}`}
-                          onClick={() => patch({ musicVideoGenerationMode: 'direct_references' })}
-                        >
-                          <span>Direct approved references</span>
-                          <span className="text-[9px] text-text-muted">H3 Ref2VA · no start images</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`${button} flex-col ${directVideo ? 'border-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-200' : ''}`}
-                          onClick={() => patch({ musicVideoGenerationMode: 'direct_video', protagonistConsistency: false })}
-                        >
-                          <span>Direct video</span>
-                          <span className="text-[9px] text-text-muted">T2V · no references or start images</span>
-                        </button>
-                      </div>
-                      {(directReferenceVideo || directVideo) && (
-                        <p className={`text-[9px] ${directReferenceVideoReady ? 'text-emerald-200' : 'text-amber-300'}`}>
-                          {directVideo
-                            ? 'Text-to-video mode: no image model, start image or visual reference is required.'
-                            : directReferenceVideoReady
-                            ? `${approvedVisualReferenceCount} approved reference${approvedVisualReferenceCount === 1 ? '' : 's'} ready for H3.`
-                            : directReferenceVideoSupported
-                              ? 'Approve at least one image in Imágenes.'
-                              : 'Choose a MiniMax H3 video model.'}
-                        </p>
-                      )}
-                    </div>
-                    <label className="block text-[10px] text-text-muted">Image model
-                      <select
-                        className={`${input} mt-1`}
-                        value={filmImageModel}
-                        disabled={directReferenceVideo || directVideo}
-                        onChange={event => selectDirectorImageModel(event.target.value)}
-                      >
-                        {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
-                          <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
-                        )}
-                        <optgroup label="External API">
-                          <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
-                        </optgroup>
-                        <optgroup label="HocusPocus local">
-                          {selectableImageModels.map(model => (
-                            <option key={model.model_type} value={model.model_type}>
-                              {model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}
-                            </option>
-                          ))}
-                        </optgroup>
-                      </select>
-                      <span className={`mt-1 block text-[9px] leading-relaxed ${filmImageReady ? 'text-text-muted' : 'text-amber-300'}`}>
-                        {directVideo
-                          ? 'Not used in direct-video mode; the clip is generated from the text prompt alone.'
-                          : directReferenceVideo
-                          ? 'Not used in direct-reference mode; approved Story images go straight to H3 Ref2VA.'
-                          : filmImageModel === MINIMAX_IMAGE_API_MODEL
-                          ? filmImageReady
-                            ? 'MiniMax Image-01 runs through the external API and does not use local VRAM. It is independent from the local H3 video model.'
-                            : 'Add the MiniMax API key in Settings → Services before starting complete generation.'
-                          : 'Generates every shot frame locally with the selected HocusPocus image model.'}
-                      </span>
-                    </label>
-                    <label className="block text-[10px] text-text-muted">Video model
-                      <select
-                        className={`${input} mt-1`}
-                        value={filmVideoModel}
-                        disabled={project.provider.useGlobalProfile || !storyVideoOptionsReady}
-                        onChange={event => selectStoryVideoModel(event.target.value)}
-                      >
-                        {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && (
-                          <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>
-                        )}
-                        {selectableVideoModels.map(model => (
-                          <option key={model.model_type} value={model.model_type}>
-                            {model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
-                        {!storyVideoOptionsReady
-                          ? 'Checking this model’s supported formats…'
-                          : project.provider.useGlobalProfile
-                            ? 'Inherited from the global production profile. Choose “Override in this project” above to edit it only for this Story.'
-                            : filmVideoModel === 'minimax_h3_legacy'
-                          ? 'H3 Legacy Quality uses its 20-step ConvRot recipe. A 7–10s shot at 720p can take tens of minutes even on an RTX 4090; choose 540p/480p or a Turbo-capable H3 variant when speed matters.'
-                          : filmVideoModel.startsWith('minimax_h3')
-                          ? 'MiniMax H3 renders every planned shot locally at up to 768p with native stereo audio. Longer shots are continued and assembled automatically.'
-                          : 'LTX uses HocusPocus’s multi-shot Director pipeline and requires its bundled Gemma 3 12B text encoder. Gemma may download on first use; it is an LTX dependency, not a separate setting. This choice is saved only in this Story.'}
-                      </span>
-                    </label>
-                    <StoryVideoFormatControls
-                      videoModel={filmVideoModel}
-                      resolution={storyVideoResolution}
-                      aspectRatio={storyVideoAspectRatio}
-                      options={storyVideoOptions}
-                      disabled={!storyVideoOptionsReady}
-                      inherited={project.provider.useGlobalProfile}
-                      adjusted={storyVideoFormat.adjusted}
-                      onChange={setStoryVideoFormat}
-                    />
-                    <label className="flex items-start gap-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filmPreserveVisualStyle}
-                        onChange={event => setFilmPreserveVisualStyle(event.target.checked)}
-                        className="mt-0.5 accent-purple-400"
-                      />
-                      <span>
-                        <span className="block text-[10px] font-medium text-purple-200">Preserve Story visual style</span>
-                        <span className="block text-[9px] leading-relaxed text-text-muted">
-                          Keeps anime, comic, illustration, palette and character design across generated frames and video. Disable only to intentionally reinterpret the adaptation.
-                        </span>
-                      </span>
-                    </label>
-                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmGenerationImageReady || !directReferenceVideoReady || !storyVideoConfigurationReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
-                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !storyVideoConfigurationReady} onClick={() => stageFilm(false)}><ChevronRight size={13} /> {project.projectType === 'quick_video' ? 'Abrir en Director' : 'Open in Short Film Director'}</button>
-                    <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
-                    {project.projectType === 'quick_video' && (
-                      <QuickVideoBatchPanel
-                        project={project}
-                        workspace={activeWorkspace}
-                        videoModel={filmVideoModel}
-                        imageModel={filmImageModel}
-                        resolution={storyVideoResolution}
-                        aspectRatio={storyVideoAspectRatio}
-                        durationSeconds={filmDuration}
-                      />
-                    )}
-                  </div>
-                  )}
-                  {project.projectType !== 'quick_video' && (
-                  <div className={`${panel} space-y-3 md:col-span-2`}>
-                    <div className="flex items-start gap-3">
-                      <Music size={26} className="shrink-0 text-pink-400" />
-                      <div>
-                        <h3 className="font-semibold text-text-primary">Music video or musical trailer</h3>
-                        <p className="mt-1 text-xs text-text-muted">
-                          Selects an existing Story song and builds the visuals around what that cue represents. Character themes keep that character and approved identity references at the center.
-                        </p>
-                      </div>
-                    </div>
-                    {musicCandidateOptions.length ? (
-                      <>
-                        <label className="block text-[10px] text-text-muted">Song
-                          <select
-                            className={`${input} mt-1`}
-                            value={musicProductionCandidateId}
-                            onChange={event => setMusicProductionCandidateId(event.target.value)}
-                          >
-                            {musicCandidateOptions.map(option => (
-                              <option key={option.candidate.id} value={option.candidate.id}>
-                                {option.label} · {option.candidate.durationSeconds
-                                  ? `${Math.floor(option.candidate.durationSeconds / 60)}:${Math.round(option.candidate.durationSeconds % 60).toString().padStart(2, '0')}`
-                                  : 'duration on playback'}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        {selectedMusicOption && (
-                          <div className="rounded-lg border border-pink-500/25 bg-pink-500/5 p-2.5 space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
-                              <span className="font-medium text-pink-200">
-                                {selectedMusicOption.cue
-                                  ? `${selectedMusicOption.cue.kind === 'character' ? 'Character' : selectedMusicOption.cue.kind === 'world' ? 'World' : 'Story'} focus · ${selectedMusicOption.cue.title}`
-                                  : 'Story-wide focus'}
-                              </span>
-                              <span className="text-text-muted">
-                                {getOutputReference({ name: selectedMusicOption.candidate.name, type: 'audio' })} · {selectedMusicOption.candidate.provider}/{selectedMusicOption.candidate.model}
-                              </span>
-                            </div>
-                            {selectedMusicOption.cue?.purpose && (
-                              <p className="text-[10px] text-text-secondary">{selectedMusicOption.cue.purpose}</p>
-                            )}
-                            <audio src={api.getPlayableFileUrl(selectedMusicOption.candidate.source, selectedMusicOption.candidate.name, activeWorkspace)} controls preload="metadata" className="h-8 w-full" />
-                          </div>
-                        )}
-                        <div className="rounded-lg border border-fuchsia-500/35 bg-fuchsia-500/5 p-2.5 space-y-2.5">
-                          <div>
-                            <p className="text-[10px] font-medium text-fuchsia-200">Cómo generar los planos</p>
-                            <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
-                              Elige fotogramas generados, referencias aprobadas directas mediante H3 Ref2VA, o texto puro sin ninguna imagen.
-                            </p>
-                          </div>
-                          <div className="grid gap-1.5 md:grid-cols-3">
-                            <button
-                              type="button"
-                              onClick={() => patch({ musicVideoGenerationMode: 'image_guided' })}
-                              className={`${button} flex-col ${project.musicVideoGenerationMode === 'image_guided' ? 'border-pink-500/60 text-pink-300' : ''}`}
-                            >
-                              <span>Con imágenes</span>
-                              <span className="text-[9px] text-text-muted">Crea un fotograma inicial</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => patch({ musicVideoGenerationMode: 'direct_references' })}
-                              className={`${button} flex-col ${directReferenceVideo ? 'border-violet-400/70 bg-violet-500/10 text-violet-200' : ''}`}
-                            >
-                              <span>Directo con referencias</span>
-                              <span className="text-[9px] text-text-muted">H3 Ref2VA · sin start frames</span>
-                            </button>
-                            <button
-                              type="button"
-                              disabled={project.protagonistConsistency}
-                              onClick={() => patch({ musicVideoGenerationMode: 'direct_video' })}
-                              className={`${button} flex-col ${directMusicVideo ? 'border-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-200' : ''}`}
-                            >
-                              <span>Vídeo directo · sin imágenes</span>
-                              <span className="text-[9px] text-text-muted">T2V puro</span>
-                            </button>
-                          </div>
-                          {project.protagonistConsistency && <p className="text-[9px] text-amber-300">El modo de protagonista fijo necesita imágenes: usa “Con imágenes” o “Directo con referencias”.</p>}
-                          {directReferenceVideo && (
-                            <div className={`rounded-md border p-2 text-[9px] leading-relaxed ${directReferenceVideoReady
-                              ? 'border-emerald-500/35 bg-emerald-500/5 text-emerald-100'
-                              : 'border-amber-500/40 bg-amber-500/5 text-amber-200'}`}>
-                              {directReferenceVideoReady
-                                ? `${approvedVisualReferenceCount} approved image${approvedVisualReferenceCount === 1 ? '' : 's'} will be routed by character/location labels directly into H3 Ref2VA. The image model is not run.`
-                                : directReferenceVideoSupported
-                                  ? 'Approve at least one image in Imágenes before generating.'
-                                  : 'Choose a MiniMax H3 video model; this mode is unavailable for LTX and other start-frame models.'}
-                            </div>
-                          )}
-                          {directMusicVideo && (
-                            <div className="block text-[10px] text-violet-200">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span>Prompt maestro de mundo y estilo<span className="ml-1 text-violet-300" title="Required">●</span></span>
-                                <span className={`rounded-full border px-1.5 py-0.5 text-[9px] ${project.directVideoMasterPromptMode === 'inherit'
-                                  ? 'border-violet-400/50 bg-violet-500/10 text-violet-200'
-                                  : 'border-sky-400/50 bg-sky-500/10 text-sky-200'}`}>
-                                  {project.directVideoMasterPromptMode === 'inherit' ? 'Heredado de estilos' : 'Personalizado'}
-                                </span>
-                                {project.directVideoMasterPromptMode === 'custom' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => patch({ directVideoMasterPromptMode: 'inherit' })}
-                                    className="ml-auto inline-flex items-center gap-1 rounded border border-violet-400/45 px-1.5 py-0.5 text-[9px] text-violet-200 hover:bg-violet-500/15"
-                                    title="Reemplazar el prompt personalizado por los estilos actuales del proyecto"
-                                  >
-                                    <RefreshCcw size={10} /> Usar estilos actuales
-                                  </button>
-                                )}
-                              </div>
-                              <textarea
-                                className={`${input} ${requiredInput} mt-1 min-h-36 resize-y leading-relaxed`}
-                                value={project.directVideoMasterPrompt}
-                                onChange={event => patch({
-                                  directVideoMasterPromptMode: 'custom',
-                                  directVideoMasterPrompt: event.target.value,
-                                })}
-                                placeholder="Este contrato se repetirá completo en cada clip y segmento"
-                                required
-                                aria-required="true"
-                              />
-                              <span className={`mt-1 block text-[9px] leading-relaxed ${directVideoMasterReady ? 'text-fuchsia-200/80' : 'text-amber-300'}`}>
-                                {directVideoMasterReady
-                                  ? project.directVideoMasterPromptMode === 'inherit'
-                                    ? 'Se actualiza automáticamente desde Estilo visual y Estilo visual de los personajes. Al editarlo pasa a Personalizado. No se enviarán imágenes ni referencias H3.'
-                                    : 'Prompt personalizado: el LLM sólo añadirá la situación concreta. No se enviarán imágenes ni referencias H3.'
-                                  : 'Completa Estilo visual o escribe aquí un prompt maestro antes de generar.'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="rounded-lg border border-border bg-bg-tertiary/40 p-2.5 space-y-2">
-                          <div>
-                            <p className="text-[10px] font-medium text-text-secondary">Generation models</p>
-                            <p className="mt-0.5 text-[9px] text-text-muted">These exact choices are sent to Director and saved with this music-video production for later iterations.</p>
-                          </div>
-                          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                            <label className="block text-[10px] text-text-muted">Planning LLM
-                              <select
-                                className={`${input} mt-1`}
-                                value={project.provider.writingProvider}
-                                onChange={event => setMusicWritingProvider(event.target.value as StoryWritingProvider)}
-                              >
-                                <option value="maestro">HocusPocus internal</option>
-                                <option value="deepseek">DeepSeek</option>
-                                <option value="minimax">MiniMax</option>
-                                <option value="openai">OpenAI</option>
-                                <option value="openai-compatible">Custom OpenAI-compatible</option>
-                              </select>
-                            </label>
-                            {project.provider.writingProvider !== 'maestro' && (
-                              <label className="block text-[10px] text-text-muted">LLM model
-                                {project.provider.writingProvider === 'deepseek' ? (
-                                  <select className={`${input} mt-1`} value={project.provider.writingModel || 'deepseek-v4-pro'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
-                                    <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
-                                    <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
-                                  </select>
-                                ) : project.provider.writingProvider === 'minimax' ? (
-                                  <select className={`${input} mt-1`} value={project.provider.writingModel || 'MiniMax-M3'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
-                                    <option value="MiniMax-M3">MiniMax M3</option>
-                                    <option value="MiniMax-M2.7">MiniMax M2.7</option>
-                                    <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed</option>
-                                  </select>
-                                ) : (
-                                  <input className={`${input} mt-1`} value={project.provider.writingModel} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })} />
-                                )}
-                              </label>
-                            )}
-                            {directMusicVideo || directReferenceVideo ? (
-                              <div className="rounded-md border border-fuchsia-500/25 bg-fuchsia-500/5 px-2 py-1.5 text-[10px] text-text-muted">
-                                <span className="block font-medium text-fuchsia-200">Image model · no usado</span>
-                                <span className="mt-1 block text-[9px]">
-                                  {directReferenceVideo
-                                    ? 'No crea start frames: envía únicamente las referencias aprobadas directamente a H3 Ref2VA.'
-                                    : 'No se generará, cargará ni enviará ninguna imagen.'}
-                                </span>
-                              </div>
-                            ) : (
-                              <label className="block text-[10px] text-text-muted">Image model
-                                <select className={`${input} mt-1`} value={filmImageModel} onChange={event => selectDirectorImageModel(event.target.value)}>
-                                  {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
-                                    <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
-                                  )}
-                                  <optgroup label="External API">
-                                    <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
-                                  </optgroup>
-                                  <optgroup label="HocusPocus local">
-                                    {selectableImageModels.map(model => (
-                                      <option key={model.model_type} value={model.model_type}>{model.name}</option>
-                                    ))}
-                                  </optgroup>
-                                </select>
-                              </label>
-                            )}
-                            <label className="block text-[10px] text-text-muted">Video model
-                              <select
-                                className={`${input} mt-1`}
-                                value={filmVideoModel}
-                                disabled={project.provider.useGlobalProfile || !storyVideoOptionsReady}
-                                onChange={event => selectStoryVideoModel(event.target.value)}
-                              >
-                                {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && (
-                                  <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>
-                                )}
-                                {selectableVideoModels.map(model => (
-                                  <option key={model.model_type} value={model.model_type}>
-                                    {model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}
-                                  </option>
-                                ))}
-                              </select>
-                              <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
-                                {!storyVideoOptionsReady
-                                  ? 'Checking this model’s supported formats…'
-                                  : project.provider.useGlobalProfile
-                                    ? 'Inherited from the global production profile. Choose “Override in this project” above to make a Story-only selection.'
-                                    : filmVideoModel === 'minimax_h3_legacy'
-                                  ? 'H3 Legacy Quality renders 20 full quality steps per shot. At 720p this can take tens of minutes; 540p/480p or a Turbo-capable H3 variant is the faster choice.'
-                                  : filmVideoModel.startsWith('ltx2')
-                                  ? 'LTX also downloads/loads Gemma 3 12B as its required text encoder. Gemma is not another selected model.'
-                                  : 'This exact MiniMax H3 selection is saved only in this Story and sent to Director when production opens.'}
-                              </span>
-                            </label>
-                            <StoryVideoFormatControls
-                              videoModel={filmVideoModel}
-                              resolution={storyVideoResolution}
-                              aspectRatio={storyVideoAspectRatio}
-                              options={storyVideoOptions}
-                              disabled={!storyVideoOptionsReady}
-                              inherited={project.provider.useGlobalProfile}
-                              adjusted={storyVideoFormat.adjusted}
-                              onChange={setStoryVideoFormat}
-                            />
-                          </div>
-                          {project.provider.writingProvider === 'openai-compatible' && (
-                            <label className="block text-[10px] text-text-muted">Compatible API base URL
-                              <input className={`${input} mt-1`} value={project.provider.writingBaseUrl} onChange={event => patchMusicWritingProvider({ writingBaseUrl: event.target.value })} placeholder="https://…/v1" />
-                            </label>
-                          )}
-                          <p className={`text-[9px] ${musicWritingReady && musicVideoImageReady && directVideoMasterReady && directReferenceVideoReady ? 'text-text-muted' : 'text-amber-300'}`}>
-                            {musicWritingReady && musicVideoImageReady && directVideoMasterReady && directReferenceVideoReady
-                              ? directMusicVideo
-                                ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'HocusPocus internal' : project.provider.writingModel} · T2V without images · ${selectedFilmVideoModel?.name || filmVideoModel}`
-                                : directReferenceVideo
-                                  ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'HocusPocus internal' : project.provider.writingModel} · ${approvedVisualReferenceCount} approved references · ${selectedFilmVideoModel?.name || filmVideoModel}`
-                                : `Ready: ${project.provider.writingProvider === 'maestro' ? 'HocusPocus internal' : project.provider.writingModel} · ${selectedFilmImageModel?.name || filmImageModel} · ${selectedFilmVideoModel?.name || filmVideoModel}`
-                              : !musicWritingReady
-                                ? 'Configure the selected planning LLM in Settings → Services before generating.'
-                                : !directVideoMasterReady
-                                  ? 'Define the direct-video master prompt before generating.'
-                                  : !directReferenceVideoReady
-                                    ? directReferenceVideoSupported
-                                      ? 'Approve at least one image in the visual reference library.'
-                                      : 'Direct references require a MiniMax H3 video model.'
-                                  : 'Configure MiniMax in Settings → Services before using MiniMax Image.'}
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setMusicProductionMode('full')}
-                            className={`${button} flex-col ${musicProductionMode === 'full' ? 'border-pink-500/60 text-pink-300' : ''}`}
-                          >
-                            <span>Complete music video</span>
-                            <span className="text-[9px] text-text-muted">Uses the entire song</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMusicProductionMode('trailer')}
-                            className={`${button} flex-col ${musicProductionMode === 'trailer' ? 'border-pink-500/60 text-pink-300' : ''}`}
-                          >
-                            <span>Musical trailer</span>
-                            <span className="text-[9px] text-text-muted">Uses a selected excerpt</span>
-                          </button>
-                        </div>
-                        {musicProductionMode === 'trailer' && selectedMusicOption && (
-                          <AudioRangeSelector
-                            key={selectedMusicOption.candidate.id}
-                            src={api.getPlayableFileUrl(selectedMusicOption.candidate.source, selectedMusicOption.candidate.name, activeWorkspace)}
-                            durationHint={selectedMusicOption.candidate.durationSeconds}
-                            start={musicTrailerRange.start}
-                            end={musicTrailerRange.end}
-                            onChange={setMusicTrailerRange}
-                          />
-                        )}
-                        <div>
-                          <div className="mb-1.5 flex items-center justify-between">
-                            <span className="text-[10px] text-text-muted">Editing rhythm</span>
-                            <span className="text-[9px] text-text-muted">Balanced is recommended</span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-1.5">
-                            {([
-                              ['cinematic', 'Cinematic', '8–16s'],
-                              ['balanced', 'Balanced', '5–8s'],
-                              ['rhythmic', 'Rhythmic', '3–5s'],
-                            ] as const).map(([value, label, duration]) => (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() => setMusicProductionPacing(value)}
-                                className={`${button} flex-col ${musicProductionPacing === value ? 'border-pink-500/60 text-pink-300' : ''}`}
-                              >
-                                <span>{label}</span><span className="text-[9px] text-text-muted">{duration}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <label className="flex items-start gap-2 rounded-md border border-border bg-bg-tertiary/40 p-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={project.allowClipText}
-                            onChange={event => patch({ allowClipText: event.target.checked })}
-                            className="mt-0.5 accent-pink-400"
-                          />
-                          <span>
-                            <span className="block text-[10px] font-medium text-text-secondary">Permitir generar clips con textos</span>
-                            <span className="block text-[9px] leading-relaxed text-text-muted">Si está desactivado, las letras solo guían el ritmo, la interpretación y el significado visual; nunca se copian como texto dentro del plano.</span>
-                          </span>
-                        </label>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <button
-                            className={`${button} ${completeGenerationButton} w-full`}
-                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !protagonistReferenceReady || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady || !directReferenceVideoReady || !storyVideoConfigurationReady}
-                            onClick={() => void stageMusicVideo(true)}
-                          >
-                            {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                            Generate {musicProductionMode === 'trailer' ? 'musical trailer' : 'complete music video'}
-                          </button>
-                          <button
-                            className={`${button} w-full`}
-                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !protagonistReferenceReady || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady || !directReferenceVideoReady || !storyVideoConfigurationReady}
-                            onClick={() => void stageMusicVideo(false)}
-                          >
-                            <ChevronRight size={13} /> Open {musicProductionMode === 'trailer' ? 'trailer' : 'music video'} in Director
-                          </button>
-                        </div>
-                        <p className="text-[9px] text-text-muted">
-                          {directMusicVideo
-                            ? 'The selected song, structured lyrics, direct-video master prompt and pacing are saved in Adaptation history. Images remain in the Story library but are not sent to this production.'
-                            : directReferenceVideo
-                              ? 'The selected song, structured lyrics, approved custom references and pacing are saved in Adaptation history. H3 Ref2VA receives them directly without generating start images.'
-                            : 'The selected song, structured lyrics, focus character/world, approved images and pacing are saved in Adaptation history and can be reopened independently.'}
-                        </p>
-                      </>
-                    ) : (
-                      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
-                        No generated or imported songs are available yet.{' '}
-                        <button type="button" className="underline" onClick={() => setTab('music')}>Open Music</button>
-                        {' '}to generate with MiniMax or import a Google Lyria result.
-                      </div>
-                    )}
-                  </div>
-                  )}
-                  <div className="hidden" aria-hidden="true">
-                    <Music size={26} className="text-pink-400" />
-                    <h3 className="font-semibold text-text-primary">Musical trailer</h3>
-                    <p className="text-xs text-text-muted">Turns the Story into a song-led video. HocusPocus analyzes the selected track’s duration, BPM, sections and beats, then plans cuts to fit the complete song.</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="block text-[10px] text-text-muted">Generation mode
-                        <select className={`${input} mt-1`} value={project.music.mode}
-                          onChange={event => patch({ music: { ...project.music, mode: event.target.value === 'cover' ? 'cover' : 'original' } })}>
-                          <option value="original">Original song</option>
-                          <option value="cover">Cover from reference</option>
-                        </select>
-                      </label>
-                      <label className="block text-[10px] text-text-muted">Song model
-                        <select className={`${input} mt-1`} value={project.music.mode === 'cover' ? 'music-cover' : project.music.model}
-                          disabled={project.music.mode === 'cover'}
-                          onChange={event => patch({ music: { ...project.music, model: normalizeStoryMusicModel(event.target.value) } })}>
-                          {project.music.mode === 'cover'
-                            ? <option value="music-cover">MiniMax Music Cover</option>
-                            : <>
-                              <option value={ACE_STEP_MUSIC_MODEL}>ACE-Step 1.5 XL · default</option>
-                              <option value="music-3.0">MiniMax Music 3.0 · unavailable to new accounts</option>
-                              <option value="music-2.6">MiniMax Music 2.6</option>
-                            </>}
-                        </select>
-                      </label>
-                    </div>
-                    {project.music.mode === 'cover' && (
-                      <div className="space-y-1.5 rounded-md border border-pink-500/30 bg-pink-500/5 p-2">
-                        <input ref={musicCoverRef} type="file" accept="audio/*" className="hidden"
-                          onChange={event => void uploadCoverReference(event.target.files?.[0])} />
-                        <button className={`${button} w-full`} disabled={productionBusy === 'music'}
-                          onClick={() => musicCoverRef.current?.click()}>
-                          <Upload size={13} /> {project.music.coverReferenceName ? 'Replace cover reference' : 'Upload cover reference'}
-                        </button>
-                        {project.music.coverReferenceName && <p className="text-[9px] text-pink-200">Reference: {project.music.coverReferenceName}</p>}
-                        <p className="text-[9px] text-text-muted">MiniMax accepts 6 seconds–6 minutes and up to 50 MB. Leave final lyrics empty to retain/extract the original, or provide your editable Story lyrics below.</p>
-                      </div>
-                    )}
-                    <textarea
-                      className={input}
-                      rows={6}
-                      value={project.music.brief || storySongBrief(project, project.music.targetDurationSeconds)}
-                      onChange={event => patch({ music: { ...project.music, brief: event.target.value } })}
-                      aria-label="Story song brief"
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="block text-[10px] text-text-muted">Approx. duration · seconds
-                        <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
-                          value={project.music.targetDurationSeconds}
-                          onChange={event => patch({ music: { ...project.music, targetDurationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) } })} />
-                      </label>
-                      <label className="block text-[10px] text-text-muted">Candidates
-                        <select className={`${input} mt-1`} value={project.music.candidateCount}
-                          onChange={event => patch({ music: { ...project.music, candidateCount: Number(event.target.value) === 3 ? 3 : 2 } })}>
-                          <option value={2}>2 songs</option>
-                          <option value={3}>3 songs</option>
-                        </select>
-                      </label>
-                    </div>
-                    <button className={`${button} w-full`} disabled={productionBusy === 'music'} onClick={() => void writeStorySong()}>
-                      {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Write song prompt + lyrics
-                    </button>
-                    <div className="space-y-1.5 rounded-md border border-border p-2">
-                      <textarea className={input} rows={6} value={project.music.sourceLyrics}
-                        placeholder="Optional source lyrics / section structure to adapt into this Story…"
-                        onChange={event => patch({ music: { ...project.music, sourceLyrics: event.target.value } })}
-                        aria-label="Source lyrics to adapt" />
-                      <button className={`${button} w-full`} disabled={productionBusy === 'music' || !project.music.sourceLyrics.trim()}
-                        onClick={() => void adaptStoryLyrics()}>
-                        <Sparkles size={13} /> Adapt lyrics automatically to this Story
-                      </button>
-                      <p className="text-[9px] text-text-muted">Creates new wording from the Story while preserving only broad structure and singability. Use source material you are allowed to adapt.</p>
-                    </div>
-                    {project.music.style && (
-                      <textarea className={input} rows={3} value={project.music.style}
-                        onChange={event => patch({ music: { ...project.music, style: event.target.value } })}
-                        aria-label="MiniMax Music style prompt" />
-                    )}
-                    {project.music.lyrics && (
-                      <textarea className={input} rows={8} value={project.music.lyrics}
-                        onChange={event => patch({ music: { ...project.music, lyrics: event.target.value } })}
-                        aria-label="Song lyrics" />
-                    )}
-                    <button className={`${button} ${completeGenerationButton} w-full`}
-                      disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
-                      onClick={() => void generateMinimaxSongs()}>
-                      {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
-                      Generate {project.music.candidateCount} {project.music.mode === 'cover' ? 'covers' : 'songs'} with {project.music.mode === 'cover' ? 'MiniMax Music Cover' : isAceStepMusicModel(project.music.model) ? 'ACE-Step' : project.music.model === 'music-2.6' ? 'MiniMax Music 2.6' : 'MiniMax Music 3.0'}
-                    </button>
-                    {!servicesConfig?.minimax_api_key_set && <p className="text-[9px] text-amber-300">Configure MiniMax in Settings → Services to generate candidates.</p>}
-                    <p className="text-[9px] text-text-muted">Optional local generation is also supported through Director’s internal ACE-Step engine; it can be selected instead of MiniMax without changing the video workflow.</p>
-                    {project.music.candidates.length > 0 && (
-                      <div className="space-y-2">
-                        {project.music.candidates.map(candidate => {
-                          const selected = project.music.selectedCandidateId === candidate.id
-                          const label = musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1)
-                          return (
-                            <div key={candidate.id} className={`rounded border p-2 space-y-1.5 ${selected ? 'border-pink-400 bg-pink-500/5' : 'border-border'}`}>
-                              <button type="button" onClick={() => patch({ music: { ...project.music, selectedCandidateId: candidate.id } })}
-                                className="w-full flex items-center justify-between text-[10px] text-left">
-                                <span className="text-text-primary">{label} · {candidate.model}</span>
-                                <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
-                              </button>
-                              <audio src={api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)} controls preload="metadata" className="w-full h-8" />
-                              <button className={`${button} w-full ${selected ? 'border-pink-500/50 text-pink-300' : ''}`}
-                                onClick={() => void openMusicalTrailer(candidate.id)} disabled={productionBusy === 'music' || !storyVideoConfigurationReady}>
-                                <Film size={12} /> Use this song in musical trailer
-                              </button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                    <button className={`${button} w-full`} onClick={() => void openMusicalTrailer()} disabled={productionBusy === 'music' || !storyVideoConfigurationReady}>
-                      <ChevronRight size={13} /> Open Musical Video Director
-                    </button>
-                    <p className="text-[9px] text-text-muted">Uploaded songs work too. Beat-aware cuts synchronize editing rhythm; generated motion itself is not guaranteed to hit every beat semantically.</p>
-                  </div>
-                </div>
-                {visibleProductionIssues.length > 0 && (
-                  <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
-                    <p className="font-medium">Falta revisar {visibleProductionIssues.length === 1 ? 'un apartado' : `${visibleProductionIssues.length} apartados`} antes de generar.</p>
-                    <p className="mt-1 text-[10px] leading-relaxed text-amber-200/80">
-                      {directMusicVideo && project.projectType === 'music_video'
-                        ? 'Estás en vídeo directo: sólo se aprueban textos y descripciones; no necesitas generar ni seleccionar imágenes.'
-                        : 'Abre cada pendiente, revisa su contenido y pulsa Aprobar. No se genera nada al aprobar.'}
-                    </p>
-                    <div className="mt-2 grid gap-1.5 md:grid-cols-2">
-                      {visibleProductionIssues.map(issue => (
-                        <button key={issue.id} type="button" onClick={() => openProductionReviewIssue(issue)}
-                          className="flex items-start gap-2 rounded-md border border-amber-400/25 bg-bg-primary/30 px-2.5 py-2 text-left hover:border-amber-300/60 hover:bg-amber-500/10">
-                          <ChevronRight size={14} className="mt-0.5 shrink-0" />
-                          <span>
-                            <span className="block font-medium">{issue.label}</span>
-                            <span className="mt-0.5 block text-[9px] leading-relaxed text-text-muted">{issue.detail}</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {project.productions.length > 0 && <div className={`${panel} mt-4 flex flex-wrap items-center gap-3`}><div className="mr-auto"><h3 className="text-sm font-semibold text-text-primary">Hay {project.productions.length} producción{project.productions.length === 1 ? '' : 'es'} en el montaje</h3><p className="mt-1 text-[10px] text-text-muted">Ábrelas en orden, reprodúcelas completas y sustituye clips desde su posición.</p></div><button className={button} onClick={() => setTab('assembly')}><Play size={13} />Abrir montaje</button></div>}
-              </>
+              <StoryProductionsTab
+                project={project}
+                patch={patch}
+                workspace={activeWorkspace}
+                productionBusy={productionBusy}
+                comicDirection={comicDirection}
+                setComicDirection={setComicDirection}
+                comicPageCount={comicPageCount}
+                setComicPageCount={setComicPageCount}
+                comicPanelsPerPage={comicPanelsPerPage}
+                setComicPanelsPerPage={setComicPanelsPerPage}
+                stageComic={stageComic}
+                filmDirection={filmDirection}
+                setFilmDirection={setFilmDirection}
+                filmDuration={filmDuration}
+                setFilmDuration={setFilmDuration}
+                filmPreserveVisualStyle={filmPreserveVisualStyle}
+                setFilmPreserveVisualStyle={setFilmPreserveVisualStyle}
+                stageFilm={stageFilm}
+                musicProductionCandidateId={musicProductionCandidateId}
+                setMusicProductionCandidateId={setMusicProductionCandidateId}
+                musicCandidateOptions={musicCandidateOptions}
+                selectedMusicOption={selectedMusicOption}
+                musicProductionMode={musicProductionMode}
+                setMusicProductionMode={setMusicProductionMode}
+                musicProductionPacing={musicProductionPacing}
+                setMusicProductionPacing={setMusicProductionPacing}
+                musicTrailerRange={musicTrailerRange}
+                setMusicTrailerRange={setMusicTrailerRange}
+                stageMusicVideo={stageMusicVideo}
+                setMusicWritingProvider={setMusicWritingProvider}
+                patchMusicWritingProvider={patchMusicWritingProvider}
+                directVideo={directVideo}
+                directMusicVideo={directMusicVideo}
+                directReferenceVideo={directReferenceVideo}
+                approvedVisualReferenceCount={approvedVisualReferenceCount}
+                directReferenceVideoReady={directReferenceVideoReady}
+                directReferenceVideoSupported={directReferenceVideoSupported}
+                directVideoMasterReady={directVideoMasterReady}
+                protagonistReferenceReady={protagonistReferenceReady}
+                musicWritingReady={musicWritingReady}
+                musicVideoImageReady={musicVideoImageReady}
+                filmImageReady={filmImageReady}
+                filmGenerationImageReady={filmGenerationImageReady}
+                filmImageModel={filmImageModel}
+                filmVideoModel={filmVideoModel}
+                selectableImageModels={selectableImageModels}
+                selectableVideoModels={selectableVideoModels}
+                selectedFilmImageModel={selectedFilmImageModel}
+                selectedFilmVideoModel={selectedFilmVideoModel}
+                selectDirectorImageModel={selectDirectorImageModel}
+                selectStoryVideoModel={selectStoryVideoModel}
+                storyVideoOptionsReady={storyVideoOptionsReady}
+                storyVideoConfigurationReady={storyVideoConfigurationReady}
+                storyVideoResolution={storyVideoResolution}
+                storyVideoAspectRatio={storyVideoAspectRatio}
+                storyVideoOptions={storyVideoOptions}
+                storyVideoAdjusted={storyVideoFormat.adjusted}
+                setStoryVideoFormat={setStoryVideoFormat}
+                productionIssues={productionIssues}
+                musicProductionIssues={musicProductionIssues}
+                visibleProductionIssues={visibleProductionIssues}
+                onNavigate={setTab}
+                onOpenIssue={openProductionReviewIssue}
+                minimaxConfigured={Boolean(servicesConfig?.minimax_api_key_set)}
+                musicCoverRef={musicCoverRef}
+                uploadCoverReference={uploadCoverReference}
+                writeStorySong={writeStorySong}
+                adaptStoryLyrics={adaptStoryLyrics}
+                generateMinimaxSongs={generateMinimaxSongs}
+                openMusicalTrailer={openMusicalTrailer}
+              />
             )}
 
             {tab === 'assembly' && (
@@ -6696,317 +5385,5 @@ export function StoryLabPanel() {
         onChange={event => void uploadCustomMusic(event.target.files?.[0])} />
     </div>
     </StoryLabVisualsProvider>
-  )
-}
-
-function CompactVideoWorkspace({
-  project, update, busy, imageBusy, referenceBatchBusy, generateSection, approveSection,
-  isSectionApproved, generateVisual, upload, removeReference, navigate, requiresVisualIdentities,
-}: {
-  project: StoryProject
-  update: (updater: (project: StoryProject) => StoryProject) => void
-  busy: StoryGenerationScope | null
-  imageBusy: string
-  referenceBatchBusy: boolean
-  generateSection: (scope: StoryGenerationScope, options?: StoryGenerationOptions) => void
-  approveSection: (scope: keyof StoryProject['approvals']) => void
-  isSectionApproved: (scope: keyof StoryProject['approvals']) => boolean
-  generateVisual: (
-    target: { kind: 'world' | 'character' | 'location'; id?: string },
-    prompt: string,
-  ) => Promise<unknown>
-  upload: (target: { kind: 'world' | 'character' | 'location'; id?: string }) => void
-  removeReference: (target: 'world' | 'character' | 'location', targetId: string | undefined, assetId: string) => void
-  navigate: (tab: StoryTab) => void
-  requiresVisualIdentities: boolean
-}) {
-  const isMusicVideo = project.projectType === 'music_video'
-  const isTrailer = project.projectType === 'trailer'
-  const worldReady = Boolean(project.world.summary.trim() && project.world.visualLanguage.trim())
-  const castReady = project.characters.length > 0 && project.characters.every(character =>
-    character.approval === 'approved'
-    && (!requiresVisualIdentities
-      || Boolean(character.primaryReferenceAssetId
-        && project.assets[character.primaryReferenceAssetId]?.approval === 'approved')))
-  const sequenceReady = project.beats.length >= 3 && project.beats.every(beat =>
-    Boolean(beat.summary.trim() && beat.conflict.trim() && beat.turn.trim()))
-  const status = (ready: boolean, approved: boolean) => (
-    <span className={`rounded-full border px-2 py-1 text-[9px] ${ready
-      ? approved ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
-      : 'border-border bg-bg-tertiary text-text-muted'}`}>
-      {ready ? approved ? 'Aprobado' : 'Listo para aprobar' : 'Pendiente'}
-    </span>
-  )
-
-  return (
-    <section className={`${panel} mt-4 ${isMusicVideo ? 'border-pink-500/25' : 'border-cyan-500/25'}`}>
-      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <p className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${isMusicVideo ? 'text-pink-300' : 'text-cyan-300'}`}>
-            Mesa de preparación
-          </p>
-          <h3 className="mt-1 text-base font-semibold text-text-primary">
-            {isMusicVideo ? 'Imágenes y secuencia del videoclip' : isTrailer ? 'Mundo, protagonistas y arco del tráiler' : 'Imágenes y secuencia del vídeo rápido'}
-          </h3>
-          <p className="mt-1 max-w-3xl text-xs text-text-muted">
-            {isMusicVideo
-              ? 'Aquí sólo viven el entorno visual, el artista o protagonistas y los momentos que acompañarán la canción. No necesitas una biblia de mundo ni relaciones dramáticas.'
-              : isTrailer
-                ? 'Aquí se prepara el material de una película que el tráiler podrá prometer: mundo, protagonistas, amenaza, escalada y gancho final. No depende de ninguna canción.'
-              : 'Aquí sólo viven la localización, las personas que deben aparecer y la sucesión breve de acciones o diálogo. Los campos internos compatibles con Director se mantienen detrás de esta vista.'}
-          </p>
-          <p className="mt-2 rounded-md border border-accent-blue/20 bg-accent-blue/5 px-2.5 py-1.5 text-[9px] leading-relaxed text-text-muted">
-            <span className="font-medium text-accent-blue">“Solo texto” usa únicamente el LLM.</span> Conserva las referencias y no renderiza imágenes. Los botones “+ imágenes”, “Generar imagen” y “Crear identidad” sí ejecutan el proveedor visual y pueden consumir créditos.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button className={button} onClick={() => navigate('assets')}><ImagePlus size={13} /> Importar imágenes</button>
-          {isMusicVideo && <button className={button} onClick={() => navigate('music')}><Music size={13} /> Editar canción</button>}
-          <button className={`${button} border-accent-blue/60 text-accent-blue`} onClick={() => navigate(isTrailer ? 'trailer' : 'productions')}><Film size={13} /> {isTrailer ? 'Crear tráiler' : 'Ir a generar'}</button>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <article id="story-review-world" className="scroll-mt-4 rounded-xl border border-border bg-bg-primary/35 p-3 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h4 className="text-sm font-semibold text-text-primary">1 · Entorno y dirección visual</h4>
-              <p className="text-[9px] text-text-muted">Una base visual reutilizable, no una sección de worldbuilding.</p>
-            </div>
-            {status(worldReady, isSectionApproved('world'))}
-          </div>
-          <Field label={isMusicVideo ? 'Escenario visual del videoclip' : isTrailer ? 'Mundo cinematográfico' : 'Localización del vídeo'} value={project.world.summary}
-            onChange={summary => update(current => { current.world.summary = summary; return current })} rows={3} />
-          <Field label="Iluminación, paleta y lenguaje visual" value={project.world.visualLanguage}
-            onChange={visualLanguage => update(current => { current.world.visualLanguage = visualLanguage; return current })} rows={3} />
-          <Field label="Prompt para la imagen base" value={project.world.visualPrompt}
-            onChange={visualPrompt => update(current => { current.world.visualPrompt = visualPrompt; return current })} rows={4} />
-          <details className="rounded-md border border-border bg-bg-tertiary/35 p-2 text-[10px] text-text-muted">
-            <summary className="cursor-pointer text-text-secondary">Evitar en las imágenes y localizaciones adicionales</summary>
-            <div className="mt-3 space-y-3">
-              <Field label="Negative prompt" value={project.world.negativePrompt}
-                onChange={negativePrompt => update(current => { current.world.negativePrompt = negativePrompt; return current })} rows={3} />
-              <div className="flex items-center justify-between gap-2">
-                <span>{project.world.locations.length} localizaciones adicionales</span>
-                <button className={button} onClick={() => update(current => {
-                  current.world.locations.push({ id: storyId('location'), name: 'Nueva localización', purpose: '', description: '', visualPrompt: '', negativePrompt: '', referenceAssetIds: [] })
-                  return current
-                })}><Plus size={12} /> Añadir</button>
-              </div>
-              {project.world.locations.map((location, index) => (
-                <LocationEditor key={location.id} location={location} index={index} total={project.world.locations.length}
-                  project={project} update={update} />
-              ))}
-            </div>
-          </details>
-          <div className="flex flex-wrap gap-2">
-            <button className={`${button} ${!worldReady ? requiredPreparationButton : ''}`} disabled={Boolean(busy || referenceBatchBusy)} onClick={() => generateSection('world')}
-              title="Genera o reescribe sólo los textos del entorno mediante el LLM; no renderiza imágenes.">
-              {busy === 'world' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar entorno · solo texto
-            </button>
-            <button className={button} disabled={Boolean(imageBusy) || referenceBatchBusy || !project.world.visualPrompt.trim()}
-              onClick={() => void generateVisual({ kind: 'world' }, project.world.visualPrompt)}>
-              {imageBusy === 'world:world' ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} Generar imagen
-            </button>
-            <button className={button} onClick={() => upload({ kind: 'world' })}><Upload size={13} /> Añadir referencia</button>
-            <button className={`${button} ${isSectionApproved('world') ? 'border-emerald-500 text-emerald-400' : ''}`}
-              onClick={() => approveSection('world')}><Check size={13} /> {isSectionApproved('world') ? 'Aprobado' : 'Aprobar'}</button>
-          </div>
-          <ReferenceGallery ids={project.world.referenceAssetIds} assets={project.assets}
-            onRemove={id => removeReference('world', undefined, id)} />
-        </article>
-
-        <article id="story-review-characters" className="scroll-mt-4 rounded-xl border border-border bg-bg-primary/35 p-3 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h4 className="text-sm font-semibold text-text-primary">2 · {isMusicVideo ? 'Artista y sujetos' : isTrailer ? 'Protagonistas y antagonistas' : 'Protagonistas'}</h4>
-              <p className="text-[9px] text-text-muted">Sólo identidad, vestuario, aspecto y referencias que verá la cámara.</p>
-            </div>
-            {status(castReady, isSectionApproved('characters'))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button className={`${button} ${!castReady ? requiredPreparationButton : ''}`} disabled={Boolean(busy || referenceBatchBusy)} onClick={() => generateSection('characters')}
-              title="Genera o reescribe sólo los textos de los sujetos mediante el LLM; conserva sus imágenes.">
-              {busy === 'characters' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar sujetos · solo texto
-            </button>
-            <button className={`${button} ${!castReady ? requiredPreparationButton : ''}`}
-              disabled={Boolean(busy || imageBusy || referenceBatchBusy)}
-              onClick={() => generateSection('characters', { generateImages: true })}
-              title="Prepara las fichas de los sujetos y, después de aplicarlas, genera las imágenes de identidad que falten. Puede consumir créditos de imagen.">
-              {busy === 'characters' || referenceBatchBusy
-                ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-              Preparar sujetos + imágenes
-            </button>
-            <button className={button} onClick={() => update(current => { current.characters.push(emptyCharacter()); return current })}>
-              <Plus size={13} /> Añadir
-            </button>
-            <button className={`${button} ${isSectionApproved('characters') ? 'border-emerald-500 text-emerald-400' : ''}`}
-              onClick={() => approveSection('characters')}><Check size={13} /> {isSectionApproved('characters') ? 'Aprobados' : 'Aprobar conjunto'}</button>
-          </div>
-          <p className="rounded-md border border-violet-500/25 bg-violet-500/5 px-2.5 py-1.5 text-[9px] leading-relaxed text-text-muted">
-            {isTrailer
-              ? 'Para completar esta fase basta uno de los dos botones. Las imágenes son opcionales al escribir el tráiler; se necesitan después si eliges “Imágenes iniciales”, o puedes aportar referencias aprobadas para H3 Ref2VA.'
-              : 'Para completar esta fase basta uno de los dos botones; no pulses ambos. Las imágenes no son necesarias para escribir la canción: usa “+ imágenes” sólo si prepararás el videoclip con imágenes y “solo texto” para “Vídeo directo · sin imágenes”.'}
-          </p>
-          <div className="space-y-3">
-            {project.characters.map((character, index) => (
-              <CompactSubjectEditor key={character.id} character={character} index={index} total={project.characters.length}
-                project={project} update={update} imageBusy={imageBusy} generateVisual={generateVisual}
-                upload={() => upload({ kind: 'character', id: character.id })}
-                removeReference={id => removeReference('character', character.id, id)}
-                requiresVisualIdentity={requiresVisualIdentities} />
-            ))}
-            {!project.characters.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-text-muted">Genera o añade la primera persona que aparecerá en cámara.</p>}
-          </div>
-        </article>
-
-        <article id="story-review-structure" className="scroll-mt-4 rounded-xl border border-border bg-bg-primary/35 p-3 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h4 className="text-sm font-semibold text-text-primary">3 · {isMusicVideo ? 'Momentos visuales' : isTrailer ? 'Arco y momentos de tráiler' : 'Acciones y cortes'}</h4>
-              <p className="text-[9px] text-text-muted">{isMusicVideo ? 'La progresión visual que Director adaptará a las secciones de la canción.' : isTrailer ? 'Impacto, promesa, ruptura, escalada, respiración y gancho final sin revelar el desenlace.' : 'Una secuencia corta con principio, cambio y remate.'}</p>
-            </div>
-            {status(sequenceReady, isSectionApproved('structure'))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button className={`${button} ${!sequenceReady ? requiredPreparationButton : ''}`} disabled={Boolean(busy || referenceBatchBusy)} onClick={() => generateSection('structure')}
-              title="Genera o reescribe sólo la secuencia escrita mediante el LLM; no renderiza imágenes ni vídeo.">
-              {busy === 'structure' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar secuencia · solo texto
-            </button>
-            <button className={button} onClick={() => update(current => {
-              current.beats.push({ id: storyId('beat'), stage: '', title: 'Nuevo momento', summary: '', goal: '', conflict: '', turn: '' })
-              return current
-            })}><Plus size={13} /> Añadir momento</button>
-            <button className={`${button} ${isSectionApproved('structure') ? 'border-emerald-500 text-emerald-400' : ''}`}
-              onClick={() => approveSection('structure')}><Check size={13} /> {isSectionApproved('structure') ? 'Aprobada' : 'Aprobar secuencia'}</button>
-          </div>
-          <div className="space-y-2">
-            {project.beats.map((beat, index) => (
-              <CompactBeatEditor key={beat.id} beat={beat} index={index} total={project.beats.length} update={update} />
-            ))}
-            {!project.beats.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-text-muted">Genera la secuencia o añade el primer momento.</p>}
-          </div>
-        </article>
-      </div>
-    </section>
-  )
-}
-
-function CompactSubjectEditor({
-  character, index, total, project, update, imageBusy, generateVisual, upload, removeReference, requiresVisualIdentity,
-}: {
-  character: StoryCharacter
-  index: number
-  total: number
-  project: StoryProject
-  update: (updater: (project: StoryProject) => StoryProject) => void
-  imageBusy: string
-  generateVisual: (target: { kind: 'character'; id: string }, prompt: string) => Promise<unknown>
-  upload: () => void
-  removeReference: (id: string) => void
-  requiresVisualIdentity: boolean
-}) {
-  const set = (change: Partial<StoryCharacter>) => update(current => {
-    current.characters = current.characters.map(item => item.id === character.id
-      ? { ...item, approval: 'draft', ...change } : item)
-    return current
-  })
-  const primaryAsset = character.primaryReferenceAssetId
-    ? project.assets[character.primaryReferenceAssetId]
-    : undefined
-  const hasPrimary = primaryAsset?.approval === 'approved'
-  const canApprove = !requiresVisualIdentity || hasPrimary
-  return (
-    <div id={`story-review-character-${character.id}`} className="scroll-mt-4 rounded-lg border border-border bg-bg-tertiary/35 p-2.5 space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-text-primary">{character.name || 'Sin nombre'}</p>
-          <p className={`text-[9px] ${hasPrimary || !requiresVisualIdentity ? 'text-emerald-300' : 'text-amber-300'}`}>
-            {requiresVisualIdentity
-              ? hasPrimary ? 'Identidad principal aprobada' : 'Falta aprobar una imagen de identidad principal'
-              : 'Vídeo directo · la descripción es suficiente'}
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <button className={button} disabled={index === 0} title="Subir" onClick={() => update(current => { moveItem(current.characters, index, index - 1); return current })}><ChevronUp size={12} /></button>
-          <button className={button} disabled={index === total - 1} title="Bajar" onClick={() => update(current => { moveItem(current.characters, index, index + 1); return current })}><ChevronDown size={12} /></button>
-          <button className="p-1 text-red-400" title="Eliminar" onClick={() => update(current => {
-            current.characters = current.characters.filter(item => item.id !== character.id)
-            current.relationships = current.relationships.filter(item => item.fromCharacterId !== character.id && item.toCharacterId !== character.id)
-            pruneUnusedAssets(current)
-            return current
-          })}><Trash2 size={13} /></button>
-        </div>
-      </div>
-      <div className="grid sm:grid-cols-2 gap-2">
-        <Field label="Nombre" value={character.name} onChange={name => set({ name })} />
-        <Field label="Papel en cámara" value={character.role} onChange={role => set({ role })} />
-        <Field label="Aspecto reconocible" value={character.appearance} onChange={appearance => set({ appearance })} rows={3} />
-        <Field label="Vestuario y continuidad" value={character.wardrobe} onChange={wardrobe => set({ wardrobe })} rows={3} />
-        <div className="sm:col-span-2"><Field label="Prompt de identidad visual" value={character.visualPrompt} onChange={visualPrompt => set({ visualPrompt })} rows={4} /></div>
-      </div>
-      <details className="rounded border border-border px-2 py-1.5 text-[10px] text-text-muted">
-        <summary className="cursor-pointer text-text-secondary">Voz, motivación y restricciones opcionales</summary>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          <Field label="Voz / diálogo" value={character.voice} onChange={voice => set({ voice })} rows={2} />
-          <Field label="Motivación visible" value={character.desire} onChange={desire => set({ desire })} rows={2} />
-          <div className="sm:col-span-2"><Field label="Negative prompt" value={character.negativePrompt} onChange={negativePrompt => set({ negativePrompt })} rows={2} /></div>
-        </div>
-      </details>
-      <div className="flex flex-wrap gap-2">
-        <button className={button} disabled={Boolean(imageBusy) || !character.visualPrompt.trim()}
-          onClick={() => void generateVisual({ kind: 'character', id: character.id }, character.visualPrompt)}>
-          {imageBusy === `character:${character.id}` ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} {hasPrimary ? 'Crear variación' : 'Crear identidad'}
-        </button>
-        <button className={button} onClick={upload}><Upload size={13} /> Subir imágenes</button>
-        <button className={`${button} ${character.approval === 'approved' ? 'border-emerald-500 text-emerald-400' : ''}`}
-          disabled={!canApprove}
-          title={requiresVisualIdentity
-            ? hasPrimary ? 'Confirmar esta identidad para Director' : 'Selecciona y aprueba primero una imagen principal en Imágenes'
-            : 'Confirmar la descripción para el modo de vídeo directo'}
-          onClick={() => set({ approval: character.approval === 'approved' ? 'draft' : 'approved' })}>
-          <Check size={13} /> {requiresVisualIdentity
-            ? character.approval === 'approved' ? 'Identidad aprobada' : 'Aprobar identidad'
-            : character.approval === 'approved' ? 'Descripción aprobada' : 'Aprobar descripción'}
-        </button>
-      </div>
-      <ReferenceGallery ids={character.referenceAssetIds} assets={project.assets} primaryId={character.primaryReferenceAssetId}
-        onPrimary={primaryReferenceAssetId => set({ primaryReferenceAssetId })} onRemove={removeReference} />
-    </div>
-  )
-}
-
-function CompactBeatEditor({ beat, index, total, update }: {
-  beat: StoryBeat
-  index: number
-  total: number
-  update: (updater: (project: StoryProject) => StoryProject) => void
-}) {
-  const set = (change: Partial<StoryBeat>) => update(current => {
-    current.beats = current.beats.map(item => item.id === beat.id ? { ...item, ...change } : item)
-    return current
-  })
-  return (
-    <div className="rounded-lg border border-border bg-bg-tertiary/35 p-2.5 space-y-2">
-      <div className="flex items-center gap-2">
-        <span className="w-5 shrink-0 text-sm font-bold text-text-muted/60">{index + 1}</span>
-        <input className={input} value={beat.title} onChange={event => set({ title: event.target.value })} placeholder="Nombre del momento" aria-label={`Momento ${index + 1}`} />
-        <button className={button} disabled={index === 0} title="Subir" onClick={() => update(current => { moveItem(current.beats, index, index - 1); return current })}><ChevronUp size={12} /></button>
-        <button className={button} disabled={index === total - 1} title="Bajar" onClick={() => update(current => { moveItem(current.beats, index, index + 1); return current })}><ChevronDown size={12} /></button>
-        <button className="p-1 text-red-400" title="Eliminar" onClick={() => update(current => { current.beats = current.beats.filter(item => item.id !== beat.id); return current })}><Trash2 size={12} /></button>
-      </div>
-      <Field label="Qué vemos" value={beat.summary} onChange={summary => set({ summary })} rows={3} />
-      <div className="grid sm:grid-cols-2 gap-2">
-        <Field label="Tensión, obstáculo o impulso" value={beat.conflict} onChange={conflict => set({ conflict })} rows={2} />
-        <Field label="Cambio que deja para el siguiente corte" value={beat.turn} onChange={turn => set({ turn })} rows={2} />
-      </div>
-      <details className="rounded border border-border px-2 py-1.5 text-[10px] text-text-muted">
-        <summary className="cursor-pointer text-text-secondary">Sección musical / función opcional</summary>
-        <div className="mt-2 grid sm:grid-cols-2 gap-2">
-          <Field label="Sección o fase" value={beat.stage} onChange={stage => set({ stage })} />
-          <Field label="Objetivo del momento" value={beat.goal} onChange={goal => set({ goal })} rows={2} />
-        </div>
-      </details>
-    </div>
   )
 }

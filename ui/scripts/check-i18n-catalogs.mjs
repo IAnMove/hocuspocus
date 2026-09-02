@@ -53,6 +53,12 @@ const PILOT_FILES = [
   'src/features/stories/StoryCharactersTab.tsx',
   'src/features/stories/StoryStructureTab.tsx',
   'src/features/stories/StoryRelationshipsTab.tsx',
+  'src/features/stories/StoryMusicTab.tsx',
+  'src/features/stories/StoryTrailerTab.tsx',
+  'src/features/stories/StoryProductionsTab.tsx',
+  'src/features/stories/StoryProductionsMusicPanel.tsx',
+  'src/features/stories/CompactVideoWorkspace.tsx',
+  'src/features/stories/StoryVideoFormatControls.tsx',
 ]
 
 const FORBIDDEN = [
@@ -67,6 +73,10 @@ const FORBIDDEN = [
   'Dramatic structure',
   'Generate text',
   'Optional regeneration instruction…',
+  'Music bible',
+  'Cinematic trailer creator',
+  'Generate / refresh Lyria prompt',
+  'Import custom MP3',
 ]
 
 export function forbiddenLiterals() {

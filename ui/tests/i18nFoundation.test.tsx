@@ -67,6 +67,10 @@ test('required glossary keys exist in both languages', async () => {
     ['storyLab', 'characters.title'],
     ['storyLab', 'structure.title'],
     ['storyLab', 'relationships.title'],
+    ['storyLab', 'music.title'],
+    ['storyLab', 'trailer.title'],
+    ['storyLab', 'productions.title'],
+    ['storyLab', 'compact.musicTitle'],
   ]
   for (const language of ['en', 'es']) {
     await i18n.changeLanguage(language)

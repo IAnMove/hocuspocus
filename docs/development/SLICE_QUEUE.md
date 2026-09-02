@@ -15,7 +15,7 @@ Canonical sources in git:
 Working notes under `comunicaciones/` are session handoff only. They are
 gitignored and are not canonical.
 
-## Landed on main (as of #87)
+## Landed on main (as of #88)
 
 Asset-manifest v1 writers: Studio generate (simulated, WGP, H3, SFX), Tools
 upscale/revoice, Recast/Repaint/Outpaint, MiniMax image, Series assembly, 3D,
@@ -39,7 +39,7 @@ Story Lab: shared `ReferenceGallery`, `LocationEditor`, `CharacterEditor`,
 `BeatEditor`, `storyLabVisuals` and `StoryLabVisualsProvider`. World, characters,
 relationships and structure tabs import those modules instead of receiving
 16 props. Visible copy on those tabs lives in the `storyLab` namespace
-(EN+ES). Compact music/trailer/quick-video prep still sits in the panel.
+(EN+ES).
 
 i18n: foundation + Extra info inspector + Extra info video dialog (`extraInfo`
 namespace) + Assets catalog list chrome + Story Lab simple tabs (`storyLab`).
@@ -48,11 +48,12 @@ namespace) + Assets catalog list chrome + Story Lab simple tabs (`storyLab`).
 
 1. **Domain provenance contract** — landed (#86).
 2. **Typed Zustand composition** — landed (#87).
-3. **Story Lab simple tabs** — this PR: shared gallery/editors/controller,
+3. **Story Lab simple tabs** — landed (#88): shared gallery/editors/controller,
    then Characters + Structure (and world/relationships i18n) without 16-prop
    drilling.
-4. **Story Lab Music + Productions**: keep Wizard E2E with that PR. Do not
-   fold compact prep into another tiny extract.
+4. **Story Lab Music + Productions** — this PR: Music, Trailer, Productions and
+   CompactVideoWorkspace leave `StoryLabPanel`, with `storyLab` EN+ES and the
+   Wizard live E2E left as the vocal-song → Director contract.
 5. **Backend by domain**: one complete router + services per PR (Assets, Music,
    Series, Comics, …). Preserve route-table ordinals. Do not split
    `_launch_runtime.py` by line count.
