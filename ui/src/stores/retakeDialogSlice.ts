@@ -1,3 +1,5 @@
+import type { SliceCreator } from './storeApi'
+
 export type RetakeDialogSlice = {
   retakeDialogOpen: boolean
   retakeSourceFile: string | null
@@ -5,15 +7,9 @@ export type RetakeDialogSlice = {
   closeRetakeDialog: () => void
 }
 
-type SetRetakeDialogState = (
-  partial: Partial<RetakeDialogSlice> | ((state: RetakeDialogSlice) => Partial<RetakeDialogSlice>),
-) => void
-
-export function createRetakeDialogSlice(set: SetRetakeDialogState): RetakeDialogSlice {
-  return {
-    retakeDialogOpen: false,
-    retakeSourceFile: null,
-    openRetakeDialog: filename => set({ retakeDialogOpen: true, retakeSourceFile: filename }),
-    closeRetakeDialog: () => set({ retakeDialogOpen: false, retakeSourceFile: null }),
-  }
-}
+export const createRetakeDialogSlice: SliceCreator<RetakeDialogSlice> = set => ({
+  retakeDialogOpen: false,
+  retakeSourceFile: null,
+  openRetakeDialog: filename => set({ retakeDialogOpen: true, retakeSourceFile: filename }),
+  closeRetakeDialog: () => set({ retakeDialogOpen: false, retakeSourceFile: null }),
+})

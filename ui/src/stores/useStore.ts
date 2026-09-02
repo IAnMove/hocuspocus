@@ -15,6 +15,7 @@ import { createDirectorSlice } from './directorSlice'
 import { createRetakeDialogSlice } from './retakeDialogSlice'
 import { createSettingsSlice } from './settingsSlice'
 import { createSidebarSlice } from './sidebarSlice'
+import { bindSlice } from './storeApi'
 import { createThemeSlice } from './themeSlice'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 import {
@@ -2322,25 +2323,21 @@ async function _syncGlobalProductionVideoFormat(
   })
 }
 
-export const useStore = create<AppState>((set, get) => ({
-  ...createDirectorSlice(partial => set(partial as never)),
-  ...createThemeSlice(
-    partial => set(partial as never),
-    () => get(),
-  ),
-  ...createSettingsSlice(
-    partial => set(partial as never),
-    () => get(),
-  ),
-  ...createSidebarSlice(
-    partial => set(partial as never),
-    () => get(),
-  ),
-  ...createRetakeDialogSlice(partial => set(partial as never)),
-  ...createDeveloperModeSlice(
-    partial => set(partial as never),
-    () => get(),
-  ),
+export const useStore = create<AppState>((set, get) => {
+  const developerMode = bindSlice(set, get, createDeveloperModeSlice)
+  return {
+  ...bindSlice(set, get, createDirectorSlice),
+  ...bindSlice(set, get, createThemeSlice),
+  ...bindSlice(set, get, createSettingsSlice),
+  ...bindSlice(set, get, createSidebarSlice),
+  ...bindSlice(set, get, createRetakeDialogSlice),
+  ...developerMode,
+  setDeveloperMode: (enabled: boolean) => {
+    developerMode.setDeveloperMode(enabled)
+    if (!enabled && get().mediaFilter === 'auditdev') {
+      get().setMediaFilter('all')
+    }
+  },
   // Generation mode
   generationMode: 'video',
   editSubMode: 'retake' as import('../types').EditSubMode,
@@ -3737,15 +3734,6 @@ export const useStore = create<AppState>((set, get) => ({
       return { enabledModels: next }
     })
   },
-  // Open Settings → Performance and ask the Enabled Models section to
-  // expand + scroll to the given mode (fired by the ModelSelector hint).
-  modelVisibilityFocus: null,
-  openModelVisibility: (mode) => set({
-    settingsOpen: true,
-    settingsTab: 'performance',
-    modelVisibilityFocus: mode,
-  }),
-  clearModelVisibilityFocus: () => set({ modelVisibilityFocus: null }),
   loadModels: async () => {
     try {
       // The backend catalog is the single source for Hunyuan3D models too:
@@ -10953,4 +10941,5 @@ export const useStore = create<AppState>((set, get) => ({
 
     setTimeout(poll, 1000)
   },
-}))
+  }
+})

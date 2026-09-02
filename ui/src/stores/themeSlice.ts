@@ -1,4 +1,5 @@
 import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
+import type { SliceCreator } from './storeApi'
 
 export type ThemeSlice = {
   themePrefs: ThemePrefs
@@ -6,24 +7,16 @@ export type ThemeSlice = {
   setThemeFamily: (family: FamilyId) => void
 }
 
-type SetThemeState = (
-  partial: Partial<ThemeSlice> | ((state: ThemeSlice) => Partial<ThemeSlice>),
-) => void
-
-type GetThemeState = () => ThemeSlice
-
-export function createThemeSlice(set: SetThemeState, get: GetThemeState): ThemeSlice {
-  return {
-    themePrefs: getStoredPrefs(),
-    setThemeMode: mode => {
-      const prefs = { ...get().themePrefs, mode }
-      applyThemePrefs(prefs)
-      set({ themePrefs: prefs })
-    },
-    setThemeFamily: family => {
-      const prefs = { ...get().themePrefs, family }
-      applyThemePrefs(prefs)
-      set({ themePrefs: prefs })
-    },
-  }
-}
+export const createThemeSlice: SliceCreator<ThemeSlice> = (set, get) => ({
+  themePrefs: getStoredPrefs(),
+  setThemeMode: mode => {
+    const prefs = { ...get().themePrefs, mode }
+    applyThemePrefs(prefs)
+    set({ themePrefs: prefs })
+  },
+  setThemeFamily: family => {
+    const prefs = { ...get().themePrefs, family }
+    applyThemePrefs(prefs)
+    set({ themePrefs: prefs })
+  },
+})

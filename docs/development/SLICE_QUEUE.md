@@ -24,10 +24,11 @@ recording, Video Editor screenshot/export, comic animatic.
 
 Sidecar failure: Hunyuan3D and Rig keep the GLB when provenance write fails.
 
-`useStore` slices (facade kept): theme, settings, developerMode, sidebar,
-retake dialog. `openModelVisibility` still lives in `useStore` because it
-writes settings fields. `developerModeSlice` still writes `mediaFilter` when
-leaving `auditdev`.
+`useStore` slices (facade kept): theme, settings (includes model-visibility
+focus), developerMode, sidebar, retake dialog. Slices bind through
+`bindSlice` without `as never`. `developerModeSlice` no longer writes
+`mediaFilter`; the facade still leaves `auditdev` when developer mode turns
+off.
 
 Story Lab: `relationships` and `world` tabs extracted. `StoryWorldTab` is an
 intermediate cut (too many props; `LocationEditor` / `ReferenceGallery` still
@@ -38,12 +39,10 @@ namespace) + Assets catalog list chrome.
 
 ## Next medium PRs
 
-1. **Domain provenance contract** (this track): `workspace_id` vs
-   `output_folder`, `GenerationProvenance` / `CommandContext`, initiator vs
-   provider/model, uniform sidecar-failure helper, Extra info timing keys.
-2. **Typed Zustand composition**: drop `as never`, typed slice merge, stop
-   cross-slice writes (`developerMode` → `mediaFilter`), extract 2–3 *related*
-   areas together.
+1. **Domain provenance contract** — landed (#86).
+2. **Typed Zustand composition** (this track): `bindSlice`, no `as never` at
+   compose time, settings owns model-visibility focus, developerMode does not
+   write `mediaFilter`.
 3. **Story Lab simple tabs**: extract shared `ReferenceGallery` /
    `LocationEditor` / controllers first, then Characters + Structure (and other
    purely visual tabs) in one PR, with i18n and tests. Do not pass 16 props.
