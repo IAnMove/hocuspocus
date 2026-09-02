@@ -1,0 +1,116 @@
+{
+  "chrome": {
+    "required": "Required",
+    "regeneratePlaceholder": "Optional regeneration instruction…",
+    "generateText": "Generate text",
+    "generateTextTitle": "Uses the LLM to generate or rewrite this section's text. It does not generate images.",
+    "approve": "Approve",
+    "approved": "Approved",
+    "approveTitle": "Confirms the current version of this section. It does not generate content.",
+    "llmHint": "LLM text only: generates or rewrites this section's fields and preserves existing image references; it does not render images. Guided mode lets you review the draft before applying it. Approve only confirms the current version."
+  },
+  "status": {
+    "draft": "Draft",
+    "approved": "Approved"
+  },
+  "gallery": {
+    "primary": "Primary",
+    "useAsPrimary": "Use as primary",
+    "enlarge": "Enlarge image",
+    "enlargeNamed": "Enlarge {{name}}",
+    "remove": "Remove image",
+    "removeNamed": "Remove {{name}}",
+    "untitled": "this image",
+    "removeConfirm": "Remove “{{name}}” from this block? If it is not used elsewhere, it will also be deleted from the Story Lab library.",
+    "previewFallback": "Story Lab image",
+    "previewAlt": "Enlarged Story Lab image",
+    "closePreview": "Close enlarged image"
+  },
+  "world": {
+    "title": "World bible",
+    "description": "Rules, places and a visual language that every production can reuse.",
+    "summary": "World summary",
+    "period": "Period",
+    "geography": "Geography",
+    "society": "Society",
+    "technology": "Technology",
+    "rules": "Rules — one per line",
+    "visualLanguage": "World-specific visual language (lighting, palette, motifs)",
+    "visualPrompt": "World concept content prompt",
+    "negativePrompt": "Negative visual prompt",
+    "generateConcept": "Generate world concept",
+    "generateAnotherConcept": "Generate another world concept",
+    "addReference": "Add reference",
+    "locations": "Locations",
+    "addLocation": "Location",
+    "newLocationName": "New location"
+  },
+  "location": {
+    "name": "Name",
+    "purpose": "Dramatic purpose",
+    "description": "Description",
+    "conceptPrompt": "Concept prompt",
+    "negativePrompt": "Negative prompt",
+    "generate": "Generate location",
+    "generateAnother": "Generate another location",
+    "addReference": "Add reference",
+    "moveUp": "Move location up",
+    "moveDown": "Move location down"
+  },
+  "characters": {
+    "title": "Characters",
+    "description": "Personality, dramatic function, voice and approved visual identity live together.",
+    "add": "Character",
+    "empty": "Generate the cast or add the first character manually.",
+    "newName": "New character",
+    "moveUp": "Move character up",
+    "moveDown": "Move character down",
+    "generateFirst": "Generate first identity",
+    "generateVariation": "Generate identity variation",
+    "upload": "Upload references",
+    "fields": {
+      "name": "Name",
+      "role": "Role",
+      "age": "Age",
+      "pronouns": "Pronouns",
+      "personality": "Personality",
+      "desire": "Desire",
+      "need": "Need",
+      "flaw": "Flaw",
+      "conflict": "Conflict",
+      "arc": "Arc",
+      "voice": "Voice / dialogue",
+      "appearance": "Appearance",
+      "wardrobe": "Wardrobe / continuity",
+      "visualPrompt": "Concept-art prompt",
+      "negativePrompt": "Negative visual prompt"
+    }
+  },
+  "structure": {
+    "title": "Dramatic structure",
+    "description": "A causal sequence: every beat changes the situation and motivates the next.",
+    "add": "Beat",
+    "remove": "Remove beat",
+    "moveUp": "Move beat up",
+    "moveDown": "Move beat down",
+    "newStage": "New beat",
+    "fields": {
+      "stage": "Stage",
+      "title": "Title",
+      "summary": "What happens",
+      "goal": "Dramatic goal",
+      "conflict": "Conflict",
+      "turn": "Turn / consequence"
+    }
+  },
+  "relationships": {
+    "title": "Relationships",
+    "description": "Conflict and change often live between characters, not inside isolated biographies.",
+    "add": "Relationship",
+    "from": "From",
+    "to": "To",
+    "label": "Relationship",
+    "dynamic": "Current dynamic",
+    "evolution": "How it changes"
+  }
+}

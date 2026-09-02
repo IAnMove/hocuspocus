@@ -7,6 +7,7 @@ from tests.api_client_source import api_client_source
 
 ROOT = Path(__file__).resolve().parents[1]
 STORY = ROOT / "ui" / "src" / "features" / "stories" / "StoryLabPanel.tsx"
+STORY_GALLERY = ROOT / "ui" / "src" / "features" / "stories" / "ReferenceGallery.tsx"
 ACTIVITY = ROOT / "ui" / "src" / "components" / "ActivityFooter.tsx"
 STORY_TYPES = ROOT / "ui" / "src" / "features" / "stories" / "types.ts"
 STORY_MODEL = ROOT / "ui" / "src" / "features" / "stories" / "model.ts"
@@ -160,11 +161,12 @@ def test_story_library_can_bulk_remove_only_selected_drafts():
 
 
 def test_story_reference_images_confirm_removal_and_open_in_a_modal():
+    gallery = STORY_GALLERY.read_text(encoding="utf-8")
     panel = STORY.read_text(encoding="utf-8")
-    gallery = panel.split("function ReferenceGallery", 1)[1].split(
-        "function SectionHeader", 1,
-    )[0]
 
+    assert "export function ReferenceGallery" in gallery
+    assert "function ReferenceGallery" not in panel
+    assert "from './ReferenceGallery'" in panel
     assert "window.confirm(" in gallery
     assert "createPortal(" in gallery
     assert "Maximize2" in gallery

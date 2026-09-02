@@ -10,6 +10,8 @@ function installDom() {
     document: dom.window.document,
     HTMLElement: dom.window.HTMLElement,
     HTMLButtonElement: dom.window.HTMLButtonElement,
+    HTMLInputElement: dom.window.HTMLInputElement,
+    HTMLTextAreaElement: dom.window.HTMLTextAreaElement,
     Event: dom.window.Event,
     MutationObserver: dom.window.MutationObserver,
   })
@@ -62,182 +64,267 @@ test('Story Lab navigation exposes every section in a scrollable mobile row', as
   cleanup()
 })
 
+function sectionHandlers(projectRef: { current: import('../src/features/stories/types').StoryProject }) {
+  const generated: string[] = []
+  const approved: string[] = []
+  return {
+    generated,
+    approved,
+    props: {
+      update: (updater: (project: typeof projectRef.current) => typeof projectRef.current) => {
+        projectRef.current = updater(structuredClone(projectRef.current))
+      },
+      busy: null,
+      instruction: '',
+      setInstruction: () => {},
+      generate: (scope: string) => { generated.push(scope) },
+      approve: (key: string) => { approved.push(key) },
+      isApproved: () => false,
+    },
+  }
+}
+
+function sampleCharacter(id: string, name: string) {
+  return {
+    id, name, role: 'Lead', age: '', pronouns: '', personality: '', desire: '', need: '',
+    flaw: '', conflict: '', arc: '', voice: '', appearance: '', wardrobe: '',
+    visualPrompt: 'Portrait of Ada', negativePrompt: '', referenceAssetIds: [] as string[], approval: 'draft' as const,
+  }
+}
+
+test('Story Lab panel uses shared editors instead of passing component props', async () => {
+  const { readFileSync } = await import('node:fs')
+  const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
+  const world = readFileSync(new URL('../src/features/stories/StoryWorldTab.tsx', import.meta.url), 'utf8')
+  const characters = readFileSync(new URL('../src/features/stories/StoryCharactersTab.tsx', import.meta.url), 'utf8')
+  const structure = readFileSync(new URL('../src/features/stories/StoryStructureTab.tsx', import.meta.url), 'utf8')
+  const chrome = readFileSync(new URL('../src/features/stories/storyLabChrome.tsx', import.meta.url), 'utf8')
+
+  assert.match(panel, /import \{ StoryLabVisualsProvider \} from '\.\/StoryLabVisualsProvider'/)
+  assert.match(panel, /import \{ ReferenceGallery \} from '\.\/ReferenceGallery'/)
+  assert.match(panel, /import \{ LocationEditor \} from '\.\/LocationEditor'/)
+  assert.match(panel, /import \{ StoryCharactersTab \} from '\.\/StoryCharactersTab'/)
+  assert.match(panel, /import \{ StoryStructureTab \} from '\.\/StoryStructureTab'/)
+  assert.equal(panel.includes('function ReferenceGallery'), false)
+  assert.equal(panel.includes('function LocationEditor'), false)
+  assert.equal(panel.includes('function CharacterEditor'), false)
+  assert.equal(panel.includes('function BeatEditor'), false)
+  assert.equal(panel.includes('ReferenceGallery={'), false)
+  assert.equal(panel.includes('LocationEditor={'), false)
+  assert.match(chrome, /export function SectionHeader/)
+  assert.match(world, /id="story-review-world"/)
+  assert.match(world, /useStoryLabVisuals/)
+  assert.match(characters, /id="story-review-characters"/)
+  assert.match(structure, /id="story-review-structure"/)
+})
+
 test('Story Lab relationships tab is extracted and keeps its review chrome', async () => {
   const { readFileSync } = await import('node:fs')
   const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
   const tab = readFileSync(new URL('../src/features/stories/StoryRelationshipsTab.tsx', import.meta.url), 'utf8')
-  const chrome = readFileSync(new URL('../src/features/stories/storyLabChrome.tsx', import.meta.url), 'utf8')
 
-  assert.match(panel, /import \{ StoryRelationshipsTab \} from '\.\/StoryRelationshipsTab'/)
-  assert.match(panel, /from '\.\/storyLabChrome'/)
-  assert.match(panel, /id: 'relationships'/)
-  assert.match(panel, /\{tab === 'relationships' && \(/)
   assert.match(panel, /<StoryRelationshipsTab/)
   assert.equal(panel.includes('id="story-review-relationships"'), false)
   assert.equal(panel.includes('function RelationshipEditor'), false)
-  assert.equal(panel.includes('function SectionHeader'), false)
-  assert.match(chrome, /export function SectionHeader/)
-  assert.match(tab, /id="story-review-relationships"/)
-  assert.match(tab, /Conflict and change often live between characters, not inside isolated biographies\./)
-  assert.match(tab, /function RelationshipEditor/)
+  assert.match(tab, /t\('relationships.description'\)/)
   assert.match(tab, /scope="relationships"/)
 
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { StoryRelationshipsTab } = await import('../src/features/stories/StoryRelationshipsTab.tsx')
   const { createStoryProject } = await import('../src/features/stories/model.ts')
-  const character = (id: string, name: string) => ({
-    id, name, role: '', age: '', pronouns: '', personality: '', desire: '', need: '',
-    flaw: '', conflict: '', arc: '', voice: '', appearance: '', wardrobe: '',
-    visualPrompt: '', negativePrompt: '', referenceAssetIds: [], approval: 'draft' as const,
-  })
-  let project = createStoryProject('full_story')
-  project = {
-    ...project,
-    characters: [character('c1', 'Ada'), character('c2', 'Ben')],
-    relationships: [{
-      id: 'rel-1', fromCharacterId: 'c1', toCharacterId: 'c2',
-      label: 'Rivals', dynamic: 'They compete', evolution: '',
-    }],
+  const projectRef = {
+    current: {
+      ...createStoryProject('full_story'),
+      characters: [sampleCharacter('c1', 'Ada'), sampleCharacter('c2', 'Ben')],
+      relationships: [{
+        id: 'rel-1', fromCharacterId: 'c1', toCharacterId: 'c2',
+        label: 'Rivals', dynamic: 'They compete', evolution: '',
+      }],
+    },
   }
-  const generated: string[] = []
-  const approved: string[] = []
+  const handlers = sectionHandlers(projectRef)
   const view = render(
-    <StoryRelationshipsTab
-      project={project}
-      update={updater => { project = updater(structuredClone(project)) }}
-      busy={null}
-      instruction=""
-      setInstruction={() => {}}
-      generate={scope => { generated.push(scope) }}
-      approve={key => { approved.push(key) }}
-      isApproved={() => false}
-    />,
+    <StoryRelationshipsTab project={projectRef.current} {...handlers.props} />,
   )
 
   assert.ok(document.getElementById('story-review-relationships'))
   assert.ok(screen.getByRole('heading', { name: 'Relationships' }))
   fireEvent.click(screen.getByRole('button', { name: /Generate text/ }))
   fireEvent.click(screen.getByRole('button', { name: /^Approve$/ }))
-  assert.deepEqual(generated, ['relationships'])
-  assert.deepEqual(approved, ['relationships'])
+  assert.deepEqual(handlers.generated, ['relationships'])
+  assert.deepEqual(handlers.approved, ['relationships'])
   assert.equal(screen.getByDisplayValue('Rivals').tagName, 'INPUT')
   fireEvent.click(screen.getByRole('button', { name: /Relationship/ }))
   view.rerender(
-    <StoryRelationshipsTab
-      project={project}
-      update={updater => { project = updater(structuredClone(project)) }}
-      busy={null}
-      instruction=""
-      setInstruction={() => {}}
-      generate={scope => { generated.push(scope) }}
-      approve={key => { approved.push(key) }}
-      isApproved={() => false}
-    />,
+    <StoryRelationshipsTab project={projectRef.current} {...handlers.props} />,
   )
-  assert.equal(project.relationships.length, 2)
+  assert.equal(projectRef.current.relationships.length, 2)
   cleanup()
 })
 
-test('Story Lab world tab is extracted and keeps its review chrome', async () => {
+test('Story Lab world tab uses the shared visuals controller', async () => {
   const { readFileSync } = await import('node:fs')
   const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
   const tab = readFileSync(new URL('../src/features/stories/StoryWorldTab.tsx', import.meta.url), 'utf8')
-  const chrome = readFileSync(new URL('../src/features/stories/storyLabChrome.tsx', import.meta.url), 'utf8')
-
-  assert.match(panel, /import \{ StoryWorldTab \} from '\.\/StoryWorldTab'/)
-  assert.match(panel, /from '\.\/storyLabChrome'/)
-  assert.match(panel, /id: 'world'/)
-  assert.match(panel, /\{tab === 'world' && \(/)
   assert.match(panel, /<StoryWorldTab/)
   assert.equal(panel.includes('World bible'), false)
-  assert.match(panel, /id="story-review-world"/)
-  assert.match(chrome, /export function SectionHeader/)
-  assert.match(tab, /id="story-review-world"/)
-  assert.match(tab, /Rules, places and a visual language that every production can reuse\./)
-  assert.match(tab, /scope="world"/)
-  assert.match(tab, /Generate world concept/)
+  assert.match(tab, /t\('world.generateConcept'\)/)
+  assert.equal(tab.includes('ReferenceGallery:'), false)
 
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { StoryWorldTab } = await import('../src/features/stories/StoryWorldTab.tsx')
+  const { StoryLabVisualsProvider } = await import('../src/features/stories/StoryLabVisualsProvider.tsx')
   const { createStoryProject } = await import('../src/features/stories/model.ts')
-  let project = createStoryProject('full_story')
-  project = {
-    ...project,
-    world: {
-      ...project.world,
-      summary: 'A rain-soaked port city',
-      visualLanguage: 'Sodium light and wet asphalt',
-      visualPrompt: 'Cinematic harbor at night',
-      locations: [{
-        id: 'loc-1', name: 'Harbor', purpose: 'Arrival', description: '', visualPrompt: '', negativePrompt: '', referenceAssetIds: [],
-      }],
+  const projectRef = {
+    current: {
+      ...createStoryProject('full_story'),
+      world: {
+        ...createStoryProject('full_story').world,
+        summary: 'A rain-soaked port city',
+        visualLanguage: 'Sodium light and wet asphalt',
+        visualPrompt: 'Cinematic harbor at night',
+        locations: [{
+          id: 'loc-1', name: 'Harbor', purpose: 'Arrival', description: '', visualPrompt: '', negativePrompt: '', referenceAssetIds: [],
+        }],
+      },
     },
   }
-  const generated: string[] = []
-  const approved: string[] = []
+  const handlers = sectionHandlers(projectRef)
   const visuals: Array<{ kind: string; prompt: string }> = []
   const uploads: Array<{ kind: string; id?: string }> = []
-  const clicks: string[] = []
-  const uploadRef = {
-    current: { click: () => { clicks.push('upload') } },
-  } as unknown as React.RefObject<HTMLInputElement | null>
-  const view = render(
-    <StoryWorldTab
-      project={project}
-      patch={patch => { project = { ...project, ...patch, world: patch.world ? { ...project.world, ...patch.world } : project.world } }}
-      update={updater => { project = updater(structuredClone(project)) }}
-      busy={null}
-      instruction=""
-      setInstruction={() => {}}
-      generate={scope => { generated.push(scope) }}
-      approve={key => { approved.push(key) }}
-      isApproved={() => false}
-      imageBusy=""
-      referenceBatchBusy={false}
-      generateVisual={(target, prompt) => { visuals.push({ kind: target.kind, prompt }) }}
-      setUploadTarget={target => { uploads.push(target) }}
-      uploadRef={uploadRef}
-      removeReference={() => {}}
-      ReferenceGallery={() => <div>World references</div>}
-      LocationEditor={({ location }) => <div>{location.name}</div>}
-    />,
+  const wrap = (node: React.ReactNode) => (
+    <StoryLabVisualsProvider value={{
+      imageBusy: '',
+      referenceBatchBusy: false,
+      generateVisual: (target, prompt) => { visuals.push({ kind: target.kind, prompt }) },
+      requestUpload: target => { uploads.push(target) },
+      removeReference: () => {},
+    }}>
+      {node}
+    </StoryLabVisualsProvider>
   )
+  const view = render(wrap(
+    <StoryWorldTab
+      project={projectRef.current}
+      patch={patch => {
+        projectRef.current = {
+          ...projectRef.current,
+          ...patch,
+          world: patch.world ? { ...projectRef.current.world, ...patch.world } : projectRef.current.world,
+        }
+      }}
+      {...handlers.props}
+    />,
+  ))
 
   assert.ok(document.getElementById('story-review-world'))
   assert.ok(screen.getByRole('heading', { name: 'World bible' }))
-  assert.ok(screen.getByText('Harbor'))
+  assert.ok(screen.getByDisplayValue('Harbor'))
   fireEvent.click(screen.getByRole('button', { name: /Generate text/ }))
   fireEvent.click(screen.getByRole('button', { name: /^Approve$/ }))
   fireEvent.click(screen.getByRole('button', { name: /Generate world concept/ }))
-  fireEvent.click(screen.getByRole('button', { name: /Add reference/ }))
-  assert.deepEqual(generated, ['world'])
-  assert.deepEqual(approved, ['world'])
+  fireEvent.click(screen.getAllByRole('button', { name: /^Add reference$/ })[0])
+  assert.deepEqual(handlers.generated, ['world'])
+  assert.deepEqual(handlers.approved, ['world'])
   assert.deepEqual(visuals, [{ kind: 'world', prompt: 'Cinematic harbor at night' }])
   assert.deepEqual(uploads, [{ kind: 'world' }])
-  assert.deepEqual(clicks, ['upload'])
-  fireEvent.click(screen.getByRole('button', { name: /Location/ }))
-  view.rerender(
+  fireEvent.click(screen.getByRole('button', { name: /^Location$/ }))
+  view.rerender(wrap(
     <StoryWorldTab
-      project={project}
-      patch={patch => { project = { ...project, ...patch, world: patch.world ? { ...project.world, ...patch.world } : project.world } }}
-      update={updater => { project = updater(structuredClone(project)) }}
-      busy={null}
-      instruction=""
-      setInstruction={() => {}}
-      generate={scope => { generated.push(scope) }}
-      approve={key => { approved.push(key) }}
-      isApproved={() => false}
-      imageBusy=""
-      referenceBatchBusy={false}
-      generateVisual={(target, prompt) => { visuals.push({ kind: target.kind, prompt }) }}
-      setUploadTarget={target => { uploads.push(target) }}
-      uploadRef={uploadRef}
-      removeReference={() => {}}
-      ReferenceGallery={() => <div>World references</div>}
-      LocationEditor={({ location }) => <div>{location.name}</div>}
+      project={projectRef.current}
+      patch={patch => {
+        projectRef.current = {
+          ...projectRef.current,
+          ...patch,
+          world: patch.world ? { ...projectRef.current.world, ...patch.world } : projectRef.current.world,
+        }
+      }}
+      {...handlers.props}
     />,
+  ))
+  assert.equal(projectRef.current.world.locations.length, 2)
+  assert.equal(projectRef.current.world.locations[1]?.name, 'New location')
+  cleanup()
+})
+
+test('Story Lab characters tab is extracted with i18n chrome', async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { StoryCharactersTab } = await import('../src/features/stories/StoryCharactersTab.tsx')
+  const { StoryLabVisualsProvider } = await import('../src/features/stories/StoryLabVisualsProvider.tsx')
+  const { createStoryProject } = await import('../src/features/stories/model.ts')
+  const projectRef = {
+    current: {
+      ...createStoryProject('full_story'),
+      characters: [sampleCharacter('c1', 'Ada')],
+    },
+  }
+  const handlers = sectionHandlers(projectRef)
+  const visuals: Array<{ kind: string; id?: string }> = []
+  const view = render(
+    <StoryLabVisualsProvider value={{
+      imageBusy: '',
+      referenceBatchBusy: false,
+      generateVisual: target => { visuals.push(target) },
+      requestUpload: () => {},
+      removeReference: () => {},
+    }}>
+      <StoryCharactersTab project={projectRef.current} {...handlers.props} />
+    </StoryLabVisualsProvider>,
   )
-  assert.equal(project.world.locations.length, 2)
-  assert.equal(project.world.locations[1]?.name, 'New location')
+
+  assert.ok(document.getElementById('story-review-characters'))
+  assert.ok(document.getElementById('story-review-character-c1'))
+  assert.ok(screen.getByRole('heading', { name: 'Characters' }))
+  fireEvent.click(screen.getByRole('button', { name: /Generate text/ }))
+  fireEvent.click(screen.getByRole('button', { name: /^Approve$/ }))
+  fireEvent.click(screen.getByRole('button', { name: /Generate first identity/ }))
+  assert.deepEqual(handlers.generated, ['characters'])
+  assert.deepEqual(handlers.approved, ['characters'])
+  assert.deepEqual(visuals, [{ kind: 'character', id: 'c1' }])
+  fireEvent.click(screen.getByRole('button', { name: /^Character$/ }))
+  view.rerender(
+    <StoryLabVisualsProvider value={{
+      imageBusy: '',
+      referenceBatchBusy: false,
+      generateVisual: target => { visuals.push(target) },
+      requestUpload: () => {},
+      removeReference: () => {},
+    }}>
+      <StoryCharactersTab project={projectRef.current} {...handlers.props} />
+    </StoryLabVisualsProvider>,
+  )
+  assert.equal(projectRef.current.characters.length, 2)
+  assert.equal(projectRef.current.characters[1]?.name, 'New character')
+  cleanup()
+})
+
+test('Story Lab structure tab is extracted with i18n chrome', async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { StoryStructureTab } = await import('../src/features/stories/StoryStructureTab.tsx')
+  const { createStoryProject } = await import('../src/features/stories/model.ts')
+  const projectRef = {
+    current: {
+      ...createStoryProject('full_story'),
+      beats: [{ id: 'beat-1', stage: 'Act I', title: 'Arrival', summary: 'They meet', goal: '', conflict: '', turn: '' }],
+    },
+  }
+  const handlers = sectionHandlers(projectRef)
+  const view = render(
+    <StoryStructureTab project={projectRef.current} {...handlers.props} />,
+  )
+
+  assert.ok(document.getElementById('story-review-structure'))
+  assert.ok(screen.getByRole('heading', { name: 'Dramatic structure' }))
+  fireEvent.click(screen.getByRole('button', { name: /Generate text/ }))
+  fireEvent.click(screen.getByRole('button', { name: /^Approve$/ }))
+  assert.deepEqual(handlers.generated, ['structure'])
+  assert.deepEqual(handlers.approved, ['structure'])
+  assert.equal(screen.getByDisplayValue('Arrival').tagName, 'INPUT')
+  fireEvent.click(screen.getByRole('button', { name: /^Beat$/ }))
+  view.rerender(
+    <StoryStructureTab project={projectRef.current} {...handlers.props} />,
+  )
+  assert.equal(projectRef.current.beats.length, 2)
+  assert.equal(projectRef.current.beats[1]?.stage, 'New beat')
   cleanup()
 })
