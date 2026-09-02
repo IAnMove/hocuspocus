@@ -670,6 +670,8 @@ function wait(ms: number): Promise<void> {
 export function VideoEditorPanel() {
   const { t } = useUiTranslation('videoEditor')
   const { t: tCommon } = useUiTranslation('common')
+  const tRef = useRef(t)
+  tRef.current = t
   const refreshOutputs = useStore(s => s.refreshOutputs)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const [draft] = useState(() => loadEditorDraft(activeWorkspace))
@@ -876,7 +878,7 @@ export function VideoEditorPanel() {
           }]
         : [])
     if (!pendingSources.length) {
-      setError(t('errors.handoffEmpty'))
+      setError(tRef.current('errors.handoffEmpty'))
       return
     }
 
@@ -894,20 +896,20 @@ export function VideoEditorPanel() {
       for (let index = 0; index < pendingSources.length; index++) {
         const item = pendingSources[index]
         setAddProgress(kind === 'sequence'
-          ? t('status.openingSeriesShot', { current: index + 1, total: pendingSources.length })
-          : t('status.openingNamed', { name: item.name || 'comic animatic' }))
+          ? tRef.current('status.openingSeriesShot', { current: index + 1, total: pendingSources.length })
+          : tRef.current('status.openingNamed', { name: item.name || 'comic animatic' }))
         nextClips.push(await createClipFromSource(item.url, item.url, item.name || `Series shot ${index + 1}`))
       }
 
       if (clips.length && !window.confirm(
         kind === 'sequence'
-          ? t('confirm.replaceMontage', { count: clips.length })
-          : t('confirm.addHandoff', { count: clips.length }),
+          ? tRef.current('confirm.replaceMontage', { count: clips.length })
+          : tRef.current('confirm.addHandoff', { count: clips.length }),
       )) return
 
       const committedClips = kind === 'sequence' ? nextClips : [...clips, ...nextClips]
       if (!persistEditorDraft(committedClips, nextProjectName, nextResolution, fps, draftWorkspaceRef.current)) {
-        throw new Error(t('errors.draftSave'))
+        throw new Error(tRef.current('errors.draftSave'))
       }
       setClips(committedClips)
       setSelectedId((kind === 'sequence' ? committedClips[0] : nextClips[0])?.id || null)
@@ -919,13 +921,13 @@ export function VideoEditorPanel() {
       setPendingHandoff(null)
       setError(null)
     } catch (reason) {
-      setError(t('errors.handoffOpen', { message: (reason as Error).message }))
+      setError(tRef.current('errors.handoffOpen', { message: (reason as Error).message }))
     } finally {
       handoffProcessingRef.current = false
       setAdding(false)
       setAddProgress('')
     }
-  }, [clips, createClipFromSource, fps, projectName, resolution, t])
+  }, [clips, createClipFromSource, fps, projectName, resolution])
 
   useEffect(() => {
     let pending: PendingEditorSource | null = null
@@ -1864,24 +1866,24 @@ export function VideoEditorPanel() {
       }
     } catch (reason) {
       if (mountedRef.current && epoch === exportPollEpochRef.current) {
-        setError(t('errors.reconnectExport', { jobId, message: (reason as Error).message }))
+        setError(tRef.current('errors.reconnectExport', { jobId, message: (reason as Error).message }))
       }
     } finally {
       if (exportPollingRef.current === jobId) exportPollingRef.current = null
     }
-  }, [activeWorkspace, refreshOutputs, t])
+  }, [activeWorkspace, refreshOutputs])
 
   useEffect(() => {
     exportPollEpochRef.current += 1
     exportPollingRef.current = null
     const jobId = readVideoEditorExportId(activeWorkspace)
-    setExportJob(jobId ? pendingVideoEditorExport(jobId, t('status.reconnecting')) : null)
+    setExportJob(jobId ? pendingVideoEditorExport(jobId, tRef.current('status.reconnecting')) : null)
     if (jobId) void pollExport(jobId)
     return () => {
       exportPollEpochRef.current += 1
       exportPollingRef.current = null
     }
-  }, [activeWorkspace, pollExport, t])
+  }, [activeWorkspace, pollExport])
 
   const startExport = async () => {
     if (!clips.length || exportSubmittingRef.current || isVideoEditorJobActive(exportJob)) return
