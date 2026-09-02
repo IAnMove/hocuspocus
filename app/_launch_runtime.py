@@ -612,8 +612,19 @@ def _new_generation_job(
                 f"{len(timeline['intervals'])} timed interval(s) across "
                 f"{timeline['duration_seconds']:.3f}s."
             )
+    resolved_job_id = job_id or uuid.uuid4().hex[:8]
+    canonical_task_id = f"task-generation-{resolved_job_id}"
+    owner_id = str(frozen_params.get("_director_pipeline_id") or "")
+    if owner_id.startswith("series:"):
+        canonical_root_task_id = f"task-series-render-{owner_id.split(':', 1)[1]}"
+    elif owner_id:
+        canonical_root_task_id = f"task-director-{owner_id}"
+    else:
+        canonical_root_task_id = canonical_task_id
     job = {
-        "id": job_id or uuid.uuid4().hex[:8],
+        "id": resolved_job_id,
+        "task_id": canonical_task_id,
+        "root_task_id": canonical_root_task_id,
         "status": "queued",
         "progress": 0,
         "step": 0,
@@ -642,8 +653,10 @@ def _new_generation_job(
         try:
             task = publisher(job)
             if isinstance(task, dict):
-                job["task_id"] = task.get("id")
-                job["root_task_id"] = task.get("root_id")
+                job["task_id"] = task.get("id") or job["task_id"]
+                job["root_task_id"] = (
+                    task.get("root_id") or task.get("id") or job["root_task_id"]
+                )
         except Exception as exc:
             print(f"[Task registry] Could not publish generation {job['id']}: {exc}")
     return job
