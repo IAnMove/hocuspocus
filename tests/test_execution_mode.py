@@ -251,6 +251,65 @@ def test_simulated_generation_writes_canonical_asset_manifest(tmp_path):
     assert loaded["technical"]["published_on_generate"] is True
 
 
+def test_tool_sidecar_publishes_canonical_manifest_without_invented_actor(tmp_path):
+    artifact = tmp_path / "clip.mp4"
+    artifact.write_bytes(b"video")
+    namespace = {
+        "os": os,
+        "time": time,
+        "publish_generation_sidecar": publish_generation_sidecar,
+    }
+    write = _load_launch_function("_write_tool_sidecar", namespace)
+    write(
+        str(tmp_path),
+        "clip.mp4",
+        source_name="source.mp4",
+        tool="upscale",
+        params={"method": "flashvsr2", "api_key": "secret"},
+        elapsed=1.5,
+        job_id="tool-job",
+        task_id="tool-task",
+        workspace="lab",
+    )
+    loaded = read_asset_manifest(artifact, workspace_id="lab")
+    raw = json.loads((tmp_path / "clip.meta.json").read_text(encoding="utf-8"))
+    assert loaded is not None
+    assert raw["schema"] == SCHEMA_NAME
+    assert raw["params"]["edit_sub_mode"] == "upscale"
+    assert "secret" not in (tmp_path / "clip.meta.json").read_text(encoding="utf-8")
+    assert loaded["origin"]["tool"] == "upscale"
+    assert loaded["origin"]["actor"] == "unknown"
+    assert loaded["origin"]["workspace_id"] == "lab"
+    assert loaded["execution"]["job_id"] == "tool-job"
+    assert loaded["execution"]["task_id"] == "tool-task"
+    first_id = loaded["asset"]["id"]
+    write(
+        str(tmp_path),
+        "clip.mp4",
+        source_name="source.mp4",
+        tool="upscale",
+        params={"method": "flashvsr2"},
+        elapsed=1.5,
+        job_id="tool-job",
+        workspace="lab",
+    )
+    other = tmp_path / "clip-b.mp4"
+    other.write_bytes(b"video-b")
+    write(
+        str(tmp_path),
+        "clip-b.mp4",
+        source_name="source.mp4",
+        tool="revoice",
+        params={"mode": "clone"},
+        elapsed=2,
+        job_id="tool-job-2",
+        workspace="lab",
+    )
+    assert read_asset_manifest(artifact, workspace_id="lab")["asset"]["id"] == first_id
+    assert read_asset_manifest(other, workspace_id="lab")["asset"]["id"] != first_id
+    assert read_asset_manifest(other, workspace_id="lab")["origin"]["tool"] == "revoice"
+
+
 def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     source = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(
         encoding="utf-8",
@@ -282,7 +341,7 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
                 return ast.get_source_segment(source, node)
         raise AssertionError(name)
 
-    for name in ("_run_simulated_generation", "_write_output_sidecars", "_run_sfx_generation"):
+    for name in ("_run_simulated_generation", "_write_output_sidecars", "_run_sfx_generation", "_write_tool_sidecar"):
         body = function_source(name)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
