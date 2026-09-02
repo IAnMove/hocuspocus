@@ -1,4 +1,131 @@
 {
+  "toolbar": {
+    "aria": "Herramientas del Video Editor",
+    "projectName": "Nombre del proyecto",
+    "import": "Importar",
+    "fromHocusPocus": "Desde HocusPocus",
+    "exportMp4": "Exportar MP4",
+    "cancelling": "Cancelando…"
+  },
+  "empty": {
+    "drop": "Suelta vídeos aquí o haz clic para importar",
+    "formats": "MP4, WebM, MOV, MKV, AVI · hasta 500 MB cada uno",
+    "firstVideo": "Añade tu primer vídeo"
+  },
+  "playback": {
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "playTitle": "Reproducir desde el clip, la transición o el cabezal seleccionados",
+    "restartTitle": "Volver al inicio",
+    "playheadAria": "Cabezal de la línea de tiempo",
+    "playheadValue": "{{time}} segundos",
+    "playheadSeconds": "Segundos del cabezal",
+    "split": "Dividir",
+    "splitTitle": "Divide el clip en el cabezal actual",
+    "screenshot": "Capturar fotograma",
+    "screenshotTitle": "Guarda el fotograma exacto de la fuente como un PNG reutilizable en las salidas de HocusPocus",
+    "screenshotSaved": "Guardado {{filename}} en {{time}} · {{width}}×{{height}}"
+  },
+  "preview": {
+    "aria": "Vista previa de exportación {{width}} por {{height}} píxeles, {{aspect}}",
+    "label": "Vista previa de exportación"
+  },
+  "inspector": {
+    "aria": "Inspector del Video Editor",
+    "output": "Salida",
+    "frameRate": "Fotogramas por segundo",
+    "fps": "{{value}} FPS",
+    "remove": "Quitar",
+    "removeTitle": "Quitar este vídeo de la línea de tiempo",
+    "redoInVideoCreation": "Rehacer en Creación de vídeo",
+    "redoInVideoCreationTitle": "Carga el prompt, modelo, duración y formato de este clip en Creación de vídeo para elegir después su reemplazo",
+    "loadingGenerationSettings": "Cargando ajustes de generación…",
+    "transition": "Transición {{n}}",
+    "duration": "Duración: {{value}}s",
+    "durationInsert": "Esta cartela se inserta entre clips y suma a la duración total.",
+    "durationClamp": "La previsualización y la exportación recortan esto automáticamente en clips muy cortos.",
+    "previewTransition": "Previsualizar esta transición",
+    "alpha": "Canal alfa · {{format}}",
+    "noAlpha": "Sin alfa · {{format}}",
+    "unmute": "Activar audio del clip",
+    "mute": "Silenciar clip",
+    "fit": "Encajar · sin recorte",
+    "fill": "Llenar · recortar"
+  },
+  "timeline": {
+    "aria": "Línea de tiempo del Video Editor",
+    "summary_one": "Línea de tiempo · {{count}} clip · {{duration}}",
+    "summary_other": "Línea de tiempo · {{count}} clips · {{duration}}",
+    "soundtrack": "Banda sonora: {{name}}",
+    "loop": "bucle",
+    "allGaps": "Todos los huecos",
+    "defaultTransition": "Transición por defecto para todos los huecos",
+    "applyToAll": "Aplicar a todos",
+    "selectClip": "Seleccionar clip {{n}}: {{name}}",
+    "trimStart": "Recortar el inicio de {{name}}",
+    "trimEnd": "Recortar el final de {{name}}",
+    "removeNamed": "Quitar {{name}} de la línea de tiempo",
+    "selectTransition": "Seleccionar transición {{n}}",
+    "transition": "Transición",
+    "transitionNamed": "Transición: {{label}}",
+    "addClip": "Añadir clip",
+    "moveToEnd": "Mover al final"
+  },
+  "picker": {
+    "title": "Añadir vídeos de HocusPocus",
+    "closeAria": "Cerrar el selector de vídeos de HocusPocus",
+    "listAria": "Vídeos de HocusPocus",
+    "empty": "No hay vídeos en el Workspace “{{workspace}}”.",
+    "loadMore": "Cargar {{count}} más",
+    "selectAllShown": "Seleccionar los visibles",
+    "clear": "Limpiar",
+    "hint": "{{count}} seleccionados · clic para alternar, Mayús-clic para un intervalo",
+    "addVideos": "Añadir vídeos",
+    "addCount_one": "Añadir {{count}} vídeo",
+    "addCount_other": "Añadir {{count}} vídeos"
+  },
+  "status": {
+    "reconnecting": "Reconectando con la exportación…",
+    "submitting": "Enviando la exportación…",
+    "cancellingFfmpeg": "Cancelando en el siguiente punto seguro de FFmpeg…",
+    "importing": "Importando vídeo…",
+    "importingNamed": "Importando {{current}} de {{total}}: {{name}}",
+    "addingNamed": "Añadiendo {{current}} de {{total}}: {{name}}",
+    "openingSeriesShot": "Abriendo plano de Series {{current}}/{{total}}",
+    "openingNamed": "Abriendo {{name}}",
+    "replacingClip": "Reemplazando clip {{n}}: {{name}}",
+    "download": "Descargar {{filename}}"
+  },
+  "errors": {
+    "chooseVideos": "Elige uno o más archivos de vídeo.",
+    "selectVideos": "Selecciona uno o más vídeos.",
+    "splitPlayhead": "Mueve el cabezal dentro del clip, lejos del inicio y del final, y pulsa Dividir.",
+    "playback": "El navegador no pudo iniciar la reproducción de la línea de tiempo.",
+    "noValidClips": "No queda ningún clip válido. Restaura una fuente con duración finita antes de exportar.",
+    "handoffEmpty": "La entrega al editor no contiene fuentes de vídeo válidas. Sigue disponible para reintentar.",
+    "handoffOpen": "No se pudo abrir la entrega: {{message}}. Se conservaron la entrega y el borrador actual; reintenta cuando la fuente esté disponible.",
+    "handoffRetry": "No se pudo reintentar la entrega: {{message}}",
+    "draftSave": "No se pudo guardar el borrador del editor. Se conservó la entrega para Reintentar.",
+    "reconnectExport": "No se pudo reconectar con la exportación {{jobId}}: {{message}}",
+    "comicAnimatic": "animática de cómic",
+    "seriesShot": "Plano de Series {{n}}",
+    "slotGone": "La posición original {{n}} ya no está disponible en el montaje.",
+    "replaceFailed": "No se pudo reemplazar el clip {{n}}: {{message}}",
+    "noReusableSettings": "Este clip no conserva ajustes de generación reutilizables.",
+    "openInVideoCreation": "No se pudo abrir el clip en Creación de vídeo: {{message}}"
+  },
+  "confirm": {
+    "replaceMontage_one": "El editor ya contiene {{count}} clip. ¿Reemplazar este montaje con la entrega?",
+    "replaceMontage_other": "El editor ya contiene {{count}} clips. ¿Reemplazar este montaje con la entrega?",
+    "addHandoff_one": "El editor ya contiene {{count}} clip. ¿Añadir la entrega a este montaje?",
+    "addHandoff_other": "El editor ya contiene {{count}} clips. ¿Añadir la entrega a este montaje?"
+  },
+  "actions": {
+    "retryHandoff": "Reintentar la entrega",
+    "duplicate": "Duplicar clip",
+    "earlier": "Antes",
+    "later": "Después"
+  },
   "timeCard": {
     "default": "Momentos después…",
     "label": "Texto de la cartela",
@@ -55,124 +182,5 @@
     "outPoint": "Punto de salida",
     "inTime": "Entrada {{time}}",
     "outTime": "Salida {{time}}"
-  },
-  "toolbar": {
-    "aria": "Herramientas del editor de vídeo",
-    "projectName": "Nombre del proyecto",
-    "fromHocusPocus": "Desde HocusPocus",
-    "exportMp4": "Exportar MP4",
-    "cancelling": "Cancelando…"
-  },
-  "empty": {
-    "drop": "Suelta vídeos aquí o pulsa para importar",
-    "formats": "MP4, WebM, MOV, MKV, AVI · hasta 500 MB cada uno"
-  },
-  "playback": {
-    "play": "Reproducir",
-    "pause": "Pausar",
-    "playTitle": "Reproducir desde el clip, la transición o el cabezal seleccionados",
-    "restart": "Volver al principio",
-    "playheadSeconds": "Segundos del cabezal",
-    "playheadAria": "Cabezal de la línea de tiempo",
-    "playheadValue": "{{time}} segundos"
-  },
-  "preview": {
-    "label": "Previsualización de exportación",
-    "aria": "Previsualización de exportación {{width}} por {{height}} píxeles, {{aspect}}"
-  },
-  "actions": {
-    "split": "Dividir",
-    "splitTitle": "Dividir el clip en el cabezal actual",
-    "screenshot": "Capturar fotograma",
-    "screenshotTitle": "Guardar el fotograma exacto actual como PNG reutilizable en las salidas de HocusPocus",
-    "savedFrame": "Guardado {{filename}} en {{time}} · {{width}}×{{height}}",
-    "remove": "Quitar",
-    "removeTitle": "Quitar este vídeo de la línea de tiempo",
-    "removeNamed": "Quitar {{name}} de la línea de tiempo",
-    "duplicate": "Duplicar clip",
-    "earlier": "Antes",
-    "later": "Después"
-  },
-  "inspector": {
-    "aria": "Inspector del editor de vídeo",
-    "output": "Salida",
-    "frameRate": "Velocidad de fotogramas",
-    "fps": "{{value}} FPS",
-    "transition": "Transición {{n}}",
-    "duration": "Duración: {{value}}s",
-    "durationInsert": "Esta cartela se inserta entre clips y suma a la duración total.",
-    "durationClamp": "La previsualización y la exportación recortan esto automáticamente en clips muy cortos.",
-    "previewTransition": "Previsualizar esta transición",
-    "alpha": "Canal alfa · {{format}}",
-    "noAlpha": "Sin alfa · {{format}}",
-    "unmute": "Activar audio del clip",
-    "mute": "Silenciar clip",
-    "fit": "Encajar · sin recorte",
-    "fill": "Llenar · recortar"
-  },
-  "status": {
-    "importing": "Importando vídeo…",
-    "importingNamed": "Importando {{current}} de {{total}}: {{name}}",
-    "addingNamed": "Añadiendo {{current}} de {{total}}: {{name}}",
-    "download": "Descargar {{filename}}",
-    "reconnecting": "Reconectando a la exportación…",
-    "submitting": "Enviando exportación…",
-    "cancellingBoundary": "Cancelando en el siguiente punto seguro de FFmpeg…"
-  },
-  "timeline": {
-    "aria": "Línea de tiempo del editor de vídeo",
-    "summary_one": "Línea de tiempo · {{count}} clip · {{duration}}",
-    "summary_other": "Línea de tiempo · {{count}} clips · {{duration}}",
-    "soundtrack": "Banda sonora: {{name}}",
-    "loop": " · bucle",
-    "allGaps": "Todos los huecos",
-    "defaultTransition": "Transición predeterminada para todos los huecos",
-    "applyAll": "Aplicar a todos",
-    "selectClip": "Seleccionar clip {{n}}: {{name}}",
-    "selectTransition": "Seleccionar transición {{n}}",
-    "trimStart": "Recortar inicio de {{name}}",
-    "trimEnd": "Recortar final de {{name}}",
-    "moveToEnd": "Mover al final",
-    "addClip": "Añadir clip",
-    "addFirst": "Añade tu primer vídeo"
-  },
-  "picker": {
-    "title": "Añadir vídeos de HocusPocus",
-    "close": "Cerrar el selector de vídeos de HocusPocus",
-    "listAria": "Vídeos de HocusPocus",
-    "empty": "No se encontraron vídeos en el workspace “{{workspace}}”.",
-    "loadMore": "Cargar {{count}} más",
-    "selectAll": "Seleccionar los mostrados",
-    "clear": "Limpiar",
-    "selectedHint": "{{count}} seleccionados · pulsa para alternar, Mayús-clic para un rango",
-    "addCount_one": "Añadir {{count}} vídeo",
-    "addCount_other": "Añadir {{count}} vídeos",
-    "add": "Añadir vídeos"
-  },
-  "audio": {
-    "fit": "Encajar"
-  },
-  "errors": {
-    "chooseVideos": "Elige uno o más archivos de vídeo.",
-    "selectVideos": "Selecciona uno o más vídeos.",
-    "splitPlayhead": "Mueve el cabezal dentro del clip, lejos del inicio y del final, y luego Divide.",
-    "playback": "El navegador no pudo iniciar la reproducción de la línea de tiempo.",
-    "reconnect": "No se pudo reconectar a la exportación {{jobId}}: {{message}}",
-    "noValidClips": "No quedan clips válidos. Restaura un origen con duración finita antes de exportar.",
-    "emptyHandoff": "El pase al editor no contiene orígenes de vídeo válidos. Sigue disponible para reintentar.",
-    "openingShot": "Abriendo plano de Series {{current}}/{{total}}",
-    "openingNamed": "Abriendo {{name}}",
-    "comicAnimatic": "animática de cómic",
-    "seriesShot": "Plano de Series {{n}}",
-    "replaceConfirm_one": "El editor ya contiene {{count}} clip. ¿Sustituir este montaje por el pase?",
-    "replaceConfirm_other": "El editor ya contiene {{count}} clips. ¿Sustituir este montaje por el pase?",
-    "addConfirm_one": "El editor ya contiene {{count}} clip. ¿Añadir el pase a este montaje?",
-    "addConfirm_other": "El editor ya contiene {{count}} clips. ¿Añadir el pase a este montaje?",
-    "draftSave": "No se pudo guardar el borrador del editor. El pase se conservó para Reintentar.",
-    "openHandoff": "No se pudo abrir el pase: {{message}}. Se conservaron el pase y el borrador actual; reintenta cuando el origen esté disponible.",
-    "retryHandoff": "No se pudo reintentar el pase: {{message}}",
-    "retryAction": "Reintentar el pase",
-    "replacing": "Reemplazando clip {{n}}: {{name}}",
-    "replaceFailed": "No se pudo reemplazar el clip {{n}}: {{message}}"
   }
 }

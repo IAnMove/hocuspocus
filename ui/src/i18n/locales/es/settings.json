@@ -265,6 +265,7 @@
     "added": "añadida {{date}}",
     "released": "publicada {{date}}",
     "downloadedUnknown": "desconocida",
+    "downloadedTitle": "Descargada {{downloaded}}",
     "datesTitle": "Descargada {{downloaded}} — publicada {{released}}",
     "confirmDelete": "Pulsa otra vez para borrar esta LoRA de forma permanente (pesos + metadatos + guía)",
     "deleteLora": "Eliminar esta LoRA del disco",

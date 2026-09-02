@@ -771,10 +771,14 @@ export function LoraBrowser() {
                       {(lora.downloaded_at || lora.released_at) && (
                         <div
                           className="text-[9px] text-white/40 mt-0.5 truncate"
-                          title={t('loraBrowser.datesTitle', {
-                            downloaded: lora.downloaded_at ? new Date(lora.downloaded_at).toLocaleDateString() : t('loraBrowser.downloadedUnknown'),
-                            released: lora.released_at ? new Date(lora.released_at).toLocaleDateString() : t('loraBrowser.downloadedUnknown'),
-                          })}
+                          title={lora.released_at
+                            ? t('loraBrowser.datesTitle', {
+                                downloaded: lora.downloaded_at ? new Date(lora.downloaded_at).toLocaleDateString() : t('loraBrowser.downloadedUnknown'),
+                                released: new Date(lora.released_at).toLocaleDateString(),
+                              })
+                            : t('loraBrowser.downloadedTitle', {
+                                downloaded: new Date(lora.downloaded_at as string).toLocaleDateString(),
+                              })}
                         >
                           {installedSort === 'released' && lora.released_at
                             ? t('loraBrowser.released', { date: new Date(lora.released_at).toLocaleDateString() })

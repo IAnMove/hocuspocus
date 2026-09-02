@@ -29,6 +29,7 @@ _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+_LLM_ROUTER_PATH = _APP / "routers" / "llm.py"
 _LLM_SERVICE_PATH = _APP / "services" / "llm_service.py"
 _DEFAULT_PATH = _APP / "defaults" / "minimax_h3.json"
 _LEGACY_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_legacy.json"
@@ -36,6 +37,7 @@ _REF2VA_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va.json"
 _FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_full.json"
 _REF2VA_FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va_full.json"
 _STORE_PATH = _ROOT / "ui" / "src" / "stores" / "useStore.ts"
+_LLM_SLICE_PATH = _ROOT / "ui" / "src" / "stores" / "llmSlice.ts"
 _PROMPT_INPUT_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "PromptInput.tsx"
 _DURATION_SLIDER_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "DurationSlider.tsx"
 _ADVANCED_SETTINGS_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "AdvancedSettings.tsx"
@@ -52,6 +54,7 @@ _RESOLUTION_PRESETS_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "Re
 _ASPECT_RATIO_GRID_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "AspectRatioGrid.tsx"
 _MODEL_SELECTOR_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "ModelSelector.tsx"
 _LORA_SELECTOR_PATH = _ROOT / "ui" / "src" / "components" / "SettingsDrawer" / "LoraSelector.tsx"
+_STUDIO_EN_PATH = _ROOT / "ui" / "src" / "i18n" / "locales" / "en" / "studio.json"
 _ENHANCE_GUIDES_PATH = _APP / "services" / "enhance_guides.py"
 _PROMPT_POLISH_PATH = _APP / "services" / "director" / "prompt_polish.py"
 _H3_ENHANCE_GUIDE_PATH = _APP / "services" / "llm_guides" / "enhance" / "minimax_h3_video.md"
@@ -797,6 +800,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("audio references", model_def["selector_help"])
 
     def test_h3_selector_names_and_audio_badges_are_user_facing(self):
+        studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
         expected_names = {
             _DEFAULT_PATH: "H3 First / Last — Pruned",
             _LEGACY_DEFAULT_PATH: "H3 Legacy Quality — ConvRot",
@@ -818,8 +822,10 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("converts Pruned adapters", full_omni["lora_compatibility_note"])
 
         selector = _read(_MODEL_SELECTOR_PATH)
-        self.assertIn("Audio Out", selector)
-        self.assertIn("Audio In", selector)
+        self.assertIn("t('model.audioOut')", selector)
+        self.assertIn("t('model.audioIn')", selector)
+        self.assertEqual(studio["model"]["audioOut"], "Audio Out")
+        self.assertEqual(studio["model"]["audioIn"], "Audio In")
         self.assertNotIn("badges.push('Audio')", selector)
         self.assertIn("lora_compatibility_note", _read(_LORA_SELECTOR_PATH))
         launch = _read(_LAUNCH_PATH)
@@ -875,6 +881,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         advanced = _read(_ADVANCED_SETTINGS_PATH)
         store = _read(_STORE_PATH)
         launch = _read(_LAUNCH_PATH)
+        studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
 
         self.assertIn(
             "supportsSlidingWindows = modelOptions?.sliding_window === true",
@@ -892,7 +899,8 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("unsupportedAutoResolution", duration)
         self.assertIn("fallbackResolution", duration)
         self.assertIn("sliding_window_memory_override", store)
-        self.assertIn("full prompt auto-paced", duration)
+        self.assertIn("t('duration.autoPaced')", duration)
+        self.assertEqual(studio["duration"]["autoPaced"], "full prompt auto-paced")
         self.assertIn('"sliding_window_memory_policy": md.get(', launch)
         self.assertIn('h3_window_adjustment.get("unsupported")', launch)
 
@@ -945,10 +953,10 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("proper names", ref2va_dialect_guide)
 
     def test_h3_enhance_path_preserves_context_ir_contract(self):
-        launch = _read(_LAUNCH_PATH)
+        llm_router = _read(_LLM_ROUTER_PATH)
         llm_service = _read(_LLM_SERVICE_PATH)
-        self.assertIn("needs_h3_context_ir", launch)
-        self.assertIn("enhancer_enabled > 0 and not needs_h3_context_ir", launch)
+        self.assertIn("needs_h3_context_ir", llm_router)
+        self.assertIn("enhancer_enabled > 0 and not needs_h3_context_ir", llm_router)
         self.assertIn("is_h3_context_ir", llm_service)
         self.assertIn("is_h3_ref2va", llm_service)
         self.assertIn("is_h3_structured = is_h3_context_ir or is_h3_ref2va", llm_service)
@@ -984,8 +992,10 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         main = _read(_MAIN_PATH)
         wgp = _read(_WGP_PATH)
         store = _read(_STORE_PATH)
+        llm_slice = _read(_LLM_SLICE_PATH)
         section = _read(_OMNI_REFERENCE_SECTION_PATH)
         generate_button = _read(_GENERATE_BUTTON_PATH)
+        studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
         self.assertIn('if _generation_model_def.get("omni_reference"):', launch)
         self.assertIn("validate_reference_manifest", launch)
         self.assertIn("per_clip_minimax_h3_references", launch)
@@ -997,17 +1007,23 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("num_condition_video_rows", main)
         self.assertIn("const omniReferences = state.params.minimax_h3_references ?? []", store)
         self.assertIn("delete params.minimax_h3_references", store)
-        self.assertIn("reference_context: referenceContext", store)
-        self.assertIn("intent=AUDIO REUSE / PERFORMANCE DRIVER", store)
-        self.assertIn("intent=VOICE REFERENCE", store)
+        self.assertIn("reference_context: media.referenceContext", llm_slice)
+        self.assertIn("intent=AUDIO REUSE / PERFORMANCE DRIVER", llm_slice)
+        self.assertIn("intent=VOICE REFERENCE", llm_slice)
         self.assertIn('draggable', section)
-        self.assertIn("Include soundtrack", section)
-        self.assertIn("Attach audio", section)
+        self.assertIn("t('omni.includeSoundtrack')", section)
+        self.assertIn("t('omni.attachAudio')", section)
         self.assertIn("audio_path", section)
-        self.assertIn("Maximum detail", section)
-        self.assertIn("Voice reference", section)
-        self.assertIn("Drive / reuse audio", section)
-        self.assertIn("Sound / music style", section)
+        self.assertIn("t('omni.max')", section)
+        self.assertIn("t('omni.voiceRef')", section)
+        self.assertIn("t('omni.drive')", section)
+        self.assertIn("t('omni.style')", section)
+        self.assertEqual(studio["omni"]["includeSoundtrack"], "Include soundtrack")
+        self.assertEqual(studio["omni"]["attachAudio"], "Attach audio")
+        self.assertEqual(studio["omni"]["max"], "Maximum detail")
+        self.assertEqual(studio["omni"]["voiceRef"], "Voice reference")
+        self.assertEqual(studio["omni"]["drive"], "Drive / reuse audio")
+        self.assertEqual(studio["omni"]["style"], "Sound / music style")
         self.assertIn("const hasOmniVisualReference = useStore(s =>", generate_button)
         self.assertNotIn(
             "useStore(s => s.params.minimax_h3_references ?? [])",
@@ -1015,11 +1031,11 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         )
 
     def test_non_sliding_h3_enhance_request_stays_one_timeline(self):
-        store = _read(_STORE_PATH)
+        llm_slice = _read(_LLM_SLICE_PATH)
         prompt_input = _read(_PROMPT_INPUT_PATH)
         expected = "supportsSlidingWindows = state.modelOptions?.sliding_window === true"
-        self.assertIn(expected, store)
-        self.assertIn("supportsSlidingWindows && stride > 0", store)
+        self.assertIn(expected, llm_slice)
+        self.assertIn("supportsSlidingWindows && stride > 0", llm_slice)
         self.assertIn("supportsSlidingWindows = modelOptions?.sliding_window === true", prompt_input)
         self.assertIn("supportsSlidingWindows && stride > 0", prompt_input)
 
@@ -1312,6 +1328,7 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         sidebar = _read(_SIDEBAR_PATH)
         advanced = _read(_ADVANCED_SETTINGS_PATH)
         types_source = _read(_TYPES_PATH)
+        studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
 
         self.assertIn("def _minimax_h3_turbo_option", launch)
         self.assertIn('names.add(turbo_option["filename"])', launch)
@@ -1321,11 +1338,13 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         self.assertIn("_minimax_h3_runtime_advisory", launch)
         self.assertIn("normalize_minimax_h3_turbo_request", launch)
         self.assertIn("<MiniMaxH3TurboToggle />", sidebar)
-        self.assertIn("Experimental", toggle)
+        self.assertIn("t('chrome.experimental')", toggle)
         self.assertIn("setParam('num_inference_steps', option.steps)", toggle)
         self.assertIn("toggleLora(option.filename)", toggle)
         self.assertIn("setLoraWeight(option.filename, 0, option.weight)", toggle)
-        self.assertIn("Use Pruned Turbo", toggle)
+        self.assertIn("t('h3Turbo.usePruned')", toggle)
+        self.assertEqual(studio["chrome"]["experimental"], "Experimental")
+        self.assertEqual(studio["h3Turbo"]["usePruned"], "Use Pruned Turbo")
         self.assertIn("recommended_model_type", toggle)
         self.assertIn("disabled={h3TurboMode}", advanced)
         self.assertIn("minimax_h3_turbo_mode?: boolean", types_source)

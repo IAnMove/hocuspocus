@@ -19,7 +19,7 @@ Typed JSON under `ui/src/i18n/locales/<lng>/<namespace>.json`.
 | `storyLab` | Story Lab section chrome, world/characters/relationships/structure tabs, reference gallery and editors |
 | `director` | Director queue recovery, spoken-language chrome and direct-video T2V mode |
 | `seriesLab` | Series Lab tabs, review assembly, shot-duration chrome and spoken-language labels |
-| `videoEditor` | Video Editor transitions, time cards, remake and trim chrome |
+| `videoEditor` | Video Editor toolbar, empty states, picker, playback, timeline, transitions, time cards, remake, trim and status chrome |
 | `workspaces` | Production runs panel and Workspace collections |
 | `styleSheet` | Style sheet library, import and delete chrome |
 | `projects` | Durable projects catalog |
@@ -58,6 +58,7 @@ Keys are semantic, never the English sentence:
 | All Workspaces | Todos los Workspaces |
 | Output folder | Carpeta de salida |
 | Story Lab | Story Lab |
+| Video Editor | Video Editor |
 | Series Lab | Series Lab |
 | Director | Director |
 | Activity | Actividad |
