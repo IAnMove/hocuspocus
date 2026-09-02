@@ -380,6 +380,7 @@ class H3WindowPlannerTests(unittest.TestCase):
     def test_ui_and_runtime_use_explicit_prompt_arrays(self):
         handler = (APP / "wgp.py").read_text(encoding="utf-8")
         launch = (APP / "_launch_runtime.py").read_text(encoding="utf-8")
+        llm_router = (APP / "routers" / "llm.py").read_text(encoding="utf-8")
         store = (ROOT / "ui" / "src" / "stores" / "useStore.ts").read_text(encoding="utf-8")
         advanced = (ROOT / "ui" / "src" / "components" / "Sidebar" / "AdvancedSettings.tsx").read_text(encoding="utf-8")
         prompt_input = (ROOT / "ui" / "src" / "components" / "Sidebar" / "PromptInput.tsx").read_text(encoding="utf-8")
@@ -387,7 +388,7 @@ class H3WindowPlannerTests(unittest.TestCase):
         guide = APP / "services" / "llm_guides" / "enhance" / "minimax_h3_sliding_windows.md"
         self.assertIn("h3_window_prompts=None", handler)
         self.assertIn("Using {len(prompts)} explicit", handler)
-        self.assertIn('/api/v1/llm/plan-h3-windows', launch)
+        self.assertIn('/api/v1/llm/plan-h3-windows', llm_router)
         self.assertIn("h3_window_plan_signature", launch)
         self.assertIn("api.planH3Windows", store)
         self.assertIn("Plan Prompt Across Windows", advanced)
