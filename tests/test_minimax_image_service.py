@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 
 from services import director_pipeline, minimax_image_service  # noqa: E402
+from services.asset_manifest import read_asset_manifest  # noqa: E402
 
 
 class _MiniMaxResponse:
@@ -60,6 +61,12 @@ class TestMiniMaxImageService(unittest.TestCase):
                 metadata_text = handle.read()
             self.assertNotIn("test-secret-not-for-production", metadata_text)
             self.assertEqual(json.loads(metadata_text)["params"]["provider"], "minimax")
+            manifest = read_asset_manifest(result["path"])
+            self.assertIsNotNone(manifest)
+            self.assertEqual(manifest["schema"], "hocuspocus.asset-manifest")
+            self.assertEqual(manifest["origin"]["tool"], "minimax-image")
+            self.assertEqual(manifest["origin"]["actor"], "unknown")
+            self.assertEqual(manifest["asset"]["kind"], "image")
 
     def test_director_prioritises_character_reference_and_saved_key(self):
         previous_wgp = director_pipeline._wgp
