@@ -109,7 +109,11 @@ export function WorkspaceCollectionsPanel() {
         <nav aria-label="Saved Workspaces" className="min-h-0 flex-1 overflow-y-auto p-2">
           {items.map(item => <button key={item.id} onClick={() => select(item)} className={`mb-1 w-full rounded-lg border p-2 text-left ${item.id === selectedId ? 'border-violet-500/50 bg-violet-500/10' : 'border-transparent hover:bg-bg-hover'}`}>
             <div className="truncate text-xs font-medium text-text-primary">{item.name}</div>
-            <div className="mt-1 text-[10px] text-text-muted">{tActivity('collectionCounts', { projects: item.project_ids.length, assets: item.asset_ids.length, productions: item.production_ids.length })}</div>
+            <div className="mt-1 text-[10px] text-text-muted">{[
+              tActivity('projectCount', { count: item.project_ids.length }),
+              tActivity('assetCount', { count: item.asset_ids.length }),
+              tActivity('productionCount', { count: item.production_ids.length }),
+            ].join(' · ')}</div>
           </button>)}
           {!items.length && !loading && <p className="p-3 text-xs text-text-muted">Crea un Workspace para reunir elementos sin moverlos de sitio.</p>}
         </nav>

@@ -48,6 +48,8 @@ Keys are semantic, never the English sentence:
 | Activity | Actividad |
 | Ask to the Wizard | Pregunta al mago |
 | Inbox / Legacy | Inbox / Legacy |
+| Uploads | Subidas |
+| Extra info | Información adicional |
 
 Do not translate IDs, schema names, API paths, capability names, action types, filenames, model names, user prompts or generated content.
 

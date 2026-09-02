@@ -4,5 +4,10 @@
   "inboxLegacy": "Inbox / Legacy",
   "extraInfo": "Extra info",
   "collectionsHint": "Reference collections. They are not output folders.",
-  "collectionCounts": "{{projects}} projects · {{assets}} assets · {{productions}} productions"
+  "projectCount_one": "{{count}} project",
+  "projectCount_other": "{{count}} projects",
+  "assetCount_one": "{{count}} asset",
+  "assetCount_other": "{{count}} assets",
+  "productionCount_one": "{{count}} production",
+  "productionCount_other": "{{count}} productions"
 }

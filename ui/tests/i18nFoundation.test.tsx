@@ -49,6 +49,9 @@ test('required glossary keys exist in both languages', async () => {
     ['navigation', 'entities.workspace'],
     ['navigation', 'entities.outputFolder'],
     ['navigation', 'filters.allWorkspaces'],
+    ['navigation', 'outputFolder.uploads'],
+    ['activity', 'extraInfo'],
+    ['common', 'sample.named'],
     ['navigation', 'labs.story'],
     ['navigation', 'labs.series'],
     ['navigation', 'labs.director'],
@@ -65,6 +68,8 @@ test('required glossary keys exist in both languages', async () => {
   assert.equal(i18n.t('entities.workspace', { ns: 'navigation', lng: 'es' }), 'Workspace')
   assert.equal(i18n.t('title', { ns: 'wizard', lng: 'es' }), 'Pregunta al mago')
   assert.equal(i18n.t('entities.outputFolder', { ns: 'navigation', lng: 'es' }), 'Carpeta de salida')
+  assert.equal(i18n.t('outputFolder.uploads', { ns: 'navigation', lng: 'es' }), 'Subidas')
+  assert.equal(i18n.t('extraInfo', { ns: 'activity', lng: 'es' }), 'Información adicional')
 })
 
 test('missing keys fall back to english without throwing', async () => {
@@ -84,10 +89,32 @@ test('interpolation and pluralization stay in the catalog', async () => {
   await i18n.changeLanguage('es')
   assert.equal(i18n.t('count.item', { ns: 'common', count: 1 }), '1 elemento')
   assert.equal(i18n.t('count.item', { ns: 'common', count: 3 }), '3 elementos')
-  assert.equal(
-    i18n.t('collectionCounts', { ns: 'activity', projects: 2, assets: 4, productions: 1 }),
-    '2 proyectos · 4 recursos · 1 producciones',
-  )
+  assert.equal(i18n.t('projectCount', { ns: 'activity', count: 1 }), '1 proyecto')
+  assert.equal(i18n.t('assetCount', { ns: 'activity', count: 1 }), '1 recurso')
+  assert.equal(i18n.t('productionCount', { ns: 'activity', count: 1 }), '1 producción')
+  assert.equal(i18n.t('productionCount', { ns: 'activity', count: 2 }), '2 producciones')
+})
+
+test('react interpolation keeps special characters as text without double-escaping', async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage, useUiTranslation } = await import('../src/i18n/index.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
+  function Named() {
+    const { t } = useUiTranslation('common')
+    return <span data-testid="named">{t('sample.named', { name: '<Rock & Roll>' })}</span>
+  }
+  try {
+    const view = render(<Named />)
+    const node = screen.getByTestId('named')
+    assert.equal(node.textContent, '<Rock & Roll>')
+    assert.equal(node.querySelector('rock'), null)
+    assert.equal(node.textContent?.includes('&lt;'), false)
+    assert.equal(node.textContent?.includes('&amp;'), false)
+    assert.equal(view.container.querySelector('rock'), null)
+  } finally {
+    cleanup()
+  }
 })
 
 test('language persists and switches without a reload', { concurrency: false }, async () => {

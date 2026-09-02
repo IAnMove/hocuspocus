@@ -13,7 +13,7 @@ const INIT_OPTIONS = {
   fallbackLng: DEFAULT_LANGUAGE,
   defaultNS: 'common' as const,
   ns: [...NAMESPACES],
-  interpolation: { escapeValue: true },
+  interpolation: { escapeValue: false },
   returnNull: false,
   returnEmptyString: false,
   react: { useSuspense: false },
