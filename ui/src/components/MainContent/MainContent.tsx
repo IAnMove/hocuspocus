@@ -178,7 +178,7 @@ function OutputFolderSelector() {
               }`}
               title="Browse media you've uploaded — reuse as inputs"
             >
-              <span className="flex items-center gap-1.5"><Upload size={12} /> Uploads</span>
+              <span className="flex items-center gap-1.5"><Upload size={12} /> {t('outputFolder.uploads')}</span>
               {browsingUploads && <Check size={12} />}
             </button>
           </div>

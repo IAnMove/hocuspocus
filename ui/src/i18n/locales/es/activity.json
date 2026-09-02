@@ -2,7 +2,12 @@
   "title": "Actividad",
   "openHistory": "Mostrar el historial canónico de tareas",
   "inboxLegacy": "Inbox / Legacy",
-  "extraInfo": "Extra info",
-  "collectionsHint": "Colecciones de referencias. No son carpetas de outputs.",
-  "collectionCounts": "{{projects}} proyectos · {{assets}} recursos · {{productions}} producciones"
+  "extraInfo": "Información adicional",
+  "collectionsHint": "Colecciones de referencias. No son carpetas de salida.",
+  "projectCount_one": "{{count}} proyecto",
+  "projectCount_other": "{{count}} proyectos",
+  "assetCount_one": "{{count}} recurso",
+  "assetCount_other": "{{count}} recursos",
+  "productionCount_one": "{{count}} producción",
+  "productionCount_other": "{{count}} producciones"
 }

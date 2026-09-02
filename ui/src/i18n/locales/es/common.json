@@ -21,5 +21,8 @@
   "count": {
     "item_one": "{{count}} elemento",
     "item_other": "{{count}} elementos"
+  },
+  "sample": {
+    "named": "{{name}}"
   }
 }
