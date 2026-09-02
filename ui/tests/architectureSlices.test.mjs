@@ -119,6 +119,27 @@ test('settings slice toggles open and tab through the public facade', async () =
   assert.equal(useStore.getState().settingsOpen, false)
 })
 
+test('sidebar slice toggles open through the public facade', async () => {
+  const { createSidebarSlice } = await import('../src/stores/sidebarSlice.ts')
+  let state
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  state = createSidebarSlice(set, () => state)
+  assert.equal(state.sidebarOpen, false)
+  state.toggleSidebar()
+  assert.equal(state.sidebarOpen, true)
+  state.setSidebarOpen(false)
+  assert.equal(state.sidebarOpen, false)
+
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.getState().setSidebarOpen(true)
+  assert.equal(useStore.getState().sidebarOpen, true)
+  useStore.getState().toggleSidebar()
+  assert.equal(useStore.getState().sidebarOpen, false)
+})
+
 test('developer-mode slice persists the local flag through the public facade', async () => {
   if (!globalThis.localStorage) {
     const { JSDOM } = await import('jsdom')
