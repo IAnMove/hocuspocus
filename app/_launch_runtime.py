@@ -25477,6 +25477,7 @@ def _write_recast_shot_aware_sidecar(
 ):
     """Persist restorable settings without leaking disposable shot paths."""
     import copy
+    from services.asset_manifest import publish_generation_sidecar
 
     output_name = os.path.basename(output_path)
     params = copy.deepcopy(job.get("params") or {})
@@ -25520,9 +25521,12 @@ def _write_recast_shot_aware_sidecar(
         "created_at": time.time(),
         "output_filename": output_name,
     }
-    meta_path = os.path.splitext(output_path)[0] + ".meta.json"
-    with open(meta_path, "w", encoding="utf-8") as handle:
-        json.dump(sidecar, handle, indent=2)
+    publish_generation_sidecar(
+        output_path,
+        sidecar,
+        workspace_id=job.get("workspace"),
+        tool="recast",
+    )
 
 
 def _run_recast_shot_generation(job_id):
@@ -25720,6 +25724,7 @@ def _write_repaint_shot_aware_sidecar(
 ):
     """Persist mapped Repaint settings without disposable shot artifacts."""
     import copy
+    from services.asset_manifest import publish_generation_sidecar
 
     output_name = os.path.basename(output_path)
     params = copy.deepcopy(job.get("params") or {})
@@ -25765,9 +25770,12 @@ def _write_repaint_shot_aware_sidecar(
         "created_at": time.time(),
         "output_filename": output_name,
     }
-    meta_path = os.path.splitext(output_path)[0] + ".meta.json"
-    with open(meta_path, "w", encoding="utf-8") as handle:
-        json.dump(sidecar, handle, indent=2)
+    publish_generation_sidecar(
+        output_path,
+        sidecar,
+        workspace_id=job.get("workspace"),
+        tool="repaint",
+    )
 
 
 def _run_repaint_shot_generation(job_id):
@@ -25969,6 +25977,7 @@ def _write_outpaint_shot_aware_sidecar(
 ):
     """Persist restorable Outpaint settings without private shot paths."""
     import copy
+    from services.asset_manifest import publish_generation_sidecar
 
     output_name = os.path.basename(output_path)
     params = copy.deepcopy(job.get("params") or {})
@@ -26011,9 +26020,12 @@ def _write_outpaint_shot_aware_sidecar(
         "created_at": time.time(),
         "output_filename": output_name,
     }
-    meta_path = os.path.splitext(output_path)[0] + ".meta.json"
-    with open(meta_path, "w", encoding="utf-8") as handle:
-        json.dump(sidecar, handle, indent=2)
+    publish_generation_sidecar(
+        output_path,
+        sidecar,
+        workspace_id=job.get("workspace"),
+        tool="outpaint",
+    )
 
 
 def _run_outpaint_shot_generation(job_id):
