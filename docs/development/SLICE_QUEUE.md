@@ -15,7 +15,7 @@ Canonical sources in git:
 Working notes under `comunicaciones/` are session handoff only. They are
 gitignored and are not canonical.
 
-## Landed on main (as of #88)
+## Landed on main (as of #98)
 
 Asset-manifest v1 writers: Studio generate (simulated, WGP, H3, SFX), Tools
 upscale/revoice, Recast/Repaint/Outpaint, MiniMax image, Series assembly, 3D,
@@ -29,36 +29,58 @@ physical directory. `GenerationProvenance` / `CommandContext` distinguish
 initiator (`origin.actor` / `tool` / `capability`) from provider/model.
 Inspector timing reads `queue_ms` / `inference_ms` / `total_ms`.
 
+Studio+Wizard provenance landed (#95): generation task IDs are assigned before
+publish so Wizard→Studio→asset can share one durable identity.
+
 `useStore` slices (facade kept): theme, settings (includes model-visibility
 focus), developerMode, sidebar, retake dialog. Slices bind through
 `bindSlice` without `as never`. `developerModeSlice` no longer writes
 `mediaFilter`; the facade still leaves `auditdev` when developer mode turns
 off.
 
-Story Lab: shared `ReferenceGallery`, `LocationEditor`, `CharacterEditor`,
-`BeatEditor`, `storyLabVisuals` and `StoryLabVisualsProvider`. World, characters,
-relationships and structure tabs import those modules instead of receiving
-16 props. Visible copy on those tabs lives in the `storyLab` namespace
-(EN+ES).
+Story Lab UI extracts:
+
+- #88 shared `ReferenceGallery`, `LocationEditor`, `CharacterEditor`,
+  `BeatEditor`, `storyLabVisuals` / `StoryLabVisualsProvider`; World,
+  Characters, Relationships and Structure tabs.
+- #91 Music, Trailer, Productions and Compact workspace, with `storyLab` EN+ES.
+- #97 split those extracted tabs into smaller panels and added the code-health
+  PR table (`scripts/code_health.py --check --markdown`).
+- #98 Overview + generation-agent panel, EN+ES. Assets remains in
+  `StoryLabPanel`.
 
 i18n: foundation + Extra info inspector + Extra info video dialog (`extraInfo`
-namespace) + Assets catalog list chrome + Story Lab simple tabs (`storyLab`).
+namespace) + Assets catalog list chrome + Story Lab tabs listed above.
+
+Recipe audio duration: generated audio is sized for its consumers (#93).
+#21 was the earlier draft of that fix and is closed as superseded.
+
+Character Kits / Face Rig / cutout dialogue HOWUSEIT: #94 on `main`. #26 was
+the older Cursor docs pass and is closed as superseded.
+
+`--markdown` without `--check` prints **Ratchet not evaluated.** CI uses
+`--check --markdown`.
 
 ## Next medium PRs
 
 1. **Domain provenance contract** — landed (#86).
 2. **Typed Zustand composition** — landed (#87).
-3. **Story Lab simple tabs** — landed (#88): shared gallery/editors/controller,
-   then Characters + Structure (and world/relationships i18n) without 16-prop
-   drilling.
-4. **Story Lab Music + Productions** — this PR: Music, Trailer, Productions and
-   CompactVideoWorkspace leave `StoryLabPanel`, with `storyLab` EN+ES and the
-   Wizard live E2E left as the vocal-song → Director contract.
-5. **Backend by domain**: one complete router + services per PR (Assets, Music,
+3. **Story Lab simple tabs** — landed (#88).
+4. **Story Lab Music + Productions** — landed (#91, split further in #97).
+5. **Story Lab Overview** — landed (#98).
+6. **Story Lab Assets tab** — remaining chrome in `StoryLabPanel` (importer,
+   style conversion, visual library), EN+ES, no `useStore.ts` /
+   `_launch_runtime.py`.
+7. **`useStore` slice** — one moderate cohesive extract with the public facade
+   kept and `architectureSlices.test.mjs` extended. Do not move all of
+   `startGeneration` in one PR. At most one open PR may touch `useStore.ts`.
+8. **Backend by domain**: one complete router + services per PR (Assets, Music,
    Series, Comics, …). Preserve route-table ordinals. Do not split
    `_launch_runtime.py` by line count.
-6. **Provenance applied by flow** (after 1): Studio+Wizard, Story Lab+videoclip,
-   Series+Comics, 3D+Director.
+9. **Provenance applied by flow**: Studio+Wizard landed (#95). Remaining:
+   Story Lab+videoclip, Series+Comics. 3D+Director already has folder vs
+   Workspace provenance (#89). Do not start Director Paso 5 until a human
+   decides release order; that work must begin with 5.0 PipelineRuntime.
 
 ## Standing rules
 
