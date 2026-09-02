@@ -1,4 +1,5 @@
 import type { CreativeCharacter } from '../../lib/labHelpers'
+import type { LanguageIntent } from '../../lib/languageIntent'
 
 export interface ComicPanelCommand {
   caption: string
@@ -24,6 +25,7 @@ export interface CreateComicCommand {
   imageProvider: 'profile' | 'maestro' | 'minimax'
   imageModel: string
   factualBiography: boolean
+  languageIntent?: LanguageIntent
 }
 
 export interface GenerateComicCommand {

@@ -19,6 +19,7 @@ import type {
   AgentStartGenerationAction,
 } from './agentActions'
 import type { AspectRatio, ResolutionPreset } from '../../types'
+import { compileProviderPrompt, type ProviderPromptOptions } from '../../lib/languageIntent'
 
 const RESOLUTION_PRESETS = new Set<ResolutionPreset>(['auto', '480p', '540p', '720p', '768p', '1080p'])
 const ASPECT_RATIOS = new Set<AspectRatio>(['auto', '21:9', '16:9', '9:16', '1:1', '4:3', '3:4'])
@@ -51,6 +52,15 @@ function stringArray(value: unknown, maxItems: number, maxLength: number): strin
 
 function commonPresentation(anchors: string[]) {
   return { destination: 'studio' as const, anchors, replay: 'atomic' as const }
+}
+
+function compilePromptAction<T extends { prompt: string; languageIntent?: import('../../lib/languageIntent').LanguageIntent }>(
+  action: T,
+  medium: ProviderPromptOptions['medium'],
+): T {
+  return action.languageIntent
+    ? { ...action, prompt: compileProviderPrompt(action.prompt, action.languageIntent, { medium }) }
+    : action
 }
 
 function videoAction(raw: Record<string, unknown>): AgentPrepareVideoAction | null {
@@ -205,7 +215,7 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'edit', confirmation: 'none', progress: 'Rellenando Studio → Video…',
   resolve: videoAction,
   validate(action) { return action.prompt ? validType('prepare_video', action) : ['prompt is required'] },
-  async prepare(action) { return action },
+  async prepare(action) { return compilePromptAction(action, 'video') },
   async execute(action, context) { return context.adapters.studio.prepareVideo(action) },
   correlate(_action, outcome) { return outcome.target },
   async track(_action, outcome) { return outcome },
@@ -224,7 +234,7 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'edit', confirmation: 'none', progress: 'Rellenando Studio → Image…',
   resolve: imageAction,
   validate(action) { return action.prompt ? validType('prepare_image', action) : ['prompt is required'] },
-  async prepare(action) { return action },
+  async prepare(action) { return compilePromptAction(action, 'image') },
   async execute(action, context) { return context.adapters.studio.prepareImage(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message },
@@ -241,7 +251,9 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'edit', confirmation: 'none', progress: 'Rellenando Studio → Audio…',
   resolve: audioAction,
   validate(action) { return action.prompt ? validType('prepare_audio', action) : ['prompt is required'] },
-  async prepare(action) { return action },
+  async prepare(action) {
+    return compilePromptAction(action, action.subMode === 'speech' ? 'speech' : action.subMode === 'music' ? 'music' : 'sfx')
+  },
   async execute(action, context) { return context.adapters.studio.prepareAudio(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message },
@@ -258,7 +270,7 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'edit', confirmation: 'none', progress: 'Rellenando Studio → 3D…',
   resolve: model3dAction,
   validate(action) { return action.prompt ? validType('prepare_3d', action) : ['prompt is required'] },
-  async prepare(action) { return action },
+  async prepare(action) { return compilePromptAction(action, '3d') },
   async execute(action, context) { return context.adapters.studio.prepare3d(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message },
@@ -275,7 +287,17 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   risk: 'compute', confirmation: 'required', progress: 'Encolando el pack de SFX…',
   resolve: sfxAction,
   validate(action) { return action.confirm === true && action.clips.length > 0 ? validType('queue_sfx_pack', action) : ['confirmed SFX clips are required'] },
-  async prepare(action) { return action },
+  async prepare(action) {
+    if (!action.languageIntent) return action
+    return {
+      ...action,
+      style: compileProviderPrompt(action.style, action.languageIntent, { medium: 'sfx' }),
+      clips: action.clips.map(clip => ({
+        ...clip,
+        prompt: compileProviderPrompt(clip.prompt, action.languageIntent, { medium: 'sfx' }),
+      })),
+    }
+  },
   async execute(action, context) { return context.adapters.studio.queueSfxPack(action, context.generationContext) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_sfx_pack', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },

@@ -7,6 +7,8 @@ import {
   outlineBeats,
 } from '../../lib/labHelpers'
 import { useStore } from '../../stores/useStore'
+import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
+import { resolveSeriesLanguageIntent, seriesLanguageIntentAffectsCanon } from './languageIntent'
 import type {
   ApplySeriesPlanCommand,
   AssembleSeriesEpisodeCommand,
@@ -111,12 +113,15 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
     purpose: location.purpose,
     description: location.description,
   }))
+  const languageIntent = resolveSeriesLanguageIntent(series, action.language, action.languageIntent, createdSeries)
+  const languageSetupChanged = seriesLanguageIntentAffectsCanon(series, languageIntent)
   const needsSetup = createdSeries
     || !series.premise.trim()
     || !series.visualStyle.trim()
     || !series.canon.worldSummary.trim()
     || !series.characters.length
     || !series.locations.length
+    || languageSetupChanged
   if (needsSetup) {
     const patched = {
       ...series,
@@ -128,8 +133,9 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
       visualStyle: series.visualStyle || action.visualStyle || 'Continuidad televisiva cinematográfica, composición clara y personajes consistentes.',
       characterVisualStyle: series.characterVisualStyle || action.visualStyle || 'Identidades y vestuario consistentes entre episodios.',
       cameraLanguage: series.cameraLanguage || 'Planos de situación claros, planos medios para diálogo y primeros planos para reacciones.',
-      language: action.language || series.language,
-      spokenLanguage: action.language || series.spokenLanguage,
+      language: languageIntent.contentLanguage || action.language || series.language,
+      spokenLanguage: languageIntent.spokenLanguage || action.language || series.spokenLanguage,
+      languageIntent,
       sourceMode: action.knownUniverse ? 'known_universe_experimental' as const : series.sourceMode,
       masterUniversePrompt: series.masterUniversePrompt || (action.knownUniverse
         ? `Borrador fan inspirado en ${action.seriesTitle}; conservar los rasgos generales sin afirmar derechos sobre la obra original.`
@@ -204,12 +210,11 @@ export async function updateSeriesEpisode(action: UpdateSeriesEpisodeCommand): P
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
     : []
   if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; renombra una para poder elegirla sin ambigüedad.`)
-  const series = seriesMatches[0]
+  let series = seriesMatches[0]
     || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
   if (!series) throw new Error(action.seriesTitle
     ? `No existe la serie “${action.seriesTitle}” en este workspace.`
     : 'No hay una serie activa que modificar.')
-
   const episodeMatches = action.targetEpisodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
     : []
@@ -225,6 +230,19 @@ export async function updateSeriesEpisode(action: UpdateSeriesEpisodeCommand): P
   if (!episode) throw new Error(action.targetEpisodeTitle
     ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
     : `“${series.title}” necesita un episodio activo o un único episodio para poder inferir el destino.`)
+
+  if (action.languageIntent) {
+    const languageIntent = mergeLanguageIntent(series.languageIntent, action.languageIntent)
+    series = await api.saveSeriesProject(workspace, {
+      ...series,
+      language: languageIntent.contentLanguage || series.language,
+      spokenLanguage: languageIntent.spokenLanguage || series.spokenLanguage,
+      languageIntent,
+      updatedAt: new Date().toISOString(),
+    }, series.revision)
+    useSeriesStore.setState({ hydrated: false })
+    await useSeriesStore.getState().loadWorkspace(workspace)
+  }
 
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
@@ -267,7 +285,7 @@ export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Pro
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
     : []
   if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
-  const series = seriesMatches[0]
+  let series = seriesMatches[0]
     || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
   if (!series) throw new Error(action.seriesTitle
     ? `No existe la serie “${action.seriesTitle}” en este workspace.`
@@ -289,12 +307,38 @@ export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Pro
   if (action.scope === 'shots' && !episode.script.length) {
     throw new Error('Regenerar shots requiere un guion existente; genera script o complete primero.')
   }
-
+  if (action.languageIntent) {
+    const languageIntent = mergeLanguageIntent(series.languageIntent, action.languageIntent, {
+      contentLanguage: series.language,
+      spokenLanguage: series.spokenLanguage,
+    })
+    const language = languageIntent.contentLanguage || series.language
+    const spokenLanguage = languageIntent.spokenLanguage || series.spokenLanguage
+    if (
+      JSON.stringify(languageIntent) !== JSON.stringify(series.languageIntent)
+      || language !== series.language
+      || spokenLanguage !== series.spokenLanguage
+    ) {
+      series = await api.saveSeriesProject(workspace, {
+        ...series,
+        language,
+        spokenLanguage,
+        languageIntent,
+        updatedAt: new Date().toISOString(),
+      }, series.revision)
+      useSeriesStore.setState({ hydrated: false })
+      await useSeriesStore.getState().loadWorkspace(workspace)
+    }
+  }
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
   const job = await api.startSeriesPlan(workspace, series.id, episode.id, {
     scope: action.scope,
-    instruction: action.instruction,
+    instruction: compileProviderPrompt(
+      action.instruction,
+      mergeLanguageIntent(series.languageIntent, action.languageIntent),
+      { medium: 'series' },
+    ),
     writingProvider: series.provider.writingProvider,
     writingModel: series.provider.writingModel,
     writingBaseUrl: series.provider.writingBaseUrl,
@@ -651,4 +695,3 @@ export async function commitSeriesCanonDelta(action: CommitSeriesCanonCommand): 
     { reviewView: 'finish' },
   )
 }
-

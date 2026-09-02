@@ -5,6 +5,7 @@ export interface WizardSyncMessage {
   role: 'user' | 'assistant'
   text: string
   createdAt: number
+  language?: string
   cards?: unknown[]
 }
 
@@ -33,6 +34,7 @@ export function normalizeRemoteWizardMessages(
       role: message.role,
       text: message.text,
       createdAt: typeof message.createdAt === 'number' ? message.createdAt : 0,
+      ...(typeof message.language === 'string' && message.language ? { language: message.language } : {}),
       cards: Array.isArray(message.cards) && message.cards.length ? message.cards : undefined,
     }]
   })

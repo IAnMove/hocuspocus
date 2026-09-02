@@ -26,6 +26,7 @@ class TestWizardConversations(unittest.TestCase):
                         "role": "assistant",
                         "text": "He encolado la exportación.",
                         "createdAt": 1,
+                        "language": "es",
                         "executionKey": "default|export_video_editor|edit-1|{}",
                         "cards": [{
                             "id": "card-1",
@@ -50,6 +51,7 @@ class TestWizardConversations(unittest.TestCase):
             self.assertEqual(loaded["revision"], 1)
             self.assertEqual(loaded["messages"][0]["executionKey"], "default|export_video_editor|edit-1|{}")
             self.assertEqual(loaded["messages"][0]["cards"][0]["taskId"], "export-99")
+            self.assertEqual(loaded["messages"][0]["language"], "es")
             cards = reconstruct_cards(loaded)
             self.assertEqual(cards[0]["taskId"], "export-99")
             self.assertEqual(cards[0]["state"], "queued")

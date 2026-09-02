@@ -1,4 +1,5 @@
 import type { StoryWritingProvider } from '../stories/types'
+import type { LanguageIntent } from '../../lib/languageIntent'
 
 export type SeriesApproval = 'draft' | 'approved'
 export type SeriesFormat = 'serial' | 'episodic' | 'hybrid'
@@ -307,6 +308,7 @@ export interface SeriesProject {
   defaultEpisodeDurationSeconds: number
   language: string
   spokenLanguage: string
+  languageIntent: LanguageIntent
   protagonistConsistency: boolean
   protagonistCharacterId: string
   genre: string

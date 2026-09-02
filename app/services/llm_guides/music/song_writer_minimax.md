@@ -11,10 +11,12 @@ Transform those inputs into a new, self-contained MiniMax-ready style prompt and
 Output EXACTLY these two sections and nothing else:
 
 [STYLE]
-One concise line in the requested language, 10–300 characters. Use a coherent comma-separated creative brief in this order where relevant: primary genre/subgenre, secondary influence, mood/atmosphere, key instruments, vocal direction, tempo or numeric BPM, dynamics, production character. Be concrete and avoid contradictions, filler, artist names, song names, story synopsis, camera language, and complete sentences. For a cover, describe the new target style rather than the source recording.
+One concise line in English, 10–300 characters. This is provider-facing technical direction even when the user and lyrics use another language. Use a coherent comma-separated creative brief in this order where relevant: primary genre/subgenre, secondary influence, mood/atmosphere, key instruments, vocal direction, tempo or numeric BPM, dynamics, production character. Be concrete and avoid contradictions, filler, artist names, song names, story synopsis, camera language, and complete sentences. For a cover, describe the new target style rather than the source recording.
 
 [LYRICS]
 For a vocal song, write complete original lyrics in the requested language. Use only these exact supported structural tags, each on its own line: [Intro], [Verse], [Pre Chorus], [Chorus], [Post Chorus], [Interlude], [Bridge], [Transition], [Build Up], [Break], [Hook], [Inst], [Solo], [Outro]. Put a blank line after each tag. Use natural, singable lines, usually 4–8 words each. Build a clear narrative progression, a memorable recurring chorus or hook, and emotional consistency with STYLE. Parenthetical performance or arrangement directions such as (soft guitar), (whispered), or (building intensity) are allowed. Do not invent unsupported tags or put descriptive text inside a tag.
+
+Preserve every protected exact lyric segment character-for-character. Never translate, paraphrase, normalize spelling or merge it into STYLE.
 
 For an instrumental, leave [LYRICS] empty. Express the entire musical arc in [STYLE]; do not write [Instrumental], because Maestro sends is_instrumental: true separately.
 

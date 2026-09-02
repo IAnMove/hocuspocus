@@ -28,19 +28,19 @@ from fastapi import APIRouter, HTTPException, Request
 _SONG_WRITER_FALLBACK = (
     "You are a songwriter for ACE-Step 1.5. From the user's brief, output EXACTLY "
     "two sections and nothing else:\n[STYLE]\nA dense prose paragraph describing "
-    "genre, instruments, mood, production, and vocal type (no numeric BPM/key).\n"
+    "genre, instruments, mood, production, and vocal type in English (no numeric BPM/key).\n"
     "[LYRICS]\nOriginal lyrics with [Verse]/[Chorus]/[Bridge] section tags on their "
     "own lines, ~6-10 syllables per line. Keep STYLE and LYRICS consistent."
 )
 _SONG_WRITER_FALLBACK_INSTRUMENTAL = (
     "You are a music producer for ACE-Step 1.5. Output EXACTLY two sections:\n"
     "[STYLE]\nA dense prose paragraph describing genre, instruments, mood, "
-    "production, and energy — instrumental, no vocals, no numeric BPM/key.\n"
+    "production, and energy in English — instrumental, no vocals, no numeric BPM/key.\n"
     "[LYRICS]\n[Instrumental]"
 )
 _SONG_WRITER_FALLBACK_MINIMAX = (
     "You write prompts for MiniMax Music. Output exactly [STYLE] and [LYRICS]. "
-    "Write both STYLE and LYRICS in the language requested by the user. STYLE is one "
+    "Write STYLE in English and LYRICS in the language requested by the user. STYLE is one "
     "comma-separated line of 10-300 characters containing "
     "genre, mood, instruments, vocal direction, tempo and production. Never put "
     "reference song or artist names in STYLE. LYRICS use supported tags such as "
@@ -93,9 +93,11 @@ def _minimax_song_request_prompt(body: dict, description: str, instrumental: boo
     sections = [
         f"MODE: {'instrumental' if instrumental else 'vocal song'}",
         f"TARGET MODEL: {model}",
-        f"STYLE AND LYRICS LANGUAGE: {language}",
-        f"LANGUAGE RULE: Write the visible STYLE prompt and all sung words in {language}. "
-        "Keep only provider structural tags such as [Verse] and [Chorus] in English.",
+        "STYLE LANGUAGE: English (provider-facing technical direction).",
+        f"LYRICS LANGUAGE: {language}.",
+        f"LANGUAGE RULE: Write STYLE only in English and all sung words in {language}. "
+        "Keep provider structural tags such as [Verse] and [Chorus] in English. Preserve "
+        "every protected exact segment character-for-character and never translate it.",
         f"TARGET DURATION: approximately {duration} seconds",
         "DURATION NOTE: MiniMax Music has no exact duration API parameter. Treat the target "
         "as a strict lyric and arrangement budget: keep the section count and sung lines "
@@ -134,16 +136,17 @@ def _normalize_minimax_song_output(style: str, lyrics: str, instrumental: bool, 
 
 
 def _ace_song_request_prompt(description: str, language: str, instrumental: bool) -> str:
-    """Keep the editable ACE-Step prompt in the language selected by the user."""
+    """Keep technical direction in English and lyrics in the selected language."""
     target = str(language or "English").strip()[:80] or "English"
     if instrumental:
-        rule = f"Write the visible STYLE prompt in {target}."
+        rule = "Write the visible provider-facing STYLE prompt in English."
     else:
         rule = (
-            f"Write both the visible STYLE prompt and all lyrics in {target}; "
-            "keep structural tags such as [Verse] and [Chorus] in English."
+            f"Write the visible provider-facing STYLE prompt in English and all lyrics in {target}; "
+            "keep structural tags such as [Verse] and [Chorus] in English. Preserve protected "
+            "exact segments character-for-character."
         )
-    return f"OUTPUT LANGUAGE: {target}. {rule}\n\n{str(description or '').strip()}"
+    return f"LYRICS LANGUAGE: {target}. TECHNICAL PROMPT LANGUAGE: English. {rule}\n\n{str(description or '').strip()}"
 
 
 def _song_writer_image_paths(body: dict) -> list:

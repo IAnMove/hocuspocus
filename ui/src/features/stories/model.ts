@@ -7,6 +7,7 @@ import {
   LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT,
 } from '../../types/index.ts'
 import { normalizeStoryMusicModel } from './musicModel'
+import { normalizeLanguageIntent } from '../../lib/languageIntent'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
 
@@ -335,6 +336,11 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     },
     language: 'Español',
     spokenLanguage: 'Español de España',
+    languageIntent: normalizeLanguageIntent(null, {
+      contentLanguage: 'Español',
+      spokenLanguage: 'Español de España',
+      technicalPromptLanguage: 'en',
+    }),
     locationVariety: 'balanced',
     protagonistConsistency: false,
     protagonistCharacterId: '',
@@ -510,6 +516,11 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     },
     language: text(project.language, fallback.language),
     spokenLanguage: text(project.spokenLanguage, text(project.language, fallback.spokenLanguage)),
+    languageIntent: normalizeLanguageIntent(project.languageIntent, {
+      contentLanguage: text(project.language, fallback.language),
+      spokenLanguage: text(project.spokenLanguage, text(project.language, fallback.spokenLanguage)),
+      technicalPromptLanguage: 'en',
+    }),
     locationVariety: project.locationVariety === 'single_location' ? 'single_location' : 'balanced',
     protagonistConsistency: project.protagonistConsistency === true,
     protagonistCharacterId: (Array.isArray(project.characters) ? project.characters : [])
@@ -632,13 +643,13 @@ export function normalizeStoryProject(value: unknown): StoryProject {
 
 export function changedSections(before: StoryProject, after: StoryProject): StorySection[] {
   const overviewBefore = [
-    before.title, before.projectType, before.creativeBrief, before.language, before.spokenLanguage, before.locationVariety, before.protagonistConsistency, before.protagonistCharacterId, before.genre, before.tone, before.audience,
+    before.title, before.projectType, before.creativeBrief, before.language, before.spokenLanguage, before.languageIntent, before.locationVariety, before.protagonistConsistency, before.protagonistCharacterId, before.genre, before.tone, before.audience,
     before.visualStyle, before.characterVisualStyle, before.enforceVisualStyle, before.allowClipText,
     before.musicVideoGenerationMode, before.directVideoMasterPromptMode, before.directVideoMasterPrompt,
     before.premise, before.logline, before.synopsis, before.theme, before.ending,
   ]
   const overviewAfter = [
-    after.title, after.projectType, after.creativeBrief, after.language, after.spokenLanguage, after.locationVariety, after.protagonistConsistency, after.protagonistCharacterId, after.genre, after.tone, after.audience,
+    after.title, after.projectType, after.creativeBrief, after.language, after.spokenLanguage, after.languageIntent, after.locationVariety, after.protagonistConsistency, after.protagonistCharacterId, after.genre, after.tone, after.audience,
     after.visualStyle, after.characterVisualStyle, after.enforceVisualStyle, after.allowClipText,
     after.musicVideoGenerationMode, after.directVideoMasterPromptMode, after.directVideoMasterPrompt,
     after.premise, after.logline, after.synopsis, after.theme, after.ending,

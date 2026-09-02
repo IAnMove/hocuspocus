@@ -15,6 +15,8 @@ import re
 import uuid
 from typing import Any
 
+from .language_intent import normalize_language_intent
+
 
 SERIES_LIBRARY_FILENAME = ".series-library-v1.json"
 MAX_SERIES_PROJECTS = 100
@@ -37,6 +39,12 @@ SHOT_EDITOR_FIELDS = frozenset({
     "negativePrompt", "audioDirection",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
+SERIES_CANON_INPUT_FIELDS = (
+    "title", "premise", "logline", "format", "language", "spokenLanguage",
+    "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience",
+    "visualStyle", "characterVisualStyle", "cameraLanguage", "sourceMode",
+    "masterUniversePrompt", "characters", "relationships", "locations", "props",
+)
 
 
 class SeriesConflictError(ValueError):
@@ -115,6 +123,24 @@ def validate_series_asset_uri(value: Any) -> str:
     return uri
 
 
+def series_canon_inputs_changed(current: dict, updated: dict) -> bool:
+    """Compare durable production inputs without coupling canon to chat language."""
+    current_canon = copy.deepcopy(current.get("canon") or {})
+    updated_canon = copy.deepcopy(updated.get("canon") or {})
+    for value in (current_canon, updated_canon):
+        value.pop("approval", None)
+        value.pop("approvedAt", None)
+    if current_canon != updated_canon:
+        return True
+    if any(current.get(key) != updated.get(key) for key in SERIES_CANON_INPUT_FIELDS):
+        return True
+    current_intent = normalize_language_intent(current.get("languageIntent"))
+    updated_intent = normalize_language_intent(updated.get("languageIntent"))
+    current_intent.pop("conversationLanguage", None)
+    updated_intent.pop("conversationLanguage", None)
+    return current_intent != updated_intent
+
+
 def empty_series_library(workspace_id: str = "default") -> dict[str, Any]:
     return {
         "schema": "series-library",
@@ -139,6 +165,9 @@ def create_series_project(
         "title": title.strip() or "Untitled series", "logline": "", "premise": "",
         "format": "episodic", "defaultEpisodeDurationSeconds": 75,
         "language": "Español", "spokenLanguage": "Español de España",
+        "languageIntent": normalize_language_intent(
+            None, content_language="Español", spoken_language="Español de España"
+        ),
         "protagonistConsistency": False, "protagonistCharacterId": "",
         "genre": "", "tone": "Cinematic", "audience": "General",
         "visualStyle": "", "characterVisualStyle": "", "cameraLanguage": "",
@@ -829,6 +858,13 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "language": _text(project.get("language"), "Español"),
         "spokenLanguage": _text(
             project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
+        ),
+        "languageIntent": normalize_language_intent(
+            project.get("languageIntent"),
+            content_language=_text(project.get("language"), "Español"),
+            spoken_language=_text(
+                project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
+            ),
         ),
         "protagonistConsistency": project.get("protagonistConsistency") is True,
         "protagonistCharacterId": (

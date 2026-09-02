@@ -46,11 +46,19 @@ import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
 import {
   AGENT_TABS,
+  currentAgentInterfaceLanguage,
+  extractVerbatimSegments,
   getCapability,
+  isLanguageAwareCapability,
+  LANGUAGE_INTENT_SCHEMA,
   listCapabilities,
+  mergeLanguageIntent,
+  normalizeLanguageIntent,
+  normalizeConversationLanguageTag,
   parseRegisteredCapability,
   registeredCapabilitySchemas,
   type AgentTab,
+  type LanguageIntent,
 } from './capabilityRegistry'
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
@@ -60,12 +68,16 @@ export type { ExampleConversation }
 export { AGENT_TABS }
 export type { AgentTab }
 
+export interface AgentLanguageAwareAction {
+  languageIntent?: LanguageIntent
+}
+
 export interface AgentOpenTabAction {
   type: 'open_tab'
   tab: AgentTab
 }
 
-export interface AgentPrepareVideoAction {
+export interface AgentPrepareVideoAction extends AgentLanguageAwareAction {
   type: 'prepare_video'
   prompt: string
   modelType?: string
@@ -82,7 +94,7 @@ export interface AgentPrepareVideoAction {
   turbo?: boolean
 }
 
-export interface AgentPrepareImageAction {
+export interface AgentPrepareImageAction extends AgentLanguageAwareAction {
   type: 'prepare_image'
   prompt: string
   modelType?: string
@@ -96,7 +108,7 @@ export interface AgentPrepareImageAction {
   outputCount?: number
 }
 
-export interface AgentPrepareAudioAction {
+export interface AgentPrepareAudioAction extends AgentLanguageAwareAction {
   type: 'prepare_audio'
   subMode: 'speech' | 'music' | 'sfx'
   prompt: string
@@ -105,7 +117,7 @@ export interface AgentPrepareAudioAction {
   negativePrompt?: string
 }
 
-export interface AgentQueueSfxPackAction {
+export interface AgentQueueSfxPackAction extends AgentLanguageAwareAction {
   type: 'queue_sfx_pack'
   style: string
   clips: AgentSfxClip[]
@@ -114,7 +126,7 @@ export interface AgentQueueSfxPackAction {
   confirm: true
 }
 
-export interface AgentPrepare3dAction {
+export interface AgentPrepare3dAction extends AgentLanguageAwareAction {
   type: 'prepare_3d'
   prompt: string
   modelType?: string
@@ -153,7 +165,7 @@ export interface AgentCreativeLocation {
   description: string
 }
 
-export interface AgentCreateStoryAction {
+export interface AgentCreateStoryAction extends AgentLanguageAwareAction {
   type: 'create_story'
   title: string
   projectType: 'full_story' | 'music_video' | 'trailer' | 'quick_video'
@@ -174,7 +186,7 @@ export interface AgentCreateStoryAction {
   durationSeconds?: number
 }
 
-export interface AgentUpdateStoryAction {
+export interface AgentUpdateStoryAction extends AgentLanguageAwareAction {
   type: 'update_story'
   targetStoryTitle: string
   title: string
@@ -195,7 +207,7 @@ export interface AgentUpdateStoryAction {
   durationSeconds?: number
 }
 
-export interface AgentGenerateStorySectionAction {
+export interface AgentGenerateStorySectionAction extends AgentLanguageAwareAction {
   type: 'generate_story_section'
   targetStoryTitle: string
   scope: 'all' | 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
@@ -238,7 +250,7 @@ export interface AgentGenerateStoryVisualsAction {
   confirm: true
 }
 
-export interface AgentStageStoryComicAction {
+export interface AgentStageStoryComicAction extends AgentLanguageAwareAction {
   type: 'stage_story_comic'
   targetStoryTitle: string
   direction: string
@@ -247,7 +259,7 @@ export interface AgentStageStoryComicAction {
   confirm: true
 }
 
-export interface AgentStageStoryVideoAction {
+export interface AgentStageStoryVideoAction extends AgentLanguageAwareAction {
   type: 'stage_story_video'
   targetStoryTitle: string
   kind: 'film' | 'trailer'
@@ -265,7 +277,7 @@ export interface AgentStartDirectorProductionAction {
   confirm: true
 }
 
-export interface AgentStageStoryMusicVideoAction {
+export interface AgentStageStoryMusicVideoAction extends AgentLanguageAwareAction {
   type: 'stage_story_music_video'
   targetStoryId?: string
   targetStoryTitle: string
@@ -276,7 +288,7 @@ export interface AgentStageStoryMusicVideoAction {
   confirm: true
 }
 
-export interface AgentConfigureStorySongAction {
+export interface AgentConfigureStorySongAction extends AgentLanguageAwareAction {
   type: 'configure_story_song'
   targetStoryId?: string
   targetStoryTitle: string
@@ -300,7 +312,7 @@ export interface AgentGenerateStorySongAction {
   confirm: true
 }
 
-export interface AgentCreateSeriesEpisodeAction {
+export interface AgentCreateSeriesEpisodeAction extends AgentLanguageAwareAction {
   type: 'create_series_episode'
   seriesTitle: string
   seriesPremise: string
@@ -323,7 +335,7 @@ export interface AgentCreateSeriesEpisodeAction {
   knownUniverse: boolean
 }
 
-export interface AgentUpdateSeriesEpisodeAction {
+export interface AgentUpdateSeriesEpisodeAction extends AgentLanguageAwareAction {
   type: 'update_series_episode'
   seriesTitle: string
   targetEpisodeTitle: string
@@ -334,7 +346,7 @@ export interface AgentUpdateSeriesEpisodeAction {
   targetDurationSeconds?: number
 }
 
-export interface AgentGenerateSeriesPlanAction {
+export interface AgentGenerateSeriesPlanAction extends AgentLanguageAwareAction {
   type: 'generate_series_plan'
   seriesTitle: string
   targetEpisodeTitle: string
@@ -399,7 +411,7 @@ export interface AgentApply3dRhythmAction {
   confirm: true
 }
 
-export interface AgentCreateRhythmic3dVideoAction {
+export interface AgentCreateRhythmic3dVideoAction extends AgentLanguageAwareAction {
   type: 'create_rhythmic_3d_video'
   sceneName: string
   musicPrompt: string
@@ -450,7 +462,7 @@ export interface AgentComicPanel {
 }
 export interface AgentComicPage { title: string; stage: string; panels: AgentComicPanel[] }
 
-export interface AgentCreateComicAction {
+export interface AgentCreateComicAction extends AgentLanguageAwareAction {
   type: 'create_comic'
   title: string
   synopsis: string
@@ -626,6 +638,8 @@ export type AgentAction = AgentOpenTabAction
 export interface AgentTurn {
   reply: string
   actions: AgentAction[]
+  /** ISO language tag inferred from the user's final message, not the UI. */
+  conversationLanguage?: string
 }
 
 export interface AgentActionResult {
@@ -640,6 +654,8 @@ export interface AgentActionResult {
 export interface AgentAppSnapshot {
   /** Versioned, canonical read model. Labels are display-only; actions target IDs. */
   context: WizardContextSnapshot
+  /** Presentation preference only. It never selects an authored language. */
+  interface_language: string
   current: {
     media_filter: string
     sidebar_mode: string
@@ -1699,9 +1715,44 @@ export function parseAgentTurn(raw: string): AgentTurn {
     }
     actions.push(action)
   }
+  const conversationLanguage = normalizeConversationLanguageTag(object.conversation_language)
   return {
     reply: reply || (actions.length ? 'El hechizo está trazado; voy a mover HocusPocus.' : humanReply(raw.trim())),
     actions,
+    ...(conversationLanguage ? { conversationLanguage } : {}),
+  }
+}
+
+export function protectUserVerbatimSegments(request: string, turn: AgentTurn): AgentTurn {
+  const verbatimSegments = extractVerbatimSegments(request)
+  if (!verbatimSegments.length) return turn
+  return {
+    ...turn,
+    actions: turn.actions.map(action => {
+      if (!isLanguageAwareCapability(action.type)) return action
+      const current = 'languageIntent' in action ? action.languageIntent : undefined
+      const contentLanguage = 'language' in action && typeof action.language === 'string' ? action.language : ''
+      const lyricsLanguage = 'lyricsLanguage' in action && typeof action.lyricsLanguage === 'string'
+        ? action.lyricsLanguage : ''
+      const explicitSpokenLanguage = verbatimSegments.find(segment => (
+        (segment.kind === 'dialogue' || segment.kind === 'lyrics') && segment.language
+      ))?.language || ''
+      const spokenLanguage = explicitSpokenLanguage || current?.spokenLanguage || lyricsLanguage || contentLanguage
+      const deterministic = normalizeLanguageIntent({
+        conversation_language: current?.conversationLanguage || turn.conversationLanguage,
+        content_language: current?.contentLanguage || contentLanguage,
+        spoken_language: spokenLanguage,
+        technical_prompt_language: current?.technicalPromptLanguage || 'en',
+        verbatim_segments: verbatimSegments.map(segment => ({
+          ...segment,
+          language: segment.language || spokenLanguage,
+        })),
+      })
+      return {
+        ...action,
+        languageIntent: mergeLanguageIntent(current, deterministic),
+      } as AgentAction
+    }),
   }
 }
 
@@ -2350,6 +2401,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
   additionalProperties: false,
   properties: {
     reply: { type: 'string', maxLength: 8_000 },
+    conversation_language: { type: 'string', maxLength: 120 },
     actions: {
       type: 'array',
       maxItems: MAX_ACTIONS,
@@ -2358,6 +2410,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         additionalProperties: false,
         properties: {
           type: { type: 'string', enum: listCapabilities().map(item => item.name) },
+          language_intent: LANGUAGE_INTENT_SCHEMA,
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -2580,6 +2633,7 @@ export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions 
   const state = useStore.getState()
   return {
     context: buildWizardContextSnapshot(contextOptions),
+    interface_language: currentAgentInterfaceLanguage(),
     current: {
       media_filter: state.mediaFilter,
       sidebar_mode: state.sidebarMode,

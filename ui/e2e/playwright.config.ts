@@ -3,6 +3,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const uiRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+const port = process.env.HOCUSPOCUS_E2E_PORT || '4173'
+const baseURL = `http://127.0.0.1:${port}`
 
 export default defineConfig({
   testDir: './specs',
@@ -14,7 +16,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: '../playwright-report' }]] : 'list',
   outputDir: '../test-results',
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL,
     locale: 'en-US',
     viewport: { width: 1280, height: 720 },
     trace: 'retain-on-failure',
@@ -22,9 +24,9 @@ export default defineConfig({
     video: 'off',
   },
   webServer: {
-    command: 'npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
+    command: `npm run build && npx vite preview --host 127.0.0.1 --port ${port} --strictPort`,
     cwd: uiRoot,
-    url: 'http://127.0.0.1:4173',
+    url: baseURL,
     reuseExistingServer: false,
     timeout: 180_000,
   },

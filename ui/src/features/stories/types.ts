@@ -1,4 +1,5 @@
 import type { AspectRatio, ResolutionPreset } from '../../types'
+import type { LanguageIntent } from '../../lib/languageIntent'
 
 export type StoryWritingProvider =
   | 'maestro'
@@ -224,6 +225,8 @@ export interface StoryProject {
   language: string
   /** Exact spoken language/accent contract for generated native video audio. Empty means auto. */
   spokenLanguage: string
+  /** Separates editorial, spoken and provider prompt languages and protects exact text. */
+  languageIntent: LanguageIntent
   /** Prefer distinct settings across music-video clips instead of repeating one scene. */
   locationVariety: 'balanced' | 'single_location'
   /** Require one approved primary protagonist image before video production. */
