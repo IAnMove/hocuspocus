@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hocuspocus.local/schemas/project-record-v1.schema.json",
+  "title": "HocusPocus Project Record",
+  "type": "object",
+  "required": ["schema", "schema_version", "id", "kind", "title", "workspace_ids", "sources", "metadata"],
+  "properties": {
+    "schema": { "const": "hocuspocus.project-record" },
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "kind": {
+      "enum": ["story", "series", "episode", "comic", "scene3d", "character_kit", "video_editor"]
+    },
+    "subtype": { "type": ["string", "null"] },
+    "title": { "type": "string", "minLength": 1 },
+    "revision": { "type": ["integer", "null"], "minimum": 0 },
+    "created_at": { "type": ["string", "null"], "format": "date-time" },
+    "updated_at": { "type": ["string", "null"], "format": "date-time" },
+    "parent": {
+      "type": ["object", "null"],
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "workspace_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["workspace_id", "adapter", "key"],
+        "properties": {
+          "workspace_id": { "type": "string", "minLength": 1 },
+          "adapter": { "type": "string", "minLength": 1 },
+          "key": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": false
+}

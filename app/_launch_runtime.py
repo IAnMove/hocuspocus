@@ -37298,6 +37298,13 @@ api.include_router(create_assets_router(
     uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
 ))
 
+from routers.projects import create_projects_router
+
+api.include_router(create_projects_router(
+    list_workspaces=_list_workspaces,
+    workspace_dir=_workspace_dir,
+))
+
 
 # ============================================================================
 # Mount Gradio classic UI at /classic
