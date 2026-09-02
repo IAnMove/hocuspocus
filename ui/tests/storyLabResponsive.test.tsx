@@ -137,3 +137,107 @@ test('Story Lab relationships tab is extracted and keeps its review chrome', asy
   assert.equal(project.relationships.length, 2)
   cleanup()
 })
+
+test('Story Lab world tab is extracted and keeps its review chrome', async () => {
+  const { readFileSync } = await import('node:fs')
+  const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
+  const tab = readFileSync(new URL('../src/features/stories/StoryWorldTab.tsx', import.meta.url), 'utf8')
+  const chrome = readFileSync(new URL('../src/features/stories/storyLabChrome.tsx', import.meta.url), 'utf8')
+
+  assert.match(panel, /import \{ StoryWorldTab \} from '\.\/StoryWorldTab'/)
+  assert.match(panel, /from '\.\/storyLabChrome'/)
+  assert.match(panel, /id: 'world'/)
+  assert.match(panel, /\{tab === 'world' && \(/)
+  assert.match(panel, /<StoryWorldTab/)
+  assert.equal(panel.includes('World bible'), false)
+  assert.match(panel, /id="story-review-world"/)
+  assert.match(chrome, /export function SectionHeader/)
+  assert.match(tab, /id="story-review-world"/)
+  assert.match(tab, /Rules, places and a visual language that every production can reuse\./)
+  assert.match(tab, /scope="world"/)
+  assert.match(tab, /Generate world concept/)
+
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { StoryWorldTab } = await import('../src/features/stories/StoryWorldTab.tsx')
+  const { createStoryProject } = await import('../src/features/stories/model.ts')
+  let project = createStoryProject('full_story')
+  project = {
+    ...project,
+    world: {
+      ...project.world,
+      summary: 'A rain-soaked port city',
+      visualLanguage: 'Sodium light and wet asphalt',
+      visualPrompt: 'Cinematic harbor at night',
+      locations: [{
+        id: 'loc-1', name: 'Harbor', purpose: 'Arrival', description: '', visualPrompt: '', negativePrompt: '', referenceAssetIds: [],
+      }],
+    },
+  }
+  const generated: string[] = []
+  const approved: string[] = []
+  const visuals: Array<{ kind: string; prompt: string }> = []
+  const uploads: Array<{ kind: string; id?: string }> = []
+  const clicks: string[] = []
+  const uploadRef = {
+    current: { click: () => { clicks.push('upload') } },
+  } as unknown as React.RefObject<HTMLInputElement | null>
+  const view = render(
+    <StoryWorldTab
+      project={project}
+      patch={patch => { project = { ...project, ...patch, world: patch.world ? { ...project.world, ...patch.world } : project.world } }}
+      update={updater => { project = updater(structuredClone(project)) }}
+      busy={null}
+      instruction=""
+      setInstruction={() => {}}
+      generate={scope => { generated.push(scope) }}
+      approve={key => { approved.push(key) }}
+      isApproved={() => false}
+      imageBusy=""
+      referenceBatchBusy={false}
+      generateVisual={(target, prompt) => { visuals.push({ kind: target.kind, prompt }) }}
+      setUploadTarget={target => { uploads.push(target) }}
+      uploadRef={uploadRef}
+      removeReference={() => {}}
+      ReferenceGallery={() => <div>World references</div>}
+      LocationEditor={({ location }) => <div>{location.name}</div>}
+    />,
+  )
+
+  assert.ok(document.getElementById('story-review-world'))
+  assert.ok(screen.getByRole('heading', { name: 'World bible' }))
+  assert.ok(screen.getByText('Harbor'))
+  fireEvent.click(screen.getByRole('button', { name: /Generate text/ }))
+  fireEvent.click(screen.getByRole('button', { name: /^Approve$/ }))
+  fireEvent.click(screen.getByRole('button', { name: /Generate world concept/ }))
+  fireEvent.click(screen.getByRole('button', { name: /Add reference/ }))
+  assert.deepEqual(generated, ['world'])
+  assert.deepEqual(approved, ['world'])
+  assert.deepEqual(visuals, [{ kind: 'world', prompt: 'Cinematic harbor at night' }])
+  assert.deepEqual(uploads, [{ kind: 'world' }])
+  assert.deepEqual(clicks, ['upload'])
+  fireEvent.click(screen.getByRole('button', { name: /Location/ }))
+  view.rerender(
+    <StoryWorldTab
+      project={project}
+      patch={patch => { project = { ...project, ...patch, world: patch.world ? { ...project.world, ...patch.world } : project.world } }}
+      update={updater => { project = updater(structuredClone(project)) }}
+      busy={null}
+      instruction=""
+      setInstruction={() => {}}
+      generate={scope => { generated.push(scope) }}
+      approve={key => { approved.push(key) }}
+      isApproved={() => false}
+      imageBusy=""
+      referenceBatchBusy={false}
+      generateVisual={(target, prompt) => { visuals.push({ kind: target.kind, prompt }) }}
+      setUploadTarget={target => { uploads.push(target) }}
+      uploadRef={uploadRef}
+      removeReference={() => {}}
+      ReferenceGallery={() => <div>World references</div>}
+      LocationEditor={({ location }) => <div>{location.name}</div>}
+    />,
+  )
+  assert.equal(project.world.locations.length, 2)
+  assert.equal(project.world.locations[1]?.name, 'New location')
+  cleanup()
+})
