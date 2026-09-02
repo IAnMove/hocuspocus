@@ -767,8 +767,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             <button
               onClick={handleOpenInVideoEditor}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors"
-              title="Editar vídeo en Video Editor"
-              aria-label="Editar vídeo en Video Editor"
+              title={t('editInVideoEditor')}
+              aria-label={t('editInVideoEditor')}
             >
               <Film size={13} />
             </button>

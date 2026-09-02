@@ -29,6 +29,7 @@ _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+_LLM_ROUTER_PATH = _APP / "routers" / "llm.py"
 _LLM_SERVICE_PATH = _APP / "services" / "llm_service.py"
 _DEFAULT_PATH = _APP / "defaults" / "minimax_h3.json"
 _LEGACY_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_legacy.json"
@@ -945,10 +946,10 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("proper names", ref2va_dialect_guide)
 
     def test_h3_enhance_path_preserves_context_ir_contract(self):
-        launch = _read(_LAUNCH_PATH)
+        llm_router = _read(_LLM_ROUTER_PATH)
         llm_service = _read(_LLM_SERVICE_PATH)
-        self.assertIn("needs_h3_context_ir", launch)
-        self.assertIn("enhancer_enabled > 0 and not needs_h3_context_ir", launch)
+        self.assertIn("needs_h3_context_ir", llm_router)
+        self.assertIn("enhancer_enabled > 0 and not needs_h3_context_ir", llm_router)
         self.assertIn("is_h3_context_ir", llm_service)
         self.assertIn("is_h3_ref2va", llm_service)
         self.assertIn("is_h3_structured = is_h3_context_ir or is_h3_ref2va", llm_service)

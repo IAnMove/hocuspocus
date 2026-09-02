@@ -1,0 +1,13 @@
+{
+  "banner": "Auditoría interna: marca los clips con alucinación de audio. Copia los prompts fallidos y pégalos en el chat para iterar el generador.",
+  "onlyMarked": "Solo marcados",
+  "copyFailed": "Copiar prompts erróneos ({{count}})",
+  "copied": "Copiado",
+  "loading": "Cargando vídeos…",
+  "audioBad": "Audio mal",
+  "promptLoaded": "Prompt cargado",
+  "loadPrompt": "Cargar prompt",
+  "loadingPrompt": "Cargando…",
+  "noPrompt": "(sin prompt en metadata)",
+  "clickToLoad": "Pulsa para cargar el prompt."
+}

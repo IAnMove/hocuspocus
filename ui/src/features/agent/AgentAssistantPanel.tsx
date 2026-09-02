@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowUp, Loader2, Maximize2, Minimize2, Sparkles, Trash2, X } from 'lucide-react'
+import { ArrowUp, Loader2, Maximize2, Minimize2, PanelLeftClose, Sparkles, Trash2 } from 'lucide-react'
 import { fetchWizardConversation, generateLlmText, saveWizardConversation, subscribeCanonicalTaskEvents, type CanonicalTask } from '../../api/client'
 import { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 import { buildAgentTurnPrompt, HOCUSPOCUS_AGENT_SYSTEM_PROMPT, type AgentConversationEntry } from './agentKnowledge'
@@ -33,6 +33,14 @@ interface AgentAssistantPanelProps {
   workspace: string
   tasks: CanonicalTask[]
   onClose: () => void
+  embedded?: boolean
+}
+
+function agentPanelPresentation(embedded: boolean, expanded: boolean) {
+  if (embedded && !expanded) {
+    return { role: 'region' as const, ariaModal: undefined, autoFocus: false }
+  }
+  return { role: 'dialog' as const, ariaModal: 'true' as const, autoFocus: !embedded }
 }
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
@@ -121,7 +129,7 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
   }
 }
 
-export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistantPanelProps) {
+export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = false }: AgentAssistantPanelProps) {
   const { t } = useUiTranslation('wizard')
   const [messages, setMessages] = useState<AgentMessage[]>(() => readMessages(workspace))
   const [conversationWorkspace, setConversationWorkspace] = useState(workspace)
@@ -144,6 +152,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
   messagesRef.current = messages
   const activeCount = useMemo(() => tasks.filter(task => ACTIVE.has(task.status) && !task.parent_id).length, [tasks])
   const latestTask = useMemo(() => [...tasks].sort((left, right) => right.updated_at - left.updated_at)[0], [tasks])
+  const panelPresentation = agentPanelPresentation(embedded, expanded)
 
   useEffect(() => {
     mountedRef.current = true
@@ -454,23 +463,22 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
 
   const panel = (
     <section
-      role="dialog"
-      aria-modal="true"
+      role={panelPresentation.role}
+      aria-modal={panelPresentation.ariaModal}
       aria-label={t('title')}
       data-expanded={expanded ? 'true' : 'false'}
       className={`hp-agent-panel z-[100] flex flex-col overflow-hidden border border-amber-200/20 bg-[#0d0b13]/95 shadow-2xl backdrop-blur-xl ${expanded
         ? 'hp-agent-panel--expanded fixed inset-0 rounded-none text-sm sm:inset-2 sm:rounded-2xl'
-        : 'fixed bottom-12 left-2 h-[min(34rem,calc(100vh-5rem))] w-[min(25rem,calc(100vw-1rem))] rounded-2xl text-xs'}`}
+        : embedded
+          ? 'relative h-full w-full border-0 text-xs shadow-none'
+          : 'fixed bottom-12 left-2 h-[min(34rem,calc(100vh-5rem))] w-[min(25rem,calc(100vw-1rem))] rounded-2xl text-xs'}`}
     >
       <div className="relative overflow-hidden border-b border-white/10 px-3 py-3">
         <div className="hp-agent-panel-glow" aria-hidden="true" />
         <div className="relative flex items-center gap-3">
           <AgentAvatar state={state} size={48} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="hp-wordmark text-lg font-semibold text-amber-50">{t('title')}</h2>
-              <span className="rounded-full border border-amber-200/20 bg-amber-200/10 px-1.5 py-0.5 text-[8px] uppercase tracking-wider text-amber-100/70">Guía · acciones</span>
-            </div>
+            <h2 className="hp-wordmark max-w-36 whitespace-normal text-xl font-semibold leading-[1.05] text-amber-50">{t('title')}</h2>
             <p className="truncate text-[10px] text-white/45">Workspace: {workspace}</p>
           </div>
           <button
@@ -484,7 +492,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
           <button type="button" onClick={clearConversation} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('clear')} aria-label={t('clear')}><Trash2 size={13} /></button>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('close')} aria-label={t('close')}><X size={14} /></button>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('close')} aria-label={t('close')}><PanelLeftClose size={15} /></button>
         </div>
         <div className="relative mt-2 flex items-center gap-2 text-[9px] text-white/45">
           <span className={`h-1.5 w-1.5 rounded-full ${activeCount ? 'animate-pulse bg-blue-300' : 'bg-emerald-300'}`} />
@@ -585,7 +593,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
         <div className="flex items-end gap-2 rounded-xl border border-white/10 bg-black/25 p-2 focus-within:border-amber-200/35">
           <Sparkles size={14} className="mb-1 shrink-0 text-amber-200/55" />
           <textarea
-            autoFocus
+            autoFocus={panelPresentation.autoFocus}
             rows={2}
             value={draft}
             disabled={busy}
@@ -602,6 +610,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       </form>
     </section>
   )
+
+  if (embedded && !expanded) return panel
 
   return createPortal(
     <>

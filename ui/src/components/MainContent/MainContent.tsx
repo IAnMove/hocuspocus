@@ -1,6 +1,5 @@
 import { lazy, Suspense, useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo, type JSX } from 'react'
-import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked, Upload, Trash2, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
-import { useUiTranslation } from '../../i18n'
+import { Film, Play, Square, Loader2, X, BookMarked, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { TabFilter } from './TabFilter'
 import { ThumbnailGallery } from './ThumbnailGallery'
 import { MediaFeedItem } from './MediaFeedItem'
@@ -16,6 +15,7 @@ import {
   clearDirectorClipReplacementTarget,
   readDirectorClipReplacementTarget,
 } from '../../features/stories/directorClipHandoff'
+import { useUiTranslation } from '../../i18n'
 
 const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
   .then(module => ({ default: module.SceneAnimatorPanel })))
@@ -49,170 +49,6 @@ function PanelLoadingFallback() {
     <div className="flex flex-1 items-center justify-center text-text-muted">
       <Loader2 size={22} className="animate-spin text-accent-blue" />
       <span className="ml-2 text-xs">Opening workspace…</span>
-    </div>
-  )
-}
-
-function OutputFolderSelector() {
-  const { t } = useUiTranslation('navigation')
-  const workspaces = useStore(s => s.workspaces)
-  const activeWorkspace = useStore(s => s.activeWorkspace)
-  const browsingUploads = useStore(s => s.browsingUploads)
-  const switchWorkspace = useStore(s => s.switchWorkspace)
-  const createWorkspace = useStore(s => s.createWorkspace)
-  const deleteWorkspace = useStore(s => s.deleteWorkspace)
-  const [open, setOpen] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  const handleDelete = async (name: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (confirmDelete !== name) {
-      setConfirmDelete(name)
-      setTimeout(() => setConfirmDelete(c => (c === name ? null : c)), 4000)
-      return
-    }
-    setConfirmDelete(null)
-    setDeleting(name)
-    setDeleteError(null)
-    try {
-      await deleteWorkspace(name)
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : String(err))
-      setTimeout(() => setDeleteError(null), 6000)
-    } finally {
-      setDeleting(null)
-    }
-  }
-
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false)
-        setCreating(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  const handleCreate = async () => {
-    const name = newName.trim().replace(/\s+/g, '-')
-    if (!name) return
-    try {
-      await createWorkspace(name)
-      setNewName('')
-      setCreating(false)
-      setOpen(false)
-    } catch {
-      // error logged in store
-    }
-  }
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors border border-border"
-        title={t('outputFolder.switch')}
-      >
-        <FolderOpen size={12} />
-        <span className="max-w-[120px] truncate">{browsingUploads ? t('outputFolder.uploads') : activeWorkspace}</span>
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-1 w-56 bg-bg-secondary border border-border rounded-lg shadow-lg z-50 overflow-hidden">
-          <div className="px-2 py-1.5 border-b border-border">
-            <span className="text-[10px] text-text-muted uppercase tracking-wider">{t('outputFolder.list')}</span>
-          </div>
-          <div className="max-h-[200px] overflow-y-auto">
-            {workspaces.map(ws => (
-              <div key={ws.name} className="flex items-center group hover:bg-bg-hover transition-colors">
-                <button
-                  onClick={() => { switchWorkspace(ws.name); setOpen(false) }}
-                  className={`flex-1 min-w-0 text-left px-3 py-2 text-xs flex items-center justify-between ${
-                    ws.name === activeWorkspace && !browsingUploads ? 'text-accent-blue' : 'text-text-secondary'
-                  }`}
-                >
-                  <span className="truncate">{ws.name}</span>
-                  {ws.name === activeWorkspace && !browsingUploads && <Check size={12} className="shrink-0" />}
-                </button>
-                {/* default IS the outputs folder itself — not deletable */}
-                {ws.name !== 'default' && (
-                  <button
-                    onClick={e => handleDelete(ws.name, e)}
-                    disabled={deleting === ws.name}
-                    className={`px-2 py-2 shrink-0 transition-colors ${
-                      confirmDelete === ws.name
-                        ? 'text-red-400 bg-red-500/15'
-                        : deleting === ws.name
-                          ? 'text-text-muted cursor-wait'
-                          : 'text-text-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400'
-                    }`}
-                    title={confirmDelete === ws.name
-                      ? `Click again to permanently delete "${ws.name}" and its ${ws.file_count ?? 0} files`
-                      : `Delete workspace (${ws.file_count ?? 0} files)`}
-                  >
-                    {deleting === ws.name ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          {deleteError && (
-            <div className="px-3 py-1.5 text-[10px] text-red-400 border-t border-border leading-snug">{deleteError}</div>
-          )}
-          {/* Virtual Uploads view — browse user-uploaded media (read-only;
-              generations keep saving to the real active workspace). */}
-          <div className="border-t border-border">
-            <button
-              onClick={() => { switchWorkspace('__uploads__'); setOpen(false) }}
-              className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-bg-hover transition-colors ${
-                browsingUploads ? 'text-accent-blue' : 'text-text-secondary'
-              }`}
-              title="Browse media you've uploaded — reuse as inputs"
-            >
-              <span className="flex items-center gap-1.5"><Upload size={12} /> {t('outputFolder.uploads')}</span>
-              {browsingUploads && <Check size={12} />}
-            </button>
-          </div>
-          <div className="border-t border-border p-2">
-            {creating ? (
-              <div className="flex gap-1.5">
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                  placeholder="output-folder"
-                  className="flex-1 bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
-                  autoFocus
-                />
-                <button
-                  onClick={handleCreate}
-                  disabled={!newName.trim()}
-                  className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue-hover disabled:opacity-50"
-                >
-                  Create
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setCreating(true)}
-                className="w-full text-left px-1 py-1 text-xs text-accent-blue hover:text-accent-blue-hover flex items-center gap-1"
-              >
-                <Plus size={12} /> New output folder
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -448,11 +284,8 @@ function PipelinePlaceholder() {
 }
 
 export function MainContent() {
-  const { t } = useUiTranslation('navigation')
-  const { t: tCommon } = useUiTranslation('common')
   const { t: tActivity } = useUiTranslation('activity')
   const outputs = useStore(s => s.filteredOutputs())
-  const outputsTotal = useStore(s => s.outputsTotal)
   const outputsLoading = useStore(s => s.outputsLoading)
   const jobs = useStore(s => s.jobs)
   const generationMode = useStore(s => s.generationMode)
@@ -746,29 +579,8 @@ export function MainContent() {
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Top bar */}
-      <div className="px-2 md:px-6 py-2 md:py-3 border-b border-border flex items-center justify-between gap-2">
+      <div className="border-b border-border px-2 py-2 md:px-6 md:py-3">
         <TabFilter />
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="text-[10px] md:text-xs text-text-muted hidden md:block">
-            {mediaFilter === 'scene3d' ? t('headings.scene3d')
-              : mediaFilter === 'assets' ? t('headings.assets')
-              : mediaFilter === 'projects' ? t('headings.projects')
-              : mediaFilter === 'workspaces' ? t('headings.workspaces')
-              : mediaFilter === 'animate3d' ? t('headings.animate3d')
-              : mediaFilter === 'comics' ? t('headings.comics')
-              : mediaFilter === 'stories' ? t('headings.storyLab')
-              : mediaFilter === 'series' ? t('headings.seriesLab')
-              : mediaFilter === 'runs' ? t('headings.runs')
-              : mediaFilter === 'characters' ? t('headings.characters')
-              : mediaFilter === 'styles' ? t('headings.styles')
-              : mediaFilter === 'videoeditor' ? t('headings.videoEditor')
-              : mediaFilter === 'auditdev' && developerMode ? t('headings.auditDev')
-              : outputsTotal > outputs.length
-              ? `${outputs.length} / ${outputsTotal}`
-              : tCommon('count.item', { count: outputs.length })}
-          </div>
-          {mediaFilter !== 'styles' && mediaFilter !== 'assets' && mediaFilter !== 'projects' && mediaFilter !== 'workspaces' && <OutputFolderSelector />}
-        </div>
       </div>
 
       {/* Content area: feed + thumbnails */}

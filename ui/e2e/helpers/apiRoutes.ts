@@ -122,6 +122,19 @@ const EMPTY_STORY_LIBRARY = {
   projects: {},
 }
 
+const EMPTY_WIZARD_CONVERSATION = {
+  version: 1,
+  revision: 0,
+  messages: [],
+  executions: [],
+}
+
+const EMPTY_WIZARD_WORKFLOWS = {
+  version: 1,
+  revision: 0,
+  workflows: [],
+}
+
 function json(body: Json, status = 200) {
   return {
     status,
@@ -191,6 +204,10 @@ function exactCatalog(): Record<string, ReturnType<typeof json> | { sse: true }>
     'GET /api/v1/loras/installed': json({ loras: [], manifest_last_check_at: null }),
     'GET /api/v1/tasks': json({ workspace: 'default', tasks: [], latest_event_id: 0 }),
     'GET /api/v1/tasks/events': { sse: true },
+    'GET /api/v1/wizard/conversations': json(EMPTY_WIZARD_CONVERSATION),
+    'PUT /api/v1/wizard/conversations': json(EMPTY_WIZARD_CONVERSATION),
+    'GET /api/v1/wizard/workflows': json(EMPTY_WIZARD_WORKFLOWS),
+    'PUT /api/v1/wizard/workflows': json(EMPTY_WIZARD_WORKFLOWS),
     'GET /api/v1/stories/library': json(EMPTY_STORY_LIBRARY),
     'PUT /api/v1/stories/library': json(EMPTY_STORY_LIBRARY),
     'GET /api/v1/resolutions': json({ resolutions: [] }),

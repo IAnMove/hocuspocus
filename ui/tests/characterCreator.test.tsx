@@ -178,7 +178,7 @@ test('empty A prompt means MiniMax should describe the image', () => {
 })
 
 test('Character Creator, Runs and collection Workspaces are first-class tabs', async () => {
-  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
   useStore.setState({ mediaFilter: 'all', outputSearchQuery: '' })
@@ -186,6 +186,7 @@ test('Character Creator, Runs and collection Workspaces are first-class tabs', a
     render(<TabFilter />)
     assert.ok(screen.getByRole('tab', { name: /Runs/ }))
     assert.ok(screen.getByRole('tab', { name: /Workspaces/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Studios/ }))
     assert.ok(screen.getByRole('tab', { name: /Character Creator/ }))
   } finally {
     cleanup()

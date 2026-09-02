@@ -26,6 +26,64 @@
     "series": "Series Lab",
     "director": "Director"
   },
+  "primary": {
+    "create": "Crear",
+    "library": "Biblioteca",
+    "directGeneration": "Generación directa",
+    "studios": "Estudios",
+    "production": "Producción",
+    "media": "Media",
+    "activity": "Actividad",
+    "studio": "Studio"
+  },
+  "menu": {
+    "create": "Elige un espacio creativo",
+    "library": "Encuentra proyectos y medios generados",
+    "directGeneration": "Generación directa",
+    "guidedCreation": "Creación guiada",
+    "studios": "Desarrolla proyectos creativos guiados",
+    "production": "Prepara, supervisa y monta producciones",
+    "media": "Explora proyectos y recursos generados"
+  },
+  "panel": {
+    "directGeneration": "Generación directa",
+    "director": "Director"
+  },
+  "directModes": {
+    "image": "Imagen",
+    "video": "Vídeo",
+    "audio": "Audio",
+    "model3d": "3D",
+    "avatar": "Editar",
+    "tools": "Herramientas"
+  },
+  "descriptions": {
+    "studio": "Genera una imagen, vídeo, canción o recurso 3D individual.",
+    "storyLab": "Desarrolla historias y videoclips con un canon reutilizable.",
+    "seriesLab": "Planifica una serie y crea sus capítulos.",
+    "comics": "Compón páginas, viñetas y sus imágenes.",
+    "director": "Prepara y supervisa producciones con varios planos.",
+    "editor": "Monta y exporta clips existentes.",
+    "video3d": "Compón vídeos con cámara a partir de escenas 3D.",
+    "animate3d": "Anima personajes y objetos dentro de una escena 3D.",
+    "productions": "Consulta las producciones preparadas y su progreso.",
+    "characters": "Crea personajes y referencias reutilizables.",
+    "projects": "Documentos creativos duraderos que puedes reabrir y editar.",
+    "assets": "Archivos fuente y resultados generados reutilizables.",
+    "allOutputs": "Explora todos los resultados de la carpeta de salida actual.",
+    "mediaFilters": "Filtra la biblioteca de resultados por este tipo de medio.",
+    "directImage": "Crea una imagen con control completo sobre el modelo y las referencias.",
+    "directVideo": "Crea un vídeo o continúa un clip existente.",
+    "directAudio": "Crea voz, música, efectos o una mezcla.",
+    "direct3d": "Genera un recurso 3D independiente.",
+    "directEdit": "Edita, cambia el estilo, rellena o sustituye un resultado.",
+    "directTools": "Ejecuta herramientas de posprocesado sobre un recurso existente."
+  },
+  "search": {
+    "placeholder": "Buscar...",
+    "open": "Buscar en la biblioteca",
+    "close": "Cerrar búsqueda"
+  },
   "tabs": {
     "all": "Todo",
     "assets": "Recursos",
@@ -47,6 +105,7 @@
     "styles": "Hoja de estilos",
     "comics": "Cómics",
     "videoEditor": "Video Editor",
+    "productions": "Producciones",
     "scene3d": "3D Video",
     "animate3d": "Animate",
     "edits": "Edits",
@@ -99,6 +158,7 @@
     "auditDev": "Auditoría interna"
   },
   "outputFolder": {
+    "option": "Salida",
     "switch": "Cambiar carpeta de salida",
     "list": "Carpetas de salida",
     "uploads": "Subidas"

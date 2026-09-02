@@ -212,12 +212,6 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
-      "file": "tests/test_minimax_song_writer_prompt.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
       "file": "tests/test_model_selection_persistence.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",

@@ -1,0 +1,32 @@
+{
+  "title": "Projects",
+  "aria": "All projects",
+  "durable_one": "{{count}} durable project",
+  "durable_other": "{{count}} durable projects",
+  "unreadable_one": "{{count}} unreadable source",
+  "unreadable_other": "{{count}} unreadable sources",
+  "search": "Search title, ID or type…",
+  "kindAria": "Project kind",
+  "workspaceAria": "Project workspace",
+  "allWorkspaces": "All workspaces",
+  "refresh": "Refresh registry",
+  "loading": "Reading projects…",
+  "empty": "No projects match these filters.",
+  "loadFailed": "Could not load the registry",
+  "openFailed": "Could not open the project",
+  "open": "Open project",
+  "copyId": "Copy ID",
+  "copyIdAria": "Copy ID of {{title}}",
+  "noDate": "Date unavailable",
+  "belongsTo": "Belongs to {{kind}}: {{id}}",
+  "kinds": {
+    "all": "All",
+    "story": "Stories",
+    "series": "Series",
+    "episode": "Episodes",
+    "comic": "Comics",
+    "scene3d": "3D scenes",
+    "characterKit": "Character Kits",
+    "videoEditor": "Video Editor"
+  }
+}

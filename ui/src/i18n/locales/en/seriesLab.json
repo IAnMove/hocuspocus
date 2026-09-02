@@ -18,6 +18,12 @@
     "minimumLimited": "The model’s native minimum leaves unspoken visual room.",
     "requiresSplit": "The dialogue exceeds one clip’s maximum; split it before rendering."
   },
+  "library": {
+    "loading": "Loading Series Lab…",
+    "empty": "Create an empty original series or import an existing Story Lab bible.",
+    "spoken": "Spoken video language",
+    "spokenHint": "Forces every dialogue prompt; regional accent remains model-dependent."
+  },
   "duration": {
     "seconds": "{{count}} seconds",
     "estimatedVoice": "Estimated voice",
