@@ -1215,12 +1215,15 @@ def persist_pipeline_output_timing(
         params.setdefault("result_kind", result_kind)
         metadata.setdefault("result_kind", result_kind)
 
-    temp_path = f"{meta_path}.{uuid.uuid4().hex[:8]}.tmp"
     try:
-        os.makedirs(out_dir, exist_ok=True)
-        with open(temp_path, "w", encoding="utf-8") as handle:
-            json.dump(metadata, handle, indent=2, ensure_ascii=False, default=str)
-        os.replace(temp_path, meta_path)
+        from services.asset_manifest import publish_generation_sidecar
+
+        publish_generation_sidecar(
+            os.path.join(out_dir, filename),
+            metadata,
+            workspace_id=pipeline.get("workspace") or None,
+            tool="director",
+        )
         return True
     except Exception as error:
         print(
@@ -1228,12 +1231,6 @@ def persist_pipeline_output_timing(
             f"{filename}: {error}"
         )
         return False
-    finally:
-        try:
-            if os.path.isfile(temp_path):
-                os.remove(temp_path)
-        except OSError:
-            pass
 
 
 def _write_director_assembly_sidecar(
