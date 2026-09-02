@@ -825,14 +825,16 @@ defineCapability<AgentStartDirectorProductionAction>({
   name: 'start_director_production', title: 'Start a prepared Director production',
   description: 'Start only the exact Story/Director production prepared by the Wizard and return its real pipeline ID.',
   useWhen: 'The user explicitly asks to start or queue the prepared Story film, trailer or music video.',
-  parameters: ['target_story_title', 'production_kind', 'confirm'],
-  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'start_director_production' }, target_story_title: { type: 'string' }, production_kind: { type: 'string', enum: ['film', 'trailer', 'music_video'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
+  parameters: ['target_story_id', 'target_story_title', 'production_id', 'production_kind', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'start_director_production' }, target_story_id: { type: 'string' }, target_story_title: { type: 'string' }, production_id: { type: 'string' }, production_kind: { type: 'string', enum: ['film', 'trailer', 'music_video'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
   risk: 'compute', confirmation: 'required', progress: 'Iniciando el pipeline real de Director…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const kind = text(raw.production_kind, 30)
     if (kind !== 'film' && kind !== 'trailer' && kind !== 'music_video') return null
-    return { type: 'start_director_production', targetStoryTitle: text(raw.target_story_title, 300), kind, confirm: true }
+    const targetStoryId = text(raw.target_story_id, 240)
+    const productionId = text(raw.production_id, 240)
+    return { type: 'start_director_production', ...(targetStoryId ? { targetStoryId } : {}), targetStoryTitle: text(raw.target_story_title, 300), ...(productionId ? { productionId } : {}), kind, confirm: true }
   },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
   async execute(action, context) {
@@ -859,11 +861,12 @@ defineCapability<AgentConfigureStorySongAction>({
   name: 'configure_story_song', title: 'Fill a Story Lab song draft',
   description: 'Write the selected model, vocal/instrumental mode, musical direction and structured lyrics into the canonical Story Lab music form.',
   useWhen: 'The user asks to create, write or revise the song/lyrics for a Story Lab videoclip.',
-  parameters: ['target_story_title', 'song_title', 'song_brief', 'music_style', 'lyrics', 'write_lyrics', 'lyrics_language', 'instrumental', 'model_type', 'target_duration_seconds'],
+  parameters: ['target_story_id', 'target_story_title', 'song_title', 'song_brief', 'music_style', 'lyrics', 'write_lyrics', 'lyrics_language', 'instrumental', 'model_type', 'target_duration_seconds'],
   inputSchema: {
     type: 'object', additionalProperties: false,
     properties: {
       type: { const: 'configure_story_song' },
+      target_story_id: { type: 'string', maxLength: 240 },
       target_story_title: { type: 'string', maxLength: 300 },
       song_title: { type: 'string', maxLength: 300 },
       song_brief: { type: 'string', maxLength: 4_000 },
@@ -885,8 +888,10 @@ defineCapability<AgentConfigureStorySongAction>({
     const style = text(raw.music_style, 4_000)
     if (!style || (!instrumental && !lyrics && !writeLyrics)) return null
     const model = text(raw.model_type, 160)
+    const targetStoryId = text(raw.target_story_id, 240)
     return {
       type: 'configure_story_song',
+      ...(targetStoryId ? { targetStoryId } : {}),
       targetStoryTitle: text(raw.target_story_title, 300),
       songTitle: text(raw.song_title, 300),
       brief: text(raw.song_brief, 4_000),
@@ -911,19 +916,26 @@ defineCapability<AgentGenerateStorySongAction>({
   name: 'generate_story_song', title: 'Generate the configured Story song',
   description: 'Generate the exact configured Story Lab song with ACE-Step and select the verified audio candidate in the music form.',
   useWhen: 'The user explicitly asks to generate, execute or launch the Story Lab song after its draft is filled.',
-  parameters: ['target_story_title', 'cue_title', 'confirm'],
+  parameters: ['target_story_id', 'target_story_title', 'cue_id', 'cue_title', 'confirm'],
   inputSchema: {
     type: 'object', additionalProperties: false,
     properties: {
       type: { const: 'generate_story_song' },
+      target_story_id: { type: 'string', maxLength: 240 },
       target_story_title: { type: 'string', maxLength: 300 },
+      cue_id: { type: 'string', maxLength: 240 },
       cue_title: { type: 'string', maxLength: 300 },
       confirm: { const: true },
     },
     required: ['type', 'confirm'],
   },
   risk: 'compute', confirmation: 'required', progress: 'Generando la canción configurada con ACE-Step…',
-  resolve(raw) { return raw.confirm === true ? { type: 'generate_story_song', targetStoryTitle: text(raw.target_story_title, 300), cueTitle: text(raw.cue_title, 300), confirm: true } : null },
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const targetStoryId = text(raw.target_story_id, 240)
+    const cueId = text(raw.cue_id, 240)
+    return { type: 'generate_story_song', ...(targetStoryId ? { targetStoryId } : {}), targetStoryTitle: text(raw.target_story_title, 300), ...(cueId ? { cueId } : {}), cueTitle: text(raw.cue_title, 300), confirm: true }
+  },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
   async execute(action, context) { return context.adapters.storyLab.generateSong(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
@@ -935,10 +947,16 @@ defineCapability<AgentStageStoryMusicVideoAction>({
   name: 'stage_story_music_video', title: 'Prepare a Story music video in Director',
   description: 'Resolve the exact Story song and cue, then prepare a verified Music Video Director production without launching it.',
   useWhen: 'The user asks to prepare a Story music video for later launch.',
-  parameters: ['target_story_title', 'song_name', 'cue_title', 'pacing', 'confirm'],
-  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_music_video' }, pacing: { type: 'string', enum: ['cinematic', 'balanced', 'rhythmic'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
+  parameters: ['target_story_id', 'target_story_title', 'song_name', 'cue_id', 'cue_title', 'pacing', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_music_video' }, target_story_id: { type: 'string', maxLength: 240 }, target_story_title: { type: 'string', maxLength: 300 }, song_name: { type: 'string', maxLength: 300 }, cue_id: { type: 'string', maxLength: 240 }, cue_title: { type: 'string', maxLength: 300 }, pacing: { type: 'string', enum: ['cinematic', 'balanced', 'rhythmic'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
   risk: 'edit', confirmation: 'required', progress: 'Preparando el videoclip de Story en Director…',
-  resolve(raw) { const pacing = text(raw.pacing, 20); return raw.confirm === true ? { type: 'stage_story_music_video', targetStoryTitle: text(raw.target_story_title, 300), songName: text(raw.song_name, 300), cueTitle: text(raw.cue_title, 300), pacing: pacing === 'cinematic' || pacing === 'rhythmic' ? pacing : 'balanced', confirm: true } : null },
+  resolve(raw) {
+    if (raw.confirm !== true) return null
+    const pacing = text(raw.pacing, 20)
+    const targetStoryId = text(raw.target_story_id, 240)
+    const cueId = text(raw.cue_id, 240)
+    return { type: 'stage_story_music_video', ...(targetStoryId ? { targetStoryId } : {}), targetStoryTitle: text(raw.target_story_title, 300), songName: text(raw.song_name, 300), ...(cueId ? { cueId } : {}), cueTitle: text(raw.cue_title, 300), pacing: pacing === 'cinematic' || pacing === 'rhythmic' ? pacing : 'balanced', confirm: true }
+  },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.storyLab.stageMusicVideo(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'director_production', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'director', anchors: ['production', 'music'], replay: 'atomic' },
 })

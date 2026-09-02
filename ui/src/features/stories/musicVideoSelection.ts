@@ -36,8 +36,11 @@ export function resolveStoryMusicSelection(
   project: StoryProject,
   songName = '',
   cueTitle = '',
+  cueId = '',
 ): StoryMusicSelection {
   const requestedCue = normalizeName(cueTitle)
+  const cueById = cueId ? project.music.cues.find(item => item.id === cueId) : undefined
+  if (cueId && !cueById) throw new Error(`No existe el cue con ID “${cueId}” en “${project.title}”.`)
   // Models occasionally put the selected rendered version ("… · v2") in
   // cue_title. Accept that harmless field mix-up and resolve its owning cue;
   // exact cue titles remain authoritative when they do match.
@@ -50,16 +53,16 @@ export function resolveStoryMusicSelection(
   if (exactCues.length > 1) {
     throw new Error(`Hay varios cues llamados “${cueTitle}”; usa el título exacto y único.`)
   }
-  const cue = requestedCue && !candidateFromCueTitle
+  const cue = cueById || (requestedCue && !candidateFromCueTitle
     ? exactCues[0] || (project.music.cues.length === 1 ? project.music.cues[0] : undefined)
     : candidateFromCueTitle
       ? project.music.cues.find(item => item.candidates.some(candidate => candidate.id === candidateFromCueTitle.id))
     : project.music.cues.length === 1
       ? project.music.cues[0]
-      : project.music.cues.find(item => (
+    : project.music.cues.find(item => (
         item.selectedCandidateId
         && item.candidates.some(candidate => candidate.id === item.selectedCandidateId)
-      ))
+      )))
 
   const pool = allCandidates(project, cue)
   if (!pool.length) {
