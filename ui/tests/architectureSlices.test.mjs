@@ -50,7 +50,7 @@ test('Director slice keeps the public setter behavior while state is composed se
     const partial = typeof update === 'function' ? update(state) : update
     state = { ...state, ...partial }
   }
-  state = createDirectorSlice(set)
+  state = createDirectorSlice(set, () => state)
 
   state.setDirectorMusicVideoTreatment({ generation_mode: 'direct_video' })
   assert.equal(state.directorMusicVideoTreatment.generation_mode, 'direct_video')
@@ -117,6 +117,12 @@ test('settings slice toggles open and tab through the public facade', async () =
   assert.equal(useStore.getState().settingsTab, 'integrations')
   useStore.getState().toggleSettings()
   assert.equal(useStore.getState().settingsOpen, false)
+  useStore.getState().openModelVisibility('video')
+  assert.equal(useStore.getState().settingsOpen, true)
+  assert.equal(useStore.getState().settingsTab, 'performance')
+  assert.equal(useStore.getState().modelVisibilityFocus, 'video')
+  useStore.getState().clearModelVisibilityFocus()
+  assert.equal(useStore.getState().modelVisibilityFocus, null)
 })
 
 test('sidebar slice toggles open through the public facade', async () => {
@@ -147,7 +153,7 @@ test('retake dialog slice opens and closes through the public facade', async () 
     const partial = typeof update === 'function' ? update(state) : update
     state = { ...state, ...partial }
   }
-  state = createRetakeDialogSlice(set)
+  state = createRetakeDialogSlice(set, () => state)
   assert.equal(state.retakeDialogOpen, false)
   assert.equal(state.retakeSourceFile, null)
   state.openRetakeDialog('clip.mp4')
@@ -207,6 +213,19 @@ test('developer-mode slice persists the local flag through the public facade', a
   useStore.getState().setDeveloperMode(true)
   assert.equal(useStore.getState().developerMode, true)
   assert.equal(useStore.getState().mediaFilter, 'videos')
+
+  const isolated = createDeveloperModeSlice(set, () => state)
+  isolated.setDeveloperMode(false)
+  assert.equal('mediaFilter' in isolated, false)
+})
+
+test('composed slices bind without as-never casts at the useStore call site', async () => {
+  const fs = await import('node:fs/promises')
+  const source = await fs.readFile(new URL('../src/stores/useStore.ts', import.meta.url), 'utf8')
+  const composition = source.split('export const useStore')[1].split('generationMode:')[0]
+  assert.match(composition, /bindSlice\(set, get, createSettingsSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createThemeSlice\)/)
+  assert.doesNotMatch(composition, /as never/)
 })
 
 test('useStore keeps Director actions available through its existing public facade', async () => {

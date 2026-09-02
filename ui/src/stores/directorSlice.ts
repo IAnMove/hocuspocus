@@ -14,6 +14,7 @@ import type {
   SpeakerMapping,
 } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
+import type { SliceCreator } from './storeApi'
 
 export type DirectorSlice = {
   directorStep: 'upload' | 'analyze' | 'structure' | 'style' | 'plan' | 'review' | 'generate_images' | 'plan_video' | 'review_video'
@@ -97,11 +98,6 @@ export type DirectorSlice = {
   directorAllowClipText: boolean
 }
 
-export type DirectorState = DirectorSlice & { directorSeamless: boolean }
-type SetDirectorState = (
-  partial: Partial<DirectorState> | ((state: DirectorState) => Partial<DirectorState>),
-) => void
-
 const defaultTreatment = (): MusicVideoTreatment => ({
   generation_mode: 'image_guided',
   direct_video_master_prompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
@@ -122,7 +118,7 @@ const defaultTreatment = (): MusicVideoTreatment => ({
  * Director's state and local reducers. Async orchestration remains in the
  * store for now; this slice gives it a stable, compatible state boundary.
  */
-export function createDirectorSlice(set: SetDirectorState): DirectorSlice {
+export const createDirectorSlice: SliceCreator<DirectorSlice> = set => {
   return {
     directorStep: 'upload',
     directorAudioFile: null,

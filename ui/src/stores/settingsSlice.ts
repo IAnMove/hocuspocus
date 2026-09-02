@@ -1,4 +1,5 @@
-import type { SettingsTab } from '../types'
+import type { GenerationMode, SettingsTab } from '../types'
+import type { SliceCreator } from './storeApi'
 
 export type SettingsSlice = {
   settingsOpen: boolean
@@ -6,20 +7,22 @@ export type SettingsSlice = {
   setSettingsOpen: (open: boolean) => void
   settingsTab: SettingsTab
   setSettingsTab: (tab: SettingsTab) => void
+  modelVisibilityFocus: GenerationMode | null
+  openModelVisibility: (mode: GenerationMode) => void
+  clearModelVisibilityFocus: () => void
 }
 
-type SetSettingsState = (
-  partial: Partial<SettingsSlice> | ((state: SettingsSlice) => Partial<SettingsSlice>),
-) => void
-
-type GetSettingsState = () => SettingsSlice
-
-export function createSettingsSlice(set: SetSettingsState, get: GetSettingsState): SettingsSlice {
-  return {
-    settingsOpen: false,
-    toggleSettings: () => set({ settingsOpen: !get().settingsOpen }),
-    setSettingsOpen: open => set({ settingsOpen: open }),
+export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
+  settingsOpen: false,
+  toggleSettings: () => set({ settingsOpen: !get().settingsOpen }),
+  setSettingsOpen: open => set({ settingsOpen: open }),
+  settingsTab: 'performance',
+  setSettingsTab: tab => set({ settingsTab: tab }),
+  modelVisibilityFocus: null,
+  openModelVisibility: mode => set({
+    settingsOpen: true,
     settingsTab: 'performance',
-    setSettingsTab: tab => set({ settingsTab: tab }),
-  }
-}
+    modelVisibilityFocus: mode,
+  }),
+  clearModelVisibilityFocus: () => set({ modelVisibilityFocus: null }),
+})
