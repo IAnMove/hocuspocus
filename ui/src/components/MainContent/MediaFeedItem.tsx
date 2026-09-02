@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties }
 import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, BookOpen, Box, Film, BadgeInfo, Clock3 } from 'lucide-react'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject, selectPipelineClipVideo } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
@@ -83,6 +84,7 @@ function RetryImage({ url, alt }: { url: string; alt: string }) {
 }
 
 export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, style }: Props) {
+  const { t } = useUiTranslation('activity')
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
   const setMediaFilter = useStore(s => s.setMediaFilter)
   const loadSettingsFromOutput = useStore(s => s.loadSettingsFromOutput)
@@ -864,7 +866,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
                 title="Generate descriptions and social copy from saved prompts"
               >
                 <BadgeInfo size={13} />
-                Extra info
+                {t('extraInfo')}
               </button>
             </>
           )}

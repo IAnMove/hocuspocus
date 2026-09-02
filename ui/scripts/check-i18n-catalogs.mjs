@@ -34,6 +34,9 @@ export function catalogReport() {
 const PILOT_FILES = [
   'src/components/MainContent/TabFilter.tsx',
   'src/components/MainContent/MainContent.tsx',
+  'src/components/MainContent/MediaFeedItem.tsx',
+  'src/components/MainContent/VideoExtraInfoDialog.tsx',
+  'src/components/MainContent/VideoInfoBar.tsx',
   'src/components/SettingsDrawer/SettingsDrawer.tsx',
   'src/components/SettingsDrawer/SystemSettingsPanel.tsx',
   'src/components/ActivityFooter.tsx',
@@ -48,6 +51,7 @@ const FORBIDDEN = [
   'Output folders',
   'Pregunta al mago',
   'Carpetas de salida',
+  'Extra info',
 ]
 
 export function forbiddenLiterals() {
