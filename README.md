@@ -10,21 +10,21 @@ HocusPocus exists for creators who do not want a one-off prompt machine. It is a
 
 1. **Studio (sidebar)** — choose an image, video or audio model; write the prompt; add references/LoRAs; then generate. Use it when you want direct, manual control over one asset. The output appears in the gallery and is reusable everywhere else.
 2. **Director (sidebar)** — select Music Video, Short Film, Trailer or a story-driven workflow and describe the outcome. The LLM turns the brief into reviewable shots, prompts and references. Choose manual review for control or automatic mode for a complete recoverable pipeline.
-3. **Gallery: All, Images, Videos, Audio, Videoclips, Trailers and Chapters** — browse results by kind. Open an item to inspect it; use it as a reference, send it to an editor, or keep it in the active workspace.
+3. **Gallery: All, Images, Videos, Audio, Videoclips, Trailers and Chapters** — browse results by kind. Open an item to inspect it; use it as a reference, send it to an editor, or keep it in the active output folder.
 4. **3D** — create a mesh from text, one image or the four front/left/right/back views. You can upload references or select existing HocusPocus images. Export GLB for later animation or 3D-video composition.
-5. **3D Video** — place GLBs, images and effects in a controllable scene and render an MP4/WebM composition. Use it for camera moves that must be exact rather than invented by a video model.
+5. **3D Video** — place GLBs, images, Character Kits and effects in a controllable scene and render an MP4/WebM composition. Use it for camera moves that must be exact rather than invented by a video model, and for 2D cutout dialogue through Face Rig mouth overlays.
 6. **Animate** — rig a compatible static GLB and apply procedural or AI-assisted motion. Export the rigged model or bring it back to 3D Video.
-7. **Character Creator** — upload one subject image. H3 makes a centered 360° turntable; select/re-take the best front, left, back and right frames, then build a Hunyuan multi-view mesh. It is the quickest route from character art to a 3D asset.
+7. **Character Creator** — upload one subject image. H3 makes a centered 360° turntable; select/re-take the best front, left, back and right frames, then build a Hunyuan multi-view mesh. **Create / open CharacterKit Face Rig** hands a saved view to **3D Video** as a 2D puppet (not a mesh). It is the quickest route from character art to a 3D asset or a reusable cutout; see the [Character Kits / Face Rig guide](docs/character-kits/HOWUSEIT.md).
 8. **Story Lab** — write the production bible: premise, world rules, locations, cast, relationships and beats. Review each field, then hand the approved canon to Comic Studio, Director, trailers or music-video production.
 9. **Series Lab** — turn approved canon into seasons, episodes, scenes and shots. Use it when continuity has to survive several episodes and you need attempts and references tracked per shot.
-10. **Workspaces** — separate client work, worlds and experiments. The workspace selector changes the active output folder; this tab is also the place to inspect and resume Director production threads.
+10. **Output folders and Workspace collections** — the output-folder selector changes the active physical save directory. Explicit Workspace collections group related projects, assets and Productions without becoming a directory; the Workspaces tab inspects and resumes Director production threads in the active output folder.
 11. **Hoja de estilos** — save visual rules, palettes and prompt language. Apply the sheet so images, comics and shots share a recognizable art direction.
 12. **Comics** — plan pages and panels, revise dialogue, generate/re-generate panel art, then export PDF, CBZ or PNG. Use **Comic → AI film** to turn approved panels into a film plan without losing the comic canon.
 13. **Video Editor** — import generated or uploaded clips, trim, split, reorder and export an MP4. It is the finishing room for material that is already good and should not be regenerated.
 14. **Edits and Multi-clip** — use Edits for targeted retakes, outpaint and prompt-driven changes; use Multi-clip for longer sequences with prompt-by-prompt control and overlapping continuity.
 15. **Footer, Productions and Settings** — the footer shows active jobs, their ETA and history; Productions preserves Director pipelines and recovery actions. The gear controls services, models, performance, themes and explicit mature/experimental options.
 
-For a typical project: create the canon in **Story Lab** (or begin in **Studio**), approve a character or location, produce a few clips in **Director**, refine them in **Video Editor**, and keep all source assets in the same **Workspace**. Every step can also start from an existing image, video, audio file or GLB.
+For a typical project: create the canon in **Story Lab** (or begin in **Studio**), approve a character or location, produce a few clips in **Director**, refine them in **Video Editor**, and keep source assets in the same **output folder**, optionally linking the work to a logical **Workspace collection**. Every step can also start from an existing image, video, audio file or GLB.
 
 ## What it does
 
@@ -138,7 +138,7 @@ For a screenshot-led, end-to-end walkthrough, see **[HocusPocus / Experimental: 
 - **Guided mode** creates reviewable field-level drafts and locks production until the relevant story, world, cast identities, relationships, and structure are approved. **Automatic mode** runs the same checkpointed pipeline, then offers first-look world, location, and character concepts.
 - Choose HocusPocus internal, DeepSeek V4 Pro/Flash, MiniMax M3/M2.7/M2.7 Highspeed, OpenAI, or a custom compatible writing agent inside the story itself. Concept-art generation has its own independent HocusPocus/MiniMax selector.
 - Character cards combine role, desire, need, flaw, arc, dialogue voice, wardrobe, visual invariants, negative prompts, multiple references, and a selected primary identity image.
-- Export/import a `.storypack` with the editable JSON and available visual assets. Each workspace has a multi-story autosaved library; generated plans and local concept jobs can resume from durable checkpoints after interruption.
+- Export/import a `.storypack` with the editable JSON and available visual assets. Each output folder has a multi-story autosaved library; generated plans and local concept jobs can resume from durable checkpoints after interruption. A logical Workspace collection can link those projects without owning their files.
 - **Productions** offers a review-first hand-off and a complete one-click generation for both media. Comic opens **Director → Comic** and creates a self-contained chapter rather than retelling the master plot; four pages remain the quick-test default, while page count and panels per page are configurable up to the Director limits. Short Film opens **Director → Short Film → Story** with an editable target duration and independently selectable image and video models, and inherits the Story project's selected writing provider instead of silently falling back to the global LLM. Its shot frames can use a local HocusPocus image model or the external MiniMax Image-01 API; the latter does not consume local VRAM and is distinct from the local MiniMax H3 video runtime. Both productions receive the full editable canon, structured cast, locations and labelled visual references. Character images remain attached through planning and MiniMax `image-01` uses the visually prioritised character as its single supported identity reference per request. Adaptation history preserves the selected models when reopening the staged target, or can restore its exact source as a new editable copy.
 - New **Videoclip** songs default to local **ACE-Step 1.5 XL** (`ace_step_v1_5_xl_sft_lm_4b`). MiniMax `music-2.6` / `music-3.0` stay available on the song model selector.
 - **Tráiler cinematográfico** is a standalone Story Lab project type beside **Videoclip**, so movie trailers never require a song. Its four-stage planner creates the concept, protagonists, world and a 6–12-beat trailer arc, then opens the dedicated 15–180 second Trailer Creator. It exposes theatrical, teaser and character formats; narration, dialogue or visual-only storytelling; spoiler and intensity controls; optional minimal title cards; and an editable six-part timed arc from cold open to unresolved final hook. Visual generation can create start frames, route approved references directly through H3 Ref2VA, or run as pure text-to-video without generating or sending any image. A trailer can be reviewed in Director or generated as a recoverable ordered pipeline, then replayed, regenerated clip-by-clip and joined from Story Lab's Assembly view.
@@ -153,7 +153,7 @@ Build a comic as an editable production rather than a single flattened generatio
 - Comic and Video Editor drafts autosave locally; saved comics remain backward-compatible with older version-2 project JSON.
 
 ### ✂️ Video Editor — cut Lab clips without regenerating
-The **Video Editor** tab assembles existing workspace or uploaded clips (H3 MP4s, compositor WebM, Series handoffs, comic animatics). Timeline trim, split, reorder, play-from-selection, and playhead scrub are local; only probe, thumbnails, frame grabs, and FFmpeg export hit the server.
+The **Video Editor** tab assembles existing output-folder or uploaded clips (H3 MP4s, compositor WebM, Series handoffs, comic animatics). Timeline trim, split, reorder, play-from-selection, and playhead scrub are local; only probe, thumbnails, frame grabs, and FFmpeg export hit the server.
 
 - Import from the gallery card, **From HocusPocus** picker, drag-and-drop (`POST /api/v1/upload`, 500 MB max), or a Series/comic handoff.
 - Export is a queued FFmpeg job (`POST /api/v1/video-editor/export`, 1–100 clips, even 240–3840 resolution, fps 24/25/30/50/60). Cancel waits for the current FFmpeg subprocess.
@@ -191,7 +191,7 @@ Three themes, switchable in Settings → System:
 ### 🧊 Native Hunyuan3D Studio
 HocusPocus includes an integrated **3D** section for text-to-3D, image-to-3D, and multi-image reconstruction. Hunyuan runs in an isolated environment inside HocusPocus, so its older Diffusers stack cannot conflict with the audio/video models. Each worker exits after export and releases its CUDA context and VRAM.
 
-Reference slots accept both images uploaded from disk and existing images selected directly from the active HocusPocus workspace. This applies to the single front reference, all four multi-view slots, and the texture reference used by **Retexture GLB**.
+Reference slots accept both images uploaded from disk and existing images selected directly from the active HocusPocus output folder. This applies to the single front reference, all four multi-view slots, and the texture reference used by **Retexture GLB**.
 
 Included geometry variants:
 
@@ -284,10 +284,10 @@ job = requests.post(f"{base}/api/v1/model3d/generate", json={
 status = requests.get(f"{base}/api/v1/model3d/status/{job['job_id']}").json()
 ```
 
-### 📂 Workspaces (output directories)
-Multiple isolated output directories with a quick switcher in the sidebar. Useful for separating client projects, NSFW vs SFW, or experiments. Pinned and favorited outputs are tracked per workspace.
+### 📂 Output folders and Workspace collections
+Multiple isolated physical output folders with a quick switcher in the sidebar are useful for separating client projects, NSFW vs SFW, or experiments. Pinned and favorited outputs are tracked per output folder. A separate Workspace collection is an explicit logical grouping of project, asset and Production IDs; it does not create, move or delete files. See the [domain model and asset provenance contract](docs/development/DOMAIN_MODEL_AND_ASSET_PROVENANCE.md).
 
-The gallery **Workspaces** tab is a different feature: a Director **generation-thread** dashboard for the *active* output directory (inspect the shot queue, rewrite selected prompts from one instruction, toggle per-shot soundtrack drive vs mute, resume, rejoin). Operator contract: **[Workspaces tab](docs/workspaces/HOWUSEIT.md)**.
+The gallery **Workspaces** tab is a different feature: a Director **generation-thread** dashboard for the *active* output folder (inspect the shot queue, rewrite selected prompts from one instruction, toggle per-shot soundtrack drive vs mute, resume, rejoin). Operator contract: **[Workspaces tab](docs/workspaces/HOWUSEIT.md)**.
 
 ### 🔒 Mature mode + experimental gate
 - **NSFW mode** is opt-in with a disclaimer step. Disabled by default. Gates uncensored model variants, NSFW LoRAs in the CivitAI browser, and the Settings → Services NSFW toggle.
@@ -305,7 +305,7 @@ The version you are running is shown next to the HocusPocus title in the UI. To 
 **First HocusPocus preview**
 - HocusPocus now has its own product versioning, separate from the upstream Maestro lineage.
 - The local creation studio introduces its final transparent scribe icon, launch intro, and English-first identity.
-- Image, video, sound, 3D, comics, games, and story tools remain available in the same local workspace.
+- Image, video, sound, 3D, comics, games, and story tools remain available in the same local output folder.
 
 ### Pre-HocusPocus lineage
 
@@ -439,7 +439,7 @@ After clicking **Start**, the launcher shows an **Open Web UI** button once the 
 - **Activity footer** — persistent live job progress and access to current or past **Productions**
 - **Settings drawer** (gear icon) — model visibility, performance auto-tune, services (LLM, API keys, NSFW, theme)
 - **Pinokio menu** — Update, Reset, Install Inpaint Support, LoRA folder shortcuts
-- **Operator guides** — [HOWUSEIT index](docs/HOWUSEIT.md) (Video Editor, Workspaces tab, 3D compositor)
+- **Operator guides** — [HOWUSEIT index](docs/HOWUSEIT.md) (Video Editor, Workspaces tab, 3D compositor, Character Kits)
 
 ## Sharing on the local network
 

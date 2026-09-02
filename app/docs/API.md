@@ -603,7 +603,7 @@ does not apply local image LoRAs. The credential is read only from
 Settings → Services; it is not accepted in pipeline payloads or persisted in
 output metadata.
 
-Comic recovery checkpoints are workspace-scoped and durable. Create one with
+Comic recovery checkpoints are output-folder-scoped and durable. Create one with
 `POST /api/v1/comics/history`, list versions with
 `GET /api/v1/comics/history` (optionally `?comic_id=...`), and load a version
 with `GET /api/v1/comics/history/{snapshot_id}`. Identical consecutive
@@ -720,13 +720,72 @@ curl -X POST "$MAESTRO_URL/api/v1/characters/describe-refs" \
 
 `kind` is `character` or `object` (default `character`). `roles` are `subject`, `face`, `outfit`, `extra`, or `accessory`; missing/invalid roles become `subject` for index 0 and `extra` otherwise. Response: `{ "a_prompt", "kind" }`. `400` if `image_paths` is empty, a file is missing, or the API key is unset.
 
+## Character Kits
+
+Character Kits are reusable 2D cutout puppets. Their current HTTP routes are
+scoped to a physical output folder. The query/body field is named `workspace`
+for compatibility; it is **not** the ID of a logical Workspace collection.
+Logical collections use `/api/v1/workspace-collections` and only group project,
+asset, and Production IDs. See [`docs/character-kits/HOWUSEIT.md`](../../docs/character-kits/HOWUSEIT.md)
+for the operator workflow and [the domain contract](../../docs/development/DOMAIN_MODEL_AND_ASSET_PROVENANCE.md).
+
+Set the base URL in the examples to your running HocusPocus instance:
+
+```bash
+export HOCUSPOCUS_URL=http://127.0.0.1:7860
+```
+
+- `GET /api/v1/character-kits/library?workspace=default` — reads the normalized
+  `{output-folder}/.character-kit-library-v1.json`, or returns an empty
+  `{ "version": 1, "revision": 0, "activeId": "", "kits": {} }` when it is
+  missing.
+- `PATCH /api/v1/character-kits/library/kits/{kit_id}` — creates or replaces one
+  kit with `{ workspace, baseRevision, kit, makeActive? }`; neighbours are not
+  replaced. `makeActive` defaults to true. A stale revision returns `409` with
+  `code: character_kit_revision_conflict`, `expectedRevision`, and
+  `currentRevision`.
+- `DELETE /api/v1/character-kits/library/kits/{kit_id}` — body
+  `{ workspace, baseRevision }`; `404` if the kit is absent. Source files are
+  intentionally retained.
+- `POST /api/v1/character-kits/face-rig/cleanup` — body
+  `{ workspace, source, padding? }`, where `padding` is 0–64 (default 8). The
+  endpoint runs rembg U2Net + crop-to-alpha, writes a new PNG, and never
+  overwrites `source`. Sources must be inside uploads or the selected output
+  folder; disallowed/missing images return `400`/`404`.
+
+The output-folder token is `default` or `[A-Za-z0-9][A-Za-z0-9_-]*`. Kit mouth
+keys are `closed`, `small`, `wide`, and `round`; eye keys are `open` and
+`blink`. `blob:` sources are rejected, and the UI-only `lookNotes` field is
+stripped when the kit is normalized for persistence.
+
+```bash
+curl "$HOCUSPOCUS_URL/api/v1/character-kits/library?workspace=default"
+
+curl -X PATCH "$HOCUSPOCUS_URL/api/v1/character-kits/library/kits/luma" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workspace": "default",
+    "baseRevision": 0,
+    "kit": {
+      "version": 1, "id": "luma", "name": "Luma", "style": "cutout",
+      "base": {
+        "id": "luma-base", "name": "Luma base", "source": "luma-base.png",
+        "kind": "image", "alphaStatus": "transparent", "reviewState": "approved"
+      },
+      "poses": {}, "mouth": {}, "eyes": {},
+      "anchors": { "base": { "mouth": { "offsetX": 0, "offsetY": -18, "scale": 0.05, "rotation": 0 } } },
+      "provenance": []
+    }
+  }'
+```
+
 ## Director pipeline threads
 
-These routes always use the server active workspace. They do not accept `?workspace=`.
+These routes always use the server active output folder. They do not accept `?workspace=`.
 
-- `GET /api/v1/director/pipelines` / `GET /api/v1/director/pipelines/active` / `GET /api/v1/director/pipelines/{pid}` — list or load. `{pid}` hydrates an empty `clips` array from `clip_plans` or `planned_clips` and sets `queue_source` to `clips`, `clip_plans`, or `planned`.
+- `GET /api/v1/director/pipelines` / `GET /api/v1/director/pipelines/active` / `GET /api/v1/director/pipelines/{pid}` — list or load. `{pid}` hydrates an empty `clips` array from `clip_plans` or `planned_clips` and sets `queue_source` to `clips`, `clip_plans`, or `planned`. List accepts `limit` and `offset` (newest first); `limit=0` (the default) returns the full list, while the Workspaces tab pages 8 at a time and uses `total` for “load more”.
 - `PUT /api/v1/director/pipelines/{pid}/clips/{clip_index}/prompt` — optional `video_prompt`, `image_prompt`, `soundtrack_drive`. `true` writes an `audio_driven` / `lip_sync_critical` plan; `false` writes `music_driven` and clears `_director_dialogue_beats`. `409` while the pipeline is active.
 - `POST /api/v1/director/pipeline/{pid}/resume` and `POST /api/v1/director/pipeline/{pid}/continue` use the singular `pipeline` path.
 - Batch prompt rewrite is UI-only: loop `POST /api/v1/llm/generate` (local LLM) then PUT the chosen prompts.
 
-Operator notes: `docs/video-editor/HOWUSEIT.md` and `docs/workspaces/HOWUSEIT.md`.
+Operator notes: `docs/video-editor/HOWUSEIT.md`, `docs/workspaces/HOWUSEIT.md`, and `docs/character-kits/HOWUSEIT.md`.
