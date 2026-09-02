@@ -37,6 +37,7 @@ _REF2VA_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va.json"
 _FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_full.json"
 _REF2VA_FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va_full.json"
 _STORE_PATH = _ROOT / "ui" / "src" / "stores" / "useStore.ts"
+_LLM_SLICE_PATH = _ROOT / "ui" / "src" / "stores" / "llmSlice.ts"
 _PROMPT_INPUT_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "PromptInput.tsx"
 _DURATION_SLIDER_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "DurationSlider.tsx"
 _ADVANCED_SETTINGS_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "AdvancedSettings.tsx"
@@ -985,6 +986,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         main = _read(_MAIN_PATH)
         wgp = _read(_WGP_PATH)
         store = _read(_STORE_PATH)
+        llm_slice = _read(_LLM_SLICE_PATH)
         section = _read(_OMNI_REFERENCE_SECTION_PATH)
         generate_button = _read(_GENERATE_BUTTON_PATH)
         self.assertIn('if _generation_model_def.get("omni_reference"):', launch)
@@ -998,9 +1000,9 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("num_condition_video_rows", main)
         self.assertIn("const omniReferences = state.params.minimax_h3_references ?? []", store)
         self.assertIn("delete params.minimax_h3_references", store)
-        self.assertIn("reference_context: referenceContext", store)
-        self.assertIn("intent=AUDIO REUSE / PERFORMANCE DRIVER", store)
-        self.assertIn("intent=VOICE REFERENCE", store)
+        self.assertIn("reference_context: media.referenceContext", llm_slice)
+        self.assertIn("intent=AUDIO REUSE / PERFORMANCE DRIVER", llm_slice)
+        self.assertIn("intent=VOICE REFERENCE", llm_slice)
         self.assertIn('draggable', section)
         self.assertIn("Include soundtrack", section)
         self.assertIn("Attach audio", section)
@@ -1016,11 +1018,11 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         )
 
     def test_non_sliding_h3_enhance_request_stays_one_timeline(self):
-        store = _read(_STORE_PATH)
+        llm_slice = _read(_LLM_SLICE_PATH)
         prompt_input = _read(_PROMPT_INPUT_PATH)
         expected = "supportsSlidingWindows = state.modelOptions?.sliding_window === true"
-        self.assertIn(expected, store)
-        self.assertIn("supportsSlidingWindows && stride > 0", store)
+        self.assertIn(expected, llm_slice)
+        self.assertIn("supportsSlidingWindows && stride > 0", llm_slice)
         self.assertIn("supportsSlidingWindows = modelOptions?.sliding_window === true", prompt_input)
         self.assertIn("supportsSlidingWindows && stride > 0", prompt_input)
 
