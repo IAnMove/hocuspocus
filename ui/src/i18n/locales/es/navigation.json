@@ -36,6 +36,10 @@
     "create": "Elige un espacio creativo",
     "library": "Encuentra proyectos y medios generados"
   },
+  "panel": {
+    "directGeneration": "Generación directa",
+    "director": "Director"
+  },
   "descriptions": {
     "studio": "Genera una imagen, vídeo, canción o recurso 3D individual.",
     "storyLab": "Desarrolla historias y videoclips con un canon reutilizable.",

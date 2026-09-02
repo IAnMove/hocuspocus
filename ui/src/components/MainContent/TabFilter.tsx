@@ -110,7 +110,10 @@ export function TabFilter() {
     { value: 'stories', label: t('tabs.storyLab'), description: t('descriptions.storyLab'), icon: <BookOpen size={15} />, action: () => openFilter('stories') },
     { value: 'series', label: t('tabs.seriesLab'), description: t('descriptions.seriesLab'), icon: <Library size={15} />, action: () => openFilter('series') },
     { value: 'comics', label: t('tabs.comics'), description: t('descriptions.comics'), icon: <BookOpen size={15} />, action: () => openFilter('comics') },
-    { label: t('labs.director'), description: t('descriptions.director'), icon: <Clapperboard size={15} />, action: () => useStore.getState().setDashboardOpen(true) },
+    { label: t('labs.director'), description: t('descriptions.director'), icon: <Clapperboard size={15} />, action: () => {
+      useStore.getState().setSidebarMode('director')
+      window.dispatchEvent(new Event('maestro:director-open'))
+    } },
     { value: 'videoeditor', label: t('tabs.videoEditor'), description: t('descriptions.editor'), icon: <Video size={15} />, action: () => openFilter('videoeditor') },
     { value: 'scene3d', label: t('tabs.scene3d'), description: t('descriptions.video3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('scene3d') },
     { value: 'characters', label: t('tabs.characters'), description: t('descriptions.characters'), icon: <WandSparkles size={15} />, action: () => openFilter('characters') },

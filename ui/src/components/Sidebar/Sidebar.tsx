@@ -34,8 +34,11 @@ import { HardwareStatusBar } from './HardwareStatusBar'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
 import { PanoramaLoopPanel } from './PanoramaLoopPanel'
 import { BrandIdentity } from '../BrandIdentity'
+import { DirectorChat } from './DirectorChat'
+import { useUiTranslation } from '../../i18n'
 
 export function Sidebar() {
+  const { t } = useUiTranslation('navigation')
   const [toolsCollapsed, setToolsCollapsed] = useState(() =>
     window.localStorage.getItem('hocuspocus-tools-sidebar-collapsed') === 'true')
   const generationMode = useStore(s => s.generationMode)
@@ -45,6 +48,7 @@ export function Sidebar() {
   const appVersion = useStore(s => s.systemConfig?.app_version)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
   const setSidebarMode = useStore(s => s.setSidebarMode)
+  const sidebarMode = useStore(s => s.sidebarMode)
   const setSettingsOpen = useStore(s => s.setSettingsOpen)
   const editSubMode = useStore(s => s.editSubMode)
   const modelType = useStore(s => s.params.model_type)
@@ -58,6 +62,7 @@ export function Sidebar() {
   const audioSubMode = useStore(s => s.audioSubMode)
   const isEdit = generationMode === 'avatar'
   const isTools = generationMode === 'tools'
+  const isDirector = sidebarMode === 'director'
   const isRetake = isEdit && editSubMode === 'retake'
   const isRestyle = isEdit && editSubMode === 'restyle'
   const isInpaint = isEdit && editSubMode === 'inpaint'
@@ -86,11 +91,18 @@ export function Sidebar() {
       setSidebarOpen(true)
       setSettingsOpen(true)
     }
+    const openDirector = () => {
+      setSidebarMode('director')
+      setToolsSidebarCollapsed(false)
+      setSidebarOpen(true)
+    }
     window.addEventListener('hocuspocus:studio-open', openStudio)
     window.addEventListener('hocuspocus:settings-open', openSettings)
+    window.addEventListener('maestro:director-open', openDirector)
     return () => {
       window.removeEventListener('hocuspocus:studio-open', openStudio)
       window.removeEventListener('hocuspocus:settings-open', openSettings)
+      window.removeEventListener('maestro:director-open', openDirector)
     }
   // The event bridge deliberately tracks stable Zustand actions only.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -283,7 +295,7 @@ export function Sidebar() {
               </button>
             </div>
           </div>
-          {studioControls}
+          {isDirector ? <DirectorChat /> : studioControls}
           <HardwareStatusBar />
         </aside>
       </>
@@ -302,7 +314,7 @@ export function Sidebar() {
           <PanelLeftOpen size={17} />
         </button>
         <span className="mt-2 text-[10px] uppercase tracking-[0.2em] text-text-muted [writing-mode:vertical-rl]">
-          Studio
+          {isDirector ? t('panel.director') : t('panel.directGeneration')}
         </span>
       </aside>
     )
@@ -315,7 +327,7 @@ export function Sidebar() {
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <BrandIdentity appVersion={appVersion} />
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-text-secondary">Studio & tools</span>
+          <span className="text-xs font-medium text-text-secondary">{isDirector ? t('panel.director') : t('panel.directGeneration')}</span>
           <button
             onClick={() => setToolsSidebarCollapsed(true)}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
@@ -326,7 +338,7 @@ export function Sidebar() {
           </button>
         </div>
       </div>
-      {studioControls}
+      {isDirector ? <DirectorChat /> : studioControls}
       <HardwareStatusBar />
     </aside>
   )
