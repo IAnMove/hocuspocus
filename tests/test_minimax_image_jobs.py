@@ -10,8 +10,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
-TREE = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+COMICS = ROOT / "app" / "routers" / "comics.py"
+TREE = ast.parse(COMICS.read_text(encoding="utf-8"), filename=str(COMICS))
 
 
 def _function(name: str) -> ast.FunctionDef:
@@ -29,7 +29,7 @@ def _load(*names: str, namespace: dict) -> dict:
         type_ignores=[],
     )
     ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
+    exec(compile(module, str(COMICS), "exec"), namespace)
     return namespace
 
 
