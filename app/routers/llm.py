@@ -146,6 +146,97 @@ def _ace_song_request_prompt(description: str, language: str, instrumental: bool
     return f"OUTPUT LANGUAGE: {target}. {rule}\n\n{str(description or '').strip()}"
 
 
+def _song_writer_image_paths(body: dict) -> list:
+    """Optional reference images that may inform STYLE; missing files are dropped."""
+    image_paths = body.get("image_paths") or []
+    if not image_paths and body.get("reference_image_path"):
+        image_paths = [body["reference_image_path"]]
+    return [p for p in image_paths if p and os.path.isfile(p)]
+
+
+def _song_writer_prompts(
+    body: dict, description: str, instrumental: bool, target: str, language: str,
+) -> tuple[str, str, bool]:
+    """Return (system_prompt, user_prompt, include_lyria) for the selected contract."""
+    from services.guide_loader import load_guide
+    include_lyria = False
+    if target == "minimax":
+        system_prompt = load_guide("music", "song_writer_minimax") or _SONG_WRITER_FALLBACK_MINIMAX
+        include_lyria = bool(body.get("include_lyria"))
+        if include_lyria:
+            lyria_guide = load_guide("music", "song_writer_lyria")
+            if lyria_guide:
+                system_prompt = f"{system_prompt}\n\n{lyria_guide}"
+        user_prompt = _minimax_song_request_prompt(body, description, instrumental)
+    elif instrumental:
+        system_prompt = load_guide("music", "song_writer_instrumental") or _SONG_WRITER_FALLBACK_INSTRUMENTAL
+        user_prompt = _ace_song_request_prompt(description, language, True)
+    else:
+        system_prompt = load_guide("music", "song_writer") or _SONG_WRITER_FALLBACK
+        user_prompt = _ace_song_request_prompt(description, language, False)
+    return system_prompt, user_prompt, include_lyria
+
+
+def _generate_song_writer_text(
+    llm_service: Any,
+    ensure_llm_loaded: Callable[[], None],
+    llm_override: dict | None,
+    user_prompt: str,
+    system_prompt: str,
+    body: dict,
+    include_lyria: bool,
+    image_paths: list,
+):
+    """Call the scoped writing LLM or the loaded default; HTTP 500 on provider errors."""
+    max_new_tokens = body.get("max_new_tokens", 3000 if include_lyria else 1024)
+    paths = image_paths or None
+    try:
+        if llm_override:
+            return llm_service.generate_openai_compatible(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                model_id=llm_override["model"],
+                base_url=llm_override["base_url"],
+                api_key=llm_override["api_key"],
+                max_new_tokens=max_new_tokens,
+                temperature=body.get("temperature", 0.85),
+                top_p=body.get("top_p", 0.9),
+                image_paths=paths,
+            )
+        ensure_llm_loaded()
+        return llm_service.generate(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_new_tokens=max_new_tokens,
+            temperature=body.get("temperature", 0.85),
+            top_p=body.get("top_p", 0.9),
+            seed=body.get("seed"),
+            image_paths=paths,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _song_writer_payload(raw, instrumental: bool, target: str, include_lyria: bool, model: str) -> dict:
+    """Parse STYLE/LYRICS (and optional Lyria) into the write-song JSON body."""
+    style, lyrics = _parse_song_output(raw, instrumental)
+    lyria_prompt = _parse_lyria_output(raw) if target == "minimax" and include_lyria else ""
+    if target == "minimax":
+        style, lyrics = _normalize_minimax_song_output(style, lyrics, instrumental, model)
+        if len(style) < 10:
+            raise HTTPException(status_code=502, detail="The LLM did not return a valid MiniMax style prompt")
+        if not instrumental and not lyrics:
+            raise HTTPException(status_code=502, detail="The LLM did not return MiniMax lyrics")
+    lyria_warning = _optional_lyria_warning(lyria_prompt, include_lyria)
+    return {
+        "style": style,
+        "lyrics": lyrics,
+        "lyria_prompt": lyria_prompt,
+        "warnings": [lyria_warning] if lyria_warning else [],
+        "raw": raw,
+    }
+
+
 def create_llm_router(
     *,
     get_services_config: Callable[[], dict[str, Any]],
@@ -291,76 +382,240 @@ def create_llm_router(
         target = str(body.get("target") or "ace-step").strip().lower()
         model = str(body.get("model") or "music-3.0").strip()
         language = str(body.get("language") or "English").strip()[:80]
-
-        # Optional reference image → the vision LLM lets the visuals inform the
-        # STYLE (e.g. neon cityscape → synthwave). Degrades gracefully: if the
-        # loaded LLM has no vision (mmproj), llm_service.generate ignores images.
-        image_paths = body.get("image_paths") or []
-        if not image_paths and body.get("reference_image_path"):
-            image_paths = [body["reference_image_path"]]
-        image_paths = [p for p in image_paths if p and os.path.isfile(p)]
-
-        from services.guide_loader import load_guide
-        include_lyria = False
-        if target == "minimax":
-            system_prompt = load_guide("music", "song_writer_minimax") or _SONG_WRITER_FALLBACK_MINIMAX
-            include_lyria = bool(body.get("include_lyria"))
-            if include_lyria:
-                lyria_guide = load_guide("music", "song_writer_lyria")
-                if lyria_guide:
-                    system_prompt = f"{system_prompt}\n\n{lyria_guide}"
-            user_prompt = _minimax_song_request_prompt(body, description, instrumental)
-        elif instrumental:
-            system_prompt = load_guide("music", "song_writer_instrumental") or _SONG_WRITER_FALLBACK_INSTRUMENTAL
-            user_prompt = _ace_song_request_prompt(description, language, True)
-        else:
-            system_prompt = load_guide("music", "song_writer") or _SONG_WRITER_FALLBACK
-            user_prompt = _ace_song_request_prompt(description, language, False)
+        image_paths = _song_writer_image_paths(body)
+        system_prompt, user_prompt, include_lyria = _song_writer_prompts(
+            body, description, instrumental, target, language,
+        )
         llm_override = comic_writing_llm(body) if body.get("writingProvider") else None
-        try:
-            if llm_override:
-                raw = llm_service.generate_openai_compatible(
-                    prompt=user_prompt,
-                    system_prompt=system_prompt,
-                    model_id=llm_override["model"],
-                    base_url=llm_override["base_url"],
-                    api_key=llm_override["api_key"],
-                    max_new_tokens=body.get("max_new_tokens", 3000 if include_lyria else 1024),
-                    temperature=body.get("temperature", 0.85),
-                    top_p=body.get("top_p", 0.9),
-                    image_paths=image_paths or None,
-                )
-            else:
-                ensure_llm_loaded()
-                raw = llm_service.generate(
-                    prompt=user_prompt,
-                    system_prompt=system_prompt,
-                    max_new_tokens=body.get("max_new_tokens", 3000 if include_lyria else 1024),
-                    temperature=body.get("temperature", 0.85),
-                    top_p=body.get("top_p", 0.9),
-                    seed=body.get("seed"),
-                    image_paths=image_paths or None,
-                )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-        style, lyrics = _parse_song_output(raw, instrumental)
-        lyria_prompt = _parse_lyria_output(raw) if target == "minimax" and include_lyria else ""
-        if target == "minimax":
-            style, lyrics = _normalize_minimax_song_output(style, lyrics, instrumental, model)
-            if len(style) < 10:
-                raise HTTPException(status_code=502, detail="The LLM did not return a valid MiniMax style prompt")
-            if not instrumental and not lyrics:
-                raise HTTPException(status_code=502, detail="The LLM did not return MiniMax lyrics")
-        lyria_warning = _optional_lyria_warning(lyria_prompt, include_lyria)
-        return {
-            "style": style,
-            "lyrics": lyrics,
-            "lyria_prompt": lyria_prompt,
-            "warnings": [lyria_warning] if lyria_warning else [],
-            "raw": raw,
-        }
+        raw = _generate_song_writer_text(
+            llm_service,
+            ensure_llm_loaded,
+            llm_override,
+            user_prompt,
+            system_prompt,
+            body,
+            include_lyria,
+            image_paths,
+        )
+        return _song_writer_payload(raw, instrumental, target, include_lyria, model)
 
     return router
+
+
+def _h3_plan_model_def(get_model_def: Callable[[str], Any], model_type: str):
+    """Require a sliding-window MiniMax H3 model definition."""
+    model_def = get_model_def(model_type) or {}
+    if not str(model_def.get("architecture") or "").startswith("minimax_h3"):
+        raise HTTPException(status_code=400, detail="H3 window planning requires a MiniMax H3 model.")
+    if model_def.get("omni_reference"):
+        raise HTTPException(status_code=400, detail="MiniMax H3 Omni does not use sliding windows.")
+    return model_def
+
+
+def _h3_planning_inputs(body: dict, model_type: str) -> dict:
+    """Collect window-memory inputs using the same field aliases as the Studio UI."""
+    return {
+        "model_type": model_type,
+        "resolution": body.get("resolution") or "864x480",
+        "video_length": body.get("total_frames") or body.get("video_length") or 124,
+        "sliding_window_size": body.get("window_frames") or body.get("sliding_window_size") or 345,
+        "sliding_window_overlap": body.get("overlap_frames", body.get("sliding_window_overlap", 1)),
+        "sliding_window_discard_last_frames": body.get("discard_frames", body.get("sliding_window_discard_last_frames", 0)),
+        "sliding_window_memory_override": bool(body.get("sliding_window_memory_override", False)),
+    }
+
+
+def _h3_plan_image_paths(body: dict) -> list:
+    return [
+        path for path in (body.get("image_paths") or [])
+        if isinstance(path, str) and path and os.path.isfile(path)
+    ]
+
+
+def _h3_plan_nsfw(
+    get_services_config: Callable[[], dict[str, Any]],
+    effective_llm_routing: Callable[..., tuple[str, str, str]],
+    public_llm_providers: set[str] | frozenset[str],
+) -> bool:
+    services = get_services_config()
+    provider = effective_llm_routing(services)[0]
+    return services.get("nsfw_mode", False) and provider not in public_llm_providers
+
+
+def _enhance_request_image_paths(body: dict) -> list:
+    """Support both a single image_path and an image_paths array."""
+    image_paths = body.get("image_paths") or []
+    if not image_paths and body.get("image_path"):
+        image_paths = [body["image_path"]]
+    return image_paths
+
+
+async def _maybe_enhance_with_wangp(
+    body: dict,
+    prompt: str,
+    generation_mode: str,
+    needs_h3_context_ir: bool,
+    enhancer_enabled: int,
+    enhance_with_wangp: Callable[..., Any],
+) -> tuple[bool, Any]:
+    """Use Wan2GP when enabled, except MiniMax H3 which needs Context-IR."""
+    if enhancer_enabled > 0 and not needs_h3_context_ir:
+        try:
+            image_paths = _enhance_request_image_paths(body)
+            return True, await enhance_with_wangp(
+                prompt, generation_mode, enhancer_enabled, image_paths=image_paths,
+            )
+        except Exception as e:
+            print(f"[Enhance] Wan2GP enhancer failed, falling back to LLM: {e}")
+            return False, None
+    if enhancer_enabled > 0 and needs_h3_context_ir:
+        print("[Enhance] MiniMax H3 requires structured Context-IR; using HocusPocus Lab's model-specific LLM guide")
+    return False, None
+
+
+def _resolve_enhance_llm(
+    body: dict,
+    services: dict[str, Any],
+    get_model_def: Callable[[str], Any],
+) -> tuple[Any, Any, bool]:
+    """Pick the enhance model: per-model raw enhancer, else the configured enhance LLM."""
+    enhance_model = services.get("enhance_llm_model_id", "")
+    enhance_device = services.get("enhance_llm_device", "cuda")
+    raw_enhancer_mode = False
+    _enh_mt = body.get("model_type", "")
+    if _enh_mt:
+        try:
+            _md = get_model_def(_enh_mt)
+            _pe = (_md or {}).get("prompt_enhancer_model")
+            if _pe:
+                enhance_model = _pe
+                raw_enhancer_mode = True
+                print(f"[Enhance] Per-model enhancer for {_enh_mt}: {_pe} (raw passthrough)")
+        except Exception as e:
+            print(f"[Enhance] Per-model enhancer lookup failed: {e}")
+    return enhance_model, enhance_device, raw_enhancer_mode
+
+
+def _ensure_enhance_llm_ready(
+    llm_service: Any,
+    enhance_model: Any,
+    enhance_device: Any,
+    ensure_llm_loaded: Callable[[], None],
+) -> None:
+    if enhance_model:
+        if llm_service.is_loaded():
+            status = llm_service.get_status()
+            if status.get("model_id") != enhance_model:
+                llm_service.unload_model()
+                llm_service.load_model(model_id=enhance_model, device=enhance_device)
+        else:
+            llm_service.load_model(model_id=enhance_model, device=enhance_device)
+    else:
+        ensure_llm_loaded()
+
+
+def _lora_sidecar_trigger_words(lora_dir: str, lora_name: str) -> list:
+    sidecar_path = os.path.join(lora_dir, os.path.splitext(lora_name)[0] + ".civitai.json")
+    trigger_words: list = []
+    if os.path.isfile(sidecar_path):
+        try:
+            with open(sidecar_path, "r", encoding="utf-8") as sf:
+                sidecar = json.loads(sf.read())
+            trigger_words = sidecar.get("trainedWords", []) or []
+        except Exception:
+            pass
+    print(f"[Enhance] LoRA '{lora_name}': triggers={trigger_words[:3]}, sidecar={os.path.isfile(sidecar_path)}")
+    return trigger_words
+
+
+def _lora_trigger_hint_block(trigger_lines: list[str]) -> str:
+    any_leet = any(any(c.isdigit() for c in ln) for ln in trigger_lines)
+    leet_block = (
+        " Some trigger words are coded tokens with letters replaced by "
+        "numbers (e.g. 'o'→'0', 'i'→'1', 's'→'5', 'e'→'3', 'a'→'4'). "
+        "If you see one with digits, copy it EXACTLY as written — do "
+        "not decode it into plain English."
+    ) if any_leet else ""
+    return (
+        "\n\n[LORA TRIGGER WORDS — these are exact tokens the model was "
+        "trained on. Pick the ONE most relevant trigger and include it "
+        "somewhere in the prompt IF AND ONLY IF it forms a natural, "
+        "grammatical part of a sentence. If you cannot weave it in "
+        "naturally, OMIT IT ENTIRELY.\n\n"
+        "FORBIDDEN INSERTION PATTERNS (any of these ruins the prompt):\n"
+        "- At the start as a standalone tag:  'Unchained, the doctor...'\n"
+        "- As a comma-offset appositive:      'the doctor, Unchained, in white...'\n"
+        "- As a parenthetical:                'the doctor (Unchained) in white...'\n"
+        "- As a standalone label anywhere:    '...in the exam room. Unchained. She...'\n"
+        "- Attached to an unrelated character: 'the doctor, Mystic XXX, leans...'\n\n"
+        "ACCEPTABLE INSERTIONS only if grammatically natural:\n"
+        "- Body/appearance descriptor trigger ('detailed muscle definition'): "
+        "scoped to the right character inside a sentence — "
+        "'the man with detailed muscle definition lifts the crate...'\n"
+        "- Style tag trigger ('Mystic XXX', 'Unchained'): use only when the "
+        "trigger names a genre or action the scene actually depicts. If it "
+        "does not fit grammatically, OMIT IT. Do not force it in.\n\n"
+        "Do NOT invent variants. Do NOT include a trigger that does not "
+        "match the scene." + leet_block + "]\n"
+    ) + "\n".join(trigger_lines)
+
+
+def _lora_trigger_hint_text(body: dict, model_type: str, get_lora_dir: Callable[[str], str]) -> str:
+    """Inject CivitAI trainedWords only; guide prose is not a trigger source."""
+    lora_hint_text = ""
+    activated_loras = body.get("activated_loras") or []
+    print(f"[Enhance] LoRA check: activated_loras={activated_loras}, model_type={model_type}")
+    if not (activated_loras and model_type):
+        return lora_hint_text
+    try:
+        lora_dir = get_lora_dir(model_type)
+        print(f"[Enhance] LoRA dir: {lora_dir}")
+        trigger_lines = []
+        for lora_name in activated_loras:
+            trigger_words = _lora_sidecar_trigger_words(lora_dir, lora_name)
+            if trigger_words:
+                trigger_lines.append(f"- {', '.join(trigger_words[:5])}")
+        if trigger_lines:
+            lora_hint_text = _lora_trigger_hint_block(trigger_lines)
+            print(f"[Enhance] Loaded {len(trigger_lines)} trigger block(s): {lora_hint_text[:200]}")
+        else:
+            print(f"[Enhance] No LoRA triggers extractable from {len(activated_loras)} LoRA(s)")
+    except Exception as e:
+        print(f"[Enhance] LoRA hint loading failed: {e}")
+    return lora_hint_text
+
+
+def _run_llm_enhance(
+    llm_service: Any,
+    prompt: str,
+    lora_hint_text: str,
+    body: dict,
+    nsfw: bool,
+    model_type: str,
+    llm_image_paths: list,
+    raw_enhancer_mode: bool,
+) -> dict:
+    try:
+        result = llm_service.enhance_prompt(
+            prompt=prompt,
+            lora_system_hint=lora_hint_text,
+            mode=body.get("mode", "video"),
+            max_new_tokens=body.get("max_new_tokens", 512),
+            temperature=body.get("temperature", 0.6),
+            nsfw=nsfw,
+            model_type=model_type,
+            image_paths=llm_image_paths if llm_image_paths else None,
+            duration_seconds=body.get("duration_seconds"),
+            window_count=body.get("window_count"),
+            window_size_seconds=body.get("window_size_seconds"),
+            tts_enhance_mode=body.get("tts_enhance_mode"),
+            tts_voice_count=body.get("tts_voice_count", 2),
+            raw_enhancer_mode=raw_enhancer_mode,
+            reference_context=body.get("reference_context"),
+        )
+        return {"original": prompt, "enhanced": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def create_llm_prompt_router(
@@ -388,21 +643,8 @@ def create_llm_prompt_router(
         model_type = str(body.get("model_type") or "")
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt is required")
-        model_def = get_model_def(model_type) or {}
-        if not str(model_def.get("architecture") or "").startswith("minimax_h3"):
-            raise HTTPException(status_code=400, detail="H3 window planning requires a MiniMax H3 model.")
-        if model_def.get("omni_reference"):
-            raise HTTPException(status_code=400, detail="MiniMax H3 Omni does not use sliding windows.")
-
-        planning_inputs = {
-            "model_type": model_type,
-            "resolution": body.get("resolution") or "864x480",
-            "video_length": body.get("total_frames") or body.get("video_length") or 124,
-            "sliding_window_size": body.get("window_frames") or body.get("sliding_window_size") or 345,
-            "sliding_window_overlap": body.get("overlap_frames", body.get("sliding_window_overlap", 1)),
-            "sliding_window_discard_last_frames": body.get("discard_frames", body.get("sliding_window_discard_last_frames", 0)),
-            "sliding_window_memory_override": bool(body.get("sliding_window_memory_override", False)),
-        }
+        model_def = _h3_plan_model_def(get_model_def, model_type)
+        planning_inputs = _h3_planning_inputs(body, model_type)
         from models.minimax_h3.minimax_h3_handler import apply_h3_window_memory_policy
 
         adjustment = apply_h3_window_memory_policy(
@@ -422,13 +664,8 @@ def create_llm_prompt_router(
             # usable on installs where the optional local planning model has not
             # been downloaded yet, and surface that state in planned_by.
             print(f"[MiniMax H3] Planner LLM unavailable; using fallback: {load_error}")
-        services = get_services_config()
-        provider = effective_llm_routing(services)[0]
-        nsfw = services.get("nsfw_mode", False) and provider not in public_llm_providers
-        image_paths = [
-            path for path in (body.get("image_paths") or [])
-            if isinstance(path, str) and path and os.path.isfile(path)
-        ]
+        nsfw = _h3_plan_nsfw(get_services_config, effective_llm_routing, public_llm_providers)
+        image_paths = _h3_plan_image_paths(body)
         total_frames = int(planning_inputs["video_length"])
         window_frames = int(planning_inputs["sliding_window_size"])
         overlap_frames = int(planning_inputs["sliding_window_overlap"] or 0)
@@ -471,160 +708,31 @@ def create_llm_prompt_router(
             and generation_mode in ("video", "avatar")
         )
         enhancer_enabled = get_enhancer_enabled()
+        used_wangp, wangp_result = await _maybe_enhance_with_wangp(
+            body, prompt, generation_mode, needs_h3_context_ir, enhancer_enabled, enhance_with_wangp,
+        )
+        if used_wangp:
+            return wangp_result
 
-        # The generic Wan2GP cinematic enhancer cannot produce MiniMax H3's
-        # required Context-IR fields, speaker IDs, or <d> dialogue tags. Route H3
-        # through Maestro's model-specific guide even when the legacy enhancer is
-        # enabled; all other model families retain the configured behavior.
-        if enhancer_enabled > 0 and not needs_h3_context_ir:
-            try:
-                # Support both single image_path and array image_paths
-                image_paths = body.get("image_paths") or []
-                if not image_paths and body.get("image_path"):
-                    image_paths = [body["image_path"]]
-                return await enhance_with_wangp(prompt, generation_mode, enhancer_enabled, image_paths=image_paths)
-            except Exception as e:
-                print(f"[Enhance] Wan2GP enhancer failed, falling back to LLM: {e}")
-                # Fall through to LLM
-        elif enhancer_enabled > 0 and needs_h3_context_ir:
-            print("[Enhance] MiniMax H3 requires structured Context-IR; using HocusPocus Lab's model-specific LLM guide")
-
-        # Use our local LLM service
         from services import llm_service
 
         services = get_services_config()
         provider = effective_llm_routing(services)[0]
         nsfw = services.get("nsfw_mode", False) and provider not in public_llm_providers
-
-        # Check if a separate enhance LLM is configured
-        enhance_model = services.get("enhance_llm_model_id", "")
-        enhance_device = services.get("enhance_llm_device", "cuda")
-
-        # Per-model dedicated prompt enhancer: when the active gen model declares
-        # `prompt_enhancer_model` (e.g. Sulphur ships its own uncensored enhancer
-        # LLM), it takes precedence and runs in raw-passthrough mode — the user's
-        # prompt (+ optional image) is sent with NO guide/system prompt because the
-        # model is trained to enhance directly. nsfw_only gen models are already
-        # gated to Mature Mode, so no extra gate is needed here.
-        raw_enhancer_mode = False
-        _enh_mt = body.get("model_type", "")
-        if _enh_mt:
-            try:
-                _md = get_model_def(_enh_mt)
-                _pe = (_md or {}).get("prompt_enhancer_model")
-                if _pe:
-                    enhance_model = _pe
-                    raw_enhancer_mode = True
-                    print(f"[Enhance] Per-model enhancer for {_enh_mt}: {_pe} (raw passthrough)")
-            except Exception as e:
-                print(f"[Enhance] Per-model enhancer lookup failed: {e}")
-
-        if enhance_model:
-            # Load the enhance-specific LLM (may differ from Director LLM)
-            if llm_service.is_loaded():
-                status = llm_service.get_status()
-                if status.get("model_id") != enhance_model:
-                    llm_service.unload_model()
-                    llm_service.load_model(model_id=enhance_model, device=enhance_device)
-            else:
-                llm_service.load_model(model_id=enhance_model, device=enhance_device)
-        else:
-            # Use the Director LLM (default)
-            ensure_llm_loaded()
-
-        # Collect image paths for vision-enabled LLM
-        llm_image_paths = body.get("image_paths") or []
-        if not llm_image_paths and body.get("image_path"):
-            llm_image_paths = [body["image_path"]]
-
-        # Load LoRA info for activated LoRAs — extract ONLY trigger words and key tips
-        lora_hint_text = ""
-        activated_loras = body.get("activated_loras") or []
-        print(f"[Enhance] LoRA check: activated_loras={activated_loras}, model_type={model_type}")
-        if activated_loras and model_type:
-            try:
-                lora_dir = get_lora_dir(model_type)
-                print(f"[Enhance] LoRA dir: {lora_dir}")
-                # Only inject trigger words from the CivitAI sidecar's
-                # trainedWords field. Do NOT extract triggers from guide prose —
-                # guide descriptions like "include the trigger phrase 'Unchained'"
-                # are instructions for the user, not actual trained tokens, and
-                # injecting them causes the LLM to insert them as broken tags.
-                trigger_lines = []
-                for lora_name in activated_loras:
-                    sidecar_path = os.path.join(lora_dir, os.path.splitext(lora_name)[0] + ".civitai.json")
-                    trigger_words = []
-                    if os.path.isfile(sidecar_path):
-                        try:
-                            with open(sidecar_path, "r", encoding="utf-8") as sf:
-                                sidecar = json.loads(sf.read())
-                            trigger_words = sidecar.get("trainedWords", []) or []
-                        except Exception:
-                            pass
-
-                    if trigger_words:
-                        trigger_lines.append(f"- {', '.join(trigger_words[:5])}")
-                    print(f"[Enhance] LoRA '{lora_name}': triggers={trigger_words[:3]}, sidecar={os.path.isfile(sidecar_path)}")
-
-                if trigger_lines:
-                    any_leet = any(any(c.isdigit() for c in ln) for ln in trigger_lines)
-                    leet_block = (
-                        " Some trigger words are coded tokens with letters replaced by "
-                        "numbers (e.g. 'o'→'0', 'i'→'1', 's'→'5', 'e'→'3', 'a'→'4'). "
-                        "If you see one with digits, copy it EXACTLY as written — do "
-                        "not decode it into plain English."
-                    ) if any_leet else ""
-                    lora_hint_text = (
-                        "\n\n[LORA TRIGGER WORDS — these are exact tokens the model was "
-                        "trained on. Pick the ONE most relevant trigger and include it "
-                        "somewhere in the prompt IF AND ONLY IF it forms a natural, "
-                        "grammatical part of a sentence. If you cannot weave it in "
-                        "naturally, OMIT IT ENTIRELY.\n\n"
-                        "FORBIDDEN INSERTION PATTERNS (any of these ruins the prompt):\n"
-                        "- At the start as a standalone tag:  'Unchained, the doctor...'\n"
-                        "- As a comma-offset appositive:      'the doctor, Unchained, in white...'\n"
-                        "- As a parenthetical:                'the doctor (Unchained) in white...'\n"
-                        "- As a standalone label anywhere:    '...in the exam room. Unchained. She...'\n"
-                        "- Attached to an unrelated character: 'the doctor, Mystic XXX, leans...'\n\n"
-                        "ACCEPTABLE INSERTIONS only if grammatically natural:\n"
-                        "- Body/appearance descriptor trigger ('detailed muscle definition'): "
-                        "scoped to the right character inside a sentence — "
-                        "'the man with detailed muscle definition lifts the crate...'\n"
-                        "- Style tag trigger ('Mystic XXX', 'Unchained'): use only when the "
-                        "trigger names a genre or action the scene actually depicts. If it "
-                        "does not fit grammatically, OMIT IT. Do not force it in.\n\n"
-                        "Do NOT invent variants. Do NOT include a trigger that does not "
-                        "match the scene." + leet_block + "]\n"
-                    ) + "\n".join(trigger_lines)
-                    print(f"[Enhance] Loaded {len(trigger_lines)} trigger block(s): {lora_hint_text[:200]}")
-                else:
-                    print(f"[Enhance] No LoRA triggers extractable from {len(activated_loras)} LoRA(s)")
-            except Exception as e:
-                print(f"[Enhance] LoRA hint loading failed: {e}")
-
-        try:
-            # Pass LoRA hints as system-level context so the LLM treats them as instructions,
-            # not content to parrot. The hints go via lora_system_hint into the system prompt.
-            result = llm_service.enhance_prompt(
-                prompt=prompt,
-                lora_system_hint=lora_hint_text,
-                mode=body.get("mode", "video"),
-                max_new_tokens=body.get("max_new_tokens", 512),
-                temperature=body.get("temperature", 0.6),
-                nsfw=nsfw,
-                model_type=model_type,
-                image_paths=llm_image_paths if llm_image_paths else None,
-                duration_seconds=body.get("duration_seconds"),
-                window_count=body.get("window_count"),
-                window_size_seconds=body.get("window_size_seconds"),
-                tts_enhance_mode=body.get("tts_enhance_mode"),
-                tts_voice_count=body.get("tts_voice_count", 2),
-                raw_enhancer_mode=raw_enhancer_mode,
-                reference_context=body.get("reference_context"),
-            )
-            return {"original": prompt, "enhanced": result}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+        enhance_model, enhance_device, raw_enhancer_mode = _resolve_enhance_llm(
+            body, services, get_model_def,
+        )
+        _ensure_enhance_llm_ready(llm_service, enhance_model, enhance_device, ensure_llm_loaded)
+        return _run_llm_enhance(
+            llm_service,
+            prompt,
+            _lora_trigger_hint_text(body, model_type, get_lora_dir),
+            body,
+            nsfw,
+            model_type,
+            _enhance_request_image_paths(body),
+            raw_enhancer_mode,
+        )
 
     @router.post("/api/v1/llm/describe-image")
     async def llm_describe_image(request: Request):
