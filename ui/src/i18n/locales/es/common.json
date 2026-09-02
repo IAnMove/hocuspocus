@@ -10,10 +10,18 @@
     "reload": "Recargar",
     "create": "Crear",
     "search": "Buscar",
-    "discard": "Descartar"
+    "discard": "Descartar",
+    "delete": "Eliminar",
+    "refresh": "Actualizar",
+    "loadMore": "Cargar más"
+  },
+  "fields": {
+    "name": "Nombre",
+    "description": "Descripción"
   },
   "status": {
     "running": "En marcha",
+    "loading": "Cargando…",
     "queued": "En cola",
     "completed": "Completado",
     "failed": "Fallido",

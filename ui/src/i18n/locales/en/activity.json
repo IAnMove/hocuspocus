@@ -47,5 +47,6 @@
     "cancelReplacement": "Cancel replacement",
     "redoingEditorSlot": "Redoing assembly position {{n}}: {{name}}. Generate a new video and then press “Use in position {{n}}”.",
     "useInPosition": "Use in position {{n}}"
-  }
+  },
+  "editInVideoEditor": "Edit video in Video Editor"
 }

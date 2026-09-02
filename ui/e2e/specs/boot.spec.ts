@@ -24,6 +24,7 @@ test('boots Story Lab against a simulated API', async ({ page }) => {
   await expect(page.getByText('HocusPocus could not reach its local server.')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'HocusPocus LAN access' })).toHaveCount(0)
 
+  await page.getByRole('button', { name: 'Studios' }).click()
   const storyTab = page.getByRole('tab', { name: 'Story Lab' })
   await expect(storyTab).toBeVisible()
   await storyTab.click()

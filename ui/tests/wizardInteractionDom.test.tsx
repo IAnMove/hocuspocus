@@ -143,10 +143,11 @@ test('Wizard DOM interaction navigates, accepts form input, and restores a pendi
   useStore.setState({ mediaFilter: 'all', developerMode: false, outputSearchQuery: '' })
   try {
     const tabs = render(<TabFilter />)
+    fireEvent.click(screen.getByRole('button', { name: /Studios/ }))
     fireEvent.click(screen.getByRole('tab', { name: /Series Lab/ }))
     assert.equal(useStore.getState().mediaFilter, 'series')
     assert.equal(screen.getByRole('tab', { name: /Series Lab/ }).getAttribute('aria-selected'), 'true')
-    fireEvent.click(screen.getByTitle('Search outputs'))
+    fireEvent.click(screen.getByTitle('Search library'))
     const search = screen.getByPlaceholderText('Search...') as HTMLInputElement
     fireEvent.change(search, { target: { value: 'himno' } })
     assert.equal(search.value, 'himno')

@@ -4,6 +4,7 @@ import { fetchOutputMetadata, fetchOutputs } from '../../api/client'
 import type { ApiOutput } from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { formatFailedPromptDump, promptFromMetadata, type AuditFailedClip } from './auditClipboard'
+import { useUiTranslation } from '../../i18n'
 
 const FLAGS_KEY = 'maestro-auditdev-flags-v1'
 
@@ -25,6 +26,7 @@ function saveFlags(flags: FlagMap) {
 }
 
 export function AuditDevPanel() {
+  const { t } = useUiTranslation('auditDev')
   const workspace = useStore(s => s.activeWorkspace)
   const [outputs, setOutputs] = useState<ApiOutput[]>([])
   const [loading, setLoading] = useState(true)
@@ -109,8 +111,7 @@ export function AuditDevPanel() {
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
         <ShieldAlert size={16} className="shrink-0 text-amber-300" />
         <div className="min-w-0 flex-1 text-xs text-amber-100">
-          Auditoría interna: marca los clips con alucinación de audio. Copia los prompts
-          fallidos y pégalos en el chat para iterar el generador.
+          {t('banner')}
         </div>
         <label className="flex items-center gap-1 text-[11px] text-amber-100">
           <input
@@ -118,7 +119,7 @@ export function AuditDevPanel() {
             checked={onlyMarked}
             onChange={event => setOnlyMarked(event.target.checked)}
           />
-          Solo marcados
+          {t('onlyMarked')}
         </label>
         <button
           type="button"
@@ -127,14 +128,14 @@ export function AuditDevPanel() {
           className="inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-500/20 px-2.5 py-1 text-[11px] font-medium text-amber-100 hover:bg-amber-500/30 disabled:opacity-40"
         >
           {copied ? <Check size={12} /> : <ClipboardCopy size={12} />}
-          {copied ? 'Copiado' : `Copiar prompts erróneos (${markedCount})`}
+          {copied ? t('copied') : t('copyFailed', { count: markedCount })}
         </button>
       </div>
 
       {loading ? (
         <div className="flex flex-1 items-center justify-center text-text-muted">
           <Loader2 size={18} className="animate-spin" />
-          <span className="ml-2 text-xs">Cargando vídeos…</span>
+          <span className="ml-2 text-xs">{t('loading')}</span>
         </div>
       ) : error ? (
         <p className="text-xs text-red-400">{error}</p>
@@ -169,7 +170,7 @@ export function AuditDevPanel() {
                           void ensurePrompt(item.name)
                         }}
                       />
-                      Audio mal
+                      {t('audioBad')}
                     </label>
                   </div>
                   <button
@@ -177,14 +178,14 @@ export function AuditDevPanel() {
                     className="self-start text-[10px] text-accent-blue hover:underline"
                     onClick={() => void ensurePrompt(item.name)}
                   >
-                    {prompts[item.name] !== undefined ? 'Prompt cargado' : 'Cargar prompt'}
+                    {prompts[item.name] !== undefined ? t('promptLoaded') : t('loadPrompt')}
                   </button>
                   <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2 text-[10px] text-text-muted">
                     {loadingMeta === item.name
-                      ? 'Cargando…'
+                      ? t('loadingPrompt')
                       : prompts[item.name] !== undefined
-                        ? prompts[item.name] || '(sin prompt en metadata)'
-                        : 'Pulsa para cargar el prompt.'}
+                        ? prompts[item.name] || t('noPrompt')
+                        : t('clickToLoad')}
                   </pre>
                 </div>
               </div>

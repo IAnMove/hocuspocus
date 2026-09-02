@@ -1,0 +1,13 @@
+{
+  "banner": "Internal audit: mark clips with audio hallucination. Copy the failed prompts and paste them in the chat to iterate the generator.",
+  "onlyMarked": "Marked only",
+  "copyFailed": "Copy failed prompts ({{count}})",
+  "copied": "Copied",
+  "loading": "Loading videos…",
+  "audioBad": "Bad audio",
+  "promptLoaded": "Prompt loaded",
+  "loadPrompt": "Load prompt",
+  "loadingPrompt": "Loading…",
+  "noPrompt": "(no prompt in metadata)",
+  "clickToLoad": "Click to load the prompt."
+}

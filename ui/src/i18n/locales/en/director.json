@@ -14,5 +14,31 @@
     "discardClean": "Discard and start clean",
     "resumeAnyway": "Resume old leftovers anyway",
     "resumeQueue": "Resume queue"
+  },
+  "spoken": {
+    "label": "Spoken video language",
+    "auto": "Automatic from the dialogue",
+    "spain": "Spanish (Spain)",
+    "latam": "Latin American Spanish",
+    "english": "English",
+    "french": "French",
+    "italian": "Italian",
+    "hint": "Added to every shot; the regional variant is best-effort from the model."
+  },
+  "clipText": {
+    "label": "Allow generating clips with on-screen text",
+    "hint": "Off by default. Dialogue and lyrics remain audio-only and are not rendered as visible lettering."
+  },
+  "directVideo": {
+    "mode": "Direct video · T2V only · no images",
+    "pure": "Pure T2V · no image contamination",
+    "generationMode": "Video generation mode",
+    "imageGuided": "Image-guided · create a start frame",
+    "masterLabel": "Immutable master prompt",
+    "masterHint": "HocusPocus will repeat this complete master prompt in every clip. The LLM will only write the concrete situation. No start frames will be generated and no visual references will be sent to H3; older style fields will not mix into this world either.",
+    "masterPlaceholder": "Define here the world and style that must repeat in every video",
+    "ignoreLoaded": "Images and references already loaded stay in the session, but this mode ignores them completely.",
+    "option": "Direct video · text only, no images",
+    "promptNote": "Direct video: every prompt includes the master world and this clip’s situation. Generation will be pure T2V, with no start frame or references."
   }
 }

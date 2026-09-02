@@ -20,6 +20,7 @@
     "label": "Idioma de la interfaz",
     "help": "Afecta a las etiquetas de la aplicación. El contenido generado, los prompts y los nombres de archivo no cambian.",
     "optionEn": "English",
-    "optionEs": "Español"
+    "optionEs": "Español",
+    "quickAria": "Idioma rápido de la interfaz"
   }
 }
