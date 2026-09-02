@@ -27802,7 +27802,7 @@ def get_series_project_endpoint(series_id: str, workspace: str | None = None):
 
 @api.put("/api/v1/series/{series_id}")
 def put_series_project_endpoint(series_id: str, body: dict):
-    from services.series_library import normalize_series_project
+    from services.series_library import normalize_series_project, series_canon_inputs_changed
 
     workspace = _series_library_workspace(body.get("workspace"))
     raw_series = body.get("series")
@@ -27821,19 +27821,7 @@ def put_series_project_endpoint(series_id: str, body: dict):
                     detail=f"Series revision changed to {current.get('revision')}; reload before saving",
                 )
             updated = normalize_series_project({**raw_series, "id": series_id}, series_id, workspace)
-            canon_inputs = (
-                "title", "premise", "logline", "format", "language", "spokenLanguage", "languageIntent",
-                "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience",
-                "visualStyle", "characterVisualStyle", "cameraLanguage", "sourceMode",
-                "masterUniversePrompt", "characters", "relationships", "locations", "props",
-            )
-            current_canon = copy.deepcopy(current.get("canon") or {})
-            updated_canon = copy.deepcopy(updated.get("canon") or {})
-            for value in (current_canon, updated_canon):
-                value.pop("approval", None); value.pop("approvedAt", None)
-            if current_canon != updated_canon or any(
-                current.get(key) != updated.get(key) for key in canon_inputs
-            ):
+            if series_canon_inputs_changed(current, updated):
                 updated["canon"]["approval"] = "draft"
                 updated["canon"]["approvedAt"] = ""
             updated["revision"] = int(current.get("revision") or 1) + 1
