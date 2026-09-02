@@ -13,6 +13,7 @@ import { llmActivityPreview } from '../lib/llmActivityPreview'
 import { createDeveloperModeSlice } from './developerModeSlice'
 import { createDirectorSlice } from './directorSlice'
 import { createSettingsSlice } from './settingsSlice'
+import { createSidebarSlice } from './sidebarSlice'
 import { createThemeSlice } from './themeSlice'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 import {
@@ -2330,6 +2331,10 @@ export const useStore = create<AppState>((set, get) => ({
     partial => set(partial as never),
     () => get(),
   ),
+  ...createSidebarSlice(
+    partial => set(partial as never),
+    () => get(),
+  ),
   ...createDeveloperModeSlice(
     partial => set(partial as never),
     () => get(),
@@ -3040,10 +3045,6 @@ export const useStore = create<AppState>((set, get) => ({
   setParams: (partial) => {
     set(s => ({ params: { ...s.params, ...partial } }))
   },
-
-  sidebarOpen: false,
-  toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   // CivitAI LoRA Browser
   // Director Pipeline Dashboard
