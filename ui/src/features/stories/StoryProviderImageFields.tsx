@@ -12,9 +12,10 @@ export function StoryProviderImageFields({
   onPatchProvider: (value: Partial<StoryProject['provider']>) => void
 }) {
   const { t } = useUiTranslation('storyLab')
+  const usesMiniMaxImage = project.provider.imageProvider === 'minimax'
   const status = imageReady
-    ? project.provider.imageProvider === 'minimax' ? t('provider.minimaxImageReady') : t('provider.localImageReady')
-    : project.provider.imageProvider === 'minimax' ? t('provider.minimaxImageMissing') : t('provider.chooseLocalImage')
+    ? (usesMiniMaxImage ? t('provider.minimaxImageReady') : t('provider.localImageReady'))
+    : (usesMiniMaxImage ? t('provider.minimaxImageMissing') : t('provider.chooseLocalImage'))
   return (
     <>
       <label className="block text-[10px] text-text-muted">{t('provider.imageProvider')}
