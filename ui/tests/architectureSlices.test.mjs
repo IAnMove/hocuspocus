@@ -93,6 +93,32 @@ test('theme slice keeps mode and family persistence keys through the public faca
   assert.equal(globalThis.localStorage.getItem('maestro-theme-mode'), 'auto')
 })
 
+test('settings slice toggles open and tab through the public facade', async () => {
+  const { createSettingsSlice } = await import('../src/stores/settingsSlice.ts')
+  let state
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  state = createSettingsSlice(set, () => state)
+  assert.equal(state.settingsOpen, false)
+  assert.equal(state.settingsTab, 'performance')
+  state.toggleSettings()
+  assert.equal(state.settingsOpen, true)
+  state.setSettingsTab('integrations')
+  assert.equal(state.settingsTab, 'integrations')
+  state.setSettingsOpen(false)
+  assert.equal(state.settingsOpen, false)
+
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.getState().setSettingsOpen(true)
+  useStore.getState().setSettingsTab('integrations')
+  assert.equal(useStore.getState().settingsOpen, true)
+  assert.equal(useStore.getState().settingsTab, 'integrations')
+  useStore.getState().toggleSettings()
+  assert.equal(useStore.getState().settingsOpen, false)
+})
+
 test('useStore keeps Director actions available through its existing public facade', async () => {
   const { useStore } = await import('../src/stores/useStore.ts')
   useStore.setState({ directorAutoMode: true, directorSeamless: true })

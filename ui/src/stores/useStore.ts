@@ -12,6 +12,7 @@ import { isGenerationJobActive } from '../lib/generationJobState'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
 import { llmActivityPreview } from '../lib/llmActivityPreview'
 import { createDirectorSlice } from './directorSlice'
+import { createSettingsSlice } from './settingsSlice'
 import { createThemeSlice } from './themeSlice'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 import {
@@ -2325,6 +2326,10 @@ export const useStore = create<AppState>((set, get) => ({
     partial => set(partial as never),
     () => get(),
   ),
+  ...createSettingsSlice(
+    partial => set(partial as never),
+    () => get(),
+  ),
   // Generation mode
   generationMode: 'video',
   editSubMode: 'retake' as import('../types').EditSubMode,
@@ -3032,9 +3037,6 @@ export const useStore = create<AppState>((set, get) => ({
     set(s => ({ params: { ...s.params, ...partial } }))
   },
 
-  settingsOpen: false,
-  toggleSettings: () => set(s => ({ settingsOpen: !s.settingsOpen })),
-  setSettingsOpen: (open) => set({ settingsOpen: open }),
   sidebarOpen: false,
   toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -6874,10 +6876,6 @@ export const useStore = create<AppState>((set, get) => ({
       _systemStatsInFlight = false
     }
   },
-
-  // Settings tab
-  settingsTab: 'performance' as SettingsTab,
-  setSettingsTab: (tab) => set({ settingsTab: tab }),
 
   // Services config
   servicesConfig: null,
