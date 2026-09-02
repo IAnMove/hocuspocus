@@ -88,6 +88,13 @@ their existing `language` and `spokenLanguage` fields. Provider prompt
 compilation includes only literals relevant to that medium: lyrics are sent to
 music, for example, but are not injected into image prompts.
 
+The LLM is not the only protection boundary. Before execution, the client also
+extracts explicitly cued quoted dialogue, lyrics, subtitles, visible text and
+names from the current user turn. It ignores quotations introduced as a
+technical `style` or `prompt`, merges the protected text into every relevant
+creative action and lets an explicitly named dialogue/lyric language override
+an inconsistent spoken-language guess. Literal spacing is preserved exactly.
+
 Successive project actions merge exact segments by kind, language, speaker and
 text instead of silently discarding earlier authored lines. Removing or
 rewriting authored text remains an explicit project edit, never a side effect
