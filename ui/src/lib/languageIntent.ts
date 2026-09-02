@@ -150,12 +150,16 @@ export function mergeLanguageIntent(
 
 export function hasLanguageIntent(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const raw = value as Record<string, unknown>
   const intent = normalizeLanguageIntent(value)
+  const explicitTechnicalLanguage = raw.technical_prompt_language ?? raw.technicalPromptLanguage
   return Boolean(
     intent.conversationLanguage
     || intent.contentLanguage
     || intent.spokenLanguage
-    || intent.verbatimSegments.length,
+    || intent.verbatimSegments.length
+    || explicitTechnicalLanguage === 'auto'
+    || explicitTechnicalLanguage === 'en'
   )
 }
 

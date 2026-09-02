@@ -167,6 +167,14 @@ test('language-only Story and Series updates survive capability resolution', () 
   assert.equal(story?.type, 'update_story')
   assert.equal(story && 'languageIntent' in story && story.languageIntent?.spokenLanguage, 'es')
 
+  const technicalOnly = parseRegisteredCapability('update_story', {
+    type: 'update_story',
+    target_story_title: 'The Observatory',
+    language_intent: { technical_prompt_language: 'auto' },
+  })
+  assert.equal(technicalOnly?.type, 'update_story')
+  assert.equal(technicalOnly && 'languageIntent' in technicalOnly && technicalOnly.languageIntent?.technicalPromptLanguage, 'auto')
+
   const episode = parseRegisteredCapability('update_series_episode', {
     type: 'update_series_episode',
     series_title: 'Night Shift',
