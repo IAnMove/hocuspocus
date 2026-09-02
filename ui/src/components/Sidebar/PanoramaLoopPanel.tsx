@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../stores/useStore'
+import { ensureUiI18n, useUiTranslation } from '../../i18n'
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { buildInfinitePanoramaPrompt, createTripleTileLayout } from '../../lib/panoramaLoop'
+
+const ts = (key: string, opts?: Record<string, unknown>) => ensureUiI18n().t(key, { ns: 'studio', ...opts })
 
 type PreparedPanorama = { file: File; url: string; width: number; height: number }
 
 const loadImage = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
   const image = new Image()
   image.onload = () => resolve(image)
-  image.onerror = () => reject(new Error('Could not read this background image.'))
+  image.onerror = () => reject(new Error(ts('panorama.readFailed')))
   image.src = url
 })
 
 const canvasBlob = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) => {
-  canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not prepare the panorama canvas.')), 'image/png')
+  canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error(ts('panorama.canvasFailed'))), 'image/png')
 })
 
 async function prepareTripleTile(file: File, seamPercent: number): Promise<PreparedPanorama> {
@@ -28,7 +31,7 @@ async function prepareTripleTile(file: File, seamPercent: number): Promise<Prepa
     canvas.width = layout.canvas.width
     canvas.height = layout.canvas.height
     const context = canvas.getContext('2d')
-    if (!context) throw new Error('This browser cannot prepare the panorama canvas.')
+    if (!context) throw new Error(ts('panorama.browserFailed'))
     for (const tile of layout.tiles) context.drawImage(image, tile.x, tile.y, tile.width, tile.height)
     for (const seam of layout.seamBands) {
       const gradient = context.createLinearGradient(seam.x, 0, seam.x + seam.width, 0)
@@ -48,6 +51,7 @@ async function prepareTripleTile(file: File, seamPercent: number): Promise<Prepa
 
 /** A deliberately small image-side entry point for seamless horizontal backgrounds. */
 export function PanoramaLoopPanel() {
+  const { t } = useUiTranslation('studio')
   const selectedModel = useStore(state => {
     const remembered = state.selectedModelPerMode.image
     // MiniMax may remain selected for ordinary image creation, but this tool
@@ -77,16 +81,16 @@ export function PanoramaLoopPanel() {
     void (async () => {
       try {
         const response = await fetch(sourceUrl)
-        if (!response.ok) throw new Error('The selected 3D Video background is no longer available.')
+        if (!response.ok) throw new Error(t('panorama.missingBackground'))
         const blob = await response.blob()
         const extension = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'
         const file = new File([blob], queued.name || `3d-video-background.${extension}`, { type: blob.type || 'image/jpeg' })
         setSource(file)
         const next = await prepareTripleTile(file, seamPercent)
         setPrepared(previous => { if (previous) URL.revokeObjectURL(previous.url); return next })
-        setMessage('Background received from 3D Video. Review the seams, then generate a loopable variation.')
+        setMessage(t('panorama.received'))
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Could not receive the selected 3D Video background.')
+        setMessage(error instanceof Error ? error.message : t('panorama.receiveFailed'))
       }
     })()
   // Consume the hand-off once when the Image panel mounts.
@@ -100,38 +104,38 @@ export function PanoramaLoopPanel() {
       const next = await prepareTripleTile(file, seamPercent)
       setPrepared(previous => { if (previous) URL.revokeObjectURL(previous.url); return next })
     } catch (error) {
-      setPrepared(null); setMessage(error instanceof Error ? error.message : 'Could not prepare panorama.')
+      setPrepared(null); setMessage(error instanceof Error ? error.message : t('panorama.prepareFailed'))
     }
   }
   const updateSeam = (value: number) => {
     const next = Math.max(4, Math.min(25, value))
     setSeamPercent(next)
-    if (source) void prepareTripleTile(source, next).then(result => setPrepared(previous => { if (previous) URL.revokeObjectURL(previous.url); return result })).catch(error => setMessage(error instanceof Error ? error.message : 'Could not prepare panorama.'))
+    if (source) void prepareTripleTile(source, next).then(result => setPrepared(previous => { if (previous) URL.revokeObjectURL(previous.url); return result })).catch(error => setMessage(error instanceof Error ? error.message : t('panorama.prepareFailed')))
   }
   const generate = async () => {
-    if (!prepared) { setMessage('Choose a background image first.'); return }
-    if (!selectedModel) { setMessage('Choose a reference-capable image model first.'); return }
+    if (!prepared) { setMessage(t('panorama.chooseImage')); return }
+    if (!selectedModel) { setMessage(t('panorama.chooseModel')); return }
     setBusy(true); setMessage(null)
     try {
       const asset = await generateImageAsset('maestro', prompt, selectedModel, prepared.url, 'visible seam, border, frame, text, duplicated focal object', { strictReference: true, referenceMode: 'edit' })
       await loadOutputs()
-      setMessage(`Generated panorama variation: ${asset.name}`)
+      setMessage(t('panorama.generated', { name: asset.name }))
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not generate panorama variation.')
+      setMessage(error instanceof Error ? error.message : t('panorama.generateFailed'))
     } finally {
       setBusy(false)
     }
   }
 
   return <section className="space-y-2 rounded-lg border border-amber-400/25 bg-amber-400/[.035] p-3">
-    <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-medium text-amber-100">Fondo infinito</span><span className="text-[8px] text-amber-200/70">Experimental · image edit</span></div>
-    <p className="text-[9px] leading-relaxed text-text-muted">Prepara tres copias del fondo y marca las dos costuras para que un modelo de imagen continúe el paisaje. El resultado se guarda en Images y puede elegirse después como plate en 3D Video.</p>
-    <input aria-label="Panorama source image" type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={event => { const file = event.target.files?.[0]; if (file) void prepare(file) }} className="block w-full text-[9px] text-text-muted file:mr-2 file:rounded file:border-0 file:bg-bg-tertiary file:px-2 file:py-1 file:text-[9px] file:text-text-secondary" />
-    <div className="grid grid-cols-2 gap-2"><label className="text-[9px] text-text-muted">Scene / subject<input value={subject} disabled={busy} onChange={event => setSubject(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]" /></label><label className="text-[9px] text-text-muted">Style (optional)<input value={style} disabled={busy} onChange={event => setStyle(event.target.value)} placeholder="anime background" className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]" /></label></div>
-    <div className="grid grid-cols-2 gap-2"><label className="text-[9px] text-text-muted">Seam cover (optional)<input value={occluder} disabled={busy} onChange={event => setOccluder(event.target.value)} placeholder="lamp post / tree" className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]" /></label><label className="text-[9px] text-text-muted">Seam width {seamPercent}%<input type="range" min="4" max="25" value={seamPercent} disabled={busy} onChange={event => updateSeam(Number(event.target.value))} className="mt-1 w-full accent-amber-300" /></label></div>
-    {prepared && <div className="overflow-hidden rounded border border-amber-300/20 bg-black/20"><img src={prepared.url} alt="Three repeated copies with marked joins" className="block max-h-28 w-full object-contain" /><p className="border-t border-amber-300/10 px-1.5 py-1 text-[8px] text-text-muted">3× preview · each source tile {prepared.width}×{prepared.height}; highlighted bands are the only seams to repair.</p></div>}
-    <details className="text-[8px] text-text-muted"><summary className="cursor-pointer">Exact edit prompt</summary><p className="mt-1 rounded bg-black/20 p-1.5 leading-relaxed">{prompt}</p></details>
-    <button type="button" disabled={!prepared || busy} onClick={() => void generate()} className="w-full rounded border border-amber-300/45 bg-amber-400/10 px-2 py-1.5 text-[10px] text-amber-100 disabled:opacity-40">{busy ? 'Generating seamless variation…' : `Generate with ${selectedModel || 'selected image model'}`}</button>
-    {message && <p className={`text-[8px] ${/generated/i.test(message) ? 'text-emerald-200' : 'text-red-300'}`}>{message}</p>}
+    <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-medium text-amber-100">{t('panorama.title')}</span><span className="text-[8px] text-amber-200/70">{t('panorama.experimental')}</span></div>
+    <p className="text-[9px] leading-relaxed text-text-muted">{t('panorama.hint')}</p>
+    <input aria-label={t('panorama.sourceAria')} type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={event => { const file = event.target.files?.[0]; if (file) void prepare(file) }} className="block w-full text-[9px] text-text-muted file:mr-2 file:rounded file:border-0 file:bg-bg-tertiary file:px-2 file:py-1 file:text-[9px] file:text-text-secondary" />
+    <div className="grid grid-cols-2 gap-2"><label className="text-[9px] text-text-muted">{t('panorama.scene')}<input value={subject} disabled={busy} onChange={event => setSubject(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]" /></label><label className="text-[9px] text-text-muted">{t('panorama.style')}<input value={style} disabled={busy} onChange={event => setStyle(event.target.value)} placeholder={t('panorama.stylePlaceholder')} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]" /></label></div>
+    <div className="grid grid-cols-2 gap-2"><label className="text-[9px] text-text-muted">{t('panorama.seamCover')}<input value={occluder} disabled={busy} onChange={event => setOccluder(event.target.value)} placeholder={t('panorama.occluderPlaceholder')} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]" /></label><label className="text-[9px] text-text-muted">{t('panorama.seamWidth', { percent: seamPercent })}<input type="range" min="4" max="25" value={seamPercent} disabled={busy} onChange={event => updateSeam(Number(event.target.value))} className="mt-1 w-full accent-amber-300" /></label></div>
+    {prepared && <div className="overflow-hidden rounded border border-amber-300/20 bg-black/20"><img src={prepared.url} alt={t('panorama.previewAlt')} className="block max-h-28 w-full object-contain" /><p className="border-t border-amber-300/10 px-1.5 py-1 text-[8px] text-text-muted">{t('panorama.previewCaption', { width: prepared.width, height: prepared.height })}</p></div>}
+    <details className="text-[8px] text-text-muted"><summary className="cursor-pointer">{t('panorama.exactPrompt')}</summary><p className="mt-1 rounded bg-black/20 p-1.5 leading-relaxed">{prompt}</p></details>
+    <button type="button" disabled={!prepared || busy} onClick={() => void generate()} className="w-full rounded border border-amber-300/45 bg-amber-400/10 px-2 py-1.5 text-[10px] text-amber-100 disabled:opacity-40">{busy ? t('panorama.generating') : t('panorama.generateWith', { model: selectedModel || t('panorama.selectedModel') })}</button>
+    {message && <p className={`text-[8px] ${/generated|generada/i.test(message) ? 'text-emerald-200' : 'text-red-300'}`}>{message}</p>}
   </section>
 }

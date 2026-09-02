@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from 'react'
 import { ChevronDown, ChevronRight, X, Mic } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 
 const baseOptions = [
@@ -27,6 +28,7 @@ const flashvsrOptions = [
 ]
 
 export function PostProcessing() {
+  const { t } = useUiTranslation('studio')
   const [open, setOpen] = useState(false)
   const spatialUpsampling = useStore(s => s.spatialUpsampling)
   const setSpatialUpsampling = useStore(s => s.setSpatialUpsampling)
@@ -84,7 +86,7 @@ export function PostProcessing() {
         className="flex items-center gap-1.5 text-[11px] text-text-muted uppercase tracking-wider w-full hover:text-text-primary transition-colors"
       >
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <span className="flex-1 text-left">Post Processing</span>
+        <span className="flex-1 text-left">{t('post.title')}</span>
         {hasAny && <span className="w-1.5 h-1.5 rounded-full bg-accent-blue" />}
       </button>
 
@@ -93,7 +95,7 @@ export function PostProcessing() {
           {/* Spatial Upsampling */}
           <div>
             <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-              Spatial Upsampling
+              {t('post.spatial')}
             </label>
             <select
               value={spatialUpsampling}
@@ -101,7 +103,7 @@ export function PostProcessing() {
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             >
               {upsamplingOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option key={opt.value} value={opt.value}>{opt.value === '' ? t('chrome.none') : opt.label}</option>
               ))}
             </select>
           </div>
@@ -109,7 +111,7 @@ export function PostProcessing() {
           {/* Film Grain Intensity */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] text-text-muted uppercase tracking-wider">Film Grain Intensity</label>
+              <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('post.grainIntensity')}</label>
               <span className="text-xs text-text-secondary">{filmGrainIntensity.toFixed(2)}</span>
             </div>
             <input
@@ -126,7 +128,7 @@ export function PostProcessing() {
           {filmGrainIntensity > 0 && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11px] text-text-muted uppercase tracking-wider">Film Grain Saturation</label>
+                <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('post.grainSaturation')}</label>
                 <span className="text-xs text-text-secondary">{filmGrainSaturation.toFixed(2)}</span>
               </div>
               <input
@@ -148,7 +150,7 @@ export function PostProcessing() {
             <div className="border-t border-border pt-3 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-[11px] text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                  <Mic size={11} /> Voice Clone (SeedVC)
+                  <Mic size={11} /> {t('post.voiceClone')}
                 </label>
                 <button
                   onClick={() => setVoiceCloneEnabled(!voiceCloneEnabled)}
@@ -173,7 +175,7 @@ export function PostProcessing() {
                           : 'bg-bg-tertiary border-border text-text-secondary hover:text-text-primary'
                       }`}
                     >
-                      Single Voice
+                      {t('tools.singleVoice')}
                     </button>
                     <button
                       onClick={() => setVoiceCloneMode('two')}
@@ -183,19 +185,19 @@ export function PostProcessing() {
                           : 'bg-bg-tertiary border-border text-text-secondary hover:text-text-primary'
                       }`}
                     >
-                      Two Voices
+                      {t('tools.twoVoices')}
                     </button>
                   </div>
                   <p className="text-[10px] text-text-muted leading-snug">
                     {voiceCloneMode === 'single'
-                      ? 'Replaces every voice in the audio with the reference voice. Affects the whole audio track.'
-                      : 'Auto-detects 2 speakers; preserves background music & silence. First detected speaker → Voice A, second → Voice B.'}
+                      ? t('post.singleHint')
+                      : t('post.twoHint')}
                   </p>
 
                   {/* Voice reference upload(s) */}
                   {[0, ...(voiceCloneMode === 'two' ? [1] : [])].map(idx => {
                     const ref = voiceCloneRefs[idx]
-                    const label = voiceCloneMode === 'two' ? (idx === 0 ? 'Voice A' : 'Voice B') : 'Reference Voice'
+                    const label = voiceCloneMode === 'two' ? (idx === 0 ? t('tools.voiceA') : t('tools.voiceB')) : t('tools.referenceVoice')
                     return (
                       <div key={idx}>
                         <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{label}</label>
@@ -207,7 +209,7 @@ export function PostProcessing() {
                             }`}
                           >
                             <p className="text-[11px] text-text-secondary">
-                              {vcUploading === idx ? 'Uploading...' : `Upload ${label.toLowerCase()} sample`}
+                              {vcUploading === idx ? t('chrome.uploading') : t('tools.uploadSample', { label: label.toLowerCase() })}
                             </p>
                             <input
                               ref={vcFileRefs[idx]}

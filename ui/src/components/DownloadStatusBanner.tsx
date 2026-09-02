@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Download, AlertTriangle } from 'lucide-react'
 import { fetchActiveDownloads, type ActiveDownload } from '../api/client'
 import { useSerializedPoll } from '../hooks/useSerializedPoll'
+import { useUiTranslation } from '../i18n'
 
 /**
  * DownloadStatusBanner — fixed-position overlay shown while
@@ -24,6 +25,7 @@ import { useSerializedPoll } from '../hooks/useSerializedPoll'
  * of the previous "frozen progress bar in console" UX.
  */
 export function DownloadStatusBanner() {
+  const { t } = useUiTranslation('shell')
   const [downloads, setDownloads] = useState<ActiveDownload[]>([])
 
   useSerializedPoll({
@@ -75,7 +77,7 @@ export function DownloadStatusBanner() {
           <div className="px-4 py-2 bg-red-500/15 border-b border-red-500/30 flex items-center gap-2">
             <AlertTriangle size={14} className="text-red-400 shrink-0" />
             <div className="text-xs font-medium text-text-primary">
-              A download was interrupted — re-run to finish it
+              {t('download.interrupted')}
             </div>
           </div>
         )}
@@ -85,7 +87,7 @@ export function DownloadStatusBanner() {
           <div className="px-4 py-2 bg-amber-500/15 border-b border-amber-500/30 flex items-center gap-2">
             <AlertTriangle size={14} className="text-indicator-warning shrink-0" />
             <div className="text-xs font-medium text-text-primary">
-              Download is slow — waiting for retry
+              {t('download.slow')}
             </div>
           </div>
         )}
@@ -99,18 +101,18 @@ export function DownloadStatusBanner() {
               {!stalled && (
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-xs font-medium text-text-primary truncate">
-                    Downloading model files
+                    {t('download.title')}
                   </div>
                   {downloads.length > 1 && (
                     <div className="text-[10px] text-text-muted shrink-0">
-                      {downloads.length} files
+                      {t('download.files', { count: downloads.length })}
                     </div>
                   )}
                 </div>
               )}
               {stalled && downloads.length > 1 && (
                 <div className="text-[10px] text-text-muted text-right -mt-0.5 mb-0.5">
-                  {downloads.length} files
+                  {t('download.files', { count: downloads.length })}
                 </div>
               )}
               <div className="text-[10px] text-text-muted truncate" title={featured.filename}>
@@ -119,9 +121,7 @@ export function DownloadStatusBanner() {
               <DownloadProgressBar download={featured} stalled={!!stalled} />
               {stalled && (
                 <div className="text-[11px] text-text-secondary mt-1.5 leading-snug">
-                  No progress for {Math.round(featured.seconds_since_progress)}s.
-                  The download will resume from where it left off as soon as
-                  the connection recovers — no action needed from you.
+                  {t('download.noProgress', { seconds: Math.round(featured.seconds_since_progress) })}
                 </div>
               )}
             </div>

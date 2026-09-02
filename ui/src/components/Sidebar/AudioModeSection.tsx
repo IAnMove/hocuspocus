@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { ChoiceControl } from '../shared/ChoiceControl'
 import { FileUploadZone } from '../shared/FileUploadZone'
 import * as api from '../../api/client'
 
 export function AudioModeSection() {
+  const { t } = useUiTranslation('studio')
   const modelOptions = useStore(s => s.modelOptions)
   const params = useStore(s => s.params)
   const setParam = useStore(s => s.setParam)
@@ -145,7 +147,7 @@ export function AudioModeSection() {
             const isAudioDriven = val.includes('A') && !isAudioOnly
             setParam('modality_scale' as keyof import('../../types').GenerateParams, isAudioDriven ? 1.0 : 1.0)
           }}
-          label="Audio Mode"
+          label={t('audio.mode')}
         />
       )}
 
@@ -159,13 +161,13 @@ export function AudioModeSection() {
               className="w-full py-1.5 rounded-lg text-[10px] font-medium border border-dashed border-border text-text-muted hover:text-text-primary hover:border-border-light transition-colors flex items-center justify-center gap-1.5"
             >
               <Plus size={12} />
-              {ttsVoiceCount === 0 ? 'Add Voice Clone' : `Add Voice (${ttsVoiceCount}/${maxVoiceCount})`}
+              {ttsVoiceCount === 0 ? t('audio.addVoiceClone') : t('audio.addVoice', { count: ttsVoiceCount, max: maxVoiceCount })}
             </button>
           )}
 
           {ttsVoiceCount === 0 && (
             <p className="text-[9px] text-text-muted text-center">
-              Text-only mode. Add voices to clone specific speakers.
+              {t('audio.textOnly')}
             </p>
           )}
 
@@ -181,10 +183,10 @@ export function AudioModeSection() {
                     <X size={10} />
                   </button>
                   <label className="text-[9px] text-text-muted uppercase tracking-wider block mb-1">
-                    Voice {i + 1}
+                    {t('audio.voiceN', { n: i + 1 })}
                   </label>
                   <FileUploadZone
-                    label={uploading ? '...' : 'Drop audio'}
+                    label={uploading ? '...' : t('audio.dropAudio')}
                     accept=".wav,.mp3,.flac,.ogg,.m4a"
                     filename={voice.filename}
                     onFile={f => handleVoiceUpload(f, i)}
@@ -192,7 +194,7 @@ export function AudioModeSection() {
                   />
                   <input
                     type="text"
-                    placeholder="Speaker name"
+                    placeholder={t('audio.speakerName')}
                     value={voice.name}
                     onChange={e => setTtsVoiceName(i, e.target.value)}
                     className="w-full mt-1 bg-bg-tertiary border border-border rounded px-1.5 py-0.5 text-[9px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
@@ -207,7 +209,7 @@ export function AudioModeSection() {
             <div className="space-y-1.5 pt-1">
               {ttsVoiceCount >= 2 && (
                 <p className="text-[9px] text-text-muted">
-                  Names auto-fill from prompt. Each name maps to the voice above it.
+                  {t('audio.namesHint')}
                 </p>
               )}
               <label className="flex items-center gap-2 cursor-pointer group">
@@ -219,7 +221,7 @@ export function AudioModeSection() {
                   }}
                   className="accent-accent-blue" />
                 <span className="text-[10px] text-text-secondary group-hover:text-text-primary transition-colors">
-                  Normalize audio volumes
+                  {t('audio.normalizeVolumes')}
                 </span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer group">
@@ -231,7 +233,7 @@ export function AudioModeSection() {
                   }}
                   className="accent-accent-blue" />
                 <span className="text-[10px] text-text-secondary group-hover:text-text-primary transition-colors">
-                  Remove background music
+                  {t('audio.removeBgMusic')}
                 </span>
               </label>
               {ttsVoiceCount >= 2 && (
@@ -241,7 +243,7 @@ export function AudioModeSection() {
                     onChange={e => setParam('tts_dynaudnorm' as keyof import('../../types').GenerateParams, e.target.checked ? 1 : undefined)}
                     className="accent-accent-blue" />
                   <span className="text-[10px] text-text-secondary group-hover:text-text-primary transition-colors">
-                    Smooth speaker volumes
+                    {t('audio.smoothVolumes')}
                   </span>
                 </label>
               )}
@@ -256,10 +258,10 @@ export function AudioModeSection() {
       {!isAudioOnly && needsAudioUpload && (
         <div>
           <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-            Audio File
+            {t('audio.audioFile')}
           </label>
           <FileUploadZone
-            label={uploading ? 'Uploading...' : 'Drop audio or video (audio will be extracted)'}
+            label={uploading ? t('chrome.uploading') : t('audio.dropAudioOrVideo')}
             accept=".wav,.mp3,.flac,.ogg,.m4a,.mp4,.mov,.mkv,.webm,.avi,.m4v"
             filename={audioGuideFilename}
             onFile={file => handleLegacyUpload(file, 'audio_guide', setAudioGuideFilename)}
@@ -276,7 +278,7 @@ export function AudioModeSection() {
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-[10px] text-text-muted uppercase tracking-wider">
-              {modelOptions?.audio_scale_name || 'Prompt Audio Strength'}
+              {modelOptions?.audio_scale_name || t('audio.promptStrength')}
             </label>
             <span className="text-[10px] text-text-secondary">
               {((params as unknown as Record<string, unknown>).modality_scale as number ?? 1.0).toFixed(1)}
@@ -289,7 +291,7 @@ export function AudioModeSection() {
             className="w-full accent-accent-blue"
           />
           <div className="flex justify-between text-[9px] text-text-muted mt-0.5">
-            <span>0.1</span><span>1.0 (Default)</span><span>3.0 (Experimental TTS Boost)</span>
+            <span>0.1</span><span>{t('audio.defaultMark')}</span><span>{t('audio.ttsBoost')}</span>
           </div>
         </div>
       )}
@@ -298,10 +300,10 @@ export function AudioModeSection() {
       {!isAudioOnly && needsVideoGuideUpload && (
         <div>
           <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-            Control Video
+            {t('audio.controlVideo')}
           </label>
           <FileUploadZone
-            label={uploading ? 'Uploading...' : 'Drop video file (.mp4)'}
+            label={uploading ? t('chrome.uploading') : t('audio.dropVideoMp4')}
             accept=".mp4,.webm,.mkv"
             filename={videoGuideFilename}
             onFile={file => handleLegacyUpload(file, 'video_guide', setVideoGuideFilename)}

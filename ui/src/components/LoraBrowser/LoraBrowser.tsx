@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Search, Loader2, BookOpen, HardDrive, Tag, Link2, ArrowUpCircle, RefreshCw, KeyRound, ExternalLink, Boxes, Trash2 } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { fetchCivitAIModelFilters, startLoraScan, fetchLoraScanStatus, fetchInstalledLoras, importHuggingFaceLora, checkLoraUpdates, deleteLoraFile } from '../../api/client'
 import { formatBytes } from '../../lib/format'
@@ -25,6 +26,8 @@ const PERIOD_OPTIONS = [
 ]
 
 export function LoraBrowser() {
+  const { t } = useUiTranslation('settings')
+  const { t: tCommon } = useUiTranslation('common')
   const open = useStore(s => s.loraBrowserOpen)
   const setOpen = useStore(s => s.setLoraBrowserOpen)
   const results = useStore(s => s.civitSearchResults)
@@ -226,24 +229,24 @@ export function LoraBrowser() {
     setImporting(true)
     const trimmed = importUrl.trim()
     const isCivitai = /civitai\.com/i.test(trimmed)
-    setImportStatus(isCivitai ? 'Resolving CivitAI model…' : 'Parsing HuggingFace repo…')
+    setImportStatus(isCivitai ? t('loraBrowser.resolvingCivitai') : t('loraBrowser.parsingHf'))
     try {
       // Backend endpoint dispatches by URL type — both HuggingFace and
       // CivitAI URLs route through the same /huggingface/import-lora
       // endpoint (historical name; now handles both).
       const result = await importHuggingFaceLora(trimmed)
-      setImportStatus(`Downloading ${result.filename} → ${result.target_dir}/ (base: ${result.base_model || 'auto-detected'})`)
+      setImportStatus(t('loraBrowser.downloadingTo', { filename: result.filename, dir: result.target_dir, base: result.base_model || t('loraBrowser.autoDetected') }))
       setImportUrl('')
       pollDownloads()
       // The download runs in background on the server — it'll appear in the download bar
       setTimeout(() => setImportStatus(''), 10000)
     } catch (e) {
-      setImportStatus(`Error: ${e instanceof Error ? e.message : 'Import failed'}`)
+      setImportStatus(t('loraBrowser.error', { message: e instanceof Error ? e.message : t('loraBrowser.importFailed') }))
       setTimeout(() => setImportStatus(''), 8000)
     } finally {
       setImporting(false)
     }
-  }, [importUrl, importing, pollDownloads])
+  }, [importUrl, importing, pollDownloads, t])
 
   if (!open) return null
 
@@ -251,7 +254,7 @@ export function LoraBrowser() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-bg-primary">
       {/* Top bar */}
       <div className="px-4 py-3 border-b border-border flex items-center gap-3 shrink-0">
-        <h1 className="text-sm font-semibold text-text-primary shrink-0">Model Browser</h1>
+        <h1 className="text-sm font-semibold text-text-primary shrink-0">{t('loraBrowser.title')}</h1>
 
         {/* LoRA (adapter) vs Checkpoint (full model) mode */}
         <div className="flex items-center rounded-lg border border-border overflow-hidden shrink-0 text-xs">
@@ -271,7 +274,7 @@ export function LoraBrowser() {
                   : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
               }`}
             >
-              {k === 'lora' ? 'LoRAs' : 'Checkpoints'}
+              {k === 'lora' ? t('loraBrowser.loras') : t('loraBrowser.checkpoints')}
             </button>
           ))}
         </div>
@@ -282,11 +285,11 @@ export function LoraBrowser() {
             <button
               onClick={async () => {
                 setScanning(true)
-                setScanProgress('Scanning new LoRAs...')
+                setScanProgress(t('loraBrowser.scanning'))
                 try {
                   const { scan_id, total } = await startLoraScan()
                   if (total === 0) {
-                    setScanProgress('All LoRAs already have guides')
+                    setScanProgress(t('loraBrowser.allHaveGuides'))
                     setTimeout(() => { setScanning(false); setScanProgress('') }, 3000)
                     return
                   }
@@ -294,28 +297,28 @@ export function LoraBrowser() {
                     const status = await fetchLoraScanStatus(scan_id)
                     setScanProgress(`${status.message} (${status.current}/${status.total})`)
                     if (status.status === 'running') setTimeout(poll, 2000)
-                    else { setScanProgress(`Done: ${status.results.length} processed`); setTimeout(() => { setScanning(false); setScanProgress('') }, 5000) }
+                    else { setScanProgress(t('loraBrowser.doneProcessed', { count: status.results.length })); setTimeout(() => { setScanning(false); setScanProgress('') }, 5000) }
                   }
                   poll()
                 } catch (e) {
-                  setScanProgress(`Error: ${e instanceof Error ? e.message : 'failed'}`)
+                  setScanProgress(t('loraBrowser.error', { message: e instanceof Error ? e.message : t('loraBrowser.failed') }))
                   setTimeout(() => { setScanning(false); setScanProgress('') }, 5000)
                 }
               }}
               className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-bg-tertiary border border-border rounded-lg hover:border-accent-blue text-text-secondary hover:text-accent-blue transition-colors shrink-0"
-              title="Scan new LoRAs without guides"
+              title={t('loraBrowser.generateGuidesTitle')}
             >
               <BookOpen size={12} />
-              <span className="hidden sm:inline">Generate Guides</span>
+              <span className="hidden sm:inline">{t('loraBrowser.generateGuides')}</span>
             </button>
             <button
               onClick={async () => {
                 setScanning(true)
-                setScanProgress('Regenerating all guides...')
+                setScanProgress(t('loraBrowser.regenerating'))
                 try {
                   const { scan_id, total } = await startLoraScan({ force: true })
                   if (total === 0) {
-                    setScanProgress('No LoRAs found')
+                    setScanProgress(t('loraBrowser.noLorasFound'))
                     setTimeout(() => { setScanning(false); setScanProgress('') }, 3000)
                     return
                   }
@@ -323,29 +326,29 @@ export function LoraBrowser() {
                     const status = await fetchLoraScanStatus(scan_id)
                     setScanProgress(`${status.message} (${status.current}/${status.total})`)
                     if (status.status === 'running') setTimeout(poll, 2000)
-                    else { setScanProgress(`Done: ${status.results.length} regenerated`); setTimeout(() => { setScanning(false); setScanProgress('') }, 5000) }
+                    else { setScanProgress(t('loraBrowser.doneRegenerated', { count: status.results.length })); setTimeout(() => { setScanning(false); setScanProgress('') }, 5000) }
                   }
                   poll()
                 } catch (e) {
-                  setScanProgress(`Error: ${e instanceof Error ? e.message : 'failed'}`)
+                  setScanProgress(t('loraBrowser.error', { message: e instanceof Error ? e.message : t('loraBrowser.failed') }))
                   setTimeout(() => { setScanning(false); setScanProgress('') }, 5000)
                 }
               }}
               className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-bg-tertiary border border-border rounded-lg hover:border-indicator-warning text-text-secondary hover:text-indicator-warning transition-colors shrink-0"
-              title="Regenerate ALL guides (overwrites existing)"
+              title={t('loraBrowser.regenerateTitle')}
             >
-              <span className="hidden sm:inline">Regenerate All</span>
-              <span className="sm:hidden">Regen</span>
+              <span className="hidden sm:inline">{t('loraBrowser.regenerateAll')}</span>
+              <span className="sm:hidden">{t('loraBrowser.regen')}</span>
             </button>
             <button
               onClick={() => setShowUrlImport(!showUrlImport)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-bg-tertiary border rounded-lg transition-colors shrink-0 ${
                 showUrlImport ? 'border-accent-blue text-accent-blue' : 'border-border text-text-secondary hover:border-accent-blue hover:text-accent-blue'
               }`}
-              title="Import LoRA from HuggingFace or CivitAI URL"
+              title={t('loraBrowser.importUrlTitle')}
             >
               <Link2 size={12} />
-              <span className="hidden sm:inline">Import URL</span>
+              <span className="hidden sm:inline">{t('loraBrowser.importUrl')}</span>
             </button>
           </div>
         )}
@@ -364,7 +367,7 @@ export function LoraBrowser() {
                 type="text"
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
-                placeholder="HuggingFace repo or CivitAI model URL"
+                placeholder={t('loraBrowser.urlPlaceholder')}
                 className="flex-1 bg-bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                 onKeyDown={e => {
                   if (e.key === 'Enter' && importUrl.trim() && !importing) {
@@ -378,11 +381,11 @@ export function LoraBrowser() {
                 disabled={!importUrl.trim() || importing}
                 className="px-3 py-1.5 text-xs bg-accent-blue text-white rounded-lg hover:bg-accent-blue/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
               >
-                {importing ? <Loader2 size={12} className="animate-spin" /> : 'Import'}
+                {importing ? <Loader2 size={12} className="animate-spin" /> : tCommon('actions.import')}
               </button>
             </div>
             <p className="text-[9px] text-text-muted">
-              Paste a HuggingFace model URL. Downloads the LoRA, saves metadata, example media, and generates a usage guide.
+              {t('loraBrowser.urlHint')}
             </p>
             {importStatus && (
               <div className={`text-[10px] ${importStatus.startsWith('Error') ? 'text-red-400' : 'text-accent-blue'}`}>
@@ -401,7 +404,7 @@ export function LoraBrowser() {
                 type="text"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Search CivitAI..."
+                placeholder={t('loraBrowser.searchPlaceholder')}
                 className="w-full bg-bg-tertiary border border-border rounded-lg pl-8 pr-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                 autoFocus
               />
@@ -430,36 +433,35 @@ export function LoraBrowser() {
         <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/30 flex items-start gap-2.5 shrink-0">
           <KeyRound size={14} className="text-indicator-warning shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0 text-xs text-text-primary leading-relaxed">
-            <span className="font-semibold">No CivitAI API key configured.</span>{' '}
-            Most NSFW, restricted, and early-access LoRAs require a key to
-            download — without one, those downloads will fail with an error.
+            <span className="font-semibold">{t('loraBrowser.noKeyTitle')}</span>{' '}
+            {t('loraBrowser.noKeyBody')}
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
               <a
                 href="https://civitai.com/user/account"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-indicator-warning underline decoration-indicator-warning/40 hover:decoration-indicator-warning hover:text-indicator-warning/80 transition-colors"
-                title="Opens CivitAI's account page in a new tab — scroll to 'API Keys'"
+                title={t('loraBrowser.getKeyTitle')}
               >
                 <ExternalLink size={10} />
-                Get a key from civitai.com
+                {t('loraBrowser.getKey')}
               </a>
               <span className="text-text-secondary">→</span>
               <button
                 onClick={goToCivitaiKeySettings}
                 className="inline-flex items-center gap-1 text-indicator-warning underline decoration-indicator-warning/40 hover:decoration-indicator-warning hover:text-indicator-warning/80 transition-colors"
-                title="Opens Settings → Services where you can paste your key"
+                title={t('loraBrowser.pasteKeyTitle')}
               >
                 <KeyRound size={10} />
-                Paste it in Settings → Services
+                {t('loraBrowser.pasteKey')}
               </button>
             </div>
           </div>
           <button
             onClick={() => setApiKeyBannerDismissed(true)}
             className="p-1 rounded hover:bg-amber-500/20 text-indicator-warning hover:text-indicator-warning/80 shrink-0 transition-colors"
-            title="Dismiss for this session"
-            aria-label="Dismiss"
+            title={t('loraBrowser.dismissSession')}
+            aria-label={t('loraBrowser.dismiss')}
           >
             <X size={12} />
           </button>
@@ -474,7 +476,14 @@ export function LoraBrowser() {
             onChange={e => setSort(e.target.value)}
             className="bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {SORT_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>
+                {o.value === 'Highest Rated' ? t('loraBrowser.sortHighest')
+                  : o.value === 'Most Downloaded' ? t('loraBrowser.sortMostDownloaded')
+                    : o.value === 'Newest' ? t('loraBrowser.sortNewest')
+                      : t('loraBrowser.sortMostLiked')}
+              </option>
+            ))}
           </select>
 
           <select
@@ -482,7 +491,15 @@ export function LoraBrowser() {
             onChange={e => setPeriod(e.target.value)}
             className="bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            {PERIOD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {PERIOD_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>
+                {o.value === 'AllTime' ? t('loraBrowser.periodAll')
+                  : o.value === 'Year' ? t('loraBrowser.periodYear')
+                    : o.value === 'Month' ? t('loraBrowser.periodMonth')
+                      : o.value === 'Week' ? t('loraBrowser.periodWeek')
+                        : t('loraBrowser.periodDay')}
+              </option>
+            ))}
           </select>
 
           <select
@@ -494,7 +511,7 @@ export function LoraBrowser() {
             }}
             className="bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="">All Models</option>
+            <option value="">{t('loraBrowser.allModels')}</option>
             {modelFilters.map(f => <option key={f.label} value={f.label}>{f.label}</option>)}
           </select>
 
@@ -510,7 +527,7 @@ export function LoraBrowser() {
               onChange={e => setNsfwSticky(e.target.checked)}
               className="w-3.5 h-3.5 rounded accent-red-500"
             />
-            NSFW
+            {t('loraBrowser.nsfw')}
           </label>
           )}
 
@@ -522,8 +539,8 @@ export function LoraBrowser() {
             <label
               className="flex items-center gap-1.5 text-xs cursor-pointer shrink-0 select-none"
               title={updatableCount > 0
-                ? `${updatableCount} LoRA${updatableCount === 1 ? ' has' : 's have'} updates available — check to filter`
-                : 'No updates available — click Check to refresh from CivitAI'}
+                ? t('loraBrowser.updatesFilterTitle', { count: updatableCount })
+                : t('loraBrowser.updatesNoneTitle')}
             >
               <input
                 type="checkbox"
@@ -536,7 +553,7 @@ export function LoraBrowser() {
                 updatableOnly ? 'text-indicator-warning' : updatableCount > 0 ? 'text-text-secondary' : 'text-text-muted'
               }`}>
                 <ArrowUpCircle size={11} />
-                Updates
+                {t('loraBrowser.updates')}
               </span>
             </label>
           )}
@@ -549,12 +566,12 @@ export function LoraBrowser() {
               value={installedSort}
               onChange={e => setInstalledSort(e.target.value as typeof installedSort)}
               className="px-2 py-1 text-xs rounded-lg border border-border bg-bg-tertiary text-text-secondary focus:outline-none focus:border-accent-blue shrink-0"
-              title="Sort installed LoRAs"
+              title={t('loraBrowser.sortTitle')}
             >
-              <option value="name">Name</option>
-              <option value="downloaded">Newest download</option>
-              <option value="released">Newest release</option>
-              <option value="largest">Largest file</option>
+              <option value="name">{t('loraBrowser.sortName')}</option>
+              <option value="downloaded">{t('loraBrowser.sortDownloaded')}</option>
+              <option value="released">{t('loraBrowser.sortReleased')}</option>
+              <option value="largest">{t('loraBrowser.sortLargest')}</option>
             </select>
           )}
 
@@ -570,13 +587,13 @@ export function LoraBrowser() {
               disabled={checkingUpdates}
               className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg border border-border text-text-secondary hover:text-text-primary hover:border-border-light transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               title={checkingUpdates
-                ? 'Checking CivitAI for newer LoRA versions…'
-                : 'Check CivitAI for newer LoRA versions'}
+                ? t('loraBrowser.checkingLoras')
+                : t('loraBrowser.checkLoras')}
             >
               {checkingUpdates
                 ? <Loader2 size={11} className="animate-spin" />
                 : <RefreshCw size={11} />}
-              Check
+              {t('loraBrowser.check')}
               {updatableCount > 0 && !checkingUpdates && (
                 <span className="ml-0.5 px-1 rounded bg-amber-500/20 text-indicator-warning text-[10px] font-medium">
                   {updatableCount}
@@ -602,7 +619,7 @@ export function LoraBrowser() {
               }`}
             >
               <HardDrive size={11} />
-              My LoRAs
+              {t('loraBrowser.myLoras')}
               {/* Count badge on the My LoRAs button itself — visible from
                   the CivitAI search view too, so the user knows there
                   are updates worth investigating without clicking through. */}
@@ -625,7 +642,7 @@ export function LoraBrowser() {
               }`}
             >
               <Boxes size={11} />
-              My Models
+              {t('loraBrowser.myModels')}
             </button>
           )}
 
@@ -649,7 +666,7 @@ export function LoraBrowser() {
             ) : installedLoras.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <HardDrive size={32} className="mb-3 opacity-50" />
-                <p className="text-sm">No LoRAs installed</p>
+                <p className="text-sm">{t('loraBrowser.noLoras')}</p>
               </div>
             ) : (() => {
               // Filter installed LoRAs by active model filter and search query
@@ -687,8 +704,8 @@ export function LoraBrowser() {
               return filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                   <Search size={32} className="mb-3 opacity-50" />
-                  <p className="text-sm">No matching LoRAs</p>
-                  <p className="text-xs mt-1">{installedLoras.length} installed, try different filters</p>
+                  <p className="text-sm">{t('loraBrowser.noMatching')}</p>
+                  <p className="text-xs mt-1">{t('loraBrowser.installedTryFilters', { count: installedLoras.length })}</p>
                 </div>
               ) : (
               <>
@@ -729,7 +746,7 @@ export function LoraBrowser() {
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-text-muted gap-1">
                           <HardDrive size={20} className="opacity-30" />
-                          <span className="text-[9px] opacity-40">No metadata</span>
+                          <span className="text-[9px] opacity-40">{t('loraBrowser.noMetadata')}</span>
                         </div>
                       )}
                     </div>
@@ -740,9 +757,9 @@ export function LoraBrowser() {
                         {lora.linked && (
                           <span
                             className="text-[9px] px-1.5 py-0.5 rounded bg-accent-blue/70 text-white"
-                            title="From a linked install's loras folder (read-only) — guides and metadata are stored in HocusPocus"
+                            title={t('loraBrowser.linkedTitle')}
                           >
-                            Linked
+                            {t('loraBrowser.linked')}
                           </span>
                         )}
                         {lora.has_guide && <BookOpen size={9} className="text-accent-green" />}
@@ -754,13 +771,16 @@ export function LoraBrowser() {
                       {(lora.downloaded_at || lora.released_at) && (
                         <div
                           className="text-[9px] text-white/40 mt-0.5 truncate"
-                          title={`Downloaded ${lora.downloaded_at ? new Date(lora.downloaded_at).toLocaleDateString() : 'unknown'}${lora.released_at ? ` — released ${new Date(lora.released_at).toLocaleDateString()}` : ''}`}
+                          title={t('loraBrowser.datesTitle', {
+                            downloaded: lora.downloaded_at ? new Date(lora.downloaded_at).toLocaleDateString() : t('loraBrowser.downloadedUnknown'),
+                            released: lora.released_at ? new Date(lora.released_at).toLocaleDateString() : t('loraBrowser.downloadedUnknown'),
+                          })}
                         >
                           {installedSort === 'released' && lora.released_at
-                            ? `released ${new Date(lora.released_at).toLocaleDateString()}`
+                            ? t('loraBrowser.released', { date: new Date(lora.released_at).toLocaleDateString() })
                             : lora.downloaded_at
-                              ? `added ${new Date(lora.downloaded_at).toLocaleDateString()}`
-                              : `released ${new Date(lora.released_at as string).toLocaleDateString()}`}
+                              ? t('loraBrowser.added', { date: new Date(lora.downloaded_at).toLocaleDateString() })
+                              : t('loraBrowser.released', { date: new Date(lora.released_at as string).toLocaleDateString() })}
                         </div>
                       )}
                       {lora.trained_words.length > 0 && (
@@ -773,7 +793,7 @@ export function LoraBrowser() {
                     {!lora.civitai_model_id && (
                       <div className="absolute top-1.5 right-1.5">
                         <span className={`text-[8px] px-1 py-0.5 rounded bg-black/60 ${lora.hf_repo_id ? 'text-amber-300/80' : 'text-white/50'}`}>
-                          {lora.hf_repo_id ? 'HuggingFace' : 'Local only'}
+                          {lora.hf_repo_id ? t('loraBrowser.huggingFace') : t('loraBrowser.localOnly')}
                         </span>
                       </div>
                     )}
@@ -787,11 +807,11 @@ export function LoraBrowser() {
                         <span
                           className="flex items-center gap-0.5 text-[8px] px-1 py-0.5 rounded bg-amber-500/90 text-white font-medium shadow-sm"
                           title={lora.latest_published_at
-                            ? `Update available — published ${new Date(lora.latest_published_at).toLocaleDateString()}`
-                            : 'Update available on CivitAI'}
+                            ? t('loraBrowser.updatePublished', { date: new Date(lora.latest_published_at).toLocaleDateString() })
+                            : t('loraBrowser.updateAvailable')}
                         >
                           <ArrowUpCircle size={9} />
-                          UPDATE
+                          {t('loraBrowser.update')}
                         </span>
                       </div>
                     )}
@@ -809,8 +829,8 @@ export function LoraBrowser() {
                               : 'bg-black/60 text-white/70 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400'
                         }`}
                         title={confirmDeleteKey === cardKey
-                          ? 'Click again to permanently delete this LoRA (weights + metadata + guide)'
-                          : 'Delete this LoRA from disk'}
+                          ? t('loraBrowser.confirmDelete')
+                          : t('loraBrowser.deleteLora')}
                       >
                         {deletingKey === cardKey
                           ? <Loader2 size={11} className="animate-spin" />
@@ -844,7 +864,7 @@ export function LoraBrowser() {
             {!loading && results.length === 0 && searchError && (
               <div className="flex flex-col items-center justify-center py-16 text-text-muted">
                 <div className="max-w-md w-full px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-text-primary text-sm leading-relaxed">
-                  <div className="font-semibold mb-1">CivitAI is unavailable</div>
+                  <div className="font-semibold mb-1">{t('loraBrowser.unavailable')}</div>
                   <div className="text-[12px] text-text-secondary">{searchError}</div>
                 </div>
               </div>
@@ -853,8 +873,8 @@ export function LoraBrowser() {
             {!loading && results.length === 0 && !searchError && (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <Search size={32} className="mb-3 opacity-50" />
-                <p className="text-sm">No results found</p>
-                <p className="text-xs mt-1">Try different search terms or filters</p>
+                <p className="text-sm">{t('loraBrowser.noResults')}</p>
+                <p className="text-xs mt-1">{t('loraBrowser.tryFilters')}</p>
               </div>
             )}
 

@@ -54,7 +54,7 @@ test('Wizard panel keeps dialog, live-region and pending-question ARIA contracts
   assert.match(panelSource, /aria-modal=\{panelPresentation\.ariaModal\}/)
   assert.match(panelSource, /autoFocus=\{panelPresentation\.autoFocus\}/)
   assert.match(panelSource, /aria-live="polite"/)
-  assert.match(panelSource, /role="group" aria-label="Wizard pending question"/)
+  assert.match(panelSource, /role="group" aria-label=\{t\('pendingAria'\)\}/)
   assert.match(panelSource, /aria-label=\{t\('title'\)\}/)
 })
 

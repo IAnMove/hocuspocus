@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { ChoiceControl } from '../shared/ChoiceControl'
 import { FileUploadZone } from '../shared/FileUploadZone'
 import * as api from '../../api/client'
@@ -12,6 +13,7 @@ import * as api from '../../api/client'
 // user switches the process away from KFI here, we clear the inject params so
 // they don't ride along to generation.
 export function ControlVideoSection() {
+  const { t } = useUiTranslation('studio')
   const modelOptions = useStore(s => s.modelOptions)
   const params = useStore(s => s.params)
   const setParam = useStore(s => s.setParam)
@@ -26,8 +28,9 @@ export function ControlVideoSection() {
   if (!config) return null
 
   const isImageMode = generationMode === 'image'
-  const mediaType = isImageMode ? 'Image' : 'Video'
-  const label = modelOptions.guide_preprocessing ? `Control ${mediaType} Process` : `${mediaType} Process`
+  const label = modelOptions.guide_preprocessing
+    ? (isImageMode ? t('control.processImage') : t('control.processVideo'))
+    : (isImageMode ? t('control.imageProcess') : t('control.videoProcess'))
   // Strip ONLY a trailing "T" — the temporal-alignment flag the extend path
   // appends at gen time (e.g. "KFIT" vs "KFI"). Do NOT strip every "T":
   // LTX-2's union-control values use "T" internally for depth_temporal
@@ -78,10 +81,10 @@ export function ControlVideoSection() {
       {showUpload && (
         <div>
           <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-            Control {mediaType}
+            {isImageMode ? t('control.controlImage') : t('control.controlVideo')}
           </label>
           <FileUploadZone
-            label={uploading ? 'Uploading...' : isImageMode ? 'Drop control image (.png, .jpg, .webp)' : 'Drop control video (.mp4, .webm)'}
+            label={uploading ? t('chrome.uploading') : isImageMode ? t('control.dropImage') : t('control.dropVideo')}
             accept={isImageMode ? '.png,.jpg,.jpeg,.webp,.bmp' : '.mp4,.webm,.avi,.mov'}
             filename={guideFilename}
             onFile={handleUpload}

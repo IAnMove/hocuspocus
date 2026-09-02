@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Loader2, AlertCircle } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import type { CivitAIDownload } from '../../types'
 
@@ -29,6 +30,7 @@ function displayProgress(download: CivitAIDownload): number {
 }
 
 export function DownloadBar() {
+  const { t } = useUiTranslation('settings')
   const downloads = useStore(s => s.civitDownloads)
   const [now, setNow] = useState<number | null>(null)
 
@@ -80,7 +82,7 @@ export function DownloadBar() {
               </>
             )}
             {download.status === 'failed' && (
-              <span className="text-[10px] text-red-400 truncate">{download.error || 'Download failed'}</span>
+              <span className="text-[10px] text-red-400 truncate">{download.error || t('loraBrowser.downloadFailed')}</span>
             )}
           </div>
         )

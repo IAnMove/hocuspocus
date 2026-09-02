@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { FileAudio, GripVertical, Image as ImageIcon, Info, Loader2, Plus, Video, X } from 'lucide-react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import type { MiniMaxH3AudioIntent, MiniMaxH3Reference, MiniMaxH3ReferenceType } from '../../types'
 
 const IMAGE_RE = /\.(png|jpe?g|webp|bmp|tiff?)$/i
@@ -21,22 +22,8 @@ function newId(): string {
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-function referenceLabels(references: MiniMaxH3Reference[]): string[] {
-  let pictures = 0
-  let videos = 0
-  let audios = 0
-  return references.map(reference => {
-    const labels: string[] = []
-    if (reference.type === 'audio' || (reference.type === 'video' && (reference.has_audio || reference.audio_path) && reference.include_audio !== false)) {
-      labels.push(`Audio ${++audios}`)
-    }
-    if (reference.type === 'image') labels.push(`Picture ${++pictures}`)
-    if (reference.type === 'video') labels.push(`Video ${++videos}`)
-    return labels.join(' + ')
-  })
-}
-
 export function OmniReferenceSection() {
+  const { t } = useUiTranslation('studio')
   const params = useStore(s => s.params)
   const modelOptions = useStore(s => s.modelOptions)
   const setParam = useStore(s => s.setParam)
@@ -49,7 +36,20 @@ export function OmniReferenceSection() {
   const limits = modelOptions?.omni_reference_limits ?? {
     image: 9, video: 3, audio: 3, total: 12,
   }
-  const labels = useMemo(() => referenceLabels(references), [references])
+  const labels = useMemo(() => {
+    let pictures = 0
+    let videos = 0
+    let audios = 0
+    return references.map(reference => {
+      const parts: string[] = []
+      if (reference.type === 'audio' || (reference.type === 'video' && (reference.has_audio || reference.audio_path) && reference.include_audio !== false)) {
+        parts.push(t('omni.audioN', { n: ++audios }))
+      }
+      if (reference.type === 'image') parts.push(t('omni.pictureN', { n: ++pictures }))
+      if (reference.type === 'video') parts.push(t('omni.videoN', { n: ++videos }))
+      return parts.join(' + ')
+    })
+  }, [references, t])
 
   const update = (next: MiniMaxH3Reference[]) => setParam('minimax_h3_references', next)
 
@@ -67,11 +67,11 @@ export function OmniReferenceSection() {
       for (const file of files) {
         const type = mediaType(file)
         if (!type) {
-          setError(`${file.name} is not a supported image, video, or audio file.`)
+          setError(t('omni.unsupported', { name: file.name }))
           continue
         }
         if (next.length >= limits.total || counts[type] >= limits[type]) {
-          setError(`Reference limit reached (${limits.image} images, ${limits.video} videos, ${limits.audio} audio; ${limits.total} total).`)
+          setError(t('omni.limit', { image: limits.image, video: limits.video, audio: limits.audio, total: limits.total }))
           break
         }
         const uploaded = type === 'audio'
@@ -93,7 +93,7 @@ export function OmniReferenceSection() {
       }
       update(next)
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Reference upload failed.')
+      setError(uploadError instanceof Error ? uploadError.message : t('omni.uploadFailed'))
     } finally {
       setUploading(false)
       if (inputRef.current) inputRef.current.value = ''
@@ -119,7 +119,7 @@ export function OmniReferenceSection() {
         include_audio: true,
       } : reference))
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Soundtrack upload failed.')
+      setError(uploadError instanceof Error ? uploadError.message : t('omni.soundtrackFailed'))
     } finally {
       setUploading(false)
     }
@@ -141,9 +141,9 @@ export function OmniReferenceSection() {
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <label className="text-[11px] text-text-muted uppercase tracking-wider">Omni References</label>
+          <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('omni.title')}</label>
           <span
-            title="Order matters. Picture, Video, and Audio labels are assigned from top to bottom and can be named in your prompt. Video soundtracks stay attached to their video."
+            title={t('omni.orderHint')}
             className="text-text-muted cursor-help"
           >
             <Info size={12} />
@@ -162,7 +162,7 @@ export function OmniReferenceSection() {
         }}
       >
         {uploading ? <Loader2 size={14} className="animate-spin text-accent-blue" /> : <Plus size={14} className="text-text-muted" />}
-        <span className="text-[10px] text-text-secondary">{uploading ? 'Uploading references…' : 'Add images, videos, or audio'}</span>
+        <span className="text-[10px] text-text-secondary">{uploading ? t('omni.uploading') : t('omni.add')}</span>
         <input
           ref={inputRef}
           type="file"
@@ -211,7 +211,7 @@ export function OmniReferenceSection() {
                 <input
                   value={reference.role ?? ''}
                   onChange={event => patchReference(index, { role: event.target.value })}
-                  placeholder="Who or what is this? (helps Enhance)"
+                  placeholder={t('omni.rolePlaceholder')}
                   className="w-full bg-bg-primary border border-border rounded px-2 py-1 text-[10px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                 />
                 {reference.type === 'audio' && (
@@ -220,18 +220,18 @@ export function OmniReferenceSection() {
                     onChange={event => patchReference(index, {
                       audio_intent: event.target.value as MiniMaxH3AudioIntent,
                     })}
-                    title="Voice reference conditions a new voice without copying the recording. Drive/reuse follows the recording's audible timeline. Style reference borrows only musical or sound character."
+                    title={t('omni.intentHint')}
                     className="w-full bg-bg-primary border border-border rounded px-2 py-1 text-[10px] text-text-secondary focus:outline-none focus:border-accent-blue"
                   >
-                    <option value="voice">Voice reference</option>
-                    <option value="drive">Drive / reuse audio</option>
-                    <option value="style">Sound / music style</option>
+                    <option value="voice">{t('omni.voiceRef')}</option>
+                    <option value="drive">{t('omni.drive')}</option>
+                    <option value="style">{t('omni.style')}</option>
                   </select>
                 )}
                 {reference.type === 'video' && (
                   <div className="flex items-center gap-1.5 text-[9px] text-text-secondary">
                     <label className="cursor-pointer hover:text-text-primary">
-                      {reference.audio_path ? 'Replace audio' : 'Attach audio'}
+                      {reference.audio_path ? t('omni.replaceAudio') : t('omni.attachAudio')}
                       <input
                         type="file"
                         accept="audio/*,.flac,.m4a,.aac"
@@ -245,7 +245,7 @@ export function OmniReferenceSection() {
                     {reference.audio_path && (
                       <button
                         type="button"
-                        title="Remove attached soundtrack"
+                        title={t('omni.removeSoundtrack')}
                         onClick={() => patchReference(index, {
                           audio_path: undefined,
                           audio_filename: undefined,
@@ -254,7 +254,7 @@ export function OmniReferenceSection() {
                         })}
                         className="truncate text-text-muted hover:text-indicator-error"
                       >
-                        × {reference.audio_filename || 'attached audio'}
+                        × {reference.audio_filename || t('omni.attachedAudio')}
                       </button>
                     )}
                   </div>
@@ -267,13 +267,13 @@ export function OmniReferenceSection() {
                       onChange={event => patchReference(index, { include_audio: event.target.checked })}
                       className="w-3 h-3 accent-accent-blue"
                     />
-                    Include soundtrack
+                    {t('omni.includeSoundtrack')}
                   </label>
                 )}
               </div>
               <button
                 onClick={() => update(references.filter((_, itemIndex) => itemIndex !== index))}
-                title="Remove reference"
+                title={t('omni.removeRef')}
                 className="p-1 self-start text-text-muted hover:text-indicator-error"
               >
                 <X size={13} />
@@ -288,12 +288,12 @@ export function OmniReferenceSection() {
           <select
             value={detail}
             onChange={event => setParam('minimax_h3_reference_detail', event.target.value as 'match' | 'max')}
-            title="Match output uses less memory and is recommended. Maximum detail follows the official 2048px-short-edge reference preparation and can require substantially more memory."
+            title={t('omni.detailHint')}
             className="bg-bg-tertiary border border-border rounded px-2 py-1 text-[9px] text-text-secondary focus:outline-none focus:border-accent-blue"
           >
             {(modelOptions?.omni_reference_detail_choices ?? [
-              ['Match output', 'match'],
-              ['Maximum detail', 'max'],
+              [t('omni.match'), 'match'],
+              [t('omni.max'), 'max'],
             ]).map(([label, value]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </div>

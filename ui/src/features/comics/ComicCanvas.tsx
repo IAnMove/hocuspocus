@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
 import { Lock } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { useComicStore } from './store'
 import type {
   ComicElement,
@@ -95,11 +96,12 @@ function TextView({ element }: { element: ComicTextElement }) {
 }
 
 function ImageView({ element }: { element: ComicImageElement }) {
+  const { t } = useUiTranslation('comics')
   const asset = useComicStore(state => state.project.assets[element.assetId])
   if (!asset || asset.missing) {
     return (
       <div className="w-full h-full grid place-items-center bg-red-950/40 text-red-300 text-xs border border-red-500/40">
-        Missing asset
+        {t('canvas.missingAsset')}
       </div>
     )
   }
@@ -157,6 +159,7 @@ function ElementFrame({
   readOnly?: boolean
   children: React.ReactNode
 }) {
+  const { t } = useUiTranslation('comics')
   const selected = useComicStore(state => !readOnly && state.selectedId === element.id)
   const zoom = useComicStore(state => state.zoom)
   const select = useComicStore(state => state.setSelected)
@@ -276,7 +279,7 @@ function ElementFrame({
       data-comic-element={element.id}
       className={`absolute touch-none ${readOnly ? '' : element.locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'ring-2 ring-accent-blue ring-offset-1 ring-offset-transparent' : ''}`}
       title={!readOnly && element.type === 'image' && element.parentId
-        ? 'Drag to reposition inside the panel · Shift-drag for precision · Ctrl-wheel to zoom'
+        ? t('canvas.repositionHint')
         : undefined}
       style={{
         left: element.x,
@@ -314,13 +317,13 @@ function ElementFrame({
               key={direction}
               className={`absolute ${position} z-[1100] size-3 rounded-full border-2 border-accent-blue bg-white`}
               onPointerDown={event => start(event, direction)}
-              title={`Resize ${direction}`}
+              title={t('canvas.resize', { direction })}
             />
           ))}
           <button
             className="absolute left-1/2 -translate-x-1/2 -top-8 z-[1100] w-4 h-4 rounded-full bg-accent-blue border-2 border-white cursor-grab"
             onPointerDown={event => start(event, 'rotate')}
-            title="Rotate"
+            title={t('canvas.rotate')}
           />
         </>
       )}
@@ -334,6 +337,7 @@ function PanelFrame({ panel, pageId, children, readOnly = false }: {
   children: ComicElement[]
   readOnly?: boolean
 }) {
+  const { t } = useUiTranslation('comics')
   const selected = useComicStore(state => !readOnly && state.selectedId === panel.id)
   const zoom = useComicStore(state => state.zoom)
   const update = useComicStore(state => state.updateElement)
@@ -421,7 +425,7 @@ function PanelFrame({ panel, pageId, children, readOnly = false }: {
           key={index}
           className="absolute z-[1200] size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-emerald-500 cursor-move"
           style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
-          title="Drag polygon vertex"
+          title={t('canvas.vertex')}
           onPointerDown={event => startVertex(event, index)}
           onPointerMove={moveVertex}
           onPointerUp={finishVertex}

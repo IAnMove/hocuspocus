@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react'
 import { Upload, X, ImageIcon } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 
 export function VideoEditControls() {
+  const { t } = useUiTranslation('studio')
   const params = useStore(s => s.params)
   const setParam = useStore(s => s.setParam)
   const [sourceVideo, setSourceVideo] = useState<File | null>(null)
@@ -50,7 +52,7 @@ export function VideoEditControls() {
       {/* Source Video */}
       <div>
         <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-          Source Video
+          {t('videoEdit.source')}
         </label>
         <div
           className={`relative border border-dashed rounded-lg overflow-hidden transition-colors cursor-pointer
@@ -90,7 +92,7 @@ export function VideoEditControls() {
           ) : (
             <div className="flex flex-col items-center justify-center gap-1 py-4 text-text-muted">
               <Upload size={18} />
-              <span className="text-[10px]">{uploading ? 'Uploading...' : 'Drop video to edit'}</span>
+              <span className="text-[10px]">{uploading ? t('chrome.uploading') : t('videoEdit.drop')}</span>
             </div>
           )}
         </div>
@@ -99,7 +101,7 @@ export function VideoEditControls() {
       {/* Reference Image (optional) */}
       <div>
         <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-          Reference Image <span className="text-text-muted font-normal">(optional)</span>
+          {t('videoEdit.reference')} <span className="text-text-muted font-normal">({t('chrome.optional')})</span>
         </label>
         <div
           className={`relative border border-dashed rounded-lg overflow-hidden transition-colors cursor-pointer min-h-[48px]
@@ -139,12 +141,12 @@ export function VideoEditControls() {
           ) : (
             <div className="flex items-center justify-center gap-1 py-2 text-text-muted">
               <ImageIcon size={14} />
-              <span className="text-[10px]">Drop style/object reference</span>
+              <span className="text-[10px]">{t('videoEdit.dropRef')}</span>
             </div>
           )}
         </div>
         <p className="text-[9px] text-text-muted mt-1">
-          For style transfer or object reference. Leave empty for instruction-only edits.
+          {t('videoEdit.refHint')}
         </p>
       </div>
     </div>

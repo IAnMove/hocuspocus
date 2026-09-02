@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 import { Upload, X, Sparkles } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { VideoTimelineSelector } from '../shared/VideoTimelineSelector'
 import * as api from '../../api/client'
 
@@ -10,6 +11,7 @@ import * as api from '../../api/client'
  * the LoRA interprets Add / Remove / Replace / Style patterns directly.
  */
 export function EditAnythingControls() {
+  const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoUrl = useStore(s => s.editVideoUrl)
   const editVideoDuration = useStore(s => s.editVideoDuration)
@@ -57,15 +59,15 @@ export function EditAnythingControls() {
       <div className="flex items-start gap-2 bg-accent-blue/10 border border-accent-blue/20 rounded-lg px-2.5 py-2">
         <Sparkles size={12} className="text-accent-blue mt-0.5 shrink-0" />
         <p className="text-[10px] text-text-secondary leading-snug">
-          Prompt-driven edit — no mask needed. Write one of:
+          {t('editAnything.hintLead')}
           <br />
-          <span className="text-text-muted">• </span><span className="text-text-primary">Add</span> a [thing] [location]
+          <span className="text-text-muted">• </span><span className="text-text-primary">{t('editAnything.add')}</span>{t('editAnything.addRest')}
           <br />
-          <span className="text-text-muted">• </span><span className="text-text-primary">Remove</span> the [thing]
+          <span className="text-text-muted">• </span><span className="text-text-primary">{t('editAnything.remove')}</span>{t('editAnything.removeRest')}
           <br />
-          <span className="text-text-muted">• </span><span className="text-text-primary">Replace</span> the [X] with a [Y]
+          <span className="text-text-muted">• </span><span className="text-text-primary">{t('editAnything.replace')}</span>{t('editAnything.replaceRest')}
           <br />
-          <span className="text-text-muted">• </span><span className="text-text-primary">Convert</span> the video into a [style] style
+          <span className="text-text-muted">• </span><span className="text-text-primary">{t('editAnything.convert')}</span>{t('editAnything.convertRest')}
         </p>
       </div>
 
@@ -78,8 +80,8 @@ export function EditAnythingControls() {
           className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-accent-blue/50 hover:bg-bg-hover/30 transition-all"
         >
           <Upload size={24} className="mx-auto mb-2 text-text-muted" />
-          <p className="text-xs text-text-secondary">Drop a video or click to upload</p>
-          <p className="text-[9px] text-text-muted mt-1">Optional: select a time range below to edit only part of the clip</p>
+          <p className="text-xs text-text-secondary">{t('chrome.dropVideo')}</p>
+          <p className="text-[9px] text-text-muted mt-1">{t('editAnything.rangeHint')}</p>
           <input ref={fileRef} type="file" accept="video/*" className="hidden"
             onChange={e => { if (e.target.files?.[0]) handleUpload(e.target.files[0]) }} />
         </div>
@@ -104,13 +106,13 @@ export function EditAnythingControls() {
       {/* Advanced knobs */}
       <button onClick={() => setShowAdvanced(!showAdvanced)}
         className="text-[10px] text-text-muted hover:text-text-primary transition-colors">
-        {showAdvanced ? '▾' : '▸'} Advanced
+        {showAdvanced ? '▾' : '▸'} {t('chrome.advanced')}
       </button>
       {showAdvanced && (
         <div className="space-y-3 pl-2 border-l border-border/50">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">LoRA Strength</label>
+              <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('editAnything.loraStrength')}</label>
               <span className="text-[10px] text-text-secondary">{loraStrength.toFixed(2)}</span>
             </div>
             <input
@@ -120,12 +122,12 @@ export function EditAnythingControls() {
               className="w-full"
             />
             <p className="text-[9px] text-text-muted mt-0.5">
-              Per the LoRA card: start at 1.0. Bump to 1.2 if the edit is too weak; drop below if it distorts unrelated content.
+              {t('editAnything.loraHint')}
             </p>
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">Source Preservation</label>
+              <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('editAnything.preserve')}</label>
               <span className="text-[10px] text-text-secondary">{retakeStrength.toFixed(2)}</span>
             </div>
             <input
@@ -135,7 +137,7 @@ export function EditAnythingControls() {
               className="w-full"
             />
             <p className="text-[9px] text-text-muted mt-0.5">
-              How much of the source's structure is regenerated. Lower = more source preserved (subtle edit), higher = more aggressive.
+              {t('editAnything.preserveHint')}
             </p>
           </div>
         </div>

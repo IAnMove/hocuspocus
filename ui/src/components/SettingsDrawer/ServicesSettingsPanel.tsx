@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { RefreshCw, ShieldAlert, ShieldCheck, Lock, Loader2 } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { testLlmConnection } from '../../api/client'
 
@@ -9,6 +10,8 @@ function ApiKeyField({ label, maskedValue, isSet, onSave }: {
   isSet: boolean
   onSave: (value: string) => void
 }) {
+  const { t } = useUiTranslation('settings')
+  const { t: tCommon } = useUiTranslation('common')
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
 
@@ -23,7 +26,7 @@ function ApiKeyField({ label, maskedValue, isSet, onSave }: {
             type="password"
             value={value}
             onChange={e => setValue(e.target.value)}
-            placeholder="Paste API key..."
+            placeholder={t('services.pasteKey')}
             className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             autoFocus
           />
@@ -31,25 +34,25 @@ function ApiKeyField({ label, maskedValue, isSet, onSave }: {
             onClick={() => { onSave(value); setEditing(false); setValue('') }}
             className="px-3 py-2 bg-accent-blue text-white text-xs rounded-lg hover:bg-accent-blue-hover"
           >
-            Save
+            {tCommon('actions.save')}
           </button>
           <button
             onClick={() => { setEditing(false); setValue('') }}
             className="px-3 py-2 border border-border text-xs rounded-lg text-text-secondary hover:text-text-primary"
           >
-            Cancel
+            {tCommon('actions.cancel')}
           </button>
         </div>
       ) : (
         <div className="flex gap-2 items-center">
           <div className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-muted font-mono">
-            {isSet ? maskedValue : 'Not set'}
+            {isSet ? maskedValue : t('services.notSet')}
           </div>
           <button
             onClick={() => setEditing(true)}
             className="px-3 py-2 border border-border text-xs rounded-lg text-text-secondary hover:text-text-primary hover:border-border-light transition-colors"
           >
-            {isSet ? 'Change' : 'Set'}
+            {isSet ? t('services.change') : t('services.set')}
           </button>
         </div>
       )}
@@ -66,6 +69,7 @@ function NsfwDisclaimerModal({
   onAccept: () => void
   onDecline: () => void
 }) {
+  const { t } = useUiTranslation('settings')
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
   const scrollableRef = useRef<HTMLDivElement>(null)
 
@@ -105,8 +109,8 @@ function NsfwDisclaimerModal({
         <div className="px-5 py-4 border-b border-border flex items-center gap-2.5">
           <ShieldAlert size={20} className="text-red-400 shrink-0" />
           <div>
-            <h2 className="text-sm font-semibold text-text-primary">Enable Adult Content Mode</h2>
-            <p className="text-[10px] text-text-muted mt-0.5">Please read and accept before continuing</p>
+            <h2 className="text-sm font-semibold text-text-primary">{t('services.nsfwTitle')}</h2>
+            <p className="text-[10px] text-text-muted mt-0.5">{t('services.nsfwRead')}</p>
           </div>
         </div>
 
@@ -117,28 +121,28 @@ function NsfwDisclaimerModal({
           onScroll={handleScroll}
         >
           <p className="font-medium text-text-primary">
-            By enabling NSFW mode, you acknowledge and agree to the following:
+            {t('services.nsfwLead')}
           </p>
 
           <div className="space-y-2">
-            <p><span className="font-medium text-text-primary">1. Age Requirement.</span> You confirm that you are at least 18 years of age (or the age of majority in your jurisdiction, whichever is higher).</p>
+            <p>{t('services.nsfwAge')}</p>
 
-            <p><span className="font-medium text-text-primary">2. Legal Responsibility.</span> You are solely responsible for ensuring that all content you generate complies with the laws of your jurisdiction. This includes but is not limited to laws governing obscenity, pornography, intellectual property, privacy, consent, and the depiction of real persons. HocusPocus and its developers do not monitor, review, or approve generated content.</p>
+            <p>{t('services.nsfwLegal')}</p>
 
-            <p><span className="font-medium text-text-primary">3. Prohibited Content.</span> You agree to NEVER use this software to generate child sexual abuse material (CSAM) or any content depicting minors in sexual or exploitative contexts. This is strictly prohibited regardless of jurisdiction and may constitute a criminal offense.</p>
+            <p>{t('services.nsfwProhibited')}</p>
 
-            <p><span className="font-medium text-text-primary">4. No Real Person Exploitation.</span> You agree not to generate non-consensual intimate imagery of real, identifiable individuals. Creating realistic explicit content of someone without their consent may violate laws in your jurisdiction.</p>
+            <p>{t('services.nsfwPersons')}</p>
 
-            <p><span className="font-medium text-text-primary">5. Local Generation.</span> When using local models, all content is generated on your hardware and is never transmitted to external servers. You are responsible for the storage, distribution, and use of any content you create.</p>
+            <p>{t('services.nsfwLocal')}</p>
 
-            <p><span className="font-medium text-text-primary">6. Public API Providers.</span> NSFW mode is automatically disabled when using public LLM providers (OpenAI, Anthropic) as it violates their terms of service. NSFW mode is only available with local or self-hosted models.</p>
+            <p>{t('services.nsfwPublicApi')}</p>
 
-            <p><span className="font-medium text-text-primary">7. No Warranty.</span> This software is provided as-is. The developers assume no liability for content generated by users. You use this feature entirely at your own risk.</p>
+            <p>{t('services.nsfwWarranty')}</p>
           </div>
 
           {!scrolledToBottom && (
             <p className="text-text-muted pt-2">
-              Scroll to the bottom to enable the accept button.
+              {t('services.nsfwScroll')}
             </p>
           )}
         </div>
@@ -149,14 +153,14 @@ function NsfwDisclaimerModal({
             onClick={onDecline}
             className="px-4 py-2 text-xs text-text-secondary hover:text-text-primary border border-border rounded-lg hover:border-border-light transition-colors"
           >
-            Decline
+            {t('services.nsfwDecline')}
           </button>
           <button
             onClick={onAccept}
             disabled={!scrolledToBottom}
             className="px-4 py-2 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            I Accept — Enable NSFW
+            {t('services.nsfwAccept')}
           </button>
         </div>
       </div>
@@ -165,6 +169,7 @@ function NsfwDisclaimerModal({
 }
 
 function NsfwToggleSection() {
+  const { t } = useUiTranslation('settings')
   const servicesConfig = useStore(s => s.servicesConfig)
   const updateConfig = useStore(s => s.updateServicesConfig)
   const [showDisclaimer, setShowDisclaimer] = useState(false)
@@ -206,7 +211,7 @@ function NsfwToggleSection() {
   return (
     <>
       <div className="space-y-3">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Content Settings</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('services.contentSettings')}</h3>
         <div
           className={`flex items-center justify-between ${isPublicProvider ? '' : 'cursor-pointer'} group`}
           onClick={handleToggle}
@@ -220,16 +225,16 @@ function NsfwToggleSection() {
               ) : (
                 <ShieldCheck size={14} className="text-indicator-success shrink-0" />
               )}
-              NSFW Mode
+              {t('services.nsfwMode')}
               {isPublicProvider && <Lock size={11} className="text-text-muted" />}
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
               {isPublicProvider ? (
-                <>NSFW is unavailable with public LLM providers ({provider}). Switch to a local or self-hosted model to enable.</>
+                <>{t('services.nsfwPublic', { provider })}</>
               ) : nsfwEnabled ? (
-                <>Adult content generation is enabled. LLM prompts include explicit content guidance. Use responsibly.</>
+                <>{t('services.nsfwOn')}</>
               ) : (
-                <>Content safety guardrails active. Explicit content is blocked in all LLM outputs.</>
+                <>{t('services.nsfwOff')}</>
               )}
             </div>
           </div>
@@ -257,6 +262,8 @@ function NsfwToggleSection() {
 }
 
 export function ServicesSettingsPanel() {
+  const { t } = useUiTranslation('settings')
+  const { t: tCommon } = useUiTranslation('common')
   const servicesConfig = useStore(s => s.servicesConfig)
   const servicesConfigLoading = useStore(s => s.servicesConfigLoading)
   const updateConfig = useStore(s => s.updateServicesConfig)
@@ -279,10 +286,10 @@ export function ServicesSettingsPanel() {
   const [productionProfileDraft, setProductionProfile] = useState<typeof savedProductionProfile | null>(null)
   const productionProfile = productionProfileDraft ?? savedProductionProfile
   if (servicesConfigLoading && !servicesConfig) {
-    return <div className="text-xs text-text-muted py-4 text-center">Loading...</div>
+    return <div className="text-xs text-text-muted py-4 text-center">{tCommon('status.loading')}</div>
   }
   if (!servicesConfig) {
-    return <div className="text-xs text-text-muted py-4 text-center">Failed to load services settings</div>
+    return <div className="text-xs text-text-muted py-4 text-center">{t('services.loadFailed')}</div>
   }
 
   const provider = servicesConfig.llm_provider || 'local'
@@ -315,16 +322,16 @@ export function ServicesSettingsPanel() {
   }
 
   const handleTestLlm = async () => {
-    setLlmTest({ status: 'testing', message: 'Testing LLM connection...' })
+    setLlmTest({ status: 'testing', message: t('services.testProgress') })
     try {
       await pendingLlmConfig.current
       const result = await testLlmConnection()
       const response = (result.response || '').trim()
-      setLlmTest({ status: 'ok', message: `OK: ${response}` })
+      setLlmTest({ status: 'ok', message: t('services.testOk', { response }) })
     } catch (error) {
       setLlmTest({
         status: 'error',
-        message: `Error: ${(error as Error).message || 'failed to connect'}`,
+        message: t('services.testError', { message: (error as Error).message || t('services.connectFailed') }),
       })
     }
   }
@@ -347,16 +354,15 @@ export function ServicesSettingsPanel() {
         <div className="space-y-3 rounded-xl border border-border bg-bg-secondary/40 p-3">
           <div>
             <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">
-              Global production profile
+              {t('services.profileTitle')}
             </h3>
             <p className="text-[10px] text-text-muted mt-1">
-              Credential-free defaults for Studio, Story Lab, Series Lab, Comics and Director.
-              Projects can inherit these values or keep an explicit override.
+              {t('services.profileHint')}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <label className="text-[10px] text-text-muted">
-              Text provider
+              {t('services.textProvider')}
               <select
                 value={productionProfile.text.provider}
                 onChange={e => setProductionProfile({
@@ -376,18 +382,18 @@ export function ServicesSettingsPanel() {
                 disabled={productionProfileLoading}
                 className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
               >
-                <option value="local">Internal (local llama-server)</option>
-                <option value="ollama">Ollama</option>
-                <option value="minimax">MiniMax API</option>
-                <option value="grok">Grok (xAI)</option>
-                <option value="remote">Remote compatible</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="deepseek">DeepSeek</option>
+                <option value="local">{t('services.providers.local')}</option>
+                <option value="ollama">{t('services.providers.ollama')}</option>
+                <option value="minimax">{t('services.providers.minimax')}</option>
+                <option value="grok">{t('services.providers.grok')}</option>
+                <option value="remote">{t('services.providers.remote')}</option>
+                <option value="openai">{t('services.providers.openai')}</option>
+                <option value="anthropic">{t('services.providers.anthropic')}</option>
+                <option value="deepseek">{t('services.providers.deepseek')}</option>
               </select>
             </label>
             <label className="text-[10px] text-text-muted">
-              Text model
+              {t('services.textModel')}
               <input
                 value={productionProfile.text.model}
                 onChange={e => setProductionProfile({
@@ -399,7 +405,7 @@ export function ServicesSettingsPanel() {
               />
             </label>
             <label className="text-[10px] text-text-muted">
-              Image provider / model
+              {t('services.imageProviderModel')}
               <div className="mt-1 flex gap-1">
                 <select
                   value={productionProfile.image.provider}
@@ -410,9 +416,9 @@ export function ServicesSettingsPanel() {
                   disabled={productionProfileLoading}
                   className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
                 >
-                  <option value="minimax">MiniMax</option>
-                  <option value="local">Local</option>
-                  <option value="maestro">HocusPocus</option>
+                  <option value="minimax">{t('services.providers.minimaxImage')}</option>
+                  <option value="local">{t('services.providers.localGeneric')}</option>
+                  <option value="maestro">{t('services.providers.maestro')}</option>
                 </select>
                 <input
                   value={productionProfile.image.model}
@@ -426,7 +432,7 @@ export function ServicesSettingsPanel() {
               </div>
             </label>
             <label className="text-[10px] text-text-muted">
-              Music provider / model
+              {t('services.musicProviderModel')}
               <div className="mt-1 flex gap-1">
                 <select
                   value={productionProfile.music.provider}
@@ -441,9 +447,9 @@ export function ServicesSettingsPanel() {
                   disabled={productionProfileLoading}
                   className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
                 >
-                  <option value="local">Local ACE-Step</option>
-                  <option value="minimax">MiniMax Music</option>
-                  <option value="maestro">HocusPocus</option>
+                  <option value="local">{t('services.providers.aceLocal')}</option>
+                  <option value="minimax">{t('services.providers.minimaxMusic')}</option>
+                  <option value="maestro">{t('services.providers.maestro')}</option>
                 </select>
                 <input
                   value={productionProfile.music.model}
@@ -456,11 +462,11 @@ export function ServicesSettingsPanel() {
                 />
               </div>
               {productionProfile.music.provider === 'minimax' && (
-                <p className="mt-1 text-[10px] text-amber-300">MiniMax Music is closed for most accounts and will error if you select it. Prefer a local ACE-Step model.</p>
+                <p className="mt-1 text-[10px] text-amber-300">{t('services.minimaxMusicWarn')}</p>
               )}
             </label>
             <label className="text-[10px] text-text-muted">
-              3D provider / model
+              {t('services.model3dProviderModel')}
               <div className="mt-1 flex gap-1">
                 <select
                   value={productionProfile.model3d?.provider || 'local'}
@@ -474,9 +480,9 @@ export function ServicesSettingsPanel() {
                   disabled={productionProfileLoading}
                   className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
                 >
-                  <option value="local">Hunyuan local</option>
-                  <option value="meshy">Meshy API</option>
-                  <option value="hi3d">Hi3D API</option>
+                  <option value="local">{t('services.providers.hunyuanLocal')}</option>
+                  <option value="meshy">{t('services.providers.meshy')}</option>
+                  <option value="hi3d">{t('services.providers.hi3d')}</option>
                 </select>
                 <input
                   value={productionProfile.model3d?.model || 'hunyuan3d-2mini-turbo'}
@@ -494,7 +500,7 @@ export function ServicesSettingsPanel() {
             </label>
           </div>
           <label className="text-[10px] text-text-muted block">
-            Video model
+            {t('services.videoModel')}
             <input
               value={productionProfile.video.model}
               onChange={e => setProductionProfile({
@@ -507,7 +513,7 @@ export function ServicesSettingsPanel() {
           </label>
           <div className="grid grid-cols-4 gap-2">
             <label className="text-[10px] text-text-muted">
-              Resolution
+              {t('services.resolution')}
               <select
                 value={productionProfile.video.settings.resolution}
                 onChange={e => setProductionProfile({
@@ -521,7 +527,7 @@ export function ServicesSettingsPanel() {
               </select>
             </label>
             <label className="text-[10px] text-text-muted">
-              Canvas
+              {t('services.canvas')}
               <select
                 value={productionProfile.video.settings.aspectRatio}
                 onChange={e => setProductionProfile({
@@ -535,7 +541,7 @@ export function ServicesSettingsPanel() {
               </select>
             </label>
             <label className="text-[10px] text-text-muted">
-              Steps
+              {t('services.steps')}
               <input
                 type="number"
                 value={productionProfile.video.settings.steps}
@@ -548,7 +554,7 @@ export function ServicesSettingsPanel() {
               />
             </label>
             <label className="text-[10px] text-text-muted">
-              Flow / audio shift
+              {t('services.flowAudioShift')}
               <div className="mt-1 flex gap-1">
                 <input
                   type="number"
@@ -574,8 +580,8 @@ export function ServicesSettingsPanel() {
             </label>
           </div>
           <p className="text-[10px] text-text-muted">
-            {productionProfileConfigured ? 'Saved globally.' : 'Using built-in defaults until the first change.'}
-            {' '}Unsupported video sizes are resolved to the closest model-supported size without flipping orientation.
+            {productionProfileConfigured ? t('services.profileSaved') : t('services.profileDefaults')}
+            {' '}{t('services.profileSizeHint')}
           </p>
           <div className="flex justify-end">
             <button
@@ -584,21 +590,21 @@ export function ServicesSettingsPanel() {
               onClick={() => void updateProductionProfile(productionProfile).then(() => setProductionProfile(null))}
               className="rounded-lg bg-accent-blue px-3 py-1.5 text-xs text-white disabled:opacity-40"
             >
-              {productionProfileLoading ? 'Saving…' : 'Save and apply global profile'}
+              {productionProfileLoading ? t('services.saving') : t('services.saveProfile')}
             </button>
           </div>
         </div>
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">LLM Configuration</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('services.llmTitle')}</h3>
 
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1 mr-3">
             <div className="text-sm text-text-primary truncate">
-              {llmStatus?.loaded ? llmStatus.model_id : 'Standby'}
+              {llmStatus?.loaded ? llmStatus.model_id : t('services.standby')}
             </div>
             <div className="text-[10px] text-text-muted">
               {llmStatus?.loaded
-                ? `Active on ${llmStatus.device} (${llmStatus.provider || 'local'})`
-                : 'Auto-loads when needed'}
+                ? t('services.activeOn', { device: llmStatus.device, provider: llmStatus.provider || 'local' })
+                : t('services.autoLoads')}
             </div>
           </div>
           <div className={`w-2 h-2 rounded-full shrink-0 ${llmStatus?.loaded ? 'bg-indicator-success' : 'bg-text-muted/30'}`} />
@@ -607,7 +613,7 @@ export function ServicesSettingsPanel() {
         {/* Provider selector */}
         <div>
           <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-            LLM Provider
+            {t('services.llmProvider')}
           </label>
           <select
             value={provider}
@@ -632,14 +638,14 @@ export function ServicesSettingsPanel() {
             }}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="local">Internal (local llama-server)</option>
-            <option value="ollama">Ollama</option>
-            <option value="minimax">MiniMax API</option>
-            <option value="grok">Grok (xAI)</option>
-            <option value="remote">Remote OpenAI-Compatible (LM Studio, etc.)</option>
-            <option value="openai">OpenAI API</option>
-            <option value="anthropic">Anthropic API</option>
-            <option value="deepseek">DeepSeek</option>
+            <option value="local">{t('services.providers.local')}</option>
+            <option value="ollama">{t('services.providers.ollama')}</option>
+            <option value="minimax">{t('services.providers.minimax')}</option>
+            <option value="grok">{t('services.providers.grok')}</option>
+            <option value="remote">{t('services.providers.remoteOpenAi')}</option>
+            <option value="openai">{t('services.providers.openaiApi')}</option>
+            <option value="anthropic">{t('services.providers.anthropicApi')}</option>
+            <option value="deepseek">{t('services.providers.deepseek')}</option>
           </select>
         </div>
 
@@ -647,7 +653,7 @@ export function ServicesSettingsPanel() {
         {needsUrl && (
           <div>
             <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-              {isOllama || isRemote ? 'Server URL' : 'API Base URL'}
+              {isOllama || isRemote ? t('services.serverUrl') : t('services.apiBaseUrl')}
             </label>
             <input
               type="text"
@@ -667,14 +673,14 @@ export function ServicesSettingsPanel() {
             />
             <p className="text-[10px] text-text-muted mt-1">
               {isOllama
-                ? 'Type the Ollama IP/URL by hand, then Refresh to list models via /api/tags. /v1 is optional.'
+                ? t('services.urlOllama')
                 : isRemote
-                  ? 'URL of your LM Studio or other OpenAI-compatible server'
+                  ? t('services.urlRemote')
                   : isMiniMax
-                    ? 'MiniMax OpenAI-compatible API base; leave blank to use https://api.minimax.io.'
+                    ? t('services.urlMinimax')
                     : isGrok
-                      ? 'xAI OpenAI-compatible API base; leave blank to use https://api.x.ai.'
-                      : 'OpenAI API base URL; leave blank to use the default.'}
+                      ? t('services.urlGrok')
+                      : t('services.urlOpenAi')}
             </p>
           </div>
         )}
@@ -683,7 +689,7 @@ export function ServicesSettingsPanel() {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-[11px] text-text-muted uppercase tracking-wider">
-              LLM Model
+              {t('services.llmModel')}
             </label>
             {!isLocal && (
               <button
@@ -692,7 +698,7 @@ export function ServicesSettingsPanel() {
                 className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5 disabled:opacity-50"
               >
                 <RefreshCw size={10} className={refreshing ? 'animate-spin' : ''} />
-                Refresh
+                {tCommon('actions.refresh')}
               </button>
             )}
           </div>
@@ -712,7 +718,7 @@ export function ServicesSettingsPanel() {
           </select>
           {isLocal && (
             <p className="text-[10px] text-text-muted mt-1">
-              Larger models produce more creative scene descriptions but use more RAM
+              {t('services.localModelHint')}
             </p>
           )}
         </div>
@@ -720,7 +726,7 @@ export function ServicesSettingsPanel() {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-[11px] text-text-muted uppercase tracking-wider">
-              Test LLM
+              {t('services.testLlm')}
             </label>
             <button
               onClick={handleTestLlm}
@@ -730,10 +736,10 @@ export function ServicesSettingsPanel() {
               {llmTest.status === 'testing' || llmConfigSaving ? (
                 <>
                   <Loader2 size={10} className="animate-spin" />
-                  {llmTest.status === 'testing' ? 'Testing' : 'Saving'}
+                  {llmTest.status === 'testing' ? t('services.testing') : t('services.saving')}
                 </>
               ) : (
-                'Test'
+                t('services.test')
               )}
             </button>
           </div>
@@ -744,7 +750,7 @@ export function ServicesSettingsPanel() {
                   : 'text-text-muted'
             }`}
           >
-            {llmTest.message || 'Run a quick hello check against the configured model/provider.'}
+            {llmTest.message || t('services.testIdle')}
           </div>
         </div>
 
@@ -752,7 +758,7 @@ export function ServicesSettingsPanel() {
         {isLocal && (
           <div>
             <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-              LLM Device
+              {t('services.llmDevice')}
             </label>
             <select
               value={servicesConfig.llm_device}
@@ -762,11 +768,11 @@ export function ServicesSettingsPanel() {
               }}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             >
-              <option value="cpu">CPU (recommended)</option>
-              <option value="cuda">CUDA (uses VRAM)</option>
+              <option value="cpu">{t('services.cpuRecommended')}</option>
+              <option value="cuda">{t('services.cudaVram')}</option>
             </select>
             <p className="text-[10px] text-text-muted mt-1">
-              CPU recommended to avoid conflicts with video generation
+              {t('services.cpuHint')}
             </p>
           </div>
         )}
@@ -775,42 +781,42 @@ export function ServicesSettingsPanel() {
       <hr className="border-border" />
 
       <div className="space-y-3">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Provider keys</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('services.providerKeys')}</h3>
         <p className="text-[10px] text-text-muted">
-          LLM, image and music MiniMax keys are stored separately even if you paste the same value twice. A blank specific field still falls back to the legacy shared MiniMax key.
+          {t('services.providerKeysHint')}
         </p>
         <ApiKeyField
-          label="MiniMax LLM API key"
+          label={t('services.keyMinimaxLlm')}
           maskedValue={servicesConfig.minimax_llm_api_key || servicesConfig.minimax_api_key}
           isSet={servicesConfig.minimax_llm_api_key_set || servicesConfig.minimax_api_key_set}
           onSave={value => updateConfig({ minimax_llm_api_key: value, minimax_api_key: value })}
         />
         <ApiKeyField
-          label="MiniMax Image API key"
+          label={t('services.keyMinimaxImage')}
           maskedValue={servicesConfig.minimax_image_api_key || servicesConfig.minimax_api_key}
           isSet={servicesConfig.minimax_image_api_key_set || servicesConfig.minimax_api_key_set}
           onSave={value => updateConfig({ minimax_image_api_key: value })}
         />
         <ApiKeyField
-          label="MiniMax Music API key"
+          label={t('services.keyMinimaxMusic')}
           maskedValue={servicesConfig.minimax_music_api_key || servicesConfig.minimax_api_key}
           isSet={servicesConfig.minimax_music_api_key_set || servicesConfig.minimax_api_key_set}
           onSave={value => updateConfig({ minimax_music_api_key: value })}
         />
         <ApiKeyField
-          label="Grok (xAI) API key"
+          label={t('services.keyGrok')}
           maskedValue={servicesConfig.grok_api_key}
           isSet={servicesConfig.grok_api_key_set}
           onSave={value => updateConfig({ grok_api_key: value })}
         />
         <ApiKeyField
-          label="Meshy API key"
+          label={t('services.keyMeshy')}
           maskedValue={servicesConfig.meshy_api_key}
           isSet={servicesConfig.meshy_api_key_set}
           onSave={value => updateConfig({ meshy_api_key: value })}
         />
         <ApiKeyField
-          label="Hi3D API key"
+          label={t('services.keyHi3d')}
           maskedValue={servicesConfig.hi3d_api_key}
           isSet={servicesConfig.hi3d_api_key_set}
           onSave={value => updateConfig({ hi3d_api_key: value })}
@@ -826,22 +832,21 @@ export function ServicesSettingsPanel() {
 
       {/* Prompt Enhancer */}
       <div className="space-y-4">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Studio Prompt Enhancer</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('services.enhancerTitle')}</h3>
         <p className="text-[10px] text-text-muted">
-          The sparkle button in Studio mode. Uses model-specific prompt guides for best results.
-          Set a separate LLM here or leave empty to use the Director LLM above.
+          {t('services.enhancerHint')}
         </p>
 
         <div>
           <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-            Enhance LLM Model
+            {t('services.enhanceModel')}
           </label>
           <select
             value={servicesConfig.enhance_llm_model_id || ''}
             onChange={e => updateConfig({ enhance_llm_model_id: e.target.value })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="">Same as Director LLM</option>
+            <option value="">{t('services.sameAsDirector')}</option>
             {llmModels.map(m => (
               <option key={m.id} value={m.id}>
                 {m.label} ({m.size_hint})
@@ -850,8 +855,8 @@ export function ServicesSettingsPanel() {
           </select>
           <p className="text-[10px] text-text-muted mt-1">
             {servicesConfig.enhance_llm_model_id
-              ? 'Separate LLM for Studio enhancement — lighter/faster than Director.'
-              : 'Using the Director LLM for enhancement (may be slower but more capable).'
+              ? t('services.enhanceSeparate')
+              : t('services.enhanceShared')
             }
           </p>
         </div>
@@ -859,15 +864,15 @@ export function ServicesSettingsPanel() {
         {servicesConfig.enhance_llm_model_id && (
           <div>
             <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-              Enhance LLM Device
+              {t('services.enhanceDevice')}
             </label>
             <select
               value={servicesConfig.enhance_llm_device || 'cuda'}
               onChange={e => updateConfig({ enhance_llm_device: e.target.value })}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             >
-              <option value="cpu">CPU</option>
-              <option value="cuda">CUDA</option>
+              <option value="cpu">{t('services.cpu')}</option>
+              <option value="cuda">{t('services.cuda')}</option>
             </select>
           </div>
         )}
@@ -876,22 +881,21 @@ export function ServicesSettingsPanel() {
 
         <div>
           <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-            Wan2GP Enhancer (Alternative)
+            {t('services.wan2gpTitle')}
           </label>
           <select
             value={systemConfig?.enhancer_enabled ?? 0}
             onChange={e => updateSystemConfig({ enhancer_enabled: Number(e.target.value) })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value={0}>Disabled (use LLM above)</option>
+            <option value={0}>{t('services.wan2gpDisabled')}</option>
             <option value={4}>Qwen3.5 9B Abliterated</option>
             <option value={3}>Qwen3.5 4B Abliterated</option>
             <option value={1}>Llama 3.2 + Florence2</option>
             <option value={2}>LlamaJoy + Florence2</option>
           </select>
           <p className="text-[10px] text-text-muted mt-1">
-            When enabled, overrides the LLM enhancer above. Uses Wan2GP's built-in pipeline
-            (does NOT use our model-specific prompt guides).
+            {t('services.wan2gpHint')}
           </p>
         </div>
       </div>
@@ -906,7 +910,7 @@ export function ServicesSettingsPanel() {
 
       {/* Director Architecture */}
       <div className="space-y-3">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Director Architecture</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('services.directorTitle')}</h3>
         {/* Director v2 Engine toggle. v2 became the default 2026-05-03
             after weeks of real-world validation showed it's more
             reliable than v1 (v1 had a polish-pass failure mode where
@@ -917,11 +921,10 @@ export function ServicesSettingsPanel() {
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3">
             <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
-              Director v2 Engine <span className="text-[10px] text-text-muted font-normal">(default)</span>
+              {t('services.directorV2')} <span className="text-[10px] text-text-muted font-normal">{t('services.directorDefault')}</span>
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
-              Layered architecture with structured shot planning, mode-specific renderers, and prompt validation.
-              Supports Podcast and Viral Video skills. Turn off to use the legacy v1 engine.
+              {t('services.directorV2Hint')}
             </div>
           </div>
           <div
@@ -939,26 +942,26 @@ export function ServicesSettingsPanel() {
         {/* Prompt Polish Mode */}
         <div>
           <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-            Director Prompt Polish
+            {t('services.promptPolish')}
           </label>
           <select
             value={servicesConfig.director_prompt_polish || 'off'}
             onChange={e => updateConfig({ director_prompt_polish: e.target.value as 'off' | 'full_guide' | 'light_guide' | 'third_pass' })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="off">Off — use validated Director prompts</option>
-            <option value="third_pass">Third Pass (Model-aware) — recommended</option>
-            <option value="light_guide">Lightweight Guide Inject (legacy)</option>
-            <option value="full_guide">Full Guide Inject (legacy)</option>
+            <option value="off">{t('services.polishOff')}</option>
+            <option value="third_pass">{t('services.polishThird')}</option>
+            <option value="light_guide">{t('services.polishLight')}</option>
+            <option value="full_guide">{t('services.polishFull')}</option>
           </select>
           <p className="text-[10px] text-text-muted mt-1">
             {servicesConfig.director_prompt_polish === 'full_guide'
-              ? 'Legacy: injects the complete model-specific prompt guide into the Director planner\'s system prompt.'
+              ? t('services.polishFullHint')
               : servicesConfig.director_prompt_polish === 'light_guide'
-              ? 'Legacy: injects a lightweight dialect cheat sheet (~200 tokens) into the Director planner.'
+              ? t('services.polishLightHint')
               : servicesConfig.director_prompt_polish === 'off'
-              ? 'Uses the complete prompts produced and validated by Director, with no additional LLM calls.'
-              : 'Default and model-aware. H3 keeps its native video prompts while generated image prompts may still be polished; other models use their dialect-specific enhance pipeline.'}
+              ? t('services.polishOffHint')
+              : t('services.polishThirdHint')}
           </p>
         </div>
 
@@ -966,10 +969,10 @@ export function ServicesSettingsPanel() {
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3 min-w-0">
             <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
-              Parallel workflows by resource
+              {t('services.parallelTitle')}
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
-              Overlaps work only across different servers or devices. Each local GPU and each remote host remains a sequential queue.
+              {t('services.parallelHint')}
             </div>
           </div>
           <div
@@ -988,10 +991,10 @@ export function ServicesSettingsPanel() {
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3 min-w-0">
             <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
-              Debug trace
+              {t('services.debugTitle')}
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
-              Saves sanitized LLM requests/results and user actions as JSONL. Off by default.
+              {t('services.debugHint')}
             </div>
             {servicesConfig.debug_trace_enabled && servicesConfig.debug_trace_log_path && (
               <div className="text-[10px] text-text-muted mt-1 font-mono truncate" title={servicesConfig.debug_trace_log_path}>
@@ -1023,14 +1026,10 @@ export function ServicesSettingsPanel() {
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3">
             <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
-              Multi-Shot LoRA Mode <span className="text-[10px] text-accent-blue/80 font-normal">Beta</span>
+              {t('services.multishotTitle')} <span className="text-[10px] text-accent-blue/80 font-normal">{t('services.beta')}</span>
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
-              Emits storyboard-format prompts for 20s shots so an IC-LoRA
-              (e.g. Maque AI LTX-2.3) can cut between camera angles inside
-              one generation. Add the matching LoRA to your video LoRA
-              selection for cuts to render. Short and long-sustained shots
-              stay single-camera.
+              {t('services.multishotHint')}
             </div>
           </div>
           <div
@@ -1050,11 +1049,10 @@ export function ServicesSettingsPanel() {
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3">
             <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
-              Voice Reference (ID-LoRA)
+              {t('services.voiceTitle')}
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
-              Adds a voice-sample dropzone to Studio Video and Director for speaker identity preservation across clips.
-              HocusPocus loads the matching ID-LoRA when a reference is supplied. Enabled by default.
+              {t('services.voiceHint')}
             </div>
           </div>
           <div
@@ -1077,34 +1075,34 @@ export function ServicesSettingsPanel() {
           ("FlashVSR 2x", "FlashVSR Two Pass 2x", ...). These control the
           model variant, sparse-attention density, and backend. */}
       <div className="space-y-3">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">FlashVSR Upscaling</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('services.flashTitle')}</h3>
         <p className="text-[10px] text-text-muted -mt-1">
-          DiT super-resolution. Pick it per generation in Post Processing → Spatial Upsampling. First use downloads ~4 GB of weights.
+          {t('services.flashHint')}
         </p>
 
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Model Variant</label>
+          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('services.flashVariant')}</label>
           <select
             value={servicesConfig.flashvsr_mode ?? 1}
             onChange={e => updateConfig({ flashvsr_mode: Number(e.target.value) })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value={1}>Tiny — fast, low VRAM (default)</option>
-            <option value={2}>Full — best quality, more VRAM</option>
-            <option value={3}>Tiny-Long — for long videos</option>
+            <option value={1}>{t('services.flashTiny')}</option>
+            <option value={2}>{t('services.flashFull')}</option>
+            <option value={3}>{t('services.flashTinyLong')}</option>
           </select>
           <p className="text-[10px] text-text-muted mt-1">
             {servicesConfig.flashvsr_mode === 2
-              ? 'Full uses the complete Wan2.1 VAE — sharpest detail and best temporal fidelity, highest VRAM.'
+              ? t('services.flashFullHint')
               : servicesConfig.flashvsr_mode === 3
-              ? 'Tiny decoder tuned for long clips.'
-              : 'Lightweight decoder — fastest, lowest VRAM. Good default alongside the main model on a 24 GB card.'}
+              ? t('services.flashTinyLongHint')
+              : t('services.flashTinyHint')}
           </p>
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">Sparse Attention Top-K</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('services.flashTopk')}</label>
             <span className="text-xs text-text-secondary">{(servicesConfig.flashvsr_topk_ratio ?? 0).toFixed(2)}</span>
           </div>
           <input
@@ -1116,23 +1114,23 @@ export function ServicesSettingsPanel() {
             onChange={e => updateConfig({ flashvsr_topk_ratio: parseFloat(e.target.value) })}
           />
           <p className="text-[10px] text-text-muted mt-1">
-            Higher computes more attention → better motion fidelity, slower. 0 = sparsest (fastest).
+            {t('services.flashTopkHint')}
           </p>
         </div>
 
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Sparse Attention Backend</label>
+          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('services.flashBackend')}</label>
           <select
             value={servicesConfig.flashvsr_backend || 'auto'}
             onChange={e => updateConfig({ flashvsr_backend: e.target.value })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="auto">Auto (SpargeAttn if installed, else Triton)</option>
-            <option value="triton_sparse">Triton Sparse (bundled)</option>
-            <option value="sparge">SpargeAttn (best with motion — requires install)</option>
+            <option value="auto">{t('services.flashAuto')}</option>
+            <option value="triton_sparse">{t('services.flashTriton')}</option>
+            <option value="sparge">{t('services.flashSparge')}</option>
           </select>
           <p className="text-[10px] text-text-muted mt-1">
-            SpargeAttn gives the best quality when there's motion but needs a separate install. Auto uses the bundled Triton kernels otherwise.
+            {t('services.flashBackendHint')}
           </p>
         </div>
       </div>
@@ -1142,20 +1140,20 @@ export function ServicesSettingsPanel() {
       {/* Named comic-writing profiles stay visible because the comic editor
           exposes these providers outside the experimental feature gate. */}
       <div className="space-y-4">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Comic writing providers</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('services.comicTitle')}</h3>
         <p className="text-[10px] text-text-muted">
-          Credentials remain in HocusPocus settings and are never embedded in an exported comic.
+          {t('services.comicHint')}
         </p>
 
         <ApiKeyField
-          label="DeepSeek API key"
+          label={t('services.keyDeepseek')}
           maskedValue={servicesConfig.deepseek_api_key}
           isSet={servicesConfig.deepseek_api_key_set}
           onSave={val => updateConfig({ deepseek_api_key: val })}
         />
 
         <ApiKeyField
-          label="OpenAI API key"
+          label={t('services.keyOpenai')}
           maskedValue={servicesConfig.openai_api_key}
           isSet={servicesConfig.openai_api_key_set}
           onSave={val => updateConfig({ openai_api_key: val })}
@@ -1164,7 +1162,7 @@ export function ServicesSettingsPanel() {
         <div className="rounded-lg border border-border bg-bg-tertiary/20 p-3 space-y-3">
           <div>
             <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-              Custom compatible base URL
+              {t('services.compatibleUrl')}
             </label>
             <input
               type="url"
@@ -1175,31 +1173,31 @@ export function ServicesSettingsPanel() {
             />
           </div>
           <ApiKeyField
-            label="Custom compatible API key (optional)"
+            label={t('services.keyCompatible')}
             maskedValue={servicesConfig.compatible_api_key}
             isSet={servicesConfig.compatible_api_key_set}
             onSave={val => updateConfig({ compatible_api_key: val })}
           />
           <p className="text-[10px] text-text-muted">
-            Used only by the custom comic-writing profile. Local servers may leave the key empty.
+            {t('services.compatibleHint')}
           </p>
         </div>
 
         {servicesConfig.show_experimental && (
           <>
             <p className="text-[10px] text-text-muted">
-              Additional experimental service credentials.
+              {t('services.experimentalCreds')}
             </p>
 
             <ApiKeyField
-              label="Google AI API Key"
+              label={t('services.keyGoogle')}
               maskedValue={servicesConfig.google_api_key}
               isSet={servicesConfig.google_api_key_set}
               onSave={val => updateConfig({ google_api_key: val })}
             />
 
             <ApiKeyField
-              label="Anthropic API Key"
+              label={t('services.keyAnthropic')}
               maskedValue={servicesConfig.anthropic_api_key}
               isSet={servicesConfig.anthropic_api_key_set}
               onSave={val => updateConfig({ anthropic_api_key: val })}
@@ -1208,13 +1206,13 @@ export function ServicesSettingsPanel() {
         )}
 
         <ApiKeyField
-          label="CivitAI API Key"
+          label={t('services.keyCivitai')}
           maskedValue={servicesConfig.civitai_api_key}
           isSet={servicesConfig.civitai_api_key_set}
           onSave={val => updateConfig({ civitai_api_key: val })}
         />
         <p className="text-[10px] text-text-muted -mt-2">
-          Optional. Increases rate limits and enables access to restricted models.
+          {t('services.civitaiHint')}
         </p>
       </div>
 
@@ -1231,21 +1229,18 @@ export function ServicesSettingsPanel() {
       <hr className="border-border" />
       <div>
         <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium mb-3">
-          Beta Features
+          {t('services.betaTitle')}
         </h3>
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3">
             <div className="text-sm text-text-primary">
-              Show in-development features
+              {t('services.betaToggle')}
             </div>
             <div className="text-[10px] text-text-muted mt-0.5 leading-relaxed">
-              Reveals features still under development. Some are incomplete,
-              unstable, or require additional setup. Default off keeps the UI
-              focused on features known to work well.
+              {t('services.betaHint')}
             </div>
             <div className="text-[10px] text-text-muted mt-1 leading-relaxed">
-              Currently gates: external LLM APIs (Google / OpenAI / Anthropic),
-              Studio Prompt Enhancer config, and the Inpaint edit mode.
+              {t('services.betaGates')}
             </div>
           </div>
           <div

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, fetchOutputs, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
@@ -409,23 +410,25 @@ const reconcileLegacyKeyframeUpdate = (before: AnimatorLayer, after: AnimatorLay
 }
 
 const MotionPresetCard = memo(function MotionPresetCard({ preset, selected, onSelect }: { preset: Preset; scopeId: string; selected: boolean; onSelect: () => void }) {
+  const { t } = useUiTranslation('scene3d')
   const videoRef = useRef<HTMLVideoElement>(null)
   const [hovered, setHovered] = useState(false)
   const play = () => { setHovered(true); const video = videoRef.current; if (!video) return; video.currentTime = 0; void video.play().catch(() => {}) }
   const stop = () => { setHovered(false); const video = videoRef.current; if (!video) return; video.pause(); video.currentTime = 0 }
   return <button type="button" onClick={onSelect} onPointerEnter={play} onPointerLeave={stop} onFocus={play} onBlur={stop} className={`overflow-hidden rounded border text-left transition-colors ${selected ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/40' : 'border-border bg-bg-primary hover:border-accent-blue/70'}`}>
     <div className="relative aspect-video overflow-hidden bg-[#07111f]"><img src={preset.poster} alt="" className="absolute inset-0 h-full w-full object-cover" /><video ref={videoRef} src={preset.preview} poster={preset.poster} muted loop playsInline preload="metadata" className={`pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`} /></div>
-    <div className="flex min-h-9 items-center justify-between gap-1 px-1.5 py-1"><span className="line-clamp-2 text-[9px] leading-tight text-text-secondary">{preset.label}</span><span className="flex shrink-0 flex-col items-end gap-0.5">{preset.category !== 'classic' && <span className={`rounded px-1 py-0.5 text-[7px] uppercase ${preset.category === 'game' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-purple-500/15 text-purple-300'}`}>{preset.category}</span>}{preset.requiresTarget && <span className="rounded bg-accent-blue/15 px-1 py-0.5 text-[8px] text-accent-blue">2 layers</span>}</span></div>
+    <div className="flex min-h-9 items-center justify-between gap-1 px-1.5 py-1"><span className="line-clamp-2 text-[9px] leading-tight text-text-secondary">{t(`motionPresets.${preset.id}`)}</span><span className="flex shrink-0 flex-col items-end gap-0.5">{preset.category !== 'classic' && <span className={`rounded px-1 py-0.5 text-[7px] uppercase ${preset.category === 'game' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-purple-500/15 text-purple-300'}`}>{t(`categories.${preset.category}`)}</span>}{preset.requiresTarget && <span className="rounded bg-accent-blue/15 px-1 py-0.5 text-[8px] text-accent-blue">{t('animator.twoLayers')}</span>}</span></div>
   </button>
 }, (previous, next) => previous.preset === next.preset && previous.scopeId === next.scopeId && previous.selected === next.selected)
 
 const PhotoMotionPresetCard = memo(function PhotoMotionPresetCard({ preset, source, selected, onSelect }: { preset: PhotoMotionPreset; source: string; scopeId: string; selected: boolean; onSelect: () => void }) {
+  const { t } = useUiTranslation('scene3d')
   const [hovered, setHovered] = useState(false)
   const camera = hovered ? preset.end : preset.start
   const previewTransform = `translate(${(50 - camera.x) * .55}%, ${(50 - camera.y) * .55}%) scale(${camera.scale}) rotate(${-Number(camera.rotation ?? 0)}deg)`
   return <button
     type="button"
-    title={preset.description}
+    title={t(`photoPresets.${preset.id}.description`)}
     onClick={onSelect}
     onPointerEnter={() => setHovered(true)}
     onPointerLeave={() => setHovered(false)}
@@ -440,11 +443,11 @@ const PhotoMotionPresetCard = memo(function PhotoMotionPresetCard({ preset, sour
         className="absolute inset-[-8%] h-[116%] w-[116%] object-cover"
         style={{ transform: previewTransform, transition: hovered ? `transform ${Math.min(3.5, preset.duration * .5)}s ease-in-out` : 'transform 220ms ease-out' }}
       />
-      {preset.shake && <span className="absolute right-1 top-1 rounded bg-black/55 px-1 py-0.5 text-[7px] text-cyan-100">organic</span>}
+      {preset.shake && <span className="absolute right-1 top-1 rounded bg-black/55 px-1 py-0.5 text-[7px] text-cyan-100">{t('animator.organic')}</span>}
     </div>
     <div className="px-1.5 py-1">
-      <div className="text-[9px] leading-tight text-text-secondary">{preset.label}</div>
-      <div className="mt-0.5 line-clamp-2 text-[7px] leading-tight text-text-muted">{preset.description}</div>
+      <div className="text-[9px] leading-tight text-text-secondary">{t(`photoPresets.${preset.id}.label`)}</div>
+      <div className="mt-0.5 line-clamp-2 text-[7px] leading-tight text-text-muted">{t(`photoPresets.${preset.id}.description`)}</div>
     </div>
   </button>
 }, (previous, next) => previous.preset === next.preset && previous.source === next.source && previous.scopeId === next.scopeId && previous.selected === next.selected)
@@ -467,6 +470,7 @@ function AtmospherePreview({ atmosphere, seconds, width, height, layerId }: { at
 }
 
 export function SceneAnimatorPanel() {
+  const { t } = useUiTranslation('scene3d')
   const outputs = useStore(s => s.outputs)
   const loadOutputs = useStore(s => s.loadOutputs)
   const workspace = useStore(s => s.activeWorkspace)
@@ -587,11 +591,11 @@ export function SceneAnimatorPanel() {
   const selected = scene.layers.find(layer => layer.id === selectedId) ?? null
   const activeNarrativeId = scene.narrative?.templateId ?? narrativeTemplateId
   const copilotSuggestions = selected ? (() => {
-    if (selected.type === 'camera') return ['Keep the camera restrained for the whole shot', 'Add a very gentle drift without zooming']
-    if (activeNarrativeId === 'inner-thought') return ['Move it left and make it look thoughtful', 'Leave space for an inner voice on the right']
-    if (activeNarrativeId === 'run-travel-parallax') return ['Keep the subject stable and add a subtle run-like bob', 'Make this foreground layer move faster than the world']
-    if (selected.type === 'model3d') return ['Turn it slightly to camera right', 'Give it a gentle living drift']
-    return ['Move it left a little', 'Make its look calmer and more cinematic']
+    if (selected.type === 'camera') return [t('animator.suggestionCamera1'), t('animator.suggestionCamera2')]
+    if (activeNarrativeId === 'inner-thought') return [t('animator.suggestionThought1'), t('animator.suggestionThought2')]
+    if (activeNarrativeId === 'run-travel-parallax') return [t('animator.suggestionRun1'), t('animator.suggestionRun2')]
+    if (selected.type === 'model3d') return [t('animator.suggestionModel1'), t('animator.suggestionModel2')]
+    return [t('animator.suggestionDefault1'), t('animator.suggestionDefault2')]
   })() : []
   const composition = { ...DEFAULT_COMPOSITION, ...scene.composition }
   const fps: SceneFrameRate = scene.fps === 60 ? 60 : 30
@@ -712,7 +716,7 @@ export function SceneAnimatorPanel() {
         setCharacterKitDraft(kitFromFaceRigHandoff(handoff, library))
         setCharacterKitPoseId('base')
         setCharacterKitEditorTab('face-rig')
-        setMessage(`Opened Character Kit Face Rig from Character Creator. Save the kit after reviewing the base pose.`)
+        setMessage(t('animator.openedKit'))
         return
       }
       const active = library.kits[library.activeId]
@@ -723,10 +727,10 @@ export function SceneAnimatorPanel() {
         setCharacterKitDraft(null)
       }
     }).catch(error => {
-      if (!cancelled) setCharacterKitError(error instanceof Error ? error.message : 'Could not load Character Kits.')
+      if (!cancelled) setCharacterKitError(error instanceof Error ? error.message : t('animator.kitLoadFailed'))
     }).finally(() => { if (!cancelled) setCharacterKitBusy(false) })
     return () => { cancelled = true }
-  }, [workspace])
+  }, [workspace, t])
   useEffect(() => {
     const onHandoff = () => {
       const handoff = consumeFaceRigHandoff()
@@ -734,11 +738,11 @@ export function SceneAnimatorPanel() {
       setCharacterKitDraft(kitFromFaceRigHandoff(handoff, characterKitLibraryRef.current))
       setCharacterKitPoseId('base')
       setCharacterKitEditorTab('face-rig')
-      setMessage('Opened Character Kit Face Rig from Character Creator. This does not replace Character Creator.')
+      setMessage(t('animator.openedKitNote'))
     }
     window.addEventListener(FACE_RIG_HANDOFF_EVENT, onHandoff)
     return () => window.removeEventListener(FACE_RIG_HANDOFF_EVENT, onHandoff)
-  }, [])
+  }, [t])
   useEffect(() => () => {
     if (animationRef.current) cancelAnimationFrame(animationRef.current)
     if (recordingAnimationRef.current) cancelAnimationFrame(recordingAnimationRef.current)
@@ -768,7 +772,7 @@ export function SceneAnimatorPanel() {
     let next = updater(current)
     if (next === current) return
     const removesLockedLayer = current.layers.some(layer => layer.locked && !next.layers.some(candidate => candidate.id === layer.id))
-    if (removesLockedLayer) { setMessage('Unlock the layer before deleting it.'); return }
+    if (removesLockedLayer) { setMessage(t('animator.unlockBeforeDelete')); return }
     const removedIds = new Set(current.layers.filter(layer => !next.layers.some(candidate => candidate.id === layer.id)).map(layer => layer.id))
     if (removedIds.size > 0) next = { ...next, layers: next.layers.map(layer => ({ ...layer, relationship: layer.relationship && removedIds.has(layer.relationship.targetLayerId) ? undefined : layer.relationship, animation: { ...layer.animation, orbit: layer.animation.orbit && removedIds.has(layer.animation.orbit.targetLayerId) ? undefined : layer.animation.orbit } })) }
     const now = Date.now()
@@ -787,14 +791,14 @@ export function SceneAnimatorPanel() {
     if (!previous) return
     futureScenesRef.current.push(sceneRef.current)
     replaceScene(previous); lastHistoryAtRef.current = 0; setHistoryRevision(value => value + 1)
-    setSelectedId(id => id && previous.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage('Undo')
+    setSelectedId(id => id && previous.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage(t('animator.undo'))
   }
   const redoScene = () => {
     const next = futureScenesRef.current.pop()
     if (!next) return
     pastScenesRef.current.push(sceneRef.current)
     replaceScene(next); lastHistoryAtRef.current = 0; setHistoryRevision(value => value + 1)
-    setSelectedId(id => id && next.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage('Redo')
+    setSelectedId(id => id && next.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage(t('animator.redo'))
   }
   const updateLayer = (id: string, updater: (layer: AnimatorLayer) => AnimatorLayer) => updateScene(current => {
     const target = current.layers.find(layer => layer.id === id)
@@ -930,7 +934,7 @@ export function SceneAnimatorPanel() {
       const cameraCount = current.layers.filter(layer => layer.type === 'camera').length
       const camera: AnimatorLayer = {
         id,
-        name: `Camera ${cameraCount + 1}`,
+        name: t('animator.cameraN', { n: cameraCount + 1 }),
         type: 'camera',
         source: '',
         visible: true,
@@ -970,7 +974,7 @@ export function SceneAnimatorPanel() {
       }
       return { ...current, layers: normalizeZ([...current.layers, clone]) }
     })
-    setSelectedId(duplicateId); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage(`Duplicated ${original.name}.`)
+    setSelectedId(duplicateId); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage(t('animator.duplicated', { name: original.name }))
   }
   const addOrReassign = (type: VisualLayerType, file: File) => {
     const source = URL.createObjectURL(file)
@@ -987,7 +991,7 @@ export function SceneAnimatorPanel() {
   })
   const resizeLayer = (id: string, scale: number) => updateLayer(id, layer => ({ ...layer, transform: { ...layer.transform, scale }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, scale })) }))
   const startGesture = (event: ReactPointerEvent<HTMLElement>, layer: AnimatorLayer, mode: Gesture['mode']) => {
-    if (layer.locked) { event.preventDefault(); event.stopPropagation(); setSelectedId(layer.id); setMessage('Unlock the layer before moving it.'); return }
+    if (layer.locked) { event.preventDefault(); event.stopPropagation(); setSelectedId(layer.id); setMessage(t('animator.unlockBeforeMove')); return }
     event.preventDefault(); event.stopPropagation(); setSelectedId(layer.id)
     gestureRef.current = { id: layer.id, mode, startX: event.clientX, startY: event.clientY, x: layer.transform.x, y: layer.transform.y, scale: layer.transform.scale, rotationX: layer.transform.rotationX ?? 75, rotationY: layer.transform.rotationY ?? 0 }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -1252,18 +1256,18 @@ export function SceneAnimatorPanel() {
     const preset = PRESETS.find(item => item.id === presetId)
     if (!preset) return
     const target = scene.layers.find(layer => layer.id !== selected.id && layer.type === 'model3d' && !dependencyWouldCycle(selected.id, layer.id)) ?? scene.layers.find(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id))
-    if (preset.requiresTarget && !target) { setMessage('Add a second layer before applying this relational movement.'); return }
+    if (preset.requiresTarget && !target) { setMessage(t('animator.needSecondLayer')); return }
     if (chainFromPlayhead && !preset.requiresTarget) {
       const sceneTime = Math.round(progress * scene.duration * fps) / fps
       const nextDuration = Math.max(scene.duration, sceneTime + preset.duration)
       updateLayer(selected.id, layer => appendPresetAtPlayhead(layer, preset))
       updateScene(current => ({ ...current, duration: Math.max(current.duration, sceneTime + preset.duration) }))
-      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${preset.label} chained from frame ${Math.round(sceneTime * fps)} without a position jump.`)
+      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${t(`cameraPresets.${preset.id}`)} chained from frame ${Math.round(sceneTime * fps)} without a position jump.`)
       return
     }
     updateLayer(selected.id, layer => ({ ...layer, relationship: preset.requiresTarget ? undefined : layer.relationship, animation: { start: preset.start, end: preset.end, duration: preset.duration, curve: preset.curve, events: normalizeSceneEvents(layer.animation.events, preset.duration, layer.id), spin: preset.spin, rotationSpeed: layer.animation.rotationSpeed, clip: layer.animation.clip, clipOffset: layer.animation.clipOffset, clipSpeed: layer.animation.clipSpeed, clipReverse: layer.animation.clipReverse, clipLoop: layer.animation.clipLoop, clipTrimStart: layer.animation.clipTrimStart, clipTrimEnd: layer.animation.clipTrimEnd, orbit: preset.requiresTarget && target ? { targetLayerId: target.id, radiusX: 18, radiusY: 9, turns: 2, phase: 0, count: 1, facing: 'fixed', centerOffsetX: 0, centerOffsetY: 0 } : undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
-    setMessage(preset.requiresTarget ? `Orbit target: ${target?.name}` : null); setSelectedKeyframeId(null); setProgress(0)
+    setMessage(preset.requiresTarget ? t('animator.orbitTarget', { name: target?.name }) : null); setSelectedKeyframeId(null); setProgress(0)
   }
   const applyCameraPreset = (presetId: string) => {
     if (!selected || selected.type !== 'camera' || selected.locked) return
@@ -1279,12 +1283,12 @@ export function SceneAnimatorPanel() {
         return { ...chained, animation: { ...chained.animation, shake: preset.shake ? { ...preset.shake, startTime, endTime: startTime + preset.duration * timing.speed } : undefined } }
       })
       updateScene(current => ({ ...current, duration: Math.max(current.duration, sceneTime + preset.duration) }))
-      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${preset.label} camera move chained from frame ${Math.round(sceneTime * fps)}.`)
+      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${t(`cameraPresets.${preset.id}`)} camera move chained from frame ${Math.round(sceneTime * fps)}.`)
       return
     }
     updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, events: normalizeSceneEvents(layer.animation.events, preset.duration, layer.id), duration: preset.duration, curve: preset.curve, offset: 0, speed: 1, loop: false, trimStart: 0, trimEnd: preset.duration, shake: preset.shake, orbit: undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
-    setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${preset.label} applied to ${selected.name}.`)
+    setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${t(`cameraPresets.${preset.id}`)} applied to ${selected.name}.`)
   }
   const applyPhotoMotionPreset = (presetId: string) => {
     if (!selected || selected.type !== 'image' || selected.locked) return
@@ -1308,7 +1312,7 @@ export function SceneAnimatorPanel() {
           transform: { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 },
           animation: { start: makePoint(50, 50, 1), end: makePoint(50, 50, 1), duration: preset.duration, curve: preset.curve },
         }),
-        name: `Photo camera · ${preset.label}`,
+        name: `Photo camera · ${t(`cameraPresets.${preset.id}`)}`,
         visible: true,
         relationship: undefined,
         transform: { x: preset.start.x, y: preset.start.y, scale: preset.start.scale, opacity: 1, rotation: preset.start.rotation ?? 0 },
@@ -1354,9 +1358,9 @@ export function SceneAnimatorPanel() {
     setSelectedKeyframeId(null)
     setSelectedEventId(null)
     setProgress(0)
-    setMessage(`${preset.label} prepared as a ${preset.duration}s cinematic photo shot.`)
+    setMessage(`${t(`cameraPresets.${preset.id}`)} prepared as a ${preset.duration}s cinematic photo shot.`)
   }
-  const confirmPresetRemoval = () => window.confirm('Remove this effect?')
+  const confirmPresetRemoval = () => window.confirm(t('animator.removeEffect'))
   const removeLayerMotionPreset = () => {
     if (!selected || selected.locked || !confirmPresetRemoval()) return
     const point = {
@@ -1387,7 +1391,7 @@ export function SceneAnimatorPanel() {
     setSelectedPresetId('')
     setSelectedKeyframeId(null)
     setProgress(0)
-    setMessage(`Removed the motion effect from ${selected.name}.`)
+    setMessage(t('animator.removedMotion', { name: selected.name }))
   }
   const removePhotoMotionPreset = (presetId: string) => {
     if (!selected || selected.type !== 'image' || selected.locked || !confirmPresetRemoval()) return
@@ -1397,7 +1401,7 @@ export function SceneAnimatorPanel() {
     updateScene(current => ({
       ...current,
       layers: current.layers
-        .filter(layer => !(layer.type === 'camera' && layer.name === `Photo camera · ${preset.label}`))
+        .filter(layer => !(layer.type === 'camera' && layer.name === `Photo camera · ${t(`cameraPresets.${preset.id}`)}`))
         .map(layer => layer.id === photoId ? {
           ...layer,
           animation: {
@@ -1417,7 +1421,7 @@ export function SceneAnimatorPanel() {
     setSelectedPresetId('')
     setSelectedKeyframeId(null)
     setProgress(0)
-    setMessage(`Removed ${preset.label} from ${selected.name}.`)
+    setMessage(t('animator.removedPreset', { preset: t(`cameraPresets.${preset.id}`), name: selected.name }))
   }
   const updateCameraTransform = (id: string, field: 'x' | 'y' | 'scale' | 'rotation', value: number) => updateLayer(id, layer => {
     if (layer.type !== 'camera') return layer
@@ -1456,7 +1460,7 @@ export function SceneAnimatorPanel() {
     if (type === 'none') { updateLayer(selected.id, layer => ({ ...layer, relationship: undefined })); return }
     const existingTarget = selected.relationship && scene.layers.find(layer => layer.id === selected.relationship?.targetLayerId && isVisualLayer(layer))
     const target = existingTarget ?? scene.layers.find(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id))
-    if (!target) { setMessage('Add another visual layer before creating a relationship.'); return }
+    if (!target) { setMessage(t('animator.needVisualLayer')); return }
     const selectedState = layerState(selected, progress, new Set(), false)
     const targetState = layerState(target, progress, new Set(), false)
     const facingAngle = Math.atan2((targetState.y - selectedState.y) * scene.height, (targetState.x - selectedState.x) * scene.width) * 180 / Math.PI
@@ -1474,7 +1478,7 @@ export function SceneAnimatorPanel() {
     }))
   }
   const setRelationshipTarget = (targetId: string) => {
-    if (!selected?.relationship || selected.locked || dependencyWouldCycle(selected.id, targetId)) { setMessage('That relationship would create a cycle.'); return }
+    if (!selected?.relationship || selected.locked || dependencyWouldCycle(selected.id, targetId)) { setMessage(t('animator.cycleRelationship')); return }
     const target = scene.layers.find(layer => layer.id === targetId && isVisualLayer(layer))
     if (!target) return
     const selectedState = layerState(selected, progress, new Set(), false)
@@ -1484,7 +1488,7 @@ export function SceneAnimatorPanel() {
   }
   const setOrbitTarget = (targetId: string) => {
     if (!selected || !isVisualLayer(selected) || selected.locked) return
-    if (dependencyWouldCycle(selected.id, targetId)) { setMessage('That orbit would create a dependency cycle.'); return }
+    if (dependencyWouldCycle(selected.id, targetId)) { setMessage(t('animator.cycleOrbit')); return }
     updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, targetLayerId: targetId } : undefined } }))
   }
   const updateLayerEffects = (id: string, patch: Partial<LayerEffects>) => updateLayer(id, layer => ({ ...layer, effects: normalizedEffects({ ...normalizedEffects(layer.effects), ...patch }) }))
@@ -1500,7 +1504,7 @@ export function SceneAnimatorPanel() {
     setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0)
   }
   const addKeyframeAtPlayhead = () => {
-    if (!selected || selected.locked) { setMessage('Unlock the layer before adding keyframes.'); return }
+    if (!selected || selected.locked) { setMessage(t('animator.unlockBeforeKeyframes')); return }
     const sceneTime = progress * scene.duration
     const time = sceneTimeToLayerTime(selected, sceneTime)
     const frames = getSceneKeyframes(selected)
@@ -1511,7 +1515,7 @@ export function SceneAnimatorPanel() {
     updateLayer(selected.id, layer => withSceneKeyframes(layer, [...getSceneKeyframes(layer), keyframe], Math.max(layer.animation.duration, time)) as AnimatorLayer)
     updateScene(current => ({ ...current, duration: Math.max(current.duration, time) }))
     setSelectedKeyframeId(keyframe.id); setSelectedEventId(null)
-    setMessage(`Keyframe added at local ${time.toFixed(2)}s (scene ${sceneTime.toFixed(2)}s).`)
+    setMessage(t('animator.keyframeAdded', { local: time.toFixed(2), scene: sceneTime.toFixed(2) }))
   }
   const updateTimelineKeyframe = (keyframeId: string, patch: Partial<Omit<SceneKeyframe, 'id'>>) => {
     if (!selected || selected.locked) return
@@ -1534,16 +1538,16 @@ export function SceneAnimatorPanel() {
     if (index <= 0 || index >= frames.length - 1) return
     updateLayer(selected.id, layer => withSceneKeyframes(layer, getSceneKeyframes(layer).filter(frame => frame.id !== selectedKeyframeId)) as AnimatorLayer)
     setSelectedKeyframeId(null)
-    setMessage('Keyframe deleted.')
+    setMessage(t('animator.keyframeDeleted'))
   }
   const addEventAtPlayhead = () => {
-    if (!selected || selected.locked) { setMessage('Unlock the layer before adding events.'); return }
+    if (!selected || selected.locked) { setMessage(t('animator.unlockBeforeEvents')); return }
     const sceneTime = progress * scene.duration
     const time = sceneTimeToLayerTime(selected, sceneTime)
-    const event: SceneAnimationEvent = { id: uid(), time, name: `Event ${getSceneEvents(selected).length + 1}` }
+    const event: SceneAnimationEvent = { id: uid(), time, name: t('animator.eventN', { n: getSceneEvents(selected).length + 1 }) }
     updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, events: [...getSceneEvents(layer), event].sort((a, b) => a.time - b.time) } }))
     setSelectedKeyframeId(null); setSelectedEventId(event.id)
-    setMessage(`Event added at local ${time.toFixed(2)}s (scene ${sceneTime.toFixed(2)}s).`)
+    setMessage(t('animator.eventAdded', { local: time.toFixed(2), scene: sceneTime.toFixed(2) }))
   }
   const updateTimelineEvent = (eventId: string, patch: Partial<Omit<SceneAnimationEvent, 'id'>>) => {
     if (!selected || selected.locked) return
@@ -1564,7 +1568,7 @@ export function SceneAnimatorPanel() {
   const deleteTimelineEvent = () => {
     if (!selected || selected.locked || !selectedEventId) return
     updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, events: getSceneEvents(layer).filter(event => event.id !== selectedEventId) } }))
-    setSelectedEventId(null); setMessage('Animation event deleted.')
+    setSelectedEventId(null); setMessage(t('animator.eventDeleted'))
   }
   const copyTimelineKeyframes = () => {
     if (!selected) return
@@ -1574,10 +1578,10 @@ export function SceneAnimatorPanel() {
     setMessage(`${getSceneKeyframes(selected).length} keyframes copied.`)
   }
   const pasteTimelineKeyframes = async () => {
-    if (!selected || selected.locked) { setMessage('Unlock the target layer before pasting keyframes.'); return }
+    if (!selected || selected.locked) { setMessage(t('animator.unlockBeforePaste')); return }
     let text = keyframeClipboardRef.current
     try { text = await navigator.clipboard?.readText() || text } catch { /* Internal clipboard remains available. */ }
-    if (!text) { setMessage('Copy keyframes first.'); return }
+    if (!text) { setMessage(t('animator.copyFirst')); return }
     try {
       const parsed = JSON.parse(text) as { keyframes?: unknown }
       const frames = normalizeSceneKeyframes(Array.isArray(parsed) ? parsed : parsed.keyframes, selected)?.map(frame => ({ ...frame, id: uid() }))
@@ -1588,7 +1592,7 @@ export function SceneAnimatorPanel() {
       const effectiveEnd = timing.offset + timing.span / timing.speed
       updateScene(current => ({ ...current, duration: Math.max(current.duration, effectiveEnd) }))
       setSelectedKeyframeId(frames[0].id); setSelectedEventId(null); setProgress(timing.offset / Math.max(.1, Math.max(scene.duration, effectiveEnd))); setMessage(`${frames.length} keyframes pasted.`)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid keyframe clipboard.') }
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.invalidClipboard')) }
   }
   const exportScene = () => {
     try {
@@ -1603,8 +1607,8 @@ export function SceneAnimatorPanel() {
       link.click()
       window.setTimeout(() => { link.remove(); URL.revokeObjectURL(url) }, 1500)
       const localAssets = current.layers.filter(layer => layer.type !== 'camera' && layer.source.startsWith('blob:')).length
-      setMessage(localAssets > 0 ? `Scene JSON exported. ${localAssets} local asset${localAssets === 1 ? '' : 's'} will require reassignment when imported.` : 'Scene JSON exported.')
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Scene JSON could not be exported.') }
+      setMessage(localAssets > 0 ? t('animator.jsonExportedLocal', { count: localAssets }) : t('animator.jsonExported'))
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.jsonExportFailed')) }
   }
   const importScene = (text: string, successMessage?: string): boolean => {
     try {
@@ -1705,22 +1709,22 @@ export function SceneAnimatorPanel() {
       const previousObjectUrls = new Set(sceneRef.current.layers.flatMap(layer => [layer.source, layer.thumbnail].filter((value): value is string => Boolean(value?.startsWith('blob:')))))
       previousObjectUrls.forEach(url => URL.revokeObjectURL(url))
       const missingAssets = layers.filter(layer => layer.type !== 'camera' && layer.missingAsset).length
-      localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(successMessage ?? `Scene imported: ${layers.length} layer${layers.length === 1 ? '' : 's'}.${missingAssets ? ` Reassign ${missingAssets} missing asset${missingAssets === 1 ? '' : 's'}.` : ''}`); setJsonOpen(false)
+      localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(successMessage ?? `${t('animator.imported', { count: layers.length })}${missingAssets ? t('animator.reassignMissing', { count: missingAssets }) : ''}`); setJsonOpen(false)
       return true
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.'); return false }
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.invalidSceneJson')); return false }
   }
   const importSceneFile = async (file: File) => {
     try {
       if (file.size > 20 * 1024 * 1024) throw new Error('Scene JSON is unexpectedly large (maximum 20 MB).')
       importScene(await file.text())
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'The scene file could not be read.') }
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.sceneReadFailed')) }
   }
   const loadMotionFile = async (file: File) => {
     try {
       if (file.size > 2 * 1024 * 1024) throw new Error('Movement JSON is unexpectedly large (maximum 2 MB).')
       setMotionText((await file.text()).replace(/^\uFEFF/, '').trim())
-      setMessage(`Movement JSON loaded from ${file.name}.`)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'The movement file could not be read.') }
+      setMessage(t('animator.motionLoaded', { name: file.name }))
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.motionReadFailed')) }
   }
   useEffect(() => {
     const pending = sessionStorage.getItem(PENDING_SCENE_KEY)
@@ -1735,7 +1739,7 @@ export function SceneAnimatorPanel() {
       const parsed = JSON.parse(autosave) as Partial<AnimatorScene>
       if (parsed.version === 1 && Array.isArray(parsed.layers) && parsed.layers.length > 0) {
         importScene(autosave)
-        setMessage('Autosave restored. Local assets may need reassignment.')
+        setMessage(t('animator.autosaveRestored'))
       }
     } catch { localStorage.removeItem(AUTOSAVE_KEY) }
     // Scene restoration is intentionally a one-time mount operation.
@@ -1748,11 +1752,11 @@ export function SceneAnimatorPanel() {
         localStorage.setItem(AUTOSAVE_KEY, serializeSceneFile(scene))
         setLastAutosaveAt(Date.now())
       } catch {
-        setMessage('Autosave could not be written in this browser.')
+        setMessage(t('animator.autosaveFailed'))
       }
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [scene])
+  }, [scene, t])
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return
@@ -1833,14 +1837,14 @@ export function SceneAnimatorPanel() {
   // deterministic MP4 path below so slow WebGL frames never change timing.
   const recordCompatibilityWebm = (): Promise<Blob> => new Promise((resolve, reject) => {
     if (recording) { reject(new Error('A recording is already in progress.')); return }
-    if (playing) { const error = new Error('Wait for Preview to finish before recording.'); setMessage(error.message); reject(error); return }
+    if (playing) { const error = new Error(t('animator.waitPreview')); setMessage(error.message); reject(error); return }
     prepareFacePlayback()
     const current = sceneRef.current
     const currentFps: SceneFrameRate = current.fps === 60 ? 60 : 30
-    if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) { const error = new Error('Add a visible visual layer before recording.'); setMessage(error.message); reject(error); return }
-    if (!('MediaRecorder' in window)) { const error = new Error('This browser cannot record the scene.'); setMessage(error.message); reject(error); return }
+    if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) { const error = new Error(t('animator.addVisibleLayer')); setMessage(error.message); reject(error); return }
+    if (!('MediaRecorder' in window)) { const error = new Error(t('animator.cannotRecord')); setMessage(error.message); reject(error); return }
     const canvas = document.createElement('canvas'); canvas.width = current.width; canvas.height = current.height; const context = canvas.getContext('2d'); if (!context) { reject(new Error('Could not create a recording canvas.')); return }
-    if (!('filter' in context) && current.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) { const error = new Error('This browser can preview layer filters but cannot capture them. Use Chromium/Chrome to record this scene.'); setMessage(error.message); reject(error); return }
+    if (!('filter' in context) && current.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) { const error = new Error(t('animator.filterCapture')); setMessage(error.message); reject(error); return }
     let stream: MediaStream | null = null
     let recorder: MediaRecorder | null = null
     const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'
@@ -1850,7 +1854,7 @@ export function SceneAnimatorPanel() {
       recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond })
     } catch (error) {
       stream?.getTracks().forEach(track => track.stop())
-      const message = error instanceof Error ? `Recording could not start: ${error.message}` : 'Recording could not start in this browser.'
+      const message = error instanceof Error ? t('animator.recordingStartFailedDetail', { message: error.message }) : t('animator.recordingStartFailed')
       setMessage(message)
       reject(new Error(message))
       return
@@ -1873,7 +1877,7 @@ export function SceneAnimatorPanel() {
       if (failed) return
       failed = true
       const detail = error instanceof Error ? error.message : String(error || 'Unknown recorder error')
-      setMessage(`Recording failed: ${detail}`)
+      setMessage(t('animator.recordingFailed', { detail }))
       if (mediaRecorder.state !== 'inactive') {
         try { mediaRecorder.stop() } catch { clearCapture() }
       } else clearCapture()
@@ -2034,15 +2038,15 @@ export function SceneAnimatorPanel() {
 
   const recordToBlob = async (): Promise<Blob> => {
     if (recording) throw new Error('A recording is already in progress.')
-    if (playing) throw new Error('Wait for Preview to finish before recording.')
+    if (playing) throw new Error(t('animator.waitPreview'))
     prepareFacePlayback()
     if (!('VideoEncoder' in window) || typeof VideoEncoder.isConfigSupported !== 'function') {
-      setMessage('This browser lacks deterministic WebCodecs export; using compatibility recording.')
+      setMessage(t('animator.webcodecsFallback'))
       return recordCompatibilityWebm()
     }
     const current = sceneRef.current
     const fps: SceneFrameRate = current.fps === 60 ? 60 : 30
-    if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) throw new Error('Add a visible visual layer before recording.')
+    if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) throw new Error(t('animator.addVisibleLayer'))
     const canvas = document.createElement('canvas')
     canvas.width = current.width
     canvas.height = current.height
@@ -2078,7 +2082,7 @@ export function SceneAnimatorPanel() {
       resetSceneMedia()
       setRecording(true)
       setProgress(0)
-      setMessage(`Rendering ${frameCount} exact frames at ${fps} FPS…`)
+      setMessage(t('animator.renderingFrames', { count: frameCount, fps }))
       for (let index = 0; index < frameCount; index += 1) {
         if (encoderError) throw encoderError
         const seconds = Math.min(current.duration, index / fps)
@@ -2116,7 +2120,7 @@ export function SceneAnimatorPanel() {
       workspace,
     })
     await loadOutputs()
-    setMessage(`MP4 saved in Videos as ${saved.name}`)
+    setMessage(t('animator.mp4Saved', { name: saved.name }))
     return saved
   }
   const record = () => {
@@ -2126,7 +2130,7 @@ export function SceneAnimatorPanel() {
     void waitForModelViewers()
       .then(() => recordToBlob())
       .then(blob => publishRecording(blob, sceneRef.current))
-      .catch(error => setMessage(error instanceof Error ? error.message : 'Failed to export MP4.'))
+      .catch(error => setMessage(error instanceof Error ? error.message : t('animator.mp4Failed')))
       .finally(() => setPublishing(false))
   }
   const waitForModelViewers = async () => {
@@ -2163,28 +2167,28 @@ export function SceneAnimatorPanel() {
   }
   const applyRecipeScene = async (recipe: SceneRecipe, nextScene: Scene, status: (message: string) => void, prompt: string) => {
     recipeContextRef.current = { prompt }
-    importScene(JSON.stringify(nextScene), `Recipe scene loaded: ${nextScene.name}`)
+    importScene(JSON.stringify(nextScene), t('animator.recipeLoaded', { name: nextScene.name }))
     await new Promise(resolve => window.setTimeout(resolve, 120))
-    status('Waiting for 3D models to paint…')
+    status(t('animator.waitingModels'))
     await waitForModelViewers()
     if (recipe.record !== true && recipe.save !== true) {
       status('3D models ready. Scene mounted; press Export MP4 when ready.')
     }
     if (recipe.record === true) {
-      status('Recording scene…')
+      status(t('animator.recordingScene'))
       const blob = await recordToBlob()
-      status('Converting to MP4 and adding it to Videos…')
+      status(t('animator.convertingMp4'))
       const saved = await publishRecording(blob, nextScene)
-      status(`MP4 ready in Videos: ${saved.name}`)
+      status(t('animator.mp4Ready', { name: saved.name }))
     }
     if (recipe.save === true) {
-      status('Saving scene…')
+      status(t('animator.savingScene'))
       await persistScene()
     }
   }
   const persistScene = async (): Promise<string | null> => {
     const current = sceneRef.current
-    if (!current.layers.length) { setMessage('Add at least one layer before saving.'); return null }
+    if (!current.layers.length) { setMessage(t('animator.addLayerBeforeSave')); return null }
     setSaving(true); setMessage(null)
     try {
       const preview = document.createElement('canvas')
@@ -2202,10 +2206,10 @@ export function SceneAnimatorPanel() {
       const persisted = { ...current, layers }
       const saved = await saveSceneOutput(persisted, preview.toDataURL('image/png'), workspace)
       replaceScene(persisted); localFilesRef.current = {}; await loadOutputs()
-      setMessage(`Scene saved to HocusPocus as ${saved.name}`)
+      setMessage(t('animator.sceneSaved', { name: saved.name }))
       return saved.name
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Failed to save scene.')
+      setMessage(error instanceof Error ? error.message : t('animator.saveFailed'))
       return null
     } finally {
       setSaving(false)
@@ -2223,8 +2227,8 @@ export function SceneAnimatorPanel() {
       next.identityReference = { ...asset, id: `${asset.id}-identity`, kind: 'image' }
       next.provenance = [{ method: 'scene-layer-assignment', sourceLayerId: selected?.id, workspace }]
       setCharacterKitDraft(next); setCharacterKitName(''); setCharacterKitPoseId('base'); setCharacterKitError(null)
-      setMessage(`Created a draft Character Kit for ${next.name}. Save it when the reviewed pieces are assigned.`)
-    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : 'Could not create Character Kit.') }
+      setMessage(t('animator.kitCreated', { name: next.name }))
+    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : t('animator.kitCreateFailed')) }
   }
   const assignSelectedToKit = (slot: 'base' | 'pose' | 'mouth' | 'blink') => {
     if (!characterKitDraft) return
@@ -2238,14 +2242,14 @@ export function SceneAnimatorPanel() {
         if (slot === 'mouth') return { ...current, mouth: { ...current.mouth, [characterKitMouthState]: { ...asset, kind: 'overlay' } }, updatedAt: now }
         return { ...current, eyes: { ...current.eyes, blink: { ...asset, kind: 'overlay' } }, updatedAt: now }
       })
-      setCharacterKitError(null); setMessage(`Assigned ${asset.name} to the ${slot} slot.`)
-    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : 'Could not assign this layer.') }
+      setCharacterKitError(null); setMessage(t('animator.assignedSlot', { name: asset.name, slot }))
+    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : t('animator.assignFailed')) }
   }
   const captureKitAnchor = () => {
-    if (!characterKitDraft || !selected || !isCutoutFaceLayer(selected)) { setCharacterKitError('Select a bound mouth or blink overlay first.'); return }
+    if (!characterKitDraft || !selected || !isCutoutFaceLayer(selected)) { setCharacterKitError(t('animator.selectOverlayFirst')); return }
     const poseLayerId = selected.faceBinding?.poseLayerId ?? (selected.relationship?.type === 'parent' ? selected.relationship.targetLayerId : '')
     const pose = scene.layers.find(layer => layer.id === poseLayerId)
-    if (!pose) { setCharacterKitError('Bind this face overlay to its character pose before capturing the anchor.'); return }
+    if (!pose) { setCharacterKitError(t('animator.bindBeforeAnchor')); return }
     const anchor = captureCharacterFaceAnchor(pose, selected)
     const poseId = characterKitPoseId.trim() || 'base'
     const role = selected.faceBinding?.role ?? (/eye|blink/i.test(selected.name) ? 'blink' : 'mouth')
@@ -2263,7 +2267,7 @@ export function SceneAnimatorPanel() {
       },
       updatedAt: new Date().toISOString(),
     } : current)
-    setCharacterKitError(null); setMessage(`Captured the ${role === 'blink' ? 'eye' : 'mouth'} anchor for ${poseId}.`)
+    setCharacterKitError(null); setMessage(role === 'blink' ? t('animator.capturedAnchorEye', { pose: poseId }) : t('animator.capturedAnchorMouth', { pose: poseId }))
   }
   const persistCharacterKitDraft = async (kit: CharacterKit, announce = false) => {
     try {
@@ -2280,7 +2284,7 @@ export function SceneAnimatorPanel() {
       })
       if (announce) setMessage(`${next.name} guardado.`)
     } catch (error) {
-      setCharacterKitError(error instanceof Error ? error.message : 'Could not save Character Kit. Reload the library and try again.')
+      setCharacterKitError(error instanceof Error ? error.message : t('animator.kitSaveFailed'))
     }
   }
   const persistCharacterKit = async () => {
@@ -2313,16 +2317,16 @@ export function SceneAnimatorPanel() {
       }
       updateScene(current => ({ ...current, layers: normalizeZ([...current.layers, ...mounted]) }))
       setSelectedId(mounted[0].id); setMessage(`${characterKitDraft.name} está en la escena. Preview mueve boca y parpadeo.`)
-    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : 'Could not mount Character Kit.') }
+    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : t('animator.kitMountFailed')) }
   }
   const removeCharacterKit = async () => {
-    if (!characterKitDraft || !window.confirm(`Delete Character Kit “${characterKitDraft.name}”? Scene assets and generated files will remain untouched.`)) return
+    if (!characterKitDraft || !window.confirm(t('animator.deleteKitConfirm', { name: characterKitDraft.name }))) return
     setCharacterKitBusy(true); setCharacterKitError(null)
     try {
       const library = await deleteCharacterKit(workspace, characterKitLibrary, characterKitDraft.id)
       setCharacterKitLibrary(library); setCharacterKitDraft(library.kits[library.activeId] ? structuredClone(library.kits[library.activeId]) : null)
-      setMessage('Character Kit removed. Its source assets were not deleted.')
-    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : 'Could not remove Character Kit.') }
+      setMessage(t('animator.kitRemoved'))
+    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : t('animator.kitRemoveFailed')) }
     finally { setCharacterKitBusy(false) }
   }
   const numberInput = (label: string, value: number, change: (value: number) => void, min = -100, max = 200, step = 1, disabled = false) => <label className="text-[10px] text-text-muted">{label}<input type="number" min={min} max={max} step={step} value={value} disabled={disabled} onChange={event => { const next = Number(event.target.value); if (Number.isFinite(next)) change(next) }} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50" /></label>
@@ -2333,7 +2337,7 @@ export function SceneAnimatorPanel() {
     const prop = asset(narrativeProp)
     const foreground = asset(narrativeForeground)
     const missing = narrativeTemplate.assetSlots.find(slot => slot.required && !({ hero, plate, prop, foreground }[slot.id]))
-    if (missing) { setMessage(`Choose ${missing.label} before mounting this narrative scene.`); return }
+    if (missing) { setMessage(t('animator.chooseBeforeMount', { label: missing.label })); return }
     const asInput = (item: typeof hero) => item ? {
       source: item.url,
       type: item.type === 'model3d' ? 'model3d' as const : item.type === 'video' ? 'video' as const : 'image' as const,
@@ -2371,25 +2375,25 @@ export function SceneAnimatorPanel() {
         durationSeconds: sceneRef.current.duration,
       })
       attachSceneAudio(clip.filename, clip.filename.replace(/\.[^.]+$/, ''), 'speech', prompt, selectedSpeechModel)
-      setSceneAudioPrompt(''); await loadOutputs(); setMessage('Generated speech attached to this scene.')
+      setSceneAudioPrompt(''); await loadOutputs(); setMessage(t('animator.speechAttached'))
     } catch (error) {
-      setSceneAudioError(error instanceof Error ? error.message : 'Could not generate scene speech.')
+      setSceneAudioError(error instanceof Error ? error.message : t('animator.speechFailed'))
     } finally {
       setSceneAudioBusy(false)
     }
   }
   const analyzeSceneRhythm = async () => {
     const track = selectedRhythmTrack
-    if (!track) { setRhythmError('Attach an MP3, WAV or generated music track first.'); return }
+    if (!track) { setRhythmError(t('animator.attachAudioFirst')); return }
     setRhythmBusy(true); setRhythmError(null)
     try {
       const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
       if (!analysis.beats.length) throw new Error('No stable beat grid was detected in this track.')
       setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
-      setMessage(`Rhythm ready: ${analysis.bpm.toFixed(1)} BPM · ${analysis.beats.length} beats · ${analysis.downbeats.length} downbeats.`)
+      setMessage(t('animator.rhythmReady', { bpm: analysis.bpm.toFixed(1), beats: analysis.beats.length, downbeats: analysis.downbeats.length }))
     } catch (error) {
       setRhythmAnalysis(null); setRhythmAnalysisTrackId('')
-      setRhythmError(error instanceof Error ? error.message : 'Could not identify the rhythm of this track.')
+      setRhythmError(error instanceof Error ? error.message : t('animator.rhythmFailed'))
     } finally {
       setRhythmBusy(false)
     }
@@ -2397,9 +2401,9 @@ export function SceneAnimatorPanel() {
   const applySceneRhythm = () => {
     const track = selectedRhythmTrack
     const analysis = activeRhythmAnalysis
-    if (!track || !analysis) { setRhythmError('Analyze the selected audio track before applying rhythm.'); return }
-    if (!selected) { setRhythmError('Select the 3D object, visual layer or camera that should react to the music.'); return }
-    if (selected.locked) { setRhythmError(`Unlock ${selected.name} before generating beat keyframes.`); return }
+    if (!track || !analysis) { setRhythmError(t('animator.analyzeBeforeApply')); return }
+    if (!selected) { setRhythmError(t('animator.selectRhythmTarget')); return }
+    if (selected.locked) { setRhythmError(t('animator.unlockBeforeRhythm', { name: selected.name })); return }
     try {
       const map = buildSceneRhythmMap(analysis, track.startTime, scene.duration, rhythmCueSource)
       if (!map.cues.length) throw new Error('The detected beats do not overlap the current scene duration and audio start time.')
@@ -2410,9 +2414,9 @@ export function SceneAnimatorPanel() {
         intensity: rhythmIntensity,
       }) as AnimatorLayer)
       setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(map.cues[0].time / scene.duration); setRhythmError(null)
-      setMessage(`Applied ${map.cues.length} ${rhythmCueSource} from ${track.name} to ${selected.name}. The result is ordinary editable keyframes.`)
+      setMessage(t('animator.appliedRhythm', { count: map.cues.length, source: rhythmCueSource, track: track.name, name: selected.name }))
     } catch (error) {
-      setRhythmError(error instanceof Error ? error.message : 'Could not turn this rhythm into scene keyframes.')
+      setRhythmError(error instanceof Error ? error.message : t('animator.rhythmApplyFailed'))
     }
   }
   const importSceneRef = useRef(importScene)
@@ -2579,7 +2583,7 @@ export function SceneAnimatorPanel() {
         const saved = await publishRecordingRef.current(blob, sceneRef.current)
         return `He terminado y publicado el MP4 de “${current.name}” en Videos como ${saved.name}.`
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'No se pudo exportar la escena 3D a MP4.')
+        setMessage(error instanceof Error ? error.message : t('animator.export3dFailed'))
         throw error
       } finally {
         setPublishing(false)
@@ -2611,7 +2615,7 @@ export function SceneAnimatorPanel() {
       : `He abierto “${next.name}”; la escena no contiene capas.`
     setMessage(result)
     return result
-  }), [workspace])
+  }), [workspace, t])
   useEffect(() => listenForAgentSceneRhythm(async request => {
     const normalize = normalizeSceneLookupName
     const current = sceneRef.current
@@ -2681,14 +2685,14 @@ export function SceneAnimatorPanel() {
   }), [outputs, selectedId])
   const animateCutoutDialogue = () => {
     const text = cutoutDialogueText.trim()
-    if (!text) { setMessage('Write the dialogue line before animating the mouth.'); return }
+    if (!text) { setMessage(t('animator.writeDialogueFirst')); return }
     const poseLayerId = selected?.faceBinding?.poseLayerId
       ?? (selected?.relationship?.type === 'parent' && isCutoutFaceLayer(selected) ? selected.relationship.targetLayerId : undefined)
       ?? (selected && selected.type !== 'camera' && selected.type !== 'effect' && !isCutoutFaceLayer(selected) ? selected.id : undefined)
     const mouthLayers = findCutoutMouthLayers(scene.layers, poseLayerId)
     const primary = mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round
-    if (!primary) { setMessage('Add or mount an Open, Small, Wide or Round mouth overlay first. The cutout talking-head template includes one.'); return }
-    if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage('Unlock the mouth layers before animating dialogue.'); return }
+    if (!primary) { setMessage(t('animator.addMouthFirst')); return }
+    if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage(t('animator.unlockMouths')); return }
     const start = Math.max(0, Math.min(scene.duration, cutoutDialogueStart))
     const end = Math.max(start + 1 / fps, Math.min(scene.duration, cutoutDialogueEnd))
     const plan = planCutoutDialogue(text, start, end, fps)
@@ -2701,7 +2705,7 @@ export function SceneAnimatorPanel() {
       dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.some(id => Object.keys(frames).includes(id))), { id: beatId, text, start, end, mouthLayerIds: Object.keys(frames), ...(audioTrackId ? { audioTrackId } : {}), confidence: 'known-text' }],
     }))
     setSelectedId(primary.id); setSelectedKeyframeId(null); setProgress(start / scene.duration)
-    setMessage(`Animated ${plan.visemes.length} mouth beats across ${Object.keys(frames).length} available mouth state${Object.keys(frames).length === 1 ? '' : 's'}. Edit the keyframes in the timeline if needed.`)
+    setMessage(t('animator.animatedMouths', { beats: plan.visemes.length, states: Object.keys(frames).length }))
   }
   const animateCutoutDialogueFromAudio = async () => {
     const poseLayerId = selected?.faceBinding?.poseLayerId
@@ -2710,9 +2714,9 @@ export function SceneAnimatorPanel() {
     const mouthLayers = findCutoutMouthLayers(scene.layers, poseLayerId)
     const primary = mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round
     const track = selectedDialogueTrack
-    if (!primary) { setMessage('Add or mount an Open, Small, Wide or Round mouth overlay first.'); return }
-    if (!track) { setMessage('Attach or generate a speech track first.'); return }
-    if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage('Unlock the mouth layers before animating dialogue.'); return }
+    if (!primary) { setMessage(t('animator.addMouthShort')); return }
+    if (!track) { setMessage(t('animator.attachSpeechFirst')); return }
+    if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage(t('animator.unlockMouths')); return }
     setCutoutDialogueBusy(true)
     try {
       const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: true, extract_vocals: true, lyrics_hint: track.prompt })
@@ -2738,23 +2742,23 @@ export function SceneAnimatorPanel() {
       }))
       setCutoutDialogueText(segments.map(segment => segment.text).join(' ')); setCutoutDialogueStart(plans[0].start); setCutoutDialogueEnd(plans.at(-1)!.end)
       setSelectedId(primary.id); setProgress(plans[0].start / scene.duration)
-      setMessage(`Detected ${units.length} spoken ${units.length === 1 ? 'unit' : 'units'} from ${track.name} and animated the mouth.`)
+      setMessage(t('animator.detectedSpeech', { count: units.length, name: track.name }))
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not analyze the speech track.')
+      setMessage(error instanceof Error ? error.message : t('animator.speechAnalyzeFailed'))
     } finally {
       setCutoutDialogueBusy(false)
     }
   }
   const bindCutoutFace = () => {
     if (!selected || selected.type === 'camera' || selected.type === 'effect' || isCutoutFaceLayer(selected)) {
-      setMessage('Select the current character pose layer before binding its mouth and blink overlays.')
+      setMessage(t('animator.selectPoseFirst'))
       return
     }
     const next = bindCutoutFaceToPose(scene.layers, selected.id) as AnimatorLayer[]
     const bound = next.filter(layer => layer.relationship?.type === 'parent' && layer.relationship.targetLayerId === selected.id && isCutoutFaceLayer(layer)).length
-    if (!bound) { setMessage('Add mouth or blink overlays before binding the face to this pose.'); return }
+    if (!bound) { setMessage(t('animator.addOverlaysFirst')); return }
     updateScene(current => ({ ...current, layers: bindCutoutFaceToPose(current.layers, selected.id) as AnimatorLayer[] }))
-    setMessage(`Bound ${bound} face overlay${bound === 1 ? '' : 's'} to ${selected.name}. Their current placement is now specific to this pose.`)
+    setMessage(t('animator.boundOverlays', { count: bound, name: selected.name }))
   }
   const updateDialogueBeat = (beatId: string, patch: Partial<SceneDialogueBeat>) => {
     updateScene(current => {
@@ -2767,9 +2771,9 @@ export function SceneAnimatorPanel() {
   const assignDialogueBeatSpeaker = (beatId: string, poseLayerId: string) => {
     const mouths = findCutoutMouthLayers(scene.layers, poseLayerId)
     const mouthLayerIds = Object.values(mouths).flatMap(layer => layer ? [layer.id] : []).filter((id, index, ids) => ids.indexOf(id) === index)
-    if (!mouthLayerIds.length) { setMessage('This pose has no assigned mouth kit. Bind or mount its face first.'); return }
+    if (!mouthLayerIds.length) { setMessage(t('animator.noMouthKit')); return }
     updateDialogueBeat(beatId, { mouthLayerIds })
-    setMessage(`Dialogue assigned to ${scene.layers.find(layer => layer.id === poseLayerId)?.name ?? poseLayerId}.`)
+    setMessage(t('animator.dialogueAssigned', { name: scene.layers.find(layer => layer.id === poseLayerId)?.name ?? poseLayerId }))
   }
   const removeDialogueBeat = (beatId: string) => {
     updateScene(current => {
@@ -2781,7 +2785,7 @@ export function SceneAnimatorPanel() {
   }
   const proposeCopilotEdit = async () => {
     if (!selected || !copilotIntent.trim()) return
-    if (selected.locked) { setCopilotError('Unlock this layer before asking the copilot to change it.'); return }
+    if (selected.locked) { setCopilotError(t('animator.unlockBeforeCopilot')); return }
     setCopilotBusy(true); setCopilotError(null); setCopilotProposal(null)
     try {
       const text = await generateLlmText({
@@ -2794,14 +2798,14 @@ export function SceneAnimatorPanel() {
       })
       setCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, selected.id, 'layer', clipsByLayer[selected.id] ?? [])); setCopilotProposalRevision(historyRevisionRef.current)
     } catch (error) {
-      setCopilotError(error instanceof Error ? error.message : 'The copilot could not prepare this edit.')
+      setCopilotError(error instanceof Error ? error.message : t('animator.copilotFailed'))
     } finally {
       setCopilotBusy(false)
     }
   }
   const applyCopilotEdit = () => {
     if (!copilotProposal) return
-    if (copilotProposalRevision !== historyRevisionRef.current) { setCopilotProposal(null); setCopilotProposalRevision(null); setCopilotError('The scene changed while this proposal was being reviewed. Ask the copilot again.'); return }
+    if (copilotProposalRevision !== historyRevisionRef.current) { setCopilotProposal(null); setCopilotProposalRevision(null); setCopilotError(t('animator.sceneChanged')); return }
     const proposal = copilotProposal
     const selectedLayerId = selected?.id
     updateScene(current => ({
@@ -2818,7 +2822,7 @@ export function SceneAnimatorPanel() {
         model: 'configured-llm',
       }].slice(-100),
     }))
-    setMessage(`Copilot applied: ${copilotProposal.summary}`)
+    setMessage(t('animator.copilotApplied', { summary: copilotProposal.summary }))
     setCopilotProposal(null); setCopilotProposalRevision(null)
   }
   const proposeSceneCopilotEdit = async () => {
@@ -2835,14 +2839,14 @@ export function SceneAnimatorPanel() {
       })
       setSceneCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, undefined, 'scene')); setSceneCopilotProposalRevision(historyRevisionRef.current)
     } catch (error) {
-      setSceneCopilotError(error instanceof Error ? error.message : 'The copilot could not prepare this scene edit.')
+      setSceneCopilotError(error instanceof Error ? error.message : t('animator.sceneCopilotFailed'))
     } finally {
       setSceneCopilotBusy(false)
     }
   }
   const applySceneCopilotEdit = () => {
     if (!sceneCopilotProposal) return
-    if (sceneCopilotProposalRevision !== historyRevisionRef.current) { setSceneCopilotProposal(null); setSceneCopilotProposalRevision(null); setSceneCopilotError('The scene changed while this proposal was being reviewed. Ask the copilot again.'); return }
+    if (sceneCopilotProposalRevision !== historyRevisionRef.current) { setSceneCopilotProposal(null); setSceneCopilotProposalRevision(null); setSceneCopilotError(t('animator.sceneChanged')); return }
     const proposal = sceneCopilotProposal
     updateScene(current => ({
       ...(applySceneCopilotProposal(current, proposal) as AnimatorScene),
@@ -2852,20 +2856,20 @@ export function SceneAnimatorPanel() {
         operations: proposal.operations.map(operation => ({ ...operation })), validation: 'applied' as const, model: 'configured-llm',
       }].slice(-100),
     }))
-    setMessage(`Scene copilot applied: ${proposal.summary}`)
+    setMessage(t('animator.sceneCopilotApplied', { summary: proposal.summary }))
     setSceneCopilotProposal(null); setSceneCopilotProposalRevision(null)
   }
   const dictateCopilotIntent = () => {
     const root = window as unknown as { SpeechRecognition?: SpeechRecognizerConstructor; webkitSpeechRecognition?: SpeechRecognizerConstructor }
     const Recognition = root.SpeechRecognition ?? root.webkitSpeechRecognition
-    if (!Recognition) { setCopilotError('Voice input is not available in this browser. Type the instruction instead.'); return }
+    if (!Recognition) { setCopilotError(t('animator.voiceUnavailable')); return }
     const recognition = new Recognition()
     recognition.lang = navigator.language || 'en-US'; recognition.continuous = false; recognition.interimResults = false
     recognition.onresult = event => {
       const transcript = Array.from(event.results).flatMap(result => Array.from(result)).map(result => result.transcript).join(' ').trim()
       if (transcript) setCopilotIntent(current => current ? `${current} ${transcript}` : transcript)
     }
-    recognition.onerror = () => setCopilotError('Voice input was unavailable. You can still type the instruction.')
+    recognition.onerror = () => setCopilotError(t('animator.voiceError'))
     recognition.onend = () => setCopilotListening(false)
     setCopilotError(null); setCopilotListening(true); recognition.start()
   }
@@ -2891,7 +2895,7 @@ export function SceneAnimatorPanel() {
       const layerShortSide = Math.min(previewWidth * (layer.type === 'model3d' ? .52 : 1) * state.scale, previewHeight * (layer.type === 'model3d' ? .75 : 1) * state.scale)
       const maskStyle: CSSProperties = { overflow: 'hidden', borderRadius: effects.mask === 'ellipse' ? '50%' : effects.mask === 'rounded' ? `${layerShortSide * effects.maskRadius / 100}px` : undefined }
       const isPrimary = index === 0
-      if (layer.missingAsset) return isPrimary ? <button key={`${layer.id}-missing`} onClick={() => setSelectedId(layer.id)} className={`absolute flex items-center justify-center border border-dashed border-red-400/70 bg-red-500/10 text-[10px] text-red-300 ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`} style={common}>Missing asset</button> : null
+      if (layer.missingAsset) return isPrimary ? <button key={`${layer.id}-missing`} onClick={() => setSelectedId(layer.id)} className={`absolute flex items-center justify-center border border-dashed border-red-400/70 bg-red-500/10 text-[10px] text-red-300 ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`} style={common}>{t('animator.missingAsset')}</button> : null
       const atmosphere = layer.type === 'effect' ? normalizedAtmosphere(layer.atmosphere) : null
       const media = atmosphere
         ? <AtmospherePreview atmosphere={atmosphere} seconds={progress * scene.duration} width={previewWidth} height={previewHeight} layerId={layer.id} />
@@ -2900,7 +2904,7 @@ export function SceneAnimatorPanel() {
         : layer.type === 'video'
           ? <video data-layer-id={layer.id} ref={isPrimary ? element => { videoRefs.current[layer.id] = element } : undefined} src={layer.source} muted playsInline preload="auto" onLoadedMetadata={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} className={`h-full w-full ${layer.fill ? 'object-cover' : 'object-contain'}`} />
           : <img data-layer-id={layer.id} src={layer.source} alt={layer.name} draggable={false} className={`h-full w-full select-none ${layer.fill ? 'object-cover' : 'object-contain'}`} />
-      return <div key={`${layer.id}-${index}`} style={common} onPointerDown={layer.type === 'effect' ? undefined : edgeMove} onPointerMove={layer.type === 'effect' ? undefined : moveGesture} onPointerUp={layer.type === 'effect' ? undefined : endGesture} onPointerCancel={layer.type === 'effect' ? undefined : endGesture} className={`absolute touch-none ${layer.type === 'effect' ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing'} ${selection && isPrimary ? 'ring-2 ring-accent-blue ring-inset' : ''}`}><div className="h-full w-full" style={maskStyle}><div className="h-full w-full" style={effectStyle}>{media}</div></div>{selection && isPrimary && layer.type !== 'effect' && <button aria-label="Resize layer" onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
+      return <div key={`${layer.id}-${index}`} style={common} onPointerDown={layer.type === 'effect' ? undefined : edgeMove} onPointerMove={layer.type === 'effect' ? undefined : moveGesture} onPointerUp={layer.type === 'effect' ? undefined : endGesture} onPointerCancel={layer.type === 'effect' ? undefined : endGesture} className={`absolute touch-none ${layer.type === 'effect' ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing'} ${selection && isPrimary ? 'ring-2 ring-accent-blue ring-inset' : ''}`}><div className="h-full w-full" style={maskStyle}><div className="h-full w-full" style={effectStyle}>{media}</div></div>{selection && isPrimary && layer.type !== 'effect' && <button aria-label={t('animator.resizeLayer')} onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
     }).concat(seamCoverStates(layer).map((state, index) => {
       const kind = normalizedStrip(layer.strip).seamOccluder.kind
       const coverScale = normalizedStrip(layer.strip).seamOccluder.scale
@@ -2920,32 +2924,32 @@ export function SceneAnimatorPanel() {
 
   return <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-bg-tertiary xl:flex-row">
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setLibraryOpen(true)} disabled={playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><FolderOpen size={12} /> Open scene</button><button type="button" onClick={() => void persistScene()} disabled={saving || !scene.layers.length || playing || recording || publishing} className="rounded border border-accent-blue/40 bg-accent-blue/10 px-2.5 py-1.5 text-[10px] text-accent-blue flex items-center gap-1 disabled:opacity-50">{saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}{saving ? 'Saving…' : 'Save scene'}</button><button onClick={play} disabled={!scene.layers.length || playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording || playing || publishing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording || publishing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : publishing ? 'Saving MP4…' : 'Export MP4'}</button></div></div>
-      <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? `Autosaved ${new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Autosave waiting…'}</span></div>
-      <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{label}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">Frame rate{([30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{rate} FPS</button>)}</span></div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label={t('animator.sceneNameAria')} className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setLibraryOpen(true)} disabled={playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><FolderOpen size={12} /> {t('animator.openScene')}</button><button type="button" onClick={() => void persistScene()} disabled={saving || !scene.layers.length || playing || recording || publishing} className="rounded border border-accent-blue/40 bg-accent-blue/10 px-2.5 py-1.5 text-[10px] text-accent-blue flex items-center gap-1 disabled:opacity-50">{saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}{saving ? t('animator.saving') : t('animator.saveScene')}</button><button onClick={play} disabled={!scene.layers.length || playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> {t('animator.preview')}</button><button onClick={record} disabled={recording || playing || publishing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording || publishing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? t('animator.recording') : publishing ? t('animator.savingMp4') : t('animator.exportMp4')}</button></div></div>
+      <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title={t('animator.undoTitle')} className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title={t('animator.redoTitle')} className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? t('animator.autosaved', { time: new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }) : t('animator.autosaveWaiting')}</span></div>
+      <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{t(`resolutions.${label === 'HD landscape' ? 'hdLandscape' : label === 'Full HD landscape' ? 'fullHdLandscape' : label === '4K landscape' ? 'fourKLandscape' : label === 'Square' ? 'square' : label === 'HD portrait' ? 'hdPortrait' : label === 'Full HD portrait' ? 'fullHdPortrait' : 'fourKPortrait'}`)}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">{t('animator.frameRate')}{([30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{t('animator.fps', { rate })}</button>)}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary p-1.5">
-        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, showGrid: !composition.showGrid } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.showGrid ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-border text-text-muted'}`}><Grid3X3 size={10} /> Grid</button>
-        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, snap: !composition.snap } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.snap ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border text-text-muted'}`}><Magnet size={10} /> Snap</button>
-        <label className="flex items-center gap-1 text-[8px] text-text-muted">Grid %<input type="number" min={1} max={50} step={1} value={composition.gridSize} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateScene(current => ({ ...current, composition: { ...composition, gridSize: Math.max(1, Math.min(50, value)) } })) }} className="w-12 rounded border border-border bg-bg-primary px-1 py-1 text-[9px]" /></label>
-        <label className="ml-auto flex items-center gap-1 text-[8px] text-text-muted">Safe area<select value={composition.safeArea} onChange={event => updateScene(current => ({ ...current, composition: { ...composition, safeArea: event.target.value as NonNullable<Scene['composition']>['safeArea'] } }))} className="rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="none">Off</option><option value="action">Action 90%</option><option value="title">Title 80%</option><option value="vertical">9:16 social</option><option value="all">All guides</option></select></label>
-        {selected && isVisualLayer(selected) && <><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, 50, selected.transform.y, false)} title="Center horizontally" className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignHorizontalJustifyCenter size={11} /></button><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, selected.transform.x, 50, false)} title="Center vertically" className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignVerticalJustifyCenter size={11} /></button></>}
+        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, showGrid: !composition.showGrid } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.showGrid ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-border text-text-muted'}`}><Grid3X3 size={10} /> {t('animator.grid')}</button>
+        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, snap: !composition.snap } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.snap ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border text-text-muted'}`}><Magnet size={10} /> {t('animator.snap')}</button>
+        <label className="flex items-center gap-1 text-[8px] text-text-muted">{t('animator.gridPercent')}<input type="number" min={1} max={50} step={1} value={composition.gridSize} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateScene(current => ({ ...current, composition: { ...composition, gridSize: Math.max(1, Math.min(50, value)) } })) }} className="w-12 rounded border border-border bg-bg-primary px-1 py-1 text-[9px]" /></label>
+        <label className="ml-auto flex items-center gap-1 text-[8px] text-text-muted">{t('animator.safeArea')}<select value={composition.safeArea} onChange={event => updateScene(current => ({ ...current, composition: { ...composition, safeArea: event.target.value as NonNullable<Scene['composition']>['safeArea'] } }))} className="rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="none">{t('animator.safeOff')}</option><option value="action">{t('animator.safeAction')}</option><option value="title">{t('animator.safeTitle')}</option><option value="vertical">{t('animator.safeVertical')}</option><option value="all">{t('animator.safeAll')}</option></select></label>
+        {selected && isVisualLayer(selected) && <><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, 50, selected.transform.y, false)} title={t('animator.centerH')} className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignHorizontalJustifyCenter size={11} /></button><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, selected.transform.x, 50, false)} title={t('animator.centerV')} className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignVerticalJustifyCenter size={11} /></button></>}
       </div>
-      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && selected.type !== 'effect' && <button onClick={() => updateLayer(selected.id, layer => ({ ...layer, fill: !layer.fill, transform: { ...layer.transform, x: 50, y: 50, scale: 1 }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: 50, y: 50, scale: 1 })) }))} className={`mb-3 rounded border px-2 py-1 text-[10px] ${selected.fill ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.fill ? 'Fill screen enabled' : 'Fill screen'}</button>}
-      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && selected.type !== 'effect' && <button onClick={() => { sendToBack(selected.id); applyParallaxPreset(selected.id, 'background') }} className="mb-3 ml-1 rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-secondary">Use as background</button>}
+      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && selected.type !== 'effect' && <button onClick={() => updateLayer(selected.id, layer => ({ ...layer, fill: !layer.fill, transform: { ...layer.transform, x: 50, y: 50, scale: 1 }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: 50, y: 50, scale: 1 })) }))} className={`mb-3 rounded border px-2 py-1 text-[10px] ${selected.fill ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.fill ? t('animator.fillEnabled') : t('animator.fillScreen')}</button>}
+      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && selected.type !== 'effect' && <button onClick={() => { sendToBack(selected.id); applyParallaxPreset(selected.id, 'background') }} className="mb-3 ml-1 rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-secondary">{t('animator.useAsBackground')}</button>}
       <div className="flex w-full justify-center">
       <div ref={canvasRef} className="relative isolate w-full overflow-hidden rounded-lg border border-border bg-[#0b1020]" style={{ aspectRatio: `${scene.width} / ${scene.height}`, maxWidth: `${68 * scene.width / scene.height}vh` }}>
         {[...scene.layers].sort((a, b) => a.z - b.z).map(renderLayer)}
         {composition.showGrid && <div className="pointer-events-none absolute inset-0 z-[990] opacity-35" style={{ backgroundImage: 'linear-gradient(to right, rgba(125,211,252,.55) 1px, transparent 1px), linear-gradient(to bottom, rgba(125,211,252,.55) 1px, transparent 1px)', backgroundSize: `${composition.gridSize}% ${composition.gridSize}%` }} />}
-        {(composition.safeArea === 'action' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[5%] z-[991] border border-dashed border-emerald-300/80"><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-emerald-200">Action safe 90%</span></div>}
-        {(composition.safeArea === 'title' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[10%] z-[992] border border-dashed border-amber-300/80"><span className="absolute right-1 top-1 rounded bg-black/55 px-1 text-[7px] text-amber-200">Title safe 80%</span></div>}
-        {(composition.safeArea === 'vertical' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-y-0 left-1/2 z-[993] -translate-x-1/2 border-x border-dashed border-fuchsia-300/90 bg-fuchsia-400/[.03]" style={{ width: `${verticalSafeWidth}%` }}><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-fuchsia-200">9:16 social</span></div>}
+        {(composition.safeArea === 'action' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[5%] z-[991] border border-dashed border-emerald-300/80"><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-emerald-200">{t('animator.actionSafeBadge')}</span></div>}
+        {(composition.safeArea === 'title' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[10%] z-[992] border border-dashed border-amber-300/80"><span className="absolute right-1 top-1 rounded bg-black/55 px-1 text-[7px] text-amber-200">{t('animator.titleSafeBadge')}</span></div>}
+        {(composition.safeArea === 'vertical' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-y-0 left-1/2 z-[993] -translate-x-1/2 border-x border-dashed border-fuchsia-300/90 bg-fuchsia-400/[.03]" style={{ width: `${verticalSafeWidth}%` }}><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-fuchsia-200">{t('animator.verticalBadge')}</span></div>}
         {activeCamera && <div className="pointer-events-none absolute left-2 top-2 z-[997] flex items-center gap-1 rounded bg-black/55 px-1.5 py-1 text-[8px] text-cyan-200"><Camera size={10} /> {activeCamera.name}</div>}
         {orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}
         {flash && <div className="pointer-events-none absolute z-[999]" style={{ left: `${flash.x}%`, top: `${flash.y}%` }}><span className="absolute -left-6 -top-6 h-12 w-12 rounded-full border-2 border-white/90 animate-ping" /><span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-white shadow-[0_0_20px_8px_rgba(96,165,250,.9)]" /></div>}
         <div className="absolute inset-x-0 bottom-0 z-[1000] h-1 bg-black/40"><div className="h-full bg-accent-blue" style={{ width: `${progress * 100}%` }} /></div>
       </div>
       </div>
-      <p className="mt-2 text-[9px] text-text-muted">Center-drag a 3D layer to orbit it 360°; drag its outer edge to move it. Camera layers animate pan, zoom and rotation without rendering an asset. Parallax controls how strongly each visual layer follows camera pan. WebM uses the same camera transform and Z order as this preview.</p>
+      <p className="mt-2 text-[9px] text-text-muted">{t('animator.canvasHelp')}</p>
       <SceneTimeline
         layers={scene.layers}
         duration={scene.duration}
@@ -2971,56 +2975,56 @@ export function SceneAnimatorPanel() {
     </section>
     <aside className="w-full shrink-0 border-t border-border bg-bg-secondary p-3 overflow-y-auto space-y-3 xl:w-[300px] xl:border-l xl:border-t-0">
       <div className="space-y-2 rounded border border-fuchsia-400/30 bg-fuchsia-400/[.045] p-2">
-        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-100">Narrative scenes</span><span className="text-[8px] text-fuchsia-200/70">10–12s editable shots</span></div>
+        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-100">{t('animator.narrativeTitle')}</span><span className="text-[8px] text-fuchsia-200/70">{t('animator.narrativeMeta')}</span></div>
         <select value={narrativeTemplateId} disabled={playing || recording || publishing} onChange={event => setNarrativeTemplateId(event.target.value as NarrativeSceneId)} className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]">
-          {NARRATIVE_SCENE_TEMPLATES.map(template => <option key={template.id} value={template.id}>{template.experimental ? 'Experimental · ' : ''}{template.title}</option>)}
+          {NARRATIVE_SCENE_TEMPLATES.map(template => <option key={template.id} value={template.id}>{template.experimental ? t('animator.experimental') : ''}{template.title}</option>)}
         </select>
-        <div className="grid grid-cols-2 gap-1">{NARRATIVE_SCENE_TEMPLATES.map(template => <button key={template.id} type="button" disabled={playing || recording || publishing} onClick={() => setNarrativeTemplateId(template.id)} title={template.description} className={`rounded border p-1 text-left disabled:opacity-40 ${narrativeTemplateId === template.id ? 'border-fuchsia-300/70 bg-fuchsia-400/15 text-fuchsia-100' : 'border-border bg-bg-primary text-text-secondary hover:border-fuchsia-300/40'}`}><span className="block truncate text-[8px] font-medium">{template.experimental ? 'Experimental · ' : ''}{template.title}</span><span className="block text-[7px] text-text-muted">{template.defaultDuration}s · {template.assetSlots.filter(slot => slot.required).length} assets</span></button>)}</div>
+        <div className="grid grid-cols-2 gap-1">{NARRATIVE_SCENE_TEMPLATES.map(template => <button key={template.id} type="button" disabled={playing || recording || publishing} onClick={() => setNarrativeTemplateId(template.id)} title={template.description} className={`rounded border p-1 text-left disabled:opacity-40 ${narrativeTemplateId === template.id ? 'border-fuchsia-300/70 bg-fuchsia-400/15 text-fuchsia-100' : 'border-border bg-bg-primary text-text-secondary hover:border-fuchsia-300/40'}`}><span className="block truncate text-[8px] font-medium">{template.experimental ? t('animator.experimental') : ''}{template.title}</span><span className="block text-[7px] text-text-muted">{t('animator.templateMeta', { duration: template.defaultDuration, count: template.assetSlots.filter(slot => slot.required).length })}</span></button>)}</div>
         <p className="text-[8px] leading-relaxed text-text-muted">{narrativeTemplate.description}</p>
-        <label className="block text-[9px] text-text-muted">Character / subject<select value={narrativeHero} onChange={event => setNarrativeHero(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">Choose asset…</option>{narrativeVisuals.map(asset => <option key={asset.name} value={asset.name}>{asset.type === 'model3d' ? '3D · ' : asset.type === 'video' ? 'Video · ' : 'Image · '}{asset.name}</option>)}</select></label>
+        <label className="block text-[9px] text-text-muted">{t('animator.character')}<select value={narrativeHero} onChange={event => setNarrativeHero(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.chooseAsset')}</option>{narrativeVisuals.map(asset => <option key={asset.name} value={asset.name}>{asset.type === 'model3d' ? t('animator.prefix3d') : asset.type === 'video' ? t('animator.prefixVideo') : t('animator.prefixImage')}{asset.name}</option>)}</select></label>
         {narrativeHero && <p className={`rounded border px-1.5 py-1 text-[8px] leading-relaxed ${narrativeSuitability('hero', narrativeHero).level === 'warning' ? 'border-amber-300/25 bg-amber-400/[.06] text-amber-100' : 'border-emerald-300/20 bg-emerald-400/[.04] text-emerald-100'}`}>{narrativeSuitability('hero', narrativeHero).message}</p>}
-        <label className="block text-[9px] text-text-muted">Background<select value={narrativePlate} onChange={event => { setNarrativePlate(event.target.value); setNarrativePlateLoopReady(false) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">Choose asset…</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.type === 'video' ? 'Video · ' : 'Image · '}{asset.name}</option>)}</select></label>
+        <label className="block text-[9px] text-text-muted">{t('animator.background')}<select value={narrativePlate} onChange={event => { setNarrativePlate(event.target.value); setNarrativePlateLoopReady(false) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.chooseAsset')}</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.type === 'video' ? t('animator.prefixVideo') : t('animator.prefixImage')}{asset.name}</option>)}</select></label>
         {narrativePlate && narrativeSuitability('plate', narrativePlate).level !== 'ok' && <p className="rounded border border-cyan-300/20 bg-cyan-400/[.04] px-1.5 py-1 text-[8px] leading-relaxed text-cyan-100">{narrativeSuitability('plate', narrativePlate).message}</p>}
-        {narrativePlate && <label className="flex items-start gap-1.5 rounded border border-amber-300/20 bg-amber-400/[.035] p-1.5 text-[8px] leading-relaxed text-amber-100"><input type="checkbox" checked={narrativePlateLoopReady} onChange={event => setNarrativePlateLoopReady(event.target.checked)} className="mt-0.5" /> <span><strong>Loop-ready horizontally</strong><br />I reviewed this plate in Fondo infinito (or it is a verified panorama). This enables the cylinder A/B preview; it does not claim the model repaired the seam mathematically.</span></label>}
-        {narrativeTemplate.assetSlots.some(slot => slot.id === 'prop') && <label className="block text-[9px] text-text-muted">Object / portal{narrativeTemplate.assetSlots.find(slot => slot.id === 'prop')?.required ? '' : ' (optional)'}<select value={narrativeProp} onChange={event => setNarrativeProp(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">None</option>{narrativeVisuals.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
-        {narrativeTemplate.assetSlots.some(slot => slot.id === 'foreground') && <label className="block text-[9px] text-text-muted">Foreground (optional)<select value={narrativeForeground} onChange={event => setNarrativeForeground(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">None</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
+        {narrativePlate && <label className="flex items-start gap-1.5 rounded border border-amber-300/20 bg-amber-400/[.035] p-1.5 text-[8px] leading-relaxed text-amber-100"><input type="checkbox" checked={narrativePlateLoopReady} onChange={event => setNarrativePlateLoopReady(event.target.checked)} className="mt-0.5" /> <span><strong>{t('animator.loopReady')}</strong><br />{t('animator.loopReadyHelp')}</span></label>}
+        {narrativeTemplate.assetSlots.some(slot => slot.id === 'prop') && <label className="block text-[9px] text-text-muted">{t('animator.objectPortal')}{narrativeTemplate.assetSlots.find(slot => slot.id === 'prop')?.required ? '' : t('animator.optional')}<select value={narrativeProp} onChange={event => setNarrativeProp(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.none')}</option>{narrativeVisuals.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
+        {narrativeTemplate.assetSlots.some(slot => slot.id === 'foreground') && <label className="block text-[9px] text-text-muted">{t('animator.foreground')}<select value={narrativeForeground} onChange={event => setNarrativeForeground(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.none')}</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
         <div className="grid grid-cols-2 gap-1 text-[9px] text-text-muted">
-          {narrativeTemplate.controls.includes('mood') && <label>Mood<select value={narrativeMood} onChange={event => setNarrativeMood(event.target.value as typeof narrativeMood)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="calm">Calm</option><option value="tense">Tense</option><option value="dreamy">Dreamy</option><option value="heroic">Heroic</option></select></label>}
-          {narrativeTemplate.controls.includes('intensity') && <label>Intensity<select value={narrativeIntensity} onChange={event => setNarrativeIntensity(Number(event.target.value) as 1 | 2 | 3)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value={1}>Low</option><option value={2}>Medium</option><option value={3}>High</option></select></label>}
-          {narrativeTemplate.controls.includes('direction') && <label>Direction<select value={narrativeDirection} onChange={event => setNarrativeDirection(event.target.value as typeof narrativeDirection)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="right">Right</option><option value="left">Left</option></select></label>}
-          {narrativeTemplate.controls.includes('camera') && <label>Camera<select value={narrativeCamera} onChange={event => setNarrativeCamera(event.target.value as typeof narrativeCamera)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="restrained">Restrained</option><option value="push">Push</option><option value="drift">Drift</option></select></label>}
-          {narrativeTemplate.controls.includes('palette') && <label>Palette<select value={narrativePalette} onChange={event => setNarrativePalette(event.target.value as typeof narrativePalette)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="natural">Natural</option><option value="cool">Cool</option><option value="warm">Warm</option><option value="neon">Neon</option></select></label>}
-          {narrativeTemplate.controls.includes('voiceSpace') && <label>Voice space<select value={narrativeVoiceSpace} onChange={event => setNarrativeVoiceSpace(event.target.value as typeof narrativeVoiceSpace)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="center">Center</option><option value="left">Left</option><option value="right">Right</option></select></label>}
+          {narrativeTemplate.controls.includes('mood') && <label>{t('animator.mood')}<select value={narrativeMood} onChange={event => setNarrativeMood(event.target.value as typeof narrativeMood)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="calm">{t('animator.moodCalm')}</option><option value="tense">{t('animator.moodTense')}</option><option value="dreamy">{t('animator.moodDreamy')}</option><option value="heroic">{t('animator.moodHeroic')}</option></select></label>}
+          {narrativeTemplate.controls.includes('intensity') && <label>{t('animator.intensity')}<select value={narrativeIntensity} onChange={event => setNarrativeIntensity(Number(event.target.value) as 1 | 2 | 3)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value={1}>{t('animator.intensityLow')}</option><option value={2}>{t('animator.intensityMedium')}</option><option value={3}>{t('animator.intensityHigh')}</option></select></label>}
+          {narrativeTemplate.controls.includes('direction') && <label>{t('animator.direction')}<select value={narrativeDirection} onChange={event => setNarrativeDirection(event.target.value as typeof narrativeDirection)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="right">{t('animator.right')}</option><option value="left">{t('animator.left')}</option></select></label>}
+          {narrativeTemplate.controls.includes('camera') && <label>{t('animator.camera')}<select value={narrativeCamera} onChange={event => setNarrativeCamera(event.target.value as typeof narrativeCamera)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="restrained">{t('animator.cameraRestrained')}</option><option value="push">{t('animator.cameraPush')}</option><option value="drift">{t('animator.cameraDrift')}</option></select></label>}
+          {narrativeTemplate.controls.includes('palette') && <label>{t('animator.palette')}<select value={narrativePalette} onChange={event => setNarrativePalette(event.target.value as typeof narrativePalette)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="natural">{t('animator.paletteNatural')}</option><option value="cool">{t('animator.paletteCool')}</option><option value="warm">{t('animator.paletteWarm')}</option><option value="neon">{t('animator.paletteNeon')}</option></select></label>}
+          {narrativeTemplate.controls.includes('voiceSpace') && <label>{t('animator.voiceSpace')}<select value={narrativeVoiceSpace} onChange={event => setNarrativeVoiceSpace(event.target.value as typeof narrativeVoiceSpace)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="center">{t('animator.center')}</option><option value="left">{t('animator.left')}</option><option value="right">{t('animator.right')}</option></select></label>}
         </div>
-        <button type="button" disabled={playing || recording || publishing} onClick={mountNarrativeTemplate} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/20 disabled:opacity-40">Mount editable scene</button>
+        <button type="button" disabled={playing || recording || publishing} onClick={mountNarrativeTemplate} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/20 disabled:opacity-40">{t('animator.mountScene')}</button>
       </div>
       <div className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.04] p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-cyan-100">Instruct scene</span><span className="text-[8px] text-cyan-200/80">Camera + grade + links</span></div>
-        <p className="text-[8px] leading-relaxed text-text-muted">Ask for a restrained global camera move, visual mood, or an explicit link between existing layers. Links always require confirmation; it cannot add, remove, move, or replace assets.</p>
-        <textarea value={sceneCopilotIntent} disabled={sceneCopilotBusy} onChange={event => setSceneCopilotIntent(event.target.value)} placeholder="Make the camera drift slowly and give the whole scene a cool, dreamy tone…" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
-        <button type="button" disabled={!sceneCopilotIntent.trim() || sceneCopilotBusy} onClick={() => void proposeSceneCopilotEdit()} className="w-full rounded border border-cyan-300/50 bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-100 disabled:opacity-40">{sceneCopilotBusy ? 'Planning scene edit…' : 'Propose scene changes'}</button>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-cyan-100">{t('animator.instructScene')}</span><span className="text-[8px] text-cyan-200/80">{t('animator.instructSceneMeta')}</span></div>
+        <p className="text-[8px] leading-relaxed text-text-muted">{t('animator.instructSceneHelp')}</p>
+        <textarea value={sceneCopilotIntent} disabled={sceneCopilotBusy} onChange={event => setSceneCopilotIntent(event.target.value)} placeholder={t('animator.instructScenePlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <button type="button" disabled={!sceneCopilotIntent.trim() || sceneCopilotBusy} onClick={() => void proposeSceneCopilotEdit()} className="w-full rounded border border-cyan-300/50 bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-100 disabled:opacity-40">{sceneCopilotBusy ? t('animator.planningScene') : t('animator.proposeScene')}</button>
         {sceneCopilotError && <p className="text-[8px] text-red-300">{sceneCopilotError}</p>}
-        {sceneCopilotProposal && <div className="space-y-1 rounded border border-cyan-300/25 bg-black/15 p-1.5"><p className="text-[9px] text-cyan-100">{sceneCopilotProposal.summary}</p><ul className="space-y-0.5 text-[8px] text-text-secondary">{describeSceneCopilotProposal(scene, sceneCopilotProposal).map(line => <li key={line}>• {line}</li>)}</ul><div className="flex gap-1"><button type="button" onClick={applySceneCopilotEdit} className="flex-1 rounded bg-cyan-400/20 px-1.5 py-1 text-[9px] text-cyan-100">Apply</button><button type="button" onClick={() => setSceneCopilotProposal(null)} className="rounded border border-border px-1.5 py-1 text-[9px] text-text-muted">Discard</button></div></div>}
+        {sceneCopilotProposal && <div className="space-y-1 rounded border border-cyan-300/25 bg-black/15 p-1.5"><p className="text-[9px] text-cyan-100">{sceneCopilotProposal.summary}</p><ul className="space-y-0.5 text-[8px] text-text-secondary">{describeSceneCopilotProposal(scene, sceneCopilotProposal).map(line => <li key={line}>• {line}</li>)}</ul><div className="flex gap-1"><button type="button" onClick={applySceneCopilotEdit} className="flex-1 rounded bg-cyan-400/20 px-1.5 py-1 text-[9px] text-cyan-100">{t('animator.apply')}</button><button type="button" onClick={() => setSceneCopilotProposal(null)} className="rounded border border-border px-1.5 py-1 text-[9px] text-text-muted">{t('animator.discard')}</button></div></div>}
       </div>
       <div className="space-y-1.5 rounded border border-amber-400/30 bg-amber-400/[.04] p-2">
-        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-amber-100">Scene audio</span><span className="text-[8px] text-amber-200/75">Rendered into MP4</span></div>
-        <p className="text-[8px] leading-relaxed text-text-muted">Generate narration with the installed audio model, or attach an existing audio output. Prompt, model, start time and volume stay with the scene and its exported metadata.</p>
-        <textarea value={sceneAudioPrompt} disabled={sceneAudioBusy || playing || recording || publishing} onChange={event => setSceneAudioPrompt(event.target.value)} placeholder="A calm inner voice: ‘I know this place…’" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
-        <button type="button" disabled={!sceneAudioPrompt.trim() || sceneAudioBusy || playing || recording || publishing} onClick={() => void generateSceneSpeech()} className="w-full rounded border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100 disabled:opacity-40">{sceneAudioBusy ? 'Generating narration…' : `Generate speech · ${selectedSpeechModel}`}</button>
-        {generatedAudio.length > 0 && <label className="block text-[9px] text-text-muted">Attach existing output<select defaultValue="" onChange={event => { const output = generatedAudio.find(item => item.name === event.target.value); if (output) attachSceneAudio(output.name, output.name.replace(/\.[^.]+$/, ''), 'audio'); event.currentTarget.value = '' }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">Choose audio…</option>{generatedAudio.map(output => <option key={output.name} value={output.name}>{output.name}</option>)}</select></label>}
-        {(scene.audioTracks ?? []).length > 0 && <div className="space-y-1 rounded border border-amber-300/15 bg-black/15 p-1.5">{scene.audioTracks!.map(track => <div key={track.id} className="grid grid-cols-[1fr_44px_44px_18px] items-center gap-1 text-[8px]"><span title={track.prompt ?? track.name} className="truncate text-amber-100">{track.kind} · {track.name}</span><label className="text-text-muted">at<input aria-label={`Start ${track.name}`} type="number" min="0" max={scene.duration} step="0.1" value={track.startTime} onChange={event => { const startTime = Number(event.target.value); if (Number.isFinite(startTime)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, startTime: Math.max(0, Math.min(current.duration, startTime)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><label className="text-text-muted">vol<input aria-label={`Volume ${track.name}`} type="number" min="0" max="2" step="0.1" value={track.volume} onChange={event => { const volume = Number(event.target.value); if (Number.isFinite(volume)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, volume: Math.max(0, Math.min(2, volume)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><button type="button" title={`Remove ${track.name}`} onClick={() => updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).filter(item => item.id !== track.id) }))} className="mt-3 text-red-300"><Trash2 size={12} /></button></div>)}</div>}
+        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-amber-100">{t('animator.sceneAudio')}</span><span className="text-[8px] text-amber-200/75">{t('animator.sceneAudioMeta')}</span></div>
+        <p className="text-[8px] leading-relaxed text-text-muted">{t('animator.sceneAudioHelp')}</p>
+        <textarea value={sceneAudioPrompt} disabled={sceneAudioBusy || playing || recording || publishing} onChange={event => setSceneAudioPrompt(event.target.value)} placeholder={t('animator.sceneAudioPlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <button type="button" disabled={!sceneAudioPrompt.trim() || sceneAudioBusy || playing || recording || publishing} onClick={() => void generateSceneSpeech()} className="w-full rounded border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100 disabled:opacity-40">{sceneAudioBusy ? t('animator.generatingNarration') : t('animator.generateSpeech', { model: selectedSpeechModel })}</button>
+        {generatedAudio.length > 0 && <label className="block text-[9px] text-text-muted">{t('animator.attachOutput')}<select defaultValue="" onChange={event => { const output = generatedAudio.find(item => item.name === event.target.value); if (output) attachSceneAudio(output.name, output.name.replace(/\.[^.]+$/, ''), 'audio'); event.currentTarget.value = '' }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.chooseAudio')}</option>{generatedAudio.map(output => <option key={output.name} value={output.name}>{output.name}</option>)}</select></label>}
+        {(scene.audioTracks ?? []).length > 0 && <div className="space-y-1 rounded border border-amber-300/15 bg-black/15 p-1.5">{scene.audioTracks!.map(track => <div key={track.id} className="grid grid-cols-[1fr_44px_44px_18px] items-center gap-1 text-[8px]"><span title={track.prompt ?? track.name} className="truncate text-amber-100">{track.kind} · {track.name}</span><label className="text-text-muted">{t('animator.at')}<input aria-label={t('animator.startTrack', { name: track.name })} type="number" min="0" max={scene.duration} step="0.1" value={track.startTime} onChange={event => { const startTime = Number(event.target.value); if (Number.isFinite(startTime)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, startTime: Math.max(0, Math.min(current.duration, startTime)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><label className="text-text-muted">{t('animator.vol')}<input aria-label={t('animator.volumeTrack', { name: track.name })} type="number" min="0" max="2" step="0.1" value={track.volume} onChange={event => { const volume = Number(event.target.value); if (Number.isFinite(volume)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, volume: Math.max(0, Math.min(2, volume)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><button type="button" title={t('animator.removeTrack', { name: track.name })} onClick={() => updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).filter(item => item.id !== track.id) }))} className="mt-3 text-red-300"><Trash2 size={12} /></button></div>)}</div>}
         {rhythmAudioTracks.length > 0 && <div className="space-y-1.5 rounded border border-violet-300/25 bg-violet-400/[.045] p-1.5">
-          <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-medium text-violet-100">Music rhythm → animation</span><span className="text-[7px] text-violet-200/70">BPM + beat grid</span></div>
-          <label className="block text-[8px] text-text-muted">Rhythm track<select value={selectedRhythmTrack?.id ?? ''} disabled={rhythmBusy || playing || recording || publishing} onChange={event => { setRhythmTrackId(event.target.value); setRhythmError(null) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[9px] disabled:opacity-40">{rhythmAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind} · {track.name}</option>)}</select></label>
-          <button type="button" disabled={!selectedRhythmTrack || rhythmBusy || playing || recording || publishing} onClick={() => void analyzeSceneRhythm()} className="w-full rounded border border-violet-300/45 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{rhythmBusy ? 'Detecting beats…' : activeRhythmAnalysis ? 'Analyze again' : 'Analyze BPM and beats'}</button>
-          {activeRhythmAnalysis && <div className="rounded border border-violet-300/15 bg-black/15 px-1.5 py-1 text-[8px] text-violet-100"><strong>{activeRhythmAnalysis.bpm.toFixed(1)} BPM</strong> · {activeRhythmAnalysis.beats.length} beats · {activeRhythmAnalysis.downbeats.length} downbeats · {activeRhythmAnalysis.sections.length} sections</div>}
+          <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-medium text-violet-100">{t('animator.rhythmTitle')}</span><span className="text-[7px] text-violet-200/70">{t('animator.rhythmMeta')}</span></div>
+          <label className="block text-[8px] text-text-muted">{t('animator.rhythmTrack')}<select value={selectedRhythmTrack?.id ?? ''} disabled={rhythmBusy || playing || recording || publishing} onChange={event => { setRhythmTrackId(event.target.value); setRhythmError(null) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[9px] disabled:opacity-40">{rhythmAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind} · {track.name}</option>)}</select></label>
+          <button type="button" disabled={!selectedRhythmTrack || rhythmBusy || playing || recording || publishing} onClick={() => void analyzeSceneRhythm()} className="w-full rounded border border-violet-300/45 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{rhythmBusy ? t('animator.detectingBeats') : activeRhythmAnalysis ? t('animator.analyzeAgain') : t('animator.analyzeBpm')}</button>
+          {activeRhythmAnalysis && <div className="rounded border border-violet-300/15 bg-black/15 px-1.5 py-1 text-[8px] text-violet-100">{t('animator.rhythmStats', { bpm: activeRhythmAnalysis.bpm.toFixed(1), beats: activeRhythmAnalysis.beats.length, downbeats: activeRhythmAnalysis.downbeats.length, sections: activeRhythmAnalysis.sections.length })}</div>}
           <div className="grid grid-cols-2 gap-1">
-            <label className="text-[8px] text-text-muted">Trigger<select value={rhythmCueSource} onChange={event => setRhythmCueSource(event.target.value as SceneRhythmCueSource)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="beats">Every beat</option><option value="downbeats">Downbeats only</option></select></label>
-            <label className="text-[8px] text-text-muted">Reaction<select value={rhythmProfile} onChange={event => setRhythmProfile(event.target.value as SceneRhythmProfile)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="pulse">Scale pulse</option><option value="bounce">Bounce</option><option value="peek" disabled={selected?.type === 'camera'}>Peek on beat</option><option value="camera-punch">Camera punch</option></select></label>
+            <label className="text-[8px] text-text-muted">{t('animator.trigger')}<select value={rhythmCueSource} onChange={event => setRhythmCueSource(event.target.value as SceneRhythmCueSource)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="beats">{t('animator.everyBeat')}</option><option value="downbeats">{t('animator.downbeatsOnly')}</option></select></label>
+            <label className="text-[8px] text-text-muted">{t('animator.reaction')}<select value={rhythmProfile} onChange={event => setRhythmProfile(event.target.value as SceneRhythmProfile)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="pulse">{t('animator.scalePulse')}</option><option value="bounce">{t('curves.bounce')}</option><option value="peek" disabled={selected?.type === 'camera'}>{t('animator.peekOnBeat')}</option><option value="camera-punch">{t('animator.cameraPunch')}</option></select></label>
           </div>
-          <label className="block text-[8px] text-text-muted">Intensity · {Math.round(rhythmIntensity * 100)}%<input type="range" min="0" max="1" step="0.05" value={rhythmIntensity} onChange={event => setRhythmIntensity(Number(event.target.value))} className="mt-0.5 w-full accent-violet-400" /></label>
-          <button type="button" disabled={!activeRhythmAnalysis || !selected || selected.locked || rhythmBusy || playing || recording || publishing} onClick={applySceneRhythm} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">Apply to {selected?.name ?? 'selected layer'}</button>
-          <p className="text-[7px] leading-relaxed text-text-muted">The detected grid is offset with the track, then baked into normal keyframes shared by preview and MP4 export. “Peek” hides the selected object between beats and reveals it on each hit.</p>
+          <label className="block text-[8px] text-text-muted">{t('animator.intensityPercent', { percent: Math.round(rhythmIntensity * 100) })}<input type="range" min="0" max="1" step="0.05" value={rhythmIntensity} onChange={event => setRhythmIntensity(Number(event.target.value))} className="mt-0.5 w-full accent-violet-400" /></label>
+          <button type="button" disabled={!activeRhythmAnalysis || !selected || selected.locked || rhythmBusy || playing || recording || publishing} onClick={applySceneRhythm} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{selected?.name ? t('animator.applyToLayer', { name: selected.name }) : t('animator.applyToSelected')}</button>
+          <p className="text-[7px] leading-relaxed text-text-muted">{t('animator.rhythmHelp')}</p>
         </div>}
         {rhythmError && <p className="text-[8px] text-red-300">{rhythmError}</p>}
         {sceneAudioError && <p className="text-[8px] text-red-300">{sceneAudioError}</p>}
@@ -3056,129 +3060,129 @@ export function SceneAnimatorPanel() {
         onStatus={setMessage}
       />
       <div className="space-y-1.5 rounded border border-rose-300/30 bg-rose-400/[.04] p-2">
-        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-rose-100">Cutout dialogue</span><span className="text-[8px] text-rose-200/75">Editable mouth keyframes</span></div>
-        <p className="text-[8px] leading-relaxed text-text-muted">With mouth overlays named <em>Open</em>, <em>Small</em>, <em>Wide</em>, <em>Round</em> and optionally <em>Closed</em>, turn a known line into a restrained speaking rhythm. Missing shapes safely fall back to Open.</p>
-        <button type="button" disabled={!selected || playing || recording || publishing} onClick={bindCutoutFace} className="w-full rounded border border-rose-300/30 bg-black/10 px-2 py-1 text-[9px] text-rose-100 disabled:opacity-40">Bind face overlays to selected pose</button>
-        {dialogueAudioTracks.length > 0 && <label className="block text-[8px] text-text-muted">Voice track<select aria-label="Cutout dialogue voice track" value={selectedDialogueTrack?.id ?? ''} onChange={event => setCutoutDialogueTrackId(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[9px] text-text-secondary">{dialogueAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind === 'speech' ? 'Voice' : track.kind} · {track.name}</option>)}</select></label>}
-        <textarea value={cutoutDialogueText} disabled={playing || recording || publishing} onChange={event => setCutoutDialogueText(event.target.value)} placeholder="Dialogue spoken by this character…" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
-        <div className="grid grid-cols-2 gap-1"><label className="text-[8px] text-text-muted">Start<input aria-label="Cutout dialogue start" type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueStart} onChange={event => setCutoutDialogueStart(Number(event.target.value) || 0)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label><label className="text-[8px] text-text-muted">End<input aria-label="Cutout dialogue end" type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueEnd} onChange={event => setCutoutDialogueEnd(Number(event.target.value) || scene.duration)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label></div>
-        <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!cutoutDialogueText.trim() || cutoutDialogueBusy || playing || recording || publishing} onClick={animateCutoutDialogue} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">Animate from line</button><button type="button" disabled={cutoutDialogueBusy || !selectedDialogueTrack || playing || recording || publishing} onClick={() => void animateCutoutDialogueFromAudio()} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{cutoutDialogueBusy ? 'Analyzing speech…' : 'Detect from audio'}</button></div>
-        {(scene.dialogueBeats ?? []).length > 0 && <div className="space-y-1 rounded border border-rose-300/15 bg-black/10 p-1.5"><div className="text-[8px] text-rose-100/80">{scene.dialogueBeats!.length} editable dialogue beat{scene.dialogueBeats!.length === 1 ? '' : 's'}</div>{scene.dialogueBeats!.map(beat => {
+        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-rose-100">{t('animator.cutoutTitle')}</span><span className="text-[8px] text-rose-200/75">{t('animator.cutoutMeta')}</span></div>
+        <p className="text-[8px] leading-relaxed text-text-muted">{t('animator.cutoutHelp')}</p>
+        <button type="button" disabled={!selected || playing || recording || publishing} onClick={bindCutoutFace} className="w-full rounded border border-rose-300/30 bg-black/10 px-2 py-1 text-[9px] text-rose-100 disabled:opacity-40">{t('animator.bindFace')}</button>
+        {dialogueAudioTracks.length > 0 && <label className="block text-[8px] text-text-muted">{t('animator.voiceTrack')}<select aria-label={t('animator.voiceTrackAria')} value={selectedDialogueTrack?.id ?? ''} onChange={event => setCutoutDialogueTrackId(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[9px] text-text-secondary">{dialogueAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind === 'speech' ? t('animator.voice') : track.kind} · {track.name}</option>)}</select></label>}
+        <textarea value={cutoutDialogueText} disabled={playing || recording || publishing} onChange={event => setCutoutDialogueText(event.target.value)} placeholder={t('animator.dialoguePlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <div className="grid grid-cols-2 gap-1"><label className="text-[8px] text-text-muted">{t('animator.start')}<input aria-label={t('animator.dialogueStartAria')} type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueStart} onChange={event => setCutoutDialogueStart(Number(event.target.value) || 0)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label><label className="text-[8px] text-text-muted">{t('animator.end')}<input aria-label={t('animator.dialogueEndAria')} type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueEnd} onChange={event => setCutoutDialogueEnd(Number(event.target.value) || scene.duration)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label></div>
+        <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!cutoutDialogueText.trim() || cutoutDialogueBusy || playing || recording || publishing} onClick={animateCutoutDialogue} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{t('animator.animateFromLine')}</button><button type="button" disabled={cutoutDialogueBusy || !selectedDialogueTrack || playing || recording || publishing} onClick={() => void animateCutoutDialogueFromAudio()} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{cutoutDialogueBusy ? t('animator.analyzingSpeech') : t('animator.detectFromAudio')}</button></div>
+        {(scene.dialogueBeats ?? []).length > 0 && <div className="space-y-1 rounded border border-rose-300/15 bg-black/10 p-1.5"><div className="text-[8px] text-rose-100/80">{t('animator.beats', { count: scene.dialogueBeats!.length })}</div>{scene.dialogueBeats!.map(beat => {
           const mouth = scene.layers.find(layer => beat.mouthLayerIds.includes(layer.id))
           const poseLayerId = mouth?.faceBinding?.poseLayerId ?? (mouth?.relationship?.type === 'parent' ? mouth.relationship.targetLayerId : '')
           const speakerPoses = scene.layers.filter(layer => !isCutoutFaceLayer(layer) && scene.layers.some(face => face.faceBinding?.poseLayerId === layer.id && face.faceBinding.role === 'mouth' || !face.faceBinding && face.relationship?.type === 'parent' && face.relationship.targetLayerId === layer.id && isCutoutFaceLayer(face)))
-          return <div key={beat.id} className="space-y-1 rounded border border-rose-300/15 p-1"><div className="grid grid-cols-[1fr_20px] gap-1"><input aria-label={`Dialogue text ${beat.id}`} value={beat.text} onChange={event => updateDialogueBeat(beat.id, { text: event.target.value })} className="rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /><button type="button" title="Delete dialogue beat" onClick={() => removeDialogueBeat(beat.id)} className="text-red-300"><Trash2 size={10} /></button></div><div className="grid grid-cols-2 gap-1"><label className="text-[7px] text-text-muted">Speaker<select aria-label={`Dialogue speaker ${beat.id}`} value={poseLayerId} onChange={event => assignDialogueBeatSpeaker(beat.id, event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="">Unassigned</option>{speakerPoses.map(layer => <option key={layer.id} value={layer.id}>{layer.name}</option>)}</select></label><label className="text-[7px] text-text-muted">Voice<select aria-label={`Dialogue audio ${beat.id}`} value={beat.audioTrackId ?? ''} onChange={event => updateDialogueBeat(beat.id, { audioTrackId: event.target.value || undefined })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="">No track</option>{dialogueAudioTracks.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}</select></label></div><div className="grid grid-cols-3 gap-1"><label className="text-[7px] text-text-muted">Start<input type="number" min="0" max={scene.duration} step="0.05" value={beat.start} onChange={event => updateDialogueBeat(beat.id, { start: Math.max(0, Math.min(beat.end - 1 / fps, Number(event.target.value) || 0)) })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]" /></label><label className="text-[7px] text-text-muted">End<input type="number" min="0" max={scene.duration} step="0.05" value={beat.end} onChange={event => updateDialogueBeat(beat.id, { end: Math.max(beat.start + 1 / fps, Math.min(scene.duration, Number(event.target.value) || scene.duration)) })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]" /></label><label className="text-[7px] text-text-muted">Timing<select value={beat.confidence} onChange={event => updateDialogueBeat(beat.id, { confidence: event.target.value as SceneDialogueBeat['confidence'] })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="known-text">Known</option><option value="aligned-audio">Aligned</option><option value="energy-fallback">Energy</option></select></label></div><button type="button" onClick={() => { setSelectedId(mouth?.id ?? null); setProgress(beat.start / scene.duration) }} className="w-full text-[7px] text-rose-200/80">Jump to beat · {beat.mouthLayerIds.length} mouth states</button></div>
+          return <div key={beat.id} className="space-y-1 rounded border border-rose-300/15 p-1"><div className="grid grid-cols-[1fr_20px] gap-1"><input aria-label={t('animator.dialogueTextAria', { id: beat.id })} value={beat.text} onChange={event => updateDialogueBeat(beat.id, { text: event.target.value })} className="rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /><button type="button" title={t('animator.deleteBeat')} onClick={() => removeDialogueBeat(beat.id)} className="text-red-300"><Trash2 size={10} /></button></div><div className="grid grid-cols-2 gap-1"><label className="text-[7px] text-text-muted">{t('animator.speaker')}<select aria-label={t('animator.speakerAria', { id: beat.id })} value={poseLayerId} onChange={event => assignDialogueBeatSpeaker(beat.id, event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="">{t('animator.unassigned')}</option>{speakerPoses.map(layer => <option key={layer.id} value={layer.id}>{layer.name}</option>)}</select></label><label className="text-[7px] text-text-muted">{t('animator.voice')}<select aria-label={t('animator.dialogueAudioAria', { id: beat.id })} value={beat.audioTrackId ?? ''} onChange={event => updateDialogueBeat(beat.id, { audioTrackId: event.target.value || undefined })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="">{t('animator.noTrack')}</option>{dialogueAudioTracks.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}</select></label></div><div className="grid grid-cols-3 gap-1"><label className="text-[7px] text-text-muted">{t('animator.start')}<input type="number" min="0" max={scene.duration} step="0.05" value={beat.start} onChange={event => updateDialogueBeat(beat.id, { start: Math.max(0, Math.min(beat.end - 1 / fps, Number(event.target.value) || 0)) })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]" /></label><label className="text-[7px] text-text-muted">{t('animator.end')}<input type="number" min="0" max={scene.duration} step="0.05" value={beat.end} onChange={event => updateDialogueBeat(beat.id, { end: Math.max(beat.start + 1 / fps, Math.min(scene.duration, Number(event.target.value) || scene.duration)) })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]" /></label><label className="text-[7px] text-text-muted">{t('animator.timing')}<select value={beat.confidence} onChange={event => updateDialogueBeat(beat.id, { confidence: event.target.value as SceneDialogueBeat['confidence'] })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="known-text">{t('animator.known')}</option><option value="aligned-audio">{t('animator.aligned')}</option><option value="energy-fallback">{t('animator.energy')}</option></select></label></div><button type="button" onClick={() => { setSelectedId(mouth?.id ?? null); setProgress(beat.start / scene.duration) }} className="w-full text-[7px] text-rose-200/80">{t('animator.jumpToBeat', { count: beat.mouthLayerIds.length })}</button></div>
         })}</div>}
       </div>
-      {selected && <div className="space-y-1 rounded border border-fuchsia-400/20 bg-fuchsia-400/[.025] p-2"><div className="text-[9px] text-fuchsia-100">Suggestions for {selected.name}</div><div className="flex flex-wrap gap-1">{copilotSuggestions.map(suggestion => <button key={suggestion} type="button" disabled={copilotBusy || selected.locked} onClick={() => { setCopilotIntent(suggestion); setCopilotError(null) }} className="rounded border border-fuchsia-300/25 px-1.5 py-0.5 text-left text-[8px] text-fuchsia-100 hover:bg-fuchsia-400/10 disabled:opacity-40">{suggestion}</button>)}</div></div>}
+      {selected && <div className="space-y-1 rounded border border-fuchsia-400/20 bg-fuchsia-400/[.025] p-2"><div className="text-[9px] text-fuchsia-100">{t('animator.suggestions', { name: selected.name })}</div><div className="flex flex-wrap gap-1">{copilotSuggestions.map(suggestion => <button key={suggestion} type="button" disabled={copilotBusy || selected.locked} onClick={() => { setCopilotIntent(suggestion); setCopilotError(null) }} className="rounded border border-fuchsia-300/25 px-1.5 py-0.5 text-left text-[8px] text-fuchsia-100 hover:bg-fuchsia-400/10 disabled:opacity-40">{suggestion}</button>)}</div></div>}
       <SceneRecipePanel disabled={playing || recording || publishing || saving} outputs={outputs} characterKits={characterKitLibrary} onApply={applyRecipeScene} />
-      <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> Add layer</button>{addOpen && <div className="absolute z-[1100] mt-1 max-h-[75vh] w-full space-y-1 overflow-y-auto rounded border border-border bg-bg-primary p-1 shadow-xl"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">Add camera</button><div className="px-2 pt-1 text-[8px] font-medium uppercase tracking-wider text-text-muted">Atmospheric effect · 14 presets</div><div className="grid grid-cols-2 gap-1">{ATMOSPHERE_KINDS.map(kind => <button key={kind} onClick={() => addAtmosphere(kind)} title={`${ATMOSPHERE_LABELS[kind]} — ${ATMOSPHERE_DESCRIPTIONS[kind]}`} className="truncate rounded border border-border px-2 py-1.5 text-left text-[9px] text-purple-200 hover:border-purple-400/60 hover:bg-bg-hover">{ATMOSPHERE_LABELS[kind]}</button>)}</div><button onClick={() => { setPicker('model'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated 3D model</button><button onClick={() => { setAddOpen(false); modelInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import GLB</button><button onClick={() => { setPicker('media'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated image/video</button><button onClick={() => { setAddOpen(false); mediaInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import image/video</button><button onClick={() => { setAddOpen(false); overlayInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import transparent PNG/WebP</button></div>}</div>
-      {picker && <div className="rounded border border-border bg-bg-primary p-2"><div className="mb-1 flex justify-between text-[10px] text-text-muted"><span>{picker === 'model' ? 'Generated 3D models' : 'Generated images & videos'}</span><button onClick={() => setPicker(null)}><Down size={13} /></button></div><div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">{(picker === 'model' ? generatedModels : generatedMedia).map(asset => <button key={asset.name} onClick={() => addLayer(asset.type === 'model3d' ? 'model3d' : asset.type === 'video' ? 'video' : 'image', asset.url, asset.name, asset.thumbnail_url ?? undefined)} className="overflow-hidden rounded border border-border text-left hover:border-accent-blue"><div className="aspect-square bg-bg-active">{asset.thumbnail_url || asset.type === 'image' ? <img src={asset.thumbnail_url ?? asset.url} alt="" className="h-full w-full object-cover" /> : <div className="h-full flex items-center justify-center"><Video size={16} /></div>}</div><span className="block truncate px-1 py-1 text-[9px]">{asset.name}</span></button>)}</div></div>}
+      <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> {t('animator.addLayer')}</button>{addOpen && <div className="absolute z-[1100] mt-1 max-h-[75vh] w-full space-y-1 overflow-y-auto rounded border border-border bg-bg-primary p-1 shadow-xl"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">{t('animator.addCamera')}</button><div className="px-2 pt-1 text-[8px] font-medium uppercase tracking-wider text-text-muted">{t('animator.atmospherePresets')}</div><div className="grid grid-cols-2 gap-1">{ATMOSPHERE_KINDS.map(kind => <button key={kind} onClick={() => addAtmosphere(kind)} title={`${t(`atmosphere.labels.${kind}`)} — ${t(`atmosphere.descriptions.${kind}`, { defaultValue: ATMOSPHERE_DESCRIPTIONS[kind] })}`} className="truncate rounded border border-border px-2 py-1.5 text-left text-[9px] text-purple-200 hover:border-purple-400/60 hover:bg-bg-hover">{t(`atmosphere.labels.${kind}`)}</button>)}</div><button onClick={() => { setPicker('model'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.selectGenerated3d')}</button><button onClick={() => { setAddOpen(false); modelInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importGlb')}</button><button onClick={() => { setPicker('media'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.selectGeneratedMedia')}</button><button onClick={() => { setAddOpen(false); mediaInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importMedia')}</button><button onClick={() => { setAddOpen(false); overlayInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importOverlay')}</button></div>}</div>
+      {picker && <div className="rounded border border-border bg-bg-primary p-2"><div className="mb-1 flex justify-between text-[10px] text-text-muted"><span>{picker === 'model' ? t('animator.generatedModels') : t('animator.generatedMedia')}</span><button onClick={() => setPicker(null)}><Down size={13} /></button></div><div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">{(picker === 'model' ? generatedModels : generatedMedia).map(asset => <button key={asset.name} onClick={() => addLayer(asset.type === 'model3d' ? 'model3d' : asset.type === 'video' ? 'video' : 'image', asset.url, asset.name, asset.thumbnail_url ?? undefined)} className="overflow-hidden rounded border border-border text-left hover:border-accent-blue"><div className="aspect-square bg-bg-active">{asset.thumbnail_url || asset.type === 'image' ? <img src={asset.thumbnail_url ?? asset.url} alt="" className="h-full w-full object-cover" /> : <div className="h-full flex items-center justify-center"><Video size={16} /></div>}</div><span className="block truncate px-1 py-1 text-[9px]">{asset.name}</span></button>)}</div></div>}
       <input ref={modelInputRef} type="file" accept=".glb,model/gltf-binary" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign('model3d', file) }} /><input ref={mediaInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign(file.type.startsWith('video/') ? 'video' : 'image', file) }} /><input ref={overlayInputRef} type="file" accept="image/png,image/webp" multiple className="hidden" onChange={event => [...(event.target.files ?? [])].forEach(file => addOrReassign('overlay', file))} />
-      <div><div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">Layers</div><div className="space-y-1">{[...scene.layers].sort((a, b) => b.z - a.z).map(layer => <div key={layer.id} onClick={() => setSelectedId(layer.id)} className={`flex cursor-pointer items-center gap-1.5 rounded border p-1.5 text-[10px] ${selectedId === layer.id ? 'border-accent-blue bg-accent-blue/10' : 'border-border bg-bg-primary'}`}><div className="h-7 w-7 shrink-0 overflow-hidden rounded bg-bg-active flex items-center justify-center">{layer.thumbnail ? <img src={layer.thumbnail} alt="" className="h-full w-full object-cover" /> : iconFor(layer.type)}</div><div className="min-w-0 flex-1"><div className="truncate">{layer.name}</div><div className="text-[9px] text-text-muted">{layer.type} · z: {layer.z}{layer.missingAsset ? ' · missing asset' : ''}</div></div><button onClick={event => { event.stopPropagation(); updateLayer(layer.id, item => ({ ...item, visible: !item.visible })) }} title="Visibility">{layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}</button><div className="flex flex-col"><button title="Bring forward" onClick={event => { event.stopPropagation(); moveLayerZ(layer.id, 1) }}><ChevronUp size={12} /></button><button title="Send backward" onClick={event => { event.stopPropagation(); moveLayerZ(layer.id, -1) }}><ChevronDown size={12} /></button></div><button onClick={event => { event.stopPropagation(); updateScene(current => ({ ...current, layers: normalizeZ(current.layers.filter(item => item.id !== layer.id)) })); if (selectedId === layer.id) setSelectedId(null) }} className="text-red-400"><Trash2 size={12} /></button></div>)}</div></div>
-      {selected && <label className={`flex cursor-pointer items-center justify-between gap-2 rounded border p-2 text-[9px] ${chainFromPlayhead ? 'border-purple-300/60 bg-purple-400/10 text-purple-100' : 'border-border bg-bg-primary text-text-secondary'}`}><span><span className="block font-medium">Chain preset from playhead</span><span className="block text-[8px] text-text-muted">Starts on frame {Math.round(progress * scene.duration * fps)} from the exact current transform.</span></span><input type="checkbox" checked={chainFromPlayhead} onChange={event => setChainFromPlayhead(event.target.checked)} /></label>}
-      {selected && <div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={() => updateLayer(selected.id, layer => ({ ...layer, locked: !layer.locked }))} className={`flex items-center justify-center gap-1 rounded border py-1.5 text-[9px] ${selected.locked ? 'border-amber-400/60 bg-amber-400/10 text-amber-200' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.locked ? <Lock size={11} /> : <Unlock size={11} />}{selected.locked ? 'Locked' : 'Lock layer'}</button><button type="button" onClick={() => duplicateLayer(selected.id)} className="flex items-center justify-center gap-1 rounded border border-border bg-bg-primary py-1.5 text-[9px] text-text-secondary"><CopyPlus size={11} /> Duplicate</button>{selected.locked && <p className="col-span-2 text-[8px] text-amber-200/80">Unlock this layer to change transforms, timing, presets or keyframes.</p>}</div>}
+      <div><div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">{t('animator.layers')}</div><div className="space-y-1">{[...scene.layers].sort((a, b) => b.z - a.z).map(layer => <div key={layer.id} onClick={() => setSelectedId(layer.id)} className={`flex cursor-pointer items-center gap-1.5 rounded border p-1.5 text-[10px] ${selectedId === layer.id ? 'border-accent-blue bg-accent-blue/10' : 'border-border bg-bg-primary'}`}><div className="h-7 w-7 shrink-0 overflow-hidden rounded bg-bg-active flex items-center justify-center">{layer.thumbnail ? <img src={layer.thumbnail} alt="" className="h-full w-full object-cover" /> : iconFor(layer.type)}</div><div className="min-w-0 flex-1"><div className="truncate">{layer.name}</div><div className="text-[9px] text-text-muted">{t('animator.layerMeta', { type: t(`layerTypes.${layer.type}` as 'layerTypes.camera'), z: layer.z })}{layer.missingAsset ? t('animator.missingAssetSuffix') : ''}</div></div><button onClick={event => { event.stopPropagation(); updateLayer(layer.id, item => ({ ...item, visible: !item.visible })) }} title={t('animator.visibility')}>{layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}</button><div className="flex flex-col"><button title={t('animator.bringForward')} onClick={event => { event.stopPropagation(); moveLayerZ(layer.id, 1) }}><ChevronUp size={12} /></button><button title={t('animator.sendBackward')} onClick={event => { event.stopPropagation(); moveLayerZ(layer.id, -1) }}><ChevronDown size={12} /></button></div><button onClick={event => { event.stopPropagation(); updateScene(current => ({ ...current, layers: normalizeZ(current.layers.filter(item => item.id !== layer.id)) })); if (selectedId === layer.id) setSelectedId(null) }} className="text-red-400"><Trash2 size={12} /></button></div>)}</div></div>
+      {selected && <label className={`flex cursor-pointer items-center justify-between gap-2 rounded border p-2 text-[9px] ${chainFromPlayhead ? 'border-purple-300/60 bg-purple-400/10 text-purple-100' : 'border-border bg-bg-primary text-text-secondary'}`}><span><span className="block font-medium">{t('animator.chainFromPlayhead')}</span><span className="block text-[8px] text-text-muted">{t('animator.chainHelp', { frame: Math.round(progress * scene.duration * fps) })}</span></span><input type="checkbox" checked={chainFromPlayhead} onChange={event => setChainFromPlayhead(event.target.checked)} /></label>}
+      {selected && <div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={() => updateLayer(selected.id, layer => ({ ...layer, locked: !layer.locked }))} className={`flex items-center justify-center gap-1 rounded border py-1.5 text-[9px] ${selected.locked ? 'border-amber-400/60 bg-amber-400/10 text-amber-200' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.locked ? <Lock size={11} /> : <Unlock size={11} />}{selected.locked ? t('animator.locked') : t('animator.lockLayer')}</button><button type="button" onClick={() => duplicateLayer(selected.id)} className="flex items-center justify-center gap-1 rounded border border-border bg-bg-primary py-1.5 text-[9px] text-text-secondary"><CopyPlus size={11} /> {t('animator.duplicate')}</button>{selected.locked && <p className="col-span-2 text-[8px] text-amber-200/80">{t('animator.unlockHelp')}</p>}</div>}
       {selected?.type === 'camera' && <div className="space-y-2 border-t border-border pt-3">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">Camera inspector</span><span className={`rounded px-1.5 py-0.5 text-[8px] ${activeCamera?.id === selected.id ? 'bg-cyan-400/15 text-cyan-200' : 'bg-bg-active text-text-muted'}`}>{activeCamera?.id === selected.id ? 'Active camera' : 'Inactive'}</span></div>
-        <label className="text-[10px] text-text-muted">Name<input value={selected.name} onChange={event => updateLayer(selected.id, layer => ({ ...layer, name: event.target.value }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs" /></label>
-        <label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={selected.visible} onChange={event => setLayerVisibility(selected.id, event.target.checked)} /> Use this camera</label>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{t('animator.cameraInspector')}</span><span className={`rounded px-1.5 py-0.5 text-[8px] ${activeCamera?.id === selected.id ? 'bg-cyan-400/15 text-cyan-200' : 'bg-bg-active text-text-muted'}`}>{activeCamera?.id === selected.id ? t('animator.activeCamera') : t('animator.inactive')}</span></div>
+        <label className="text-[10px] text-text-muted">{t('animator.name')}<input value={selected.name} onChange={event => updateLayer(selected.id, layer => ({ ...layer, name: event.target.value }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs" /></label>
+        <label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={selected.visible} onChange={event => setLayerVisibility(selected.id, event.target.checked)} /> {t('animator.useThisCamera')}</label>
         <div className="grid grid-cols-2 gap-1.5">
-          {numberInput('Pan X', selected.transform.x, value => updateCameraTransform(selected.id, 'x', value), -100, 200, .5)}
-          {numberInput('Pan Y', selected.transform.y, value => updateCameraTransform(selected.id, 'y', value), -100, 200, .5)}
-          {numberInput('Zoom', selected.transform.scale, value => updateCameraTransform(selected.id, 'scale', Math.max(.05, value)), .05, 5, .05)}
-          {numberInput('Rotation', selected.transform.rotation ?? 0, value => updateCameraTransform(selected.id, 'rotation', value), -360, 360, .5)}
-          {numberInput('Z / priority', selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}
+          {numberInput(t('animator.panX'), selected.transform.x, value => updateCameraTransform(selected.id, 'x', value), -100, 200, .5)}
+          {numberInput(t('animator.panY'), selected.transform.y, value => updateCameraTransform(selected.id, 'y', value), -100, 200, .5)}
+          {numberInput(t('animator.zoom'), selected.transform.scale, value => updateCameraTransform(selected.id, 'scale', Math.max(.05, value)), .05, 5, .05)}
+          {numberInput(t('animator.rotation'), selected.transform.rotation ?? 0, value => updateCameraTransform(selected.id, 'rotation', value), -360, 360, .5)}
+          {numberInput(t('animator.zPriority'), selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}
         </div>
-        <div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Camera shots</span><span className="text-[9px] text-text-muted">Click again to remove</span></div><div className="grid grid-cols-2 gap-1">{CAMERA_PRESETS.map(preset => <button key={preset.id} onClick={() => selectedPresetId === preset.id ? removeLayerMotionPreset() : applyCameraPreset(preset.id)} className={`rounded border px-2 py-1.5 text-left text-[9px] ${selectedPresetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border bg-bg-primary text-text-secondary hover:border-cyan-400/60'}`}>{preset.label}</button>)}</div></div>
-        <div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] capitalize text-text-muted">{key} camera</div>{numberInput('X', selected.animation[key].x, value => updateLayerEndpoint(selected.id, key, { x: value }))}{numberInput('Y', selected.animation[key].y, value => updateLayerEndpoint(selected.id, key, { y: value }))}{numberInput('Zoom', selected.animation[key].scale, value => updateLayerEndpoint(selected.id, key, { scale: Math.max(.05, value) }), .05, 5, .05)}{numberInput('Rotation', selected.animation[key].rotation ?? selected.transform.rotation ?? 0, value => updateLayerEndpoint(selected.id, key, { rotation: value }), -360, 360, .5)}</div>)}</div>
-        <div className="grid grid-cols-2 gap-1.5">{numberInput('Duration (s)', selected.animation.duration, value => updateLayerDuration(selected.id, value), .1, 30, .05)}<label className="text-[10px] text-text-muted">All segment curves<select value={selected.animation.curve} onChange={event => updateLayerCurve(selected.id, event.target.value as SceneCurve)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">Linear</option><option value="ease">Ease</option><option value="dramatic">Dramatic</option><option value="bounce">Bounce</option><option value="hold">Hold / cutout</option></select></label></div>
+        <div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.cameraShots')}</span><span className="text-[9px] text-text-muted">{t('animator.clickAgain')}</span></div><div className="grid grid-cols-2 gap-1">{CAMERA_PRESETS.map(preset => <button key={preset.id} onClick={() => selectedPresetId === preset.id ? removeLayerMotionPreset() : applyCameraPreset(preset.id)} className={`rounded border px-2 py-1.5 text-left text-[9px] ${selectedPresetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border bg-bg-primary text-text-secondary hover:border-cyan-400/60'}`}>{t(`cameraPresets.${preset.id}`)}</button>)}</div></div>
+        <div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] capitalize text-text-muted">{t(key === 'start' ? 'animator.startCamera' : 'animator.endCamera')}</div>{numberInput(t('animator.x'), selected.animation[key].x, value => updateLayerEndpoint(selected.id, key, { x: value }))}{numberInput(t('animator.y'), selected.animation[key].y, value => updateLayerEndpoint(selected.id, key, { y: value }))}{numberInput(t('animator.zoom'), selected.animation[key].scale, value => updateLayerEndpoint(selected.id, key, { scale: Math.max(.05, value) }), .05, 5, .05)}{numberInput(t('animator.rotation'), selected.animation[key].rotation ?? selected.transform.rotation ?? 0, value => updateLayerEndpoint(selected.id, key, { rotation: value }), -360, 360, .5)}</div>)}</div>
+        <div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.duration'), selected.animation.duration, value => updateLayerDuration(selected.id, value), .1, 30, .05)}<label className="text-[10px] text-text-muted">{t('animator.allCurves')}<select value={selected.animation.curve} onChange={event => updateLayerCurve(selected.id, event.target.value as SceneCurve)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">{t('curves.linear')}</option><option value="ease">{t('curves.ease')}</option><option value="dramatic">{t('curves.dramatic')}</option><option value="bounce">{t('curves.bounce')}</option><option value="hold">{t('curves.hold')}</option></select></label></div>
         <div className="space-y-1.5 rounded border border-border bg-bg-primary p-2">
-          <label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={Boolean(selected.animation.shake?.amount)} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: event.target.checked ? { amount: layer.animation.shake?.amount || .35, frequency: layer.animation.shake?.frequency ?? 2, seed: layer.animation.shake?.seed ?? 1 } : undefined } }))} /> Camera shake (intentional)</label>
-          {Boolean(selected.animation.shake?.amount) && <div className="grid grid-cols-2 gap-1.5">{numberInput('Shake amount', selected.animation.shake?.amount ?? .35, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: Math.max(.01, Math.min(8, value)), frequency: layer.animation.shake?.frequency ?? 2, seed: layer.animation.shake?.seed ?? 1 } } })), .01, 8, .05)}{numberInput('Shake Hz', selected.animation.shake?.frequency ?? 2, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: layer.animation.shake?.amount ?? .35, frequency: Math.max(.1, Math.min(30, value)), seed: layer.animation.shake?.seed ?? 1 } } })), .1, 30, .1)}</div>}
-          <p className="text-[8px] text-text-muted">Shake is opt-in. Photo motion presets are smooth by default; camera shots marked “shake” enable it deliberately.</p>
+          <label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={Boolean(selected.animation.shake?.amount)} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: event.target.checked ? { amount: layer.animation.shake?.amount || .35, frequency: layer.animation.shake?.frequency ?? 2, seed: layer.animation.shake?.seed ?? 1 } : undefined } }))} /> {t('animator.cameraShake')}</label>
+          {Boolean(selected.animation.shake?.amount) && <div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.shakeAmount'), selected.animation.shake?.amount ?? .35, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: Math.max(.01, Math.min(8, value)), frequency: layer.animation.shake?.frequency ?? 2, seed: layer.animation.shake?.seed ?? 1 } } })), .01, 8, .05)}{numberInput(t('animator.shakeHz'), selected.animation.shake?.frequency ?? 2, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: layer.animation.shake?.amount ?? .35, frequency: Math.max(.1, Math.min(30, value)), seed: layer.animation.shake?.seed ?? 1 } } })), .1, 30, .1)}</div>}
+          <p className="text-[8px] text-text-muted">{t('animator.shakeHelp')}</p>
         </div>
-        <p className="text-[9px] text-text-muted">The highest visible camera is active. Its pan, zoom and rotation are applied identically to preview and WebM capture.</p>
+        <p className="text-[9px] text-text-muted">{t('animator.cameraHelp')}</p>
       </div>}
-      {selected?.type === 'image' && <button type="button" onClick={sendImageToPanoramaLoop} className="w-full rounded border border-amber-300/45 bg-amber-400/10 px-2 py-1.5 text-[10px] text-amber-100">Create infinite background from selected image</button>}
-      {selected?.type === 'image' && selected.seamlessHorizontal && <button type="button" onClick={() => setCylinderCompareOpen(value => !value)} className="w-full rounded border border-cyan-300/40 bg-cyan-400/[.06] px-2 py-1.5 text-[10px] text-cyan-100">{cylinderCompareOpen ? 'Hide cylinder comparison' : 'Compare parallax vs cylinder'}</button>}
-      {selected?.type === 'image' && !selected.seamlessHorizontal && <p className="rounded border border-cyan-300/15 bg-cyan-400/[.025] px-2 py-1.5 text-[8px] leading-relaxed text-cyan-100">Cylinder A/B is locked until this plate is marked loop-ready when mounting a narrative scene. Use Fondo infinito first; flat parallax remains the safe renderer.</p>}
+      {selected?.type === 'image' && <button type="button" onClick={sendImageToPanoramaLoop} className="w-full rounded border border-amber-300/45 bg-amber-400/10 px-2 py-1.5 text-[10px] text-amber-100">{t('animator.infiniteBackground')}</button>}
+      {selected?.type === 'image' && selected.seamlessHorizontal && <button type="button" onClick={() => setCylinderCompareOpen(value => !value)} className="w-full rounded border border-cyan-300/40 bg-cyan-400/[.06] px-2 py-1.5 text-[10px] text-cyan-100">{cylinderCompareOpen ? t('animator.hideCylinder') : t('animator.compareCylinder')}</button>}
+      {selected?.type === 'image' && !selected.seamlessHorizontal && <p className="rounded border border-cyan-300/15 bg-cyan-400/[.025] px-2 py-1.5 text-[8px] leading-relaxed text-cyan-100">{t('animator.cylinderLocked')}</p>}
       {selected?.type === 'image' && cylinderCompareOpen && <CylinderPanoramaComparison source={selected.source} onClose={() => setCylinderCompareOpen(false)} />}
       {selected?.type !== 'camera' && <>
-      {selected ? <div className="border-t border-border pt-3 space-y-2"><div className="text-[10px] font-medium uppercase tracking-wider text-text-muted">Layer inspector</div>{selected.missingAsset && <button onClick={() => { setReassignId(selected.id); (selected.type === 'model3d' ? modelInputRef : selected.type === 'overlay' ? overlayInputRef : mediaInputRef).current?.click() }} className="w-full rounded border border-red-400/50 py-1.5 text-[10px] text-red-300">Reassign missing asset</button>}<label className="text-[10px] text-text-muted">Name<input value={selected.name} onChange={event => updateLayer(selected.id, layer => ({ ...layer, name: event.target.value }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs" /></label><div className="grid grid-cols-3 gap-1.5">{numberInput('X', selected.transform.x, value => { const delta = value - selected.transform.x; updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: value }, animation: { ...layer.animation, start: { ...layer.animation.start, x: layer.animation.start.x + delta }, end: { ...layer.animation.end, x: layer.animation.end.x + delta } } })); flashAt(value, selected.transform.y) }, -100, 200)}{numberInput('Y', selected.transform.y, value => { const delta = value - selected.transform.y; updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, y: value }, animation: { ...layer.animation, start: { ...layer.animation.start, y: layer.animation.start.y + delta }, end: { ...layer.animation.end, y: layer.animation.end.y + delta } } })); flashAt(selected.transform.x, value) }, -100, 200)}{numberInput('Z', selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}{numberInput('Scale', selected.transform.scale, value => updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, scale: value }, animation: { ...layer.animation, start: { ...layer.animation.start, scale: value }, end: { ...layer.animation.end, scale: value } } })), .05, 3, .05)}{numberInput('Opacity', selected.transform.opacity, value => updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, opacity: value }, animation: { ...layer.animation, start: { ...layer.animation.start, opacity: value }, end: { ...layer.animation.end, opacity: value } } })), 0, 1, .05)}{numberInput('Rotation', selected.transform.rotation ?? 0, value => updateLayer(selected.id, layer => { const previous = layer.transform.rotation ?? 0; const delta = value - previous; return { ...layer, transform: { ...layer.transform, rotation: value }, animation: { ...layer.animation, start: { ...layer.animation.start, rotation: layer.animation.start.rotation === undefined ? undefined : layer.animation.start.rotation + delta }, end: { ...layer.animation.end, rotation: layer.animation.end.rotation === undefined ? undefined : layer.animation.end.rotation + delta } } } }), -360, 360)} </div><label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={selected.visible} onChange={event => updateLayer(selected.id, layer => ({ ...layer, visible: event.target.checked }))} /> Visible</label><div className="space-y-1.5 rounded border border-fuchsia-400/30 bg-fuchsia-400/[.04] p-2"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-fuchsia-100">Instruct {selected.name}</span><span className="text-[8px] text-fuchsia-200/80">This item only</span></div><p className="text-[8px] leading-relaxed text-text-muted">Describe a change for this selected layer. The copilot proposes a reversible scene edit; it cannot alter other layers.</p><textarea value={copilotIntent} disabled={copilotBusy || selected.locked} onChange={event => setCopilotIntent(event.target.value)} placeholder="Move it left and make it look thoughtful…" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" /><button type="button" disabled={!copilotIntent.trim() || copilotBusy || selected.locked} onClick={() => void proposeCopilotEdit()} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1 text-[10px] text-fuchsia-100 disabled:opacity-40">{copilotBusy ? 'Planning edit…' : 'Propose changes'}</button>{copilotError && <p className="text-[8px] text-red-300">{copilotError}</p>}{copilotProposal && <div className="space-y-1 rounded border border-fuchsia-300/25 bg-black/15 p-1.5"><p className="text-[9px] text-fuchsia-100">{copilotProposal.summary}</p><ul className="space-y-0.5 text-[8px] text-text-secondary">{describeSceneCopilotProposal(scene, copilotProposal).map(line => <li key={line}>• {line}</li>)}</ul><div className="flex gap-1"><button type="button" onClick={applyCopilotEdit} className="flex-1 rounded bg-fuchsia-400/20 px-1.5 py-1 text-[9px] text-fuchsia-100">Apply</button><button type="button" onClick={() => setCopilotProposal(null)} className="rounded border border-border px-1.5 py-1 text-[9px] text-text-muted">Discard</button></div></div>}</div>{selected.type === 'image' && <div className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.04] p-2"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-cyan-100">Cinematic photo motion</span><span className="text-[8px] text-text-muted">One-click shot</span></div><p className="text-[8px] text-text-muted">Prepares this photograph as a full-frame background and creates or updates the active camera. Hover a card to preview the move on your photo.</p><div className="grid max-h-[390px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{PHOTO_MOTION_PRESETS.map(preset => <PhotoMotionPresetCard key={preset.id} preset={preset} source={selected.thumbnail ?? selected.source} scopeId={selected.id} selected={selectedPresetId === preset.id} onSelect={() => selectedPresetId === preset.id ? removePhotoMotionPreset(preset.id) : applyPhotoMotionPreset(preset.id)} />)}</div></div>}<div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Motion presets</span><span className="text-[9px] text-text-muted">Hover to preview · click again to remove</span></div><div className="grid max-h-[370px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{PRESETS.map(preset => <MotionPresetCard key={preset.id} preset={preset} scopeId={selected.id} selected={selectedPresetId === preset.id} onSelect={() => { if (selectedPresetId === preset.id) removeLayerMotionPreset(); else { setSelectedPresetId(preset.id); applyPreset(preset.id) } }} />)}</div></div><div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] text-text-muted capitalize">{key} motion</div>{numberInput('X', selected.animation[key].x, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], x: value } } })))}{numberInput('Y', selected.animation[key].y, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], y: value } } })))}{numberInput('Scale', selected.animation[key].scale, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], scale: value } } })), .05, 3, .05)}</div>)}</div><div className="grid grid-cols-2 gap-1.5">{numberInput('Duration (s)', selected.animation.duration, value => updateLayerDuration(selected.id, value, 1), 1, 30)}<label className="text-[10px] text-text-muted">Curve<select value={selected.animation.curve} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, curve: event.target.value as SceneCurve } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">Linear</option><option value="ease">Ease</option><option value="dramatic">Dramatic</option><option value="bounce">Bounce</option></select></label></div>{selected.type === 'model3d' && <div className="grid grid-cols-2 gap-1.5"><label className="flex items-end gap-1.5 pb-1 text-[10px]"><input type="checkbox" checked={Boolean(selected.animation.spin)} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, spin: event.target.checked } }))} /> Auto spin</label>{numberInput('Spin °/sec', selected.animation.rotationSpeed ?? 35, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, rotationSpeed: value } })), 0, 720)}</div>}{selected.type === 'model3d' && (clipsByLayer[selected.id]?.length ?? 0) > 0 && <div className="space-y-2 rounded border border-emerald-400/30 bg-emerald-400/[.04] p-2"><label className="text-[10px] text-text-muted">Skeletal animation<select value={selected.animation.clip ?? ''} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clip: event.target.value || undefined, clipOffset: layer.animation.clipOffset ?? 0, clipSpeed: layer.animation.clipSpeed ?? 1, clipLoop: layer.animation.clipLoop ?? true, clipReverse: layer.animation.clipReverse ?? false, clipTrimStart: 0, clipTrimEnd: undefined } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50"><option value="">Off</option>{(clipsByLayer[selected.id] ?? []).map(clip => <option key={clip} value={clip}>{clip}</option>)}</select></label>{selected.animation.clip && <><div className="grid grid-cols-2 gap-1.5">{numberInput('Clip offset', selected.animation.clipOffset ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipOffset: value } })), 0, scene.duration, 1 / fps, selected.locked)}{numberInput('Clip speed', selected.animation.clipSpeed ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipSpeed: value } })), .05, 8, .05, selected.locked)}{numberInput('Clip trim in', selected.animation.clipTrimStart ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimStart: value, clipTrimEnd: layer.animation.clipTrimEnd !== undefined && layer.animation.clipTrimEnd <= value ? value + .001 : layer.animation.clipTrimEnd } })), 0, Math.max(0, (selectedClipDuration || 3600) - .001), 1 / fps, selected.locked)}{numberInput('Clip trim out', selected.animation.clipTrimEnd ?? selectedClipDuration, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimEnd: Math.max((layer.animation.clipTrimStart ?? 0) + .001, value) } })), .001, selectedClipDuration || 3600, 1 / fps, selected.locked)}</div><div className="flex flex-wrap gap-3 text-[9px] text-text-secondary"><label className="flex items-center gap-1"><input type="checkbox" checked={selected.animation.clipLoop !== false} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipLoop: event.target.checked } }))} /> Loop clip</label><label className="flex items-center gap-1"><input type="checkbox" checked={Boolean(selected.animation.clipReverse)} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipReverse: event.target.checked } }))} /> Reverse</label><button type="button" disabled={selected.locked} onClick={() => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimStart: 0, clipTrimEnd: undefined } }))} className="ml-auto text-[8px] text-emerald-200 disabled:opacity-40">Full clip</button></div><p className="text-[8px] text-text-muted">{selectedClipDuration > 0 ? `Clip length ${selectedClipDuration.toFixed(2)}s.` : 'Reading clip length…'} Scrub, preview and WebM use the same paused-frame sampler.</p></>}</div>}</div> : <p className="text-[10px] text-text-muted">Select a layer to edit it.</p>}
-      {selected && <button type="button" disabled={copilotBusy || selected.locked || copilotListening} onClick={dictateCopilotIntent} className="flex w-full items-center justify-center gap-1 rounded border border-fuchsia-300/35 bg-fuchsia-400/[.04] px-2 py-1 text-[9px] text-fuchsia-100 disabled:opacity-40"><Mic size={11} />{copilotListening ? 'Listening for this item…' : `Dictate instruction for ${selected.name}`}</button>}
+      {selected ? <div className="border-t border-border pt-3 space-y-2"><div className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{t('animator.layerInspector')}</div>{selected.missingAsset && <button onClick={() => { setReassignId(selected.id); (selected.type === 'model3d' ? modelInputRef : selected.type === 'overlay' ? overlayInputRef : mediaInputRef).current?.click() }} className="w-full rounded border border-red-400/50 py-1.5 text-[10px] text-red-300">{t('animator.reassignAsset')}</button>}<label className="text-[10px] text-text-muted">{t('animator.name')}<input value={selected.name} onChange={event => updateLayer(selected.id, layer => ({ ...layer, name: event.target.value }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs" /></label><div className="grid grid-cols-3 gap-1.5">{numberInput(t('animator.x'), selected.transform.x, value => { const delta = value - selected.transform.x; updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: value }, animation: { ...layer.animation, start: { ...layer.animation.start, x: layer.animation.start.x + delta }, end: { ...layer.animation.end, x: layer.animation.end.x + delta } } })); flashAt(value, selected.transform.y) }, -100, 200)}{numberInput(t('animator.y'), selected.transform.y, value => { const delta = value - selected.transform.y; updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, y: value }, animation: { ...layer.animation, start: { ...layer.animation.start, y: layer.animation.start.y + delta }, end: { ...layer.animation.end, y: layer.animation.end.y + delta } } })); flashAt(selected.transform.x, value) }, -100, 200)}{numberInput(t('animator.z'), selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}{numberInput(t('animator.scale'), selected.transform.scale, value => updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, scale: value }, animation: { ...layer.animation, start: { ...layer.animation.start, scale: value }, end: { ...layer.animation.end, scale: value } } })), .05, 3, .05)}{numberInput(t('animator.opacity'), selected.transform.opacity, value => updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, opacity: value }, animation: { ...layer.animation, start: { ...layer.animation.start, opacity: value }, end: { ...layer.animation.end, opacity: value } } })), 0, 1, .05)}{numberInput(t('animator.rotation'), selected.transform.rotation ?? 0, value => updateLayer(selected.id, layer => { const previous = layer.transform.rotation ?? 0; const delta = value - previous; return { ...layer, transform: { ...layer.transform, rotation: value }, animation: { ...layer.animation, start: { ...layer.animation.start, rotation: layer.animation.start.rotation === undefined ? undefined : layer.animation.start.rotation + delta }, end: { ...layer.animation.end, rotation: layer.animation.end.rotation === undefined ? undefined : layer.animation.end.rotation + delta } } } }), -360, 360)} </div><label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={selected.visible} onChange={event => updateLayer(selected.id, layer => ({ ...layer, visible: event.target.checked }))} /> {t('animator.visible')}</label><div className="space-y-1.5 rounded border border-fuchsia-400/30 bg-fuchsia-400/[.04] p-2"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-fuchsia-100">{t('animator.instructLayer', { name: selected.name })}</span><span className="text-[8px] text-fuchsia-200/80">{t('animator.thisItemOnly')}</span></div><p className="text-[8px] leading-relaxed text-text-muted">{t('animator.instructLayerHelp')}</p><textarea value={copilotIntent} disabled={copilotBusy || selected.locked} onChange={event => setCopilotIntent(event.target.value)} placeholder={t('animator.instructLayerPlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" /><button type="button" disabled={!copilotIntent.trim() || copilotBusy || selected.locked} onClick={() => void proposeCopilotEdit()} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1 text-[10px] text-fuchsia-100 disabled:opacity-40">{copilotBusy ? t('animator.planningEdit') : t('animator.proposeChanges')}</button>{copilotError && <p className="text-[8px] text-red-300">{copilotError}</p>}{copilotProposal && <div className="space-y-1 rounded border border-fuchsia-300/25 bg-black/15 p-1.5"><p className="text-[9px] text-fuchsia-100">{copilotProposal.summary}</p><ul className="space-y-0.5 text-[8px] text-text-secondary">{describeSceneCopilotProposal(scene, copilotProposal).map(line => <li key={line}>• {line}</li>)}</ul><div className="flex gap-1"><button type="button" onClick={applyCopilotEdit} className="flex-1 rounded bg-fuchsia-400/20 px-1.5 py-1 text-[9px] text-fuchsia-100">{t('animator.apply')}</button><button type="button" onClick={() => setCopilotProposal(null)} className="rounded border border-border px-1.5 py-1 text-[9px] text-text-muted">{t('animator.discard')}</button></div></div>}</div>{selected.type === 'image' && <div className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.04] p-2"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-cyan-100">{t('animator.photoMotion')}</span><span className="text-[8px] text-text-muted">{t('animator.oneClickShot')}</span></div><p className="text-[8px] text-text-muted">{t('animator.photoMotionHelp')}</p><div className="grid max-h-[390px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{PHOTO_MOTION_PRESETS.map(preset => <PhotoMotionPresetCard key={preset.id} preset={preset} source={selected.thumbnail ?? selected.source} scopeId={selected.id} selected={selectedPresetId === preset.id} onSelect={() => selectedPresetId === preset.id ? removePhotoMotionPreset(preset.id) : applyPhotoMotionPreset(preset.id)} />)}</div></div>}<div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.motionPresets')}</span><span className="text-[9px] text-text-muted">{t('animator.hoverPreview')}</span></div><div className="grid max-h-[370px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{PRESETS.map(preset => <MotionPresetCard key={preset.id} preset={preset} scopeId={selected.id} selected={selectedPresetId === preset.id} onSelect={() => { if (selectedPresetId === preset.id) removeLayerMotionPreset(); else { setSelectedPresetId(preset.id); applyPreset(preset.id) } }} />)}</div></div><div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] text-text-muted capitalize">{t(key === 'start' ? 'animator.startMotion' : 'animator.endMotion')}</div>{numberInput(t('animator.x'), selected.animation[key].x, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], x: value } } })))}{numberInput(t('animator.y'), selected.animation[key].y, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], y: value } } })))}{numberInput(t('animator.scale'), selected.animation[key].scale, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], scale: value } } })), .05, 3, .05)}</div>)}</div><div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.duration'), selected.animation.duration, value => updateLayerDuration(selected.id, value, 1), 1, 30)}<label className="text-[10px] text-text-muted">{t('animator.curve')}<select value={selected.animation.curve} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, curve: event.target.value as SceneCurve } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">{t('curves.linear')}</option><option value="ease">{t('curves.ease')}</option><option value="dramatic">{t('curves.dramatic')}</option><option value="bounce">{t('curves.bounce')}</option></select></label></div>{selected.type === 'model3d' && <div className="grid grid-cols-2 gap-1.5"><label className="flex items-end gap-1.5 pb-1 text-[10px]"><input type="checkbox" checked={Boolean(selected.animation.spin)} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, spin: event.target.checked } }))} /> {t('animator.autoSpin')}</label>{numberInput(t('animator.spinPerSec'), selected.animation.rotationSpeed ?? 35, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, rotationSpeed: value } })), 0, 720)}</div>}{selected.type === 'model3d' && (clipsByLayer[selected.id]?.length ?? 0) > 0 && <div className="space-y-2 rounded border border-emerald-400/30 bg-emerald-400/[.04] p-2"><label className="text-[10px] text-text-muted">{t('animator.skeletalAnimation')}<select value={selected.animation.clip ?? ''} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clip: event.target.value || undefined, clipOffset: layer.animation.clipOffset ?? 0, clipSpeed: layer.animation.clipSpeed ?? 1, clipLoop: layer.animation.clipLoop ?? true, clipReverse: layer.animation.clipReverse ?? false, clipTrimStart: 0, clipTrimEnd: undefined } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50"><option value="">{t('animator.off')}</option>{(clipsByLayer[selected.id] ?? []).map(clip => <option key={clip} value={clip}>{clip}</option>)}</select></label>{selected.animation.clip && <><div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.clipOffset'), selected.animation.clipOffset ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipOffset: value } })), 0, scene.duration, 1 / fps, selected.locked)}{numberInput(t('animator.clipSpeed'), selected.animation.clipSpeed ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipSpeed: value } })), .05, 8, .05, selected.locked)}{numberInput(t('animator.clipTrimIn'), selected.animation.clipTrimStart ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimStart: value, clipTrimEnd: layer.animation.clipTrimEnd !== undefined && layer.animation.clipTrimEnd <= value ? value + .001 : layer.animation.clipTrimEnd } })), 0, Math.max(0, (selectedClipDuration || 3600) - .001), 1 / fps, selected.locked)}{numberInput(t('animator.clipTrimOut'), selected.animation.clipTrimEnd ?? selectedClipDuration, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimEnd: Math.max((layer.animation.clipTrimStart ?? 0) + .001, value) } })), .001, selectedClipDuration || 3600, 1 / fps, selected.locked)}</div><div className="flex flex-wrap gap-3 text-[9px] text-text-secondary"><label className="flex items-center gap-1"><input type="checkbox" checked={selected.animation.clipLoop !== false} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipLoop: event.target.checked } }))} /> {t('animator.loopClip')}</label><label className="flex items-center gap-1"><input type="checkbox" checked={Boolean(selected.animation.clipReverse)} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipReverse: event.target.checked } }))} /> {t('animator.reverse')}</label><button type="button" disabled={selected.locked} onClick={() => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimStart: 0, clipTrimEnd: undefined } }))} className="ml-auto text-[8px] text-emerald-200 disabled:opacity-40">{t('animator.fullClip')}</button></div><p className="text-[8px] text-text-muted">{selectedClipDuration > 0 ? t('animator.clipLength', { seconds: selectedClipDuration.toFixed(2) }) : t('animator.readingClip')} {t('animator.clipSamplerHelp')}</p></>}</div>}</div> : <p className="text-[10px] text-text-muted">{t('animator.selectLayer')}</p>}
+      {selected && <button type="button" disabled={copilotBusy || selected.locked || copilotListening} onClick={dictateCopilotIntent} className="flex w-full items-center justify-center gap-1 rounded border border-fuchsia-300/35 bg-fuchsia-400/[.04] px-2 py-1 text-[9px] text-fuchsia-100 disabled:opacity-40"><Mic size={11} />{copilotListening ? t('animator.listening') : t('animator.dictate', { name: selected.name })}</button>}
       {selected?.type === 'effect' && selectedAtmosphere && <div className="space-y-2 rounded border border-purple-400/30 bg-purple-400/[.04] p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-purple-100">Atmospheric particles</span><span className="text-[8px] text-text-muted">Preview + WebM</span></div>
-        <p className="text-[8px] text-purple-100/70">{ATMOSPHERE_DESCRIPTIONS[selectedAtmosphere.kind]}</p>
-        <label className="text-[9px] text-text-muted">Effect<select value={selectedAtmosphere.kind} disabled={selected.locked} onChange={event => { const kind = event.target.value as SceneAtmosphereKind; updateLayer(selected.id, layer => ({ ...layer, name: ATMOSPHERE_LABELS[kind], source: `maestro-effect:${kind}`, atmosphere: { ...ATMOSPHERE_PRESETS[kind] } })) }} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50">{ATMOSPHERE_KINDS.map(kind => <option key={kind} value={kind}>{ATMOSPHERE_LABELS[kind]}</option>)}</select></label>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-purple-100">{t('animator.particles')}</span><span className="text-[8px] text-text-muted">{t('animator.previewWebm')}</span></div>
+        <p className="text-[8px] text-purple-100/70">{t(`atmosphere.descriptions.${selectedAtmosphere.kind}`)}</p>
+        <label className="text-[9px] text-text-muted">{t('animator.effect')}<select value={selectedAtmosphere.kind} disabled={selected.locked} onChange={event => { const kind = event.target.value as SceneAtmosphereKind; updateLayer(selected.id, layer => ({ ...layer, name: ATMOSPHERE_LABELS[kind], source: `maestro-effect:${kind}`, atmosphere: { ...ATMOSPHERE_PRESETS[kind] } })) }} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50">{ATMOSPHERE_KINDS.map(kind => <option key={kind} value={kind}>{t(`atmosphere.labels.${kind}`)}</option>)}</select></label>
         <div className="grid grid-cols-2 gap-1.5">
-          {numberInput('Density', selectedAtmosphere.density, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), density: Math.round(value) } })), 5, 240, 1, selected.locked)}
-          {numberInput('Speed', selectedAtmosphere.speed, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), speed: value } })), .05, 4, .05, selected.locked)}
-          {numberInput('Particle size', selectedAtmosphere.size, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), size: value } })), .2, 8, .05, selected.locked)}
-          {numberInput('Wind', selectedAtmosphere.wind, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), wind: value } })), -100, 100, 1, selected.locked)}
+          {numberInput(t('animator.density'), selectedAtmosphere.density, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), density: Math.round(value) } })), 5, 240, 1, selected.locked)}
+          {numberInput(t('animator.speed'), selectedAtmosphere.speed, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), speed: value } })), .05, 4, .05, selected.locked)}
+          {numberInput(t('animator.particleSize'), selectedAtmosphere.size, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), size: value } })), .2, 8, .05, selected.locked)}
+          {numberInput(t('animator.wind'), selectedAtmosphere.wind, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), wind: value } })), -100, 100, 1, selected.locked)}
         </div>
-        <label className="flex items-center justify-between gap-2 text-[9px] text-text-muted">Particle color<input type="color" value={selectedAtmosphere.color} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), color: event.target.value } }))} className="h-7 w-12 rounded border border-border bg-bg-tertiary disabled:opacity-50" /></label>
-        <p className="text-[8px] text-text-muted">Particles are deterministic: scrubbing, playback and recording show the same frame. Use layer opacity and Z to blend the effect into the shot.</p>
+        <label className="flex items-center justify-between gap-2 text-[9px] text-text-muted">{t('animator.particleColor')}<input type="color" value={selectedAtmosphere.color} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), color: event.target.value } }))} className="h-7 w-12 rounded border border-border bg-bg-tertiary disabled:opacity-50" /></label>
+        <p className="text-[8px] text-text-muted">{t('animator.particlesHelp')}</p>
       </div>}
       {selected && isVisualLayer(selected) && selected.type !== 'effect' && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Camera parallax</span><span className="text-[9px] text-text-muted">Z order unchanged</span></div>
-        <div className="grid grid-cols-3 gap-1">{(['background', 'midground', 'foreground'] as const).map(preset => <button key={preset} onClick={() => applyParallaxPreset(selected.id, preset)} className={`rounded border px-1 py-1.5 text-[8px] capitalize ${Math.abs((selected.parallax ?? 1) - PARALLAX_PRESETS[preset]) < .001 ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border text-text-muted hover:border-cyan-400/60'}`}>{preset}</button>)}</div>
-        {numberInput('Parallax strength', selected.parallax ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, parallax: Math.max(0, Math.min(2, value)) })), 0, 2, .05)}
-        <p className="text-[9px] text-text-muted">0 ignores camera pan, 1 follows it normally, and values above 1 feel closer. Zoom and camera roll still affect the full shot. Background adds 20% overscan to image/video layers; extreme moves may need more scale.</p>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.parallax')}</span><span className="text-[9px] text-text-muted">{t('animator.zUnchanged')}</span></div>
+        <div className="grid grid-cols-3 gap-1">{(['background', 'midground', 'foreground'] as const).map(preset => <button key={preset} onClick={() => applyParallaxPreset(selected.id, preset)} className={`rounded border px-1 py-1.5 text-[8px] capitalize ${Math.abs((selected.parallax ?? 1) - PARALLAX_PRESETS[preset]) < .001 ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border text-text-muted hover:border-cyan-400/60'}`}>{t(`animator.parallax${preset[0].toUpperCase()}${preset.slice(1)}` as 'animator.parallaxBackground')}</button>)}</div>
+        {numberInput(t('animator.parallaxStrength'), selected.parallax ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, parallax: Math.max(0, Math.min(2, value)) })), 0, 2, .05)}
+        <p className="text-[9px] text-text-muted">{t('animator.parallaxHelp')}</p>
       </div>}
       {selected && selectedEffects && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Layer effects & mask</span><button type="button" disabled={selected.locked} onClick={() => updateLayer(selected.id, layer => ({ ...layer, effects: undefined }))} className="text-[8px] text-text-muted hover:text-text-primary disabled:opacity-40">Reset</button></div>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.effectsMask')}</span><button type="button" disabled={selected.locked} onClick={() => updateLayer(selected.id, layer => ({ ...layer, effects: undefined }))} className="text-[8px] text-text-muted hover:text-text-primary disabled:opacity-40">{t('animator.reset')}</button></div>
         <div className="grid grid-cols-2 gap-1.5">
-          <label className="text-[9px] text-text-muted">Blend<select value={selectedEffects.blendMode} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { blendMode: event.target.value as SceneBlendMode })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="normal">Normal</option><option value="screen">Screen</option><option value="multiply">Multiply</option><option value="overlay">Overlay</option><option value="lighten">Lighten</option><option value="darken">Darken</option></select></label>
-          <label className="text-[9px] text-text-muted">Mask<select value={selectedEffects.mask} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { mask: event.target.value as SceneMask })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="none">Rectangle</option><option value="rounded">Rounded</option><option value="ellipse">Ellipse</option></select></label>
+          <label className="text-[9px] text-text-muted">{t('animator.blend')}<select value={selectedEffects.blendMode} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { blendMode: event.target.value as SceneBlendMode })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="normal">{t('animator.blendNormal')}</option><option value="screen">{t('animator.blendScreen')}</option><option value="multiply">{t('animator.blendMultiply')}</option><option value="overlay">{t('animator.blendOverlay')}</option><option value="lighten">{t('animator.blendLighten')}</option><option value="darken">{t('animator.blendDarken')}</option></select></label>
+          <label className="text-[9px] text-text-muted">{t('animator.mask')}<select value={selectedEffects.mask} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { mask: event.target.value as SceneMask })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="none">{t('animator.maskRect')}</option><option value="rounded">{t('animator.maskRounded')}</option><option value="ellipse">{t('animator.maskEllipse')}</option></select></label>
         </div>
-        {selectedEffects.mask === 'rounded' && numberInput('Corner radius %', selectedEffects.maskRadius, value => updateLayerEffects(selected.id, { maskRadius: value }), 0, 50, 1, selected.locked)}
-        <div className="grid grid-cols-2 gap-1.5">{numberInput('Blur %', selectedEffects.blur, value => updateLayerEffects(selected.id, { blur: value }), 0, 3, .05, selected.locked)}{numberInput('Glow %', selectedEffects.glow, value => updateLayerEffects(selected.id, { glow: value }), 0, 5, .05, selected.locked)}{numberInput('Shadow %', selectedEffects.shadow, value => updateLayerEffects(selected.id, { shadow: value }), 0, 8, .1, selected.locked)}{numberInput('Brightness', selectedEffects.brightness, value => updateLayerEffects(selected.id, { brightness: value }), 0, 3, .05, selected.locked)}{numberInput('Contrast', selectedEffects.contrast, value => updateLayerEffects(selected.id, { contrast: value }), 0, 3, .05, selected.locked)}{numberInput('Saturation', selectedEffects.saturation, value => updateLayerEffects(selected.id, { saturation: value }), 0, 4, .05, selected.locked)}{numberInput('Hue °', selectedEffects.hue, value => updateLayerEffects(selected.id, { hue: value }), -180, 180, 1, selected.locked)}</div>
-        <p className="text-[8px] text-text-muted">Percent effects scale from the frame’s short side, so preview, saved thumbnail and WebM stay visually aligned. Effects are clipped to the layer box or selected mask.</p>
+        {selectedEffects.mask === 'rounded' && numberInput(t('animator.cornerRadius'), selectedEffects.maskRadius, value => updateLayerEffects(selected.id, { maskRadius: value }), 0, 50, 1, selected.locked)}
+        <div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.blur'), selectedEffects.blur, value => updateLayerEffects(selected.id, { blur: value }), 0, 3, .05, selected.locked)}{numberInput(t('animator.glow'), selectedEffects.glow, value => updateLayerEffects(selected.id, { glow: value }), 0, 5, .05, selected.locked)}{numberInput(t('animator.shadow'), selectedEffects.shadow, value => updateLayerEffects(selected.id, { shadow: value }), 0, 8, .1, selected.locked)}{numberInput(t('animator.brightness'), selectedEffects.brightness, value => updateLayerEffects(selected.id, { brightness: value }), 0, 3, .05, selected.locked)}{numberInput(t('animator.contrast'), selectedEffects.contrast, value => updateLayerEffects(selected.id, { contrast: value }), 0, 3, .05, selected.locked)}{numberInput(t('animator.saturation'), selectedEffects.saturation, value => updateLayerEffects(selected.id, { saturation: value }), 0, 4, .05, selected.locked)}{numberInput(t('animator.hue'), selectedEffects.hue, value => updateLayerEffects(selected.id, { hue: value }), -180, 180, 1, selected.locked)}</div>
+        <p className="text-[8px] text-text-muted">{t('animator.effectsHelp')}</p>
       </div>}
       {selected && selectedStrip && <div className="space-y-2 rounded border border-fuchsia-400/30 bg-fuchsia-400/[.04] p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-fuchsia-100">Infinite strip</span><label className="flex items-center gap-1 text-[9px] text-text-secondary"><input type="checkbox" checked={selectedStrip.enabled} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), enabled: event.target.checked } }))} /> Enabled</label></div>
-        <p className="text-[8px] text-text-muted">Repeats this layer in a seamless moving row or column. It works with transparent 2D assets, video and GLB.</p>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-fuchsia-100">{t('animator.infiniteStrip')}</span><label className="flex items-center gap-1 text-[9px] text-text-secondary"><input type="checkbox" checked={selectedStrip.enabled} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), enabled: event.target.checked } }))} /> {t('animator.enabled')}</label></div>
+        <p className="text-[8px] text-text-muted">{t('animator.stripHelp')}</p>
         <div className="grid grid-cols-2 gap-1.5">
-          {numberInput('Copies', selectedStrip.count, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), count: Math.round(value) } })), 1, 12, 1, selected.locked)}
-          {numberInput('Spacing %', selectedStrip.spacing, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), spacing: value } })), 2, 200, 1, selected.locked)}
-          {numberInput('Speed %/s', selectedStrip.speed, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), speed: value } })), 0, 300, 1, selected.locked)}
-          {numberInput('Start phase %', selectedStrip.phase, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), phase: value } })), -1000, 1000, 1, selected.locked)}
+          {numberInput(t('animator.copies'), selectedStrip.count, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), count: Math.round(value) } })), 1, 12, 1, selected.locked)}
+          {numberInput(t('animator.spacing'), selectedStrip.spacing, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), spacing: value } })), 2, 200, 1, selected.locked)}
+          {numberInput(t('animator.speedPerSec'), selectedStrip.speed, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), speed: value } })), 0, 300, 1, selected.locked)}
+          {numberInput(t('animator.startPhase'), selectedStrip.phase, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), phase: value } })), -1000, 1000, 1, selected.locked)}
         </div>
-        <label className="text-[9px] text-text-muted">Direction<select value={selectedStrip.direction} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), direction: event.target.value as LayerStrip['direction'] } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="down">Top → bottom</option><option value="up">Bottom → top</option><option value="right">Left → right</option><option value="left">Right → left</option></select></label>
-        <label className="text-[9px] text-text-muted">Seam cover<select value={selectedStrip.seamOccluder.enabled ? selectedStrip.seamOccluder.kind : 'off'} disabled={selected.locked || !selectedStrip.enabled} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, enabled: event.target.value !== 'off', kind: event.target.value === 'off' ? normalizedStrip(layer.strip).seamOccluder.kind : event.target.value as SeamOccluderKind } } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="off">Off</option><option value="pole">Pole / post</option><option value="lamp">Lamp</option><option value="tree">Tree</option><option value="column">Column</option></select></label>
-        {selectedStrip.seamOccluder.enabled && <><>{numberInput('Cover scale', selectedStrip.seamOccluder.scale, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, scale: value } } })), .45, 1.8, .05, selected.locked)}</>{numberInput('Cover opacity', selectedStrip.seamOccluder.opacity, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, opacity: value } } })), .2, 1, .05, selected.locked)}</>}
-        <p className="text-[8px] text-text-muted">A foreground silhouette stays locked to each tile join so a looping plate never shows its seam.</p>
-        {selected.type === 'model3d' && selectedStrip.count > 4 && <p className="text-[8px] text-amber-200">Preview caps GLB copies at 4. Extra copies freeze the GPU.</p>}
+        <label className="text-[9px] text-text-muted">{t('animator.direction')}<select value={selectedStrip.direction} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), direction: event.target.value as LayerStrip['direction'] } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="down">{t('animator.dirDown')}</option><option value="up">{t('animator.dirUp')}</option><option value="right">{t('animator.dirRight')}</option><option value="left">{t('animator.dirLeft')}</option></select></label>
+        <label className="text-[9px] text-text-muted">{t('animator.seamCover')}<select value={selectedStrip.seamOccluder.enabled ? selectedStrip.seamOccluder.kind : 'off'} disabled={selected.locked || !selectedStrip.enabled} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, enabled: event.target.value !== 'off', kind: event.target.value === 'off' ? normalizedStrip(layer.strip).seamOccluder.kind : event.target.value as SeamOccluderKind } } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="off">{t('animator.off')}</option><option value="pole">{t('animator.seamPole')}</option><option value="lamp">{t('animator.seamLamp')}</option><option value="tree">{t('animator.seamTree')}</option><option value="column">{t('animator.seamColumn')}</option></select></label>
+        {selectedStrip.seamOccluder.enabled && <><>{numberInput(t('animator.coverScale'), selectedStrip.seamOccluder.scale, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, scale: value } } })), .45, 1.8, .05, selected.locked)}</>{numberInput(t('animator.coverOpacity'), selectedStrip.seamOccluder.opacity, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, opacity: value } } })), .2, 1, .05, selected.locked)}</>}
+        <p className="text-[8px] text-text-muted">{t('animator.seamHelp')}</p>
+        {selected.type === 'model3d' && selectedStrip.count > 4 && <p className="text-[8px] text-amber-200">{t('animator.glbCap')}</p>}
       </div>}
       </>}
       {selected && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Layer relationship</span><span className="text-[8px] text-text-muted">2D scene space</span></div>
-        <label className="text-[9px] text-text-muted">Behaviour<select value={selected.relationship?.type ?? 'none'} disabled={selected.locked} onChange={event => setLayerRelationship(event.target.value as NonNullable<AnimatorLayer['relationship']>['type'] | 'none')} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="none">Independent</option>{selected.type !== 'camera' && <option value="parent">Parent / child</option>}<option value="follow">Follow layer</option>{selected.type !== 'camera' && <option value="lookAt">Look at layer</option>}</select></label>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.relationship')}</span><span className="text-[8px] text-text-muted">{t('animator.sceneSpace')}</span></div>
+        <label className="text-[9px] text-text-muted">{t('animator.behaviour')}<select value={selected.relationship?.type ?? 'none'} disabled={selected.locked} onChange={event => setLayerRelationship(event.target.value as NonNullable<AnimatorLayer['relationship']>['type'] | 'none')} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="none">{t('animator.independent')}</option>{selected.type !== 'camera' && <option value="parent">{t('animator.parentChild')}</option>}<option value="follow">{t('animator.followLayer')}</option>{selected.type !== 'camera' && <option value="lookAt">{t('animator.lookAtLayer')}</option>}</select></label>
         {selected.relationship && <>
-          <label className="text-[9px] text-text-muted">Target<select value={selected.relationship.targetLayerId} disabled={selected.locked} onChange={event => setRelationshipTarget(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50">{relationshipTargets.map(layer => <option key={layer.id} value={layer.id}>{layer.name} · {layer.type}</option>)}</select></label>
-          {selected.relationship.type === 'follow' && <div className="grid grid-cols-3 gap-1">{numberInput('Offset X', selected.relationship.offsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetX: value } : undefined })), -200, 200, .5)}{numberInput('Offset Y', selected.relationship.offsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetY: value } : undefined })), -200, 200, .5)}{numberInput('Strength', selected.relationship.strength ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, strength: Math.max(0, Math.min(1, value)) } : undefined })), 0, 1, .05)}</div>}
-          {selected.relationship.type === 'lookAt' && numberInput('Angle offset', selected.relationship.rotationOffset ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, rotationOffset: value } : undefined })), -360, 360, 1)}
-          <p className="text-[8px] text-text-muted">{selected.relationship.type === 'parent' ? 'Inherits the target movement, scale and rotation while preserving this layer’s own animation.' : selected.relationship.type === 'follow' ? 'Blends toward the target plus the stored offset. Camera follow keeps the subject framed.' : 'Rotates this layer so it faces the target in the current output aspect ratio.'}</p>
+          <label className="text-[9px] text-text-muted">{t('animator.target')}<select value={selected.relationship.targetLayerId} disabled={selected.locked} onChange={event => setRelationshipTarget(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50">{relationshipTargets.map(layer => <option key={layer.id} value={layer.id}>{t('animator.targetOption', { name: layer.name, type: layer.type })}</option>)}</select></label>
+          {selected.relationship.type === 'follow' && <div className="grid grid-cols-3 gap-1">{numberInput(t('animator.offsetX'), selected.relationship.offsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetX: value } : undefined })), -200, 200, .5)}{numberInput(t('animator.offsetY'), selected.relationship.offsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetY: value } : undefined })), -200, 200, .5)}{numberInput(t('animator.strength'), selected.relationship.strength ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, strength: Math.max(0, Math.min(1, value)) } : undefined })), 0, 1, .05)}</div>}
+          {selected.relationship.type === 'lookAt' && numberInput(t('animator.angleOffset'), selected.relationship.rotationOffset ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, rotationOffset: value } : undefined })), -360, 360, 1)}
+          <p className="text-[8px] text-text-muted">{selected.relationship.type === 'parent' ? t('animator.parentHelp') : selected.relationship.type === 'follow' ? t('animator.followHelp') : t('animator.lookAtHelp')}</p>
         </>}
       </div>}
       {selected && isVisualLayer(selected) && selected.animation.orbit && <div className="rounded border border-accent-blue/40 bg-accent-blue/10 p-2 space-y-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-accent-blue">Relational orbit</span><button onClick={() => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: undefined } }))} className="text-[9px] text-text-muted hover:text-red-400">Remove</button></div>
-        <label className="text-[10px] text-text-muted">Orbit around<select value={selected.animation.orbit.targetLayerId} disabled={selected.locked} onChange={event => setOrbitTarget(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50">{scene.layers.filter(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id)).map(layer => <option key={layer.id} value={layer.id}>{layer.name} · {layer.type}</option>)}</select></label>
-        <div className="grid grid-cols-2 gap-1.5">{numberInput('Horizontal radius', selected.animation.orbit.radiusX, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusX: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput('Vertical radius', selected.animation.orbit.radiusY, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusY: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput('Orbit copies', selected.animation.orbit.count ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, count: Math.round(value) } : undefined } })), 1, 12, 1)}{numberInput('Turns', selected.animation.orbit.turns, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, turns: value } : undefined } })), -20, 20, .25)}{numberInput('Center offset X', selected.animation.orbit.centerOffsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetX: value } : undefined } })), -100, 100, .5)}{numberInput('Center offset Y', selected.animation.orbit.centerOffsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetY: value } : undefined } })), -100, 100, .5)}{numberInput('Start phase °', selected.animation.orbit.phase, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, phase: value } : undefined } })), -360, 360, 5)}<label className="text-[10px] text-text-muted">Facing<select value={selected.animation.orbit.facing ?? 'fixed'} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, facing: event.target.value as NonNullable<NonNullable<AnimatorLayer['animation']['orbit']>['facing']> } : undefined } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50"><option value="fixed">Fixed direction</option><option value="center">Face center</option><option value="outward">Face outward</option></select></label></div>
-        <p className="text-[9px] text-text-muted">The cyan cross marks the exact orbit center. Use center offsets when an asymmetric GLB's visual center differs from its layer box. Negative turns reverse direction.</p>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-accent-blue">{t('animator.orbit')}</span><button onClick={() => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: undefined } }))} className="text-[9px] text-text-muted hover:text-red-400">{t('animator.remove')}</button></div>
+        <label className="text-[10px] text-text-muted">{t('animator.orbitAround')}<select value={selected.animation.orbit.targetLayerId} disabled={selected.locked} onChange={event => setOrbitTarget(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50">{scene.layers.filter(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id)).map(layer => <option key={layer.id} value={layer.id}>{t('animator.targetOption', { name: layer.name, type: layer.type })}</option>)}</select></label>
+        <div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.radiusX'), selected.animation.orbit.radiusX, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusX: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput(t('animator.radiusY'), selected.animation.orbit.radiusY, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusY: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput(t('animator.orbitCopies'), selected.animation.orbit.count ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, count: Math.round(value) } : undefined } })), 1, 12, 1)}{numberInput(t('animator.turns'), selected.animation.orbit.turns, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, turns: value } : undefined } })), -20, 20, .25)}{numberInput(t('animator.centerOffsetX'), selected.animation.orbit.centerOffsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetX: value } : undefined } })), -100, 100, .5)}{numberInput(t('animator.centerOffsetY'), selected.animation.orbit.centerOffsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetY: value } : undefined } })), -100, 100, .5)}{numberInput(t('animator.startPhaseDeg'), selected.animation.orbit.phase, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, phase: value } : undefined } })), -360, 360, 5)}<label className="text-[10px] text-text-muted">{t('animator.facing')}<select value={selected.animation.orbit.facing ?? 'fixed'} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, facing: event.target.value as NonNullable<NonNullable<AnimatorLayer['animation']['orbit']>['facing']> } : undefined } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50"><option value="fixed">{t('animator.facingFixed')}</option><option value="center">{t('animator.facingCenter')}</option><option value="outward">{t('animator.facingOutward')}</option></select></label></div>
+        <p className="text-[9px] text-text-muted">{t('animator.orbitHelp')}</p>
       </div>}
       <div className="border-t border-border pt-3 space-y-2">
         <div className="grid grid-cols-2 gap-1.5">
-          <button disabled={!selected} onClick={() => selected && navigator.clipboard.writeText(JSON.stringify({ version: 1, motion: motion(selected) }, null, 2)).then(() => setMessage('Movement JSON copied.'))} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1 disabled:opacity-40"><Copy size={11} /> Copy movement</button>
-          <button onClick={() => void persistScene()} disabled={saving || !scene.layers.length} className="rounded bg-accent-blue py-1.5 text-[10px] text-white flex justify-center gap-1 disabled:opacity-40">{saving ? <Loader2 size={11} className="animate-spin" /> : <Film size={11} />} {saving ? 'Saving…' : 'Save scene'}</button>
+          <button disabled={!selected} onClick={() => selected && navigator.clipboard.writeText(JSON.stringify({ version: 1, motion: motion(selected) }, null, 2)).then(() => setMessage(t('animator.movementCopied')))} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1 disabled:opacity-40"><Copy size={11} /> {t('animator.copyMovement')}</button>
+          <button onClick={() => void persistScene()} disabled={saving || !scene.layers.length} className="rounded bg-accent-blue py-1.5 text-[10px] text-white flex justify-center gap-1 disabled:opacity-40">{saving ? <Loader2 size={11} className="animate-spin" /> : <Film size={11} />} {saving ? t('animator.saving') : t('animator.saveScene')}</button>
         </div>
         <div className="grid grid-cols-2 gap-1.5">
-          <button onClick={exportScene} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><Download size={11} /> Export scene</button>
-          <button onClick={() => setLibraryOpen(true)} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FolderOpen size={11} /> Open scene</button>
+          <button onClick={exportScene} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><Download size={11} /> {t('animator.exportScene')}</button>
+          <button onClick={() => setLibraryOpen(true)} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FolderOpen size={11} /> {t('animator.openScene')}</button>
         </div>
         <input ref={sceneInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void importSceneFile(file) }} />
-        <button onClick={() => setJsonOpen(value => !value)} className="w-full rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> {jsonOpen ? 'Close movement JSON' : 'Movement JSON tools'}</button>
-        {jsonOpen && <div className="space-y-1.5"><textarea value={motionText} onChange={event => setMotionText(event.target.value)} placeholder="Paste movement JSON" rows={4} className="w-full rounded border border-border bg-bg-primary p-1.5 text-[9px] font-mono" /><div className="flex gap-1.5"><button disabled={!selected || !motionText.trim()} onClick={() => { try { applyMotion(JSON.parse(motionText.replace(/^\uFEFF/, '').trim())); setMessage('Movement applied to selected layer.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid motion JSON.') } }} className="rounded bg-accent-blue px-2 py-1 text-[10px] text-white disabled:opacity-40">Apply movement</button><button onClick={() => motionInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">Load movement file</button></div><input ref={motionInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void loadMotionFile(file) }} /></div>}
+        <button onClick={() => setJsonOpen(value => !value)} className="w-full rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> {jsonOpen ? t('animator.closeJson') : t('animator.jsonTools')}</button>
+        {jsonOpen && <div className="space-y-1.5"><textarea value={motionText} onChange={event => setMotionText(event.target.value)} placeholder={t('animator.pasteJson')} rows={4} className="w-full rounded border border-border bg-bg-primary p-1.5 text-[9px] font-mono" /><div className="flex gap-1.5"><button disabled={!selected || !motionText.trim()} onClick={() => { try { applyMotion(JSON.parse(motionText.replace(/^\uFEFF/, '').trim())); setMessage(t('animator.movementApplied')) } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.invalidMotionJson')) } }} className="rounded bg-accent-blue px-2 py-1 text-[10px] text-white disabled:opacity-40">{t('animator.applyMovement')}</button><button onClick={() => motionInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">{t('animator.loadMovement')}</button></div><input ref={motionInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void loadMotionFile(file) }} /></div>}
         <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">Return only valid HocusPocus Scene Animator motion JSON.{`\n`}Use start/end x and y from 0 to 100, start/end scale,{`\n`}duration in seconds, curve as linear/ease/dramatic/bounce,{`\n`}and optional spin plus rotationSpeed. For multi-step motion, add keyframes with id, time, x, y, scale, opacity, rotation and curve. Optional events use id, local time, name and a plain-text payload.{`\n`}Do not include Markdown or explanations.{`\n\n`}{'{"version":1,"motion":{"start":{"x":10,"y":70,"scale":0.2},"end":{"x":90,"y":30,"scale":0.8},"duration":3,"curve":"dramatic","spin":true,"rotationSpeed":240}}'}</div>
       </div>
       {message && <p className="text-[10px] text-text-secondary">{message}</p>}
@@ -3189,7 +3193,7 @@ export function SceneAnimatorPanel() {
       onClose={() => setLibraryOpen(false)}
       onPickFile={() => { setLibraryOpen(false); sceneInputRef.current?.click() }}
       onOpenScene={(next, label) => {
-        importScene(JSON.stringify(next), `Opened ${label}`)
+        importScene(JSON.stringify(next), t('animator.openedLabel', { label }))
         setLibraryOpen(false)
       }}
     />

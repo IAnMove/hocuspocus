@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Save, Trash2, FolderOpen, SlidersHorizontal } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { PostProcessing } from './PostProcessing'
 import { ControlVideoSection } from './ControlVideoSection'
 import { LoraSelector } from '../SettingsDrawer/LoraSelector'
@@ -10,6 +11,8 @@ import { WindowSettings } from './DurationSlider'
 import type { GenerateParams } from '../../types'
 
 function PresetManager() {
+  const { t } = useUiTranslation('studio')
+  const { t: tCommon } = useUiTranslation('common')
   const presets = useStore(s => s.presets)
   const loadPresets = useStore(s => s.loadPresets)
   const savePreset = useStore(s => s.savePreset)
@@ -45,12 +48,12 @@ function PresetManager() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-[11px] text-text-muted uppercase tracking-wider">Presets</label>
+        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.presets')}</label>
         <button
           onClick={() => setShowSave(!showSave)}
           className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5"
         >
-          <Save size={10} /> Save Current
+          <Save size={10} /> {t('advanced.saveCurrent')}
         </button>
       </div>
 
@@ -61,7 +64,7 @@ function PresetManager() {
             value={saveName}
             onChange={e => setSaveName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSave()}
-            placeholder="Preset name..."
+            placeholder={t('advanced.presetName')}
             className="flex-1 bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
             autoFocus
           />
@@ -70,7 +73,7 @@ function PresetManager() {
             disabled={!saveName.trim()}
             className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue-hover disabled:opacity-50"
           >
-            Save
+            {tCommon('actions.save')}
           </button>
         </div>
       )}
@@ -82,7 +85,7 @@ function PresetManager() {
               <button
                 onClick={() => loadPresetFn(p)}
                 className="flex-1 text-left px-2 py-1.5 rounded text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors truncate flex items-center gap-1.5"
-                title={`${p.name}\n${p.activated_loras.length} LoRA(s) - ${p.model_type}`}
+                title={t('advanced.loraCount', { name: p.name, count: p.activated_loras.length, model: p.model_type })}
               >
                 <FolderOpen size={10} className="shrink-0 text-text-muted" />
                 <span className="truncate">{p.name}</span>
@@ -101,7 +104,7 @@ function PresetManager() {
           ))}
         </div>
       ) : (
-        <p className="text-[10px] text-text-muted">No {generationMode} presets for this model</p>
+        <p className="text-[10px] text-text-muted">{t('advanced.noPresets', { mode: generationMode })}</p>
       )}
     </div>
   )
@@ -111,6 +114,7 @@ function PresetManager() {
  *  count AND its hover tooltip, so a surprising number names its source
  *  instead of sending the user hunting through every section. */
 function useAdvancedActiveItems(): string[] {
+  const { t } = useUiTranslation('studio')
   const params = useStore(s => s.params)
   const modelOptions = useStore(s => s.modelOptions)
   const spatialUpsampling = useStore(s => s.spatialUpsampling)
@@ -124,23 +128,23 @@ function useAdvancedActiveItems(): string[] {
   const isScailHq = isScailEdit && params.model_type === 'scail2_14B'
 
   const items: string[] = []
-  if (params.seed !== -1) items.push(`Seed ${params.seed}`)
-  if (params.minimax_h3_turbo_mode) items.push('H3 Turbo')
+  if (params.seed !== -1) items.push(t('advanced.active.seed', { seed: params.seed }))
+  if (params.minimax_h3_turbo_mode) items.push(t('advanced.active.h3Turbo'))
   if (params.skip_steps_cache_type === 'first_block') {
-    items.push(`H3 cache ${params.skip_steps_multiplier ?? 0.08}`)
+    items.push(t('advanced.active.h3Cache', { value: params.skip_steps_multiplier ?? 0.08 }))
   }
   if (
     modelOptions?.sliding_window_auto_prompt_pacing === true
     && params.minimax_h3_window_storyboard === false
-  ) items.push('H3 window planning off')
+  ) items.push(t('advanced.active.windowOff'))
   if (
     (params.negative_prompt?.length ?? 0) > 0
     && (!isScailEdit || isScailHq)
-  ) items.push('Negative prompt')
-  for (const l of params.activated_loras) items.push(`LoRA: ${l.replace(/\.(safetensors|sft)$/i, '')}`)
-  if (!isScailEdit && spatialUpsampling) items.push(`Upscaling (${spatialUpsampling})`)
-  if (!isScailEdit && filmGrainIntensity > 0) items.push('Film grain')
-  if (!isScailEdit && (params.self_refiner_setting ?? 0) > 0) items.push('Self refiner')
+  ) items.push(t('advanced.active.negative'))
+  for (const l of params.activated_loras) items.push(t('advanced.active.lora', { name: l.replace(/\.(safetensors|sft)$/i, '') }))
+  if (!isScailEdit && spatialUpsampling) items.push(t('advanced.active.upscaling', { method: spatialUpsampling }))
+  if (!isScailEdit && filmGrainIntensity > 0) items.push(t('advanced.active.filmGrain'))
+  if (!isScailEdit && (params.self_refiner_setting ?? 0) > 0) items.push(t('advanced.active.selfRefiner'))
   if (
     modelOptions?.minimax_h3_text_encoder_choices?.length
     && params.minimax_h3_text_encoder
@@ -149,16 +153,16 @@ function useAdvancedActiveItems(): string[] {
     const selected = modelOptions.minimax_h3_text_encoder_choices.find(
       choice => choice.value === params.minimax_h3_text_encoder
     )
-    items.push(`H3 encoder: ${selected?.label || params.minimax_h3_text_encoder}`)
+    items.push(t('advanced.active.encoder', { name: selected?.label || params.minimax_h3_text_encoder }))
   }
   // injection_strength only matters when injected frames actually exist.
   // The persisted snapshot strips image_refs (file paths are ephemeral)
   // but kept the strength value — counting it alone produced a ghost
   // badge with nothing visibly active in the panel.
   const refCount = Array.isArray(params.image_refs) ? params.image_refs.length : (params.image_refs ? 1 : 0)
-  if (!isScailEdit && params.injection_strength != null && params.injection_strength !== 1.0 && refCount > 0) items.push('Injection strength')
-  if (params.preserve_source_style === false) items.push('Source restyling allowed')
-  if (params.image_fit_mode === 'crop') items.push('I2V crop to canvas')
+  if (!isScailEdit && params.injection_strength != null && params.injection_strength !== 1.0 && refCount > 0) items.push(t('advanced.active.injection'))
+  if (params.preserve_source_style === false) items.push(t('advanced.active.restyleAllowed'))
+  if (params.image_fit_mode === 'crop') items.push(t('advanced.active.crop'))
   // Process letter codes persist by design (the dropdown remembers the
   // user's choice across sessions), but their REQUIRED inputs are
   // ephemeral and stripped from persistence: frames injection ("F")
@@ -174,12 +178,13 @@ function useAdvancedActiveItems(): string[] {
       : vptVisible.includes('V')
         ? !!params.video_guide
         : true
-    if (effective) items.push(`Process: ${vptVisible}`)
+    if (effective) items.push(t('advanced.active.process', { code: vptVisible }))
   }
   return items
 }
 
 export function AdvancedSettings() {
+  const { t } = useUiTranslation('studio')
   const [open, setOpen] = useState(false)
   const params = useStore(s => s.params)
   const setParam = useStore(s => s.setParam)
@@ -255,7 +260,7 @@ export function AdvancedSettings() {
         }`}
       >
         <SlidersHorizontal size={13} />
-        <span className="hidden md:inline">Advanced</span>
+        <span className="hidden md:inline">{t('chrome.advanced')}</span>
         {advancedCount > 0 && (
           <span
             title={advancedItems.join('\n')}
@@ -278,7 +283,7 @@ export function AdvancedSettings() {
       >
             {/* Header */}
             <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
-              <span className="text-sm font-semibold text-text-primary">Advanced Settings</span>
+              <span className="text-sm font-semibold text-text-primary">{t('advanced.title')}</span>
               <button onClick={() => setOpen(false)} className="p-1 rounded-lg hover:bg-bg-hover text-text-secondary">
                 <X size={16} />
               </button>
@@ -301,7 +306,7 @@ export function AdvancedSettings() {
               {modelOptions?.minimax_h3_text_encoder_choices?.length ? (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-                    H3 Text Encoder
+                    {t('advanced.h3Encoder')}
                   </label>
                   <select
                     value={params.minimax_h3_text_encoder || modelOptions.minimax_h3_text_encoder_default || modelOptions.minimax_h3_text_encoder_choices[0]?.value}
@@ -317,7 +322,7 @@ export function AdvancedSettings() {
                   <p className="text-[9px] text-text-muted mt-1">
                     {modelOptions.minimax_h3_text_encoder_choices.find(
                       choice => choice.value === (params.minimax_h3_text_encoder || modelOptions.minimax_h3_text_encoder_default)
-                    )?.size_hint || 'Changing this reloads the H3 model.'}
+                    )?.size_hint || t('advanced.encoderReload')}
                   </p>
                 </div>
               ) : null}
@@ -343,17 +348,17 @@ export function AdvancedSettings() {
                       className="accent-accent-blue"
                     />
                     <span className="text-[11px] text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
-                      First Block Cache
+                      {t('advanced.firstBlockCache')}
                     </span>
                     <span className="text-[9px] text-amber-300/90 border border-amber-400/30 rounded px-1 py-0.5">
-                      Experimental
+                      {t('chrome.experimental')}
                     </span>
                   </label>
                   {params.skip_steps_cache_type === 'first_block' && (
                     <div className="space-y-2 pl-1 border-l border-border ml-1">
                       <div>
                         <label className="text-[10px] text-text-muted block mb-1">
-                          {modelOptions.skip_steps_multiplier_label || 'Cache Threshold'}
+                          {modelOptions.skip_steps_multiplier_label || t('advanced.cacheThreshold')}
                         </label>
                         <select
                           value={params.skip_steps_multiplier ?? modelOptions.default_skip_steps_multiplier ?? 0.08}
@@ -367,7 +372,7 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Warmup</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.warmup')}</label>
                           <span className="text-[10px] text-text-secondary">
                             {params.skip_steps_start_step_perc ?? modelOptions.default_skip_steps_start_step_perc ?? 25}%
                           </span>
@@ -385,7 +390,7 @@ export function AdvancedSettings() {
                     </div>
                   )}
                   <p className="text-[9px] text-text-muted">
-                    Reuses stable transformer work after warmup. Best suited to 15-20 step H3 runs; higher thresholds can change motion or fine detail.
+                    {t('advanced.cacheHint')}
                   </p>
                 </div>
               )}
@@ -405,11 +410,11 @@ export function AdvancedSettings() {
                       className="accent-accent-blue"
                     />
                     <span className="text-[11px] text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
-                      Plan Prompt Across Windows
+                      {t('advanced.planWindows')}
                     </span>
                   </label>
                   <p className="text-[9px] text-text-muted">
-                    H3 expands one idea into complete window-local visual and audio prompts. Enhance enables this automatically; disable afterward only to supply manual line-per-window prompts.
+                    {t('advanced.planWindowsHint')}
                   </p>
                 </div>
               )}
@@ -422,7 +427,7 @@ export function AdvancedSettings() {
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-[11px] text-text-muted uppercase tracking-wider">
-                          {modelOptions.duration_slider.label || 'Max Duration'}
+                          {modelOptions.duration_slider.label || t('advanced.maxDuration')}
                         </label>
                         <span className="text-xs text-text-secondary">{Math.round(durationSeconds)}s</span>
                       </div>
@@ -440,7 +445,7 @@ export function AdvancedSettings() {
                   {modelOptions?.pause_between_sentences && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[11px] text-text-muted uppercase tracking-wider">Speaker Pause</label>
+                        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.speakerPause')}</label>
                         <span className="text-xs text-text-secondary">{(params.pause_seconds ?? 0.5).toFixed(2)}s</span>
                       </div>
                       <input
@@ -456,7 +461,7 @@ export function AdvancedSettings() {
                   {modelOptions?.temperature_enabled && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[11px] text-text-muted uppercase tracking-wider">Temperature</label>
+                        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.temperature')}</label>
                         <span className="text-xs text-text-secondary">{(params.temperature ?? 1.0).toFixed(2)}</span>
                       </div>
                       <input
@@ -471,7 +476,7 @@ export function AdvancedSettings() {
                   {/* Guidance Scale */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11px] text-text-muted uppercase tracking-wider">Guidance (CFG)</label>
+                      <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.guidanceCfg')}</label>
                       <span className="text-xs text-text-secondary">{(params.guidance_scale ?? 3.0).toFixed(1)}</span>
                     </div>
                     <input
@@ -488,7 +493,7 @@ export function AdvancedSettings() {
                       <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{setting.name}</label>
                       <input
                         type="number"
-                        placeholder="Empty = disabled"
+                        placeholder={t('advanced.emptyDisabled')}
                         value={String((params.custom_settings as Record<string, unknown> | undefined)?.[setting.id] ?? '')}
                         onChange={e => {
                           const val = e.target.value.trim()
@@ -509,50 +514,50 @@ export function AdvancedSettings() {
                   {/* Compressor Settings — shown when Smooth Speaker Volumes is enabled */}
                   {params.tts_dynaudnorm === true && (
                     <div className="space-y-3 p-2.5 bg-bg-tertiary/50 rounded-lg border border-border/50">
-                      <label className="text-[10px] text-text-muted uppercase tracking-wider block">Speaker Transition Compressor</label>
+                      <label className="text-[10px] text-text-muted uppercase tracking-wider block">{t('advanced.compressor')}</label>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Threshold</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.threshold')}</label>
                           <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_threshold ?? -25)}dB</span>
                         </div>
                         <input type="range" min={-50} max={-10} step={1}
                           value={Number(params.tts_comp_threshold ?? -25)}
                           onChange={e => setParam('tts_comp_threshold', parseInt(e.target.value))}
                           className="w-full" />
-                        <p className="text-[9px] text-text-muted">Volume level where boosting kicks in. Lower = catches quieter parts.</p>
+                        <p className="text-[9px] text-text-muted">{t('advanced.thresholdHint')}</p>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Attack</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.attack')}</label>
                           <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_attack ?? 5)}ms</span>
                         </div>
                         <input type="range" min={1} max={50} step={1}
                           value={Number(params.tts_comp_attack ?? 5)}
                           onChange={e => setParam('tts_comp_attack', parseInt(e.target.value))}
                           className="w-full" />
-                        <p className="text-[9px] text-text-muted">How fast the compressor reacts. Low = catches brief dips at speaker transitions.</p>
+                        <p className="text-[9px] text-text-muted">{t('advanced.attackHint')}</p>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Release</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.release')}</label>
                           <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_release ?? 100)}ms</span>
                         </div>
                         <input type="range" min={20} max={500} step={10}
                           value={Number(params.tts_comp_release ?? 100)}
                           onChange={e => setParam('tts_comp_release', parseInt(e.target.value))}
                           className="w-full" />
-                        <p className="text-[9px] text-text-muted">How fast it returns to normal after boosting. Higher = smoother.</p>
+                        <p className="text-[9px] text-text-muted">{t('advanced.releaseHint')}</p>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Makeup Gain</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.makeup')}</label>
                           <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_makeup ?? 4)}dB</span>
                         </div>
                         <input type="range" min={0} max={12} step={1}
                           value={Number(params.tts_comp_makeup ?? 4)}
                           onChange={e => setParam('tts_comp_makeup', parseInt(e.target.value))}
                           className="w-full" />
-                        <p className="text-[9px] text-text-muted">How much to boost the quiet parts. Higher = louder transitions.</p>
+                        <p className="text-[9px] text-text-muted">{t('advanced.makeupHint')}</p>
                       </div>
                     </div>
                   )}
@@ -565,9 +570,9 @@ export function AdvancedSettings() {
               {(
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider">Seed</label>
+                  <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.seed')}</label>
                   <button onClick={() => setParam('seed', -1)} className="text-[10px] text-accent-blue hover:text-accent-blue-hover">
-                    Random
+                    {t('chrome.random')}
                   </button>
                 </div>
                 <input
@@ -575,7 +580,7 @@ export function AdvancedSettings() {
                   value={Number(params.seed)}
                   onChange={e => setParam('seed', Number(e.target.value))}
                   className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
-                  placeholder="-1 for random"
+                  placeholder={t('advanced.seedPlaceholder')}
                 />
               </div>
               ) as any /* eslint-disable-line @typescript-eslint/no-explicit-any -- preserves the legacy JSX child inference boundary. */}
@@ -583,15 +588,15 @@ export function AdvancedSettings() {
               {/* Self Refiner */}
               {!isScailEdit && modelOptions?.self_refiner === true ? (
                 <div>
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Self Refiner</label>
+                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.selfRefiner')}</label>
                   <select
                     value={params.self_refiner_setting ?? 0}
                     onChange={e => setParam('self_refiner_setting', Number(e.target.value))}
                     className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
                   >
-                    <option value={0}>Disabled</option>
-                    <option value={1}>Enabled with P1-Norm</option>
-                    <option value={2}>Enabled with P2-Norm</option>
+                    <option value={0}>{t('chrome.disabled')}</option>
+                    <option value={1}>{t('advanced.p1')}</option>
+                    <option value={2}>{t('advanced.p2')}</option>
                   </select>
                 </div>
               ) : null}
@@ -602,14 +607,14 @@ export function AdvancedSettings() {
               {isVideo && (hasStartImage || params.image_mode === 2) && (
                 <div className="space-y-2">
                   <label className="block text-[10px] text-text-muted">
-                    Start image fit
+                    {t('advanced.startFit')}
                     <select
                       value={params.image_fit_mode === 'crop' ? 'crop' : 'contain'}
                       onChange={e => setParam('image_fit_mode', e.target.value as 'contain' | 'crop')}
                       className="mt-1 w-full rounded-lg border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:border-accent-blue focus:outline-none"
                     >
-                      <option value="contain">Fit with black bars · no distortion</option>
-                      <option value="crop">Crop to fill canvas · edges may be lost</option>
+                      <option value="contain">{t('advanced.fitBars')}</option>
+                      <option value="crop">{t('advanced.cropFill')}</option>
                     </select>
                   </label>
                   <label className="flex cursor-pointer items-center gap-2">
@@ -620,13 +625,11 @@ export function AdvancedSettings() {
                       className="accent-accent-blue"
                     />
                     <span className="text-[11px] uppercase tracking-wider text-text-muted">
-                      Preserve source image style
+                      {t('advanced.preserveStyle')}
                     </span>
                   </label>
                   <p className="text-[9px] text-text-muted/60">
-                    Fit preserves the complete source inside the selected canvas;
-                    black bars appear only when aspect ratios differ. Crop fills
-                    the canvas but can remove content near the edges.
+                    {t('advanced.fitHint')}
                   </p>
                 </div>
               )}
@@ -637,7 +640,7 @@ export function AdvancedSettings() {
                 <div className="space-y-3">
                   {/* Single / 2-Stage / 3-Stage segmented control — mutually exclusive */}
                   <div>
-                    <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Pipeline Mode</label>
+                    <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.pipeline')}</label>
                     <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
                       <button
                         onClick={() => { setParam('progressive_pipeline', false); setParam('single_stage_pipeline', true) }}
@@ -646,9 +649,9 @@ export function AdvancedSettings() {
                             ? 'bg-bg-active text-text-primary'
                             : 'text-text-secondary hover:text-text-primary'
                         }`}
-                        title="Run at full target resolution in one pass. No upscale, no refine. Higher VRAM."
+                        title={t('advanced.singleTitle')}
                       >
-                        Single
+                        {t('advanced.single')}
                       </button>
                       <button
                         onClick={() => { setParam('progressive_pipeline', false); setParam('single_stage_pipeline', false) }}
@@ -657,9 +660,9 @@ export function AdvancedSettings() {
                             ? 'bg-bg-active text-text-primary'
                             : 'text-text-secondary hover:text-text-primary'
                         }`}
-                        title="Half-res denoise, then 2x spatial upscale + refine. Balanced speed/quality."
+                        title={t('advanced.standardTitle')}
                       >
-                        Standard (2-Stage)
+                        {t('advanced.standard')}
                       </button>
                       <button
                         onClick={() => { setParam('progressive_pipeline', true); setParam('single_stage_pipeline', false) }}
@@ -668,9 +671,9 @@ export function AdvancedSettings() {
                             ? 'bg-bg-active text-text-primary'
                             : 'text-text-secondary hover:text-text-primary'
                         }`}
-                        title="Progressive 1/4 → 1/2 → full. Smoother motion, slower."
+                        title={t('advanced.progressiveTitle')}
                       >
-                        Progressive (3-Stage)
+                        {t('advanced.progressive')}
                       </button>
                     </div>
                   </div>
@@ -678,8 +681,7 @@ export function AdvancedSettings() {
                   {/* Single-Stage: no extra controls — stage 1 runs at full res */}
                   {!!params.single_stage_pipeline && !params.progressive_pipeline && (
                     <div className="text-[10px] text-text-muted px-1">
-                      Runs the distilled denoise at full target resolution in one pass. No stage-2 upscale or refine.
-                      Uses ~4× the stage-1 VRAM of 2-Stage mode; drop to a smaller resolution preset if you OOM.
+                      {t('advanced.singleHint')}
                     </div>
                   )}
 
@@ -687,7 +689,7 @@ export function AdvancedSettings() {
                   {!params.progressive_pipeline && !params.single_stage_pipeline && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[11px] text-text-muted uppercase tracking-wider">Stage 2 Steps</label>
+                        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.stage2Steps')}</label>
                         <span className="text-xs text-text-secondary">{params.stage2_steps || 3}</span>
                       </div>
                       <input
@@ -697,7 +699,7 @@ export function AdvancedSettings() {
                         className="w-full accent-accent-blue"
                       />
                       <div className="flex justify-between text-[10px] text-text-muted mt-0.5">
-                        <span>2 (faster)</span><span>7 (more detail)</span>
+                        <span>{t('advanced.faster')}</span><span>{t('advanced.moreDetail')}</span>
                       </div>
                     </div>
                   )}
@@ -707,7 +709,7 @@ export function AdvancedSettings() {
                     <div className="space-y-3 pt-1 border-t border-border/30">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Stage 1 Image Weight</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.stage1Weight')}</label>
                           <span className="text-[10px] text-text-secondary">{(params.progressive_stage1_image_weight ?? 0.7).toFixed(2)}</span>
                         </div>
                         <input type="range" min={0.3} max={1.0} step={0.05}
@@ -715,12 +717,12 @@ export function AdvancedSettings() {
                           onChange={e => setParam('progressive_stage1_image_weight', parseFloat(e.target.value))}
                           className="w-full accent-accent-blue" />
                         <div className="flex justify-between text-[9px] text-text-muted mt-0.5">
-                          <span>0.30 (more motion)</span><span>1.00 (match start image)</span>
+                          <span>{t('advanced.moreMotion')}</span><span>{t('advanced.matchStart')}</span>
                         </div>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Stage 2 Steps (half res)</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.stage2Half')}</label>
                           <span className="text-[10px] text-text-secondary">{params.progressive_stage2_steps ?? 5}</span>
                         </div>
                         <input type="range" min={1} max={8} step={1}
@@ -730,7 +732,7 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Stage 3 Steps (full res)</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.stage3Full')}</label>
                           <span className="text-[10px] text-text-secondary">{params.progressive_stage3_steps ?? 3}</span>
                         </div>
                         <input type="range" min={1} max={8} step={1}
@@ -740,7 +742,7 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Stage 2 Sigma</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.stage2Sigma')}</label>
                           <span className="text-[10px] text-text-secondary">{(params.progressive_stage2_sigma ?? 0.85).toFixed(2)}</span>
                         </div>
                         <input type="range" min={0.5} max={1.0} step={0.05}
@@ -748,12 +750,12 @@ export function AdvancedSettings() {
                           onChange={e => setParam('progressive_stage2_sigma', parseFloat(e.target.value))}
                           className="w-full accent-accent-blue" />
                         <div className="flex justify-between text-[9px] text-text-muted mt-0.5">
-                          <span>0.50 (preserve)</span><span>1.00 (regenerate)</span>
+                          <span>{t('advanced.preserve')}</span><span>{t('advanced.regenerate')}</span>
                         </div>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Stage 3 Sigma</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.stage3Sigma')}</label>
                           <span className="text-[10px] text-text-secondary">{(params.progressive_stage3_sigma ?? 0.85).toFixed(2)}</span>
                         </div>
                         <input type="range" min={0.5} max={1.0} step={0.05}
@@ -761,12 +763,12 @@ export function AdvancedSettings() {
                           onChange={e => setParam('progressive_stage3_sigma', parseFloat(e.target.value))}
                           className="w-full accent-accent-blue" />
                         <div className="flex justify-between text-[9px] text-text-muted mt-0.5">
-                          <span>0.50 (preserve)</span><span>1.00 (regenerate)</span>
+                          <span>{t('advanced.preserve')}</span><span>{t('advanced.regenerate')}</span>
                         </div>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">Stage 3 Image Weight (full res)</label>
+                          <label className="text-[10px] text-text-muted">{t('advanced.stage3Weight')}</label>
                           <span className="text-[10px] text-text-secondary">{(params.progressive_stage3_image_weight ?? 0.7).toFixed(2)}</span>
                         </div>
                         <input type="range" min={0.3} max={1.0} step={0.05}
@@ -774,7 +776,7 @@ export function AdvancedSettings() {
                           onChange={e => setParam('progressive_stage3_image_weight', parseFloat(e.target.value))}
                           className="w-full accent-accent-blue" />
                         <div className="flex justify-between text-[9px] text-text-muted mt-0.5">
-                          <span>0.30 (more detail freedom)</span><span>1.00 (match start image)</span>
+                          <span>{t('advanced.moreFreedom')}</span><span>{t('advanced.matchStart')}</span>
                         </div>
                       </div>
                     </div>
@@ -795,13 +797,11 @@ export function AdvancedSettings() {
                       onChange={e => setParam('reference_pipeline', e.target.checked ? true : undefined)}
                       className="accent-accent-blue" />
                     <span className="text-[11px] text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
-                      Reference Pipeline (10Eros)
+                      {t('advanced.referencePipeline')}
                     </span>
                   </label>
                   <p className="text-[9px] text-text-muted">
-                    Runs the model author&apos;s ComfyUI workflow config: 9+3 steps on hand-tuned sigmas,
-                    CFG only on the first 2 steps, STG on the first 4, ancestral sampling.
-                    Steps / CFG / STG sliders below are ignored while this is on.
+                    {t('advanced.referencePipelineHint')}
                   </p>
                 </div>
               )}
@@ -811,7 +811,7 @@ export function AdvancedSettings() {
               {showInferenceSteps && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] text-text-muted uppercase tracking-wider">Inference Steps</label>
+                    <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.inferenceSteps')}</label>
                     <input
                       type="number"
                       value={params.num_inference_steps}
@@ -829,13 +829,12 @@ export function AdvancedSettings() {
                   />
                   {h3TurboMode && (
                     <p className="text-[9px] text-text-muted mt-0.5">
-                      Turbo mode locks this preset to {modelOptions?.minimax_h3_turbo?.steps} steps.
+                      {t('advanced.turboLock', { steps: modelOptions?.minimax_h3_turbo?.steps })}
                     </p>
                   )}
                   {isScailFast && (
                     <p className="text-[9px] text-text-muted mt-0.5">
-                      Fast keeps its distilled CFG 1 recipe; guidance and
-                      negative-prompt controls do not apply.
+                      {t('advanced.fastCfg')}
                     </p>
                   )}
                 </div>
@@ -845,7 +844,7 @@ export function AdvancedSettings() {
               {showGuidanceScale && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] text-text-muted uppercase tracking-wider">Guidance Scale</label>
+                    <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.guidanceScale')}</label>
                     <input
                       type="number"
                       value={params.guidance_scale}
@@ -869,27 +868,27 @@ export function AdvancedSettings() {
                   {/* STG Scale */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11px] text-text-muted uppercase tracking-wider">STG Scale</label>
-                      <span className="text-xs text-text-secondary">{(params.stg_scale ?? 0) > 0 ? (params.stg_scale as number).toFixed(1) : 'Off'}</span>
+                      <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.stg')}</label>
+                      <span className="text-xs text-text-secondary">{(params.stg_scale ?? 0) > 0 ? (params.stg_scale as number).toFixed(1) : t('chrome.off')}</span>
                     </div>
                     <input type="range" min={0} max={3} step={0.1}
                       value={params.stg_scale ?? 0}
                       onChange={e => setParam('stg_scale', parseFloat(e.target.value))}
                       className="w-full" />
-                    <p className="text-[9px] text-text-muted mt-0.5">Spatio-temporal guidance. 0 = off. Sharpens structure &amp; motion via a third denoising pass (~50% slower). Try 1.0.</p>
+                    <p className="text-[9px] text-text-muted mt-0.5">{t('advanced.stgHint')}</p>
                   </div>
 
                   {/* CFG Rescale */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11px] text-text-muted uppercase tracking-wider">CFG Rescale</label>
+                      <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.cfgRescale')}</label>
                       <span className="text-xs text-text-secondary">{(params.cfg_rescale ?? 0).toFixed(2)}</span>
                     </div>
                     <input type="range" min={0} max={1} step={0.05}
                       value={params.cfg_rescale ?? 0}
                       onChange={e => setParam('cfg_rescale', parseFloat(e.target.value))}
                       className="w-full" />
-                    <p className="text-[9px] text-text-muted mt-0.5">Reduces over-saturation. 0.7 recommended.</p>
+                    <p className="text-[9px] text-text-muted mt-0.5">{t('advanced.cfgRescaleHint')}</p>
                   </div>
 
                   {/* Gradient Estimation */}
@@ -900,15 +899,15 @@ export function AdvancedSettings() {
                         onChange={e => setParam('use_gradient_estimation', e.target.checked ? true : undefined)}
                         className="accent-accent-blue" />
                       <span className="text-[11px] text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
-                        Gradient Estimation
+                        {t('advanced.gradient')}
                       </span>
                     </label>
                     {params.use_gradient_estimation && (
                       <div className="pl-1 border-l border-border ml-1 space-y-1.5">
-                        <p className="text-[9px] text-accent-blue/80">Use 20-25 steps instead of 30-40 for comparable quality.</p>
+                        <p className="text-[9px] text-accent-blue/80">{t('advanced.gradientHint')}</p>
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] text-text-muted">Gamma</span>
+                            <span className="text-[10px] text-text-muted">{t('advanced.gamma')}</span>
                             <span className="text-[9px] text-text-muted">{(params.ge_gamma ?? 2.0).toFixed(1)}</span>
                           </div>
                           <input type="range" min={1} max={4} step={0.1}
@@ -925,43 +924,43 @@ export function AdvancedSettings() {
               {/* Keyframe Conditioning Mode — Start/End frames */}
               {!isScailEdit && (isVideo || isAvatar) && (hasStartImage || hasEndImage) && (
                 <div>
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Start/End Frame Mode</label>
+                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.startEndMode')}</label>
                   <select
                     value={params.keyframe_conditioning_mode || 'replace'}
                     onChange={e => setParam('keyframe_conditioning_mode', e.target.value)}
                     className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
                   >
-                    <option value="replace">Replace (Default)</option>
-                    <option value="additive">Additive (Smooth)</option>
+                    <option value="replace">{t('advanced.replaceDefault')}</option>
+                    <option value="additive">{t('advanced.additiveSmooth')}</option>
                   </select>
-                  <p className="text-[9px] text-text-muted mt-0.5">Replace: exact adherence to source image. Additive: smoother blending.</p>
+                  <p className="text-[9px] text-text-muted mt-0.5">{t('advanced.replaceHint')}</p>
                 </div>
               )}
 
               {/* Keyframe Conditioning Mode — Injected keyframes */}
               {!isScailEdit && (isVideo || isAvatar) && hasImageRefs && (
                 <div>
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Injected Keyframe Mode</label>
+                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.injectMode')}</label>
                   <select
                     value={params.keyframe_inject_mode || 'additive'}
                     onChange={e => setParam('keyframe_inject_mode', e.target.value)}
                     className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
                   >
-                    <option value="additive">Additive (Default)</option>
-                    <option value="replace">Replace (Strict)</option>
+                    <option value="additive">{t('advanced.additiveDefault')}</option>
+                    <option value="replace">{t('advanced.replaceStrict')}</option>
                   </select>
-                  <p className="text-[9px] text-text-muted mt-0.5">Additive: smooth transitions at injected frames. Replace: strict adherence.</p>
+                  <p className="text-[9px] text-text-muted mt-0.5">{t('advanced.injectHint')}</p>
                 </div>
               )}
 
               {/* Negative Prompt */}
               {showNegativePrompt && (
                 <div>
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Negative Prompt</label>
+                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.negative')}</label>
                   <textarea
                     value={params.negative_prompt || ''}
                     onChange={e => setParam('negative_prompt', e.target.value)}
-                    placeholder="What to avoid..."
+                    placeholder={t('advanced.negativePlaceholder')}
                     rows={2}
                     className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                     style={{ resize: 'vertical', minHeight: 48 }}
@@ -980,28 +979,28 @@ export function AdvancedSettings() {
                       className="accent-accent-blue"
                     />
                     <span className="text-[11px] text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
-                      MMAudio (Soundtrack)
+                      {t('advanced.mmaudio')}
                     </span>
                   </label>
                   {params.MMAudio_setting === 1 && (
                     <div className="space-y-2 pl-1 border-l border-border ml-1">
                       <div>
-                        <label className="text-[10px] text-text-muted block mb-1">Prompt (1-2 keywords)</label>
+                        <label className="text-[10px] text-text-muted block mb-1">{t('advanced.mmaudioPrompt')}</label>
                         <input
                           type="text"
                           value={(params.MMAudio_prompt) || ''}
                           onChange={e => setParam('MMAudio_prompt', e.target.value)}
-                          placeholder="e.g. rain, thunder"
+                          placeholder={t('advanced.mmaudioPromptPh')}
                           className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-text-muted block mb-1">Negative Prompt (1-2 keywords)</label>
+                        <label className="text-[10px] text-text-muted block mb-1">{t('advanced.mmaudioNeg')}</label>
                         <input
                           type="text"
                           value={(params.MMAudio_neg_prompt) || ''}
                           onChange={e => setParam('MMAudio_neg_prompt', e.target.value)}
-                          placeholder="e.g. talking, speech"
+                          placeholder={t('advanced.mmaudioNegPh')}
                           className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                         />
                       </div>
@@ -1026,7 +1025,7 @@ export function AdvancedSettings() {
               {/* Dedicated Recast/Repaint submissions create one edit job. */}
               {!isScailEdit && <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider">Output Count</label>
+                  <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.outputCount')}</label>
                   <span className="text-xs text-text-secondary">{params.repeat_generation || 1}</span>
                 </div>
                 <input

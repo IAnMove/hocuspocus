@@ -156,7 +156,7 @@ test('Wizard DOM interaction navigates, accepts form input, and restores a pendi
     const first = render(<AgentAssistantPanel workspace="default" tasks={[]} onClose={() => undefined} />)
     const pending = await screen.findByRole('group', { name: 'Wizard pending question' })
     assert.match(pending.textContent || '', /Elige la canción exacta/)
-    assert.ok(screen.getByRole('button', { name: 'Himno v2 · recomendado' }))
+    assert.ok(screen.getByRole('button', { name: 'Himno v2 · recommended' }))
     const textarea = screen.getByPlaceholderText('Ask HocusPocus for a spell…') as HTMLTextAreaElement
     fireEvent.change(textarea, { target: { value: 'usa el audio recomendado' } })
     assert.equal(textarea.value, 'usa el audio recomendado')
@@ -166,7 +166,7 @@ test('Wizard DOM interaction navigates, accepts form input, and restores a pendi
     first.unmount()
     const second = render(<AgentAssistantPanel workspace="default" tasks={[]} onClose={() => undefined} />)
     await screen.findByRole('group', { name: 'Wizard pending question' })
-    fireEvent.click(screen.getByRole('button', { name: 'Himno v2 · recomendado' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Himno v2 · recommended' }))
     await waitFor(() => assert.ok(workflowWrites > 0))
     second.unmount()
   } finally {

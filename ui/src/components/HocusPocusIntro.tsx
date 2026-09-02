@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { SkipForward } from 'lucide-react'
+import { useUiTranslation } from '../i18n'
 
 /** How long the poster holds — measured from the moment the key art is
  *  actually on screen, not from mount. See the readiness gate below. */
@@ -40,6 +41,7 @@ interface HocusPocusIntroProps {
 
 /** A short boot identity before the existing first-run / release notes dialog. */
 export function HocusPocusIntro({ onComplete, version }: HocusPocusIntroProps) {
+  const { t } = useUiTranslation('shell')
   const [leaving, setLeaving] = useState(false)
   const [ready, setReady] = useState(false)
   const artRef = useRef<HTMLImageElement>(null)
@@ -108,7 +110,7 @@ export function HocusPocusIntro({ onComplete, version }: HocusPocusIntroProps) {
 
   return (
     <section
-      aria-label="HocusPocus is starting"
+      aria-label={t('intro.aria')}
       onClick={finish}
       data-run={ready ? 'true' : 'false'}
       data-leaving={leaving ? 'true' : 'false'}
@@ -166,7 +168,7 @@ export function HocusPocusIntro({ onComplete, version }: HocusPocusIntroProps) {
               style={{ animationDelay: '700ms' }}
               className="hp-intro-beat mt-6 text-[10px] font-semibold uppercase tracking-[0.46em] text-amber-100/70"
             >
-              Forge stories. Shape worlds.
+              {t('intro.tagline')}
             </p>
             <h1
               style={{ animationDelay: '900ms' }}
@@ -183,7 +185,7 @@ export function HocusPocusIntro({ onComplete, version }: HocusPocusIntroProps) {
               style={{ animationDelay: '1750ms' }}
               className="hp-intro-beat mt-5 max-w-sm text-sm leading-relaxed text-amber-50/70"
             >
-              The local studio to imagine, direct, and turn worlds into images, video, sound, and 3D.
+              {t('intro.body')}
             </p>
           </div>
         </div>
@@ -205,7 +207,7 @@ export function HocusPocusIntro({ onComplete, version }: HocusPocusIntroProps) {
         onClick={finish}
         className="absolute bottom-6 right-6 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/20 px-3 py-1.5 text-[11px] text-white/70 backdrop-blur transition hover:border-amber-200/60 hover:text-white"
       >
-        <SkipForward size={13} /> Skip
+        <SkipForward size={13} /> {t('intro.skip')}
       </button>
 
       {/* Draws across the full width over exactly the hold time, so the

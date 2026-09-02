@@ -1,7 +1,9 @@
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { ChoiceControl } from '../shared/ChoiceControl'
 
 export function ModelOptionsPanel() {
+  const { t } = useUiTranslation('settings')
   const modelOptions = useStore(s => s.modelOptions)
   const params = useStore(s => s.params)
   const setParam = useStore(s => s.setParam)
@@ -26,10 +28,10 @@ export function ModelOptionsPanel() {
       {/* Sampler / Solver */}
       {sample_solvers && sample_solvers.length > 0 && (
         <ChoiceControl
-          config={{ choices: sample_solvers, label: 'Sampler' }}
+          config={{ choices: sample_solvers, label: t('modelOptions.sampler') }}
           value={params.video_prompt_type || sample_solvers[0]?.[1] || ''}
           onChange={val => setParam('video_prompt_type', val)}
-          label="Sampler"
+          label={t('modelOptions.sampler')}
         />
       )}
 
@@ -37,7 +39,7 @@ export function ModelOptionsPanel() {
       {guidance_max_phases > 1 && !lock_guidance_phases && (
         <div>
           <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-            Guidance Phases
+            {t('modelOptions.guidancePhases')}
           </label>
           <select
             value={params.guidance_phases ?? 1}
@@ -46,7 +48,7 @@ export function ModelOptionsPanel() {
           >
             {Array.from({ length: guidance_max_phases }, (_, i) => i + 1).map(n => (
               <option key={n} value={n}>
-                {n === 1 ? 'One Phase' : n === 2 ? 'Two Phases' : 'Three Phases'}
+                {n === 1 ? t('modelOptions.onePhase') : n === 2 ? t('modelOptions.twoPhases') : t('modelOptions.threePhases')}
               </option>
             ))}
           </select>
@@ -57,7 +59,7 @@ export function ModelOptionsPanel() {
       {flow_shift && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">{modelOptions.architecture === 'minimax_h3' ? 'Video Sigma Shift' : 'Flow Shift'}</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider">{modelOptions.architecture === 'minimax_h3' ? t('modelOptions.videoSigmaShift') : t('modelOptions.flowShift')}</label>
             <input
               type="number"
               value={params.flow_shift ?? 3.0}
@@ -80,55 +82,55 @@ export function ModelOptionsPanel() {
       {modelOptions.architecture === 'minimax_h3' && (
         <div className="space-y-4">
           <div>
-            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Conditioning Mode</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('modelOptions.conditioningMode')}</label>
             <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-tertiary p-1">
               <button type="button" onClick={() => setParam('h3_reference_mode', 'first_frame')}
                 className={`rounded-md px-2 py-1.5 text-[11px] transition-colors ${(params.h3_reference_mode ?? 'first_frame') === 'first_frame' ? 'bg-accent-blue text-white' : 'text-text-secondary hover:bg-bg-hover'}`}>
-                Exact frame · FL2VA
+                {t('modelOptions.exactFrame')}
               </button>
               <button type="button" onClick={() => setParam('h3_reference_mode', 'references')}
                 className={`rounded-md px-2 py-1.5 text-[11px] transition-colors ${params.h3_reference_mode === 'references' ? 'bg-cyan-600 text-white' : 'text-text-secondary hover:bg-bg-hover'}`}>
-                References · Ref2VA
+                {t('modelOptions.references')}
               </button>
             </div>
             <p className="text-[10px] text-text-muted mt-1">
-              FL2VA preserves the supplied first frame. Ref2VA composes a new shot from image/video/audio references and cannot guarantee an exact opening frame.
+              {t('modelOptions.conditioningHint')}
             </p>
           </div>
           <div>
-            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">4090 Model Profile</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('modelOptions.profile4090')}</label>
             <select
               value={params.h3_model_profile ?? 'quality'}
               onChange={e => setParam('h3_model_profile', e.target.value as 'balanced' | 'quality' | 'low_memory')}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             >
-              <option value="quality">Quality 4090 · INT8 (recommended)</option>
-              <option value="balanced">Legacy Balanced · INT8</option>
-              <option value="low_memory">Low VRAM fallback · INT4</option>
+              <option value="quality">{t('modelOptions.quality4090')}</option>
+              <option value="balanced">{t('modelOptions.legacyBalanced')}</option>
+              <option value="low_memory">{t('modelOptions.lowVram')}</option>
             </select>
-            <p className="text-[10px] text-text-muted mt-1">INT4 is retried automatically only if INT8 runs out of VRAM. The selected FL2VA or Ref2VA checkpoint downloads on first use.</p>
+            <p className="text-[10px] text-text-muted mt-1">{t('modelOptions.profileHint')}</p>
           </div>
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] text-text-muted uppercase tracking-wider">Audio Sigma Shift</label>
+              <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('modelOptions.audioSigmaShift')}</label>
               <input type="number" value={params.h3_audio_shift ?? 3.0}
                 onChange={e => setParam('h3_audio_shift', Number(e.target.value))} step={0.1}
                 className="w-14 bg-bg-tertiary border border-border rounded px-2 py-0.5 text-xs text-text-primary text-center focus:outline-none" />
             </div>
             <input type="range" min={0.1} max={20} step={0.1} value={params.h3_audio_shift ?? 3.0}
               onChange={e => setParam('h3_audio_shift', Number(e.target.value))} />
-            <p className="text-[10px] text-text-muted mt-1">Official default: video 12, audio 3.</p>
+            <p className="text-[10px] text-text-muted mt-1">{t('modelOptions.officialDefault')}</p>
           </div>
           <div>
-            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Audio Direction</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('modelOptions.audioDirection')}</label>
             <textarea
               rows={3}
               value={params.h3_audio_prompt ?? ''}
               onChange={e => setParam('h3_audio_prompt', e.target.value)}
-              placeholder="Ambience, dialogue, music and sound effects for the clip"
+              placeholder={t('modelOptions.audioPlaceholder')}
               className="w-full resize-y bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-accent-blue"
             />
-            <p className="text-[10px] text-text-muted mt-1">Appended as <code>Audio:</code> when the main prompt has no audio clause. Director adds each shot's planned ambience, effects and dialogue automatically.</p>
+            <p className="text-[10px] text-text-muted mt-1">{t('modelOptions.audioHint')}</p>
           </div>
         </div>
       )}
@@ -137,16 +139,16 @@ export function ModelOptionsPanel() {
       {self_refiner && (
         <div>
           <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-            Self Refiner
+            {t('modelOptions.selfRefiner')}
           </label>
           <select
             value={params.self_refiner_setting ?? 0}
             onChange={e => setParam('self_refiner_setting', Number(e.target.value))}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value={0}>Disabled</option>
-            <option value={1}>Enabled with P1-Norm</option>
-            <option value={2}>Enabled with P2-Norm</option>
+            <option value={0}>{t('modelOptions.disabled')}</option>
+            <option value={1}>{t('modelOptions.p1')}</option>
+            <option value={2}>{t('modelOptions.p2')}</option>
           </select>
         </div>
       )}

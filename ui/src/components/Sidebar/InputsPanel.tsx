@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { X, Upload, Plus, Music, Film, Mic, Layers, Loader2, AlertTriangle } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 
 // A reference clip has to be long enough to carry a subject or a motion, and short enough that its
@@ -86,6 +87,8 @@ const getMediaDuration = (file: File): Promise<number | null> => {
 }
 
 export function InputsPanel() {
+  const { t } = useUiTranslation('studio')
+  const { t: tCommon } = useUiTranslation('common')
   const modelOptions = useStore(s => s.modelOptions)
   const startImage = useStore(s => s.startImage)
   const endImage = useStore(s => s.endImage)
@@ -244,8 +247,12 @@ export function InputsPanel() {
     const duration = await probeClipDuration(file)
     if (duration > 0 && (duration < REFERENCE_CLIP_MIN_SECONDS || duration > REFERENCE_CLIP_MAX_SECONDS)) {
       window.alert(
-        `A reference video must be between ${REFERENCE_CLIP_MIN_SECONDS} and ${REFERENCE_CLIP_MAX_SECONDS} ` +
-        `seconds long.\n\n"${file.name}" is ${duration.toFixed(1)}s.\n\nPick a different clip, or trim this one.`
+        t('inputs.clipDurationAlert', {
+          min: REFERENCE_CLIP_MIN_SECONDS,
+          max: REFERENCE_CLIP_MAX_SECONDS,
+          name: file.name,
+          duration: duration.toFixed(1),
+        })
       )
       pickReferences()
       return
@@ -363,7 +370,7 @@ export function InputsPanel() {
       const imageModel = maestro.selectedModelPerMode.image || 'flux2_klein_9b'
       const model = maestro.models.find(item => item.model_type === imageModel)
       if (model && !model.supports_ref_images) {
-        throw new Error(`The selected image model “${imageModel}” does not support reference images. Choose a reference-capable image model first.`)
+        throw new Error(t('inputs.noRefModel', { model: imageModel }))
       }
 
       const startPath = startImage
@@ -404,23 +411,23 @@ export function InputsPanel() {
         await new Promise(resolve => window.setTimeout(resolve, 1500))
         const status = await api.fetchJobStatus(submitted.job_id)
         if (status.status === 'failed' || status.status === 'cancelled') {
-          throw new Error(status.error || status.message || 'Composite image generation failed')
+          throw new Error(status.error || status.message || t('inputs.compositeFailed'))
         }
         if (status.status === 'completed') {
           outputPath = status.output_files.find(path => /\.(png|jpe?g|webp)$/i.test(path)) || ''
           break
         }
       }
-      if (!outputPath) throw new Error('Composite image generation timed out or returned no image')
+      if (!outputPath) throw new Error(t('inputs.compositeTimeout'))
       const response = await fetch(api.getFileUrl(outputPath))
-      if (!response.ok) throw new Error('The composite image could not be loaded')
+      if (!response.ok) throw new Error(t('inputs.compositeLoadFailed'))
       const blob = await response.blob()
       const filename = basename(outputPath)
       setStartImage(new File([blob], filename, { type: blob.type || 'image/png' }))
       setParam('h3_reference_mode', 'first_frame')
       setCompositeNotice({
         kind: 'ok',
-        text: 'Composite ready. It replaced the Start frame; MiniMax H3 will now preserve it with FL2VA.',
+        text: t('inputs.compositeReady'),
       })
       void maestro.loadOutputs()
     } catch (error) {
@@ -479,7 +486,12 @@ export function InputsPanel() {
   //   everything else (W1 25/Mid/75, and ALL of W2+) -> injected keyframe
   // All tiles share the same controls (window + offset) — start/end aren't
   // special-cased. Extend mode: the source video is the anchor, so all inject.
-  const offsetLabel = (offset: string) => OFFSET_PRESETS.find(p => p.value === offset)?.label ?? offset
+  const offsetLabel = (offset: string) => {
+    if (offset === 'start') return t('inputs.offsetStart')
+    if (offset === 'middle') return t('inputs.offsetMid')
+    if (offset === 'end') return t('inputs.offsetEnd')
+    return OFFSET_PRESETS.find(p => p.value === offset)?.label ?? offset
+  }
   const offsetPct = (offset: string) => OFFSET_PRESETS.find(p => p.value === offset)?.pct ?? 1
   const lastWindow = Math.max(0, windowInfo.windowCount - 1)
   const hasStart = !!startImage || (!isExtend && !!params.image_start)
@@ -527,14 +539,14 @@ export function InputsPanel() {
     if (Math.abs(sourceRatio - targetRatio) / targetRatio < 0.025) return null
     const orientation = (size: ImageSize) => (
       Math.abs(size.width / size.height - 1) < 0.025
-        ? 'cuadrada'
-        : size.width > size.height ? 'horizontal' : 'vertical'
+        ? 'square'
+        : size.width > size.height ? 'landscape' : 'portrait'
     )
     return {
       target,
       sourceOrientation: orientation(startImageSize),
       targetOrientation: orientation(target),
-      bars: sourceRatio < targetRatio ? 'laterales' : 'arriba y abajo',
+      bars: sourceRatio < targetRatio ? 'sides' : 'topBottom',
     }
   }, [hasStart, isH3, params.resolution, startImageSize])
 
@@ -674,11 +686,11 @@ export function InputsPanel() {
     return false
   }
   const frameRoutingHint = (tile: FrameTile): string => {
-    if (isExtend) return 'Injected as a keyframe into the new content.'
+    if (isExtend) return t('inputs.hintInject')
     const role = frameRoleFor(tile.window, tile.offset)
-    if (role === 'start') return 'Used as the first frame (image-to-video start).'
-    if (role === 'end') return 'Used as the final frame.'
-    return 'Injected as a keyframe at this point in the timeline.'
+    if (role === 'start') return t('inputs.hintStart')
+    if (role === 'end') return t('inputs.hintEnd')
+    return t('inputs.hintKeyframe')
   }
 
   // ── Audio / control-video handlers ─────────────────────────────────
@@ -782,7 +794,7 @@ export function InputsPanel() {
 
   return (
     <div>
-      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Inputs</label>
+      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('inputs.title')}</label>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {/* Extend-from source video (Extend mode only) — the timeline anchor. */}
         {isExtend && (continueVideo ? (
@@ -790,13 +802,13 @@ export function InputsPanel() {
             className={`relative w-[90px] h-[90px] shrink-0 rounded-xl overflow-hidden border cursor-pointer transition-colors ${selected === 'extend' ? 'border-accent-blue' : 'border-border hover:border-border-light'}`}>
             {continueVideoUrl && <video src={continueVideoUrl} muted className="absolute inset-0 w-full h-full object-cover" />}
             <button onClick={e => { e.stopPropagation(); clearContinueVideo(); if (selected === 'extend') setSelected(null) }}
-              className="absolute top-1 right-1 z-10 rounded-full bg-black/45 text-white p-0.5 hover:bg-black/70" aria-label="Remove"><X size={12} /></button>
+              className="absolute top-1 right-1 z-10 rounded-full bg-black/45 text-white p-0.5 hover:bg-black/70" aria-label={tCommon('actions.remove')}><X size={12} /></button>
             <div className="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-1">
-              <span className="text-[10px] text-white/95">Extend from{continueVideoDuration > 0 ? ` · ${continueVideoDuration.toFixed(1)}s` : ''}</span>
+              <span className="text-[10px] text-white/95">{continueVideoDuration > 0 ? t('inputs.extendFromDuration', { duration: continueVideoDuration.toFixed(1) }) : t('inputs.extendFrom')}</span>
             </div>
           </div>
         ) : (
-          <AddTile label="Extend from" icon={<Film size={18} />} onClick={() => pickFile('video/*', handleAddExtendSource)} onDropFile={handleAddExtendSource} dropAccept="video" />
+          <AddTile label={t('inputs.extendFrom')} icon={<Film size={18} />} onClick={() => pickFile('video/*', handleAddExtendSource)} onDropFile={handleAddExtendSource} dropAccept="video" />
         ))}
 
         {/* Unified "Frame" tiles — start / end / injected keyframes, one concept,
@@ -823,52 +835,52 @@ export function InputsPanel() {
             }`}>
             <img src={tile.preview} alt={`Frame ${offsetLabel(tile.offset)}`} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
             <button onClick={e => { e.stopPropagation(); removeFrameTile(tile) }}
-              className="absolute top-1 right-1 z-10 rounded-full bg-black/45 text-white p-0.5 hover:bg-black/70 transition-colors" aria-label="Remove"><X size={12} /></button>
+              className="absolute top-1 right-1 z-10 rounded-full bg-black/45 text-white p-0.5 hover:bg-black/70 transition-colors" aria-label={tCommon('actions.remove')}><X size={12} /></button>
             <div className="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-1">
               <span className="text-[10px] text-white/95">{windowInfo.windowCount > 1 ? `W${tile.window + 1} · ` : ''}{offsetLabel(tile.offset)}</span>
             </div>
           </div>
         ))}
         {canAddFrame && (
-          <AddTile label={frameUploading ? 'Uploading…' : 'Frame'} icon={<Plus size={18} />}
+          <AddTile label={frameUploading ? t('chrome.uploading') : t('inputs.frame')} icon={<Plus size={18} />}
             onClick={() => pickImage(handleAddFrameSmart)} onDropFile={handleAddFrameSmart} dropAccept="image" />
         )}
 
         {/* Soundtrack (audio) */}
         {hasSoundtrack ? (
-          <Tile role="Soundtrack" filledIcon={<Music size={20} />} filledLabel={soundtrackName ?? undefined}
+          <Tile role={t('inputs.soundtrack')} filledIcon={<Music size={20} />} filledLabel={soundtrackName ?? undefined}
             imgSrc={null} selected={selected === 'audio'} onClear={removeSoundtrack}
             onSelect={() => setSelected(selected === 'audio' ? null : 'audio')} />
         ) : supportsSoundtrack && (
-          <AddTile label="Soundtrack" icon={<Music size={18} />} onClick={() => pickFile('.wav,.mp3,.flac,.ogg,.m4a,.mp4,.mov,.mkv,.webm', handleAddSoundtrack)} onDropFile={handleAddSoundtrack} />
+          <AddTile label={t('inputs.soundtrack')} icon={<Music size={18} />} onClick={() => pickFile('.wav,.mp3,.flac,.ogg,.m4a,.mp4,.mov,.mkv,.webm', handleAddSoundtrack)} onDropFile={handleAddSoundtrack} />
         )}
 
         {/* Control video */}
         {hasControlVid ? (
-          <Tile role="Control video" filledIcon={<Film size={20} />} filledLabel={controlVidName ?? undefined}
+          <Tile role={t('inputs.controlVideo')} filledIcon={<Film size={20} />} filledLabel={controlVidName ?? undefined}
             imgSrc={null} selected={selected === 'ctrlvid'} onClear={removeControlVid}
             onSelect={() => setSelected(selected === 'ctrlvid' ? null : 'ctrlvid')} />
         ) : supportsControlVid && (
-          <AddTile label="Control video" icon={<Film size={18} />} onClick={() => pickFile('.mp4,.webm,.mkv,.mov', handleAddControlVid)} onDropFile={handleAddControlVid} dropAccept="video" />
+          <AddTile label={t('inputs.controlVideo')} icon={<Film size={18} />} onClick={() => pickFile('.mp4,.webm,.mkv,.mov', handleAddControlVid)} onDropFile={handleAddControlVid} dropAccept="video" />
         )}
 
         {/* Guide video (motion source) — guide_custom_choices models (SCAIL-2 etc.) */}
         {hasGuideVid ? (
-          <Tile role="Control video" filledIcon={<Film size={20} />} filledLabel={controlVidName ?? undefined}
+          <Tile role={t('inputs.controlVideo')} filledIcon={<Film size={20} />} filledLabel={controlVidName ?? undefined}
             imgSrc={null} selected={selected === 'guidevid'} onClear={removeGuideVid}
             onSelect={() => setSelected(selected === 'guidevid' ? null : 'guidevid')} />
         ) : supportsGuideVid && (
-          <AddTile label="Control video" icon={<Film size={18} />} onClick={() => pickFile('.mp4,.webm,.mkv,.mov', handleAddGuideVid)} onDropFile={handleAddGuideVid} dropAccept="video" />
+          <AddTile label={t('inputs.controlVideo')} icon={<Film size={18} />} onClick={() => pickFile('.mp4,.webm,.mkv,.mov', handleAddGuideVid)} onDropFile={handleAddGuideVid} dropAccept="video" />
         )}
 
         {/* Voice reference (ID-LoRA) — keeps the speaker's voice consistent. */}
         {voiceRefEnabled && (directorVoiceRef ? (
-          <Tile role="Voice ref" filledIcon={<Mic size={20} />} filledLabel={directorVoiceRef.name}
+          <Tile role={t('inputs.voiceRef')} filledIcon={<Mic size={20} />} filledLabel={directorVoiceRef.name}
             imgSrc={null} selected={selected === 'voiceref'}
             onClear={() => { setDirectorVoiceRef(null); if (selected === 'voiceref') setSelected(null) }}
             onSelect={() => setSelected(selected === 'voiceref' ? null : 'voiceref')} />
         ) : (
-          <AddTile label="Voice ref" icon={<Mic size={18} />} onClick={() => pickFile('.wav,.mp3,.flac,.ogg,.m4a', setDirectorVoiceRef)} onDropFile={setDirectorVoiceRef} dropAccept="audio" />
+          <AddTile label={t('inputs.voiceRef')} icon={<Mic size={18} />} onClick={() => pickFile('.wav,.mp3,.flac,.ogg,.m4a', setDirectorVoiceRef)} onDropFile={setDirectorVoiceRef} dropAccept="audio" />
         ))}
 
         {/* Reference images (ordered; first = main subject/landscape). Drag to reorder. */}
@@ -886,18 +898,18 @@ export function InputsPanel() {
             className={`relative w-[90px] h-[90px] shrink-0 rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing transition-colors ${
               dragOverIndex === i ? 'border-accent-blue border-2' : selected === `ref-${i}` ? 'border-accent-blue' : 'border-border hover:border-border-light'
             }`}>
-            <img src={URL.createObjectURL(file)} alt={`Ref ${i + 1}`} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+            <img src={URL.createObjectURL(file)} alt={t('inputs.refAlt', { n: i + 1 })} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
             <span className="absolute top-1 left-1 z-10 rounded bg-black/55 text-white text-[9px] px-1">{i + 1}</span>
             <button onClick={e => { e.stopPropagation(); removeImageRef(i); if (selected === `ref-${i}`) setSelected(null) }}
-              className="absolute top-1 right-1 z-10 rounded-full bg-black/45 text-white p-0.5 hover:bg-black/70" aria-label="Remove"><X size={12} /></button>
+              className="absolute top-1 right-1 z-10 rounded-full bg-black/45 text-white p-0.5 hover:bg-black/70" aria-label={tCommon('actions.remove')}><X size={12} /></button>
             <div className="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-1">
-              <span className="text-[10px] text-white/95">{i === 0 && hasLandscapeMode && imageRefType === 'KI' ? 'Main ref' : 'Reference'}</span>
+              <span className="text-[10px] text-white/95">{i === 0 && hasLandscapeMode && imageRefType === 'KI' ? t('inputs.mainRef') : t('inputs.reference')}</span>
             </div>
           </div>
         ))}
         {supportsRefs && canAddRef && (!isH3 || (imageRefs.length < 9 && h3ReferenceCount < 12)) && (
           <AddTile
-            label={supportsRefVideo ? 'Reference\n(Image and/or Video)' : 'Reference'}
+            label={supportsRefVideo ? t('inputs.referenceMixed') : t('inputs.reference')}
             icon={<Plus size={18} />}
             onClick={pickReferences}
             onDropFile={dropOnReferenceTile}
@@ -908,24 +920,24 @@ export function InputsPanel() {
         {/* MiniMax H3 Ref2VA accepts up to three reference videos (with their
             embedded soundtrack) and three standalone audio references. */}
         {isH3 && h3RefVideos.map((path, i) => (
-          <Tile key={`h3-video-${i}`} role={`Video ref ${i + 1}`} filledIcon={<Film size={20} />}
+          <Tile key={`h3-video-${i}`} role={t('inputs.videoRefN', { n: i + 1 })} filledIcon={<Film size={20} />}
             filledLabel={basename(path)} imgSrc={null} selected={selected === `h3-video-${i}`}
             onClear={() => removeH3Reference('video', i)}
             onSelect={() => setSelected(selected === `h3-video-${i}` ? null : `h3-video-${i}`)} />
         ))}
         {isH3 && h3RefVideos.length < 3 && h3ReferenceCount < 12 && (
-          <AddTile label="Video ref" icon={<Film size={18} />}
+          <AddTile label={t('inputs.videoRef')} icon={<Film size={18} />}
             onClick={() => pickFile('.mp4,.mov,.mkv,.webm,.avi,.m4v', f => void addH3Reference('video', f))}
             onDropFile={f => void addH3Reference('video', f)} dropAccept="video" />
         )}
         {isH3 && h3RefAudios.map((path, i) => (
-          <Tile key={`h3-audio-${i}`} role={`Audio ref ${i + 1}`} filledIcon={<Music size={20} />}
+          <Tile key={`h3-audio-${i}`} role={t('inputs.audioRefN', { n: i + 1 })} filledIcon={<Music size={20} />}
             filledLabel={basename(path)} imgSrc={null} selected={selected === `h3-audio-${i}`}
             onClear={() => removeH3Reference('audio', i)}
             onSelect={() => setSelected(selected === `h3-audio-${i}` ? null : `h3-audio-${i}`)} />
         ))}
         {isH3 && h3RefAudios.length < 3 && h3ReferenceCount < 12 && (
-          <AddTile label="Audio ref" icon={<Music size={18} />}
+          <AddTile label={t('inputs.audioRef')} icon={<Music size={18} />}
             onClick={() => pickFile('.wav,.mp3,.flac,.ogg,.m4a,.aac', f => void addH3Reference('audio', f))}
             onDropFile={f => void addH3Reference('audio', f)} dropAccept="audio" />
         )}
@@ -937,10 +949,29 @@ export function InputsPanel() {
             <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-300" />
             <div className="min-w-0 space-y-2">
               <p className="text-[10px] leading-relaxed text-amber-100/90">
-                La Start image es {startImageSize?.width}×{startImageSize?.height} ({startAspectWarning.sourceOrientation}), pero MiniMax H3 está configurado a {startAspectWarning.target.width}×{startAspectWarning.target.height} ({startAspectWarning.targetOrientation}).{' '}
+                {t('inputs.startMismatch', {
+                  width: startImageSize?.width,
+                  height: startImageSize?.height,
+                  sourceOrientation: t(
+                    startAspectWarning.sourceOrientation === 'square'
+                      ? 'inputs.aspectSquare'
+                      : startAspectWarning.sourceOrientation === 'landscape'
+                        ? 'inputs.aspectLandscape'
+                        : 'inputs.aspectPortrait',
+                  ),
+                  targetWidth: startAspectWarning.target.width,
+                  targetHeight: startAspectWarning.target.height,
+                  targetOrientation: t(
+                    startAspectWarning.targetOrientation === 'square'
+                      ? 'inputs.aspectSquare'
+                      : startAspectWarning.targetOrientation === 'landscape'
+                        ? 'inputs.aspectLandscape'
+                        : 'inputs.aspectPortrait',
+                  ),
+                })}{' '}
                 {params.image_fit_mode === 'crop'
-                  ? 'Se recortarán los bordes para llenar el encuadre; la imagen no se deformará.'
-                  : `Se conservará completa, centrada y sin deformar, añadiendo franjas negras ${startAspectWarning.bars}.`}
+                  ? t('inputs.cropHint')
+                  : t('inputs.containHint', { bars: t(startAspectWarning.bars === 'sides' ? 'inputs.barsSides' : 'inputs.barsTopBottom') })}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 <button
@@ -948,14 +979,14 @@ export function InputsPanel() {
                   onClick={() => setParam('image_fit_mode', 'contain')}
                   className={`rounded-md border px-2 py-1 text-[9px] transition-colors ${params.image_fit_mode !== 'crop' ? 'border-amber-300/45 bg-amber-400/20 text-amber-50' : 'border-border bg-bg-secondary text-text-muted hover:text-text-primary'}`}
                 >
-                  Ajustar con franjas
+                  {t('inputs.fitBars')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setParam('image_fit_mode', 'crop')}
                   className={`rounded-md border px-2 py-1 text-[9px] transition-colors ${params.image_fit_mode === 'crop' ? 'border-amber-300/45 bg-amber-400/20 text-amber-50' : 'border-border bg-bg-secondary text-text-muted hover:text-text-primary'}`}
                 >
-                  Recortar para llenar
+                  {t('inputs.cropFill')}
                 </button>
               </div>
             </div>
@@ -968,7 +999,7 @@ export function InputsPanel() {
           <div className="flex items-start gap-2">
             <Layers size={14} className="mt-0.5 shrink-0 text-amber-300" />
             <p className="text-[10px] leading-relaxed text-amber-100/90">
-              MiniMax H3 no puede conservar el Start frame exacto y usar referencias de identidad separadas en la misma generación. Crea primero una imagen compuesta: HocusPocus colocará las referencias dentro de la escena inicial y usará el resultado como primer fotograma exacto con FL2VA.
+              {t('inputs.compositeHint')}
             </p>
           </div>
           <button
@@ -978,7 +1009,7 @@ export function InputsPanel() {
             className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/30 bg-amber-500/15 px-2.5 py-1.5 text-[10px] font-medium text-amber-100 hover:bg-amber-500/25 disabled:opacity-50"
           >
             {compositeBusy ? <Loader2 size={12} className="animate-spin" /> : <Layers size={12} />}
-            {compositeBusy ? 'Creando imagen compuesta…' : 'Crear imagen compuesta'}
+            {compositeBusy ? t('inputs.creatingComposite') : t('inputs.createComposite')}
           </button>
           {compositeNotice && (
             <p className={`text-[9px] ${compositeNotice.kind === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>
@@ -995,13 +1026,13 @@ export function InputsPanel() {
           <div className="flex items-center gap-1.5">
             {windowInfo.windowCount > 1 && (
               <>
-                <span className="text-[10px] text-text-muted shrink-0">Window</span>
+                <span className="text-[10px] text-text-muted shrink-0">{t('inputs.window')}</span>
                 <select value={selectedFrameTile.window}
                   onChange={e => setFramePosition(selectedFrameTile, parseInt(e.target.value), selectedFrameTile.offset)}
                   className="shrink-0 bg-bg-secondary border border-border rounded px-1 py-0.5 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue">
                   {Array.from({ length: windowInfo.windowCount }, (_, wi) => <option key={wi} value={wi}>{wi + 1}</option>)}
                 </select>
-                <span className="text-[10px] text-text-muted shrink-0">at</span>
+                <span className="text-[10px] text-text-muted shrink-0">{t('inputs.at')}</span>
               </>
             )}
             <div className="flex gap-0.5 flex-1">
@@ -1015,14 +1046,14 @@ export function InputsPanel() {
                       active ? 'bg-accent-blue text-white'
                         : disabled ? 'bg-bg-secondary text-text-muted cursor-not-allowed'
                         : 'bg-bg-secondary text-text-muted hover:text-text-primary hover:bg-bg-hover'
-                    }`}>{preset.label}</button>
+                    }`}>{offsetLabel(preset.value)}</button>
                 )
               })}
             </div>
           </div>
           {selectedFrameTile.kind === 'inject' ? (
             <>
-              <Row label="Injection strength" value={(params.injection_strength ?? 1.0).toFixed(2)} />
+              <Row label={t('inputs.injectionStrength')} value={(params.injection_strength ?? 1.0).toFixed(2)} />
               <input type="range" min={0} max={1} step={0.05} value={params.injection_strength ?? 1.0}
                 onChange={e => setParam('injection_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
             </>
@@ -1041,13 +1072,13 @@ export function InputsPanel() {
       {selected === 'extend' && continueVideo && (
         <Strip>
           {isH3 ? (
-            <p className="text-[9px] text-text-muted/70">MiniMax H3 captures the source video's final frame and continues from it with FL2VA. The full video is not sent as a slower, loose Ref2VA reference.</p>
+            <p className="text-[9px] text-text-muted/70">{t('inputs.h3Extend')}</p>
           ) : (
             <>
-              <Row label="Source video strength" value={inputVideoStrength.toFixed(2)} />
+              <Row label={t('inputs.sourceVideoStrength')} value={inputVideoStrength.toFixed(2)} />
               <input type="range" min={0} max={1} step={0.05} value={inputVideoStrength}
                 onChange={e => setParam('input_video_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
-              <p className="text-[9px] text-text-muted/60">1.0 = seamless continuation; lower gives more creative freedom. New content is appended after the source.</p>
+              <p className="text-[9px] text-text-muted/60">{t('inputs.extendStrengthHint')}</p>
             </>
           )}
         </Strip>
@@ -1056,16 +1087,16 @@ export function InputsPanel() {
       {/* Option strip — soundtrack: audio strength + processing flags */}
       {selected === 'audio' && hasSoundtrack && (
         <Strip>
-          <Row label={modelOptions?.audio_scale_name || 'Audio strength'} value={(((params as unknown as Record<string, unknown>).modality_scale as number) ?? 1.0).toFixed(1)} />
+          <Row label={modelOptions?.audio_scale_name || t('inputs.audioStrength')} value={(((params as unknown as Record<string, unknown>).modality_scale as number) ?? 1.0).toFixed(1)} />
           <input type="range" min={0.1} max={3.0} step={0.1} value={((params as unknown as Record<string, unknown>).modality_scale as number) ?? 1.0}
             onChange={e => setParam('modality_scale' as keyof typeof params, parseFloat(e.target.value) as never)} className="w-full h-1 accent-accent-blue" />
           <label className="flex items-center gap-2 cursor-pointer pt-1">
             <input type="checkbox" checked={audioPT.includes('N')} onChange={() => toggleAudioFlag('N')} className="accent-accent-blue" />
-            <span className="text-[10px] text-text-secondary">Normalize audio volume</span>
+            <span className="text-[10px] text-text-secondary">{t('inputs.normalizeVolume')}</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={audioPT.includes('V')} onChange={() => toggleAudioFlag('V')} className="accent-accent-blue" />
-            <span className="text-[10px] text-text-secondary">Remove background music</span>
+            <span className="text-[10px] text-text-secondary">{t('inputs.removeBgMusic')}</span>
           </label>
         </Strip>
       )}
@@ -1074,7 +1105,7 @@ export function InputsPanel() {
       {selected === 'ctrlvid' && hasControlVid && (
         <Strip>
           <label className="text-[10px] text-text-muted uppercase tracking-wider">
-            Audio behavior
+            {t('inputs.audioBehavior')}
           </label>
           <select
             value={
@@ -1089,17 +1120,17 @@ export function InputsPanel() {
             }}
             className="w-full bg-bg-secondary border border-border rounded-lg px-2 py-1.5 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="K">Use control video's audio</option>
-            <option value="">Generate soundtrack from text prompt</option>
+            <option value="K">{t('inputs.useControlAudio')}</option>
+            <option value="">{t('inputs.generateFromText')}</option>
             {audioVals.includes('2') && (
-              <option value="2">Generate new audio from control video</option>
+              <option value="2">{t('inputs.generateFromControl')}</option>
             )}
             {hasSoundtrack && soundtrackVal && (
-              <option value="A">Use uploaded soundtrack</option>
+              <option value="A">{t('inputs.useUploadedSoundtrack')}</option>
             )}
           </select>
           <p className="text-[9px] text-text-muted">
-            The control video remains attached as the motion guide in every mode.
+            {t('inputs.controlStays')}
           </p>
         </Strip>
       )}
@@ -1107,10 +1138,10 @@ export function InputsPanel() {
       {/* Option strip — voice reference: identity guidance scale */}
       {selected === 'voiceref' && directorVoiceRef && (
         <Strip>
-          <Row label="Identity scale" value={String(identityScale)} />
+          <Row label={t('inputs.identityScale')} value={String(identityScale)} />
           <input type="range" min={0} max={10} step={0.5} value={identityScale}
             onChange={e => setIdentityScale(parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
-          <p className="text-[9px] text-text-muted">~5s voice sample. With an active ID-LoRA, keeps the speaker's voice consistent across clips.</p>
+          <p className="text-[9px] text-text-muted">{t('inputs.voiceHint')}</p>
         </Strip>
       )}
 
@@ -1121,23 +1152,23 @@ export function InputsPanel() {
             <>
               <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
                 <button onClick={() => setParam('h3_ref_image_size', 'match')}
-                  className={`flex-1 text-[10px] py-1 rounded-md transition-all ${(params.h3_ref_image_size || 'match') === 'match' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>Match canvas</button>
+                  className={`flex-1 text-[10px] py-1 rounded-md transition-all ${(params.h3_ref_image_size || 'match') === 'match' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>{t('inputs.matchCanvas')}</button>
                 <button onClick={() => setParam('h3_ref_image_size', 'max')}
-                  className={`flex-1 text-[10px] py-1 rounded-md transition-all ${params.h3_ref_image_size === 'max' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>Max identity</button>
+                  className={`flex-1 text-[10px] py-1 rounded-md transition-all ${params.h3_ref_image_size === 'max' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>{t('inputs.maxIdentity')}</button>
               </div>
-              <p className="text-[9px] text-text-muted/60">Use &lt;Picture 1&gt;, &lt;Picture 2&gt;… in the prompt. Max identity uses more VRAM and is slower.</p>
+              <p className="text-[9px] text-text-muted/60">{t('inputs.h3PictureHint')}</p>
             </>
           )}
           {hasLandscapeMode && hasPeopleMode && (
             <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
               <button onClick={() => setImageRefType('KI')}
-                className={`flex-1 text-[10px] py-1 rounded-md transition-all ${imageRefType === 'KI' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>Subject / Landscape</button>
+                className={`flex-1 text-[10px] py-1 rounded-md transition-all ${imageRefType === 'KI' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>{t('inputs.subjectLandscape')}</button>
               <button onClick={() => setImageRefType('I')}
-                className={`flex-1 text-[10px] py-1 rounded-md transition-all ${imageRefType === 'I' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>People / Objects</button>
+                className={`flex-1 text-[10px] py-1 rounded-md transition-all ${imageRefType === 'I' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>{t('inputs.peopleObjects')}</button>
             </div>
           )}
           {hasLandscapeMode && imageRefType === 'KI' && (
-            <p className="text-[9px] text-text-muted">First image is the main subject/landscape; the rest are people/objects. Drag tiles to reorder.</p>
+            <p className="text-[9px] text-text-muted">{t('inputs.landscapeHint')}</p>
           )}
           {refBgLabel && (
             <label className="flex items-start gap-2 cursor-pointer">
@@ -1149,10 +1180,10 @@ export function InputsPanel() {
       )}
 
       {isH3 && selected?.startsWith('h3-video-') && (
-        <Strip><p className="text-[9px] text-text-muted/70">Use &lt;Video 1&gt;, &lt;Video 2&gt;… in the prompt. The embedded soundtrack is paired automatically as &lt;Audio n&gt;. Each clip must be 2–15 seconds.</p></Strip>
+        <Strip><p className="text-[9px] text-text-muted/70">{t('inputs.h3VideoHint')}</p></Strip>
       )}
       {isH3 && selected?.startsWith('h3-audio-') && (
-        <Strip><p className="text-[9px] text-text-muted/70">Use &lt;Audio 1&gt;, &lt;Audio 2&gt;… in the prompt. Audio-only Ref2VA is not supported: also add an image or video reference.</p></Strip>
+        <Strip><p className="text-[9px] text-text-muted/70">{t('inputs.h3AudioHint')}</p></Strip>
       )}
     </div>
   )
@@ -1208,6 +1239,7 @@ function Tile({ role, imgSrc, icon, badge, selected, filledIcon, filledLabel, on
   onSelect: () => void
   onDropFile?: (f: File) => void
 }) {
+  const { t: tCommon } = useUiTranslation('common')
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const f = e.dataTransfer.files[0]
@@ -1232,7 +1264,7 @@ function Tile({ role, imgSrc, icon, badge, selected, filledIcon, filledLabel, on
           )}
           {badge !== undefined && <span className="absolute top-1 left-1 z-10 rounded bg-black/55 text-white text-[9px] px-1">{badge}</span>}
           <button onClick={e => { e.stopPropagation(); onClear() }}
-            className="absolute top-1 right-1 z-10 rounded-full bg-black/45 text-white p-0.5 hover:bg-black/70 transition-colors" aria-label="Remove">
+            className="absolute top-1 right-1 z-10 rounded-full bg-black/45 text-white p-0.5 hover:bg-black/70 transition-colors" aria-label={tCommon('actions.remove')}>
             <X size={12} />
           </button>
           <div className="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-1">

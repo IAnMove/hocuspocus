@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Pause, Play } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value))
@@ -25,12 +26,13 @@ function parseAudioTime(value: string): number | null {
 }
 
 function TimeEditor({
-  label, value, maximum, onCommit,
+  label, value, maximum, onCommit, timeAria,
 }: {
   label: string
   value: number
   maximum: number
   onCommit: (value: number) => void
+  timeAria: string
 }) {
   const [draft, setDraft] = useState(() => formatAudioTime(value))
   const commit = () => {
@@ -56,7 +58,7 @@ function TimeEditor({
           }
         }}
         className="w-20 rounded border border-border bg-bg-primary px-1.5 py-1 text-center font-mono text-[10px] text-text-primary"
-        aria-label={`${label} in minutes and seconds`}
+        aria-label={timeAria}
       />
     </label>
   )
@@ -75,6 +77,7 @@ export function AudioRangeSelector({
   end: number
   onChange: (range: { start: number; end: number; duration: number }) => void
 }) {
+  const { t } = useUiTranslation('storyLab')
   const audioRef = useRef<HTMLAudioElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const dragging = useRef<'start' | 'end' | null>(null)
@@ -155,7 +158,7 @@ export function AudioRangeSelector({
       />
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-medium text-text-primary">Trailer excerpt</span>
+        <span className="text-[10px] font-medium text-text-primary">{t('range.excerpt')}</span>
         <span className="font-mono text-[10px] text-pink-300">
           {formatAudioTime(start)} → {formatAudioTime(safeEnd)} · {formatAudioTime(safeEnd - start)}
         </span>
@@ -194,7 +197,7 @@ export function AudioRangeSelector({
                 trackRef.current?.setPointerCapture(event.pointerId)
                 setEdge(edge, event.clientX)
               }}
-              aria-label={`Drag trailer ${edge} time`}
+              aria-label={edge === 'start' ? t('range.dragStart') : t('range.dragEnd')}
             >
               <span className="mx-auto block h-full w-1 rounded bg-pink-300 shadow-[0_0_5px_rgba(249,168,212,.8)]" />
             </button>
@@ -208,14 +211,16 @@ export function AudioRangeSelector({
         <div className="flex flex-wrap items-center gap-2">
           <TimeEditor
             key={`start-${start.toFixed(3)}`}
-            label="From"
+            label={t('range.from')}
+            timeAria={t('range.timeAria', { label: t('range.from') })}
             value={start}
             maximum={Math.max(0, safeEnd - minimumSelection)}
             onCommit={value => onChange({ start: Math.min(value, safeEnd - minimumSelection), end: safeEnd, duration })}
           />
           <TimeEditor
             key={`end-${safeEnd.toFixed(3)}`}
-            label="To"
+            label={t('range.to')}
+            timeAria={t('range.timeAria', { label: t('range.to') })}
             value={safeEnd}
             maximum={duration}
             onCommit={value => onChange({ start, end: Math.max(value, start + minimumSelection), duration })}
@@ -228,7 +233,7 @@ export function AudioRangeSelector({
           className="inline-flex items-center gap-1.5 rounded-md border border-pink-500/50 px-2 py-1 text-[10px] text-pink-300 disabled:opacity-40"
         >
           {playing ? <Pause size={11} /> : <Play size={11} />}
-          {playing ? 'Pause preview' : 'Play selected excerpt'}
+          {playing ? t('range.pausePreview') : t('range.playExcerpt')}
         </button>
       </div>
     </div>

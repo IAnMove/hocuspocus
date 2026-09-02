@@ -15,9 +15,9 @@ const approved = (id, source) => ({
 })
 
 test('pose labels use human names instead of ids', () => {
-  assert.equal(characterKitPoseLabel('base'), 'De pie')
-  assert.equal(characterKitPoseLabel('reaction'), 'Reacción')
-  assert.equal(characterKitPoseLabel('pointing'), 'Señala')
+  assert.equal(characterKitPoseLabel('base'), 'Standing')
+  assert.equal(characterKitPoseLabel('reaction'), 'Reaction')
+  assert.equal(characterKitPoseLabel('pointing'), 'Pointing')
 })
 
 test('a kit with an approved body opens on mouths, not the advanced layer mapper', () => {
@@ -34,8 +34,8 @@ test('a kit with an approved body opens on mouths, not the advanced layer mapper
   assert.deepEqual(characterKitPoseOptions(kit).map(pose => pose.id), ['base', 'reaction'])
   const next = characterKitNextStep(kit, 'reaction')
   assert.equal(next.id, 'wipe-mouth')
-  assert.match(next.title, /caja/i)
-  assert.match(next.detail, /Limpiar zona de la boca/)
+  assert.match(next.title, /box/i)
+  assert.match(next.detail, /Wipe mouth area/)
 })
 
 test('after wipe and lock the next action is to put the character on the scene', () => {
@@ -51,11 +51,11 @@ test('after wipe and lock the next action is to put the character on the scene',
   kit = lockFaceRigMouthPlacement(kit, 'base', { offsetX: 0, offsetY: -16, scale: .07, rotation: 0 })
   const next = characterKitNextStep(kit, 'base')
   assert.equal(next.id, 'put-on-scene')
-  assert.match(next.title, /escena/i)
+  assert.match(next.title, /scene/i)
 })
 
 test('empty library tells the user to pick a character', () => {
   const next = characterKitNextStep(null)
   assert.equal(next.id, 'pick-character')
-  assert.match(next.detail, /Luma o Brin/)
+  assert.match(next.detail, /Luma or Brin/)
 })

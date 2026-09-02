@@ -1,9 +1,11 @@
 import { ChevronDown, Check, Plus } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { InfoTooltip } from './InfoTooltip'
 
 export function ModelSelector() {
+  const { t } = useUiTranslation('studio')
   const models = useStore(s => s.models)
   const families = useStore(s => s.families)
   const enabledModels = useStore(s => s.enabledModels)
@@ -69,7 +71,7 @@ export function ModelSelector() {
         className="w-full flex items-center gap-1.5 bg-bg-tertiary border border-border rounded-lg px-2.5 py-2 text-left hover:border-border-light transition-colors"
       >
         <span className="flex-1 min-w-0 truncate text-xs text-text-primary">
-          {currentModel?.name ?? 'Select model'}
+          {currentModel?.name ?? t('model.select')}
         </span>
         <ChevronDown size={14} className={`shrink-0 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -85,8 +87,8 @@ export function ModelSelector() {
               className="w-full flex items-center gap-2 px-3 py-2 text-left border-b border-border text-text-secondary hover:bg-bg-hover hover:text-accent-blue transition-colors"
             >
               <Plus size={13} className="shrink-0" />
-              <span className="flex-1 text-xs">Enable more models</span>
-              <span className="text-[10px] text-text-muted shrink-0">{disabledCount} available</span>
+              <span className="flex-1 text-xs">{t('model.enableMore')}</span>
+              <span className="text-[10px] text-text-muted shrink-0">{t('model.available', { count: disabledCount })}</span>
             </button>
           )}
           <div className="max-h-[360px] overflow-y-auto py-1">
@@ -124,7 +126,7 @@ export function ModelSelector() {
                         <span className="pr-2">
                           <InfoTooltip
                             text={help}
-                            label={`About ${model.name}`}
+                            label={t('model.about', { name: model.name })}
                           />
                         </span>
                       )}
@@ -152,21 +154,22 @@ function ModelBadges({ model }: {
     supports_ref_images?: boolean
   }
 }) {
+  const { t } = useUiTranslation('studio')
   const badges: Array<{ label: string; title: string }> = []
   const workflowIsAlreadyInName = model.model_type.startsWith('minimax_h3')
   if (!workflowIsAlreadyInName && model.is_i2v && model.supports_end_frame) {
-    badges.push({ label: 'First / Last', title: 'Accepts a first frame, a last frame, or both' })
+    badges.push({ label: t('model.firstLast'), title: t('model.firstLastHint') })
   } else if (!workflowIsAlreadyInName && model.is_i2v) {
-    badges.push({ label: 'I2V', title: 'Accepts an input image' })
+    badges.push({ label: t('model.i2v'), title: t('model.i2vHint') })
   }
   if (model.generates_audio) {
-    badges.push({ label: 'Audio Out', title: 'Generates synchronized audio with the video' })
+    badges.push({ label: t('model.audioOut'), title: t('model.audioOutHint') })
   }
   if (model.supports_audio_input) {
-    badges.push({ label: 'Audio In', title: 'Accepts audio input; H3 Omni uses it as an ordered audio reference' })
+    badges.push({ label: t('model.audioIn'), title: t('model.audioInHint') })
   }
   if (model.supports_ref_images) {
-    badges.push({ label: 'Refs', title: 'Accepts one or more reference images' })
+    badges.push({ label: t('model.refs'), title: t('model.refsHint') })
   }
   if (badges.length === 0) return null
   return (

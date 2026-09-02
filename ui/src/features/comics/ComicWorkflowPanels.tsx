@@ -3,7 +3,9 @@ import {
   AlertTriangle, ArrowDown, ArrowUp, Check, CheckCircle2, Clapperboard, Eye, Film,
   ImagePlus, ListVideo, Loader2, Play, Plus, Settings2, ShieldCheck, Sparkles, Trash2, Upload,
 } from 'lucide-react'
+import type { TFunction } from 'i18next'
 import * as api from '../../api/client'
+import { useUiTranslation } from '../../i18n'
 import { DirectorLoraSelector } from '../../components/SettingsDrawer/DirectorLoraSelector'
 import { useStore } from '../../stores/useStore'
 import type { PlannedClip } from '../../types'
@@ -37,66 +39,67 @@ const resolutionMegapixels = (value: string): number => {
 }
 
 const comicMovieResolutions = (
+  t: TFunction,
   modelId: string,
   aspect: ComicMovieAspect,
 ): ComicMovieResolution[] => {
   if (modelId === 'minimax_h3') {
     if (aspect === 'square') {
       return [
-        { quality: 'h3-fast', value: '640x640', label: 'Fast preview · 640×640 · 0.41 MP' },
-        { quality: 'h3-default', value: '736x736', label: 'RTX 4090 default · 736×736 · 0.54 MP', recommended: true },
-        { quality: 'h3-balanced', value: '864x864', label: 'Balanced · 864×864 · 0.75 MP' },
-        { quality: 'h3-native', value: '992x992', label: 'Native quality · 992×992 · 0.98 MP' },
+        { quality: 'h3-fast', value: '640x640', label: t('video.fastPreview', { size: '640×640', mp: '0.41' }) },
+        { quality: 'h3-default', value: '736x736', label: t('video.rtxDefault', { size: '736×736', mp: '0.54' }), recommended: true },
+        { quality: 'h3-balanced', value: '864x864', label: t('video.balancedRes', { size: '864×864', mp: '0.75' }) },
+        { quality: 'h3-native', value: '992x992', label: t('video.nativeRes', { size: '992×992', mp: '0.98' }) },
       ]
     }
     const portrait = aspect === 'portrait'
     return [
-      { quality: 'h3-fast', value: portrait ? '480x864' : '864x480', label: `Fast preview · ${portrait ? '480×864' : '864×480'} · 0.41 MP` },
-      { quality: 'h3-default', value: portrait ? '544x960' : '960x544', label: `RTX 4090 default · ${portrait ? '544×960' : '960×544'} · 0.52 MP`, recommended: true },
-      { quality: 'h3-balanced', value: portrait ? '640x1152' : '1152x640', label: `Balanced · ${portrait ? '640×1152' : '1152×640'} · 0.74 MP` },
-      { quality: 'h3-native', value: portrait ? '768x1344' : '1344x768', label: `Native quality · ${portrait ? '768×1344' : '1344×768'} · 1.03 MP` },
+      { quality: 'h3-fast', value: portrait ? '480x864' : '864x480', label: t('video.fastPreview', { size: portrait ? '480×864' : '864×480', mp: '0.41' }) },
+      { quality: 'h3-default', value: portrait ? '544x960' : '960x544', label: t('video.rtxDefault', { size: portrait ? '544×960' : '960×544', mp: '0.52' }), recommended: true },
+      { quality: 'h3-balanced', value: portrait ? '640x1152' : '1152x640', label: t('video.balancedRes', { size: portrait ? '640×1152' : '1152×640', mp: '0.74' }) },
+      { quality: 'h3-native', value: portrait ? '768x1344' : '1344x768', label: t('video.nativeRes', { size: portrait ? '768×1344' : '1344×768', mp: '1.03' }) },
     ]
   }
   return [
     {
       quality: '480p',
       value: aspect === 'portrait' ? '448x832' : aspect === 'square' ? '640x640' : '832x448',
-      label: `≈480p · ${aspect === 'portrait' ? '448×832' : aspect === 'square' ? '640×640' : '832×448'} · test`,
+      label: t('video.p480', { size: aspect === 'portrait' ? '448×832' : aspect === 'square' ? '640×640' : '832×448' }),
     },
     {
       quality: '720p',
       value: aspect === 'portrait' ? '704x1280' : aspect === 'square' ? '1024x1024' : '1280x704',
-      label: `≈720p · ${aspect === 'portrait' ? '704×1280' : aspect === 'square' ? '1024×1024' : '1280×704'} · recommended`,
+      label: t('video.p720', { size: aspect === 'portrait' ? '704×1280' : aspect === 'square' ? '1024×1024' : '1280×704' }),
       recommended: true,
     },
     {
       quality: '1080p',
       value: aspect === 'portrait' ? '1088x1920' : aspect === 'square' ? '1408x1408' : '1920x1088',
-      label: `≈1080p · ${aspect === 'portrait' ? '1088×1920' : aspect === 'square' ? '1408×1408' : '1920×1088'} · heavy`,
+      label: t('video.p1080', { size: aspect === 'portrait' ? '1088×1920' : aspect === 'square' ? '1408×1408' : '1920×1088' }),
     },
   ]
 }
 
-const motionLevelLabel = (level: number) => (
+const motionLevelLabel = (t: TFunction, level: number) => (
   level <= 0
-    ? '0 · exact hold'
+    ? t('video.levelHold')
     : level === 1
-      ? '1 · ambient, locked camera'
+      ? t('video.levelAmbient')
       : level === 2
-        ? '2 · restrained performance'
-        : '3 · authored action'
+        ? t('video.levelRestrained')
+        : t('video.levelAction')
 )
 
-const motionMethodLabel = (renderer?: string) => (
+const motionMethodLabel = (t: TFunction, renderer?: string) => (
   renderer === 'hold'
-    ? 'Exact still'
+    ? t('video.methodExact')
     : renderer === 'parallax'
-      ? 'Deterministic push'
+      ? t('video.methodPush')
       : renderer === 'cinemagraph'
-        ? 'AI living still'
+        ? t('video.methodLiving')
         : renderer === 'ltx'
-          ? 'Model-driven I2V'
-          : 'Automatic'
+          ? t('video.methodI2v')
+          : t('video.methodAutomatic')
 )
 
 const VIDEO_OVERRIDE_BY_PROPERTY: Partial<Record<keyof ComicPlanPanel, ComicVideoOverrideField>> = {
@@ -168,6 +171,7 @@ export function ComicWritingProviderFields({
   onChange: <K extends keyof ComicDirectorRequest>(key: K, value: ComicDirectorRequest[K]) => void
   disabled?: boolean
 }) {
+  const { t } = useUiTranslation('comics')
   const services = useStore(state => state.servicesConfig)
   const profile = useStore(state => state.productionProfile)
   const provider = value.writingProvider || 'maestro'
@@ -224,64 +228,64 @@ export function ComicWritingProviderFields({
             ))
             onChange('provider', profile.image.provider === 'minimax' ? 'minimax' : 'maestro')
             onChange('imageModel', profile.image.model)
-          }}>Use global profile</button>
+          }}>{t('writing.useGlobal')}</button>
         <button type="button" className={`${button} ${!value.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`} disabled={disabled}
-          onClick={() => onChange('useGlobalProfile', false)}>Override in this comic</button>
+          onClick={() => onChange('useGlobalProfile', false)}>{t('writing.override')}</button>
       </div>
-      {value.useGlobalProfile && <p className="text-[9px] text-emerald-400">Global: {profile.text.model} · {profile.image.model}</p>}
+      {value.useGlobalProfile && <p className="text-[9px] text-emerald-400">{t('writing.global', { text: profile.text.model, image: profile.image.model })}</p>}
       <fieldset disabled={disabled || value.useGlobalProfile} className="space-y-2 disabled:opacity-50">
-      <label className="block text-[10px] text-text-muted">Writing LLM
+      <label className="block text-[10px] text-text-muted">{t('writing.llm')}
         <select
           className={`${input} mt-1`}
           disabled={disabled}
           value={value.writingProvider || 'maestro'}
           onChange={event => selectProvider(event.target.value as ComicDirectorRequest['writingProvider'])}
         >
-          <option value="maestro">HocusPocus internal · default</option>
-          <option value="deepseek">DeepSeek · only this comic</option>
-          <option value="minimax">MiniMax · only this comic</option>
-          <option value="ollama">Ollama · only this comic</option>
-          <option value="grok">Grok · only this comic</option>
-          <option value="openai">OpenAI · only this comic</option>
-          <option value="openai-compatible">Custom OpenAI-compatible · only this comic</option>
+          <option value="maestro">{t('writing.maestro')}</option>
+          <option value="deepseek">{t('writing.deepseek')}</option>
+          <option value="minimax">{t('writing.minimax')}</option>
+          <option value="ollama">{t('writing.ollama')}</option>
+          <option value="grok">{t('writing.grok')}</option>
+          <option value="openai">{t('writing.openai')}</option>
+          <option value="openai-compatible">{t('writing.compatible')}</option>
         </select>
       </label>
       {external && <>
-        <label className="block text-[10px] text-text-muted">Model
+        <label className="block text-[10px] text-text-muted">{t('writing.model')}
           {provider === 'deepseek' ? (
             <select className={`${input} mt-1`} disabled={disabled} value={value.writingModel || 'deepseek-v4-pro'} onChange={event => onChange('writingModel', event.target.value)}>
-              <option value="deepseek-v4-pro">DeepSeek V4 Pro · best story quality</option>
-              <option value="deepseek-v4-flash">DeepSeek V4 Flash · faster and cheaper</option>
+              <option value="deepseek-v4-pro">{t('writing.deepseekPro')}</option>
+              <option value="deepseek-v4-flash">{t('writing.deepseekFlash')}</option>
             </select>
           ) : provider === 'minimax' ? (
             <select className={`${input} mt-1`} disabled={disabled} value={value.writingModel || 'MiniMax-M3'} onChange={event => onChange('writingModel', event.target.value)}>
-              <option value="MiniMax-M3">MiniMax M3 · multimodal, 1M context</option>
-              <option value="MiniMax-M2.7">MiniMax M2.7 · character-rich interaction</option>
-              <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed · lower latency</option>
+              <option value="MiniMax-M3">{t('writing.minimaxM3')}</option>
+              <option value="MiniMax-M2.7">{t('writing.minimaxM27')}</option>
+              <option value="MiniMax-M2.7-highspeed">{t('writing.minimaxFast')}</option>
             </select>
           ) : (
-            <input className={`${input} mt-1`} disabled={disabled} value={value.writingModel || ''} onChange={event => onChange('writingModel', event.target.value)} placeholder={provider === 'openai' ? 'gpt-4.1' : 'Model name exposed by your server'} />
+            <input className={`${input} mt-1`} disabled={disabled} value={value.writingModel || ''} onChange={event => onChange('writingModel', event.target.value)} placeholder={provider === 'openai' ? 'gpt-4.1' : t('writing.modelPlaceholder')} />
           )}
         </label>
         <div className="rounded border border-border px-2 py-1.5 text-[9px] text-text-muted">
           {provider === 'deepseek'
-            ? 'https://api.deepseek.com · Translation always uses V4 Flash, even when Pro is selected here.'
+            ? t('writing.deepseekHint')
             : provider === 'minimax'
-              ? 'https://api.minimax.io/v1 · Shares the MiniMax key with image generation, but not its model selection.'
+              ? t('writing.minimaxHint')
             : provider === 'openai'
-              ? 'https://api.openai.com'
-              : services?.compatible_base_url || 'Set the custom compatible URL in Settings → Services.'}
+              ? t('writing.openaiHint')
+              : services?.compatible_base_url || t('writing.compatibleHint')}
         </div>
         <p className={`text-[9px] ${apiKeySet ? 'text-emerald-400' : 'text-amber-300'}`}>
           {apiKeySet
             ? provider === 'openai-compatible' && !services?.compatible_api_key_set
-              ? 'Custom endpoint configured without authentication. The internal LLM remains unchanged.'
-              : 'Provider credential configured. The internal LLM remains loaded and unchanged.'
-            : `Add your ${provider === 'deepseek' ? 'DeepSeek' : provider === 'minimax' ? 'MiniMax' : provider === 'openai' ? 'OpenAI' : 'custom compatible'} credential in Settings → Services.`}
+              ? t('writing.credentialNoAuth')
+              : t('writing.credentialOk')
+            : t('writing.credentialMissing', { provider: provider === 'deepseek' ? t('writing.providerDeepseek') : provider === 'minimax' ? t('writing.providerMinimax') : provider === 'openai' ? t('writing.providerOpenai') : t('writing.providerCompatible') })}
         </p>
       </>}
       </fieldset>
-      {!external && <p className="text-[9px] text-text-muted">Uses HocusPocus&apos;s configured internal LLM. External selection never changes the global provider.</p>}
+      {!external && <p className="text-[9px] text-text-muted">{t('writing.internalHint')}</p>}
     </div>
   )
 }
@@ -318,6 +322,8 @@ export function ComicCharactersPanel({
   generateReference: (character: ComicCharacter) => Promise<void>
   notify: (kind: 'ok' | 'error', text: string) => void
 }) {
+  const { t } = useUiTranslation('comics')
+  const { t: tCommon } = useUiTranslation('common')
   const project = useComicStore(state => state.project)
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploadTarget, setUploadTarget] = useState<string | null>(null)
@@ -360,7 +366,7 @@ export function ComicCharactersPanel({
       useComicStore.getState().addAsset(asset)
       const references = Array.from(new Set([...(character.referenceAssetIds || []), asset.id]))
       patchCharacter(character.id, { referenceAssetId: asset.id, referenceAssetIds: references })
-      notify('ok', `Reference added to ${character.name}.`)
+      notify('ok', t('characters.referenceAdded', { name: character.name }))
     } catch (error) {
       notify('error', (error as Error).message)
     } finally {
@@ -372,8 +378,8 @@ export function ComicCharactersPanel({
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-purple-400/30 bg-purple-400/5 p-3">
-        <div className="text-xs font-semibold text-text-primary">Character bible</div>
-        <p className="mt-1 text-[10px] text-text-muted">Define personality, voice and stable visual traits. Reference images are reused whenever the character appears.</p>
+        <div className="text-xs font-semibold text-text-primary">{t('characters.title')}</div>
+        <p className="mt-1 text-[10px] text-text-muted">{t('characters.hint')}</p>
       </div>
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={event => upload(event.target.files?.[0])} />
       {project.characters.map(character => (
@@ -381,51 +387,52 @@ export function ComicCharactersPanel({
           <summary className="cursor-pointer px-2.5 py-2 text-xs font-medium text-text-primary">{character.name}{character.role ? ` · ${character.role}` : ''}</summary>
           <div className="space-y-2 p-2.5 pt-0">
             <div className="grid grid-cols-2 gap-2">
-              <input className={input} value={character.name} onChange={event => patchCharacter(character.id, { name: event.target.value })} placeholder="Name" />
-              <input className={input} value={character.role || ''} onChange={event => patchCharacter(character.id, { role: event.target.value })} placeholder="Role / archetype" />
+              <input className={input} value={character.name} onChange={event => patchCharacter(character.id, { name: event.target.value })} placeholder={tCommon('fields.name')} />
+              <input className={input} value={character.role || ''} onChange={event => patchCharacter(character.id, { role: event.target.value })} placeholder={t('characters.role')} />
             </div>
-            <textarea className={input} rows={3} value={character.description} onChange={event => patchCharacter(character.id, { description: event.target.value })} placeholder="Canonical appearance" />
-            <textarea className={input} rows={2} value={character.personality || ''} onChange={event => patchCharacter(character.id, { personality: event.target.value })} placeholder="Personality, flaws and contradictions" />
-            <textarea className={input} rows={2} value={character.motivation || ''} onChange={event => patchCharacter(character.id, { motivation: event.target.value })} placeholder="Goal, need and stakes" />
-            <textarea className={input} rows={2} value={character.voice || ''} onChange={event => patchCharacter(character.id, { voice: event.target.value })} placeholder="Voice: vocabulary, rhythm, phrases to avoid" />
-            <textarea className={input} rows={2} value={character.wardrobe || ''} onChange={event => patchCharacter(character.id, { wardrobe: event.target.value })} placeholder="Wardrobe and invariant accessories" />
-            <textarea className={input} rows={2} value={character.visualNotes || ''} onChange={event => patchCharacter(character.id, { visualNotes: event.target.value })} placeholder="Face, body, palette, silhouette and scale" />
-            <textarea className={input} rows={2} value={character.negativePrompt || ''} onChange={event => patchCharacter(character.id, { negativePrompt: event.target.value })} placeholder="Never show / continuity exclusions" />
+            <textarea className={input} rows={3} value={character.description} onChange={event => patchCharacter(character.id, { description: event.target.value })} placeholder={t('characters.appearance')} />
+            <textarea className={input} rows={2} value={character.personality || ''} onChange={event => patchCharacter(character.id, { personality: event.target.value })} placeholder={t('characters.personality')} />
+            <textarea className={input} rows={2} value={character.motivation || ''} onChange={event => patchCharacter(character.id, { motivation: event.target.value })} placeholder={t('characters.motivation')} />
+            <textarea className={input} rows={2} value={character.voice || ''} onChange={event => patchCharacter(character.id, { voice: event.target.value })} placeholder={t('characters.voice')} />
+            <textarea className={input} rows={2} value={character.wardrobe || ''} onChange={event => patchCharacter(character.id, { wardrobe: event.target.value })} placeholder={t('characters.wardrobe')} />
+            <textarea className={input} rows={2} value={character.visualNotes || ''} onChange={event => patchCharacter(character.id, { visualNotes: event.target.value })} placeholder={t('characters.visualNotes')} />
+            <textarea className={input} rows={2} value={character.negativePrompt || ''} onChange={event => patchCharacter(character.id, { negativePrompt: event.target.value })} placeholder={t('characters.negative')} />
             {!!character.referenceAssetIds?.length && (
               <div className="grid grid-cols-3 gap-1.5">
                 {character.referenceAssetIds.map(assetId => {
                   const asset = project.assets[assetId]
-                  return asset ? <button key={assetId} onClick={() => patchCharacter(character.id, { referenceAssetId: assetId })} className={`relative aspect-square overflow-hidden rounded border ${character.referenceAssetId === assetId ? 'border-accent-blue' : 'border-border'}`} title="Use as primary identity reference"><img src={asset.thumbnail || asset.source} className="size-full object-cover" /></button> : null
+                  return asset ? <button key={assetId} onClick={() => patchCharacter(character.id, { referenceAssetId: assetId })} className={`relative aspect-square overflow-hidden rounded border ${character.referenceAssetId === assetId ? 'border-accent-blue' : 'border-border'}`} title={t('characters.primaryRef')}><img src={asset.thumbnail || asset.source} className="size-full object-cover" /></button> : null
                 })}
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">
-              <button className={button} disabled={busy !== null} onClick={() => { setUploadTarget(character.id); fileRef.current?.click() }}><Upload size={12} /> Add reference</button>
-              <button className={`${button} border-purple-400/40 text-purple-300`} disabled={busy !== null} onClick={async () => { setBusy(character.id); try { await generateReference(character); notify('ok', `Reference generated for ${character.name}.`) } catch (error) { notify('error', (error as Error).message) } finally { setBusy(null) } }}>
-                {busy === character.id ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />} Generate portrait
+              <button className={button} disabled={busy !== null} onClick={() => { setUploadTarget(character.id); fileRef.current?.click() }}><Upload size={12} /> {t('characters.addReference')}</button>
+              <button className={`${button} border-purple-400/40 text-purple-300`} disabled={busy !== null} onClick={async () => { setBusy(character.id); try { await generateReference(character); notify('ok', t('characters.referenceGenerated', { name: character.name })) } catch (error) { notify('error', (error as Error).message) } finally { setBusy(null) } }}>
+                {busy === character.id ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />} {t('characters.generatePortrait')}
               </button>
             </div>
-            <button className={`${button} w-full text-red-300`} onClick={() => updateCharacters(project.characters.filter(item => item.id !== character.id))}><Trash2 size={12} /> Remove character</button>
+            <button className={`${button} w-full text-red-300`} onClick={() => updateCharacters(project.characters.filter(item => item.id !== character.id))}><Trash2 size={12} /> {t('characters.remove')}</button>
           </div>
         </details>
       ))}
       <div className="space-y-2 rounded-lg border border-dashed border-border p-2.5">
-        <input className={input} value={draft.name} onChange={event => setDraft(value => ({ ...value, name: event.target.value }))} placeholder="New character name" />
-        <input className={input} value={draft.role} onChange={event => setDraft(value => ({ ...value, role: event.target.value }))} placeholder="Role / archetype" />
-        <textarea className={input} rows={2} value={draft.description} onChange={event => setDraft(value => ({ ...value, description: event.target.value }))} placeholder="Canonical appearance" />
-        <button className={`${button} w-full`} disabled={!draft.name.trim()} onClick={add}><Plus size={12} /> Create character</button>
+        <input className={input} value={draft.name} onChange={event => setDraft(value => ({ ...value, name: event.target.value }))} placeholder={t('characters.newName')} />
+        <input className={input} value={draft.role} onChange={event => setDraft(value => ({ ...value, role: event.target.value }))} placeholder={t('characters.role')} />
+        <textarea className={input} rows={2} value={draft.description} onChange={event => setDraft(value => ({ ...value, description: event.target.value }))} placeholder={t('characters.appearance')} />
+        <button className={`${button} w-full`} disabled={!draft.name.trim()} onClick={add}><Plus size={12} /> {t('characters.create')}</button>
       </div>
     </div>
   )
 }
 
 export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', text: string) => void }) {
+  const { t } = useUiTranslation('comics')
   const project = useComicStore(state => state.project)
   const director = project.director
   const storyboard = director?.input.productionMode === 'storyboard'
   const [revisionInstruction, setRevisionInstruction] = useState('')
   const [revising, setRevising] = useState(false)
-  if (!director) return <p className="text-xs text-text-muted">Create an editable Director plan first.</p>
+  if (!director) return <p className="text-xs text-text-muted">{t('script.empty')}</p>
   const patchPlan = (patch: Partial<typeof director.plan>) => {
     const state = useComicStore.getState()
     const current = state.project.director!
@@ -458,10 +465,10 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
   const approve = () => {
     const state = useComicStore.getState()
     state.patchProject({ director: { ...state.project.director!, scriptApprovedAt: new Date().toISOString() } })
-    notify('ok', 'Script approved. Artwork can now be generated from this version.')
+    notify('ok', t('script.approved'))
   }
   const improveStory = async () => {
-    if (director.completedPanelIds.length && !window.confirm('Some artwork already exists. Revising the story keeps those images, so changed scenes may need individual regeneration. Continue?')) return
+    if (director.completedPanelIds.length && !window.confirm(t('script.reviseConfirm'))) return
     setRevising(true)
     try {
       const result = await api.reviseComicStory({
@@ -490,7 +497,7 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
           scriptVersion: (current.scriptVersion || 1) + 1,
         },
       }))
-      notify('ok', 'Story revised. Review and approve the new script version before generating artwork.')
+      notify('ok', t('script.revised'))
     } catch (error) {
       notify('error', (error as Error).message)
     } finally {
@@ -500,11 +507,11 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
   return (
     <div className="space-y-3">
       <div className={`rounded-lg border p-3 ${director.scriptApprovedAt ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-amber-500/40 bg-amber-500/5'}`}>
-        <div className="flex items-center gap-2 text-xs font-semibold text-text-primary">{director.scriptApprovedAt ? <Check size={14} className="text-emerald-400" /> : <Sparkles size={14} className="text-amber-300" />} Script v{director.scriptVersion || 1}</div>
+        <div className="flex items-center gap-2 text-xs font-semibold text-text-primary">{director.scriptApprovedAt ? <Check size={14} className="text-emerald-400" /> : <Sparkles size={14} className="text-amber-300" />} {t('script.version', { version: director.scriptVersion || 1 })}</div>
         <p className="mt-1 text-[10px] text-text-muted">
           {storyboard
-            ? 'Review dramatic beats, first-frame prompts and ready-to-render I2V prompts before generating expensive artwork.'
-            : 'Review the dramatic beats and complete lettering before generating expensive artwork.'}
+            ? t('script.reviewStoryboard')
+            : t('script.reviewComic')}
         </p>
       </div>
       <ComicWritingProviderFields
@@ -516,14 +523,14 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
           state.patchProject({ director: { ...current, input: { ...current.input, [key]: value } } })
         }}
       />
-      <input className={input} value={director.plan.title} onChange={event => patchPlan({ title: event.target.value })} placeholder="Title" />
-      <textarea className={input} rows={2} value={director.plan.logline} onChange={event => patchPlan({ logline: event.target.value })} placeholder="Logline" />
-      <textarea className={input} rows={4} value={director.plan.synopsis} onChange={event => patchPlan({ synopsis: event.target.value })} placeholder="Synopsis" />
-      {!!director.plan.storyStructure?.length && <div className="space-y-2"><strong className="text-[10px] uppercase tracking-wide text-text-muted">Page beats</strong>{director.plan.storyStructure.map((beat, index) => <div key={beat.pageNumber} className="space-y-1.5 rounded border border-border p-2"><input className={input} value={beat.stage} onChange={event => patchBeat(index, { stage: event.target.value })} /><textarea className={input} rows={2} value={beat.goal} onChange={event => patchBeat(index, { goal: event.target.value })} /><textarea className={input} rows={2} value={beat.turningPoint} onChange={event => patchBeat(index, { turningPoint: event.target.value })} /></div>)}</div>}
-      <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5"><strong className="text-[10px] uppercase tracking-wide text-text-muted">Improve story with the LLM</strong><textarea className={input} rows={3} value={revisionInstruction} onChange={event => setRevisionInstruction(event.target.value)} placeholder="Optional direction: clarify the protagonist's goal, make the midpoint reverse the plan, pay off the opening image…" /><button className={`${button} w-full border-purple-400/40 text-purple-300`} disabled={revising} onClick={improveStory}>{revising ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Revise full story</button></div>
+      <input className={input} value={director.plan.title} onChange={event => patchPlan({ title: event.target.value })} placeholder={t('script.title')} />
+      <textarea className={input} rows={2} value={director.plan.logline} onChange={event => patchPlan({ logline: event.target.value })} placeholder={t('script.logline')} />
+      <textarea className={input} rows={4} value={director.plan.synopsis} onChange={event => patchPlan({ synopsis: event.target.value })} placeholder={t('script.synopsis')} />
+      {!!director.plan.storyStructure?.length && <div className="space-y-2"><strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('script.pageBeats')}</strong>{director.plan.storyStructure.map((beat, index) => <div key={beat.pageNumber} className="space-y-1.5 rounded border border-border p-2"><input className={input} value={beat.stage} onChange={event => patchBeat(index, { stage: event.target.value })} /><textarea className={input} rows={2} value={beat.goal} onChange={event => patchBeat(index, { goal: event.target.value })} /><textarea className={input} rows={2} value={beat.turningPoint} onChange={event => patchBeat(index, { turningPoint: event.target.value })} /></div>)}</div>}
+      <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5"><strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('script.improve')}</strong><textarea className={input} rows={3} value={revisionInstruction} onChange={event => setRevisionInstruction(event.target.value)} placeholder={t('script.improvePlaceholder')} /><button className={`${button} w-full border-purple-400/40 text-purple-300`} disabled={revising} onClick={improveStory}>{revising ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {t('script.revise')}</button></div>
       <div className="space-y-2">
         <strong className="text-[10px] uppercase tracking-wide text-text-muted">
-          {storyboard ? 'Shot list and video prompts' : 'Full script'}
+          {storyboard ? t('script.shotList') : t('script.fullScript')}
         </strong>
         {director.plan.pages.map((page, pageIndex) => (
           <details
@@ -533,13 +540,13 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
             open={pageIndex === 0}
           >
             <summary className="cursor-pointer p-2 text-xs text-text-primary">
-              {storyboard ? `Shot ${page.pageNumber}` : `Page ${page.pageNumber} · ${page.panels.length} panels`}
+              {storyboard ? t('script.shot', { n: page.pageNumber }) : t('script.pagePanels', { n: page.pageNumber, count: page.panels.length })}
             </summary>
             <div className="space-y-2 p-2 pt-0">
               {page.panels.map((panel, panelIndex) => storyboard ? (
                 <div key={`${panel.id}-${director.scriptVersion || 1}`} className="space-y-2 rounded border border-border p-2">
                   <label className="block text-[10px] text-text-muted">
-                    First-frame image prompt
+                    {t('script.firstFrame')}
                     <textarea
                       className={`${input} mt-1`}
                       rows={4}
@@ -552,7 +559,7 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
                     />
                   </label>
                   <label className="block text-[10px] text-text-muted">
-                    I2V motion / performance prompt
+                    {t('script.motionPrompt')}
                     <textarea
                       className={`${input} mt-1`}
                       rows={6}
@@ -572,15 +579,15 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
                 </div>
               ) : (
                 <label key={`${panel.id}-${director.scriptVersion || 1}`} className="block text-[10px] text-text-muted">
-                  Panel {panelIndex + 1} · {panel.narrativeRole}
-                  <textarea className={`${input} mt-1`} rows={3} defaultValue={scriptForPanel(panel)} onBlur={event => patchPanel(pageIndex, panelIndex, event.target.value)} placeholder="Silent panel" />
+                  {t('script.panelRole', { n: panelIndex + 1, role: panel.narrativeRole })}
+                  <textarea className={`${input} mt-1`} rows={3} defaultValue={scriptForPanel(panel)} onBlur={event => patchPanel(pageIndex, panelIndex, event.target.value)} placeholder={t('script.silent')} />
                 </label>
               ))}
             </div>
           </details>
         ))}
       </div>
-      <button className={`${button} w-full border-emerald-500/50 text-emerald-300`} onClick={approve}><ShieldCheck size={13} /> Approve this script</button>
+      <button className={`${button} w-full border-emerald-500/50 text-emerald-300`} onClick={approve}><ShieldCheck size={13} /> {t('script.approve')}</button>
     </div>
   )
 }
@@ -588,45 +595,47 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
 type QualityIssue = { level: 'error' | 'warning' | 'tip'; text: string }
 
 export function ComicQualityPanel({ notify }: { notify: (kind: 'ok' | 'error', text: string) => void }) {
+  const { t } = useUiTranslation('comics')
   const project = useComicStore(state => state.project)
   const [draft, setDraft] = useState<ComicGlossaryEntry>({ source: '', translation: '', note: '' })
   const issues = useMemo<QualityIssue[]>(() => {
     const found: QualityIssue[] = []
     const director = project.director
-    if (!director) return [{ level: 'error', text: 'No Director plan is attached to this comic.' }]
-    if (!director.scriptApprovedAt) found.push({ level: 'warning', text: 'The current script version has not been approved.' })
-    if (!director.plan.storyStructure?.length) found.push({ level: 'warning', text: 'The comic has no explicit dramatic page structure.' })
+    if (!director) return [{ level: 'error', text: t('quality.noPlan') }]
+    if (!director.scriptApprovedAt) found.push({ level: 'warning', text: t('quality.unapproved') })
+    if (!director.plan.storyStructure?.length) found.push({ level: 'warning', text: t('quality.noStructure') })
     const known = new Set(project.characters.map(character => character.id))
     director.plan.pages.forEach((page, pageIndex) => {
       const seen = new Set<string>()
       page.panels.forEach((panel, panelIndex) => {
         const blocks = panel.captions.length + panel.dialogue.length + panel.soundEffects.length
-        if (blocks > (page.panels.length >= 7 ? 1 : 2)) found.push({ level: 'error', text: `Page ${pageIndex + 1}, panel ${panelIndex + 1} has ${blocks} text blocks.` })
-        if (!(panel.continuityNotes || '').trim()) found.push({ level: 'tip', text: `Page ${pageIndex + 1}, panel ${panelIndex + 1} has no continuity note.` })
-        panel.characters.filter(id => !known.has(id)).forEach(id => found.push({ level: 'error', text: `Unknown character “${id}” in page ${pageIndex + 1}.` }))
+        if (blocks > (page.panels.length >= 7 ? 1 : 2)) found.push({ level: 'error', text: t('quality.tooManyBlocks', { page: pageIndex + 1, panel: panelIndex + 1, count: blocks }) })
+        if (!(panel.continuityNotes || '').trim()) found.push({ level: 'tip', text: t('quality.noContinuity', { page: pageIndex + 1, panel: panelIndex + 1 }) })
+        panel.characters.filter(id => !known.has(id)).forEach(id => found.push({ level: 'error', text: t('quality.unknownCharacter', { id, page: pageIndex + 1 }) }))
         ;[...panel.captions, ...panel.dialogue.map(line => line.text)].forEach(line => {
           const key = String(line || '').trim().toLocaleLowerCase()
-          if (key && seen.has(key)) found.push({ level: 'warning', text: `Repeated line on page ${pageIndex + 1}: “${line}”.` })
+          if (key && seen.has(key)) found.push({ level: 'warning', text: t('quality.repeatedLine', { page: pageIndex + 1, line }) })
           seen.add(key)
         })
       })
     })
     project.characters.forEach(character => {
-      if (!character.personality?.trim()) found.push({ level: 'tip', text: `${character.name} has no personality definition.` })
-      if (!character.referenceAssetId) found.push({ level: 'warning', text: `${character.name} has no primary visual reference.` })
+      if (!character.personality?.trim()) found.push({ level: 'tip', text: t('quality.noPersonality', { name: character.name }) })
+      if (!character.referenceAssetId) found.push({ level: 'warning', text: t('quality.noReference', { name: character.name }) })
     })
     return found
-  }, [project])
+  }, [project, t])
   const score = Math.max(0, 100 - issues.reduce((sum, issue) => sum + (issue.level === 'error' ? 15 : issue.level === 'warning' ? 7 : 2), 0))
   const addGlossary = () => {
     if (!draft.source.trim() || !draft.translation.trim()) return
     useComicStore.getState().patchProject({ translationGlossary: [...(project.translationGlossary || []), { source: draft.source.trim(), translation: draft.translation.trim(), note: draft.note?.trim() }] })
     setDraft({ source: '', translation: '', note: '' })
   }
-  return <div className="space-y-3"><div className="rounded-lg border border-border bg-bg-tertiary/30 p-3"><div className="flex items-center justify-between"><span className="text-xs font-semibold text-text-primary">Preflight score</span><span className={`text-xl font-bold ${score >= 80 ? 'text-emerald-400' : score >= 55 ? 'text-amber-300' : 'text-red-400'}`}>{score}</span></div><p className="text-[10px] text-text-muted">Story, lettering, characters and continuity checks.</p></div><div className="space-y-1.5">{issues.length ? issues.slice(0, 40).map((issue, index) => <div key={`${issue.text}-${index}`} className={`rounded border px-2 py-1.5 text-[10px] ${issue.level === 'error' ? 'border-red-500/30 text-red-300' : issue.level === 'warning' ? 'border-amber-500/30 text-amber-300' : 'border-border text-text-muted'}`}>{issue.text}</div>) : <div className="rounded border border-emerald-500/30 p-2 text-xs text-emerald-300">No obvious continuity or lettering problems found.</div>}</div><button className={`${button} w-full`} disabled={!project.director} onClick={() => { const state = useComicStore.getState(); state.patchProject(simplifyDirectorText(state.project)); notify('ok', 'Safe lettering limits and layout were reapplied without changing images.') }}><Sparkles size={12} /> Apply safe fixes</button><div className="border-t border-border pt-3 space-y-2"><strong className="text-[10px] uppercase tracking-wide text-text-muted">Translation glossary</strong><p className="text-[9px] text-text-muted">Names and terms here are enforced during translated export.</p>{(project.translationGlossary || []).map((entry, index) => <div key={`${entry.source}-${index}`} className="flex items-center gap-1 rounded border border-border p-1.5 text-[10px]"><span className="text-text-primary">{entry.source}</span><span className="text-text-muted">→</span><span className="text-accent-blue">{entry.translation}</span><button className="ml-auto text-red-300" onClick={() => useComicStore.getState().patchProject({ translationGlossary: (project.translationGlossary || []).filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={11} /></button></div>)}<input className={input} value={draft.source} onChange={event => setDraft(value => ({ ...value, source: event.target.value }))} placeholder="Source term" /><input className={input} value={draft.translation} onChange={event => setDraft(value => ({ ...value, translation: event.target.value }))} placeholder="Required translation" /><input className={input} value={draft.note || ''} onChange={event => setDraft(value => ({ ...value, note: event.target.value }))} placeholder="Optional context" /><button className={`${button} w-full`} onClick={addGlossary}><Plus size={12} /> Add term</button></div></div>
+  return <div className="space-y-3"><div className="rounded-lg border border-border bg-bg-tertiary/30 p-3"><div className="flex items-center justify-between"><span className="text-xs font-semibold text-text-primary">{t('quality.title')}</span><span className={`text-xl font-bold ${score >= 80 ? 'text-emerald-400' : score >= 55 ? 'text-amber-300' : 'text-red-400'}`}>{score}</span></div><p className="text-[10px] text-text-muted">{t('quality.hint')}</p></div><div className="space-y-1.5">{issues.length ? issues.slice(0, 40).map((issue, index) => <div key={`${issue.text}-${index}`} className={`rounded border px-2 py-1.5 text-[10px] ${issue.level === 'error' ? 'border-red-500/30 text-red-300' : issue.level === 'warning' ? 'border-amber-500/30 text-amber-300' : 'border-border text-text-muted'}`}>{issue.text}</div>) : <div className="rounded border border-emerald-500/30 p-2 text-xs text-emerald-300">{t('quality.clean')}</div>}</div><button className={`${button} w-full`} disabled={!project.director} onClick={() => { const state = useComicStore.getState(); state.patchProject(simplifyDirectorText(state.project)); notify('ok', t('quality.fixed')) }}><Sparkles size={12} /> {t('quality.safeFixes')}</button><div className="border-t border-border pt-3 space-y-2"><strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('quality.glossary')}</strong><p className="text-[9px] text-text-muted">{t('quality.glossaryHint')}</p>{(project.translationGlossary || []).map((entry, index) => <div key={`${entry.source}-${index}`} className="flex items-center gap-1 rounded border border-border p-1.5 text-[10px]"><span className="text-text-primary">{entry.source}</span><span className="text-text-muted">→</span><span className="text-accent-blue">{entry.translation}</span><button className="ml-auto text-red-300" onClick={() => useComicStore.getState().patchProject({ translationGlossary: (project.translationGlossary || []).filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={11} /></button></div>)}<input className={input} value={draft.source} onChange={event => setDraft(value => ({ ...value, source: event.target.value }))} placeholder={t('quality.sourceTerm')} /><input className={input} value={draft.translation} onChange={event => setDraft(value => ({ ...value, translation: event.target.value }))} placeholder={t('quality.requiredTranslation')} /><input className={input} value={draft.note || ''} onChange={event => setDraft(value => ({ ...value, note: event.target.value }))} placeholder={t('quality.optionalContext')} /><button className={`${button} w-full`} onClick={addGlossary}><Plus size={12} /> {t('quality.addTerm')}</button></div></div>
 }
 
 export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', text: string) => void }) {
+  const { t } = useUiTranslation('comics')
   const project = useComicStore(state => state.project)
   const refreshOutputs = useStore(state => state.refreshOutputs)
   const activeWorkspace = useStore(state => state.activeWorkspace)
@@ -823,8 +832,8 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     model => model.model_type === effectiveVideoModel,
   )?.name || effectiveVideoModel
   const movieResolutionOptions = useMemo(
-    () => comicMovieResolutions(effectiveVideoModel, aspect),
-    [aspect, effectiveVideoModel],
+    () => comicMovieResolutions(t, effectiveVideoModel, aspect),
+    [aspect, effectiveVideoModel, t],
   )
   const selectedMovieResolution = movieResolutionOptions.find(
     option => option.quality === movieQuality,
@@ -985,7 +994,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       )
     }))
     state.patchProject({ director: { ...director, plan } })
-    notify('ok', `Selected ${selected.size} representative shots: aspect risk, face, ensemble, action and quiet detail.`)
+    notify('ok', t('video.testsSelected', { count: selected.size }))
   }
   const resolvedMotionMode = (planned?: ComicPlanPanel): 'contextual' | 'living-still' | 'action' =>
     planned?.videoMotion === 'contextual'
@@ -1002,19 +1011,16 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     planned?.durationSeconds || defaultDuration
   const motionTreatmentLabel = (mode: 'contextual' | 'living-still' | 'action') =>
     mode === 'contextual'
-      ? 'context-aware performance with a fixed camera'
+      ? t('video.treatmentContextual')
       : mode === 'living-still'
-        ? 'deterministic living still with a fixed camera'
-        : 'authored story action and camera'
+        ? t('video.treatmentLiving')
+        : t('video.treatmentAction')
   const create = async () => {
     if (panelCount > 200) {
-      notify('error', `This animatic has ${panelCount} panels; the safe limit is 200.`)
+      notify('error', t('video.animaticLimit', { count: panelCount }))
       return
     }
-    if (!window.confirm(
-      `Render a quick non-generative storyboard preview from ${panelCount} still panels? `
-      + 'This does not call the selected video model or animate characters; it only holds the drawings and optionally applies FFmpeg pans, zooms and transitions.',
-    )) return
+    if (!window.confirm(t('video.animaticConfirm', { count: panelCount }))) return
     const activityId = `comic-animatic:${project.id}:${Date.now()}`
     const reportAnimaticActivity = (
       message: string,
@@ -1037,7 +1043,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     const pollGeneration = ++pipelinePollRef.current
     setBusy('animatic')
     setResult(null)
-    reportAnimaticActivity('Preparing comic animatic…')
+    reportAnimaticActivity(t('video.preparingAnimatic'))
     try {
       const panels: Array<{
         source: string
@@ -1049,7 +1055,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         script: string
       }> = []
       await forEachComicPanelCapture(async (capture, current, total) => {
-        reportAnimaticActivity(`Uploading shot ${current}/${total}`, 'uploading_artwork', current, total)
+        reportAnimaticActivity(t('video.uploadingShot', { current, total }), 'uploading_artwork', current, total)
         const blob = await (await fetch(capture.dataUrl)).blob()
         const upload = await api.uploadImage(new File(
           [blob],
@@ -1069,12 +1075,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           script: planned ? scriptForPanel(planned) : '',
         })
       }, (current, total) => reportAnimaticActivity(
-        `Capturing panel ${current}/${total}`,
+        t('video.capturingPanel', { current, total }),
         'preparing_comic_video',
         current,
         total,
       ))
-      reportAnimaticActivity('Starting FFmpeg animatic…')
+      reportAnimaticActivity(t('video.startingAnimatic'))
       const started = await api.startComicAnimatic({
         comic_id: project.id,
         comic_title: project.title,
@@ -1092,14 +1098,14 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         const job = await api.fetchVideoEditorExport(started.job_id)
         if (pollGeneration !== pipelinePollRef.current) return
         reportAnimaticActivity(
-          `${job.message} · ${job.progress}%`,
+          t('video.animaticProgress', { message: job.message, progress: job.progress }),
           'rendering_animatic',
           job.progress,
           100,
         )
         if (job.status === 'cancelled' || String(job.status) === 'interrupted') {
           activityCancelled = true
-          notify('ok', 'Animatic rendering cancelled.')
+          notify('ok', t('video.animaticCancelled'))
           break
         }
         if (job.status === 'failed' || String(job.status) === 'crashed') throw new Error(job.error || job.message)
@@ -1108,7 +1114,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           setResult(completed)
           try { window.localStorage.setItem('maestro-video-editor-pending-source', JSON.stringify(completed)) } catch { /* optional hand-off */ }
           await refreshOutputs()
-          notify('ok', 'Animatic created. It is ready in the gallery and Video Editor.')
+          notify('ok', t('video.animaticReady'))
           break
         }
       }
@@ -1151,12 +1157,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     const requestedPanelCount = requestedRows.length
     if (!requestedPanelCount) {
       notify('error', selected.size
-        ? 'None of the selected test shots is enabled.'
-        : 'The film adaptation has no enabled shots.')
+        ? t('video.noTestShots')
+        : t('video.noEnabledShots'))
       return
     }
     if (requestedPanelCount > 200) {
-      notify('error', `This conversion has ${requestedPanelCount} panels; the safe limit is 200.`)
+      notify('error', t('video.conversionLimit', { count: requestedPanelCount }))
       return
     }
     const plannedForRun = requestedRows.map(row => row.planned)
@@ -1166,13 +1172,16 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     )
     const isTestRun = (clipLimit !== undefined || selected.size > 0) && !preflightOnly
     if (!preflightOnly && !window.confirm(
-      `${isTestRun ? 'Create a selected quality test from' : 'Adapt'} ${requestedPanelCount} `
-      + `source beat${requestedPanelCount === 1 ? '' : 's'} into an estimated ${totalSeconds}s film edit? `
-      + `Global motion treatment: ${motionTreatmentLabel(movieMotionMode)}; per-shot overrides are shown in the shot plan. `
-      + `${isTestRun ? 'This uses the final model, resolution, prompts and shot settings; it is not a lower-quality preview. ' : ''}`
-      + `Selected video engine: ${effectiveVideoModelName} (${effectiveVideoModel}). `
-      + `Exact output request: ${selectedMovieResolution.value}. `
-      + 'Director may omit or fuse source beats. Only model-driven and AI-living-still shots use I2V; holds and subtle centered pushes are deterministic.',
+      t('video.convertConfirm', {
+        count: requestedPanelCount,
+        verb: isTestRun ? t('video.createTest') : t('video.adapt'),
+        seconds: totalSeconds,
+        treatment: motionTreatmentLabel(movieMotionMode),
+        test: isTestRun ? t('video.testNote') : '',
+        engine: effectiveVideoModelName,
+        id: effectiveVideoModel,
+        resolution: selectedMovieResolution.value,
+      }),
     )) return
 
     const activityId = `comic-video:${project.id}:${Date.now()}`
@@ -1196,7 +1205,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     const pollGeneration = ++pipelinePollRef.current
     setBusy(preflightOnly ? 'preflight' : 'movie')
     setResult(null)
-    reportActivity('Preparing comic video…')
+    reportActivity(t('video.preparingVideo'))
     if (preflightOnly) {
       setPreflightPipelineId(null)
       setPreflightStatus(null)
@@ -1249,7 +1258,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       await forEachComicPanelCapture(async (capture, current, total) => {
         const row = rowByPosition.get(`${capture.pageNumber}.${capture.panelNumber}`)
         if (!row) return
-        reportActivity(`Preparing artwork ${current}/${total}`, 'uploading_artwork', current, total)
+        reportActivity(t('video.preparingArtwork', { current, total }), 'uploading_artwork', current, total)
         const blob = await (await fetch(capture.dataUrl)).blob()
         const upload = await api.uploadImage(new File(
           [blob],
@@ -1316,7 +1325,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           ].filter(Boolean).join('. '),
         })
       }, (current, total) => reportActivity(
-        `Capturing clean artwork ${current}/${total}`,
+        t('video.capturingArtwork', { current, total }),
         'preparing_comic_video',
         current,
         total,
@@ -1364,10 +1373,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         && state.modelOptions
         && !state.modelOptions.supports_end_frame
       ) {
-        throw new Error(
-          'The selected video model does not support end frames. '
-          + 'Choose a model with end-frame support or use “No end frame”.',
-        )
+        throw new Error(t('video.noEndFrame'))
       }
       const qualityResolution = selectedMovieResolution.value
       const fps = state.modelOptions?.fps || 16
@@ -1391,7 +1397,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         return clips
       }, [])
 
-      reportActivity('Submitting comic movie to Director…', 'planning')
+      reportActivity(t('video.submittingMovie'), 'planning')
       const { pipeline_id } = await api.startPipeline({
         pipeline_type: 'comic_movie',
         comic_id: project.id,
@@ -1479,7 +1485,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           if (pollGeneration !== pipelinePollRef.current) return
           setPreflightStatus(status)
           reportActivity(
-            status.progress?.message || 'Preparing comic video PRE…',
+            status.progress?.message || t('video.preparingPre'),
             status.phase,
             status.progress?.current || status.progress?.step || 0,
             status.progress?.total || status.progress?.total_steps || 0,
@@ -1493,7 +1499,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             setPreflightBuiltFingerprint(preflightFingerprint)
             notify(
               'ok',
-              `PRE ready for ${status.preview_clips?.length || 0} clips. No video was generated.`,
+              t('video.preReady', { count: status.preview_clips?.length || 0 }),
             )
             window.dispatchEvent(new CustomEvent('maestro:comic-pre-open', {
               detail: { pipelineId: pipeline_id },
@@ -1501,7 +1507,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             break
           }
           if (['failed', 'cancelled', 'interrupted', 'crashed'].includes(String(status.status))) {
-            throw new Error(status.error || 'Comic video PRE stopped.')
+            throw new Error(status.error || t('video.preStopped'))
           }
         }
         return
@@ -1533,10 +1539,15 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       notify(
         'ok',
         isTestRun
-          ? `${requestedPanelCount}-clip quality test started at ${selectedMovieResolution.value} with the real ${effectiveVideoModelName} settings. The remaining ${panelCount - requestedPanelCount} panels were not submitted.`
+          ? t('video.testStarted', {
+            count: requestedPanelCount,
+            resolution: selectedMovieResolution.value,
+            engine: effectiveVideoModelName,
+            rest: panelCount - requestedPanelCount,
+          })
           : movieEndFrameMode === 'none'
-            ? 'Comic movie started. Panels without an explicit end-frame override are independent I2V shots; completed clips are joined with clean cuts.'
-            : 'Comic movie started. End-frame conditioning is enabled for selected shots, but completed clips are still joined with clean cuts.',
+            ? t('video.movieNoEnd')
+            : t('video.movieWithEnd'),
       )
     } catch (error) {
       activityFailed = true
@@ -1563,19 +1574,17 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     <div className="space-y-3">
       <div className="rounded-lg border border-purple-400/30 bg-purple-400/5 p-3">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
-          <Film size={14} className="text-purple-300" /> Convert {storyboard ? 'storyboard' : 'comic'} to AI film
+          <Film size={14} className="text-purple-300" /> {storyboard ? t('video.titleStoryboard') : t('video.titleComic')}
         </div>
         <p className="mt-1 text-[10px] text-text-muted">
-          {storyboard
-            ? 'Each approved first frame and its editable I2V prompt go directly to Director. Missing prompts alone are completed by the LLM.'
-            : 'Adapt the comic into a film shot list first. Shots can be omitted, reordered or routed to an exact hold, deterministic subtle push, AI living still or model-driven I2V without changing the printed comic.'}
+          {storyboard ? t('video.hintStoryboard') : t('video.hintComic')}
         </p>
       </div>
       <label className="block rounded-lg border border-accent-blue/35 bg-accent-blue/5 p-3 text-[10px] text-text-muted">
         <span className="flex items-center justify-between gap-2">
-          <b className="text-xs text-text-primary">Video engine for this movie</b>
+          <b className="text-xs text-text-primary">{t('video.engine')}</b>
           <span className="rounded-full border border-emerald-400/35 bg-emerald-400/10 px-2 py-0.5 text-[9px] text-emerald-200">
-            Selected
+            {t('video.selected')}
           </span>
         </span>
         <select
@@ -1589,22 +1598,22 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           )}
           {selectableVideoModels.map(model => (
             <option key={model.model_type} value={model.model_type}>
-              {model.name}{model.is_downloaded === false ? ' · not installed' : ''}
+              {model.name}{model.is_downloaded === false ? t('video.notInstalled') : ''}
             </option>
           ))}
         </select>
         <span className="mt-1 block text-[9px] text-accent-blue">
-          Director will submit <b>{effectiveVideoModelName}</b> · <code>{effectiveVideoModel}</code>
+          {t('video.willSubmit', { name: effectiveVideoModelName, id: effectiveVideoModel })}
         </span>
         <span className="mt-1 block text-[9px] text-text-primary">
-          Current output: <b>{selectedMovieResolution.label}</b>
+          {t('video.currentOutput', { label: selectedMovieResolution.label })}
         </span>
         <span className="mt-1 block text-[9px] text-text-muted">
           {effectiveVideoModel.includes('ltx2')
-            ? 'LTX Distilled uses HocusPocus’s validated two-stage 8+3 recipe.'
+            ? t('video.ltxHint')
             : effectiveVideoModel.includes('minimax')
-              ? 'MiniMax is the actual generative engine; “model-driven I2V” below describes a shot method, not a different model.'
-              : 'The selected engine is frozen into PRE and shown again before generation.'}
+              ? t('video.minimaxHint')
+              : t('video.otherHint')}
         </span>
       </label>
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-tertiary/30 p-1">
@@ -1612,80 +1621,79 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           className={`${button} border-0 ${videoTab === 'settings' ? 'bg-accent-blue/15 text-accent-blue' : ''}`}
           onClick={() => setVideoTab('settings')}
         >
-          <Settings2 size={12} /> Configuration
+          <Settings2 size={12} /> {t('video.configuration')}
         </button>
         <button
           className={`${button} border-0 ${videoTab === 'shots' ? 'bg-purple-400/15 text-purple-300' : ''}`}
           onClick={() => setVideoTab('shots')}
         >
-          <Clapperboard size={12} /> Source beats · {includedVideoShots.length}
+          <Clapperboard size={12} /> {t('video.sourceBeats', { count: includedVideoShots.length })}
         </button>
       </div>
 
       {videoTab === 'settings' && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
-            <label className="block text-[10px] text-text-muted">Movie format
+            <label className="block text-[10px] text-text-muted">{t('video.movieFormat')}
               <select className={`${input} mt-1`} value={aspect} onChange={event => setAspect(event.target.value as ComicMovieAspect)}>
-                <option value="landscape">Landscape · TV</option>
-                <option value="portrait">Portrait · mobile</option>
-                <option value="square">Square</option>
+                <option value="landscape">{t('video.landscape')}</option>
+                <option value="portrait">{t('video.portrait')}</option>
+                <option value="square">{t('video.square')}</option>
               </select>
             </label>
-            <label className="block text-[10px] text-text-muted">Output resolution
+            <label className="block text-[10px] text-text-muted">{t('video.outputResolution')}
               <select className={`${input} mt-1`} value={movieQuality} onChange={event => setMovieQuality(event.target.value as ComicMovieQuality)}>
                 {movieResolutionOptions.map(option => (
                   <option key={option.value} value={option.quality}>{option.label}</option>
                 ))}
               </select>
               <span className="mt-1 block text-[9px] text-text-muted">
-                Exact request: <b className="text-text-primary">{selectedMovieResolution.value.replace('x', '×')}</b>
+                {t('video.exactRequest', { value: selectedMovieResolution.value.replace('x', '×') })}
                 {effectiveVideoModel === 'minimax_h3'
-                  ? ` · ${resolutionMegapixels(selectedMovieResolution.value).toFixed(2)} MP, H3-native 32-pixel grid.`
-                  : ' · compatible preset for the selected engine.'}
+                  ? t('video.h3Grid', { mp: resolutionMegapixels(selectedMovieResolution.value).toFixed(2) })
+                  : t('video.compatiblePreset')}
               </span>
               {effectiveVideoModel === 'minimax_h3' && (
                 <span className="mt-1 block rounded border border-cyan-400/25 bg-cyan-400/5 px-1.5 py-1 text-[9px] text-cyan-100">
-                  Optimized H3 presets: Fast is about 46% of the pixels of the old 1280×704 setting;
-                  the 960×544 RTX 4090 default is about 58%. Native 1344×768 gives full Base quality but is the slowest.
+                  {t('video.h3Presets')}
                 </span>
               )}
             </label>
           </div>
-          <label className="block text-[10px] text-text-muted">Global AI motion direction
+          <label className="block text-[10px] text-text-muted">{t('video.motionDirection')}
             <select className={`${input} mt-1`} value={movieMotionMode} onChange={event => setMovieMotionMode(event.target.value as typeof movieMotionMode)}>
-              <option value="contextual">Context-aware performance · fixed camera · recommended</option>
-              <option value="living-still">Living still · micro-motion only</option>
-              <option value="action">Authored action · prompt and camera</option>
+              <option value="contextual">{t('video.contextual')}</option>
+              <option value="living-still">{t('video.livingStill')}</option>
+              <option value="action">{t('video.authoredAction')}</option>
             </select>
           </label>
-          <label className="block text-[10px] text-text-muted">Default video framing
+          <label className="block text-[10px] text-text-muted">{t('video.framing')}
             <select className={`${input} mt-1`} value={movieImageFit} onChange={event => setMovieImageFit(event.target.value as typeof movieImageFit)}>
-              <option value="cover">Cinematic crop · fill canvas</option>
-              <option value="contain">Preserve whole panel · visible padding</option>
+              <option value="cover">{t('video.cover')}</option>
+              <option value="contain">{t('video.contain')}</option>
             </select>
-            <span className="mt-1 block text-[9px] text-text-muted">Contain preserves the whole panel; Cover is an explicit crop. AI reframe import/generation is not available in this build, so it is never offered as a magical fallback.</span>
+            <span className="mt-1 block text-[9px] text-text-muted">{t('video.fitHint')}</span>
           </label>
           <div className="grid grid-cols-2 gap-2">
-            <label className="block text-[10px] text-text-muted">End frame
+            <label className="block text-[10px] text-text-muted">{t('video.endFrame')}
               <select className={`${input} mt-1`} value={movieEndFrameMode} onChange={event => setMovieEndFrameMode(event.target.value as typeof movieEndFrameMode)}>
-                <option value="none">None · independent shots</option>
-                <option value="smart">Compatible continuous actions</option>
-                <option value="all">Every following panel · experimental</option>
+                <option value="none">{t('video.endNone')}</option>
+                <option value="smart">{t('video.endSmart')}</option>
+                <option value="all">{t('video.endAll')}</option>
               </select>
             </label>
-            <label className="block text-[10px] text-text-muted">Fidelity
+            <label className="block text-[10px] text-text-muted">{t('video.fidelity')}
               <select className={`${input} mt-1`} value={movieFidelity} onChange={event => setMovieFidelity(event.target.value as typeof movieFidelity)}>
-                <option value="faithful">Faithful · recommended</option>
-                <option value="balanced">Balanced</option>
-                <option value="expressive">Expressive · drift risk</option>
+                <option value="faithful">{t('video.faithful')}</option>
+                <option value="balanced">{t('video.balanced')}</option>
+                <option value="expressive">{t('video.expressive')}</option>
               </select>
             </label>
           </div>
-          <label className="block text-[10px] text-text-muted">Default duration
+          <label className="block text-[10px] text-text-muted">{t('video.defaultDuration')}
             <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} />
           </label>
-          <label className="block text-[10px] text-text-muted">Target film shots
+          <label className="block text-[10px] text-text-muted">{t('video.targetShots')}
             <input
               className={`${input} mt-1`}
               type="number"
@@ -1700,59 +1708,59 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             />
             <span className="mt-1 block text-[9px] text-text-muted">
               {targetFilmShots === 0
-                ? `Auto · Director will adapt these ${includedVideoShots.length} source beats into roughly ${Math.max(1, Math.round(includedVideoShots.length * .34))} purposeful film shots.`
-                : `${targetFilmShots} film shots requested. PRE shows the actual adapted shot list before any video is generated.`}
+                ? t('video.targetAuto', { beats: includedVideoShots.length, shots: Math.max(1, Math.round(includedVideoShots.length * .34)) })
+                : t('video.targetRequested', { count: targetFilmShots })}
             </span>
           </label>
-          <label className="block text-[10px] text-text-muted">Experimental self-refiner
+          <label className="block text-[10px] text-text-muted">{t('video.selfRefiner')}
             <select className={`${input} mt-1`} value={movieSelfRefiner} onChange={event => setMovieSelfRefiner(Number(event.target.value))}>
-              <option value={0}>Off · stable path</option>
-              <option value={1}>P1-Norm · experimental</option>
-              <option value={2}>P2-Norm · experimental</option>
+              <option value={0}>{t('video.refinerOff')}</option>
+              <option value={1}>{t('video.refinerP1')}</option>
+              <option value={2}>{t('video.refinerP2')}</option>
             </select>
           </label>
-          {selectedVideoModel?.includes('gguf') && <div className="rounded border border-amber-400/30 bg-amber-400/5 p-2 text-[10px] text-amber-200">Q6 saves VRAM but was slower and less faithful locally. <button className="underline" onClick={() => selectDirectorVideoModel('ltx2_22B_distilled_1_1')}>Use INT8</button></div>}
-          {selectedVideoModel?.includes('fp8') && <div className="rounded border border-amber-400/30 bg-amber-400/5 p-2 text-[10px] text-amber-200">FP8 remains experimental: slower locally with more anatomy and clothing deformation.</div>}
+          {selectedVideoModel?.includes('gguf') && <div className="rounded border border-amber-400/30 bg-amber-400/5 p-2 text-[10px] text-amber-200">{t('video.q6Hint')} <button className="underline" onClick={() => selectDirectorVideoModel('ltx2_22B_distilled_1_1')}>{t('video.useInt8')}</button></div>}
+          {selectedVideoModel?.includes('fp8') && <div className="rounded border border-amber-400/30 bg-amber-400/5 p-2 text-[10px] text-amber-200">{t('video.fp8Hint')}</div>}
           <details className="rounded border border-border bg-bg-tertiary/30">
-            <summary className="cursor-pointer p-2 text-[10px] font-semibold text-text-primary">Video LoRAs · {savedVideoLoras?.activated_loras?.length || 0} active</summary>
+            <summary className="cursor-pointer p-2 text-[10px] font-semibold text-text-primary">{t('video.loras', { count: savedVideoLoras?.activated_loras?.length || 0 })}</summary>
             <div className="space-y-2 border-t border-border p-2">
-              <p className="text-[9px] text-amber-200">Transition LoRAs are not comic/anime style LoRAs. Use only a LoRA trained for the selected video model and test it in PRE.</p>
+              <p className="text-[9px] text-amber-200">{t('video.loraHint')}</p>
               <DirectorLoraSelector mode="video" modelType={selectedVideoModel || 'ltx2_22B_distilled_1_1'} />
             </div>
           </details>
           <details className="border-t border-border pt-3">
-            <summary className="cursor-pointer text-xs font-semibold text-text-muted">FFmpeg animatic · no generative video</summary>
+            <summary className="cursor-pointer text-xs font-semibold text-text-muted">{t('video.animatic')}</summary>
             <div className="mt-2 space-y-2 rounded border border-amber-400/25 bg-amber-400/5 p-2">
-              <p className="text-[10px] text-amber-100/80">Useful for timing only. Camera movement here is programmatic and does not call the selected video model.</p>
+              <p className="text-[10px] text-amber-100/80">{t('video.animaticHint')}</p>
               <select className={input} value={animaticMotion} onChange={event => setAnimaticMotion(event.target.value as typeof animaticMotion)}>
-                <option value="none">Static panels · recommended</option>
-                <option value="shot-settings">Use programmed pan/zoom settings</option>
+                <option value="none">{t('video.staticPanels')}</option>
+                <option value="shot-settings">{t('video.usePanZoom')}</option>
               </select>
               <select className={input} value={transition} onChange={event => setTransition(event.target.value)}>
-                <option value="none">Hard cuts · recommended</option>
-                <option value="crossfade">Crossfade</option>
-                <option value="fade-black">Fade through black</option>
-                <option value="wipe-left">Wipe left</option>
-                <option value="dissolve">Dissolve</option>
+                <option value="none">{t('video.hardCuts')}</option>
+                <option value="crossfade">{t('video.crossfade')}</option>
+                <option value="fade-black">{t('video.fadeBlack')}</option>
+                <option value="wipe-left">{t('video.wipeLeft')}</option>
+                <option value="dissolve">{t('video.dissolve')}</option>
               </select>
               <button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={Boolean(busy) || panelCount === 0} onClick={create}>
                 {busy === 'animatic' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
-                {busy === 'animatic' && progress ? progress : 'Render animatic'}
+                {busy === 'animatic' && progress ? progress : t('video.renderAnimatic')}
               </button>
             </div>
           </details>
-          {result && <div className="space-y-2 rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><video src={result.url} controls className="w-full rounded" /><button className={`${button} w-full border-emerald-500/40 text-emerald-300`} onClick={() => useStore.getState().setMediaFilter('videoeditor')}>Open in Video Editor</button></div>}
+          {result && <div className="space-y-2 rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><video src={result.url} controls className="w-full rounded" /><button className={`${button} w-full border-emerald-500/40 text-emerald-300`} onClick={() => useStore.getState().setMediaFilter('videoeditor')}>{t('video.openEditor')}</button></div>}
         </div>
       )}
 
       {videoTab === 'shots' && project.director && (
         <div className="space-y-3">
           <div className="rounded border border-border bg-bg-tertiary/30 p-2 text-[10px] text-text-muted">
-            <div className="flex items-center justify-between gap-2"><span><b className="text-text-primary">{includedVideoShots.length}</b> source beats enabled · {videoShotRows.length - includedVideoShots.length} omitted · {selectedTestShots.length} suggested for test</span><span>Global: <b className="text-accent-blue">{movieMotionMode}</b></span></div>
-            <p className="mt-1">These are source comic beats, not the final film-shot count. Director may merge adjacent beats, so these controls are adaptation hints. PRE is the authoritative, editable list of effective film shots and render settings.</p>
+            <div className="flex items-center justify-between gap-2"><span>{t('video.beatsSummary', { enabled: includedVideoShots.length, omitted: videoShotRows.length - includedVideoShots.length, tests: selectedTestShots.length })}</span><span>{t('video.global', { mode: movieMotionMode })}</span></div>
+            <p className="mt-1">{t('video.beatsHint')}</p>
           </div>
           <div className="grid grid-cols-2 gap-1.5">
-            <button className={`${button} border-accent-blue/40 text-accent-blue`} onClick={() => updateAllShots({ videoMotion: 'auto' }, `All ${videoShotRows.length} shots now follow the global AI motion direction.`)}>All follow global motion</button>
+            <button className={`${button} border-accent-blue/40 text-accent-blue`} onClick={() => updateAllShots({ videoMotion: 'auto' }, t('video.followMotionOk', { count: videoShotRows.length }))}>{t('video.followGlobal')}</button>
             <button className={`${button} border-purple-400/40 text-purple-200`} onClick={() => updateAllShots({
               videoIncluded: undefined,
               videoOrder: undefined,
@@ -1766,19 +1774,19 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
               videoSeed: undefined,
               videoTestSelected: undefined,
               videoOverrideFields: [],
-            }, `Released every manual adaptation lock on ${videoShotRows.length} source beats.`)}>Release all manual locks</button>
-            <button className={button} onClick={() => updateAllShots({ videoIncluded: true }, 'All film shots enabled.')}>Include all</button>
+            }, t('video.releasedLocks', { count: videoShotRows.length }))}>{t('video.releaseLocks')}</button>
+            <button className={button} onClick={() => updateAllShots({ videoIncluded: true }, t('video.allEnabled'))}>{t('video.includeAll')}</button>
             <button
               className={button}
               onClick={() => updateAllShots(
                 { durationSeconds: defaultDuration },
-                `Applied ${defaultDuration}s as a source timing hint. Set the exact final-shot duration in PRE.`,
+                t('video.timingApplied', { duration: defaultDuration }),
                 { add: [], remove: ['duration'] },
               )}
             >
-              Use {defaultDuration}s timing hint
+              {t('video.timingHint', { duration: defaultDuration })}
             </button>
-            <button className={`${button} border-cyan-400/40 text-cyan-300`} onClick={selectRepresentativeTests}><Sparkles size={12} /> Select representative test</button>
+            <button className={`${button} border-cyan-400/40 text-cyan-300`} onClick={selectRepresentativeTests}><Sparkles size={12} /> {t('video.selectTest')}</button>
           </div>
           <div className="space-y-2">
             {videoShotRows.map((row, rowIndex) => {
@@ -1790,27 +1798,27 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
               return (
                 <details key={planned.id} open={rowIndex < 2} className={`rounded-lg border ${planned.videoIncluded === false ? 'border-border opacity-60' : 'border-purple-400/25'} bg-bg-tertiary/20`}>
                   <summary className="cursor-pointer p-2 text-[10px] text-text-primary">
-                    <span className="font-semibold">{rowIndex + 1}. Source {pageIndex + 1}.{panelIndex + 1}</span>
+                    <span className="font-semibold">{t('video.sourceBeat', { order: rowIndex + 1, page: pageIndex + 1, panel: panelIndex + 1 })}</span>
                     <span className="ml-1 text-text-muted">· {planned.narrativeRole}</span>
-                    <span className="ml-2 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-purple-200">{motionMethodLabel(rendererLabel)}</span>
-                    <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-amber-200">fit {resolvedFit(planned)}</span>
-                    {overrides.size > 0 && <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-emerald-200">{overrides.size} manual lock{overrides.size === 1 ? '' : 's'}</span>}
-                    {(!renderer || renderer === 'ltx') && <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-cyan-200">{overrides.has('motion_mode') ? `${motion} override` : `${motion} global`}</span>}
+                    <span className="ml-2 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-purple-200">{motionMethodLabel(t, rendererLabel)}</span>
+                    <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-amber-200">{t('video.fitBadge', { fit: resolvedFit(planned) })}</span>
+                    {overrides.size > 0 && <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-emerald-200">{t('video.lock', { count: overrides.size })}</span>}
+                    {(!renderer || renderer === 'ltx') && <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-cyan-200">{overrides.has('motion_mode') ? t('video.motionOverride', { mode: motion }) : t('video.motionGlobal', { mode: motion })}</span>}
                   </summary>
                   <div className="space-y-2 border-t border-border p-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex items-center gap-1 text-[9px] text-text-muted"><input type="checkbox" checked={planned.videoIncluded !== false} onChange={event => updateShot(pageIndex, panelIndex, { videoIncluded: event.target.checked })} /> Include</label>
-                      <label className="flex items-center gap-1 text-[9px] text-text-muted"><input type="checkbox" checked={Boolean(planned.videoTestSelected)} disabled={planned.videoIncluded === false} onChange={event => updateShot(pageIndex, panelIndex, { videoTestSelected: event.target.checked })} /> Suggest for PRE test</label>
-                      <span className="ml-auto flex gap-1"><button className={button} disabled={rowIndex === 0} onClick={() => moveShot(rowIndex, -1)} title="Move earlier"><ArrowUp size={12} /></button><button className={button} disabled={rowIndex === videoShotRows.length - 1} onClick={() => moveShot(rowIndex, 1)} title="Move later"><ArrowDown size={12} /></button></span>
+                      <label className="flex items-center gap-1 text-[9px] text-text-muted"><input type="checkbox" checked={planned.videoIncluded !== false} onChange={event => updateShot(pageIndex, panelIndex, { videoIncluded: event.target.checked })} /> {t('video.include')}</label>
+                      <label className="flex items-center gap-1 text-[9px] text-text-muted"><input type="checkbox" checked={Boolean(planned.videoTestSelected)} disabled={planned.videoIncluded === false} onChange={event => updateShot(pageIndex, panelIndex, { videoTestSelected: event.target.checked })} /> {t('video.suggestTest')}</label>
+                      <span className="ml-auto flex gap-1"><button className={button} disabled={rowIndex === 0} onClick={() => moveShot(rowIndex, -1)} title={t('video.moveEarlier')}><ArrowUp size={12} /></button><button className={button} disabled={rowIndex === videoShotRows.length - 1} onClick={() => moveShot(rowIndex, 1)} title={t('video.moveLater')}><ArrowDown size={12} /></button></span>
                     </div>
-                    <label className="block text-[9px] text-text-muted">Action hint after the first frame
-                      <textarea className={`${input} mt-1`} rows={2} value={planned.videoAction || ''} onChange={event => updateShot(pageIndex, panelIndex, { videoAction: event.target.value })} placeholder="One clear chronological performance or environmental action…" />
+                    <label className="block text-[9px] text-text-muted">{t('video.actionHint')}
+                      <textarea className={`${input} mt-1`} rows={2} value={planned.videoAction || ''} onChange={event => updateShot(pageIndex, panelIndex, { videoAction: event.target.value })} placeholder={t('video.actionPlaceholder')} />
                     </label>
-                    <label className="block text-[9px] text-text-muted">I2V prompt hint
-                      <textarea className={`${input} mt-1`} rows={4} value={planned.videoPrompt || ''} onChange={event => updateShot(pageIndex, panelIndex, { videoPrompt: event.target.value })} placeholder="Describe only what changes: action, restrained movement, camera and final beat…" />
+                    <label className="block text-[9px] text-text-muted">{t('video.i2vHint')}
+                      <textarea className={`${input} mt-1`} rows={4} value={planned.videoPrompt || ''} onChange={event => updateShot(pageIndex, panelIndex, { videoPrompt: event.target.value })} placeholder={t('video.i2vPlaceholder')} />
                     </label>
                     <div className="grid grid-cols-2 gap-1.5">
-                      <label className="text-[9px] text-text-muted">Motion method hint
+                      <label className="text-[9px] text-text-muted">{t('video.methodHint')}
                         <select
                           className={`${input} mt-1`}
                           value={rendererLabel}
@@ -1838,52 +1846,52 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                               })
                           }}
                         >
-                          <option value="auto">Auto · Director chooses for this beat</option>
-                          <option value="hold">Hold · exact still</option>
-                          <option value="parallax">Subtle centered push · deterministic</option>
-                          <option value="cinemagraph">AI living still · subtle full-frame I2V</option>
-                          <option value="ltx">Model-driven I2V · performance/action</option>
+                          <option value="auto">{t('video.methodAuto')}</option>
+                          <option value="hold">{t('video.methodHold')}</option>
+                          <option value="parallax">{t('video.methodParallax')}</option>
+                          <option value="cinemagraph">{t('video.methodCinemagraph')}</option>
+                          <option value="ltx">{t('video.methodLtx')}</option>
                         </select>
                       </label>
-                      <label className="text-[9px] text-text-muted">Frame-fit hint
+                      <label className="text-[9px] text-text-muted">{t('video.fitHintLabel')}
                         <select className={`${input} mt-1`} value={planned.videoFit || 'auto'} onChange={event => updateShot(pageIndex, panelIndex, { videoFit: event.target.value === 'auto' ? undefined : event.target.value as ComicPlanPanel['videoFit'] })}>
-                          <option value="auto">Follow global · {movieImageFit}</option>
-                          {planned.videoFit === 'reframe' && <option value="reframe" disabled>Legacy AI reframe request · change to Contain/Cover</option>}
-                          <option value="cover">Cinematic crop</option>
-                          <option value="contain">Whole panel + padding</option>
+                          <option value="auto">{t('video.followFit', { fit: movieImageFit })}</option>
+                          {planned.videoFit === 'reframe' && <option value="reframe" disabled>{t('video.legacyReframe')}</option>}
+                          <option value="cover">{t('video.cinematicCrop')}</option>
+                          <option value="contain">{t('video.wholePanel')}</option>
                         </select>
                       </label>
-                      <label className="text-[9px] text-text-muted">Preferred duration
+                      <label className="text-[9px] text-text-muted">{t('video.preferredDuration')}
                         <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={planned.durationSeconds || defaultDuration} onChange={event => updateShot(pageIndex, panelIndex, { durationSeconds: Number(event.target.value) })} />
                       </label>
-                      <label className="text-[9px] text-text-muted">Motion hint · {motionLevelLabel(planned.videoMotionLevel ?? (renderer === 'hold' ? 0 : 1))}
+                      <label className="text-[9px] text-text-muted">{t('video.motionHint', { label: motionLevelLabel(t, planned.videoMotionLevel ?? (renderer === 'hold' ? 0 : 1)) })}
                         <input className="mt-2 w-full" type="range" min={0} max={3} step={1} disabled={renderer === 'hold' || renderer === 'parallax' || renderer === 'cinemagraph'} value={planned.videoMotionLevel ?? (renderer === 'hold' ? 0 : 1)} onChange={event => updateShot(pageIndex, panelIndex, { videoMotionLevel: Number(event.target.value) as ComicPlanPanel['videoMotionLevel'] })} />
                       </label>
-                      <label className="text-[9px] text-text-muted">Camera hint
+                      <label className="text-[9px] text-text-muted">{t('video.cameraHint')}
                         <select className={`${input} mt-1`} value={planned.cameraMove || 'none'} disabled={renderer !== 'ltx'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}>
-                          <option value="none">Locked / no requested move</option>
-                          <option value="push-in">Push-in</option>
-                          <option value="pull-out">Pull-out</option>
-                          <option value="pan-left">Pan left</option>
-                          <option value="pan-right">Pan right</option>
+                          <option value="none">{t('video.lockedCamera')}</option>
+                          <option value="push-in">{t('video.pushIn')}</option>
+                          <option value="pull-out">{t('video.pullOut')}</option>
+                          <option value="pan-left">{t('video.panLeft')}</option>
+                          <option value="pan-right">{t('video.panRight')}</option>
                         </select>
                       </label>
-                      <label className="text-[9px] text-text-muted">AI motion direction hint
+                      <label className="text-[9px] text-text-muted">{t('video.aiMotionHint')}
                         <select className={`${input} mt-1`} value={planned.videoMotion || 'auto'} disabled={renderer !== 'ltx'} onChange={event => updateShot(pageIndex, panelIndex, { videoMotion: event.target.value as ComicPlanPanel['videoMotion'] })}>
-                          <option value="auto">Follow global · {movieMotionMode}</option>
-                          <option value="contextual">Context-aware</option>
-                          <option value="living-still">Living still</option>
-                          <option value="action">Authored prompt</option>
+                          <option value="auto">{t('video.followMotion', { mode: movieMotionMode })}</option>
+                          <option value="contextual">{t('video.contextAware')}</option>
+                          <option value="living-still">{t('video.livingStillShort')}</option>
+                          <option value="action">{t('video.authoredPrompt')}</option>
                         </select>
                       </label>
-                      <label className="text-[9px] text-text-muted">Seed
-                        <input className={`${input} mt-1`} type="number" value={planned.videoSeed ?? ''} placeholder="Stable auto seed" onChange={event => updateShot(pageIndex, panelIndex, { videoSeed: event.target.value === '' ? undefined : Math.trunc(Number(event.target.value)) })} />
+                      <label className="text-[9px] text-text-muted">{t('video.seed')}
+                        <input className={`${input} mt-1`} type="number" value={planned.videoSeed ?? ''} placeholder={t('video.autoSeed')} onChange={event => updateShot(pageIndex, panelIndex, { videoSeed: event.target.value === '' ? undefined : Math.trunc(Number(event.target.value)) })} />
                       </label>
-                      <label className="text-[9px] text-text-muted">End-frame hint
+                      <label className="text-[9px] text-text-muted">{t('video.endHint')}
                         <select className={`${input} mt-1`} value={planned.videoEndFrame || 'auto'} onChange={event => updateShot(pageIndex, panelIndex, { videoEndFrame: event.target.value as ComicPlanPanel['videoEndFrame'] })}>
-                          <option value="auto">Follow global</option>
-                          <option value="none">None</option>
-                          <option value="next-panel">Use next compatible panel</option>
+                          <option value="auto">{t('video.followEnd')}</option>
+                          <option value="none">{t('video.endNoneShort')}</option>
+                          <option value="next-panel">{t('video.nextPanel')}</option>
                         </select>
                       </label>
                     </div>
@@ -1898,17 +1906,17 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       <div className="space-y-2 border-t border-border pt-3">
         <button className={`${button} w-full border-red-400/60 bg-red-400/5 text-red-200`} disabled={Boolean(busy) || includedVideoShots.length === 0} onClick={() => convertToMovie(undefined, true)}>
           {busy === 'preflight' ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}
-          {busy === 'preflight' && progress ? progress : `Prepare PRE for ${includedVideoShots.length} enabled film shots`}
+          {busy === 'preflight' && progress ? progress : t('video.preparePre', { count: includedVideoShots.length })}
         </button>
-        <p className="text-[9px] text-red-200/80">PRE opens as its own full comic workspace tab. It shows the exact source, prepared frame, prompt, motion method, seed and video-model parameters before any generation.</p>
-        <p className="text-[9px] text-accent-blue">Current engine: <b>{effectiveVideoModelName}</b> · <code>{effectiveVideoModel}</code></p>
+        <p className="text-[9px] text-red-200/80">{t('video.preHint')}</p>
+        <p className="text-[9px] text-accent-blue">{t('video.currentEngine', { name: effectiveVideoModelName, id: effectiveVideoModel })}</p>
         {preflightStatus?.status === 'preview_ready' && (
           <button className={`${button} w-full ${preflightIsStale ? 'border-amber-400/50 text-amber-200' : 'border-emerald-400/50 text-emerald-300'}`} onClick={() => window.dispatchEvent(new CustomEvent('maestro:comic-pre-open', { detail: { pipelineId: preflightPipelineId } }))}>
             {preflightIsStale ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
-            {preflightIsStale ? 'Open stale PRE · rebuild before approval' : `Open prepared PRE · ${preflightStatus.preview_clips?.length || 0} shots · ${preflightStatus.preview_clips?.[0]?.video_model || effectiveVideoModel}`}
+            {preflightIsStale ? t('video.openStale') : t('video.openReady', { count: preflightStatus.preview_clips?.length || 0, model: preflightStatus.preview_clips?.[0]?.video_model || effectiveVideoModel })}
           </button>
         )}
-        {preflightStatus?.status === 'failed' && <div className="rounded border border-red-500/40 bg-red-500/10 p-2 text-[10px] text-red-200">{preflightStatus.error || 'Comic video PRE failed.'}</div>}
+        {preflightStatus?.status === 'failed' && <div className="rounded border border-red-500/40 bg-red-500/10 p-2 text-[10px] text-red-200">{preflightStatus.error || t('video.preFailed')}</div>}
       </div>
     </div>
   )
@@ -1993,6 +2001,8 @@ export function ComicVideoPreflightPanel({
   notify: (kind: 'ok' | 'error', text: string) => void
   onDirtyChange?: (dirty: boolean) => void
 }) {
+  const { t } = useUiTranslation('comics')
+  const { t: tCommon } = useUiTranslation('common')
   const project = useComicStore(state => state.project)
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const selectedVideoModel = useStore(state => state.selectedModelPerMode.video)
@@ -2031,7 +2041,7 @@ export function ComicVideoPreflightPanel({
       ) as ComicMovieAspect
       const savedQuality = saved.quality || '720p'
       const currentVideoModel = selectedVideoModel || 'ltx2_22B_distilled_1_1'
-      const currentResolutionOptions = comicMovieResolutions(currentVideoModel, savedAspect)
+      const currentResolutionOptions = comicMovieResolutions(t, currentVideoModel, savedAspect)
       const currentResolution = currentResolutionOptions.find(
         option => option.quality === savedQuality,
       ) || currentResolutionOptions.find(option => option.recommended) || currentResolutionOptions[0]
@@ -2170,7 +2180,7 @@ export function ComicVideoPreflightPanel({
             : [])
           window.localStorage.setItem(storageKey, candidate)
           if (canRestore) {
-            notify('ok', 'Recovered unsaved PRE edits from this browser for the exact same fingerprint.')
+            notify('ok', t('preflight.recoveredEdits'))
           }
           return
         } catch {
@@ -2193,7 +2203,7 @@ export function ComicVideoPreflightPanel({
     const open = (event: Event) => {
       const detail = (event as CustomEvent<{ pipelineId?: string }>).detail
       if (dirtyRef.current && !window.confirm(
-        'Discard unsaved PRE edits and open the requested prepared shot list?',
+        t('preflight.discardEdits'),
       )) return
       if (dirtyRef.current) {
         const currentPipelineId = window.localStorage.getItem(storageKey)
@@ -2217,7 +2227,7 @@ export function ComicVideoPreflightPanel({
 
   const patchDraft = (index: number, patch: Partial<PreviewDraft>) => {
     if (frontendSourceStale) {
-      notify('error', 'This recovered PRE is view-only. Rebuild it from the current comic before editing.')
+      notify('error', t('preflight.viewOnlyEdit'))
       return
     }
     setDrafts(current => current.map(clip => clip.index === index ? { ...clip, ...patch } : clip))
@@ -2225,7 +2235,7 @@ export function ComicVideoPreflightPanel({
   }
   const moveDraft = (position: number, direction: -1 | 1) => {
     if (frontendSourceStale) {
-      notify('error', 'This recovered PRE is view-only. Rebuild it from the current comic before reordering.')
+      notify('error', t('preflight.viewOnlyReorder'))
       return
     }
     const destination = position + direction
@@ -2271,12 +2281,12 @@ export function ComicVideoPreflightPanel({
   } = {}) => {
     if (!pipelineId) return false
     if (frontendSourceStale) {
-      notify('error', 'The comic or film configuration changed after this PRE was built. Return to Video and rebuild it.')
+      notify('error', t('preflight.staleRebuild'))
       return false
     }
     const expectedFingerprint = status?.preview_fingerprint || ''
     if (!expectedFingerprint) {
-      notify('error', 'This legacy PRE has no backend fingerprint. Rebuild it from Video before editing or generating.')
+      notify('error', t('preflight.noFingerprint'))
       return false
     }
     const unresolved = drafts.filter(clip =>
@@ -2286,23 +2296,20 @@ export function ComicVideoPreflightPanel({
     if (approvePreview && unresolved.length) {
       notify(
         'error',
-        `${unresolved.length} enabled shot${unresolved.length === 1 ? '' : 's'} requested AI reframe but has no real prepared keyframe. Reframe import/generation is not available yet; change each to Contain/Cover and save.`,
+        t('preflight.unresolvedApprove', { count: unresolved.length }),
       )
       return false
     }
     const normalizedWaiverReason = waiverReason.trim()
     if (qualityWaiver && !normalizedWaiverReason) {
-      notify('error', 'Explain why the representative quality test is being waived. The reason is stored with the PRE.')
+      notify('error', t('preflight.needWaiver'))
       return false
     }
     if (qualityWaiver && !status?.preview_approved) {
-      notify('error', 'Approve this exact PRE first; only an approved fingerprint can receive a quality-test waiver.')
+      notify('error', t('preflight.approveBeforeWaiver'))
       return false
     }
-    if (qualityWaiver && !window.confirm(
-      'Waive the representative quality test for this exact PRE fingerprint? '
-      + 'This is an auditable exception, not a successful quality test.',
-    )) return false
+    if (qualityWaiver && !window.confirm(t('preflight.waiverConfirm'))) return false
     setBusy(approvePreview || qualityWaiver ? 'approve' : 'save')
     try {
       await api.updatePipelinePreview(
@@ -2335,8 +2342,8 @@ export function ComicVideoPreflightPanel({
         && !(clip.reframe_approved && clip.used_prepared_keyframe))
       if (approvePreview && !refreshed.preview_approved) {
         notify('error', refreshedBlocking.length
-          ? 'PRE was saved but not approved: at least one requested AI reframe still lacks a real prepared keyframe.'
-          : 'PRE was saved but the backend did not approve this fingerprint. Reload it before generating.')
+          ? t('preflight.savedNotApprovedReframe')
+          : t('preflight.savedNotApproved'))
         return false
       }
       const gate = refreshed.quality_gate
@@ -2346,16 +2353,16 @@ export function ComicVideoPreflightPanel({
         && (gate.status === 'passed' || gate.status === 'waived'),
       )
       if (qualityWaiver && !gateReady) {
-        notify('error', 'The backend did not accept the quality waiver for this PRE fingerprint.')
+        notify('error', t('preflight.waiverRejected'))
         return false
       }
-      let message = 'PRE changes saved and prepared inputs rebuilt. Approval and earlier quality tests were invalidated.'
+      let message = t('preflight.savedInvalidated')
       if (qualityWaiver) {
-        message = 'Quality test waived with an auditable reason. Full generation is unlocked for this approved PRE.'
+        message = t('preflight.waiverAccepted')
       } else if (approvePreview) {
         message = gateReady
-          ? `PRE approved; quality gate ${gate?.status}. Full generation is unlocked for this exact fingerprint.`
-          : 'PRE approved. Run the selected representative clips and pass the quality gate before full generation.'
+          ? t('preflight.approvedUnlocked', { status: gate?.status })
+          : t('preflight.approvedRunTest')
       }
       notify('ok', message)
       return true
@@ -2370,24 +2377,21 @@ export function ComicVideoPreflightPanel({
   const acceptTestedClips = async () => {
     if (!pipelineId || !status?.preview_fingerprint) return
     if (frontendSourceStale || dirty || !status.preview_approved) {
-      notify('error', 'Only the current saved and approved PRE can accept a representative quality test.')
+      notify('error', t('preflight.acceptOnlyApproved'))
       return
     }
     if (status.quality_gate?.status !== 'review_required') {
-      notify('error', 'The complete required test set is not ready for review yet. Reload after the test jobs finish.')
+      notify('error', t('preflight.testNotReady'))
       return
     }
     const missingReviews = (status.quality_gate.required_test_indices || [])
       .filter(index => !reviewedTestIndices.includes(index))
     if (missingReviews.length) {
-      notify('error', `Review and confirm the test video for shot${missingReviews.length === 1 ? '' : 's'} ${missingReviews.map(index => index + 1).join(', ')} first.`)
+      notify('error', t('preflight.reviewShots', { count: missingReviews.length, list: missingReviews.map(index => index + 1).join(', ') }))
       return
     }
     const testedCount = status.quality_gate.tested_indices?.length || 0
-    if (!window.confirm(
-      `Accept the ${testedCount} completed representative clip`
-      + `${testedCount === 1 ? '' : 's'} for this exact PRE fingerprint?`,
-    )) return
+    if (!window.confirm(t('preflight.acceptConfirm', { count: testedCount }))) return
     setBusy('accept')
     try {
       await api.updatePipelinePreview(pipelineId, [], {
@@ -2399,10 +2403,10 @@ export function ComicVideoPreflightPanel({
       if (refreshed.quality_gate?.status !== 'passed') {
         throw new Error(
           refreshed.quality_gate?.failures?.join(' · ')
-          || 'The backend did not pass the quality gate for this fingerprint.',
+          || t('preflight.gateFailed'),
         )
       }
-      notify('ok', 'Representative clips accepted. Full generation is now unlocked for this exact approved PRE.')
+      notify('ok', t('preflight.accepted'))
     } catch (error) {
       notify('error', (error as Error).message)
     } finally {
@@ -2458,7 +2462,7 @@ export function ComicVideoPreflightPanel({
   )
   const selectRepresentativePreviewTests = () => {
     if (frontendSourceStale) {
-      notify('error', 'This recovered PRE is view-only. Rebuild it before changing the test selection.')
+      notify('error', t('preflight.viewOnlyTest'))
       return
     }
     const candidates = drafts.filter(clip => clip.included)
@@ -2480,11 +2484,11 @@ export function ComicVideoPreflightPanel({
       test_selected: selected.has(clip.index),
     })))
     setDirty(true)
-    notify('ok', `Selected ${selected.size} representative PRE shots by aspect risk, motion method and motion level.`)
+    notify('ok', t('preflight.testsPicked', { count: selected.size }))
   }
   const applyDurationToPreparedShots = () => {
     if (frontendSourceStale) {
-      notify('error', 'This recovered PRE is view-only. Rebuild it before changing shot durations.')
+      notify('error', t('preflight.viewOnlyDuration'))
       return
     }
     const duration = Math.max(.8, Math.min(20, Number(bulkDuration) || 3))
@@ -2493,7 +2497,7 @@ export function ComicVideoPreflightPanel({
       clip.included ? { ...clip, duration_seconds: duration } : clip
     )))
     setDirty(true)
-    notify('ok', `Applied ${duration}s to every enabled final PRE shot. Save to freeze the new timing.`)
+    notify('ok', t('preflight.durationApplied', { duration }))
   }
 
   const handOffGeneration = (
@@ -2555,33 +2559,35 @@ export function ComicVideoPreflightPanel({
         : enabledDrafts
     if (!chosen.length) {
       notify('error', mode === 'test'
-        ? 'Select at least one enabled PRE shot for the quality test.'
-        : 'No enabled PRE shots are available.')
+        ? t('preflight.needTestShot')
+        : t('preflight.noEnabled'))
       return
     }
     if (!previewFingerprint) {
-      notify('error', 'This PRE has no backend fingerprint. Rebuild it before generation.')
+      notify('error', t('preflight.needFingerprint'))
       return
     }
     if (frontendSourceStale) {
-      notify('error', 'This PRE is stale relative to the current comic or film settings. Rebuild it from Video.')
+      notify('error', t('preflight.staleGenerate'))
       return
     }
     if (mode !== 'all' && !previewApproved) {
-      notify('error', 'Approve this exact saved PRE before running representative test clips.')
+      notify('error', t('preflight.approveBeforeTest'))
       return
     }
     if (mode === 'all' && !fullGenerationUnlocked) {
       notify(
         'error',
-        'Full generation requires this exact PRE fingerprint to be approved and its representative quality gate to be passed or explicitly waived.',
+        t('preflight.fullLocked'),
       )
       return
     }
     if (!window.confirm(
-      `${mode === 'all' ? 'Generate the approved film' : 'Generate this quality test'} `
-      + `from ${chosen.length} exact PRE shot${chosen.length === 1 ? '' : 's'} `
-      + `with ${[...new Set(chosen.map(clip => clip.video_model))].join(', ')}?`,
+      t('preflight.generateConfirm', {
+        count: chosen.length,
+        mode: mode === 'all' ? t('preflight.generateFilmMode') : t('preflight.generateTestMode'),
+        models: [...new Set(chosen.map(clip => clip.video_model))].join(', '),
+      }),
     )) return
     setBusy(mode)
     try {
@@ -2594,8 +2600,8 @@ export function ComicVideoPreflightPanel({
       })
       handOffGeneration(started, chosen)
       notify('ok', started.reused
-        ? 'Reconnected to the already-running PRE generation.'
-        : `Started ${chosen.length} exact PRE clip${chosen.length === 1 ? '' : 's'}.`)
+        ? t('preflight.reconnected')
+        : t('preflight.started', { count: chosen.length }))
     } catch (error) {
       notify('error', (error as Error).message)
     } finally {
@@ -2603,13 +2609,13 @@ export function ComicVideoPreflightPanel({
     }
   }
 
-  if (loading) return <div className="flex min-h-52 items-center justify-center gap-2 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" /> Loading comic PRE…</div>
+  if (loading) return <div className="flex min-h-52 items-center justify-center gap-2 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" /> {t('preflight.loading')}</div>
   if (!pipelineId || status?.status !== 'preview_ready') {
     return (
       <div className="mx-auto max-w-2xl rounded-xl border border-dashed border-border bg-bg-secondary/60 p-8 text-center">
         <Eye size={28} className="mx-auto text-text-muted" />
-        <h2 className="mt-3 text-base font-semibold text-text-primary">No prepared film PRE</h2>
-        <p className="mt-1 text-xs text-text-muted">Open Video → Configuration/Adaptation, prepare a PRE, and HocusPocus will open it here without covering the comic canvas.</p>
+        <h2 className="mt-3 text-base font-semibold text-text-primary">{t('preflight.emptyTitle')}</h2>
+        <p className="mt-1 text-xs text-text-muted">{t('preflight.emptyBody')}</p>
       </div>
     )
   }
@@ -2619,17 +2625,17 @@ export function ComicVideoPreflightPanel({
       <header className="sticky top-0 z-10 rounded-xl border border-red-400/35 bg-bg-primary/95 p-3 shadow-lg backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
           <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-text-primary"><ListVideo size={16} className="text-red-300" /> Comic film PRE · {drafts.length} planned shots</div>
-            <p className="mt-1 text-[10px] text-text-muted">This is a separate review workspace. Changes are saved into the durable PRE checkpoint before generation.</p>
+            <div className="flex items-center gap-2 text-sm font-semibold text-text-primary"><ListVideo size={16} className="text-red-300" /> {t('preflight.title', { count: drafts.length })}</div>
+            <p className="mt-1 text-[10px] text-text-muted">{t('preflight.hint')}</p>
             <p className="mt-1 text-[10px] text-accent-blue">
-              Frozen video engine: <b>{preparedVideoModels.join(', ') || 'not reported'}</b>
+              {t('preflight.frozenEngine', { models: preparedVideoModels.join(', ') || t('preflight.notReported') })}
             </p>
           </div>
           <div className="ml-auto flex flex-wrap gap-1.5">
-            <button className={button} disabled={busy !== null || hasUnsavedLocalChanges} onClick={() => void loadPreview(pipelineId)}>Reload</button>
-            <button className={button} disabled={busy !== null || frontendSourceStale} onClick={selectRepresentativePreviewTests}><Sparkles size={12} /> Auto-select test</button>
+            <button className={button} disabled={busy !== null || hasUnsavedLocalChanges} onClick={() => void loadPreview(pipelineId)}>{tCommon('actions.reload')}</button>
+            <button className={button} disabled={busy !== null || frontendSourceStale} onClick={selectRepresentativePreviewTests}><Sparkles size={12} /> {t('preflight.autoSelect')}</button>
             <label className="flex items-center gap-1 rounded border border-border px-1.5 text-[9px] text-text-muted">
-              Duration
+              {t('preflight.duration')}
               <input
                 className="w-12 bg-transparent text-right text-text-primary outline-none"
                 type="number"
@@ -2641,26 +2647,26 @@ export function ComicVideoPreflightPanel({
               />
               s
             </label>
-            <button className={button} disabled={busy !== null || frontendSourceStale || !enabledDrafts.length} onClick={applyDurationToPreparedShots}>Apply to final shots</button>
-            <button className={`${button} border-cyan-400/40 text-cyan-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewApproved || !selectedDrafts.length} onClick={() => void generate('test')}><Play size={12} /> Test selected ({selectedDrafts.length})</button>
-            <button className={`${button} border-emerald-400/40 text-emerald-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewFingerprint || previewApproved || Boolean(unresolvedRisks.length)} onClick={() => void save({ approvePreview: true })}>{busy === 'approve' ? <Loader2 size={12} className="animate-spin" /> : previewApproved ? <CheckCircle2 size={12} /> : <ShieldCheck size={12} />} {previewApproved ? 'Exact PRE approved' : 'Approve exact PRE'}</button>
-            <button className={`${button} border-purple-400/50 text-purple-200`} disabled={busy !== null || !fullGenerationUnlocked} onClick={() => void generate('all')}>{busy === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Film size={12} />} Generate approved film</button>
+            <button className={button} disabled={busy !== null || frontendSourceStale || !enabledDrafts.length} onClick={applyDurationToPreparedShots}>{t('preflight.applyDuration')}</button>
+            <button className={`${button} border-cyan-400/40 text-cyan-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewApproved || !selectedDrafts.length} onClick={() => void generate('test')}><Play size={12} /> {t('preflight.testSelected', { count: selectedDrafts.length })}</button>
+            <button className={`${button} border-emerald-400/40 text-emerald-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewFingerprint || previewApproved || Boolean(unresolvedRisks.length)} onClick={() => void save({ approvePreview: true })}>{busy === 'approve' ? <Loader2 size={12} className="animate-spin" /> : previewApproved ? <CheckCircle2 size={12} /> : <ShieldCheck size={12} />} {previewApproved ? t('preflight.approved') : t('preflight.approve')}</button>
+            <button className={`${button} border-purple-400/50 text-purple-200`} disabled={busy !== null || !fullGenerationUnlocked} onClick={() => void generate('all')}>{busy === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Film size={12} />} {t('preflight.generateFilm')}</button>
           </div>
         </div>
-        {frontendSourceStale && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />This recovered PRE belongs to an older comic/configuration state. It remains viewable, but editing, approval and generation are locked. Return to Video and prepare a new PRE.</div>}
-        {dirty && <div className="mt-2 flex items-center justify-between rounded border border-amber-400/35 bg-amber-400/5 p-2 text-[10px] text-amber-200"><span><AlertTriangle size={12} className="mr-1 inline" />Unsaved PRE edits. Saving rebuilds prepared inputs and invalidates approval and earlier tests.</span><button className={`${button} border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale} onClick={() => void save()}>{busy === 'save' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save & rebuild PRE</button></div>}
-        {!previewFingerprint && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />Legacy PRE without a backend fingerprint. Rebuild it from Video; this checkpoint cannot be safely approved or generated.</div>}
-        {!dirty && previewApproved && <div className={`mt-2 rounded border p-2 text-[10px] ${qualityGateReady ? 'border-emerald-400/35 bg-emerald-400/5 text-emerald-200' : 'border-cyan-400/35 bg-cyan-400/5 text-cyan-200'}`}><CheckCircle2 size={12} className="mr-1 inline" />PRE fingerprint approved. Quality gate: <b>{qualityGate?.status || 'pending'}</b>{qualityGateReady ? '; full generation is unlocked.' : '; run and review the representative test before full generation.'}</div>}
+        {frontendSourceStale && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />{t('preflight.staleBanner')}</div>}
+        {dirty && <div className="mt-2 flex items-center justify-between rounded border border-amber-400/35 bg-amber-400/5 p-2 text-[10px] text-amber-200"><span><AlertTriangle size={12} className="mr-1 inline" />{t('preflight.unsaved')}</span><button className={`${button} border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale} onClick={() => void save()}>{busy === 'save' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} {t('preflight.saveRebuild')}</button></div>}
+        {!previewFingerprint && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />{t('preflight.legacy')}</div>}
+        {!dirty && previewApproved && <div className={`mt-2 rounded border p-2 text-[10px] ${qualityGateReady ? 'border-emerald-400/35 bg-emerald-400/5 text-emerald-200' : 'border-cyan-400/35 bg-cyan-400/5 text-cyan-200'}`}><CheckCircle2 size={12} className="mr-1 inline" />{t('preflight.approvedGate', { status: qualityGate?.status || t('preflight.pending'), tail: qualityGateReady ? t('preflight.gateUnlocked') : t('preflight.gatePending') })}</div>}
         {!dirty && previewApproved && qualityGate && !qualityGateReady && (
           <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-cyan-400/30 bg-cyan-400/5 p-2 text-[10px] text-cyan-100">
             <div className="min-w-0 flex-1">
               <span>
-                Representative test: <b>{qualityTestedIndices.length}</b> completed / <b>{qualityRequiredIndices.length}</b> required.
+                {t('preflight.repTest', { completed: qualityTestedIndices.length, required: qualityRequiredIndices.length })}
                 {!!(qualityGate.failures || []).length && <span className="ml-1 text-red-200">{qualityGate.failures.join(' · ')}</span>}
               </span>
               {!!qualityRequiredIndices.length && (
                 <details className="mt-1">
-                  <summary className="cursor-pointer text-cyan-200/80">Required shots and recorded results</summary>
+                  <summary className="cursor-pointer text-cyan-200/80">{t('preflight.requiredShots')}</summary>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {qualityRequiredIndices.map(index => {
                       const result = qualityResults[String(index)]
@@ -2671,7 +2677,7 @@ export function ComicVideoPreflightPanel({
                           : result?.status || (qualityTestedIndices.includes(index) ? 'completed' : 'pending')
                       return (
                         <span key={index} className={`rounded border px-1.5 py-0.5 ${resultStatus === 'passed' || resultStatus === 'completed' ? 'border-emerald-400/35 text-emerald-200' : resultStatus === 'failed' ? 'border-red-400/35 text-red-200' : 'border-border text-text-muted'}`}>
-                          #{index + 1} · {resultStatus}
+                          {t('preflight.shotResult', { n: index + 1, status: resultStatus === 'passed' ? t('preflight.passed') : resultStatus === 'failed' ? t('preflight.failed') : resultStatus === 'completed' ? t('preflight.completed') : resultStatus })}
                         </span>
                       )
                     })}
@@ -2680,8 +2686,8 @@ export function ComicVideoPreflightPanel({
               )}
             </div>
             {qualityGate.status === 'review_required' && (
-              <button className={`${button} ml-auto border-emerald-400/50 text-emerald-200`} disabled={busy !== null || frontendSourceStale || Boolean(pendingVisualReviews.length)} onClick={() => void acceptTestedClips()} title={pendingVisualReviews.length ? 'Review every required test video in its shot card first' : 'Accept the reviewed representative clips'}>
-                {busy === 'accept' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Accept tested clips
+              <button className={`${button} ml-auto border-emerald-400/50 text-emerald-200`} disabled={busy !== null || frontendSourceStale || Boolean(pendingVisualReviews.length)} onClick={() => void acceptTestedClips()} title={pendingVisualReviews.length ? t('preflight.reviewFirst') : t('preflight.acceptTitle')}>
+                {busy === 'accept' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} {t('preflight.acceptTested')}
               </button>
             )}
           </div>
@@ -2689,13 +2695,13 @@ export function ComicVideoPreflightPanel({
         {!dirty && previewApproved && !qualityGateReady && previewFingerprint && (
           <div className="mt-2 grid gap-2 rounded border border-amber-400/30 bg-amber-400/5 p-2 sm:grid-cols-[1fr_auto]">
             <label className="text-[9px] text-amber-100">
-              Auditable quality-test waiver reason
-              <input className={`${input} mt-1`} value={waiverReason} onChange={event => setWaiverReason(event.target.value)} placeholder="Why is a representative test unsafe, unavailable or intentionally skipped?" />
+              {t('preflight.waiverReason')}
+              <input className={`${input} mt-1`} value={waiverReason} onChange={event => setWaiverReason(event.target.value)} placeholder={t('preflight.waiverPlaceholder')} />
             </label>
-            <button className={`${button} self-end border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale || !waiverReason.trim() || Boolean(unresolvedRisks.length)} onClick={() => void save({ qualityWaiver: true })}><ShieldCheck size={12} /> Waive quality test</button>
+            <button className={`${button} self-end border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale || !waiverReason.trim() || Boolean(unresolvedRisks.length)} onClick={() => void save({ qualityWaiver: true })}><ShieldCheck size={12} /> {t('preflight.waive')}</button>
           </div>
         )}
-        {!!unresolvedRisks.length && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />{unresolvedRisks.length} enabled shot{unresolvedRisks.length === 1 ? '' : 's'} requested AI reframe but has no real prepared keyframe. Reframe import/generation is not available yet; choose Contain/Cover and save.</div>}
+        {!!unresolvedRisks.length && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />{t('preflight.unresolved', { count: unresolvedRisks.length })}</div>}
       </header>
 
       <div className="grid gap-3 xl:grid-cols-2">
@@ -2711,38 +2717,38 @@ export function ComicVideoPreflightPanel({
           return (
             <article key={`${pipelineId}-${clip.index}`} className={`rounded-xl border ${clip.included ? risk ? 'border-amber-400/45' : 'border-border' : 'border-border opacity-55'} bg-bg-secondary/80 p-3`}>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-text-primary">{position + 1}. {clip.label || `Shot ${clip.index + 1}`}</span>
+                <span className="text-xs font-semibold text-text-primary">{position + 1}. {clip.label || t('preflight.shotFallback', { n: clip.index + 1 })}</span>
                 <span className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[9px] text-purple-200">
                   {clip.effective_renderer && clip.effective_renderer !== clip.renderer
-                    ? `${motionMethodLabel(clip.renderer)} → ${motionMethodLabel(clip.effective_renderer)}`
-                    : motionMethodLabel(clip.effective_renderer || clip.renderer)}
+                    ? `${motionMethodLabel(t, clip.renderer)} → ${motionMethodLabel(t, clip.effective_renderer)}`
+                    : motionMethodLabel(t, clip.effective_renderer || clip.renderer)}
                 </span>
-                {risk && <span className="rounded bg-amber-400/10 px-1.5 py-0.5 text-[9px] text-amber-200">aspect risk</span>}
+                {risk && <span className="rounded bg-amber-400/10 px-1.5 py-0.5 text-[9px] text-amber-200">{t('preflight.aspectRisk')}</span>}
                 <div className="ml-auto flex gap-1"><button className={button} disabled={position === 0} onClick={() => moveDraft(position, -1)}><ArrowUp size={12} /></button><button className={button} disabled={position === drafts.length - 1} onClick={() => moveDraft(position, 1)}><ArrowDown size={12} /></button></div>
               </div>
               <div className="mt-1 text-[9px] text-text-muted">
-                Primary <b className="text-text-primary">{clip.panel_id || `${clip.page_number || '?'}.${clip.panel_number || '?'}`}</b>
-                {' · '}context from <b className="text-text-primary">{clip.source_panel_ids?.length || 1}</b> source panel{(clip.source_panel_ids?.length || 1) === 1 ? '' : 's'}
+                {t('preflight.primary', { id: clip.panel_id || `${clip.page_number || '?'}.${clip.panel_number || '?'}` })}
+                {' · '}{t('preflight.context', { count: clip.source_panel_ids?.length || 1 })}
                 {!!clip.source_panel_ids?.length && <span className="ml-1">({clip.source_panel_ids.join(', ')})</span>}
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <figure>
-                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-text-muted">Source panel · {clip.source_resolution || 'unknown'}</div>
+                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-text-muted">{t('preflight.sourcePanel', { resolution: clip.source_resolution || t('preflight.unknownRes') })}</div>
                   <div className="relative overflow-hidden rounded border border-border bg-black" style={{ aspectRatio: previewRatio(clip.output_resolution) }}>
-                    {sourceImage ? <img src={sourceImage} alt={`Source ${clip.label}`} className="h-full w-full object-contain" /> : <div className="flex h-full min-h-32 items-center justify-center text-[9px] text-text-muted">Source unavailable in this recovered PRE</div>}
+                    {sourceImage ? <img src={sourceImage} alt={t('preflight.sourceAlt', { label: clip.label })} className="h-full w-full object-contain" /> : <div className="flex h-full min-h-32 items-center justify-center text-[9px] text-text-muted">{t('preflight.sourceMissing')}</div>}
                   </div>
                 </figure>
                 <figure>
-                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-red-200">Prepared input · {clip.output_resolution}</div>
+                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-red-200">{t('preflight.preparedInput', { resolution: clip.output_resolution })}</div>
                   <div className="relative overflow-hidden rounded bg-black" style={{ aspectRatio: previewRatio(clip.output_resolution) }}>
-                    <img src={api.getFileUrl(clip.image_filename)} alt={`Prepared ${clip.label}`} className="h-full w-full object-contain" />
+                    <img src={api.getFileUrl(clip.image_filename)} alt={t('preflight.preparedAlt', { label: clip.label })} className="h-full w-full object-contain" />
                     <div className="pointer-events-none absolute inset-0 border-[3px] border-red-500/70 shadow-[inset_0_0_18px_rgba(239,68,68,0.18)]" />
                   </div>
                 </figure>
               </div>
               {requiresVisualReview && (
                 <div className="mt-2 rounded border border-cyan-400/30 bg-black/20 p-2">
-                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-cyan-200">Generated representative test · human review required</div>
+                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-cyan-200">{t('preflight.testReview')}</div>
                   {testVideoFilename ? (
                     <>
                       <video
@@ -2762,57 +2768,57 @@ export function ComicVideoPreflightPanel({
                               ? current.includes(clip.index) ? current : [...current, clip.index]
                               : current.filter(index => index !== clip.index))}
                         />
-                        I reviewed this exact generated clip and accept its visual quality.
+                        {t('preflight.acceptClip')}
                       </label>
                     </>
                   ) : (
-                    <div className="rounded border border-red-400/30 p-2 text-[9px] text-red-200">The quality result has no playable video filename. Reload after the test finishes; this shot cannot be visually accepted yet.</div>
+                    <div className="rounded border border-red-400/30 p-2 text-[9px] text-red-200">{t('preflight.noTestVideo')}</div>
                   )}
                 </div>
               )}
               {clip.needs_reframe ? (
                 <div className="mt-2 rounded border border-red-400/35 bg-red-400/5 p-2 text-[9px] text-red-100">
-                  AI reframe was requested, but this PRE has no real prepared keyframe. The backend used a safe contain fallback and blocks generation. Reframe import/generation is not available yet; change Fit to Contain/Cover and save.
+                  {t('preflight.reframeBlocked')}
                 </div>
               ) : aspectRisk(clip) ? (
                 <div className="mt-2 rounded border border-amber-400/30 bg-amber-400/5 p-2 text-[9px] text-amber-100">
-                  Source and output aspect ratios differ substantially. <b>{clip.fit_mode}</b> is an explicit editorial choice; inspect the prepared input before approval.
+                  {t('preflight.aspectNote', { fit: clip.fit_mode })}
                 </div>
               ) : null}
               <div className="mt-2 flex flex-wrap gap-3 text-[9px] text-text-muted">
-                <label className="flex items-center gap-1"><input type="checkbox" checked={clip.included} onChange={event => patchDraft(clip.index, { included: event.target.checked })} /> Include</label>
-                <label className="flex items-center gap-1"><input type="checkbox" checked={clip.test_selected} disabled={!clip.included} onChange={event => patchDraft(clip.index, { test_selected: event.target.checked })} /> Test sample</label>
-                <span>Model <b className="text-text-primary">{clip.video_model}</b></span>
-                {clip.runtime_recipe && <span>Recipe <b className="text-text-primary">{clip.runtime_recipe}</b></span>}
-                <span>Steps <b className="text-text-primary">{clip.num_inference_steps}{clip.stage2_steps ? `+${clip.stage2_steps}` : ''}</b></span>
+                <label className="flex items-center gap-1"><input type="checkbox" checked={clip.included} onChange={event => patchDraft(clip.index, { included: event.target.checked })} /> {t('video.include')}</label>
+                <label className="flex items-center gap-1"><input type="checkbox" checked={clip.test_selected} disabled={!clip.included} onChange={event => patchDraft(clip.index, { test_selected: event.target.checked })} /> {t('preflight.testSample')}</label>
+                <span>{t('preflight.model', { name: clip.video_model })}</span>
+                {clip.runtime_recipe && <span>{t('preflight.recipe', { name: clip.runtime_recipe })}</span>}
+                <span>{t('preflight.steps', { value: `${clip.num_inference_steps}${clip.stage2_steps ? `+${clip.stage2_steps}` : ''}` })}</span>
                 {clip.requested_num_inference_steps !== undefined
                   && clip.requested_num_inference_steps !== clip.num_inference_steps
-                  && <span>Requested steps <b className="text-text-primary">{clip.requested_num_inference_steps}</b></span>}
+                  && <span>{t('preflight.requestedSteps', { value: clip.requested_num_inference_steps })}</span>}
                 {clip.requested_stage2_steps !== undefined
                   && clip.requested_stage2_steps !== clip.stage2_steps
-                  && <span>Requested stage 2 <b className="text-text-primary">{clip.requested_stage2_steps}</b></span>}
-                <span>CFG <b className="text-text-primary">{clip.guidance_scale}</b></span>
+                  && <span>{t('preflight.requestedStage2', { value: clip.requested_stage2_steps })}</span>}
+                <span>{t('preflight.cfg', { value: clip.guidance_scale })}</span>
                 {clip.requested_guidance_scale !== undefined
                   && clip.requested_guidance_scale !== clip.guidance_scale
-                  && <span>Requested CFG <b className="text-text-primary">{clip.requested_guidance_scale}</b></span>}
-                <span>Frames <b className="text-text-primary">{clip.frames}@{clip.fps}</b></span>
-                {clip.output_frames !== undefined && <span>Output <b className="text-text-primary">{clip.output_frames} frames</b></span>}
-                <span>Strength <b className="text-text-primary">{clip.input_video_strength}</b></span>
-                <span>Prompt type <b className="text-text-primary">{clip.image_prompt_type || 'S'}</b></span>
-                <span>Motion <b className="text-text-primary">{clip.motion_mode || 'automatic'}</b></span>
-                <span>Fidelity <b className="text-text-primary">{clip.fidelity || 'default'}</b></span>
-                {clip.self_refiner > 0 && <span>Self-refiner <b className="text-text-primary">{clip.self_refiner}</b></span>}
-                {!!clip.activated_loras?.length && <span>LoRAs <b className="text-text-primary">{clip.activated_loras.join(', ')}</b>{clip.lora_multipliers ? ` · ${clip.lora_multipliers}` : ''}</span>}
-                {clip.spatial_upsampling && <span>Upsampling <b className="text-text-primary">{clip.spatial_upsampling}</b></span>}
-                {clip.film_grain_intensity > 0 && <span>Film grain <b className="text-text-primary">{clip.film_grain_intensity} / {clip.film_grain_saturation}</b></span>}
-                {clip.effective_fit_mode && <span>Effective fit <b className="text-text-primary">{clip.effective_fit_mode}</b></span>}
-                {clip.retained_fraction !== undefined && <span>Source retained <b className="text-text-primary">{Math.round(clip.retained_fraction * 100)}%</b></span>}
-                {(clip.single_stage_pipeline > 0 || clip.progressive_pipeline > 0) && <span>Pipeline <b className="text-text-primary">{clip.single_stage_pipeline > 0 ? 'single-stage' : 'progressive'}</b></span>}
-                {clip.used_prepared_keyframe && <span className="text-emerald-300">Prepared reframe verified</span>}
+                  && <span>{t('preflight.requestedCfg', { value: clip.requested_guidance_scale })}</span>}
+                <span>{t('preflight.frames', { frames: clip.frames, fps: clip.fps })}</span>
+                {clip.output_frames !== undefined && <span>{t('preflight.outputFrames', { count: clip.output_frames })}</span>}
+                <span>{t('preflight.strength', { value: clip.input_video_strength })}</span>
+                <span>{t('preflight.promptType', { value: clip.image_prompt_type || 'S' })}</span>
+                <span>{t('preflight.motion', { value: clip.motion_mode || t('preflight.automatic') })}</span>
+                <span>{t('preflight.fidelity', { value: clip.fidelity || t('preflight.default') })}</span>
+                {clip.self_refiner > 0 && <span>{t('preflight.selfRefiner', { value: clip.self_refiner })}</span>}
+                {!!clip.activated_loras?.length && <span>{t('preflight.loras', { value: clip.activated_loras.join(', ') })}{clip.lora_multipliers ? ` · ${clip.lora_multipliers}` : ''}</span>}
+                {clip.spatial_upsampling && <span>{t('preflight.upsampling', { value: clip.spatial_upsampling })}</span>}
+                {clip.film_grain_intensity > 0 && <span>{t('preflight.filmGrain', { intensity: clip.film_grain_intensity, saturation: clip.film_grain_saturation })}</span>}
+                {clip.effective_fit_mode && <span>{t('preflight.effectiveFit', { value: clip.effective_fit_mode })}</span>}
+                {clip.retained_fraction !== undefined && <span>{t('preflight.retained', { percent: Math.round(clip.retained_fraction * 100) })}</span>}
+                {(clip.single_stage_pipeline > 0 || clip.progressive_pipeline > 0) && <span>{t('preflight.pipeline', { value: clip.single_stage_pipeline > 0 ? t('preflight.singleStage') : t('preflight.progressive') })}</span>}
+                {clip.used_prepared_keyframe && <span className="text-emerald-300">{t('preflight.reframeVerified')}</span>}
               </div>
               {clip.guidance_note && <p className="mt-1 rounded border border-border bg-bg-tertiary/50 px-2 py-1 text-[9px] text-text-muted">{clip.guidance_note}</p>}
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <label className="text-[9px] text-text-muted">Motion method<select className={`${input} mt-1`} value={clip.renderer} onChange={event => {
+                <label className="text-[9px] text-text-muted">{t('preflight.motionMethod')}<select className={`${input} mt-1`} value={clip.renderer} onChange={event => {
                   const renderer = event.target.value as PreviewDraft['renderer']
                   patchDraft(clip.index, {
                     renderer,
@@ -2822,26 +2828,26 @@ export function ComicVideoPreflightPanel({
                         ? { motion_level: 1 }
                         : {}),
                   })
-                }}><option value="hold">Hold · exact still</option><option value="parallax">Subtle centered push · deterministic</option><option value="cinemagraph">AI living still · subtle full-frame I2V</option><option value="ltx">Model-driven I2V · authored action</option></select></label>
-                <label className="text-[9px] text-text-muted">Fit
+                }}><option value="hold">{t('preflight.hold')}</option><option value="parallax">{t('preflight.parallax')}</option><option value="cinemagraph">{t('preflight.cinemagraph')}</option><option value="ltx">{t('preflight.ltx')}</option></select></label>
+                <label className="text-[9px] text-text-muted">{t('preflight.fit')}
                   <select className={`${input} mt-1`} value={clip.fit_mode} onChange={event => patchDraft(clip.index, { fit_mode: event.target.value as PreviewDraft['fit_mode'] })}>
                     {(clip.fit_mode === 'reframe' || clip.used_prepared_keyframe) && (
                       <option value="reframe" disabled={!clip.used_prepared_keyframe}>
-                        {clip.used_prepared_keyframe ? 'Prepared AI reframe · verified' : 'Legacy reframe request · change to Contain/Cover'}
+                        {clip.used_prepared_keyframe ? t('preflight.reframeVerifiedOpt') : t('preflight.legacyReframe')}
                       </option>
                     )}
-                    <option value="cover">Cinematic crop · explicit</option>
-                    <option value="contain">Whole panel + padding · safe</option>
+                    <option value="cover">{t('preflight.cover')}</option>
+                    <option value="contain">{t('preflight.contain')}</option>
                   </select>
                 </label>
-                <label className="text-[9px] text-text-muted">Duration<input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={clip.duration_seconds} onChange={event => patchDraft(clip.index, { duration_seconds: Number(event.target.value) })} /></label>
-                <label className="text-[9px] text-text-muted">Seed<input className={`${input} mt-1`} type="number" value={clip.seed} onChange={event => patchDraft(clip.index, { seed: Math.trunc(Number(event.target.value)) })} /></label>
-                <label className="text-[9px] text-text-muted">Motion level · {motionLevelLabel(clip.motion_level || 0)}<input className="mt-2 w-full" type="range" min={0} max={3} step={1} disabled={clip.renderer === 'hold' || clip.renderer === 'parallax' || clip.renderer === 'cinemagraph'} value={clip.motion_level || 0} onChange={event => patchDraft(clip.index, { motion_level: Number(event.target.value) })} /></label>
-                <label className="col-span-2 text-[9px] text-text-muted">Camera<select className={`${input} mt-1`} value={clip.camera_move} disabled={clip.renderer !== 'ltx'} onChange={event => patchDraft(clip.index, { camera_move: event.target.value })}><option value="none">Locked / no move</option><option value="push-in">Push-in</option><option value="pull-out">Pull-out</option><option value="pan-left">Pan left</option><option value="pan-right">Pan right</option><option value="authored">Authored in prompt</option></select></label>
+                <label className="text-[9px] text-text-muted">{t('preflight.duration')}<input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={clip.duration_seconds} onChange={event => patchDraft(clip.index, { duration_seconds: Number(event.target.value) })} /></label>
+                <label className="text-[9px] text-text-muted">{t('preflight.seed')}<input className={`${input} mt-1`} type="number" value={clip.seed} onChange={event => patchDraft(clip.index, { seed: Math.trunc(Number(event.target.value)) })} /></label>
+                <label className="text-[9px] text-text-muted">{t('preflight.motionLevel', { label: motionLevelLabel(t, clip.motion_level || 0) })}<input className="mt-2 w-full" type="range" min={0} max={3} step={1} disabled={clip.renderer === 'hold' || clip.renderer === 'parallax' || clip.renderer === 'cinemagraph'} value={clip.motion_level || 0} onChange={event => patchDraft(clip.index, { motion_level: Number(event.target.value) })} /></label>
+                <label className="col-span-2 text-[9px] text-text-muted">{t('preflight.camera')}<select className={`${input} mt-1`} value={clip.camera_move} disabled={clip.renderer !== 'ltx'} onChange={event => patchDraft(clip.index, { camera_move: event.target.value })}><option value="none">{t('preflight.locked')}</option><option value="push-in">{t('preflight.pushIn')}</option><option value="pull-out">{t('preflight.pullOut')}</option><option value="pan-left">{t('preflight.panLeft')}</option><option value="pan-right">{t('preflight.panRight')}</option><option value="authored">{t('preflight.authored')}</option></select></label>
               </div>
               <label className="mt-2 block text-[9px] text-text-muted">
                 <span className="flex items-center justify-between gap-2">
-                  <span>Exact effective video prompt · {promptIsManual ? 'manual override' : 'automatic'}</span>
+                  <span>{t('preflight.promptLabel', { mode: promptIsManual ? t('preflight.manual') : t('preflight.automaticMode') })}</span>
                   {promptIsManual && (
                     <button
                       type="button"
@@ -2851,7 +2857,7 @@ export function ComicVideoPreflightPanel({
                         prompt_override_update: false,
                       })}
                     >
-                      Reset to automatic
+                      {t('preflight.resetAutomatic')}
                     </button>
                   )}
                 </span>
@@ -2860,19 +2866,19 @@ export function ComicVideoPreflightPanel({
               {clip.dialogue && (
                 <div className="mt-2 rounded border border-cyan-400/25 bg-cyan-400/5 p-2">
                   <div className="text-[9px] font-semibold uppercase tracking-wide text-cyan-200">
-                    Spoken script retained
+                    {t('preflight.spokenScript')}
                   </div>
                   <p className="mt-1 whitespace-pre-wrap text-[10px] text-text-primary">{clip.dialogue}</p>
                   <p className="mt-1 text-[9px] text-text-muted">
                     {(clip.effective_renderer || clip.renderer) === 'ltx'
                       || (clip.effective_renderer || clip.renderer) === 'cinemagraph'
-                      ? 'Automatic video-model prompts include a bounded excerpt as a performance and native-audio cue. Native model audio is not deterministic TTS: exact wording, timing and voice identity are not guaranteed. A manual prompt must include any words that must be attempted.'
-                      : 'This deterministic motion method preserves the line for later dubbing or subtitles; it does not synthesize speech.'}
+                      ? t('preflight.spokenI2v')
+                      : t('preflight.spokenHold')}
                   </p>
                 </div>
               )}
-              {clip.negative_prompt && <details className="mt-2"><summary className="cursor-pointer text-[9px] text-text-muted">Negative prompt and safeguards</summary><p className="mt-1 whitespace-pre-wrap rounded border border-border bg-bg-tertiary p-2 text-[9px] text-text-muted">{clip.negative_prompt}</p></details>}
-              <button className={`${button} mt-2 w-full border-red-400/45 text-red-200`} disabled={busy !== null || dirty || frontendSourceStale || !clip.included || !previewApproved || Boolean(clip.needs_reframe && !(clip.reframe_approved && clip.used_prepared_keyframe))} onClick={() => void generate(clip.index)}>{busy === clip.index ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Generate only this approved test clip</button>
+              {clip.negative_prompt && <details className="mt-2"><summary className="cursor-pointer text-[9px] text-text-muted">{t('preflight.negative')}</summary><p className="mt-1 whitespace-pre-wrap rounded border border-border bg-bg-tertiary p-2 text-[9px] text-text-muted">{clip.negative_prompt}</p></details>}
+              <button className={`${button} mt-2 w-full border-red-400/45 text-red-200`} disabled={busy !== null || dirty || frontendSourceStale || !clip.included || !previewApproved || Boolean(clip.needs_reframe && !(clip.reframe_approved && clip.used_prepared_keyframe))} onClick={() => void generate(clip.index)}>{busy === clip.index ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} {t('preflight.generateClip')}</button>
             </article>
           )
         })}

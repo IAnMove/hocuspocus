@@ -1,9 +1,11 @@
 import { useState, useRef, useCallback } from 'react'
 import { X, Film } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 
 export function ContinueVideoSection() {
+  const { t } = useUiTranslation('studio')
   const continueVideo = useStore(s => s.continueVideo)
   const continueVideoUrl = useStore(s => s.continueVideoUrl)
   const continueVideoDuration = useStore(s => s.continueVideoDuration)
@@ -18,7 +20,7 @@ export function ContinueVideoSection() {
 
   const handleUpload = useCallback(async (file: File) => {
     if (!file.type.startsWith('video/')) {
-      setError('Please upload a video file')
+      setError(t('continue.needVideo'))
       return
     }
     setError(null)
@@ -34,14 +36,14 @@ export function ContinueVideoSection() {
         setUploading(false)
       }
       video.onerror = () => {
-        setError('Could not read video metadata')
+        setError(t('continue.metaFailed'))
         setUploading(false)
       }
     } catch {
-      setError('Failed to upload video')
+      setError(t('continue.uploadFailed'))
       setUploading(false)
     }
-  }, [setContinueVideo])
+  }, [setContinueVideo, t])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -52,7 +54,7 @@ export function ContinueVideoSection() {
   return (
     <div className="space-y-2">
       <label className="text-[11px] text-text-muted uppercase tracking-wider block">
-        Source Video to Extend
+        {t('continue.title')}
       </label>
 
       {!continueVideo ? (
@@ -66,9 +68,9 @@ export function ContinueVideoSection() {
         >
           <Film size={20} className="mx-auto mb-1.5 text-text-muted" />
           <p className="text-xs text-text-secondary">
-            {uploading ? 'Uploading...' : 'Drop a video to continue from'}
+            {uploading ? t('chrome.uploading') : t('continue.drop')}
           </p>
-          <p className="text-[10px] text-text-muted mt-0.5">or click to browse</p>
+          <p className="text-[10px] text-text-muted mt-0.5">{t('chrome.orBrowse')}</p>
           <input
             ref={fileRef}
             type="file"
@@ -108,7 +110,7 @@ export function ContinueVideoSection() {
       {continueVideo && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-[10px] text-text-muted">Source Video Strength</label>
+            <label className="text-[10px] text-text-muted">{t('continue.strength')}</label>
             <span className="text-[10px] text-text-secondary">{(inputVideoStrength as number).toFixed(2)}</span>
           </div>
           <input
@@ -119,14 +121,14 @@ export function ContinueVideoSection() {
             className="w-full"
           />
           <p className="text-[9px] text-text-muted mt-0.5">
-            1.0 = seamless continuation. Lower values give the model more creative freedom.
+            {t('continue.strengthHint')}
           </p>
         </div>
       )}
 
       {continueVideo && (
         <p className="text-[10px] text-text-muted text-center">
-          New content will be appended after the source video
+          {t('continue.appended')}
         </p>
       )}
     </div>

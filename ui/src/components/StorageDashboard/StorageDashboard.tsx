@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, HardDrive, Loader2, Trash2, RefreshCw, Copy, Boxes, FolderOpen, Film } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import {
   fetchStorageUsage, fetchStorageDuplicates, reclaimDuplicate, removeLinkedDuplicate,
@@ -13,6 +14,8 @@ import { formatBytes } from '../../lib/format'
  *  action reuses the deletion endpoints shipped in phases A/B, with the
  *  same two-click confirm convention. */
 export function StorageDashboard() {
+  const { t } = useUiTranslation('settings')
+  const { t: tCommon } = useUiTranslation('common')
   const open = useStore(s => s.storageDashboardOpen)
   const setOpen = useStore(s => s.setStorageDashboardOpen)
   const loadWorkspaces = useStore(s => s.loadWorkspaces)
@@ -74,7 +77,7 @@ export function StorageDashboard() {
 
   if (!open) return null
 
-  const fmtWhen = (ts: number | null) => ts ? new Date(ts * 1000).toLocaleDateString() : 'never'
+  const fmtWhen = (ts: number | null) => ts ? new Date(ts * 1000).toLocaleDateString() : t('storage.never')
   // Server-side deduped total — per-model sizes overlap on shared weights.
   const totalModels = usage ? usage.models_total_bytes : 0
   const totalLoras = usage ? usage.loras.reduce((a, l) => a + l.size_bytes, 0) : 0
@@ -91,7 +94,7 @@ export function StorageDashboard() {
       }`}
     >
       {busyKey === key ? <Loader2 size={9} className="animate-spin" /> : <Trash2 size={9} />}
-      {confirmKey === key ? 'Confirm?' : label}
+      {confirmKey === key ? t('storage.confirm') : label}
     </button>
   )
 
@@ -99,10 +102,10 @@ export function StorageDashboard() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-bg-primary">
       <div className="px-4 py-3 border-b border-border flex items-center gap-3 shrink-0">
         <HardDrive size={16} className="text-accent-blue" />
-        <h1 className="text-sm font-semibold text-text-primary">Storage Manager</h1>
+        <h1 className="text-sm font-semibold text-text-primary">{t('storage.title')}</h1>
         {usage && (
           <span className="text-[10px] text-text-muted">
-            usage from {usage.scanned_sidecars} generations
+            {t('storage.usageFrom', { count: usage.scanned_sidecars })}
           </span>
         )}
         {usageLoading && <Loader2 size={13} className="animate-spin text-accent-blue" />}
@@ -119,10 +122,10 @@ export function StorageDashboard() {
         {/* Summary tiles */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'Models on disk', value: formatBytes(totalModels), icon: Boxes },
-            { label: 'LoRAs on disk', value: formatBytes(totalLoras), icon: HardDrive },
-            { label: 'Generated media', value: formatBytes(totalMedia), icon: Film },
-            { label: 'Reclaimable duplicates', value: dupes ? formatBytes(dupes.total_reclaimable_bytes) : 'scan below', icon: Copy },
+            { label: t('storage.modelsOnDisk'), value: formatBytes(totalModels), icon: Boxes },
+            { label: t('storage.lorasOnDisk'), value: formatBytes(totalLoras), icon: HardDrive },
+            { label: t('storage.generatedMedia'), value: formatBytes(totalMedia), icon: Film },
+            { label: t('storage.reclaimable'), value: dupes ? formatBytes(dupes.total_reclaimable_bytes) : t('storage.scanBelow'), icon: Copy },
           ].map(t => (
             <div key={t.label} className="rounded-lg border border-border bg-bg-secondary px-3 py-2.5">
               <div className="flex items-center gap-1.5 text-[10px] text-text-muted uppercase tracking-wider"><t.icon size={10} />{t.label}</div>
@@ -134,30 +137,30 @@ export function StorageDashboard() {
         {/* Duplicates */}
         <section>
           <div className="flex items-center gap-2 mb-2">
-            <h2 className="text-xs font-medium text-text-primary uppercase tracking-wider">Duplicates in linked folders</h2>
+            <h2 className="text-xs font-medium text-text-primary uppercase tracking-wider">{t('storage.duplicatesTitle')}</h2>
             <button
               onClick={scanDupes}
               disabled={dupesLoading}
               className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
             >
               {dupesLoading ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
-              Scan
+              {t('storage.scan')}
             </button>
             <span className="text-[10px] text-text-muted">
-              same file in HocusPocus AND a linked install — deleting HocusPocus&apos;s copy is free, the linked one keeps working
+              {t('storage.duplicatesHint')}
             </span>
-            <label className="ml-auto flex items-center gap-1.5 text-[10px] text-text-secondary cursor-pointer shrink-0" title="The inverse direction: keep HocusPocus's copy and remove the duplicate FROM the linked install. Removals go to the Windows Recycle Bin so they can be undone. Off by default because it modifies other installs.">
+            <label className="ml-auto flex items-center gap-1.5 text-[10px] text-text-secondary cursor-pointer shrink-0" title={t('storage.allowLinkedTitle')}>
               <input
                 type="checkbox"
                 checked={allowLinkedRemoval}
                 onChange={e => updateServicesConfig({ storage_allow_linked_removal: e.target.checked })}
                 className="w-3 h-3 rounded border-border bg-bg-tertiary accent-accent-blue"
               />
-              Allow removing from linked installs
+              {t('storage.allowLinked')}
             </label>
           </div>
           {dupes && dupes.duplicates.length === 0 && (
-            <div className="text-xs text-text-muted py-2">No duplicates — nothing stored twice.</div>
+            <div className="text-xs text-text-muted py-2">{t('storage.noDuplicates')}</div>
           )}
           {dupes && dupes.duplicates.length > 0 && (
             <div className="rounded-lg border border-border overflow-hidden">
@@ -167,7 +170,7 @@ export function StorageDashboard() {
                   <span className="truncate text-text-primary flex-1 min-w-0" title={d.primary_path}>{d.rel_path}</span>
                   <span className="text-text-muted shrink-0" title={`Also in ${d.linked_path}`}>in {d.linked_install}</span>
                   <span className="text-text-secondary tabular-nums shrink-0">{formatBytes(d.size_bytes)}</span>
-                  {rowBtn(`dup:${d.primary_path}`, 'Reclaim', async () => {
+                  {rowBtn(`dup:${d.primary_path}`, t('storage.reclaim'), async () => {
                     await reclaimDuplicate(d.primary_path)
                     setDupes(prev => prev ? {
                       ...prev,
@@ -175,7 +178,7 @@ export function StorageDashboard() {
                       total_reclaimable_bytes: prev.total_reclaimable_bytes - d.size_bytes,
                     } : prev)
                   })}
-                  {allowLinkedRemoval && rowBtn(`dupl:${d.linked_path}`, 'Remove linked', async () => {
+                  {allowLinkedRemoval && rowBtn(`dupl:${d.linked_path}`, t('storage.removeLinked'), async () => {
                     await removeLinkedDuplicate(d.linked_path)
                     // Pair broken the other way: Maestro's copy stays, the
                     // linked one is in that install's Recycle Bin.
@@ -191,41 +194,41 @@ export function StorageDashboard() {
           )}
           {dupes && dupes.conflicts.length > 0 && (
             <div className="mt-2 text-[10px] text-indicator-warning">
-              {dupes.conflicts.length} same-name files differ in size between installs (not listed as reclaimable — HocusPocus&apos;s copy is the one in use).
+              {t('storage.conflicts', { count: dupes.conflicts.length })}
             </div>
           )}
         </section>
 
         {/* Models by size/usage */}
         <section>
-          <h2 className="text-xs font-medium text-text-primary uppercase tracking-wider mb-2">Models — largest first</h2>
+          <h2 className="text-xs font-medium text-text-primary uppercase tracking-wider mb-2">{t('storage.modelsTitle')}</h2>
           {usage && (
             <div className="rounded-lg border border-border overflow-hidden">
               {usage.models.filter(m => m.size_bytes > 0).map(m => (
                 <div key={m.model_type} className="flex items-center gap-2 px-3 py-1.5 text-xs border-b border-border last:border-b-0 hover:bg-bg-hover">
                   <span className="truncate text-text-primary flex-1 min-w-0">{m.name}</span>
                   <span className={`shrink-0 ${m.use_count === 0 ? 'text-indicator-warning' : 'text-text-muted'}`}>
-                    {m.use_count === 0 ? 'never used' : `${m.use_count} uses, last ${fmtWhen(m.last_used)}`}
+                    {m.use_count === 0 ? t('storage.neverUsed') : t('storage.usesLast', { count: m.use_count, when: fmtWhen(m.last_used) })}
                   </span>
-                  <span className="text-text-secondary tabular-nums shrink-0" title={m.primary_bytes < m.size_bytes ? `${formatBytes(m.primary_bytes)} deletable here; the rest lives in linked installs or belongs to a base model` : undefined}>
+                  <span className="text-text-secondary tabular-nums shrink-0" title={m.primary_bytes < m.size_bytes ? t('storage.modelSizeTitle', { primary: formatBytes(m.primary_bytes) }) : undefined}>
                     {formatBytes(m.size_bytes)}
                   </span>
-                  {m.primary_bytes > 0 ? rowBtn(`model:${m.model_type}`, 'Delete', async () => {
+                  {m.primary_bytes > 0 ? rowBtn(`model:${m.model_type}`, tCommon('actions.delete'), async () => {
                     await deleteModel(m.model_type)
                     loadUsage()
                   }) : m.alias_of ? (
                     <span
                       className="text-[9px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted shrink-0"
-                      title={`This entry runs on ${m.alias_of}'s weights — delete that row to free the space. Its own extras (like a bundled accelerator LoRA) are tiny.`}
+                      title={t('storage.sharesWeightsTitle', { name: m.alias_of })}
                     >
-                      shares weights
+                      {t('storage.sharesWeights')}
                     </span>
                   ) : m.size_bytes > 0 ? (
                     <span
                       className="text-[9px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted shrink-0"
-                      title="Every copy of these weights lives in a linked install (read-only from here). Free the space in that install, or unlink it."
+                      title={t('storage.linkedOnlyTitle')}
                     >
-                      linked only
+                      {t('storage.linkedOnly')}
                     </span>
                   ) : null}
                 </div>
@@ -236,7 +239,7 @@ export function StorageDashboard() {
 
         {/* LoRAs by size/usage */}
         <section>
-          <h2 className="text-xs font-medium text-text-primary uppercase tracking-wider mb-2">LoRAs — largest first</h2>
+          <h2 className="text-xs font-medium text-text-primary uppercase tracking-wider mb-2">{t('storage.lorasTitle')}</h2>
           {usage && (
             <div className="rounded-lg border border-border overflow-hidden">
               {usage.loras.map(l => (
@@ -245,16 +248,16 @@ export function StorageDashboard() {
                   {l.linked && (
                     <span
                       className="text-[9px] px-1 py-0.5 rounded bg-accent-blue/20 text-accent-blue shrink-0"
-                      title="Lives in a linked install's loras folder (read-only from here) — no delete. Free the space in that install, or unlink it."
+                      title={t('storage.linkedLoraTitle')}
                     >
-                      Linked
+                      {t('storage.linked')}
                     </span>
                   )}
                   <span className={`shrink-0 ${l.use_count === 0 ? 'text-indicator-warning' : 'text-text-muted'}`}>
-                    {l.use_count === 0 ? 'never used' : `${l.use_count} uses, last ${fmtWhen(l.last_used)}`}
+                    {l.use_count === 0 ? t('storage.neverUsed') : t('storage.usesLast', { count: l.use_count, when: fmtWhen(l.last_used) })}
                   </span>
                   <span className="text-text-secondary tabular-nums shrink-0">{formatBytes(l.size_bytes)}</span>
-                  {!l.linked && rowBtn(`lora:${l.directory}/${l.filename}`, 'Delete', async () => {
+                  {!l.linked && rowBtn(`lora:${l.directory}/${l.filename}`, tCommon('actions.delete'), async () => {
                     await deleteLoraFile(l.directory, l.filename)
                     setUsage(prev => prev ? { ...prev, loras: prev.loras.filter(x => !(x.directory === l.directory && x.filename === l.filename)) } : prev)
                   })}
@@ -266,16 +269,16 @@ export function StorageDashboard() {
 
         {/* Workspaces */}
         <section>
-          <h2 className="text-xs font-medium text-text-primary uppercase tracking-wider mb-2">Workspaces</h2>
+          <h2 className="text-xs font-medium text-text-primary uppercase tracking-wider mb-2">{t('storage.workspacesTitle')}</h2>
           {usage && (
             <div className="rounded-lg border border-border overflow-hidden">
               {usage.workspaces.map(w => (
                 <div key={w.name} className="flex items-center gap-2 px-3 py-1.5 text-xs border-b border-border last:border-b-0 hover:bg-bg-hover">
                   <FolderOpen size={11} className="text-text-muted shrink-0" />
                   <span className="truncate text-text-primary flex-1 min-w-0">{w.name}</span>
-                  <span className="text-text-muted shrink-0">{w.file_count} files</span>
+                  <span className="text-text-muted shrink-0">{t('storage.files', { count: w.file_count })}</span>
                   <span className="text-text-secondary tabular-nums shrink-0">{formatBytes(w.size_bytes)}</span>
-                  {w.name !== 'default' && rowBtn(`ws:${w.name}`, 'Delete', async () => {
+                  {w.name !== 'default' && rowBtn(`ws:${w.name}`, tCommon('actions.delete'), async () => {
                     await apiDeleteWorkspace(w.name)
                     loadWorkspaces()
                     loadUsage()

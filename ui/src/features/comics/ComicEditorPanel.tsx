@@ -4,6 +4,7 @@ import {
   History as HistoryIcon, ImagePlus, Loader2, Lock, PanelTop, Plus, Redo2, Save, Sparkles, Trash2,
   Maximize2, Type, Undo2, Unlock, Upload, WandSparkles, X,
 } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { getModelMode, useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
@@ -113,6 +114,7 @@ function PanelScriptEditor({
   panel: ComicPlanPanel
   onCommit: (value: string) => void
 }) {
+  const { t } = useUiTranslation('comics')
   const canonical = panelScript(panel)
   const [draft, setDraft] = useState({ canonical, value: canonical })
   const value = draft.canonical === canonical ? draft.value : canonical
@@ -121,7 +123,7 @@ function PanelScriptEditor({
       className={input}
       rows={3}
       value={value}
-      placeholder="Leave empty for a silent panel. Use [Caption], [Dialogue], [SFX] or [Character]."
+      placeholder={t('lettering.placeholder')}
       onChange={event => setDraft({ canonical, value: event.target.value })}
       onBlur={() => value !== canonical && onCommit(value)}
     />
@@ -183,6 +185,7 @@ const TRANSLATION_LANGUAGES = [
 ]
 
 function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
+  const { t } = useUiTranslation('comics')
   const projectLanguage = useComicStore(state => state.project.language)
   const hasDirectorPlan = useComicStore(state => Boolean(state.project.director?.plan))
   const [language, setLanguage] = useState(projectLanguage || 'Español')
@@ -195,7 +198,7 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
     const state = useComicStore.getState()
     const sourcePlan = planWithCanvasText(state.project)
     if (!sourcePlan) {
-      notify({ kind: 'error', text: 'This comic does not have an editable Director plan.' })
+      notify({ kind: 'error', text: t('generate.noPlan') })
       return
     }
     const originalPageId = state.currentPageId
@@ -205,7 +208,7 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
     try {
       const working = structuredClone(sourcePlan)
       for (let pageIndex = 0; pageIndex < working.pages.length; pageIndex += 1) {
-        setProgress(`Translating ${pageIndex + 1}/${working.pages.length}`)
+        setProgress(t('export.translating', { current: pageIndex + 1, total: working.pages.length }))
         const cacheKey = translationCacheKey(
           working.pages[pageIndex],
           target,
@@ -243,10 +246,10 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
       state.patchProject(translatedProject)
       temporaryApplied = true
       await wait(100)
-      await exportComicPdf((current, total) => setProgress(`PDF ${current}/${total}`))
+      await exportComicPdf((current, total) => setProgress(t('export.pdfProgress', { current, total })))
       notify({
         kind: 'ok',
-        text: `PDF exported in ${target}; the editable original was preserved.`,
+        text: t('export.pdfKept', { language: target }),
       })
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
@@ -267,8 +270,8 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
         list="comic-toolbar-languages"
         value={language}
         onChange={event => setLanguage(event.target.value)}
-        placeholder="Language"
-        title="Choose or type any export language"
+        placeholder={t('export.language')}
+        title={t('export.languageTitle')}
       />
       <datalist id="comic-toolbar-languages">
         {TRANSLATION_LANGUAGES.map(item => <option key={item} value={item} />)}
@@ -278,17 +281,19 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
         disabled={busy || !hasDirectorPlan || !language.trim()}
         onClick={exportTranslated}
         title={hasDirectorPlan
-          ? 'Translate only the lettering, export a PDF, then restore the editable original'
-          : 'Generate the comic with Director before using translated export'}
+          ? t('export.translateTitle')
+          : t('export.needDirector')}
       >
         {busy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-        {progress || `Export in ${language.trim() || 'language'}`}
+        {progress || t('export.inLanguage', { language: language.trim() || t('export.languageFallback') })}
       </button>
     </div>
   )
 }
 
 function PagesRail() {
+  const { t } = useUiTranslation('comics')
+  const { t: tCommon } = useUiTranslation('common')
   const project = useComicStore(state => state.project)
   const current = useComicStore(state => state.currentPageId)
   const setCurrent = useComicStore(state => state.setCurrentPage)
@@ -298,7 +303,7 @@ function PagesRail() {
   const remove = useComicStore(state => state.deletePage)
   return (
     <aside className="w-36 shrink-0 border-r border-border bg-bg-secondary p-2 overflow-y-auto">
-      <button className={`${button} w-full mb-2`} onClick={addPage}><Plus size={13} /> Add page</button>
+      <button className={`${button} w-full mb-2`} onClick={addPage}><Plus size={13} /> {t('pages.add')}</button>
       <div className="space-y-2">
         {project.pages.map((page, index) => (
           <div key={page.id} className={`rounded-lg border p-1 ${page.id === current ? 'border-accent-blue bg-accent-blue/10' : 'border-border'}`}>
@@ -316,13 +321,13 @@ function PagesRail() {
                   }} />
                 ))}
               </div>
-              <span className="block text-[10px] text-text-muted mt-1">Page {index + 1}</span>
+              <span className="block text-[10px] text-text-muted mt-1">{t('pages.page', { n: index + 1 })}</span>
             </button>
             <div className="flex justify-center gap-1 mt-1">
-              <button title="Move up" disabled={index === 0} onClick={() => movePage(page.id, -1)} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30">↑</button>
-              <button title="Move down" disabled={index === project.pages.length - 1} onClick={() => movePage(page.id, 1)} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30">↓</button>
-              <button title="Duplicate" onClick={() => duplicate(page.id)} className="p-1 text-text-muted hover:text-text-primary"><Copy size={11} /></button>
-              <button title="Delete" disabled={project.pages.length === 1} onClick={() => remove(page.id)} className="p-1 text-text-muted hover:text-red-400 disabled:opacity-30"><Trash2 size={11} /></button>
+              <button title={t('pages.moveUp')} disabled={index === 0} onClick={() => movePage(page.id, -1)} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30">↑</button>
+              <button title={t('pages.moveDown')} disabled={index === project.pages.length - 1} onClick={() => movePage(page.id, 1)} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30">↓</button>
+              <button title={tCommon('actions.duplicate')} onClick={() => duplicate(page.id)} className="p-1 text-text-muted hover:text-text-primary"><Copy size={11} /></button>
+              <button title={tCommon('actions.delete')} disabled={project.pages.length === 1} onClick={() => remove(page.id)} className="p-1 text-text-muted hover:text-red-400 disabled:opacity-30"><Trash2 size={11} /></button>
             </div>
           </div>
         ))}
@@ -332,6 +337,7 @@ function PagesRail() {
 }
 
 function AssetsPanel() {
+  const { t } = useUiTranslation('comics')
   const outputs = useStore(state => state.outputs)
   const loadOutputs = useStore(state => state.loadOutputs)
   const assets = useComicStore(state => state.project.assets)
@@ -383,25 +389,25 @@ function AssetsPanel() {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-1">
-        <button className={`${button} ${source === 'maestro' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSource('maestro')}>HocusPocus</button>
-        <button className={`${button} ${source === 'project' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSource('project')}>Project</button>
+        <button className={`${button} ${source === 'maestro' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSource('maestro')}>{t('assets.hocuspocus')}</button>
+        <button className={`${button} ${source === 'project' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSource('project')}>{t('assets.project')}</button>
       </div>
       <button className={`${button} w-full`} onClick={() => fileRef.current?.click()} disabled={busy}>
-        {busy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Upload images
+        {busy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} {t('assets.upload')}
       </button>
       <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={event => uploadFiles(event.target.files)} />
       <div className="rounded-lg border border-border bg-bg-tertiary/40 p-2 space-y-2">
         <div className="grid grid-cols-2 gap-1">
-          <button className={`${button} ${provider === 'maestro' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('maestro')}>HocusPocus local</button>
-          <button className={`${button} ${provider === 'minimax' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('minimax')}>MiniMax</button>
+          <button className={`${button} ${provider === 'maestro' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('maestro')}>{t('assets.local')}</button>
+          <button className={`${button} ${provider === 'minimax' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('minimax')}>{t('assets.minimax')}</button>
         </div>
-        <textarea className={input} rows={3} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Describe this panel image…" />
+        <textarea className={input} rows={3} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={t('assets.promptPlaceholder')} />
         <button className={`${button} w-full`} disabled={busy || !prompt.trim()} onClick={generateOne}>
-          {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate into selection
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {t('assets.generateInto')}
         </button>
         {generationError && <p className="text-[10px] text-red-400">{generationError}</p>}
       </div>
-      <p className="text-[10px] text-text-muted">Select a panel first to fill it. Without a panel, the image is placed freely.</p>
+      <p className="text-[10px] text-text-muted">{t('assets.hint')}</p>
       <div className="grid grid-cols-2 gap-2 max-h-[58vh] overflow-y-auto pr-1">
         {(source === 'maestro' ? images : Object.values(assets)).map(item => {
           const asset = 'kind' in item ? item : assetFromOutput(item)
@@ -427,6 +433,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function InspectorPanel() {
+  const { t } = useUiTranslation('comics')
   const project = useComicStore(state => state.project)
   const pageId = useComicStore(state => state.currentPageId)
   const selectedId = useComicStore(state => state.selectedId)
@@ -455,7 +462,7 @@ function InspectorPanel() {
 
   const addText = (
     bubble: ComicTextElement['bubble'] = 'speech',
-    content = 'Your text',
+    content = t('inspector.defaultText'),
   ) => {
     if (!page) return
     const selectedPanel = element?.type === 'panel' ? element : undefined
@@ -484,24 +491,24 @@ function InspectorPanel() {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-1">
-        <button className={button} onClick={() => addPanels(4)}><PanelTop size={13} /> 4 panels</button>
-        <button className={button} onClick={() => addText()}><Type size={13} /> Add text</button>
+        <button className={button} onClick={() => addPanels(4)}><PanelTop size={13} /> {t('inspector.fourPanels')}</button>
+        <button className={button} onClick={() => addText()}><Type size={13} /> {t('inspector.addText')}</button>
       </div>
       <div className="grid grid-cols-4 gap-1">
         {[1, 3, 6, 9].map(count => <button key={count} className={button} onClick={() => addPanels(count)}>{count}</button>)}
       </div>
       <div className="grid grid-cols-2 gap-1">
-        <button className={button} onClick={() => addText('thought', 'I am thinking…')}>Thought</button>
-        <button className={button} onClick={() => addText('caption', 'Meanwhile…')}>Caption</button>
-        <button className={button} onClick={() => addText('whisper', 'Speak softly…')}>Whisper</button>
-        <button className={button} onClick={() => addText('electric', 'WATCH OUT!')}>Shout</button>
+        <button className={button} onClick={() => addText('thought', t('inspector.defaultThought'))}>{t('inspector.thought')}</button>
+        <button className={button} onClick={() => addText('caption', t('inspector.defaultCaption'))}>{t('inspector.caption')}</button>
+        <button className={button} onClick={() => addText('whisper', t('inspector.defaultWhisper'))}>{t('inspector.whisper')}</button>
+        <button className={button} onClick={() => addText('electric', t('inspector.defaultShout'))}>{t('inspector.shout')}</button>
       </div>
       {!element ? (
         <div className="space-y-3">
           <div className="rounded-lg border border-dashed border-border p-3 text-center text-xs text-text-muted">
-            Page settings · select an element for its inspector.
+            {t('inspector.empty')}
           </div>
-          <Field label="Page preset">
+          <Field label={t('inspector.pagePreset')}>
             <select
               className={input}
               value=""
@@ -517,67 +524,67 @@ function InspectorPanel() {
                 if (size) updatePage(page.id, { width: size[0], height: size[1] })
               }}
             >
-              <option value="">Choose…</option>
-              <option value="a4">A4 portrait</option>
-              <option value="a4-landscape">A4 landscape</option>
-              <option value="square">Square</option>
-              <option value="webtoon">Webtoon</option>
+              <option value="">{t('inspector.choose')}</option>
+              <option value="a4">{t('inspector.a4')}</option>
+              <option value="a4-landscape">{t('inspector.a4Landscape')}</option>
+              <option value="square">{t('inspector.square')}</option>
+              <option value="webtoon">{t('inspector.webtoon')}</option>
             </select>
           </Field>
           {page && (
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Width"><input className={input} type="number" value={page.width} onChange={event => updatePage(page.id, { width: Math.max(200, Number(event.target.value)) })} /></Field>
-              <Field label="Height"><input className={input} type="number" value={page.height} onChange={event => updatePage(page.id, { height: Math.max(200, Number(event.target.value)) })} /></Field>
-              <Field label="Background"><input className="h-8 w-full" type="color" value={page.background} onChange={event => updatePage(page.id, { background: event.target.value })} /></Field>
+              <Field label={t('inspector.width')}><input className={input} type="number" value={page.width} onChange={event => updatePage(page.id, { width: Math.max(200, Number(event.target.value)) })} /></Field>
+              <Field label={t('inspector.height')}><input className={input} type="number" value={page.height} onChange={event => updatePage(page.id, { height: Math.max(200, Number(event.target.value)) })} /></Field>
+              <Field label={t('inspector.background')}><input className="h-8 w-full" type="color" value={page.background} onChange={event => updatePage(page.id, { background: event.target.value })} /></Field>
             </div>
           )}
-          <Field label="Page numbers">
+          <Field label={t('inspector.pageNumbers')}>
             <select className={input} value={project.pageNumbering.style} onChange={event => patchProject({ pageNumbering: { style: event.target.value as 'none' | 'plain' | 'circle' } })}>
-              <option value="none">None</option>
-              <option value="plain">Plain</option>
-              <option value="circle">Circle</option>
+              <option value="none">{t('inspector.none')}</option>
+              <option value="plain">{t('inspector.plain')}</option>
+              <option value="circle">{t('inspector.circle')}</option>
             </select>
           </Field>
         </div>
       ) : (
         <>
           <div className="flex items-center justify-between">
-            <strong className="text-xs capitalize text-text-primary">{element.type}</strong>
+            <strong className="text-xs capitalize text-text-primary">{t(`inspector.type${element.type.charAt(0).toUpperCase()}${element.type.slice(1)}`)}</strong>
             <div className="flex gap-1">
-              <button className={button} title="Duplicate (Ctrl+D)" onClick={() => useComicStore.getState().duplicateElement(pageId, element.id)}><Copy size={12} /></button>
+              <button className={button} title={t('inspector.duplicateTitle')} onClick={() => useComicStore.getState().duplicateElement(pageId, element.id)}><Copy size={12} /></button>
               <button className={button} onClick={() => patch({ locked: !element.locked })}>{element.locked ? <Unlock size={12} /> : <Lock size={12} />}</button>
               <button className={`${button} hover:text-red-400`} onClick={() => remove(pageId, element.id)}><Trash2 size={12} /></button>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {(['x', 'y', 'width', 'height', 'rotation', 'zIndex'] as const).map(key => (
-              <Field key={key} label={key}>
+              <Field key={key} label={t(`inspector.field${key.charAt(0).toUpperCase()}${key.slice(1)}`)}>
                 <input className={input} type="number" value={Math.round(Number(element[key]))}
                   onChange={event => patch({ [key]: Number(event.target.value) } as Partial<ComicElement>)} />
               </Field>
             ))}
           </div>
           <label className="flex items-center justify-between text-xs text-text-secondary">
-            Visible
+            {t('inspector.visible')}
             <button onClick={() => patch({ visible: element.visible === false })}>{element.visible === false ? <EyeOff size={15} /> : <Eye size={15} />}</button>
           </label>
           <div className="grid grid-cols-2 gap-1">
-            <button className={button} onClick={() => patch({ zIndex: Math.max(...(page?.elements.map(item => item.zIndex) ?? [0])) + 1 })}>Bring front</button>
-            <button className={button} onClick={() => patch({ zIndex: Math.min(...(page?.elements.map(item => item.zIndex) ?? [0])) - 1 })}>Send back</button>
+            <button className={button} onClick={() => patch({ zIndex: Math.max(...(page?.elements.map(item => item.zIndex) ?? [0])) + 1 })}>{t('inspector.bringFront')}</button>
+            <button className={button} onClick={() => patch({ zIndex: Math.min(...(page?.elements.map(item => item.zIndex) ?? [0])) - 1 })}>{t('inspector.sendBack')}</button>
           </div>
           {element.type === 'panel' && (
             <div className="space-y-2">
-              <Field label="Border width"><input className={input} type="number" min={0} max={30} value={element.borderWidth} onChange={event => patch({ borderWidth: Number(event.target.value) })} /></Field>
-              <Field label="Border color"><input className="w-full h-8" type="color" value={element.borderColor} onChange={event => patch({ borderColor: event.target.value })} /></Field>
-              <Field label="Corner radius"><input className={input} type="number" value={element.borderRadius} onChange={event => patch({ borderRadius: Number(event.target.value) })} /></Field>
-              <Field label="Background"><input className="w-full h-8" type="color" value={element.background === 'transparent' ? '#ffffff' : element.background} onChange={event => patch({ background: event.target.value })} /></Field>
+              <Field label={t('inspector.borderWidth')}><input className={input} type="number" min={0} max={30} value={element.borderWidth} onChange={event => patch({ borderWidth: Number(event.target.value) })} /></Field>
+              <Field label={t('inspector.borderColor')}><input className="w-full h-8" type="color" value={element.borderColor} onChange={event => patch({ borderColor: event.target.value })} /></Field>
+              <Field label={t('inspector.cornerRadius')}><input className={input} type="number" value={element.borderRadius} onChange={event => patch({ borderRadius: Number(event.target.value) })} /></Field>
+              <Field label={t('inspector.background')}><input className="w-full h-8" type="color" value={element.background === 'transparent' ? '#ffffff' : element.background} onChange={event => patch({ background: event.target.value })} /></Field>
               <div className="grid grid-cols-2 gap-1">
-                <button className={button} onClick={() => patch({ background: 'transparent' })}>Transparent</button>
+                <button className={button} onClick={() => patch({ background: 'transparent' })}>{t('inspector.transparent')}</button>
                 <button
                   className={`${button} ${element.points ? 'border-accent-blue text-accent-blue' : ''}`}
                   onClick={() => patch({ points: element.points ? undefined : [[0, 0], [1, 0], [1, 1], [0, 1]] })}
                 >
-                  {element.points ? 'Rectangle' : 'Polygon'}
+                  {element.points ? t('inspector.rectangle') : t('inspector.polygon')}
                 </button>
               </div>
             </div>
@@ -587,13 +594,12 @@ function InspectorPanel() {
               {parentPanel && (
                 <div className="space-y-2 rounded-lg border border-accent-blue/30 bg-accent-blue/5 p-2">
                   <p className="text-[9px] leading-relaxed text-text-muted">
-                    Drag the image to reframe it. Hold Shift for fine movement or Ctrl-wheel over
-                    the selected image to zoom.
+                    {t('inspector.cropHint')}
                   </p>
-                  <Field label={`Crop zoom · ${Math.round(Math.max(
+                  <Field label={t('inspector.cropZoom', { percent: Math.round(Math.max(
                     element.width / parentPanel.width,
                     element.height / parentPanel.height,
-                  ) * 100)}%`}>
+                  ) * 100) })}>
                     <input
                       className={input}
                       type="range"
@@ -625,7 +631,7 @@ function InspectorPanel() {
                         y: (parentPanel.height - element.height) / 2,
                       })}
                     >
-                      Center crop
+                      {t('inspector.centerCrop')}
                     </button>
                     <button
                       className={button}
@@ -637,27 +643,27 @@ function InspectorPanel() {
                         objectFit: 'cover',
                       })}
                     >
-                      Reset crop
+                      {t('inspector.resetCrop')}
                     </button>
                   </div>
                 </div>
               )}
-              <Field label="Fit"><select className={input} value={element.objectFit} onChange={event => patch({ objectFit: event.target.value as ComicImageElement['objectFit'] })}><option value="cover">Fill panel</option><option value="contain">Show entire image</option></select></Field>
-              <Field label="Filter"><select className={input} value={element.filter} onChange={event => patch({ filter: event.target.value as ComicImageElement['filter'] })}><option value="none">None</option><option value="bw">Black & white</option><option value="sepia">Sepia</option><option value="contrast">Comic contrast</option><option value="posterize">Posterize</option><option value="halftone">Halftone</option></select></Field>
-              <Field label="Opacity"><input className={input} type="range" min={0} max={1} step={.05} value={element.opacity ?? 1} onChange={event => patch({ opacity: Number(event.target.value) })} /></Field>
+              <Field label={t('inspector.fit')}><select className={input} value={element.objectFit} onChange={event => patch({ objectFit: event.target.value as ComicImageElement['objectFit'] })}><option value="cover">{t('inspector.fillPanel')}</option><option value="contain">{t('inspector.showEntire')}</option></select></Field>
+              <Field label={t('inspector.filter')}><select className={input} value={element.filter} onChange={event => patch({ filter: event.target.value as ComicImageElement['filter'] })}><option value="none">{t('inspector.filterNone')}</option><option value="bw">{t('inspector.bw')}</option><option value="sepia">{t('inspector.sepia')}</option><option value="contrast">{t('inspector.contrast')}</option><option value="posterize">{t('inspector.posterize')}</option><option value="halftone">{t('inspector.halftone')}</option></select></Field>
+              <Field label={t('inspector.opacity')}><input className={input} type="range" min={0} max={1} step={.05} value={element.opacity ?? 1} onChange={event => patch({ opacity: Number(event.target.value) })} /></Field>
               <div className="grid grid-cols-2 gap-1">
-                <button className={`${button} ${element.flipH ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => patch({ flipH: !element.flipH })}>Flip H</button>
-                <button className={`${button} ${element.flipV ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => patch({ flipV: !element.flipV })}>Flip V</button>
+                <button className={`${button} ${element.flipH ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => patch({ flipH: !element.flipH })}>{t('inspector.flipH')}</button>
+                <button className={`${button} ${element.flipV ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => patch({ flipV: !element.flipV })}>{t('inspector.flipV')}</button>
               </div>
               {element.parentId && (
-                <button className={`${button} w-full`} onClick={detachFromPanel}>Remove from panel</button>
+                <button className={`${button} w-full`} onClick={detachFromPanel}>{t('inspector.removeFromPanel')}</button>
               )}
             </div>
           )}
           {element.type === 'text' && (
             <div className="space-y-2">
-              <Field label="Text"><textarea className={input} rows={4} value={element.content} onChange={event => patch({ content: event.target.value })} /></Field>
-              <Field label="Bubble"><select className={input} value={element.bubble} onChange={event => {
+              <Field label={t('inspector.text')}><textarea className={input} rows={4} value={element.content} onChange={event => patch({ content: event.target.value })} /></Field>
+              <Field label={t('inspector.bubble')}><select className={input} value={element.bubble} onChange={event => {
                 const bubble = event.target.value as ComicTextElement['bubble']
                 patch({
                   bubble,
@@ -669,20 +675,20 @@ function InspectorPanel() {
                         ? 'sound-effect'
                         : 'dialogue',
                 })
-              }}><option value="none">None / SFX</option><option value="speech">Speech</option><option value="ellipse">Ellipse</option><option value="rect">Rounded rectangle</option><option value="thought">Thought</option><option value="whisper">Whisper</option><option value="caption">Caption</option><option value="scream">Scream</option><option value="electric">Electric</option><option value="burst">Burst</option><option value="cloud">Cloud</option></select></Field>
-              <Field label="Font size"><input className={input} type="number" value={element.fontSize} onChange={event => patch({ fontSize: Number(event.target.value) })} /></Field>
-              <Field label="Font"><select className={input} value={element.fontFamily} onChange={event => patch({ fontFamily: event.target.value })}><option value='"Comic Sans MS", "Trebuchet MS", sans-serif'>Comic</option><option value='"Arial Black", Impact, sans-serif'>Impact</option><option value='Georgia, serif'>Classic serif</option><option value='"Courier New", monospace'>Typewriter</option><option value='Arial, sans-serif'>Clean sans</option></select></Field>
+              }}><option value="none">{t('inspector.bubbleNone')}</option><option value="speech">{t('inspector.speech')}</option><option value="ellipse">{t('inspector.ellipse')}</option><option value="rect">{t('inspector.rect')}</option><option value="thought">{t('inspector.thought')}</option><option value="whisper">{t('inspector.whisper')}</option><option value="caption">{t('inspector.caption')}</option><option value="scream">{t('inspector.scream')}</option><option value="electric">{t('inspector.electric')}</option><option value="burst">{t('inspector.burst')}</option><option value="cloud">{t('inspector.cloud')}</option></select></Field>
+              <Field label={t('inspector.fontSize')}><input className={input} type="number" value={element.fontSize} onChange={event => patch({ fontSize: Number(event.target.value) })} /></Field>
+              <Field label={t('inspector.font')}><select className={input} value={element.fontFamily} onChange={event => patch({ fontFamily: event.target.value })}><option value='"Comic Sans MS", "Trebuchet MS", sans-serif'>{t('inspector.fontComic')}</option><option value='"Arial Black", Impact, sans-serif'>{t('inspector.fontImpact')}</option><option value='Georgia, serif'>{t('inspector.fontSerif')}</option><option value='"Courier New", monospace'>{t('inspector.fontTypewriter')}</option><option value='Arial, sans-serif'>{t('inspector.fontSans')}</option></select></Field>
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Line height"><input className={input} type="number" min={0.7} max={2} step={.05} value={element.lineHeight ?? 1.08} onChange={event => patch({ lineHeight: Number(event.target.value) })} /></Field>
-                <Field label="Spacing"><input className={input} type="number" min={-8} max={30} value={element.letterSpacing ?? 0} onChange={event => patch({ letterSpacing: Number(event.target.value) })} /></Field>
-                <Field label="Text color"><input className="w-full h-8" type="color" value={element.color} onChange={event => patch({ color: event.target.value })} /></Field>
-                <Field label="Outline"><input className={input} type="number" min={0} max={8} value={element.textStrokeWidth ?? 0} onChange={event => patch({ textStrokeWidth: Number(event.target.value) })} /></Field>
+                <Field label={t('inspector.lineHeight')}><input className={input} type="number" min={0.7} max={2} step={.05} value={element.lineHeight ?? 1.08} onChange={event => patch({ lineHeight: Number(event.target.value) })} /></Field>
+                <Field label={t('inspector.spacing')}><input className={input} type="number" min={-8} max={30} value={element.letterSpacing ?? 0} onChange={event => patch({ letterSpacing: Number(event.target.value) })} /></Field>
+                <Field label={t('inspector.textColor')}><input className="w-full h-8" type="color" value={element.color} onChange={event => patch({ color: event.target.value })} /></Field>
+                <Field label={t('inspector.outline')}><input className={input} type="number" min={0} max={8} value={element.textStrokeWidth ?? 0} onChange={event => patch({ textStrokeWidth: Number(event.target.value) })} /></Field>
               </div>
-              <Field label="Text effect"><select className={input} value={element.textEffect ?? 'none'} onChange={event => patch({ textEffect: event.target.value as ComicTextElement['textEffect'] })}><option value="none">None</option><option value="shadow">Shadow</option><option value="extrude">3D extrude</option><option value="glow">Glow</option></select></Field>
-              <Field label="Fill"><select className={input} value={element.textFill ?? 'solid'} onChange={event => patch({ textFill: event.target.value as ComicTextElement['textFill'] })}><option value="solid">Solid</option><option value="gradient">Gradient</option></select></Field>
+              <Field label={t('inspector.textEffect')}><select className={input} value={element.textEffect ?? 'none'} onChange={event => patch({ textEffect: event.target.value as ComicTextElement['textEffect'] })}><option value="none">{t('inspector.effectNone')}</option><option value="shadow">{t('inspector.shadow')}</option><option value="extrude">{t('inspector.extrude')}</option><option value="glow">{t('inspector.glow')}</option></select></Field>
+              <Field label={t('inspector.fill')}><select className={input} value={element.textFill ?? 'solid'} onChange={event => patch({ textFill: event.target.value as ComicTextElement['textFill'] })}><option value="solid">{t('inspector.solid')}</option><option value="gradient">{t('inspector.gradient')}</option></select></Field>
               <div className="grid grid-cols-2 gap-1">
-                <button className={`${button} ${element.bold ? 'border-accent-blue' : ''}`} onClick={() => patch({ bold: !element.bold })}>Bold</button>
-                <button className={`${button} ${element.italic ? 'border-accent-blue' : ''}`} onClick={() => patch({ italic: !element.italic })}>Italic</button>
+                <button className={`${button} ${element.bold ? 'border-accent-blue' : ''}`} onClick={() => patch({ bold: !element.bold })}>{t('inspector.bold')}</button>
+                <button className={`${button} ${element.italic ? 'border-accent-blue' : ''}`} onClick={() => patch({ italic: !element.italic })}>{t('inspector.italic')}</button>
               </div>
             </div>
           )}
@@ -744,12 +750,15 @@ function SuggestedChoice({
   options,
   onChange,
   customPlaceholder,
+  optionKey,
 }: {
   value: string
   options: string[]
   onChange: (value: string) => void
   customPlaceholder: string
+  optionKey: 'genre' | 'tone'
 }) {
+  const { t } = useUiTranslation('comics')
   const custom = !options.includes(value)
   return (
     <div className="space-y-1.5">
@@ -758,8 +767,8 @@ function SuggestedChoice({
         value={custom ? '__other__' : value}
         onChange={event => onChange(event.target.value === '__other__' ? '' : event.target.value)}
       >
-        {options.map(option => <option key={option} value={option}>{option}</option>)}
-        <option value="__other__">Other…</option>
+        {options.map(option => <option key={option} value={option}>{t(`${optionKey}.${option}`)}</option>)}
+        <option value="__other__">{t('planning.other')}</option>
       </select>
       {custom && (
         <input
@@ -781,6 +790,7 @@ export function ComicDirectorPanel({
   notify?: (notice: Notice) => void
   createCompleteComic?: boolean
 }) {
+  const { t } = useUiTranslation('comics')
   const project = useComicStore(state => state.project)
   const [request, setRequest] = useState<ComicDirectorRequest>(() =>
     project.director?.input
@@ -792,7 +802,7 @@ export function ComicDirectorPanel({
   const [targetLanguage, setTargetLanguage] = useState('')
   const [activity, setActivity] = useState<DirectorActivity>({
     state: 'idle',
-    message: 'Ready to create your comic.',
+    message: t('planning.ready'),
     steps: [],
   })
   const [startedAt, setStartedAt] = useState<number | null>(null)
@@ -841,12 +851,12 @@ export function ComicDirectorPanel({
     : false
   const planningLlmProvider = servicesConfig?.llm_provider || llmStatus?.provider || 'local'
   const planningLlmProviderLabel: Record<string, string> = {
-    local: 'Local llama-server',
-    remote: 'Remote OpenAI-compatible',
-    openai: 'Hosted OpenAI-compatible',
-    anthropic: 'Anthropic API',
+    local: t('planning.providerLocal'),
+    remote: t('planning.providerRemote'),
+    openai: t('planning.providerOpenai'),
+    anthropic: t('planning.providerAnthropic'),
   }
-  const planningLlmModel = servicesConfig?.llm_model_id || llmStatus?.model_id || 'Loading configuration…'
+  const planningLlmModel = servicesConfig?.llm_model_id || llmStatus?.model_id || t('planning.loadingConfig')
   const planningLlmIsActive = Boolean(
     llmStatus?.loaded
     && llmStatus.model_id === planningLlmModel
@@ -988,7 +998,7 @@ export function ComicDirectorPanel({
         plan: repairComicText(director.plan),
       },
     })
-    report('Spanish text encoding repaired in the current plan.', { state: 'complete' })
+    report(t('planning.encodingRepaired'), { state: 'complete' })
   }
 
   const rememberPanelJob = (panelId: string, jobId?: string) => {
@@ -1005,7 +1015,7 @@ export function ComicDirectorPanel({
     const director = useComicStore.getState().project.director
     if (!director) return false
     if (!director.scriptApprovedAt && !window.confirm(
-      'This script version has not been approved in the Script tab. Generate artwork anyway?',
+      t('generate.unapproved'),
     )) return false
     setBusy('images')
     try {
@@ -1013,23 +1023,23 @@ export function ComicDirectorPanel({
         force,
         onProgress: (message, current, total) => {
           report(message, { current, total })
-          setProgress(`Generating panel ${current} / ${total}`)
+          setProgress(t('generate.progress', { current, total }))
         },
       })
       if (!result.total) {
-        report('All panels already have artwork.', { state: 'complete' })
+        report(t('generate.allHaveArt'), { state: 'complete' })
         return true
       }
-      report(`Comic complete: ${result.generated} panel images generated and placed.`, {
+      report(t('generate.complete', { count: result.generated }), {
         state: 'complete',
         current: result.generated,
         total: result.total,
       })
-      notify({ kind: 'ok', text: 'All Director panels were generated and placed.' })
+      notify({ kind: 'ok', text: t('generate.allPlaced') })
       useStore.getState().loadOutputs()
       return true
     } catch (error) {
-      const message = `${(error as Error).message}. Completed panels are preserved; run again to resume.`
+      const message = t('generate.resumeError', { message: (error as Error).message })
       report(message, { state: 'error' })
       notify({ kind: 'error', text: message })
       return false
@@ -1042,8 +1052,8 @@ export function ComicDirectorPanel({
   const cleanUpCurrentComicText = () => {
     const state = useComicStore.getState()
     state.patchProject(simplifyDirectorText(state.project))
-    notify({ kind: 'ok', text: 'Lettering simplified without regenerating artwork.' })
-    report('Lettering repaired: silent beats and compact panel text now preserve the artwork.', {
+    notify({ kind: 'ok', text: t('lettering.simplified') })
+    report(t('lettering.repaired'), {
       state: 'complete',
     })
   }
@@ -1054,12 +1064,12 @@ export function ComicDirectorPanel({
   ): Promise<ComicPlan> => {
     const current = useComicStore.getState().project
     const captured = planWithCanvasText(current)
-    if (!captured) throw new Error('This comic does not have an editable Director plan')
+    if (!captured) throw new Error(t('generate.noPlan'))
     const working = structuredClone(captured)
     const translationLanguage = (languageOverride ?? targetLanguage).trim()
     const operationWriting = writingForOperation(current.director!.input, mode)
     for (let pageIndex = 0; pageIndex < working.pages.length; pageIndex += 1) {
-      report(`${mode === 'translate' ? 'Translating' : 'Rewriting'} page ${pageIndex + 1} of ${working.pages.length}…`, {
+      report(t(mode === 'translate' ? 'lettering.translatingPage' : 'lettering.rewritingPage', { current: pageIndex + 1, total: working.pages.length }), {
         current: pageIndex + 1,
         total: working.pages.length,
       })
@@ -1110,12 +1120,12 @@ export function ComicDirectorPanel({
         director: { ...state.project.director!, plan },
       })
       state.patchProject(next)
-      report(`${translated ? `Translation to ${translationLanguage}` : 'Text rewrite'} applied without changing artwork.`, {
+      report(translated ? t('lettering.appliedTranslation', { language: translationLanguage }) : t('lettering.appliedRewrite'), {
         state: 'complete',
       })
       notify({ kind: 'ok', text: translated
-        ? `Comic text repaired in ${translationLanguage} and left editable.`
-        : 'Comic text rewritten without regenerating images.' })
+        ? t('lettering.translated', { language: translationLanguage })
+        : t('lettering.rewritten') })
     } catch (error) {
       report((error as Error).message, { state: 'error' })
       notify({ kind: 'error', text: (error as Error).message })
@@ -1142,11 +1152,11 @@ export function ComicDirectorPanel({
       temporaryApplied = true
       await wait(100)
       await exportComicPdf((current, total) =>
-        report(`Exporting translated PDF page ${current} of ${total}…`, { current, total }))
-      report(`PDF exported in ${targetLanguage.trim()}; the editable comic was restored.`, {
+        report(t('export.exportingPage', { current, total }), { current, total }))
+      report(t('export.pdfRestored', { language: targetLanguage.trim() }), {
         state: 'complete',
       })
-      notify({ kind: 'ok', text: `Translated PDF exported in ${targetLanguage.trim()}.` })
+      notify({ kind: 'ok', text: t('export.translatedPdf', { language: targetLanguage.trim() }) })
     } catch (error) {
       report((error as Error).message, { state: 'error' })
       notify({ kind: 'error', text: (error as Error).message })
@@ -1174,12 +1184,12 @@ export function ComicDirectorPanel({
   const varyCurrentLayouts = () => {
     const state = useComicStore.getState()
     state.patchProject(varyDirectorLayouts(state.project))
-    notify({ kind: 'ok', text: 'Page layouts varied without regenerating artwork.' })
+    notify({ kind: 'ok', text: t('generate.layoutsVaried') })
   }
 
   const regenerateAllArtwork = async () => {
     if (!window.confirm(
-      `Regenerate all ${totalPlannedPanels} panel images? This may use paid image-provider credits. Existing artwork is kept until each replacement succeeds.`,
+      t('generate.regenerateConfirm', { count: totalPlannedPanels }),
     )) return
     await generateAll(true)
   }
@@ -1191,10 +1201,13 @@ export function ComicDirectorPanel({
       request.pageCount * (storyboard ? 1 : request.panelsPerPage),
     )
     const artworkNotice = withImages
-      ? ` After the plan is ready, up to ${estimatedPanels} ${storyboard ? 'shot images' : 'panel images'} will be generated and may use provider credits.`
+      ? t('dialogs.artworkAfter', {
+        count: estimatedPanels,
+        kind: storyboard ? t('dialogs.shotImages') : t('dialogs.panelImages'),
+      })
       : ''
     return window.confirm(
-      `Create a new ${storyboard ? 'video storyboard' : 'comic'}? When planning succeeds, it will replace the project currently open and any unsaved changes will be lost.${artworkNotice}\n\nThe current project will remain untouched if planning fails or is cancelled.`,
+      t(storyboard ? 'dialogs.newStoryboard' : 'dialogs.newComic', { artwork: artworkNotice }),
     )
   }
 
@@ -1216,8 +1229,8 @@ export function ComicDirectorPanel({
         0,
       )
       report(placementRequest.productionMode === 'storyboard'
-        ? `Plan received: ${plannedImageCount} video shots.`
-        : `Plan received: ${plan.pages.length} pages and ${plannedImageCount} panels.`)
+        ? t('planning.planShots', { count: plannedImageCount })
+        : t('planning.planPages', { pages: plan.pages.length, panels: plannedImageCount }))
       const currentProject = useComicStore.getState().project
       const freshProject = createComicProject()
       const preservedReferenceIds = new Set(
@@ -1287,17 +1300,17 @@ export function ComicDirectorPanel({
         // Private browsing may block storage; the in-memory state is enough.
       }
       report(storyboard
-        ? 'Video-ready frames, camera notes and I2V prompts placed in the editor.'
-        : 'Pages, panels, dialogue and captions placed in the editor.')
+        ? t('planning.placedStoryboard')
+        : t('planning.placedComic'))
       notify({ kind: 'ok', text: storyboard
-        ? `Director created ${plan.pages.length} editable storyboard shots.`
-        : `Director created ${plan.pages.length} editable pages.` })
+        ? t('planning.createdShots', { count: plan.pages.length })
+        : t('planning.createdPages', { count: plan.pages.length }) })
       if (withImages) {
-        report('Opening the comic canvas and starting panel artwork…')
+        report(t('planning.openingCanvas'))
         await new Promise(resolve => window.setTimeout(resolve, 0))
         await generateAll()
       } else {
-        report('Editable plan ready. Review it or generate the panel images.', { state: 'complete' })
+        report(t('planning.planReady'), { state: 'complete' })
       }
   }
 
@@ -1316,8 +1329,8 @@ export function ComicDirectorPanel({
     setElapsedSeconds(0)
     setActivity({
       state: 'running',
-      message: 'Submitting the planning job to HocusPocus…',
-      steps: ['Submitting the planning job to HocusPocus…'],
+      message: t('planning.submitting'),
+      steps: [t('planning.submitting')],
     })
     try {
       const { plan } = await api.planComic({
@@ -1378,14 +1391,14 @@ export function ComicDirectorPanel({
       // An explicitly entered durable job is authoritative. A stale browser
       // result from an older session must never shadow the ID visible here.
       if (jobId) {
-        report(`Checking the saved state of ${jobId}…`)
+        report(t('planning.checkingJob', { jobId }))
         const job = await api.fetchComicPlanJob(jobId)
         placementRequest = job.request
         if (job.status === 'completed' && job.result?.plan) {
-          report(`Recovered completed plan ${jobId} without calling the LLM again.`)
+          report(t('planning.recoveredJob', { jobId }))
           plan = job.result.plan
         } else {
-          report(`Resuming ${jobId} from its last saved page checkpoint…`)
+          report(t('planning.resumingJob', { jobId }))
           await api.resumeComicPlanJob(jobId)
           const result = await api.waitForComicPlanJob(jobId, status => report(status.message, {
             current: status.current,
@@ -1396,7 +1409,7 @@ export function ComicDirectorPanel({
       } else {
         plan = pendingPlan
       }
-      if (!plan) throw new Error('Enter the comic planning job ID to recover')
+      if (!plan) throw new Error(t('planning.needJob'))
       await placePlan(plan, createCompleteComic, placementRequest)
     } catch (error) {
       const message = (error as Error).message
@@ -1443,7 +1456,7 @@ export function ComicDirectorPanel({
       .sort((a, b) => a.zIndex - b.zIndex)[panelIndex]
     if (!director || !planned || !panel) return
     if (!director.scriptApprovedAt && !window.confirm(
-      'This script version has not been approved in the Script tab. Generate this panel anyway?',
+      t('generate.unapprovedPanel'),
     )) return
     setSingleBusy(planned.id)
     try {
@@ -1501,7 +1514,7 @@ export function ComicDirectorPanel({
           ),
         },
       })
-      notify({ kind: 'ok', text: `Panel ${pageIndex + 1}.${panelIndex + 1} generated.` })
+      notify({ kind: 'ok', text: t('generate.panelDone', { page: pageIndex + 1, panel: panelIndex + 1 }) })
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
     } finally {
@@ -1512,11 +1525,11 @@ export function ComicDirectorPanel({
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-accent-blue/30 bg-accent-blue/5 p-3">
-        <div className="flex items-center gap-2 text-xs font-medium text-text-primary"><WandSparkles size={14} /> {request.productionMode === 'storyboard' ? 'Storyboard Director' : 'Comic Director'}</div>
+        <div className="flex items-center gap-2 text-xs font-medium text-text-primary"><WandSparkles size={14} /> {request.productionMode === 'storyboard' ? t('planning.storyboardTitle') : t('planning.title')}</div>
         <p className="text-[10px] text-text-muted mt-1">
           {request.productionMode === 'storyboard'
-            ? 'Plan clean video first frames plus editable motion, camera and timing prompts, then render every shot locally or with MiniMax.'
-            : 'Plan exact pages, editable dialogue and image prompts, then generate every panel locally or with MiniMax.'}
+            ? t('planning.storyboardHint')
+            : t('planning.comicHint')}
         </p>
       </div>
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-tertiary/30 p-1">
@@ -1525,7 +1538,7 @@ export function ComicDirectorPanel({
           disabled={busy !== null}
           onClick={() => patch('productionMode', 'comic')}
         >
-          Comic
+          {t('planning.comic')}
         </button>
         <button
           className={`${button} ${request.productionMode === 'storyboard' ? 'border-purple-400 text-purple-300' : ''}`}
@@ -1535,139 +1548,143 @@ export function ComicDirectorPanel({
             patch('panelsPerPage', 1)
           }}
         >
-          Storyboard / pre-video
+          {t('planning.storyboard')}
         </button>
       </div>
       {request.productionMode === 'storyboard' && (
         <div className="rounded-lg border border-purple-400/30 bg-purple-400/5 p-2.5 text-[10px] text-text-muted">
-          One page becomes one clean video shot. Dialogue may guide acting inside the motion
-          prompt, but no lettering is drawn over the generated frame.
+          {t('planning.storyboardNote')}
         </div>
       )}
       <div className="rounded-lg border border-border bg-bg-tertiary/30 p-2.5">
-        <div className="text-[9px] uppercase tracking-wide text-text-muted">Planning LLM</div>
+        <div className="text-[9px] uppercase tracking-wide text-text-muted">{t('planning.llm')}</div>
         <div className="mt-1 text-[11px] text-text-primary">
           {externalWritingLlm
-            ? `Comic override · ${request.writingProvider === 'deepseek' ? 'DeepSeek' : request.writingProvider === 'minimax' ? 'MiniMax' : request.writingProvider === 'openai' ? 'OpenAI' : 'Custom compatible'} · ${request.writingModel || 'Choose a model'}`
-            : `HocusPocus default · ${planningLlmProviderLabel[planningLlmProvider] || planningLlmProvider} · ${planningLlmModel}`}
+            ? t('planning.overrideProvider', {
+              provider: request.writingProvider === 'deepseek' ? t('planning.providerDeepseek') : request.writingProvider === 'minimax' ? t('planning.providerMinimax') : request.writingProvider === 'openai' ? t('planning.providerOpenaiHosted') : t('planning.providerCompatible'),
+              model: request.writingModel || t('planning.chooseModel'),
+            })
+            : t('planning.defaultProvider', { provider: planningLlmProviderLabel[planningLlmProvider] || planningLlmProvider, model: planningLlmModel })}
         </div>
         <div className="mt-0.5 text-[9px] text-text-muted">
           {externalWritingLlm
-            ? `${request.writingProvider === 'deepseek' ? 'https://api.deepseek.com' : request.writingProvider === 'minimax' ? 'https://api.minimax.io/v1' : request.writingProvider === 'openai' ? 'https://api.openai.com' : request.writingBaseUrl || 'Configure the custom profile'} · internal LLM is left untouched`
+            ? t('planning.externalHint', {
+              endpoint: request.writingProvider === 'deepseek' ? 'https://api.deepseek.com' : request.writingProvider === 'minimax' ? 'https://api.minimax.io/v1' : request.writingProvider === 'openai' ? 'https://api.openai.com' : request.writingBaseUrl || t('planning.configureCustom'),
+            })
             : planningLlmIsActive
-              ? 'Active now'
+              ? t('planning.activeNow')
               : llmStatus?.loaded
-                ? `Will switch from ${llmStatus.model_id || 'the currently loaded model'} when planning starts`
-                : 'Auto-loads when planning starts'}
+                ? t('planning.willSwitch', { model: llmStatus.model_id || t('planning.currentModel') })
+                : t('planning.autoLoads')}
         </div>
       </div>
       <ComicWritingProviderFields value={request} onChange={patch} disabled={busy !== null} />
-      <Field label="Story premise"><textarea className={input} rows={5} value={request.premise} onChange={event => patch('premise', event.target.value)} placeholder="What happens in the comic?" /></Field>
+      <Field label={t('planning.premise')}><textarea className={input} rows={5} value={request.premise} onChange={event => patch('premise', event.target.value)} placeholder={t('planning.premisePlaceholder')} /></Field>
       {request.sourceStory && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-[10px] text-emerald-200">
-          Loaded from Story Lab: <b>{request.sourceStory.title}</b> · revision {request.sourceStory.revision}.
-          The complete adaptation brief below is editable before planning.
+          {t('planning.fromStory', { title: request.sourceStory.title, revision: request.sourceStory.revision })}
         </div>
       )}
-      <Field label="Story bible / adaptation brief (optional, editable)">
+      <Field label={t('planning.brief')}>
         <textarea
           className={input}
           rows={8}
           value={request.storyContext || ''}
           onChange={event => patch('storyContext', event.target.value)}
-          placeholder="Characters, relationships, dramatic beats, theme and adaptation constraints. Story Lab fills this automatically."
+          placeholder={t('planning.briefPlaceholder')}
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label={request.productionMode === 'storyboard' ? 'Shots' : 'Pages'}><input className={input} type="number" min={1} max={100} value={request.pageCount} onChange={event => patch('pageCount', Math.max(1, Number(event.target.value)))} /></Field>
+        <Field label={request.productionMode === 'storyboard' ? t('planning.shots') : t('planning.pages')}><input className={input} type="number" min={1} max={100} value={request.pageCount} onChange={event => patch('pageCount', Math.max(1, Number(event.target.value)))} /></Field>
         {request.productionMode === 'storyboard' ? (
-          <Field label="Screen">
+          <Field label={t('planning.screen')}>
             <select
               className={input}
               value={request.storyboardAspect || 'landscape'}
               onChange={event => patch('storyboardAspect', event.target.value as ComicDirectorRequest['storyboardAspect'])}
             >
-              <option value="landscape">TV / desktop · landscape</option>
-              <option value="portrait">Mobile / social · portrait</option>
+              <option value="landscape">{t('planning.landscape')}</option>
+              <option value="portrait">{t('planning.portrait')}</option>
             </select>
           </Field>
         ) : (
-          <Field label="Panels / page"><input className={input} type="number" min={1} max={12} value={request.panelsPerPage} onChange={event => patch('panelsPerPage', Math.max(1, Number(event.target.value)))} /></Field>
+          <Field label={t('planning.panelsPerPage')}><input className={input} type="number" min={1} max={12} value={request.panelsPerPage} onChange={event => patch('panelsPerPage', Math.max(1, Number(event.target.value)))} /></Field>
         )}
-        <Field label="Language">
+        <Field label={t('planning.language')}>
           <EditableLanguageInput className={input} value={request.language} onChange={value => patch('language', value)} />
         </Field>
         {request.productionMode === 'storyboard' ? (
-          <Field label="Frame quality">
+          <Field label={t('planning.frameQuality')}>
             <select
               className={input}
               value={request.storyboardQuality || 'draft'}
               onChange={event => patch('storyboardQuality', event.target.value as ComicDirectorRequest['storyboardQuality'])}
             >
-              <option value="draft">Draft · 832×448 / 448×832</option>
-              <option value="final">Final · 1280×704 / 704×1280</option>
+              <option value="draft">{t('planning.draftQuality')}</option>
+              <option value="final">{t('planning.finalQuality')}</option>
             </select>
           </Field>
         ) : (
-          <Field label="Format"><select className={input} value={request.format} onChange={event => patch('format', event.target.value as ComicDirectorRequest['format'])}>{Object.entries(COMIC_FORMATS).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select></Field>
+          <Field label={t('planning.format')}><select className={input} value={request.format} onChange={event => patch('format', event.target.value as ComicDirectorRequest['format'])}>{Object.entries(COMIC_FORMATS).map(([id]) => <option key={id} value={id}>{t(`format.${id}`)}</option>)}</select></Field>
         )}
-        <Field label="Genre">
+        <Field label={t('planning.genre')}>
           <SuggestedChoice
             value={request.genre}
             options={COMIC_GENRES}
             onChange={value => patch('genre', value)}
-            customPlaceholder="Write a custom or hybrid genre"
+            customPlaceholder={t('planning.customGenre')}
+            optionKey="genre"
           />
         </Field>
-        <Field label="Tone">
+        <Field label={t('planning.tone')}>
           <SuggestedChoice
             value={request.tone}
             options={COMIC_TONES}
             onChange={value => patch('tone', value)}
-            customPlaceholder="Write a custom tone"
+            customPlaceholder={t('planning.customTone')}
+            optionKey="tone"
           />
         </Field>
-        {request.productionMode !== 'storyboard' && <Field label="Dialogue density">
+        {request.productionMode !== 'storyboard' && <Field label={t('planning.density')}>
           <select
             className={input}
             value={request.dialogueDensity}
             onChange={event => patch('dialogueDensity', event.target.value as ComicDirectorRequest['dialogueDensity'])}
           >
-            <option value="low">Low — text in about 30% of panels</option>
-            <option value="medium">Medium — text in about 55%, with silent beats</option>
-            <option value="high">High — text in about 80%, still readable</option>
+            <option value="low">{t('planning.densityLow')}</option>
+            <option value="medium">{t('planning.densityMedium')}</option>
+            <option value="high">{t('planning.densityHigh')}</option>
           </select>
         </Field>}
       </div>
-      <Field label="Art style override (optional)"><input
+      <Field label={t('planning.artStyle')}><input
         className={input}
         value={request.artStyle}
         onChange={event => patch('artStyle', event.target.value)}
-        placeholder="Leave blank and Comic Director will choose"
+        placeholder={t('planning.artStylePlaceholder')}
       /></Field>
-      <Field label="World / period / location override (optional)">
+      <Field label={t('planning.world')}>
         <textarea
           className={input}
           rows={3}
           value={request.worldContext || ''}
           onChange={event => patch('worldContext', event.target.value)}
-          placeholder="Example: Castile and Atlantic ports, 1492; late-15th-century ships, clothing, tools, masonry and interiors only."
+          placeholder={t('planning.worldPlaceholder')}
         />
       </Field>
-      <Field label="Forbidden elements / visual rules (optional)">
+      <Field label={t('planning.forbidden')}>
         <textarea
           className={input}
           rows={2}
           value={request.forbiddenElements || ''}
           onChange={event => patch('forbiddenElements', event.target.value)}
-          placeholder="Example: no engines, electric lights, modern glass, zippers, plastics, modern typography or 18th-century uniforms."
+          placeholder={t('planning.forbiddenPlaceholder')}
         />
       </Field>
       <p className="text-[9px] text-text-muted">
-        Blank fields delegate the decision to the LLM. It creates a visual bible only when useful;
-        an empty bible is not sent to the image generator.
+        {t('planning.blankHint')}
       </p>
-      <Field label="Image generator (active queue)"><select
+      <Field label={t('planning.imageGenerator')}><select
         disabled={busy !== null}
         className={input}
         value={request.provider === 'minimax'
@@ -1683,24 +1700,24 @@ export function ComicDirectorPanel({
           patch('imageModel', modelParts.join(':'))
         }}
       >
-        <optgroup label="External services">
-          <option value="minimax:image-01">MiniMax image-01 · external API</option>
+        <optgroup label={t('planning.externalGroup')}>
+          <option value="minimax:image-01">{t('planning.minimaxImage')}</option>
         </optgroup>
-        <optgroup label="Installed locally and ready">
+        <optgroup label={t('planning.installedGroup')}>
           {request.provider === 'maestro' && request.imageModel
             && !installedMaestroImageModels.some(model => model.model_type === request.imageModel) && (
             <option value={`maestro:${request.imageModel}`}>
-              {request.imageModel} — incompatible/non-image
+              {t('planning.incompatible', { model: request.imageModel })}
             </option>
           )}
           {installedMaestroImageModels.map(model => (
             <option key={model.model_type} value={`maestro:${model.model_type}`}>
-              {model.name} · local
+              {t('planning.localModel', { name: model.name })}
             </option>
           ))}
         </optgroup>
         {maestroImageModels.some(model => model.is_downloaded === false) && (
-          <optgroup label="Not downloaded — install in Settings → Models">
+          <optgroup label={t('planning.notDownloaded')}>
             {maestroImageModels.filter(model => model.is_downloaded === false).map(model => (
               <option disabled key={model.model_type} value={`maestro:${model.model_type}`}>
                 {model.name}
@@ -1710,28 +1727,25 @@ export function ComicDirectorPanel({
         )}
       </select>
       <p className="mt-1 text-[9px] text-text-muted">
-        Local entries run through HocusPocus in image mode. MiniMax is an external image generator
-        in the same queue and uses the configured MiniMax API key.
+        {t('planning.queueHint')}
       </p>
       </Field>
       {request.provider === 'minimax' && (
         <p className="text-[9px] text-text-muted">
-          MiniMax image-01 accepts one character identity reference per request. In a group panel,
-          Director anchors the first listed character that has an available reference and describes
-          every other character from the locked visual bible.
+          {t('planning.minimaxRefHint')}
         </p>
       )}
       {project.director && (
         <p className="rounded border border-border bg-bg-tertiary/40 px-2 py-1.5 text-[9px] text-text-muted">
-          Current plan will generate with <b className="text-text-primary">
-            {project.director.provider === 'minimax'
-              ? 'MiniMax image-01'
-              : `HocusPocus · ${project.director.imageModel || 'no image model selected'}`}
-          </b>.
+          {t('planning.currentPlan', {
+            engine: project.director.provider === 'minimax'
+              ? t('planning.minimaxEngine')
+              : t('planning.hocusEngine', { model: project.director.imageModel || t('planning.noImageModel') }),
+          })}
         </p>
       )}
       <div className="border-t border-border pt-3 space-y-2">
-        <strong className="text-[10px] uppercase tracking-wide text-text-muted">Characters</strong>
+        <strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('characters.heading')}</strong>
         {request.characters.map(character => (
           <div key={character.id} className="rounded border border-border p-2 text-[10px]">
             <div className="flex justify-between"><b className="text-text-primary">{character.name}</b><button onClick={() => patch('characters', request.characters.filter(item => item.id !== character.id))}><Trash2 size={11} /></button></div>
@@ -1743,18 +1757,17 @@ export function ComicDirectorPanel({
                 ? { ...item, referenceAssetId: event.target.value || undefined }
                 : item))}
             >
-              <option value="">No character identity reference</option>
+              <option value="">{t('characters.noIdentity')}</option>
               {Object.values(project.assets).map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
             </select>
             <p className="mt-1 text-[9px] text-text-muted">
-              MiniMax can use this as the panel's single identity anchor. Other characters remain
-              controlled by their canonical written descriptions.
+              {t('characters.minimaxHint')}
             </p>
           </div>
         ))}
-        <input className={input} value={newCharacter.name} onChange={event => setNewCharacter(value => ({ ...value, name: event.target.value }))} placeholder="Character name" />
-        <textarea className={input} value={newCharacter.description} onChange={event => setNewCharacter(value => ({ ...value, description: event.target.value }))} placeholder="Canonical visual description and wardrobe" />
-        <button className={`${button} w-full`} onClick={addCharacter}><Plus size={12} /> Add character</button>
+        <input className={input} value={newCharacter.name} onChange={event => setNewCharacter(value => ({ ...value, name: event.target.value }))} placeholder={t('characters.name')} />
+        <textarea className={input} value={newCharacter.description} onChange={event => setNewCharacter(value => ({ ...value, description: event.target.value }))} placeholder={t('characters.visual')} />
+        <button className={`${button} w-full`} onClick={addCharacter}><Plus size={12} /> {t('characters.add')}</button>
       </div>
       <button
         className={`${button} w-full border-accent-blue text-accent-blue`}
@@ -1762,25 +1775,25 @@ export function ComicDirectorPanel({
         onClick={() => makePlan(createCompleteComic)}
       >
         {busy !== null ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-        {createCompleteComic ? 'Create complete comic' : 'Create editable comic plan'}
+        {createCompleteComic ? t('planning.createComplete') : t('planning.createPlan')}
       </button>
       {createCompleteComic && (
         <button className={`${button} w-full`} disabled={busy !== null || !request.premise.trim()} onClick={() => makePlan(false)}>
-          Create plan only
+          {t('planning.createPlanOnly')}
         </button>
       )}
       <details open={activity.state === 'error'} className="rounded-lg border border-border bg-bg-tertiary/30 p-2">
         <summary className="cursor-pointer text-[10px] font-medium text-text-secondary">
-          Resume an interrupted comic checkpoint
+          {t('planning.resumeTitle')}
         </summary>
         <p className="mt-2 text-[9px] text-text-muted">
-          Restores the saved story bible, completed pages, placed panels and generated artwork instead of restarting.
+          {t('planning.resumeHint')}
         </p>
         <input
           className={`${input} mt-2`}
           value={recoveryJobId}
           onChange={event => setRecoveryJobId(event.target.value)}
-          placeholder="comic-plan-job-…"
+          placeholder={t('planning.jobPlaceholder')}
         />
         <button
           className={`${button} mt-2 w-full border-amber-500/50 text-amber-300`}
@@ -1788,7 +1801,7 @@ export function ComicDirectorPanel({
           onClick={recoverPlan}
         >
           {busy === 'plan' ? <Loader2 size={12} className="animate-spin" /> : <Redo2 size={12} />}
-          Resume from latest checkpoint
+          {t('planning.resumeAction')}
         </button>
       </details>
       <div className={`rounded-lg border p-2.5 ${
@@ -1828,31 +1841,30 @@ export function ComicDirectorPanel({
         <button className={`${button} w-full border-emerald-500/50 text-emerald-400`} disabled={busy !== null} onClick={() => generateAll()}>
           {busy === 'images' ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
           {progress || (remainingPanels > 0
-            ? `Generate all images — sequential queue (${remainingPanels} remaining)`
-            : `All ${totalPlannedPanels} panel images generated`)}
+            ? t('generate.allQueued', { count: remainingPanels })
+            : t('generate.allDone', { count: totalPlannedPanels }))}
         </button>
       )}
       {project.director && (
         <div className="border-t border-border pt-3 space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <button className={`${button} border-amber-500/50 text-amber-300`} disabled={busy !== null} onClick={cleanUpCurrentComicText}>
-              <Type size={12} /> Repair comic and text
+              <Type size={12} /> {t('lettering.repair')}
             </button>
             <button className={`${button} border-accent-blue/50 text-accent-blue`} disabled={busy !== null} onClick={regenerateAllArtwork}>
-              <ImagePlus size={12} /> Regenerate all artwork
+              <ImagePlus size={12} /> {t('generate.regenerateAll')}
             </button>
             <button className={`${button} col-span-2`} disabled={busy !== null} onClick={varyCurrentLayouts}>
-              <PanelTop size={12} /> Vary page layouts
+              <PanelTop size={12} /> {t('generate.varyLayouts')}
             </button>
           </div>
           <p className="text-[9px] text-text-muted">
-            Repair and layout changes keep every existing image. Artwork regeneration may consume provider credits.
+            {t('lettering.keepImages')}
           </p>
           <div className="rounded-lg border border-border bg-bg-tertiary/30 p-2.5 space-y-2">
-            <strong className="text-[10px] uppercase tracking-wide text-text-muted">Text-only editing and translation</strong>
+            <strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('lettering.title')}</strong>
             <p className="text-[9px] text-text-muted">
-              The LLM changes only captions, dialogue and effects. Images and visual prompts are untouched.
-              Manual text edits below are used as the source of truth.
+              {t('lettering.hint')}
             </p>
             <button
               className={`${button} w-full border-amber-500/50 text-amber-300`}
@@ -1863,14 +1875,14 @@ export function ComicDirectorPanel({
               )}
             >
               {busy === 'translation' ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
-              Fix mixed-language lines · {project.language || project.director?.plan.language || project.director?.input.language}
+              {t('lettering.fixMixed', { language: project.language || project.director?.plan.language || project.director?.input.language })}
             </button>
             <textarea
               className={input}
               rows={2}
               value={textInstruction}
               onChange={event => setTextInstruction(event.target.value)}
-              placeholder="Optional rewrite instruction: make it drier, shorten exposition, preserve character voices…"
+              placeholder={t('lettering.rewritePlaceholder')}
             />
             <button
               className={`${button} w-full`}
@@ -1878,14 +1890,14 @@ export function ComicDirectorPanel({
               onClick={() => applyTextOperation('rewrite')}
             >
               {busy === 'text' ? <Loader2 size={12} className="animate-spin" /> : <Type size={12} />}
-              Rewrite text only
+              {t('lettering.rewrite')}
             </button>
             <input
               className={input}
               list="comic-export-languages"
               value={targetLanguage}
               onChange={event => setTargetLanguage(event.target.value)}
-              placeholder="Target language — type any language"
+              placeholder={t('lettering.targetLanguage')}
             />
             <datalist id="comic-export-languages">
               {TRANSLATION_LANGUAGES.map(language =>
@@ -1897,7 +1909,7 @@ export function ComicDirectorPanel({
                 disabled={busy !== null || !targetLanguage.trim()}
                 onClick={() => applyTextOperation('translate')}
               >
-                Translate in editor
+                {t('lettering.translateEditor')}
               </button>
               <button
                 className={`${button} border-emerald-500/50 text-emerald-400`}
@@ -1905,18 +1917,18 @@ export function ComicDirectorPanel({
                 onClick={exportTranslatedPdf}
               >
                 {busy === 'translation' ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-                Export translated PDF
+                {t('lettering.exportPdf')}
               </button>
             </div>
           </div>
           <div>
-            <strong className="text-[10px] uppercase tracking-wide text-text-muted">Review plan</strong>
-            <p className="text-[9px] text-text-muted mt-1">The queue submits one panel at a time, preserves completed artwork and resumes from the first missing panel.</p>
+            <strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('planning.reviewPlan')}</strong>
+            <p className="text-[9px] text-text-muted mt-1">{t('planning.reviewHint')}</p>
           </div>
           {project.director.plan.storyStructure?.length ? (
             <details className="rounded-lg border border-border bg-bg-tertiary/30 p-2" open>
               <summary className="cursor-pointer text-[10px] font-medium text-text-secondary">
-                Dramatic structure · {project.director.plan.storyStructure.length} page beats
+                {t('planning.structure', { count: project.director.plan.storyStructure.length })}
               </summary>
               <ol className="mt-2 space-y-2">
                 {project.director.plan.storyStructure.map(beat => (
@@ -1925,7 +1937,7 @@ export function ComicDirectorPanel({
                       {beat.pageNumber}. {beat.stage}
                     </strong>
                     <span className="block">{beat.goal}</span>
-                    <span className="block text-amber-300/80">Turn: {beat.turningPoint}</span>
+                    <span className="block text-amber-300/80">{t('planning.turn', { text: beat.turningPoint })}</span>
                   </li>
                 ))}
               </ol>
@@ -1934,8 +1946,8 @@ export function ComicDirectorPanel({
           <details className="rounded-lg border border-border bg-bg-tertiary/30 p-2">
             <summary className="cursor-pointer text-[10px] font-medium text-text-secondary">
               {(project.director.plan.styleBible || '').trim()
-                ? 'Visual continuity bible created by the LLM'
-                : 'No separate visual bible needed'}
+                ? t('planning.bibleCreated')
+                : t('planning.bibleEmpty')}
             </summary>
             {(project.director.plan.styleBible || '').trim() ? (
               <p className="mt-2 whitespace-pre-wrap text-[9px] leading-relaxed text-text-muted">
@@ -1943,32 +1955,32 @@ export function ComicDirectorPanel({
               </p>
             ) : (
               <p className="mt-2 text-[9px] text-text-muted">
-                Comic Director left it empty, so no visual-bible block is sent to the image generator.
+                {t('planning.bibleUnused')}
               </p>
             )}
           </details>
           {hasBrokenEncoding && (
             <button className={`${button} w-full border-amber-500/50 text-amber-300`} onClick={repairCurrentPlanEncoding}>
-              Repair Spanish text encoding in this plan
+              {t('planning.repairEncoding')}
             </button>
           )}
           {project.director.plan.pages.map((page, pageIndex) => (
             <details key={page.pageNumber} open={pageIndex === 0} className="rounded-lg border border-border bg-bg-tertiary/30">
-              <summary className="cursor-pointer px-2 py-2 text-xs font-medium text-text-primary">Page {page.pageNumber} · {page.panels.length} panels</summary>
+              <summary className="cursor-pointer px-2 py-2 text-xs font-medium text-text-primary">{t('script.pagePanels', { n: page.pageNumber, count: page.panels.length })}</summary>
               <div className="p-2 pt-0 space-y-2">
                 {page.panels.map((panel, panelIndex) => (
                   <div key={panel.id} className="rounded border border-border bg-bg-secondary p-2 space-y-2">
                     <div className="flex justify-between text-[10px]">
-                      <b className="text-text-primary">Panel {panelIndex + 1}</b>
+                      <b className="text-text-primary">{t('planning.panel', { n: panelIndex + 1 })}</b>
                       <span className="text-text-muted">{panel.framing}</span>
                     </div>
-                    <Field label="Image prompt">
+                    <Field label={t('planning.imagePrompt')}>
                       <textarea className={input} rows={5} value={panel.imagePrompt}
                         onChange={event => updatePlanPanel(pageIndex, panelIndex, { imagePrompt: event.target.value })} />
                     </Field>
                     {project.director?.input.productionMode === 'storyboard' ? (
                       <>
-                        <Field label="Video motion / performance prompt">
+                        <Field label={t('planning.videoPrompt')}>
                           <textarea
                             className={input}
                             rows={7}
@@ -1979,7 +1991,7 @@ export function ComicDirectorPanel({
                           />
                         </Field>
                         <div className="grid grid-cols-[1fr_90px] gap-2">
-                          <Field label="Camera">
+                          <Field label={t('planning.camera')}>
                             <select
                               className={input}
                               value={panel.cameraMove || 'none'}
@@ -1987,14 +1999,14 @@ export function ComicDirectorPanel({
                                 cameraMove: event.target.value as ComicPlanPanel['cameraMove'],
                               }, ['camera'])}
                             >
-                              <option value="none">No forced camera move</option>
-                              <option value="push-in">Push in</option>
-                              <option value="pull-out">Pull out</option>
-                              <option value="pan-left">Pan left</option>
-                              <option value="pan-right">Pan right</option>
+                              <option value="none">{t('planning.noCamera')}</option>
+                              <option value="push-in">{t('planning.pushIn')}</option>
+                              <option value="pull-out">{t('planning.pullOut')}</option>
+                              <option value="pan-left">{t('planning.panLeft')}</option>
+                              <option value="pan-right">{t('planning.panRight')}</option>
                             </select>
                           </Field>
-                          <Field label="Seconds">
+                          <Field label={t('planning.seconds')}>
                             <input
                               className={input}
                               type="number"
@@ -2010,7 +2022,7 @@ export function ComicDirectorPanel({
                         </div>
                       </>
                     ) : (
-                      <Field label="Dialogue / captions">
+                      <Field label={t('lettering.dialogue')}>
                         <PanelScriptEditor
                           panel={panel}
                           onCommit={value => commitPanelText(pageIndex, panelIndex, value)}
@@ -2019,7 +2031,7 @@ export function ComicDirectorPanel({
                     )}
                     <button className={`${button} w-full`} disabled={singleBusy !== null || busy !== null} onClick={() => generateSingle(pageIndex, panelIndex)}>
                       {singleBusy === panel.id ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
-                      {project.director!.completedPanelIds.includes(panel.id) ? 'Regenerate panel' : 'Generate panel'}
+                      {project.director!.completedPanelIds.includes(panel.id) ? t('generate.regeneratePanel') : t('generate.panel')}
                     </button>
                   </div>
                 ))}
@@ -2032,7 +2044,19 @@ export function ComicDirectorPanel({
   )
 }
 
+const HISTORY_REASON_KEYS: Record<string, string> = {
+  'Before history restore': 'history.reason.beforeRestore',
+  'Comic opened or created': 'history.reason.opened',
+  'Automatic editing checkpoint': 'history.reason.auto',
+  'Manual save': 'history.reason.save',
+  'Before comic import': 'history.reason.beforeImport',
+  'Before opening saved comic': 'history.reason.beforeOpen',
+  'Before creating a new comic': 'history.reason.beforeNew',
+}
+
 export function ComicEditorPanel() {
+  const { t } = useUiTranslation('comics')
+  const { t: tCommon } = useUiTranslation('common')
   const project = useComicStore(state => state.project)
   const persistedName = useComicStore(state => state.persistedName)
   const dirty = useComicStore(state => state.dirty)
@@ -2079,7 +2103,7 @@ export function ComicEditorPanel() {
   const selectSideTab = (nextTab: SideTab) => {
     if (sideTab === 'pre' && nextTab !== 'pre' && preDirty
       && !window.confirm(
-        'Leave PRE with unsaved shot edits? They will remain in browser recovery for this exact PRE fingerprint when you return.',
+        t('dialogs.leavePre'),
       )) return
     setSideTab(nextTab)
     if (nextTab === 'pre') setSidePanelCollapsed(true)
@@ -2100,25 +2124,25 @@ export function ComicEditorPanel() {
     setSideTab('director')
     setSidePanelCollapsed(false)
     if (!director) {
-      notify({ kind: 'error', text: 'Create or attach a Comic Director plan before generating panel artwork.' })
+      notify({ kind: 'error', text: t('generate.needPlan') })
       return
     }
     if (!director.scriptApprovedAt && !window.confirm(
-      'This script version has not been approved in the Script tab. Generate artwork anyway?',
+      t('generate.unapproved'),
     )) return
     setGeneratingArtwork(true)
     try {
       const result = await generateDirectorArtwork({
         onProgress: (message, current, total) => notify({
           kind: 'ok',
-          text: `${message} (${current}/${total})`,
+          text: t('generate.progressWrap', { message, current, total }),
         }),
       })
       notify({
         kind: 'ok',
         text: result.total
-          ? `Comic artwork complete: ${result.generated} panel images generated and placed.`
-          : 'All comic panels already have artwork.',
+          ? t('generate.artworkComplete', { count: result.generated })
+          : t('generate.alreadyHave'),
       })
       void useStore.getState().loadOutputs()
     } catch (error) {
@@ -2162,7 +2186,7 @@ export function ComicEditorPanel() {
     void refreshComicHistory()
   }
   const restoreComicHistory = async (entry: api.ComicHistoryEntry) => {
-    if (dirty && !confirm('Restore this checkpoint as a new editable copy? Your current comic will be backed up first.')) return
+    if (dirty && !confirm(t('dialogs.restoreHistory'))) return
     setHistoryLoading(true)
     try {
       await checkpointCurrent('Before history restore')
@@ -2171,7 +2195,7 @@ export function ComicEditorPanel() {
       state.setProject(restored.project, null)
       useComicStore.getState().patchProject({})
       setHistoryOpen(false)
-      notify({ kind: 'ok', text: `Restored “${entry.title}” as an unsaved editable copy.` })
+      notify({ kind: 'ok', text: t('notices.restored', { title: entry.title }) })
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
     } finally {
@@ -2311,7 +2335,7 @@ export function ComicEditorPanel() {
     const preset = COMIC_LAYOUTS.find(item => item.name === name)
     if (!page || !preset) return
     const nested = page.elements.some(element => element.parentId)
-    if (nested && !confirm('Replace this page layout? Content currently inside panels will be removed.')) return
+    if (nested && !confirm(t('dialogs.replaceLayout'))) return
     state.updatePage(page.id, {
       elements: [
         ...page.elements.filter(element => element.type !== 'panel' && !element.parentId),
@@ -2336,7 +2360,7 @@ export function ComicEditorPanel() {
       if (withPreview) {
         await checkpointCurrent('Manual save', useComicStore.getState())
         useStore.getState().loadOutputs()
-        notify({ kind: 'ok', text: 'Comic saved in the active HocusPocus workspace.' })
+        notify({ kind: 'ok', text: t('notices.saved') })
       }
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
@@ -2355,7 +2379,7 @@ export function ComicEditorPanel() {
 
   const importProject = async (file?: File) => {
     if (!file) return
-    if (dirty && !confirm('Import this comic and replace the current unsaved work? A recovery checkpoint will be created first.')) {
+    if (dirty && !confirm(t('dialogs.importReplace'))) {
       if (importRef.current) importRef.current.value = ''
       return
     }
@@ -2376,7 +2400,7 @@ export function ComicEditorPanel() {
         asset.missing = false
       }
       useComicStore.getState().setProject(parsed)
-      notify({ kind: 'ok', text: 'Comic imported; embedded legacy assets were persisted in HocusPocus.' })
+      notify({ kind: 'ok', text: t('notices.imported') })
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
     } finally {
@@ -2386,11 +2410,11 @@ export function ComicEditorPanel() {
 
   const openSaved = async (name: string) => {
     if (!name) return
-    if (dirty && !confirm('Open this saved comic and discard unsaved changes?')) return
+    if (dirty && !confirm(t('dialogs.openDiscard'))) return
     try {
       await checkpointCurrent('Before opening saved comic')
       useComicStore.getState().setProject(await api.loadComicProject(name), name)
-      notify({ kind: 'ok', text: 'Comic opened from the active workspace.' })
+      notify({ kind: 'ok', text: t('notices.opened') })
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
     }
@@ -2399,8 +2423,8 @@ export function ComicEditorPanel() {
   const runExport = async (kind: 'pdf' | 'cbz' | 'png') => {
     setExporting(kind)
     try {
-      if (kind === 'pdf') await exportComicPdf((current, total) => setExporting(`PDF ${current}/${total}`))
-      if (kind === 'cbz') await exportComicCbz((current, total) => setExporting(`CBZ ${current}/${total}`))
+      if (kind === 'pdf') await exportComicPdf((current, total) => setExporting(t('export.pdfProgress', { current, total })))
+      if (kind === 'cbz') await exportComicCbz((current, total) => setExporting(t('export.cbzProgress', { current, total })))
       if (kind === 'png') await exportComicPagePng()
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
@@ -2410,7 +2434,7 @@ export function ComicEditorPanel() {
   }
 
   const newProject = async () => {
-    if (dirty && !confirm('Create a new comic and discard unsaved changes?')) return
+    if (dirty && !confirm(t('dialogs.newDiscard'))) return
     await checkpointCurrent('Before creating a new comic')
     window.localStorage.removeItem('maestro-story-comic-draft')
     window.localStorage.removeItem('maestro-story-comic-auto-start')
@@ -2426,22 +2450,22 @@ export function ComicEditorPanel() {
         {toolbarCollapsed ? (
           <>
             <span className="min-w-0 truncate text-xs font-semibold text-text-primary">{project.title}</span>
-            {dirty && <span className="text-[10px] text-yellow-400">Unsaved</span>}
+            {dirty && <span className="text-[10px] text-yellow-400">{t('toolbar.unsaved')}</span>}
             <button
               className={`${button} ml-auto border-emerald-500/50 text-emerald-300`}
               disabled={generatingArtwork}
               onClick={() => void generateComicArtwork()}
-              title={project.director ? 'Generate every unfinished panel image sequentially' : 'Open Comic Director to create a plan'}
+              title={project.director ? t('toolbar.generateTitle') : t('toolbar.generateNeedPlan')}
             >
               {generatingArtwork ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-              {remainingArtworkPanels > 0 ? `Generate comic (${remainingArtworkPanels})` : totalArtworkPanels ? 'Comic generated' : 'Generate comic'}
+              {remainingArtworkPanels > 0 ? t('generate.remaining', { count: remainingArtworkPanels }) : totalArtworkPanels ? t('generate.done') : t('generate.action')}
             </button>
             <button
               className={button}
               onClick={() => setToolbarCollapsed(false)}
-              title="Expand comic toolbar"
+              title={t('toolbar.expand')}
             >
-              <ChevronDown size={13} /> Tools
+              <ChevronDown size={13} /> {t('toolbar.tools')}
             </button>
           </>
         ) : (
@@ -2451,48 +2475,48 @@ export function ComicEditorPanel() {
               onChange={event => patchProject({ title: event.target.value })}
               className="w-48 bg-transparent text-sm font-semibold text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
             />
-            {dirty && <span className="text-[10px] text-yellow-400">Unsaved</span>}
+            {dirty && <span className="text-[10px] text-yellow-400">{t('toolbar.unsaved')}</span>}
             <div className="h-5 border-l border-border mx-1" />
-            <button className={button} onClick={() => void newProject()}><Plus size={13} /> New</button>
-            <select className={`${input} w-36`} value="" onChange={event => applyLayout(event.target.value)} title="Apply a panel layout">
-              <option value="">Layouts…</option>
-              {COMIC_LAYOUTS.map(layout => <option key={layout.name} value={layout.name}>{layout.name}</option>)}
+            <button className={button} onClick={() => void newProject()}><Plus size={13} /> {t('toolbar.new')}</button>
+            <select className={`${input} w-36`} value="" onChange={event => applyLayout(event.target.value)} title={t('toolbar.layoutTitle')}>
+              <option value="">{t('toolbar.layouts')}</option>
+              {COMIC_LAYOUTS.map(layout => <option key={layout.name} value={layout.name}>{t(`layout.${layout.name}`)}</option>)}
             </select>
-            <select className={`${input} w-32`} value="" onChange={event => addEffect(event.target.value)} title="Add a pop-art effect">
-              <option value="">Effects…</option>
+            <select className={`${input} w-32`} value="" onChange={event => addEffect(event.target.value)} title={t('toolbar.effectTitle')}>
+              <option value="">{t('toolbar.effects')}</option>
               {COMIC_EFFECTS.map(effect => <option key={effect.name} value={effect.name}>{effect.name}</option>)}
             </select>
-            <select className={`${input} w-40`} value="" onChange={event => openSaved(event.target.value)} title="Open a saved comic">
-              <option value="">Open saved…</option>
+            <select className={`${input} w-40`} value="" onChange={event => openSaved(event.target.value)} title={t('toolbar.openTitle')}>
+              <option value="">{t('toolbar.openSaved')}</option>
               {comicOutputs.map(output => <option key={output.name} value={output.name}>{output.name}</option>)}
             </select>
-            <button className={button} onClick={openComicHistory} title="Browse recoverable comic versions">
-              <HistoryIcon size={13} /> History
+            <button className={button} onClick={openComicHistory} title={t('toolbar.historyTitle')}>
+              <HistoryIcon size={13} /> {t('toolbar.history')}
             </button>
-            <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button>
+            <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> {tCommon('actions.import')}</button>
             <input ref={importRef} type="file" accept=".json,.comic.json" className="hidden" onChange={event => importProject(event.target.files?.[0])} />
-            <button className={button} disabled={saving} onClick={() => save(true)}>{saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save</button>
+            <button className={button} disabled={saving} onClick={() => save(true)}>{saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {tCommon('actions.save')}</button>
             <button
               className={`${button} border-emerald-500/50 text-emerald-300`}
               disabled={generatingArtwork}
               onClick={() => void generateComicArtwork()}
-              title={project.director ? 'Generate every unfinished panel image sequentially' : 'Open Comic Director to create a plan'}
+              title={project.director ? t('toolbar.generateTitle') : t('toolbar.generateNeedPlan')}
             >
               {generatingArtwork ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-              {remainingArtworkPanels > 0 ? `Generate comic (${remainingArtworkPanels})` : totalArtworkPanels ? 'Comic generated' : 'Generate comic'}
+              {remainingArtworkPanels > 0 ? t('generate.remaining', { count: remainingArtworkPanels }) : totalArtworkPanels ? t('generate.done') : t('generate.action')}
             </button>
             <button className={button} disabled={!history.past.length} onClick={undo}><Undo2 size={13} /></button>
             <button className={button} disabled={!history.future.length} onClick={redo}><Redo2 size={13} /></button>
-            <button className={`${button} ${snapEnabled ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSnapEnabled(!snapEnabled)}>Grid</button>
+            <button className={`${button} ${snapEnabled ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSnapEnabled(!snapEnabled)}>{t('toolbar.grid')}</button>
             <div className="ml-auto flex items-center gap-1">
-              <button className={button} onClick={exportComicJson}><FileJson size={13} /> JSON</button>
-              <button className={button} disabled={!!exporting} onClick={() => runExport('png')}>PNG</button>
-              <button className={button} disabled={!!exporting} onClick={() => runExport('cbz')}>CBZ</button>
+              <button className={button} onClick={exportComicJson}><FileJson size={13} /> {t('toolbar.json')}</button>
+              <button className={button} disabled={!!exporting} onClick={() => runExport('png')}>{t('toolbar.png')}</button>
+              <button className={button} disabled={!!exporting} onClick={() => runExport('cbz')}>{t('toolbar.cbz')}</button>
               <button className={`${button} border-accent-blue/50`} disabled={!!exporting} onClick={() => runExport('pdf')}>
-                {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} {exporting || 'PDF'}
+                {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} {exporting || t('toolbar.pdf')}
               </button>
               <TranslatedPdfExport notify={notify} />
-              <button className={button} onClick={() => setToolbarCollapsed(true)} title="Collapse comic toolbar">
+              <button className={button} onClick={() => setToolbarCollapsed(true)} title={t('toolbar.collapse')}>
                 <ChevronUp size={13} />
               </button>
             </div>
@@ -2507,16 +2531,16 @@ export function ComicEditorPanel() {
           >
             <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
               <div>
-                <h2 className="text-sm font-semibold text-text-primary">Comic history</h2>
+                <h2 className="text-sm font-semibold text-text-primary">{t('history.title')}</h2>
                 <p className="text-[10px] text-text-muted">
-                  Durable recovery checkpoints in workspace “{activeWorkspace}”. Restoring creates a new unsaved copy.
+                  {t('history.hint', { workspace: activeWorkspace })}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <button className={button} disabled={historyLoading} onClick={() => void refreshComicHistory()}>
-                  {historyLoading ? <Loader2 size={13} className="animate-spin" /> : <HistoryIcon size={13} />} Refresh
+                  {historyLoading ? <Loader2 size={13} className="animate-spin" /> : <HistoryIcon size={13} />} {tCommon('actions.refresh')}
                 </button>
-                <button className={button} onClick={() => setHistoryOpen(false)} aria-label="Close comic history">
+                <button className={button} onClick={() => setHistoryOpen(false)} aria-label={t('history.closeAria')}>
                   <X size={13} />
                 </button>
               </div>
@@ -2524,11 +2548,11 @@ export function ComicEditorPanel() {
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               {historyLoading && comicHistory.length === 0 ? (
                 <div className="flex items-center justify-center gap-2 py-12 text-xs text-text-muted">
-                  <Loader2 size={14} className="animate-spin" /> Loading checkpoints…
+                  <Loader2 size={14} className="animate-spin" /> {t('history.loading')}
                 </div>
               ) : comicHistory.length === 0 ? (
                 <div className="py-12 text-center text-xs text-text-muted">
-                  No comic checkpoints yet. A checkpoint is created after editing pauses and before destructive actions.
+                  {t('history.empty')}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -2545,12 +2569,16 @@ export function ComicEditorPanel() {
                         <div className="flex items-center gap-2">
                           <span className="truncate text-xs font-medium text-text-primary">{entry.title}</span>
                           {entry.comicId === project.id && (
-                            <span className="shrink-0 rounded bg-accent-blue/15 px-1.5 py-0.5 text-[9px] text-accent-blue">Current comic</span>
+                            <span className="shrink-0 rounded bg-accent-blue/15 px-1.5 py-0.5 text-[9px] text-accent-blue">{t('history.current')}</span>
                           )}
                         </div>
                         <div className="mt-1 truncate text-[10px] text-text-muted">
-                          {entry.reason} · {entry.pageCount} pages · {entry.assetCount} assets
-                          {entry.persistedName ? ` · ${entry.persistedName}` : ''}
+                          {t('history.meta', {
+                            reason: HISTORY_REASON_KEYS[entry.reason] ? t(HISTORY_REASON_KEYS[entry.reason]) : entry.reason,
+                            pages: entry.pageCount,
+                            assets: entry.assetCount,
+                            saved: entry.persistedName ? ` · ${entry.persistedName}` : '',
+                          })}
                         </div>
                         <div className="mt-0.5 text-[9px] text-text-muted">
                           {new Date(entry.createdAt).toLocaleString()}
@@ -2561,7 +2589,7 @@ export function ComicEditorPanel() {
                         disabled={historyLoading}
                         onClick={() => void restoreComicHistory(entry)}
                       >
-                        Restore copy
+                        {t('history.restore')}
                       </button>
                     </div>
                   ))}
@@ -2581,10 +2609,10 @@ export function ComicEditorPanel() {
             <>
               <div className="shrink-0 border-b border-border p-2 flex items-center gap-2 text-xs text-text-muted">
                 <button className={button} onClick={() => selectSideTab('video')}>
-                  <ChevronLeft size={12} /> Back to comic
+                  <ChevronLeft size={12} /> {t('side.back')}
                 </button>
-                <span className="font-semibold text-text-primary">PRE · cinematic shot review</span>
-                <span className="hidden sm:inline">The comic remains unchanged while you prepare and test the film.</span>
+                <span className="font-semibold text-text-primary">{t('side.preTitle')}</span>
+                <span className="hidden sm:inline">{t('side.preNote')}</span>
               </div>
               <div className="flex-1 min-h-0 overflow-auto">
                 <ComicVideoPreflightPanel notify={notifyWorkflow} onDirtyChange={setPreDirty} />
@@ -2597,7 +2625,7 @@ export function ComicEditorPanel() {
                   className={button}
                   disabled={currentPageIndex === 0}
                   onClick={() => goToPage(currentPageIndex - 1)}
-                  title="Previous page"
+                  title={t('pages.previous')}
                 >
                   <ChevronLeft size={12} />
                 </button>
@@ -2605,17 +2633,17 @@ export function ComicEditorPanel() {
                   className={`${input} w-28`}
                   value={currentPageId}
                   onChange={event => useComicStore.getState().setCurrentPage(event.target.value)}
-                  aria-label="Current comic page"
+                  aria-label={t('pages.currentAria')}
                 >
                   {project.pages.map((page, index) => (
-                    <option key={page.id} value={page.id}>Page {index + 1} / {project.pages.length}</option>
+                    <option key={page.id} value={page.id}>{t('pages.pageOf', { current: index + 1, total: project.pages.length })}</option>
                   ))}
                 </select>
                 <button
                   className={button}
                   disabled={currentPageIndex >= project.pages.length - 1}
                   onClick={() => goToPage(currentPageIndex + 1)}
-                  title="Next page"
+                  title={t('pages.next')}
                 >
                   <ChevronRight size={12} />
                 </button>
@@ -2629,9 +2657,9 @@ export function ComicEditorPanel() {
                     useComicStore.getState().setSelected(null)
                     setPreviewOpen(true)
                   }}
-                  title="Open a full-screen, read-only page preview"
+                  title={t('preview.fitTitle')}
                 >
-                  <Maximize2 size={12} /> Fit
+                  <Maximize2 size={12} /> {t('preview.fit')}
                 </button>
                 <span className="ml-2">{project.format.width} × {project.format.height}</span>
               </div>
@@ -2652,32 +2680,32 @@ export function ComicEditorPanel() {
             <button
               className="h-full flex flex-col items-center gap-2 py-3 text-[10px] text-text-muted hover:text-accent-blue"
               onClick={() => setSidePanelCollapsed(false)}
-              title="Expand assets and inspector"
+              title={t('side.expand')}
             >
               <ChevronLeft size={15} />
-              <span className="[writing-mode:vertical-rl]">Comic tools</span>
+              <span className="[writing-mode:vertical-rl]">{t('side.tools')}</span>
             </button>
           ) : (
             <>
               <div className="flex border-b border-border">
                 <div className="grid flex-1 grid-cols-3">
                   {([
-                    ['assets', 'Assets'],
-                    ['inspector', 'Inspector'],
-                    ['script', 'Script'],
-                    ['characters', 'Characters'],
-                    ['quality', 'Quality'],
-                    ['video', 'Video'],
-                    ['pre', 'PRE'],
-                    ['director', 'Director'],
+                    ['assets', 'tabs.assets'],
+                    ['inspector', 'tabs.inspector'],
+                    ['script', 'tabs.script'],
+                    ['characters', 'tabs.characters'],
+                    ['quality', 'tabs.quality'],
+                    ['video', 'tabs.video'],
+                    ['pre', 'tabs.pre'],
+                    ['director', 'tabs.director'],
                   ] as const).map(([id, label]) => (
-                    <button key={id} className={`py-2 text-[11px] ${sideTab === id ? 'text-accent-blue border-b-2 border-accent-blue' : 'text-text-muted'}`} onClick={() => selectSideTab(id)}>{label}</button>
+                    <button key={id} className={`py-2 text-[11px] ${sideTab === id ? 'text-accent-blue border-b-2 border-accent-blue' : 'text-text-muted'}`} onClick={() => selectSideTab(id)}>{t(label)}</button>
                   ))}
                 </div>
                 <button
                   className="w-9 border-l border-border text-text-muted hover:text-accent-blue"
                   onClick={() => setSidePanelCollapsed(true)}
-                  title="Collapse assets and inspector"
+                  title={t('side.collapse')}
                 >
                   <ChevronRight size={15} className="mx-auto" />
                 </button>
@@ -2689,7 +2717,7 @@ export function ComicEditorPanel() {
                 {sideTab === 'characters' && <ComicCharactersPanel generateReference={generateCharacterReference} notify={notifyWorkflow} />}
                 {sideTab === 'quality' && <ComicQualityPanel notify={notifyWorkflow} />}
                 {sideTab === 'video' && <ComicVideoPanel notify={notifyWorkflow} />}
-                {sideTab === 'pre' && <p className="text-xs text-text-muted">PRE is open in the main workspace so source and prepared frames can use the full screen.</p>}
+                {sideTab === 'pre' && <p className="text-xs text-text-muted">{t('side.preHint')}</p>}
                 {sideTab === 'director' && <ComicDirectorPanel notify={notify} />}
               </div>
             </>
@@ -2697,14 +2725,14 @@ export function ComicEditorPanel() {
         </aside>
       </div>
       {previewOpen && (
-        <div className="fixed inset-0 z-[2000] flex flex-col bg-[#090a0d]/95 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Read-only comic preview">
+        <div className="fixed inset-0 z-[2000] flex flex-col bg-[#090a0d]/95 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={t('preview.aria')}>
           <div className="shrink-0 flex items-center gap-2 border-b border-white/10 bg-black/40 px-3 py-2 text-xs text-white/70">
-            <span className="font-medium text-white">Read-only preview</span>
-            <span>Page {currentPageIndex + 1} / {project.pages.length}</span>
+            <span className="font-medium text-white">{t('preview.title')}</span>
+            <span>{t('pages.pageOf', { current: currentPageIndex + 1, total: project.pages.length })}</span>
             <div className="ml-auto flex items-center gap-1.5">
-              <button className={button} disabled={currentPageIndex === 0} onClick={() => goToPage(currentPageIndex - 1)}><ChevronLeft size={13} /> Previous</button>
-              <button className={button} disabled={currentPageIndex >= project.pages.length - 1} onClick={() => goToPage(currentPageIndex + 1)}>Next <ChevronRight size={13} /></button>
-              <button className={button} onClick={() => setPreviewOpen(false)}><X size={13} /> Close</button>
+              <button className={button} disabled={currentPageIndex === 0} onClick={() => goToPage(currentPageIndex - 1)}><ChevronLeft size={13} /> {t('preview.previous')}</button>
+              <button className={button} disabled={currentPageIndex >= project.pages.length - 1} onClick={() => goToPage(currentPageIndex + 1)}>{t('preview.next')} <ChevronRight size={13} /></button>
+              <button className={button} onClick={() => setPreviewOpen(false)}><X size={13} /> {tCommon('actions.close')}</button>
             </div>
           </div>
           <div ref={previewViewportRef} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6">

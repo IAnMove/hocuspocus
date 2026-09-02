@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { Box, FileJson, Image as ImageIcon, Loader2, Play, Sparkles, Square, Upload, Video, X } from 'lucide-react'
 import { fetchOutputMetadata, generateLlmText, getFileUrl, getOutputThumbnailUrl, uploadImage, type ApiOutput } from '../../api/client'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import {
   EXAMPLE_SAUCER_CRUISE_RECIPE,
@@ -39,26 +40,30 @@ type PickerKind = 'image' | 'model3d'
 
 const INTENT_EXAMPLES = [
   {
-    label: 'Character entrance',
+    key: 'entrance' as const,
     text: 'Create a small armored explorer who walks into a misty forest and stops before a glowing stone door. Vertical, 8 seconds, slow camera push-in.',
   },
   {
-    label: 'Vehicle fly-by',
+    key: 'flyby' as const,
     text: 'A silver saucer rises from behind a snowy ridge, pauses, then crosses left to right. Wide cinematic landscape, 8 seconds, gentle side camera.',
   },
   {
-    label: 'Product turntable',
+    key: 'turntable' as const,
     text: 'A premium red sneaker rotates slowly at the center on a clean warm studio background. Fixed camera, 6 seconds, product reveal.',
   },
 ] as const
 
-function assetPlanLabel(asset: SceneRecipe['assets'][number]): string {
-  const type = asset.kind === 'model3d' ? '3D model' : asset.kind === 'video' ? 'moving plate' : 'still plate'
-  return asset.source ? `Use ${type}: ${asset.source}` : `Generate ${type}: ${asset.prompt || asset.id}`
+function assetKindLabel(kind: RecipeAssetKind, t: (key: string) => string) {
+  return kind === 'model3d' ? t('recipe.typeModel') : kind === 'video' ? t('recipe.typeVideo') : t('recipe.typeStill')
 }
 
-function shotPlanLabel(shot: SceneRecipeShot): string {
-  if (shot.template) return `${shot.template} · ${Object.values(shot.slots ?? {}).join(' · ') || 'template slots'}`
+function assetPlanLabel(asset: SceneRecipe['assets'][number], t: (key: string, options?: Record<string, string>) => string): string {
+  const type = assetKindLabel(asset.kind, t)
+  return asset.source ? t('recipe.useAsset', { type, source: asset.source }) : t('recipe.generateAsset', { type, prompt: asset.prompt || asset.id })
+}
+
+function shotPlanLabel(shot: SceneRecipeShot, t: (key: string) => string): string {
+  if (shot.template) return `${shot.template} · ${Object.values(shot.slots ?? {}).join(' · ') || t('recipe.templateSlots')}`
   const layers = shot.layers ?? []
   const camera = layers.find(layer => layer.type === 'camera')?.cameraPreset || 'camera-locked'
   const action = layers
@@ -112,6 +117,7 @@ function AssetThumb({
   onRemove?: () => void
   disabled?: boolean
 }) {
+  const { t } = useUiTranslation('scene3d')
   const [broken, setBroken] = useState(false)
   const showImage = Boolean(previewUrl) && !broken
   return (
@@ -134,7 +140,7 @@ function AssetThumb({
         )}
         <span className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1 py-0.5 text-[8px] text-white">{name}</span>
         <span className="absolute left-1 top-1 rounded bg-black/65 px-1 text-[7px] uppercase tracking-wide text-cyan-100">
-          {kind === 'model3d' ? 'GLB' : kind === 'video' ? 'Video' : 'Image'}
+          {kind === 'model3d' ? t('recipe.kindGlb') : kind === 'video' ? t('recipe.kindVideo') : t('recipe.kindImage')}
         </span>
       </button>
       {onRemove && (
@@ -143,7 +149,7 @@ function AssetThumb({
           disabled={disabled}
           onClick={event => { event.stopPropagation(); onRemove() }}
           className="absolute -right-1 -top-1 z-10 rounded-full border border-border bg-black/80 p-0.5 text-red-200 hover:bg-red-600"
-          aria-label={`Remove ${name}`}
+          aria-label={t('recipe.removeAria', { name })}
         >
           <X size={10} />
         </button>
@@ -163,6 +169,7 @@ export function SceneRecipePanel({
   characterKits?: CharacterKitLibrary
   onApply: (recipe: SceneRecipe, scene: Scene, status: (message: string) => void, prompt: string) => Promise<void>
 }) {
+  const { t } = useUiTranslation('scene3d')
   const workspace = useStore(s => s.activeWorkspace)
   const loadOutputs = useStore(s => s.loadOutputs)
   // A natural-language request should work without first understanding the
@@ -247,9 +254,9 @@ export function SceneRecipePanel({
         return [...current, ...next.filter(asset => !seen.has(asset.source))]
       })
       await loadOutputs()
-      setStatus(`Added ${next.length} file${next.length === 1 ? '' : 's'} from disk.`)
+      setStatus(t('recipe.addedFiles', { count: next.length }))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not upload the file. Is Lab running?')
+      setError(reason instanceof Error ? reason.message : t('recipe.uploadFailed'))
     } finally {
       setBusy(null)
     }
@@ -259,7 +266,7 @@ export function SceneRecipePanel({
     if (!intent.trim()) return
     setBusy('write')
     setError(null)
-    setStatus('Interpreting the request as shots, assets and camera moves…')
+    setStatus(t('recipe.interpreting'))
     try {
       const loaded = selected.map(item => ({
         name: item.name,
@@ -289,7 +296,7 @@ export function SceneRecipePanel({
         } catch (validationError) {
           if (attempt >= 2) throw validationError
           const validationMessage = validationError instanceof Error ? validationError.message : String(validationError)
-          setStatus(`Repairing the LLM recipe (${attempt + 1}/2): ${validationMessage}`)
+          setStatus(t('recipe.repairing', { attempt: attempt + 1, message: validationMessage }))
           text = await generateLlmText({
             prompt: `Repair your previous recipe without changing the user's intent. Preserve every valid requested subject and action, fix the validation error, and return one complete replacement JSON object.\n\nUSER INTENT:\n${intent.trim()}\n\nVALIDATION ERROR:\n${validationMessage}\n\nPREVIOUS RECIPE:\n${text.slice(0, 16_000)}`,
             system_prompt: systemPrompt,
@@ -300,7 +307,7 @@ export function SceneRecipePanel({
           })
         }
       }
-      if (!recipe) throw new Error('The LLM did not produce a valid recipe after two repairs.')
+      if (!recipe) throw new Error(t('recipe.invalidRecipe'))
       if (mode === 'manual') {
         recipe = constrainManualRecipeToInventory(recipe, fullInventory)
       }
@@ -308,7 +315,7 @@ export function SceneRecipePanel({
       setPlannedRecipe(recipe)
       setShots(listRecipeShots(recipe))
       setActiveShot(0)
-      setStatus(`Recipe ready: ${recipe.name} · ${listRecipeShots(recipe).length} shot(s). Preview and edit before recording.`)
+      setStatus(t('recipe.ready', { name: recipe.name, count: listRecipeShots(recipe).length }))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -324,7 +331,7 @@ export function SceneRecipePanel({
     setError(null)
     try {
       const recipe = parseSceneRecipeText(recipeText)
-      setStatus(mode === 'manual' ? 'Using loaded assets and audio…' : 'Resolving assets and audio (generate only what is missing)…')
+      setStatus(mode === 'manual' ? t('recipe.usingLoaded') : t('recipe.resolving'))
       const resolved = await resolveRecipeAssets(recipe, {
         workspace,
         onStatus: setStatus,
@@ -339,7 +346,7 @@ export function SceneRecipePanel({
       setShots(nextShots)
       setActiveShot(0)
       await applyShot(stored, nextShots[0], resolved)
-      setStatus(`Mounted shot “${nextShots[0].name}”. Tweak it in the inspector, then Record.`)
+      setStatus(t('recipe.mounted', { name: nextShots[0].name }))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -361,7 +368,7 @@ export function SceneRecipePanel({
     setError(null)
     try {
       await applyShot(recipe, shot, resolved)
-      setStatus(`Mounted shot “${shot.name}”. Edit freely, then Record.`)
+      setStatus(t('recipe.mountedEdit', { name: shot.name }))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -374,7 +381,7 @@ export function SceneRecipePanel({
   return (
     <div className="space-y-2 rounded border border-cyan-400/30 bg-cyan-400/[.04] p-2">
       <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-cyan-200">
-        <Sparkles size={12} /> Recipe runner
+        <Sparkles size={12} /> {t('recipe.title')}
       </div>
       <div className="grid grid-cols-2 gap-1">
         {(['manual', 'auto'] as const).map(value => (
@@ -387,19 +394,17 @@ export function SceneRecipePanel({
               mode === value ? 'border-cyan-300 bg-cyan-400/15 text-cyan-100' : 'border-border text-text-muted'
             }`}
           >
-            {value === 'manual' ? 'Manual · loaded assets' : 'Auto · generate missing'}
+            {value === 'manual' ? t('recipe.manual') : t('recipe.auto')}
           </button>
         ))}
       </div>
       <p className="text-[8px] text-text-muted">
-        {mode === 'manual'
-          ? 'Add plates and GLBs with previews, then ask the LLM to compose. Edit the scene, then Record.'
-          : 'Describe the scene normally. HocusPocus plans reusable 3D subjects, plates, camera and effects; review the plan before generation.'}
+        {mode === 'manual' ? t('recipe.manualHelp') : t('recipe.autoHelp')}
       </p>
 
       <details className="rounded border border-border bg-bg-primary/45 px-2 py-1.5 text-[9px] text-text-muted">
-        <summary className="cursor-pointer font-medium text-text-secondary">How to describe a scene</summary>
-        <p className="mt-1 leading-relaxed">Mention subjects that must keep their identity, actions in order, the setting, and optionally camera, duration or format. Moving characters, vehicles and objects become separate reusable 3D assets; a fixed environment becomes one plate; fog, snow and rain become effects.</p>
+        <summary className="cursor-pointer font-medium text-text-secondary">{t('recipe.howTitle')}</summary>
+        <p className="mt-1 leading-relaxed">{t('recipe.howBody')}</p>
       </details>
 
       {mode === 'manual' && (
@@ -413,7 +418,7 @@ export function SceneRecipePanel({
                 picker === 'image' ? 'border-cyan-300 bg-cyan-400/15 text-cyan-100' : 'border-border text-text-secondary'
               }`}
             >
-              <ImageIcon size={12} /> Images
+              <ImageIcon size={12} /> {t('recipe.images')}
             </button>
             <button
               type="button"
@@ -423,13 +428,13 @@ export function SceneRecipePanel({
                 picker === 'model3d' ? 'border-cyan-300 bg-cyan-400/15 text-cyan-100' : 'border-border text-text-secondary'
               }`}
             >
-              <Box size={12} /> 3D models
+              <Box size={12} /> {t('recipe.models')}
             </button>
           </div>
 
           {selected.length > 0 && (
             <div>
-              <div className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">Selected · {selected.length}</div>
+              <div className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">{t('recipe.selectedCount', { count: selected.length })}</div>
               <div className="grid grid-cols-3 gap-1.5">
                 {selected.map(asset => (
                   <AssetThumb
@@ -450,7 +455,7 @@ export function SceneRecipePanel({
             <div className="rounded border border-border bg-bg-primary p-2">
               <div className="mb-1.5 flex items-center justify-between gap-1">
                 <span className="text-[10px] text-text-muted">
-                  {picker === 'model3d' ? 'GLBs from HocusPocus' : 'Images & videos from HocusPocus'}
+                  {picker === 'model3d' ? t('recipe.glbFromApp') : t('recipe.imagesFromApp')}
                 </span>
                 <button type="button" onClick={() => setPicker(null)} className="text-text-muted hover:text-text-primary"><X size={12} /></button>
               </div>
@@ -461,7 +466,7 @@ export function SceneRecipePanel({
                 className="mb-2 flex w-full items-center justify-center gap-1 rounded border border-dashed border-cyan-400/40 py-1.5 text-[10px] text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-40"
               >
                 {busy === 'upload' ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                {picker === 'model3d' ? 'Import GLB from disk' : 'Import image from disk'}
+                {picker === 'model3d' ? t('recipe.importGlb') : t('recipe.importImage')}
               </button>
               {pickerItems.length ? (
                 <div className="grid max-h-52 grid-cols-3 gap-1.5 overflow-y-auto">
@@ -479,7 +484,7 @@ export function SceneRecipePanel({
                 </div>
               ) : (
                 <p className="text-[9px] text-text-muted">
-                  {picker === 'model3d' ? 'No GLBs in Outputs yet. Import one from disk.' : 'No images in Outputs yet. Import one from disk.'}
+                  {picker === 'model3d' ? t('recipe.emptyGlbs') : t('recipe.emptyImages')}
                 </p>
               )}
             </div>
@@ -510,7 +515,7 @@ export function SceneRecipePanel({
       )}
 
       <label className="block text-[10px] text-text-muted">
-        Describe the scene
+        {t('recipe.describe')}
         <textarea
           rows={3}
           value={intent}
@@ -519,16 +524,16 @@ export function SceneRecipePanel({
           className="mt-1 w-full resize-y rounded border border-border bg-bg-primary px-2 py-1.5 text-[10px] text-text-primary"
         />
       </label>
-      <div className="flex flex-wrap gap-1" aria-label="Scene request examples">
+      <div className="flex flex-wrap gap-1" aria-label={t('recipe.examplesAria')}>
         {INTENT_EXAMPLES.map(example => (
           <button
-            key={example.label}
+            key={example.key}
             type="button"
             disabled={locked}
             onClick={() => setIntent(example.text)}
             className="rounded border border-border px-1.5 py-1 text-[8px] text-text-muted hover:border-cyan-400/60 hover:text-cyan-100 disabled:opacity-40"
           >
-            {example.label}
+            {t(`recipe.examples.${example.key}`)}
           </button>
         ))}
       </div>
@@ -540,7 +545,7 @@ export function SceneRecipePanel({
           className="flex flex-1 items-center justify-center gap-1 rounded border border-border bg-bg-primary py-1.5 text-[10px] disabled:opacity-40"
         >
           {busy === 'write' ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-          Plan scene
+          {t('recipe.planScene')}
         </button>
         <button
           type="button"
@@ -552,28 +557,28 @@ export function SceneRecipePanel({
           }}
           className="flex items-center justify-center gap-1 rounded border border-border bg-bg-primary px-2 py-1.5 text-[10px] disabled:opacity-40"
         >
-          <FileJson size={11} /> Example
+          <FileJson size={11} /> {t('recipe.example')}
         </button>
       </div>
       {plannedRecipe && (
-        <section aria-label="Scene plan" className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.07] p-2">
-          <div className="text-[9px] font-medium uppercase tracking-wider text-cyan-100">Review plan · {plannedRecipe.shots?.length || 1} shot{(plannedRecipe.shots?.length || 1) === 1 ? '' : 's'}</div>
+        <section aria-label={t('recipe.planAria')} className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.07] p-2">
+          <div className="text-[9px] font-medium uppercase tracking-wider text-cyan-100">{t('recipe.reviewPlan', { count: plannedRecipe.shots?.length || 1 })}</div>
           <div className="space-y-1">
             {plannedRecipe.assets.map(asset => (
-              <p key={asset.id} className="text-[8px] leading-relaxed text-text-secondary"><span className="font-medium text-cyan-100">{asset.id}</span> — {assetPlanLabel(asset)}</p>
+              <p key={asset.id} className="text-[8px] leading-relaxed text-text-secondary"><span className="font-medium text-cyan-100">{asset.id}</span> — {assetPlanLabel(asset, t)}</p>
             ))}
           </div>
           <div className="space-y-1 border-t border-cyan-400/15 pt-1">
             {(plannedRecipe.shots?.length ? plannedRecipe.shots : [{ name: 'scene', duration: plannedRecipe.scene.duration, layers: plannedRecipe.scene.layers }]).map((shot, index) => (
-              <p key={`${shot.name}-${index}`} className="text-[8px] text-text-muted">{index + 1}. {shot.name} · {shot.duration || plannedRecipe.scene.duration || 5}s · {shotPlanLabel(shot)}</p>
+              <p key={`${shot.name}-${index}`} className="text-[8px] text-text-muted">{index + 1}. {shot.name} · {shot.duration || plannedRecipe.scene.duration || 5}s · {shotPlanLabel(shot, t)}</p>
             ))}
           </div>
         </section>
       )}
       <details className="rounded border border-border bg-bg-primary/30 px-2 py-1.5">
-        <summary className="cursor-pointer text-[9px] text-text-muted">Advanced: edit recipe JSON</summary>
+        <summary className="cursor-pointer text-[9px] text-text-muted">{t('recipe.advancedJson')}</summary>
         <textarea
-          aria-label="Recipe JSON"
+          aria-label={t('recipe.jsonAria')}
           rows={8}
           value={recipeText}
           disabled={locked}
@@ -590,7 +595,7 @@ export function SceneRecipePanel({
           className="flex flex-1 items-center justify-center gap-1 rounded bg-cyan-600 py-1.5 text-[10px] text-white disabled:opacity-40"
         >
           {busy === 'run' ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
-          {busy === 'run' ? 'Working…' : mode === 'manual' ? 'Compose' : 'Generate + compose'}
+          {busy === 'run' ? t('recipe.working') : mode === 'manual' ? t('recipe.compose') : t('recipe.generateCompose')}
         </button>
         {busy && busy !== 'upload' && (
           <button
@@ -598,7 +603,7 @@ export function SceneRecipePanel({
             onClick={() => abortRef.current?.abort()}
             className="flex items-center justify-center gap-1 rounded border border-red-400/50 px-2 py-1.5 text-[10px] text-red-200"
           >
-            <Square size={10} /> Cancel
+            <Square size={10} /> {t('recipe.cancel')}
           </button>
         )}
       </div>

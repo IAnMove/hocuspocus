@@ -13,7 +13,21 @@
     "discard": "Discard",
     "delete": "Delete",
     "refresh": "Refresh",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "resume": "Resume",
+    "retry": "Retry",
+    "generate": "Generate",
+    "add": "Add",
+    "remove": "Remove",
+    "apply": "Apply",
+    "import": "Import",
+    "export": "Export",
+    "open": "Open",
+    "copy": "Copy",
+    "duplicate": "Duplicate",
+    "confirm": "Confirm",
+    "edit": "Edit",
+    "download": "Download"
   },
   "fields": {
     "name": "Name",

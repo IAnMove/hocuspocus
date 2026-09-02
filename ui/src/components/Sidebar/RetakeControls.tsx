@@ -1,10 +1,12 @@
 import { useRef, useCallback } from 'react'
 import { Upload, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { VideoTimelineSelector } from '../shared/VideoTimelineSelector'
 import * as api from '../../api/client'
 
 export function RetakeControls() {
+  const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoPath = useStore(s => s.editVideoPath)
   const editVideoUrl = useStore(s => s.editVideoUrl)
@@ -51,8 +53,8 @@ export function RetakeControls() {
           className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-accent-blue/50 hover:bg-bg-hover/30 transition-all"
         >
           <Upload size={24} className="mx-auto mb-2 text-text-muted" />
-          <p className="text-xs text-text-secondary">Drop a video or click to upload</p>
-          <p className="text-[9px] text-text-muted mt-1">Select the part you want to edit, then describe the change</p>
+          <p className="text-xs text-text-secondary">{t('chrome.dropVideo')}</p>
+          <p className="text-[9px] text-text-muted mt-1">{t('chrome.dropVideoHint')}</p>
           <input ref={fileRef} type="file" accept="video/*" className="hidden"
             onChange={e => { if (e.target.files?.[0]) handleUpload(e.target.files[0]) }} />
         </div>
@@ -80,9 +82,9 @@ export function RetakeControls() {
           <input type="checkbox" checked={editRegenerateAudio}
             onChange={e => useStore.setState({ editRegenerateAudio: e.target.checked })}
             className="w-3.5 h-3.5 rounded border-border accent-accent-blue" />
-          <span className="text-[10px] text-text-secondary">Regenerate Audio</span>
+          <span className="text-[10px] text-text-secondary">{t('retake.regenerateAudio')}</span>
           <span className="text-[9px] text-text-muted ml-auto">
-            {editRegenerateAudio ? 'New audio' : 'Keep source'}
+            {editRegenerateAudio ? t('retake.newAudio') : t('retake.keepSource')}
           </span>
         </label>
       )}
@@ -91,7 +93,7 @@ export function RetakeControls() {
       {editRetakeEngine === 'legacy' && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-[10px] text-text-muted uppercase tracking-wider">Retake Strength</label>
+            <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('retake.strength')}</label>
             <span className="text-[10px] text-text-secondary">{editRetakeStrength.toFixed(2)}</span>
           </div>
           <input type="range" min={0.1} max={1} step={0.05} value={editRetakeStrength}
@@ -101,25 +103,25 @@ export function RetakeControls() {
 
       {/* Engine toggle */}
       <div>
-        <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Retake Engine</label>
+        <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{t('retake.engine')}</label>
         <div className="flex gap-1">
           <button onClick={() => useStore.setState({ editRetakeEngine: 'native' })}
             className={`flex-1 px-2 py-1.5 text-[10px] rounded transition-colors ${
               editRetakeEngine === 'native' ? 'bg-accent-blue text-white' : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
             }`}>
-            Native
+            {t('retake.native')}
           </button>
           <button onClick={() => useStore.setState({ editRetakeEngine: 'legacy' })}
             className={`flex-1 px-2 py-1.5 text-[10px] rounded transition-colors ${
               editRetakeEngine === 'legacy' ? 'bg-accent-blue text-white' : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
             }`}>
-            Legacy
+            {t('retake.legacy')}
           </button>
         </div>
         <p className="text-[9px] text-text-muted mt-0.5">
           {editRetakeEngine === 'native'
-            ? 'Lightricks denoise_mask — preserves source identity'
-            : 'MaskInjection — strength-controlled blending'}
+            ? t('retake.nativeHint')
+            : t('retake.legacyHint')}
         </p>
       </div>
     </div>

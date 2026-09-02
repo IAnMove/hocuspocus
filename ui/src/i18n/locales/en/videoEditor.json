@@ -48,6 +48,131 @@
     "hint": "Drag the handles to set the in and out points. The original video is not modified; these cuts apply only to the preview and the exported MP4.",
     "exactIn": "Exact in",
     "exactOut": "Exact out",
-    "restore": "Restore full clip"
+    "restore": "Restore full clip",
+    "nondestructive": "Non-destructive trim",
+    "keepsRemoves": "Keeps {{kept}} · removes {{removed}}",
+    "inPoint": "In point",
+    "outPoint": "Out point",
+    "inTime": "In {{time}}",
+    "outTime": "Out {{time}}"
+  },
+  "toolbar": {
+    "aria": "Video editor tools",
+    "projectName": "Project name",
+    "fromHocusPocus": "From HocusPocus",
+    "exportMp4": "Export MP4",
+    "cancelling": "Cancelling…"
+  },
+  "empty": {
+    "drop": "Drop videos here or click to import",
+    "formats": "MP4, WebM, MOV, MKV, AVI · up to 500 MB each"
+  },
+  "playback": {
+    "play": "Play",
+    "pause": "Pause",
+    "playTitle": "Play from the selected clip, transition, or playhead",
+    "restart": "Return to the beginning",
+    "playheadSeconds": "Playhead seconds",
+    "playheadAria": "Timeline playhead",
+    "playheadValue": "{{time}} seconds"
+  },
+  "preview": {
+    "label": "Export preview",
+    "aria": "Export preview {{width}} by {{height}} pixels, {{aspect}}"
+  },
+  "actions": {
+    "split": "Split",
+    "splitTitle": "Split the clip at the current playhead",
+    "screenshot": "Take screenshot",
+    "screenshotTitle": "Save the exact current source frame as a reusable PNG in HocusPocus Outputs",
+    "savedFrame": "Saved {{filename}} at {{time}} · {{width}}×{{height}}",
+    "remove": "Remove",
+    "removeTitle": "Remove this video from the timeline",
+    "removeNamed": "Remove {{name}} from the timeline",
+    "duplicate": "Duplicate clip",
+    "earlier": "Earlier",
+    "later": "Later"
+  },
+  "inspector": {
+    "aria": "Video editor inspector",
+    "output": "Output",
+    "frameRate": "Frame rate",
+    "fps": "{{value}} FPS",
+    "transition": "Transition {{n}}",
+    "duration": "Duration: {{value}}s",
+    "durationInsert": "This card is inserted between clips and adds to the total duration.",
+    "durationClamp": "The preview and export clamp this automatically for very short clips.",
+    "previewTransition": "Preview this transition",
+    "alpha": "Alpha channel · {{format}}",
+    "noAlpha": "No alpha · {{format}}",
+    "unmute": "Unmute clip",
+    "mute": "Mute clip",
+    "fit": "Fit · no crop",
+    "fill": "Fill · crop"
+  },
+  "status": {
+    "importing": "Importing video…",
+    "importingNamed": "Importing {{current}} of {{total}}: {{name}}",
+    "addingNamed": "Adding {{current}} of {{total}}: {{name}}",
+    "download": "Download {{filename}}",
+    "reconnecting": "Reconnecting to export…",
+    "submitting": "Submitting export…",
+    "cancellingBoundary": "Cancelling at the next FFmpeg safe boundary…"
+  },
+  "timeline": {
+    "aria": "Video editor timeline",
+    "summary_one": "Timeline · {{count}} clip · {{duration}}",
+    "summary_other": "Timeline · {{count}} clips · {{duration}}",
+    "soundtrack": "Soundtrack: {{name}}",
+    "loop": " · loop",
+    "allGaps": "All gaps",
+    "defaultTransition": "Default transition for all gaps",
+    "applyAll": "Apply to all",
+    "selectClip": "Select clip {{n}}: {{name}}",
+    "selectTransition": "Select transition {{n}}",
+    "trimStart": "Trim start of {{name}}",
+    "trimEnd": "Trim end of {{name}}",
+    "moveToEnd": "Move to end",
+    "addClip": "Add clip",
+    "addFirst": "Add your first video"
+  },
+  "picker": {
+    "title": "Add HocusPocus videos",
+    "close": "Close HocusPocus video picker",
+    "listAria": "HocusPocus videos",
+    "empty": "No videos found in workspace “{{workspace}}”.",
+    "loadMore": "Load {{count}} more",
+    "selectAll": "Select all shown",
+    "clear": "Clear",
+    "selectedHint": "{{count}} selected · click to toggle, Shift-click for a range",
+    "addCount_one": "Add {{count}} video",
+    "addCount_other": "Add {{count}} videos",
+    "add": "Add videos"
+  },
+  "audio": {
+    "fit": "Fit"
+  },
+  "errors": {
+    "chooseVideos": "Choose one or more video files.",
+    "selectVideos": "Select one or more videos.",
+    "splitPlayhead": "Move the playhead inside the clip, away from the very start and end, then Split.",
+    "playback": "The browser could not start timeline playback.",
+    "reconnect": "Could not reconnect to export {{jobId}}: {{message}}",
+    "noValidClips": "No valid clips remain. Restore a source with a finite duration before exporting.",
+    "emptyHandoff": "The editor hand-off does not contain any valid video sources. It is still available to retry.",
+    "openingShot": "Opening Series shot {{current}}/{{total}}",
+    "openingNamed": "Opening {{name}}",
+    "comicAnimatic": "comic animatic",
+    "seriesShot": "Series shot {{n}}",
+    "replaceConfirm_one": "The editor already contains {{count}} clip. Replace this montage with the hand-off?",
+    "replaceConfirm_other": "The editor already contains {{count}} clips. Replace this montage with the hand-off?",
+    "addConfirm_one": "The editor already contains {{count}} clip. Add the hand-off to this montage?",
+    "addConfirm_other": "The editor already contains {{count}} clips. Add the hand-off to this montage?",
+    "draftSave": "The editor draft could not be saved. The hand-off was kept for Retry.",
+    "openHandoff": "Could not open the hand-off: {{message}}. The hand-off and current draft were kept; Retry when the source is available.",
+    "retryHandoff": "Could not retry the hand-off: {{message}}",
+    "retryAction": "Retry hand-off",
+    "replacing": "Replacing clip {{n}}: {{name}}",
+    "replaceFailed": "Could not replace clip {{n}}: {{message}}"
   }
 }

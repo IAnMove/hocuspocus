@@ -12,6 +12,11 @@ import workspacesEn from './locales/en/workspaces.json'
 import styleSheetEn from './locales/en/styleSheet.json'
 import projectsEn from './locales/en/projects.json'
 import auditDevEn from './locales/en/auditDev.json'
+import scene3dEn from './locales/en/scene3d.json'
+import shellEn from './locales/en/shell.json'
+import charactersEn from './locales/en/characters.json'
+import comicsEn from './locales/en/comics.json'
+import studioEn from './locales/en/studio.json'
 import commonEs from './locales/es/common.json'
 import navigationEs from './locales/es/navigation.json'
 import settingsEs from './locales/es/settings.json'
@@ -26,8 +31,13 @@ import workspacesEs from './locales/es/workspaces.json'
 import styleSheetEs from './locales/es/styleSheet.json'
 import projectsEs from './locales/es/projects.json'
 import auditDevEs from './locales/es/auditDev.json'
+import scene3dEs from './locales/es/scene3d.json'
+import shellEs from './locales/es/shell.json'
+import charactersEs from './locales/es/characters.json'
+import comicsEs from './locales/es/comics.json'
+import studioEs from './locales/es/studio.json'
 
-export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev'] as const
+export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'shell', 'characters', 'comics', 'studio'] as const
 export type I18nNamespace = (typeof NAMESPACES)[number]
 
 export const resources = {
@@ -46,6 +56,11 @@ export const resources = {
     styleSheet: styleSheetEn,
     projects: projectsEn,
     auditDev: auditDevEn,
+    scene3d: scene3dEn,
+    shell: shellEn,
+    characters: charactersEn,
+    comics: comicsEn,
+    studio: studioEn,
   },
   es: {
     common: commonEs,
@@ -62,6 +77,11 @@ export const resources = {
     styleSheet: styleSheetEs,
     projects: projectsEs,
     auditDev: auditDevEs,
+    scene3d: scene3dEs,
+    shell: shellEs,
+    characters: charactersEs,
+    comics: comicsEs,
+    studio: studioEs,
   },
 } as const
 

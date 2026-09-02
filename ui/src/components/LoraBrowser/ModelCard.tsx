@@ -1,4 +1,5 @@
 import { Download, ThumbsUp } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import type { CivitAIModel } from '../../types'
 
 interface Props {
@@ -13,6 +14,7 @@ function formatCount(n: number): string {
 }
 
 export function ModelCard({ model, onClick }: Props) {
+  const { t } = useUiTranslation('settings')
   // Get first image/video from first version
   const allMedia = model.modelVersions?.[0]?.images || []
   // Prefer a still image over video for the card thumbnail
@@ -48,7 +50,7 @@ export function ModelCard({ model, onClick }: Props) {
           )
         ) : (
           <div className="w-full h-full flex items-center justify-center text-text-muted text-xs">
-            No preview
+            {t('loraBrowser.noPreview')}
           </div>
         )}
       </div>

@@ -13,6 +13,7 @@ import {
   rememberCharacterCreatorSheetForWorkspace,
   type CharacterCreatorHistoryEntry,
 } from './characterCreatorHistory'
+import { useUiTranslation } from '../../i18n'
 import {
   buildCharacterOrbitPrompt,
   CHARACTER_ORBIT_VIEWS,
@@ -54,12 +55,7 @@ interface CapturedView {
   time: number
 }
 
-const EXTRA_ROLES: Array<{ id: OrbitRefRole; label: string }> = [
-  { id: 'extra', label: 'Otro ángulo / detalle' },
-  { id: 'face', label: 'Solo cara' },
-  { id: 'outfit', label: 'Solo ropa' },
-  { id: 'accessory', label: 'Accesorio / objeto extra' },
-]
+const EXTRA_ROLE_IDS: OrbitRefRole[] = ['extra', 'face', 'outfit', 'accessory']
 
 function resolveOrbitModel(models: Array<{ model_type: string }>): string {
   // Character Creator uses the isolated Comfy/ConvRot worker. It already
@@ -74,6 +70,7 @@ function newId(): string {
 }
 
 export function CharacterCreatorPanel() {
+  const { t } = useUiTranslation('characters')
   const models = useStore(s => s.models)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const llmProvider = useStore(s => s.productionProfile.text.provider)
@@ -164,9 +161,9 @@ export function CharacterCreatorPanel() {
       let resolvedAPrompt = aPrompt.trim()
       if (needsVisionDescribe(resolvedAPrompt)) {
         if (llmProvider !== 'minimax' && llmProvider !== 'local') {
-          throw new Error('Auto-describe only works with MiniMax or the internal LLM. Type an A Prompt, or switch Settings → LLM.')
+          throw new Error(t('creator.errors.autoDescribe'))
         }
-        setJobMessage(llmProvider === 'minimax' ? 'MiniMax está describiendo la imagen…' : 'El LLM interno está describiendo la imagen…')
+        setJobMessage(llmProvider === 'minimax' ? t('creator.status.minimaxDescribe') : t('creator.status.llmDescribe'))
         const described = await api.describeCharacterRefs({
           kind,
           image_paths: uploaded.map(ref => ref.path).filter((path): path is string => Boolean(path)),
@@ -210,7 +207,7 @@ export function CharacterCreatorPanel() {
         video_prompt_type: 'I',
       })
       setJobId(submitted.job_id)
-      setJobMessage('Órbita H3 en cola…')
+      setJobMessage(t('creator.status.orbitQueued'))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
       setBusy(false)
@@ -274,7 +271,7 @@ export function CharacterCreatorPanel() {
 
   const openFaceRigFromCreator = async () => {
     if (kind !== 'character') {
-      setError('Face Rig is for Character Kits. Keep Character Creator for identity and turnaround sheets.')
+      setError(t('creator.errors.faceRigKitsOnly'))
       return
     }
     setBusy(true)
@@ -284,7 +281,7 @@ export function CharacterCreatorPanel() {
       let source = captured?.url || (captured?.filename ? getFileUrl(captured.filename, activeWorkspace) : '')
       if (!source || source.startsWith('blob:') || source.startsWith('data:')) {
         const subject = refs[0]
-        if (!subject?.file) throw new Error('Capture a turnaround view or upload the subject image first.')
+        if (!subject?.file) throw new Error(t('creator.errors.needViewOrUpload'))
         const uploaded = await uploadRef(subject)
         setRefs(current => current.map(ref => ref.id === uploaded.id ? uploaded : ref))
         source = uploaded.url || (uploaded.filename ? getFileUrl(uploaded.filename, activeWorkspace) : '')
@@ -385,7 +382,7 @@ export function CharacterCreatorPanel() {
         return
       }
       if (status.status === 'failed' || status.status === 'cancelled') {
-        if (stillOnOrigin) setError(status.error || `Orbit ${status.status}`)
+        if (stillOnOrigin) setError(status.error || t(status.status === 'cancelled' ? 'creator.errors.orbitCancelled' : 'creator.errors.orbitFailed'))
         setBusy(false)
         setJobId(null)
       }
@@ -425,7 +422,7 @@ export function CharacterCreatorPanel() {
         output_format: 'glb',
       })
       setHunyuanJobId(job.job_id)
-      setHunyuanMessage(job.message || 'Hunyuan3D en cola…')
+      setHunyuanMessage(job.message || t('creator.status.hunyuanQueued'))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
       setBusy(false)
@@ -459,7 +456,7 @@ export function CharacterCreatorPanel() {
         return
       }
       if (status.status === 'failed' || status.status === 'cancelled') {
-        if (stillOnOrigin) setError(status.error || `Hunyuan3D ${status.status}`)
+        if (stillOnOrigin) setError(status.error || t(status.status === 'cancelled' ? 'creator.errors.hunyuanCancelled' : 'creator.errors.hunyuanFailed'))
         setHunyuanJobId(null)
         setBusy(false)
       }
@@ -474,12 +471,14 @@ export function CharacterCreatorPanel() {
     },
   })
 
+  const orbitViewLabel = (id: string) => t(kind === 'object' ? `creator.objectViews.${id}` : `creator.views.${id}`)
+
   return (
-    <section aria-label="Character Creator" className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary">
+    <section aria-label={t('creator.title')} className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary">
       <header className="border-b border-border bg-bg-secondary px-3 py-2">
-        <h2 className="text-sm font-semibold text-text-primary">Character Creator</h2>
+        <h2 className="text-sm font-semibold text-text-primary">{t('creator.title')}</h2>
         <p className="text-[10px] text-text-muted">
-          Turnaround 3D: sube una foto. MiniMax o el LLM interno describen el sujeto si dejas el A Prompt vacío. Sale un vídeo 360 y, si quieres, un mesh Hunyuan. No es el puppet 2D de Face Rig.
+          {t('creator.subtitle')}
         </p>
         {kind === 'character' && (
           <button
@@ -488,12 +487,12 @@ export function CharacterCreatorPanel() {
             disabled={busy}
             onClick={() => void openFaceRigFromCreator()}
           >
-            Create / open CharacterKit Face Rig
+            {t('creator.openFaceRig')}
           </button>
         )}
         {history.length > 0 && (
           <div className="mt-2 space-y-1">
-            <p className="text-[10px] text-text-muted">Historial de este workspace</p>
+            <p className="text-[10px] text-text-muted">{t('creator.history')}</p>
             <div className="flex gap-1 overflow-x-auto pb-1">
               {history.map(entry => (
                 <button
@@ -525,13 +524,13 @@ export function CharacterCreatorPanel() {
         <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
           <div className="space-y-3">
             <div className="flex gap-1">
-              <button type="button" className={`${button} flex-1 ${kind === 'character' ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setKind('character')}>Personaje</button>
-              <button type="button" className={`${button} flex-1 ${kind === 'object' ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setKind('object')}>Objeto</button>
+              <button type="button" className={`${button} flex-1 ${kind === 'character' ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setKind('character')}>{t('creator.kind.character')}</button>
+              <button type="button" className={`${button} flex-1 ${kind === 'object' ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setKind('object')}>{t('creator.kind.object')}</button>
             </div>
 
             <RefPicker
-              label={kind === 'object' ? 'Imagen principal del objeto' : 'Imagen principal del sujeto'}
-              hint="Obligatoria. Una sola basta. MiniMax lee la foto y escribe el A Prompt."
+              label={kind === 'object' ? t('creator.objectImage') : t('creator.subjectImage')}
+              hint={t('creator.subjectHint')}
               value={refs[0] || null}
               roleLocked="subject"
               onPick={file => {
@@ -544,8 +543,8 @@ export function CharacterCreatorPanel() {
             {refs.slice(1).map((ref, index) => (
               <RefPicker
                 key={ref.id}
-                label={`Referencia extra ${index + 1}`}
-                hint="Opcional. Cara, ropa, accesorio u otro ángulo."
+                label={t('creator.extraRef', { index: index + 1 })}
+                hint={t('creator.extraHint')}
                 value={ref}
                 onPick={file => setRefFile(ref.id, file, ref.role)}
                 onClear={() => clearRef(ref.id)}
@@ -568,43 +567,43 @@ export function CharacterCreatorPanel() {
                   input.click()
                 }}
               >
-                <Plus size={13} /> Añadir referencia opcional
+                <Plus size={13} /> {t('creator.addOptionalRef')}
               </button>
             )}
 
             <div className="space-y-1">
               <button type="button" className={`${button} w-full`} onClick={() => setShowAPrompt(open => !open)}>
-                {showAPrompt ? 'Ocultar A Prompt' : 'A Prompt opcional'}
+                {showAPrompt ? t('creator.hideAPrompt') : t('creator.optionalAPrompt')}
               </button>
               {showAPrompt && (
                 <textarea
                   value={aPrompt}
                   onChange={event => setAPrompt(event.target.value)}
                   rows={5}
-                  placeholder="Vacío = MiniMax o el LLM interno describen las fotos. Otros proveedores requieren un A Prompt."
+                  placeholder={t('creator.aPromptPlaceholder')}
                   className="w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[11px] text-text-primary"
                 />
               )}
             </div>
 
             <p className="text-[10px] text-text-muted">
-              Motor Character Sheet ConvRot aislado · Turbo nativo desactivado para conservar la órbita de 6 paneles.
+              {t('creator.engineNote')}
             </p>
 
             <p className="text-[10px] text-text-muted">
-              {modelType} · {CHARACTER_SHEET_RESOLUTION} 9:16 · {CHARACTER_SHEET_FRAMES} frames · grabs 2 / 21 / 42 / 63
+              {t('creator.engineMeta', { model: modelType, resolution: CHARACTER_SHEET_RESOLUTION, frames: CHARACTER_SHEET_FRAMES, grabs: '2 / 21 / 42 / 63' })}
             </p>
             <button type="button" className={primary + ' w-full'} disabled={busy || readyRefs.length === 0} onClick={() => void generateOrbit()}>
               {busy && !videoName ? <Loader2 size={13} className="animate-spin" /> : <PersonStanding size={13} />}
-              Generar órbita 360
+              {t('creator.orbitGenerate')}
             </button>
             <button type="button" className={button + ' w-full'} disabled={busy || !videoName} onClick={() => { if (videoName) void takePhotos(videoName) }}>
               {busy && videoName && !hunyuanJobId ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
-              Take photo · 4 vistas
+              {t('creator.takePhotos')}
             </button>
             <button type="button" className={primary + ' w-full'} disabled={busy || views.length < 4} onClick={() => void generateHunyuan()}>
               {busy && hunyuanJobId ? <Loader2 size={13} className="animate-spin" /> : <Box size={13} />}
-              Generar Hunyuan3D
+              {t('creator.hunyuanGenerate')}
             </button>
             {jobMessage && <p className="text-[11px] text-text-secondary">{jobMessage}</p>}
             {hunyuanMessage && <p className="text-[11px] text-text-secondary">{hunyuanMessage}</p>}
@@ -618,7 +617,7 @@ export function CharacterCreatorPanel() {
               ) : (
                 <div className="flex aspect-[9/16] max-h-[420px] flex-col items-center justify-center gap-2 text-text-muted">
                   <PersonStanding size={22} />
-                  <span className="text-[11px]">Sube al menos una imagen y genera la órbita</span>
+                  <span className="text-[11px]">{t('creator.emptyOrbit')}</span>
                 </div>
               )}
             </div>
@@ -626,8 +625,8 @@ export function CharacterCreatorPanel() {
               <div className="rounded-xl border border-violet-400/30 bg-violet-500/5 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-medium text-text-primary">Ajustar captura: {views.find(view => view.id === selectedViewId)?.label || selectedViewId}</p>
-                    <p className="text-[10px] text-text-muted">Elige un instante del vídeo y sustituye solo esta vista.</p>
+                    <p className="text-xs font-medium text-text-primary">{t('creator.adjustCapture', { label: orbitViewLabel(selectedViewId) })}</p>
+                    <p className="text-[10px] text-text-muted">{t('creator.adjustHint')}</p>
                   </div>
                   <span className="shrink-0 font-mono text-[11px] text-violet-200">{selectedTime.toFixed(2)}s</span>
                 </div>
@@ -643,17 +642,17 @@ export function CharacterCreatorPanel() {
                     if (videoPreviewRef.current) videoPreviewRef.current.currentTime = time
                   }}
                   className="mt-3 w-full accent-violet-400"
-                  aria-label="Capture time"
+                  aria-label={t('creator.captureTimeAria')}
                 />
                 <button type="button" className={button + ' mt-2 w-full'} disabled={busy} onClick={() => void replaceSelectedView()}>
-                  <Camera size={13} /> Take image y sustituir vista
+                  <Camera size={13} /> {t('creator.replaceView')}
                 </button>
               </div>
             )}
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               {CHARACTER_ORBIT_VIEWS.map(view => {
                 const captured = views.find(item => item.id === view.id)
-                const label = kind === 'object' ? view.objectLabel : view.label
+                const label = orbitViewLabel(view.id)
                 const selected = selectedViewId === view.id
                 return (
                   <button
@@ -664,12 +663,12 @@ export function CharacterCreatorPanel() {
                       if (captured) setSelectedTime(captured.time)
                     }}
                     className={`overflow-hidden rounded-lg border bg-bg-secondary text-left transition-colors ${selected ? 'border-violet-400 ring-1 ring-violet-400/50' : 'border-border hover:border-violet-400/50'}`}
-                    aria-label={`Seleccionar vista ${label}`}
+                    aria-label={t('creator.selectViewAria', { label })}
                   >
                     {captured ? (
                       <img src={captured.url} alt={label} className="aspect-[3/4] w-full object-cover" />
                     ) : (
-                      <div className="flex aspect-[3/4] items-center justify-center text-[10px] text-text-muted">Sin foto</div>
+                      <div className="flex aspect-[3/4] items-center justify-center text-[10px] text-text-muted">{t('creator.noPhoto')}</div>
                     )}
                     <span className="block px-2 py-1 text-[10px] text-text-secondary">{label}{captured ? ` · ${captured.time.toFixed(2)}s` : ''}</span>
                   </button>
@@ -680,7 +679,7 @@ export function CharacterCreatorPanel() {
               <div className="overflow-hidden rounded-xl border border-border bg-bg-secondary">
                 <model-viewer
                   src={getFileUrl(hunyuanGlb, activeWorkspace)}
-                  alt="Hunyuan3D"
+                  alt={t('creator.hunyuanAlt')}
                   camera-controls
                   auto-rotate
                   shadow-intensity="1"
@@ -706,6 +705,7 @@ function RefPicker({
   onClear: () => void
   onRole?: (role: OrbitRefRole) => void
 }) {
+  const { t } = useUiTranslation('characters')
   return (
     <div className="rounded-xl border border-border bg-bg-secondary p-3">
       <div className="text-xs font-medium text-text-primary">{label}</div>
@@ -716,13 +716,13 @@ function RefPicker({
           onChange={event => onRole(event.target.value as OrbitRefRole)}
           className="mt-2 w-full rounded-md border border-border bg-bg-primary px-2 py-1 text-[11px] text-text-primary"
         >
-          {EXTRA_ROLES.map(role => <option key={role.id} value={role.id}>{role.label}</option>)}
+          {EXTRA_ROLE_IDS.map(id => <option key={id} value={id}>{t(`creator.roles.${id}`)}</option>)}
         </select>
       )}
       {value ? (
         <div className="relative mt-2 overflow-hidden rounded-lg border border-border">
           <img src={value.preview} alt="" className="h-40 w-full object-cover" />
-          <button type="button" className="absolute right-2 top-2 rounded bg-black/60 p-1 text-white" onClick={onClear} aria-label={`Quitar ${label}`}>
+          <button type="button" className="absolute right-2 top-2 rounded bg-black/60 p-1 text-white" onClick={onClear} aria-label={t('creator.removeRefAria', { label })}>
             <X size={12} />
           </button>
         </div>
@@ -742,7 +742,7 @@ function RefPicker({
           }}
         >
           <Upload size={14} />
-          <span className="text-[10px]">Soltar o elegir imagen</span>
+          <span className="text-[10px]">{t('creator.dropOrChoose')}</span>
         </button>
       )}
     </div>

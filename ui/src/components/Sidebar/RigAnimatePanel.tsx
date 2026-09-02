@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Bone, Box, Download, Loader2, PersonStanding, Play, RefreshCw, Square } from 'lucide-react'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import {
   cancelRigJob,
@@ -19,6 +20,7 @@ import {
 type RigSource = { name: string; thumbnail_url?: string | null }
 
 function RigPreviewCard({ asset, title, selected, onSelect, children }: { asset: string; title: string; selected: boolean; onSelect: () => void; children: ReactNode }) {
+  const { t } = useUiTranslation('scene3d')
   const videoRef = useRef<HTMLVideoElement>(null)
   const [hovered, setHovered] = useState(false)
   const play = () => {
@@ -38,9 +40,9 @@ function RigPreviewCard({ asset, title, selected, onSelect, children }: { asset:
   return (
     <button type="button" aria-pressed={selected} onClick={onSelect} onPointerEnter={play} onPointerLeave={stop} onFocus={play} onBlur={stop} className={`min-w-0 overflow-hidden rounded-lg border text-left transition-colors ${selected ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/40' : 'border-border bg-bg-tertiary hover:border-accent-blue/70'}`}>
       <div className="relative aspect-video overflow-hidden bg-[#07111f]">
-        <img src={`/rig-previews/${asset}.webp`} alt={`Preview of ${title}`} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+        <img src={`/rig-previews/${asset}.webp`} alt={t('rig.previewOf', { title })} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
         <video ref={videoRef} src={`/rig-previews/${asset}.webm`} poster={`/rig-previews/${asset}.webp`} muted loop playsInline preload="metadata" aria-hidden="true" className={`pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`} />
-        <span className="absolute bottom-1 right-1 rounded bg-black/65 px-1 py-0.5 text-[7px] uppercase tracking-wide text-white/80">hover</span>
+        <span className="absolute bottom-1 right-1 rounded bg-black/65 px-1 py-0.5 text-[7px] uppercase tracking-wide text-white/80">{t('rig.hover')}</span>
       </div>
       {children}
     </button>
@@ -48,23 +50,25 @@ function RigPreviewCard({ asset, title, selected, onSelect, children }: { asset:
 }
 
 function RigProfilePreview({ profile, selected, onSelect }: { profile: RigProfile; selected: boolean; onSelect: () => void }) {
+  const { t } = useUiTranslation('scene3d')
   return (
     <RigPreviewCard asset={`profile-${profile.id}`} title={profile.label} selected={selected} onSelect={onSelect}>
       <div className="flex min-h-11 items-start justify-between gap-1 px-1.5 py-1.5">
         <span className="line-clamp-2 text-[9px] font-medium leading-tight text-text-secondary">{profile.label}</span>
-        <span className="shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[7px] uppercase text-emerald-300">{profile.default_spine_joints} joints</span>
+        <span className="shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[7px] uppercase text-emerald-300">{t('rig.joints', { count: profile.default_spine_joints })}</span>
       </div>
     </RigPreviewCard>
   )
 }
 
 function RigAnimationPreview({ animation, selected, recommended, onSelect }: { animation: RigAnimation; selected: boolean; recommended: boolean; onSelect: () => void }) {
+  const { t } = useUiTranslation('scene3d')
   return (
     <RigPreviewCard asset={`animation-${animation.id}`} title={animation.label} selected={selected} onSelect={onSelect}>
       <div className="space-y-1 px-1.5 py-1.5">
         <div className="flex items-start justify-between gap-1">
           <span className="line-clamp-2 text-[9px] font-medium leading-tight text-text-secondary">{animation.label}</span>
-          {recommended && <span className="shrink-0 rounded bg-accent-green/10 px-1 py-0.5 text-[6px] uppercase text-accent-green">recommended</span>}
+          {recommended && <span className="shrink-0 rounded bg-accent-green/10 px-1 py-0.5 text-[6px] uppercase text-accent-green">{t('rig.recommended')}</span>}
         </div>
         <div className="flex items-center justify-between gap-1">
           <span className="line-clamp-2 text-[8px] leading-tight text-text-muted">{animation.description}</span>
@@ -79,6 +83,7 @@ function RigAnimationPreview({ animation, selected, recommended, onSelect }: { a
  *  3D output. Complements the 3D tab (which creates static meshes) and the
  *  scene animator (which moves the camera, not the mesh). */
 export function RigAnimatePanel() {
+  const { t } = useUiTranslation('scene3d')
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const [sources, setSources] = useState<RigSource[]>([])
   const [sourcesLoading, setSourcesLoading] = useState(true)
@@ -112,9 +117,9 @@ export function RigAnimatePanel() {
       setWeightFalloff(profile?.default_weight_falloff ?? 2)
       setSelectedClips(new Set(profile?.recommended_animations ?? caps.animations.map(animation => animation.id)))
     }).catch(err => {
-      setCapabilityError(err instanceof Error ? err.message : 'Could not load rig capabilities')
+      setCapabilityError(err instanceof Error ? err.message : t('rig.capabilitiesFailed'))
     })
-  }, [])
+  }, [t])
 
   useEffect(() => {
     loadCapabilities()
@@ -166,22 +171,22 @@ export function RigAnimatePanel() {
     },
     onError: err => {
       pollFailuresRef.current += 1
-      const message = err instanceof Error ? err.message : 'Could not read rig job status'
+      const message = err instanceof Error ? err.message : t('rig.statusFailed')
       setError(message)
       const lost = (err as Error & { status?: number }).status === 404
       if (lost || pollFailuresRef.current >= 4) {
-        setJob(current => current && { ...current, status: 'failed', error: lost ? 'The rig job was lost — the backend probably restarted.' : message })
+        setJob(current => current && { ...current, status: 'failed', error: lost ? t('rig.jobLost') : message })
       }
     },
   })
 
   useEffect(() => {
     if (job?.status === 'completed') {
-      void useStore.getState().maybeRefreshGallery({ message: 'Rigged model ready' })
+      void useStore.getState().maybeRefreshGallery({ message: t('rig.modelReady') })
       void loadSources()
     }
     if (job?.status === 'failed') setError(job.error || job.message)
-  }, [job?.status, job?.error, job?.message, loadSources])
+  }, [job?.status, job?.error, job?.message, loadSources, t])
 
   const toggleClip = (id: string) => {
     setSelectedClips(current => {
@@ -219,7 +224,7 @@ export function RigAnimatePanel() {
         weight_falloff: weightFalloff,
       }))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Rig job failed to start')
+      setError(err instanceof Error ? err.message : t('rig.startFailed'))
     }
   }
 
@@ -228,19 +233,19 @@ export function RigAnimatePanel() {
     try {
       setJob(await cancelRigJob(job.job_id))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not cancel rig job')
+      setError(err instanceof Error ? err.message : t('rig.cancelFailed'))
     }
   }
 
   const exportAnimatedGlb = async () => {
     if (!job?.filename) {
-      setExportError('The completed rig job did not return an output filename.')
+      setExportError(t('rig.noFilename'))
       return
     }
 
     const filename = job.filename.split(/[\\/]/).pop()
     if (!filename || !/\.glb$/i.test(filename)) {
-      setExportError('The completed rig job did not return a valid GLB filename.')
+      setExportError(t('rig.invalidGlb'))
       return
     }
 
@@ -257,7 +262,7 @@ export function RigAnimatePanel() {
       })
       if (!response.ok) {
         const detail = await response.text().catch(() => '')
-        throw new Error(detail || `The animated GLB could not be opened (${response.status}).`)
+        throw new Error(detail || t('rig.openFailed', { status: response.status }))
       }
       await response.body?.cancel()
 
@@ -267,9 +272,9 @@ export function RigAnimatePanel() {
       document.body.appendChild(link)
       link.click()
       link.remove()
-      setExportStatus(`Download started: ${filename}`)
+      setExportStatus(t('rig.downloadStarted', { filename }))
     } catch (err) {
-      setExportError(err instanceof Error ? err.message : 'Could not export the animated GLB.')
+      setExportError(err instanceof Error ? err.message : t('rig.exportFailed'))
     } finally {
       setExporting(false)
     }
@@ -278,38 +283,38 @@ export function RigAnimatePanel() {
   if (capabilityError) return (
     <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 space-y-2">
       <p className="text-xs text-red-300">{capabilityError}</p>
-      <p className="text-[10px] text-text-muted">HocusPocus&apos;s backend did not answer — it may be stopped or restarting. The procedural engine needs no extra install; this is a connection issue, not a missing installation.</p>
-      <button onClick={loadCapabilities} className="rounded border border-border bg-bg-tertiary px-2.5 py-1.5 text-[10px] text-text-secondary hover:text-text-primary flex items-center gap-1"><RefreshCw size={11} /> Retry</button>
+      <p className="text-[10px] text-text-muted">{t('rig.connectionHelp')}</p>
+      <button onClick={loadCapabilities} className="rounded border border-border bg-bg-tertiary px-2.5 py-1.5 text-[10px] text-text-secondary hover:text-text-primary flex items-center gap-1"><RefreshCw size={11} /> {t('rig.retry')}</button>
     </div>
   )
 
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary"><PersonStanding size={15} className="text-accent-blue" /> Rig &amp; Animate</div>
-        <p className="text-[10px] text-text-muted mt-1">Give a generated 3D object a simple skeleton and looping animations. The result is saved as a new GLB in the gallery.</p>
+        <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary"><PersonStanding size={15} className="text-accent-blue" /> {t('rig.title')}</div>
+        <p className="text-[10px] text-text-muted mt-1">{t('rig.subtitle')}</p>
       </div>
 
       {!capabilities ? (
-        <div className="flex items-center justify-center py-8 text-xs text-text-muted"><Loader2 size={15} className="animate-spin mr-2" /> Loading...</div>
+        <div className="flex items-center justify-center py-8 text-xs text-text-muted"><Loader2 size={15} className="animate-spin mr-2" /> {t('rig.loading')}</div>
       ) : installedEngines.length === 0 ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-          <p className="text-xs font-medium text-amber-300">No rig engine is installed</p>
+          <p className="text-xs font-medium text-amber-300">{t('rig.noEngine')}</p>
           <div className="mt-1 space-y-1">{capabilities.engines.map(item => item.install_hint && <p key={item.id} className="text-[10px] leading-relaxed text-text-muted"><span className="text-text-secondary">{item.label}:</span> {item.install_hint}</p>)}</div>
         </div>
       ) : (
         <>
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">3D object</label>
-              <button onClick={() => void loadSources()} className="text-text-muted hover:text-text-primary transition-colors" title="Refresh 3D outputs">
+              <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('rig.object')}</label>
+              <button onClick={() => void loadSources()} className="text-text-muted hover:text-text-primary transition-colors" title={t('rig.refreshOutputs')}>
                 <RefreshCw size={11} />
               </button>
             </div>
             {sourcesLoading ? (
-              <div className="flex items-center gap-2 text-[10px] text-text-muted p-3"><Loader2 size={12} className="animate-spin" /> Loading 3D outputs...</div>
+              <div className="flex items-center gap-2 text-[10px] text-text-muted p-3"><Loader2 size={12} className="animate-spin" /> {t('rig.loadingOutputs')}</div>
             ) : sources.length === 0 ? (
-              <p className="text-[10px] text-text-muted rounded-lg border border-dashed border-border p-3">No GLB outputs yet. Generate an object in the 3D tab first.</p>
+              <p className="text-[10px] text-text-muted rounded-lg border border-dashed border-border p-3">{t('rig.noGlbs')}</p>
             ) : (
               <div className="grid grid-cols-3 md:grid-cols-5 gap-2 max-h-72 overflow-y-auto pr-0.5">
                 {sources.map(file => (
@@ -332,18 +337,18 @@ export function RigAnimatePanel() {
           </div>
 
           <div>
-            <div className="mb-1.5 flex items-center justify-between gap-2"><label className="text-[10px] text-text-muted uppercase tracking-wider">Rig profile / skeleton</label><span className="text-[8px] text-text-muted">Hover or focus to animate</span></div>
-            {capabilities.rig_profiles?.length ? <div className="grid grid-cols-2 gap-1.5">{capabilities.rig_profiles.map(profile => <RigProfilePreview key={profile.id} profile={profile} selected={rigProfileId === profile.id} onSelect={() => chooseRigProfile(profile.id)} />)}</div> : <select value={rigProfileId} disabled className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary opacity-60"><option value="prop">General / legacy backend</option></select>}
+            <div className="mb-1.5 flex items-center justify-between gap-2"><label className="text-[10px] text-text-muted uppercase tracking-wider">{t('rig.profile')}</label><span className="text-[8px] text-text-muted">{t('rig.hoverFocus')}</span></div>
+            {capabilities.rig_profiles?.length ? <div className="grid grid-cols-2 gap-1.5">{capabilities.rig_profiles.map(profile => <RigProfilePreview key={profile.id} profile={profile} selected={rigProfileId === profile.id} onSelect={() => chooseRigProfile(profile.id)} />)}</div> : <select value={rigProfileId} disabled className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary opacity-60"><option value="prop">{t('rig.legacyBackend')}</option></select>}
             {selectedProfile && (
               <div className="mt-1.5 rounded-lg border border-border bg-bg-tertiary p-2.5">
                 <p className="text-[9px] leading-relaxed text-text-muted">{selectedProfile.description}</p>
-                <p className="mt-1 text-[9px] text-text-muted/80">{engineId === 'procedural' ? 'Applies a tailored chain fit and shows only compatible motion clips. You can fine-tune the fit below.' : 'Filters the motion library for this body type. UniRig still predicts its own skeleton and skin weights.'}</p>
+                <p className="mt-1 text-[9px] text-text-muted/80">{engineId === 'procedural' ? t('rig.proceduralHelp') : t('rig.unirigHelp')}</p>
               </div>
             )}
           </div>
 
           <div>
-            <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Engine</label>
+            <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('rig.engine')}</label>
             <div className="space-y-1">
               {capabilities.engines.map(item => (
                 <label key={item.id} className={`flex items-start gap-2 rounded-lg border px-2.5 py-1.5 ${item.installed ? 'border-border bg-bg-tertiary cursor-pointer hover:border-border-light' : 'border-border/60 bg-bg-tertiary/50 cursor-not-allowed opacity-70'}`}>
@@ -360,38 +365,38 @@ export function RigAnimatePanel() {
 
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">{selectedProfile?.label ?? 'Rig'} animations</label>
+              <label className="text-[10px] text-text-muted uppercase tracking-wider">{selectedProfile?.label ? t('rig.animations', { name: selectedProfile.label }) : t('rig.animationsDefault')}</label>
               <div className="flex gap-1">
-                <button type="button" onClick={() => setSelectedClips(new Set(recommendedAnimationIds))} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">Recommended</button>
-                <button type="button" onClick={() => setSelectedClips(new Set(profileAnimations.map(animation => animation.id)))} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">All</button>
+                <button type="button" onClick={() => setSelectedClips(new Set(recommendedAnimationIds))} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">{t('rig.recommendedAction')}</button>
+                <button type="button" onClick={() => setSelectedClips(new Set(profileAnimations.map(animation => animation.id)))} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">{t('rig.all')}</button>
               </div>
             </div>
             <div className="grid max-h-[620px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{profileAnimations.map(animation => <RigAnimationPreview key={animation.id} animation={animation} selected={selectedClips.has(animation.id)} recommended={Boolean(selectedProfile?.recommended_animations.includes(animation.id))} onSelect={() => toggleClip(animation.id)} />)}</div>
-            <p className="mt-1.5 text-[8px] leading-relaxed text-text-muted">These previews visualize HocusPocus&apos;s generic procedural chain and its intended root motion, squash, turn and sway. They do not claim semantic limb animation.</p>
+            <p className="mt-1.5 text-[8px] leading-relaxed text-text-muted">{t('rig.previewsHelp')}</p>
           </div>
 
           {engineId === 'procedural' && (
             <div className="rounded-lg border border-border bg-bg-tertiary p-2.5 space-y-2.5">
               <div>
-                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-text-secondary"><Bone size={11} /> Manual rig fit</div>
-                <p className="mt-0.5 text-[9px] text-text-muted">Guide the procedural bone chain before generating. This adjusts the rig fit without pretending to be a full weight-painting editor.</p>
+                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-text-secondary"><Bone size={11} /> {t('rig.manualFit')}</div>
+                <p className="mt-0.5 text-[9px] text-text-muted">{t('rig.manualFitHelp')}</p>
               </div>
-              <label className="block text-[10px] text-text-muted">Skeleton direction
+              <label className="block text-[10px] text-text-muted">{t('rig.skeletonDirection')}
                 <select value={axisMode} onChange={event => setAxisMode(event.target.value as typeof axisMode)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs">
-                  <option value="auto">Auto — detect object direction</option>
-                  <option value="y">Vertical — Y axis</option>
-                  <option value="x">Horizontal — X axis</option>
-                  <option value="z">Depth — Z axis</option>
+                  <option value="auto">{t('rig.axisAuto')}</option>
+                  <option value="y">{t('rig.axisY')}</option>
+                  <option value="x">{t('rig.axisX')}</option>
+                  <option value="z">{t('rig.axisZ')}</option>
                 </select>
               </label>
               <label className="block text-[10px] text-text-muted uppercase tracking-wider">
-                <span className="flex items-center justify-between"><span>Spine joints</span><span className="text-text-primary">{spineJoints}</span></span>
+                <span className="flex items-center justify-between"><span>{t('rig.spineJoints')}</span><span className="text-text-primary">{spineJoints}</span></span>
                 <input type="range" min={2} max={9} value={spineJoints} onChange={event => setSpineJoints(Number(event.target.value))} className="mt-1.5 w-full" />
               </label>
               <label className="block text-[10px] text-text-muted uppercase tracking-wider">
-                <span className="flex items-center justify-between"><span>Skin stiffness</span><span className="text-text-primary">{weightFalloff.toFixed(1)}</span></span>
+                <span className="flex items-center justify-between"><span>{t('rig.skinStiffness')}</span><span className="text-text-primary">{weightFalloff.toFixed(1)}</span></span>
                 <input type="range" min={1} max={6} step={.25} value={weightFalloff} onChange={event => setWeightFalloff(Number(event.target.value))} className="mt-1.5 w-full" />
-                <span className="mt-0.5 block normal-case tracking-normal text-[9px] text-text-muted/80">Low bends smoothly; high keeps sections more rigid. Useful for characters versus hard-surface props.</span>
+                <span className="mt-0.5 block normal-case tracking-normal text-[9px] text-text-muted/80">{t('rig.stiffnessHelp')}</span>
               </label>
             </div>
           )}
@@ -409,9 +414,9 @@ export function RigAnimatePanel() {
                     className="w-full rounded-lg border border-accent-green/40 bg-accent-green/10 px-3 py-2 text-[11px] font-medium text-accent-green hover:bg-accent-green/20 disabled:cursor-wait disabled:opacity-60 flex items-center justify-center gap-1.5 transition-colors"
                   >
                     {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                    {exporting ? 'Preparing GLB...' : 'Export animated GLB'}
+                    {exporting ? t('rig.preparingGlb') : t('rig.exportGlb')}
                   </button>
-                  <p className="text-[9px] text-text-muted text-center">Downloads the rigged model with its baked clips. It also remains available in HocusPocus&apos;s 3D gallery.</p>
+                  <p className="text-[9px] text-text-muted text-center">{t('rig.exportHelp')}</p>
                   {exportStatus && <p className="text-[9px] text-accent-green text-center break-all">{exportStatus}</p>}
                   {exportError && <p className="text-[9px] text-red-300 text-center whitespace-pre-wrap">{exportError}</p>}
                 </div>
@@ -421,11 +426,11 @@ export function RigAnimatePanel() {
           {error && !job?.error && <p className="text-[10px] text-red-400 whitespace-pre-wrap">{error}</p>}
 
           {isRunning ? (
-            <button onClick={() => void cancel()} className="w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 text-xs font-medium"><Square size={13} /> Cancel rigging</button>
+            <button onClick={() => void cancel()} className="w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 text-xs font-medium"><Square size={13} /> {t('rig.cancelRigging')}</button>
           ) : (
-            <button disabled={!canRun} onClick={() => void run()} className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${canRun ? 'bg-cta hover:brightness-110 shadow-accent-glow text-white' : 'bg-bg-tertiary border border-border text-text-muted cursor-not-allowed'}`}><Play size={13} fill={canRun ? 'currentColor' : 'none'} /> Rig &amp; animate</button>
+            <button disabled={!canRun} onClick={() => void run()} className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${canRun ? 'bg-cta hover:brightness-110 shadow-accent-glow text-white' : 'bg-bg-tertiary border border-border text-text-muted cursor-not-allowed'}`}><Play size={13} fill={canRun ? 'currentColor' : 'none'} /> {t('rig.run')}</button>
           )}
-          <p className="text-[9px] text-text-muted text-center">{engineId === 'unirig' ? 'AI rigging uses the GPU; the first run downloads the UniRig weights (~2GB).' : 'Runs on CPU in seconds. The animated GLB plays its clips in the gallery viewer.'}</p>
+          <p className="text-[9px] text-text-muted text-center">{engineId === 'unirig' ? t('rig.unirigFooter') : t('rig.proceduralFooter')}</p>
         </>
       )}
     </div>

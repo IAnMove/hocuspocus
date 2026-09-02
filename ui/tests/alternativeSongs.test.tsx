@@ -88,8 +88,8 @@ test('alternative songs dialog lists attached songs and the remount action', asy
 
   try {
     render(<AlternativeSongsDialog name="clip.mp4" onClose={() => {}} />)
-    await screen.findByRole('dialog', { name: /canciones alternativas/i })
-    await screen.findByRole('button', { name: 'Montar' })
+    await screen.findByRole('dialog', { name: /alternative songs/i })
+    await screen.findByRole('button', { name: 'Mount' })
     assert.ok(screen.getAllByText('en.mp3').length >= 1)
   } finally {
     cleanup()

@@ -1,8 +1,10 @@
 import { useCallback } from 'react'
 import { Upload, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 
 export function ImageUpload() {
+  const { t } = useUiTranslation('studio')
   const { startImage, endImage, setStartImage, setEndImage } = useStore()
   const supportsEndFrame = useStore(s => s.modelOptions?.supports_end_frame ?? false)
   const strengthLabel = useStore(s => s.modelOptions?.input_video_strength_label ?? '')
@@ -11,8 +13,8 @@ export function ImageUpload() {
   const generationMode = useStore(s => s.generationMode)
 
   const isImage = generationMode === 'image'
-  const startLabel = isImage ? 'Input Image' : 'Start Frame'
-  const endLabel = 'End Frame'
+  const startLabel = isImage ? t('imageUpload.input') : t('imageUpload.start')
+  const endLabel = t('imageUpload.end')
 
   const handleDrop = useCallback((e: React.DragEvent, target: 'start' | 'end') => {
     e.preventDefault()
@@ -36,7 +38,7 @@ export function ImageUpload() {
       <div className="flex gap-2">
         <DropZone
           label={startLabel}
-          sublabel={isImage ? 'Optional' : undefined}
+          sublabel={isImage ? t('chrome.optional') : undefined}
           file={startImage}
           onDrop={e => handleDrop(e, 'start')}
           onSelect={e => handleFileSelect(e, 'start')}
@@ -55,7 +57,7 @@ export function ImageUpload() {
       {strengthLabel && startImage && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] text-text-secondary">Image Strength</label>
+            <label className="text-[11px] text-text-secondary">{t('imageUpload.strength')}</label>
             <span className="text-[11px] text-text-muted tabular-nums">{inputVideoStrength.toFixed(2)}</span>
           </div>
           <input
@@ -67,7 +69,7 @@ export function ImageUpload() {
             onChange={e => setParam('input_video_strength', parseFloat(e.target.value))}
             className="w-full h-1 accent-accent-blue"
           />
-          <p className="text-[9px] text-text-muted">Lower values can increase motion</p>
+          <p className="text-[9px] text-text-muted">{t('imageUpload.strengthHint')}</p>
         </div>
       )}
     </div>
