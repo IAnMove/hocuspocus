@@ -257,6 +257,7 @@ test('gallery slice keeps workspace and output filters through the public facade
   assert.equal('settingsOpen' in isolated, false)
   assert.equal('startGeneration' in isolated, false)
   assert.equal('loadSettingsFromOutput' in isolated, false)
+  assert.equal('loadLlm' in isolated, false)
 
   const { useStore } = await import('../src/stores/useStore.ts')
   useStore.setState({
@@ -273,6 +274,71 @@ test('gallery slice keeps workspace and output filters through the public facade
   assert.equal(useStore.getState().galleryFeedAtTop, true)
 })
 
+test('LLM slice keeps status, models and enhance through the public facade', async () => {
+  const { createLlmSlice } = await import('../src/stores/llmSlice.ts')
+  let state
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  state = createLlmSlice(set, () => state)
+  assert.equal(state.llmStatus, null)
+  assert.equal(state.llmLoading, false)
+  assert.deepEqual(state.llmModels, [])
+  assert.equal(state.isEnhancing, false)
+  assert.equal(state.h3WindowPlan, null)
+
+  const window = {
+    index: 1,
+    title: 'open',
+    start_frame: 0,
+    end_frame: 24,
+    start_seconds: 0,
+    end_seconds: 1,
+    opening_state: '',
+    closing_state: '',
+    prompt: 'a man walks',
+  }
+  set({
+    h3WindowPlan: {
+      source_prompt: 'walk',
+      signature: 'sig',
+      planned_by: 'llm',
+      total_frames: 24,
+      window_frames: 24,
+      window_count: 1,
+      resolution: '540p',
+      model_type: 'minimax_h3',
+      windows: [window],
+      window_prompts: [window.prompt],
+    },
+  })
+  state.updateH3WindowPrompt(0, 'a woman walks')
+  assert.equal(state.h3WindowPlan.windows[0].prompt, 'a woman walks')
+  assert.deepEqual(state.h3WindowPlan.window_prompts, ['a woman walks'])
+  state.updateH3WindowPrompt(-1, 'ignored')
+  assert.equal(state.h3WindowPlan.windows[0].prompt, 'a woman walks')
+  state.clearH3WindowPlan()
+  assert.equal(state.h3WindowPlan, null)
+
+  const isolated = createLlmSlice(set, () => state)
+  assert.equal('startGeneration' in isolated, false)
+  assert.equal('stopGeneration' in isolated, false)
+  assert.equal('settingsOpen' in isolated, false)
+  assert.equal('reconnectJobs' in isolated, false)
+
+  const { useStore } = await import('../src/stores/useStore.ts')
+  assert.equal(typeof useStore.getState().loadLlmStatus, 'function')
+  assert.equal(typeof useStore.getState().loadLlmModels, 'function')
+  assert.equal(typeof useStore.getState().loadLlm, 'function')
+  assert.equal(typeof useStore.getState().unloadLlm, 'function')
+  assert.equal(typeof useStore.getState().enhancePrompt, 'function')
+  assert.equal(typeof useStore.getState().updateH3WindowPrompt, 'function')
+  assert.equal(typeof useStore.getState().clearH3WindowPlan, 'function')
+  useStore.getState().clearH3WindowPlan()
+  assert.equal(useStore.getState().h3WindowPlan, null)
+})
+
 test('composed slices bind without as-never casts at the useStore call site', async () => {
   const fs = await import('node:fs/promises')
   const source = await fs.readFile(new URL('../src/stores/useStore.ts', import.meta.url), 'utf8')
@@ -280,6 +346,7 @@ test('composed slices bind without as-never casts at the useStore call site', as
   assert.match(composition, /bindSlice\(set, get, createSettingsSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createThemeSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createGallerySlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createLlmSlice\)/)
   assert.doesNotMatch(composition, /as never/)
 })
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanJob, DirectorV2PlanResponse } from '../types'
+import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanJob, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import { type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
@@ -18,6 +18,7 @@ import { createSidebarSlice } from './sidebarSlice'
 import { bindSlice } from './storeApi'
 import { createThemeSlice } from './themeSlice'
 import { createGallerySlice } from './gallerySlice'
+import { createLlmSlice, UNLOADED_LLM_STATUS, type LlmSlice } from './llmSlice'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 import {
   extractSingleClipStudioParams,
@@ -1060,7 +1061,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-interface AppState {
+interface AppState extends LlmSlice {
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
   setGenerationMode: (mode: GenerationMode) => void
@@ -1695,22 +1696,6 @@ interface AppState {
   loadProductionProfile: () => Promise<void>
   updateProductionProfile: (profile: ProductionProfile) => Promise<void>
 
-  // LLM state
-  llmStatus: LlmStatus | null
-  llmLoading: boolean
-  llmModels: LlmModelOption[]
-  loadLlmStatus: () => Promise<void>
-  loadLlmModels: () => Promise<void>
-  loadLlm: () => Promise<void>
-  unloadLlm: () => Promise<void>
-
-  // Prompt enhancement
-  isEnhancing: boolean
-  enhancePrompt: (ttsMode?: string) => Promise<void>
-  h3WindowPlan: H3WindowPlan | null
-  updateH3WindowPrompt: (index: number, prompt: string) => void
-  clearH3WindowPlan: () => void
-
   // Director (Music Video Director)
   sidebarMode: 'director' | 'studio'
   directorStep: 'upload' | 'analyze' | 'structure' | 'style' | 'plan' | 'review' | 'generate_images' | 'plan_video' | 'review_video'
@@ -2232,6 +2217,7 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createSidebarSlice),
   ...bindSlice(set, get, createRetakeDialogSlice),
   ...bindSlice(set, get, createGallerySlice),
+  ...bindSlice(set, get, createLlmSlice),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -4453,7 +4439,7 @@ export const useStore = create<AppState>((set, get) => {
     if (get().llmStatus?.loaded) {
       try {
         await api.unloadLlm()
-        set({ llmStatus: { loaded: false, model_id: null, device: null, provider: '' } })
+        set({ llmStatus: UNLOADED_LLM_STATUS })
       } catch { /* best-effort */ }
     }
 
@@ -6922,222 +6908,6 @@ export const useStore = create<AppState>((set, get) => {
     }
   },
 
-  // LLM state
-  llmStatus: null,
-  llmLoading: false,
-  llmModels: [],
-  loadLlmStatus: async () => {
-    try {
-      const status = await api.fetchLlmStatus()
-      set({ llmStatus: status })
-    } catch (e) {
-      console.error('Failed to load LLM status:', e)
-    }
-  },
-  loadLlmModels: async () => {
-    try {
-      const provider = get().servicesConfig?.llm_provider || get().productionProfile.text.provider
-      const data = await api.fetchLlmModels(provider)
-      set({ llmModels: data.models })
-    } catch (e) {
-      console.error('Failed to load LLM models:', e)
-    }
-  },
-  loadLlm: async () => {
-    set({ llmLoading: true })
-    try {
-      const result = await api.loadLlm()
-      set({ llmStatus: { loaded: result.loaded, model_id: result.model_id, device: result.device, provider: result.provider || '' }, llmLoading: false })
-    } catch (e) {
-      console.error('Failed to load LLM:', e)
-      set({ llmLoading: false })
-    }
-  },
-  unloadLlm: async () => {
-    try {
-      await api.unloadLlm()
-      set({ llmStatus: { loaded: false, model_id: null, device: null, provider: '' } })
-    } catch (e) {
-      console.error('Failed to unload LLM:', e)
-    }
-  },
-
-  // Prompt enhancement
-  isEnhancing: false,
-  h3WindowPlan: null,
-  updateH3WindowPrompt: (index, prompt) => set(s => {
-    if (!s.h3WindowPlan || index < 0 || index >= s.h3WindowPlan.windows.length) return {}
-    const windows = s.h3WindowPlan.windows.map((window, windowIndex) => (
-      windowIndex === index ? { ...window, prompt } : window
-    ))
-    return {
-      h3WindowPlan: {
-        ...s.h3WindowPlan,
-        windows,
-        window_prompts: windows.map(window => window.prompt),
-      },
-    }
-  }),
-  clearH3WindowPlan: () => set({ h3WindowPlan: null }),
-  enhancePrompt: async (ttsMode?: string) => {
-    const state = get()
-    const { params, generationMode, startImage, endImage, imageRefs } = state
-    if (!params.prompt.trim()) return
-    set({ isEnhancing: true })
-    try {
-      // Collect images relevant to the CURRENT mode only
-      const imagePaths: string[] = []
-      let referenceContext: string | undefined
-      const isOmniReference = state.modelOptions?.omni_reference === true
-
-      if (isOmniReference) {
-        let pictureIndex = 0
-        let videoIndex = 0
-        let audioIndex = 0
-        const labelLines: string[] = []
-        for (const reference of params.minimax_h3_references ?? []) {
-          const note = (reference.role || reference.filename || 'reference').trim()
-          if (reference.type === 'audio') {
-            const intent = reference.audio_intent ?? 'voice'
-            if (intent === 'drive') {
-              labelLines.push(`<Audio ${++audioIndex}>: ${note}; intent=AUDIO REUSE / PERFORMANCE DRIVER; retention=partially_copy; preserve its audible timeline and synchronize action to it`)
-            } else if (intent === 'style') {
-              labelLines.push(`<Audio ${++audioIndex}>: ${note}; intent=AUDIO REFERENCE; retention=weak_reference; borrow only rhythm/style/texture and do not copy the source signal or words`)
-            } else {
-              labelLines.push(`<Audio ${++audioIndex}>: ${note}; intent=VOICE REFERENCE; retention=reference; use timbre/emotion/delivery for new scripted dialogue without copying source words, timing, or waveform`)
-            }
-          } else if (reference.type === 'image') {
-            labelLines.push(`<Picture ${++pictureIndex}>: visual identity/appearance reference for ${note}; retention=reference for identity only; do not reproduce its background, framing, composition, or pose`)
-            if (reference.path) imagePaths.push(reference.path)
-          } else {
-            const nextVideoIndex = videoIndex + 1
-            if ((reference.has_audio || reference.audio_path) && reference.include_audio !== false) {
-              labelLines.push(`<Audio ${++audioIndex}>: soundtrack paired with <Video ${nextVideoIndex}>; intent=AUDIO REUSE / PERFORMANCE DRIVER; retention=partially_copy; preserve its audible timeline and synchronize action to it`)
-            }
-            videoIndex = nextVideoIndex
-            labelLines.push(`<Video ${videoIndex}>: motion/camera/scene/timing reference for ${note}`)
-          }
-        }
-        referenceContext = labelLines.join('\n')
-      } else if (generationMode === 'image') {
-        // Image mode: send reference images only
-        for (const ref of imageRefs) {
-          try {
-            const uploaded = await api.uploadImage(ref)
-            imagePaths.push(uploaded.path)
-          } catch { /* best effort */ }
-        }
-      } else {
-        // Video/Avatar mode: send start image only
-        if (startImage) {
-          try {
-            const uploaded = await api.uploadImage(startImage)
-            imagePaths.push(uploaded.path)
-          } catch { /* best effort */ }
-        } else if (params.image_start && typeof params.image_start === 'string') {
-          imagePaths.push(params.image_start as string)
-        }
-      }
-
-      // Include duration/window info for video models
-      const fps = state.modelOptions?.fps ?? 16
-      const swDefaults = (state.modelOptions as Record<string, unknown> | null)?.sliding_window_defaults as Record<string, number> | undefined
-      const discardFrames = swDefaults?.discard_last_frames ?? 0
-      const overlapSec = state.slidingWindowOverlap / fps
-      const discardSec = discardFrames / fps
-      const stride = state.slidingWindowSeconds - discardSec - overlapSec
-      const supportsSlidingWindows = state.modelOptions?.sliding_window === true
-      const windowCount = supportsSlidingWindows && stride > 0 && state.durationSeconds > state.slidingWindowSeconds
-        ? 1 + Math.ceil((state.durationSeconds - state.slidingWindowSeconds + discardSec) / stride)
-        : 1
-
-      const shouldPlanH3Windows = (
-        generationMode === 'video'
-        && state.modelOptions?.sliding_window_auto_prompt_pacing === true
-        && params.image_mode !== 2
-        && windowCount > 1
-      )
-      if (shouldPlanH3Windows) {
-        // The ordinary H3 enhancer writes one complete Context-IR timeline.
-        // Multi-window H3 instead needs a structured storyboard whose prompts
-        // contain only their own local actions. Include both endpoint images
-        // so the planner can preserve the requested visual trajectory.
-        if (endImage) {
-          try {
-            const uploaded = await api.uploadImage(endImage)
-            imagePaths.push(uploaded.path)
-          } catch { /* best effort */ }
-        } else if (params.image_end && typeof params.image_end === 'string') {
-          imagePaths.push(params.image_end)
-        }
-        const plan = await api.planH3Windows({
-          prompt: params.prompt,
-          model_type: params.model_type,
-          resolution: params.resolution,
-          total_frames: Math.max(1, Math.round(state.durationSeconds * fps)),
-          window_frames: Math.max(1, Math.round(state.slidingWindowSeconds * fps)),
-          overlap_frames: state.slidingWindowOverlap,
-          discard_frames: discardFrames,
-          sliding_window_memory_override: state.slidingWindowLocked,
-          has_start_image: !!(startImage || params.image_start),
-          has_end_image: !!(endImage || params.image_end),
-          image_paths: imagePaths.length > 0 ? imagePaths : undefined,
-        })
-        const effectiveWindowFrames = plan.effective_window_frames || plan.window_frames
-        set(s => ({
-          h3WindowPlan: plan,
-          slidingWindowSeconds: effectiveWindowFrames / fps,
-          // Clicking Enhance on a multi-window H3 First/Last job is an
-          // explicit request to plan the idea across those windows. Turn the
-          // planner back on even when an old saved setting left legacy mode
-          // disabled; otherwise the ordinary H3 enhancer flattens every
-          // window into one globally timed screenplay.
-          params: {
-            ...s.params,
-            sliding_window_size: effectiveWindowFrames,
-            minimax_h3_window_storyboard: true,
-          },
-          isEnhancing: false,
-        }))
-        return
-      }
-
-      // TTS dialogue needs more tokens for longer conversations
-      const maxTokens = (generationMode === 'audio' && ttsMode) ? 2048 : undefined
-
-      const result = await api.llmEnhancePrompt({
-        prompt: params.prompt,
-        mode: generationMode,
-        model_type: params.model_type,
-        max_new_tokens: maxTokens,
-        image_paths: imagePaths.length > 0 ? imagePaths : undefined,
-        duration_seconds: (generationMode === 'video' || generationMode === 'avatar') ? state.durationSeconds : undefined,
-        window_count: (generationMode === 'video' || generationMode === 'avatar') ? windowCount : undefined,
-        window_size_seconds: (generationMode === 'video' || generationMode === 'avatar') ? state.slidingWindowSeconds : undefined,
-        activated_loras: params.activated_loras.length > 0 ? params.activated_loras : undefined,
-        tts_enhance_mode: ttsMode || undefined,
-        tts_voice_count: state.ttsVoiceCount || undefined,
-        reference_context: referenceContext,
-      })
-      set(s => ({
-        params: { ...s.params, prompt: result.enhanced },
-        isEnhancing: false,
-      }))
-      // Auto-parse speaker names from the enhanced text whenever there are
-      // voice slots to fill. Previously gated to dialogue mode only; the user
-      // expects monologue enhance ("Peter: Hello world.") to also populate
-      // voice slot 1 with "Peter". `force=true` overrides the manual flag
-      // — enhance creates a fresh script, so previous user-edited names are
-      // no longer relevant.
-      if (ttsMode && get().ttsVoiceCount > 0) {
-        get()._autoParseSpkeakerNames(result.enhanced, true)
-      }
-    } catch (e) {
-      console.error('Failed to enhance prompt:', e)
-      set({ isEnhancing: false })
-    }
-  },
-
   // Director (Music Video Director)
   sidebarMode: 'studio' as const,
   directorSkill: null,
@@ -8364,7 +8134,7 @@ export const useStore = create<AppState>((set, get) => {
     if (get().llmStatus?.loaded) {
       try {
         await api.unloadLlm()
-        set({ llmStatus: { loaded: false, model_id: null, device: null, provider: '' } })
+        set({ llmStatus: UNLOADED_LLM_STATUS })
       } catch { /* best-effort */ }
     }
 

@@ -381,7 +381,10 @@ class H3WindowPlannerTests(unittest.TestCase):
         handler = (APP / "wgp.py").read_text(encoding="utf-8")
         launch = (APP / "_launch_runtime.py").read_text(encoding="utf-8")
         llm_router = (APP / "routers" / "llm.py").read_text(encoding="utf-8")
-        store = (ROOT / "ui" / "src" / "stores" / "useStore.ts").read_text(encoding="utf-8")
+        store = (
+            (ROOT / "ui" / "src" / "stores" / "useStore.ts").read_text(encoding="utf-8")
+            + (ROOT / "ui" / "src" / "stores" / "llmSlice.ts").read_text(encoding="utf-8")
+        )
         advanced = (ROOT / "ui" / "src" / "components" / "Sidebar" / "AdvancedSettings.tsx").read_text(encoding="utf-8")
         prompt_input = (ROOT / "ui" / "src" / "components" / "Sidebar" / "PromptInput.tsx").read_text(encoding="utf-8")
         main_content = (ROOT / "ui" / "src" / "components" / "MainContent" / "MainContent.tsx").read_text(encoding="utf-8")

@@ -38,6 +38,7 @@ function clip(name: string) {
 
 test('Series handoff validates all sources before replacing the draft and can retry', { concurrency: false }, async () => {
   const { render, screen, waitFor, cleanup, fireEvent } = await import('@testing-library/react')
+  const { setUiLanguage } = await import('../src/i18n/index.ts')
   const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
   const { videoEditorDraftStorageKey } = await import('../src/features/video-editor/editorDraft.ts')
   const draftKey = videoEditorDraftStorageKey('default')
@@ -79,6 +80,13 @@ test('Series handoff validates all sources before replacing the draft and can re
   )
   assert.deepEqual(JSON.parse(dom.window.localStorage.getItem('maestro-video-editor-pending-sequence') || '{}'), handoff)
   assert.match(screen.getByText(/current draft were kept/).textContent || '', /current draft were kept/)
+
+  await setUiLanguage('es')
+  await screen.findByRole('button', { name: 'Reintentar la entrega' })
+  assert.deepEqual(probed, ['first.mp4', 'second.mp4'])
+  await setUiLanguage('en')
+  await screen.findByRole('button', { name: 'Retry hand-off' })
+  assert.deepEqual(probed, ['first.mp4', 'second.mp4'])
 
   failSecond = false
   fireEvent.click(screen.getByRole('button', { name: 'Retry hand-off' }))
