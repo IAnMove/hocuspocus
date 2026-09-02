@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
-import { GenerationModeSelector } from './GenerationModeSelector'
 import { InputsPanel } from './InputsPanel'
 import { OmniReferenceSection } from './OmniReferenceSection'
 import { PromptInput } from './PromptInput'
@@ -74,6 +73,15 @@ export function Sidebar() {
   const isContinue = isVideo && !isOmniReference && imageMode === 3
   const isBlend = isVideo && !isOmniReference && imageMode === 4
   const isI2vOnly = modelOptions?.i2v_class && !modelOptions?.t2v_class
+  const directModeLabel = {
+    image: t('directModes.image'),
+    video: t('directModes.video'),
+    audio: t('directModes.audio'),
+    model3d: t('directModes.model3d'),
+    avatar: t('directModes.avatar'),
+    tools: t('directModes.tools'),
+  }[generationMode]
+  const panelTitle = isDirector ? t('panel.director') : `${t('panel.directGeneration')} · ${directModeLabel}`
   const previousToolContext = useRef(`${generationMode}:${editSubMode}`)
   const setToolsSidebarCollapsed = (collapsed: boolean) => {
     setToolsCollapsed(collapsed)
@@ -167,8 +175,6 @@ export function Sidebar() {
           added + hardware bar expanded), instead of letting flex-shrink
           crush sections into each other. */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 min-h-0 [&>*]:shrink-0">
-        <GenerationModeSelector />
-
         {/* Tools mode: standalone post-processing (upscale / revoice) on any
             existing clip. Renders in place of the generation controls. */}
         {isTools ? <ToolsPanel /> : isModel3d ? <Hunyuan3DPanel /> : (
@@ -314,7 +320,7 @@ export function Sidebar() {
           <PanelLeftOpen size={17} />
         </button>
         <span className="mt-2 text-[10px] uppercase tracking-[0.2em] text-text-muted [writing-mode:vertical-rl]">
-          {isDirector ? t('panel.director') : t('panel.directGeneration')}
+          {panelTitle}
         </span>
       </aside>
     )
@@ -327,7 +333,7 @@ export function Sidebar() {
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <BrandIdentity appVersion={appVersion} />
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-text-secondary">{isDirector ? t('panel.director') : t('panel.directGeneration')}</span>
+          <span className="text-xs font-medium text-text-secondary">{panelTitle}</span>
           <button
             onClick={() => setToolsSidebarCollapsed(true)}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"

@@ -5,10 +5,11 @@ import {
 } from 'lucide-react'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
 import { useStore } from '../../stores/useStore'
-import type { MediaFilter } from '../../types'
+import type { GenerationMode, MediaFilter } from '../../types'
 
 interface MenuItem {
   value?: MediaFilter
+  section?: string
   label: string
   description: string
   icon: ReactNode
@@ -54,28 +55,30 @@ function PrimaryButton({ active, icon, label, onClick, menu, ariaLabel }: {
 
 function NavigationMenu({ title, items, activeValue }: { title: string; items: MenuItem[]; activeValue: MediaFilter }) {
   return (
-    <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-xl border border-border bg-bg-secondary p-2 shadow-2xl">
+    <div className="absolute left-0 top-full z-50 mt-2 max-h-[calc(100vh-6rem)] w-80 overflow-y-auto rounded-xl border border-border bg-bg-secondary p-2 shadow-2xl">
       <p className="px-2 pb-1 pt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-text-muted">{title}</p>
       <div className="grid gap-1">
         {items.map(item => (
-          <button
-            key={item.label}
-            type="button"
-            role="tab"
-            aria-label={item.label}
-            aria-selected={item.value === activeValue}
-            onClick={event => {
-              item.action()
-              event.currentTarget.closest('details')?.removeAttribute('open')
-            }}
-            className="flex items-start gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-bg-hover"
-          >
-            <span className="mt-0.5 text-accent-blue">{item.icon}</span>
-            <span className="min-w-0">
-              <span className="block text-xs font-medium text-text-primary">{item.label}</span>
-              <span className="block text-[10px] leading-relaxed text-text-muted">{item.description}</span>
-            </span>
-          </button>
+          <div key={item.label}>
+            {item.section && <p className="mt-1 border-t border-border/60 px-2 pb-1 pt-2 text-[8px] font-semibold uppercase tracking-[0.18em] text-accent-blue first:mt-0 first:border-0 first:pt-1">{item.section}</p>}
+            <button
+              type="button"
+              role="tab"
+              aria-label={item.label}
+              aria-selected={item.value === activeValue}
+              onClick={event => {
+                item.action()
+                event.currentTarget.closest('details')?.removeAttribute('open')
+              }}
+              className="flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-bg-hover"
+            >
+              <span className="mt-0.5 text-accent-blue">{item.icon}</span>
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-text-primary">{item.label}</span>
+                <span className="block text-[10px] leading-relaxed text-text-muted">{item.description}</span>
+              </span>
+            </button>
+          </div>
         ))}
       </div>
     </div>
@@ -105,15 +108,25 @@ export function TabFilter() {
   }, [])
 
   const openFilter = (filter: MediaFilter) => setMediaFilter(filter)
+  const openDirectGeneration = (mode: GenerationMode) => {
+    useStore.getState().setGenerationMode(mode)
+    useStore.getState().setSidebarMode('studio')
+    window.dispatchEvent(new Event('hocuspocus:studio-open'))
+  }
   const createItems: MenuItem[] = [
-    { label: t('primary.studio'), description: t('descriptions.studio'), icon: <Sparkles size={15} />, action: () => window.dispatchEvent(new Event('hocuspocus:studio-open')) },
-    { value: 'stories', label: t('tabs.storyLab'), description: t('descriptions.storyLab'), icon: <BookOpen size={15} />, action: () => openFilter('stories') },
-    { value: 'series', label: t('tabs.seriesLab'), description: t('descriptions.seriesLab'), icon: <Library size={15} />, action: () => openFilter('series') },
-    { value: 'comics', label: t('tabs.comics'), description: t('descriptions.comics'), icon: <BookOpen size={15} />, action: () => openFilter('comics') },
-    { label: t('labs.director'), description: t('descriptions.director'), icon: <Clapperboard size={15} />, action: () => {
+    { section: t('menu.directGeneration'), label: t('directModes.image'), description: t('descriptions.directImage'), icon: <Sparkles size={15} />, action: () => openDirectGeneration('image') },
+    { label: t('directModes.video'), description: t('descriptions.directVideo'), icon: <Video size={15} />, action: () => openDirectGeneration('video') },
+    { label: t('directModes.audio'), description: t('descriptions.directAudio'), icon: <Activity size={15} />, action: () => openDirectGeneration('audio') },
+    { label: t('directModes.model3d'), description: t('descriptions.direct3d'), icon: <Boxes size={15} />, action: () => openDirectGeneration('model3d') },
+    { label: t('directModes.avatar'), description: t('descriptions.directEdit'), icon: <WandSparkles size={15} />, action: () => openDirectGeneration('avatar') },
+    { label: t('directModes.tools'), description: t('descriptions.directTools'), icon: <WandSparkles size={15} />, action: () => openDirectGeneration('tools') },
+    { section: t('menu.guidedCreation'), label: t('labs.director'), description: t('descriptions.director'), icon: <Clapperboard size={15} />, action: () => {
       useStore.getState().setSidebarMode('director')
       window.dispatchEvent(new Event('maestro:director-open'))
     } },
+    { value: 'stories', label: t('tabs.storyLab'), description: t('descriptions.storyLab'), icon: <BookOpen size={15} />, action: () => openFilter('stories') },
+    { value: 'series', label: t('tabs.seriesLab'), description: t('descriptions.seriesLab'), icon: <Library size={15} />, action: () => openFilter('series') },
+    { value: 'comics', label: t('tabs.comics'), description: t('descriptions.comics'), icon: <BookOpen size={15} />, action: () => openFilter('comics') },
     { value: 'videoeditor', label: t('tabs.videoEditor'), description: t('descriptions.editor'), icon: <Video size={15} />, action: () => openFilter('videoeditor') },
     { value: 'scene3d', label: t('tabs.scene3d'), description: t('descriptions.video3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('scene3d') },
     { value: 'characters', label: t('tabs.characters'), description: t('descriptions.characters'), icon: <WandSparkles size={15} />, action: () => openFilter('characters') },

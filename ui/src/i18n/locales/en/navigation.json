@@ -34,11 +34,21 @@
   },
   "menu": {
     "create": "Choose a creative workspace",
-    "library": "Find projects and generated media"
+    "library": "Find projects and generated media",
+    "directGeneration": "Direct generation",
+    "guidedCreation": "Guided creation"
   },
   "panel": {
     "directGeneration": "Direct generation",
     "director": "Director"
+  },
+  "directModes": {
+    "image": "Image",
+    "video": "Video",
+    "audio": "Audio",
+    "model3d": "3D",
+    "avatar": "Edit",
+    "tools": "Tools"
   },
   "descriptions": {
     "studio": "Generate a single image, video, song or 3D asset.",
@@ -52,7 +62,13 @@
     "projects": "Durable creative documents you can reopen and edit.",
     "assets": "Reusable source files and generated results.",
     "allOutputs": "Browse every generated output in the current output folder.",
-    "mediaFilters": "Filter the output library by this media type."
+    "mediaFilters": "Filter the output library by this media type.",
+    "directImage": "Create one image with complete control over its model and references.",
+    "directVideo": "Create one video or continue an existing clip.",
+    "directAudio": "Create speech, music, effects or a mix.",
+    "direct3d": "Generate a standalone 3D asset.",
+    "directEdit": "Edit, restyle, inpaint or recast an existing result.",
+    "directTools": "Run post-processing tools on an existing asset."
   },
   "search": {
     "placeholder": "Search...",
