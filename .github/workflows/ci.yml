@@ -92,6 +92,8 @@ jobs:
       - name: Install UI deps
         working-directory: ui
         run: npm ci
+      - name: First-party LOC and complexity ratchet
+        run: python scripts/code_health.py --check
       # Split `npm run check` so a hung runner is visible in the failing step
       # instead of one opaque 6-hour job (GitHub's default timeout).
       - name: UI tests
