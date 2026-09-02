@@ -96,6 +96,9 @@ def outer(a, b):
         self.assertIn("<!-- code-health-report -->", markdown)
         self.assertIn("| Production LOC |", markdown)
         self.assertIn("**Ratchet passed.**", markdown)
+        preview = code_health._markdown_report(report)
+        self.assertNotIn("**Ratchet passed.**", preview)
+        self.assertNotIn("**Ratchet failed.**", preview)
 
     def test_line_count_reports_physical_and_non_blank_lines(self):
         with tempfile.TemporaryDirectory() as directory:
