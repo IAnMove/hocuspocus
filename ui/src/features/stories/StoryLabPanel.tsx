@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
   BookOpen, Boxes, Check, ChevronRight, Download, Film, ImagePlus, Loader2,
-  Music, Network, Palette, Play, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
+  Music, Network, Palette, Play, Plus, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
-import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
+
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
@@ -20,10 +20,11 @@ import { StoryMusicTab } from './StoryMusicTab'
 import { StoryTrailerTab } from './StoryTrailerTab'
 import { StoryProductionsTab } from './StoryProductionsTab'
 import { CompactVideoWorkspace } from './CompactVideoWorkspace'
+import { StoryOverviewTab } from './StoryOverviewTab'
 import { StoryLabVisualsProvider } from './StoryLabVisualsProvider'
 import { emptyCharacter, pruneUnusedAssets } from './storyLabEditors'
 import {
-  button, input, panel, requiredInput, Field, SectionHeader, requiredPreparationButton,
+  button, input, panel, Field, requiredPreparationButton,
   type ProductionReviewIssue, type StoryGenerationOptions, type StoryLabTab as StoryTab,
 } from './storyLabChrome'
 import {
@@ -75,11 +76,7 @@ const CHARACTER_IDENTITY_REFERENCE_LOCK = [
   'Do not use a distant shot, full-body environmental composition, extreme profile, covered face, dramatic occlusion, action pose or additional characters.',
 ].join(' ')
 
-const CHARACTER_STYLE_PRESETS = [
-  ['Realistas', 'Photorealistic live-action people, natural skin texture, anatomically realistic proportions, authentic hair and fabric, cinematic photographic detail'],
-  ['Plastilina', 'Handmade claymation characters sculpted from plasticine, visible fingerprints and tool marks, tactile matte clay surfaces, stop-motion proportions'],
-  ['Anime', '2D anime characters, clean expressive linework, consistent cel shading, stylized facial proportions, illustrated skin and hair, never photorealistic'],
-] as const
+
 
 function stableTextKey(value: string): string {
   let hash = 2166136261
@@ -201,17 +198,6 @@ const storyJobKey = (workspace: string, projectId: string) =>
 const storyResultKey = (workspace: string, projectId: string) =>
   `maestro-story-plan-result:${workspace}:${projectId}`
 
-const GENRES = [
-  'Adventure', 'Action', 'Comedy', 'Drama', 'Fantasy', 'Science fiction', 'Horror',
-  'Mystery', 'Thriller', 'Romance', 'Historical', 'Crime', 'Slice of life',
-  'Western', 'Cyberpunk', 'Noir', 'Satire',
-]
-const TONES = [
-  'Cinematic', 'Epic', 'Lighthearted', 'Dark', 'Humorous', 'Dramatic',
-  'Suspenseful', 'Emotional', 'Hopeful', 'Gritty', 'Whimsical', 'Mysterious',
-  'Romantic', 'Melancholic', 'Satirical', 'Family-friendly',
-]
-
 const STORY_PROJECT_TYPES: Array<{ id: StoryProjectType; label: string; description: string }> = [
   { id: 'full_story', label: 'Historia completa', description: 'Mundo, personajes, estructura, música y adaptaciones.' },
   { id: 'music_video', label: 'Videoclip', description: 'Canción original y una historia visual construida alrededor de ella.' },
@@ -306,161 +292,6 @@ function draftPaths(result: Record<string, unknown>): string[] {
     })
   }
   return paths
-}
-
-function Choice({
-  label, value, options, onChange, required = false,
-}: {
-  label: string
-  value: string
-  options: string[]
-  onChange: (value: string) => void
-  required?: boolean
-}) {
-  const custom = !options.includes(value)
-  return (
-    <label className={`block text-[10px] ${required ? 'text-violet-200' : 'text-text-muted'}`}>
-      {label}{required && <span className="ml-1 text-violet-300" title="Required">●</span>}
-      <select
-        className={`${input} ${required ? requiredInput : ''} mt-1`}
-        value={custom ? '__other__' : value}
-        onChange={event => onChange(event.target.value === '__other__' ? '' : event.target.value)}
-        required={required}
-        aria-required={required}
-      >
-        {options.map(option => <option key={option}>{option}</option>)}
-        <option value="__other__">Other…</option>
-      </select>
-      {custom && <input className={`${input} mt-1`} value={value} onChange={event => onChange(event.target.value)} placeholder={`Custom ${label.toLowerCase()}`} />}
-    </label>
-  )
-}
-
-function ProviderPanel({
-  project, patch, onProfileModeChange,
-}: {
-  project: StoryProject
-  patch: (patch: Partial<StoryProject>) => void
-  onProfileModeChange: (useGlobalProfile: boolean) => void
-}) {
-  const services = useStore(state => state.servicesConfig)
-  const models = useStore(state => state.models)
-  const profile = useStore(state => state.productionProfile)
-  const resolvedWriting = resolveStoryWritingProvider(profile, project)
-  const provider = resolvedWriting.provider
-  const effectiveImageProvider = project.provider.useGlobalProfile && profile.image.provider === 'minimax'
-    ? 'minimax' : project.provider.imageProvider
-  const effectiveImageModel = project.provider.useGlobalProfile
-    ? profile.image.model : project.provider.imageModel
-  const installedImageModels = models.filter(model =>
-    model.is_downloaded !== false
-    && getModelMode(model.model_type, model.family) === 'image')
-  const writingReady = provider === 'maestro'
-    || (provider === 'deepseek' && Boolean(services?.deepseek_api_key_set))
-    || (provider === 'minimax' && Boolean(services?.minimax_api_key_set))
-    || (provider === 'openai' && Boolean(services?.openai_api_key_set))
-    || (provider === 'openai-compatible'
-      && Boolean(services?.compatible_api_key_set && services?.compatible_base_url))
-  const imageReady = effectiveImageProvider === 'maestro'
-    ? installedImageModels.some(model => model.model_type === effectiveImageModel)
-    : Boolean(services?.minimax_api_key_set)
-  const setProvider = (next: StoryWritingProvider) => {
-    const defaults = next === 'deepseek'
-      ? { writingModel: 'deepseek-v4-pro', writingBaseUrl: 'https://api.deepseek.com' }
-      : next === 'minimax'
-        ? { writingModel: 'MiniMax-M3', writingBaseUrl: 'https://api.minimax.io/v1' }
-        : next === 'openai'
-          ? { writingModel: 'gpt-4.1', writingBaseUrl: 'https://api.openai.com' }
-          : next === 'openai-compatible'
-            ? { writingModel: '', writingBaseUrl: services?.compatible_base_url || '' }
-            : { writingModel: project.provider.writingModel, writingBaseUrl: project.provider.writingBaseUrl }
-    patch({ provider: { ...project.provider, writingProvider: next, ...defaults } })
-  }
-  const patchProvider = (value: Partial<StoryProject['provider']>) =>
-    patch({ provider: { ...project.provider, ...value } })
-  return (
-    <div className={`${panel} space-y-3`}>
-      <div>
-        <h3 className="text-sm font-semibold text-text-primary">Generation agents</h3>
-        <p className="text-[10px] text-text-muted mt-1">Choose global inheritance or freeze explicit writing and concept-art overrides in this story.</p>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <button type="button" className={`${button} ${project.provider.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`}
-          onClick={() => onProfileModeChange(true)}>Use global profile</button>
-        <button type="button" className={`${button} ${!project.provider.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`}
-          onClick={() => onProfileModeChange(false)}>Override in this project</button>
-      </div>
-      {project.provider.useGlobalProfile && (
-        <p className="text-[10px] text-emerald-300">
-          Global: {resolvedWriting.provider} / {resolvedWriting.model}
-          {resolvedWriting.baseUrl && ` · ${resolvedWriting.baseUrl}`}
-          {' · '} {profile.image.provider} / {profile.image.model}
-          {' · '}video {profile.video.model} · {profile.video.settings.resolution} {profile.video.settings.aspectRatio}
-        </p>
-      )}
-      <fieldset disabled={project.provider.useGlobalProfile} className="space-y-3 disabled:opacity-50">
-      <label className="block text-[10px] text-text-muted">Writing LLM
-        <select className={`${input} mt-1`} value={provider} onChange={event => setProvider(event.target.value as StoryWritingProvider)}>
-          <option value="maestro">HocusPocus internal · default</option>
-          <option value="deepseek">DeepSeek</option>
-          <option value="minimax">MiniMax</option>
-          <option value="openai">OpenAI</option>
-          <option value="openai-compatible">Custom OpenAI-compatible</option>
-        </select>
-      </label>
-      <p className={`text-[10px] ${writingReady ? 'text-emerald-400' : 'text-amber-300'}`}>
-        {writingReady ? 'Writing provider ready.' : 'Missing provider credentials in Settings → Services.'}
-      </p>
-      {provider !== 'maestro' && (
-        <label className="block text-[10px] text-text-muted">Writing model
-          {provider === 'deepseek' ? (
-            <select className={`${input} mt-1`} value={project.provider.writingModel || 'deepseek-v4-pro'} onChange={event => patchProvider({ writingModel: event.target.value })}>
-              <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
-              <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
-            </select>
-          ) : provider === 'minimax' ? (
-            <select className={`${input} mt-1`} value={project.provider.writingModel || 'MiniMax-M3'} onChange={event => patchProvider({ writingModel: event.target.value })}>
-              <option value="MiniMax-M3">MiniMax M3</option>
-              <option value="MiniMax-M2.7">MiniMax M2.7</option>
-              <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed</option>
-            </select>
-          ) : (
-            <input className={`${input} mt-1`} value={project.provider.writingModel} onChange={event => patchProvider({ writingModel: event.target.value })} />
-          )}
-        </label>
-      )}
-      <label className="block text-[10px] text-text-muted">Concept-art provider
-        <select className={`${input} mt-1`} value={project.provider.imageProvider} onChange={event => patchProvider({ imageProvider: event.target.value as 'maestro' | 'minimax' })}>
-          <option value="maestro">HocusPocus local</option>
-          <option value="minimax">MiniMax Image</option>
-        </select>
-      </label>
-      {project.provider.imageProvider === 'maestro' && (
-        <label className="block text-[10px] text-text-muted">HocusPocus image model
-          <select
-            className={`${input} mt-1`}
-            value={project.provider.imageModel}
-            onChange={event => patchProvider({ imageModel: event.target.value })}
-          >
-            {!installedImageModels.some(model => model.model_type === project.provider.imageModel)
-              && <option value={project.provider.imageModel}>{project.provider.imageModel || 'Select an installed model'} · unavailable</option>}
-            {installedImageModels.map(model => (
-              <option key={model.model_type} value={model.model_type}>{model.name}</option>
-            ))}
-          </select>
-        </label>
-      )}
-      <p className={`text-[10px] ${imageReady ? 'text-emerald-400' : 'text-amber-300'}`}>
-        {imageReady
-          ? project.provider.imageProvider === 'minimax'
-            ? 'MiniMax Image is ready (fixed provider image model).' : 'Local image model is installed.'
-          : project.provider.imageProvider === 'minimax'
-            ? 'Add the MiniMax API key in Settings → Services.'
-            : 'Choose an installed HocusPocus image model.'}
-      </p>
-      </fieldset>
-    </div>
-  )
 }
 
 export function StoryLabPanel() {
@@ -4595,222 +4426,26 @@ export function StoryLabPanel() {
             )}
             {tab === 'overview' && (
               <>
-                <div id="story-review-overview" className="scroll-mt-4">
-                  <SectionHeader
-                    title={project.projectType === 'music_video'
-                      ? 'Canción e historia visual'
-                      : project.projectType === 'trailer'
-                        ? 'Concepto de tráiler cinematográfico'
-                        : project.projectType === 'quick_video' ? 'Concepto de vídeo rápido' : 'Story and intent'}
-                    description={project.projectType === 'music_video'
-                      ? 'Con cinco decisiones podemos escribir la canción y preparar un videoclip coherente.'
-                      : project.projectType === 'trailer'
-                        ? 'Define la película, protagonistas, conflicto, promesa y gancho sin revelar el desenlace.'
-                      : project.projectType === 'quick_video'
-                        ? 'Una idea directa, sus protagonistas, el lugar y lo que debe ocurrir.'
-                        : 'Define what the story is about before choosing shots or panels.'}
-                    scope="overview" busy={busy} approved={isApproved('overview')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('overview')}
-                  />
-                </div>
-                <div className={`${panel} mb-4 border-accent-blue/30 bg-accent-blue/5`}>
-                  <Field
-                    required
-                    label="Idea general, estilo, avatar y prompts de referencia"
-                    value={project.creativeBrief.generalIdea}
-                    onChange={generalIdea => patch({ creativeBrief: { ...project.creativeBrief, generalIdea } })}
-                    rows={9}
-                    placeholder="Describe libremente el proyecto. Puedes indicar protagonista/avatar, época, estilo, propósito y pegar un prompt que ya te funcionó como guía. Story Lab separará identidad, dirección artística, canción y acciones sin repetir literalmente el ejemplo en cada plano."
-                  />
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <p className="text-[10px] text-text-muted">El LLM interpreta este texto y propone cada campo; en modo Guided puedes aprobarlos uno a uno.</p>
-                    <button type="button" className={`${button} ${requiredPreparationButton}`} disabled={Boolean(busy)} onClick={() => generate('all')}>
-                      <Sparkles size={13} /> Interpretar y rellenar todo
-                    </button>
-                  </div>
-                </div>
-                {project.projectType === 'music_video' && (
-                  <div className={`${panel} mb-4 grid md:grid-cols-2 gap-3 border-pink-500/20`}>
-                    <div className="md:col-span-2"><Field required label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={4} placeholder="Dónde nace la canción, situación, época, atmósfera y cualquier dato imprescindible." /></div>
-                    <Field required label="Artista / quién canta, graba o produce" value={project.creativeBrief.performer} onChange={performer => patch({ creativeBrief: { ...project.creativeBrief, performer } })} rows={3} placeholder="Voz, personalidad artística, presencia escénica o productor." />
-                    <Field required label="Estilo musical" value={project.creativeBrief.musicStyle} onChange={musicStyle => patch({ creativeBrief: { ...project.creativeBrief, musicStyle }, music: { ...project.music, style: musicStyle } })} rows={3} placeholder="Género, instrumentación, voz, energía y producción." />
-                    <div className="md:col-span-2"><Field required label="Qué queremos que cuente la canción" value={project.creativeBrief.songStory} onChange={songStory => patch({ creativeBrief: { ...project.creativeBrief, songStory }, music: { ...project.music, brief: songStory } })} rows={5} placeholder="Historia, punto de vista, emoción inicial, cambio y recuerdo final." /></div>
-                    <label className="block text-[10px] text-text-muted">
-                      Duración objetivo · {project.creativeBrief.durationSeconds}s
-                      <input type="range" min={30} max={360} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
-                        onChange={event => {
-                          const durationSeconds = Number(event.target.value)
-                          patch({ creativeBrief: { ...project.creativeBrief, durationSeconds }, music: { ...project.music, targetDurationSeconds: durationSeconds } })
-                        }} />
-                    </label>
-                    <p className="self-end text-[10px] text-text-muted">El LLM generará una canción, un intérprete visualizable, un mundo compacto y 4–10 momentos utilizables como planos.</p>
-                  </div>
-                )}
-                {project.projectType === 'trailer' && (
-                  <div className={`${panel} mb-4 grid gap-3 border-amber-500/20 md:grid-cols-2`}>
-                    <div className="md:col-span-2"><Field required label="Contexto de la película" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={4} placeholder="Época, situación inicial, género, tono y aquello que el público debe comprender." /></div>
-                    <Field required label="Protagonistas y antagonistas" value={project.creativeBrief.subjects} onChange={subjects => patch({ creativeBrief: { ...project.creativeBrief, subjects } })} rows={4} placeholder="Quién conduce la película, qué desea y quién o qué se le opone." />
-                    <Field required label="Mundo y localizaciones" value={project.creativeBrief.setting} onChange={setting => patch({ creativeBrief: { ...project.creativeBrief, setting } })} rows={4} placeholder="El mundo visual de la película y sus localizaciones esenciales." />
-                    <div className="md:col-span-2"><Field required label="Conflicto, promesa y material del tráiler" value={project.creativeBrief.action} onChange={action => patch({ creativeBrief: { ...project.creativeBrief, action } })} rows={5} placeholder="Qué amenaza irrumpe, qué grandes imágenes o decisiones deben prometerse y qué misterio debe quedar abierto." /></div>
-                    <label className="block text-[10px] text-text-muted">
-                      Duración objetivo · {project.creativeBrief.durationSeconds}s
-                      <input type="range" min={15} max={180} step={5} className="mt-2 w-full accent-amber-400" value={project.creativeBrief.durationSeconds}
-                        onChange={event => {
-                          const durationSeconds = Number(event.target.value)
-                          setTrailerDuration(durationSeconds)
-                          patch({ creativeBrief: { ...project.creativeBrief, durationSeconds } })
-                        }} />
-                    </label>
-                    <p className="self-end text-[10px] text-text-muted">El LLM preparará concepto, mundo, protagonistas y 6–12 momentos de tráiler. No escribirá ni exigirá una canción.</p>
-                  </div>
-                )}
-                {project.projectType === 'quick_video' && (
-                  <div className={`${panel} mb-4 grid md:grid-cols-2 gap-3 border-cyan-500/20`}>
-                    <div className="md:col-span-2"><Field required label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={3} placeholder="Qué está pasando y qué debe entender el espectador sin explicación adicional." /></div>
-                    <Field required label="Protagonistas" value={project.creativeBrief.subjects} onChange={subjects => patch({ creativeBrief: { ...project.creativeBrief, subjects } })} rows={3} placeholder="Por ejemplo: Trump y Marco Rubio." />
-                    <Field required label="Lugar" value={project.creativeBrief.setting} onChange={setting => patch({ creativeBrief: { ...project.creativeBrief, setting } })} rows={3} placeholder="Por ejemplo: despacho de la Casa Blanca, de día." />
-                    <div className="md:col-span-2"><Field required label="Qué ocurre / diálogo" value={project.creativeBrief.action} onChange={action => patch({ creativeBrief: { ...project.creativeBrief, action } })} rows={5} placeholder="Acción, conversación, remate o mensaje que debe aparecer." /></div>
-                    <label className="block text-[10px] text-text-muted">Formato
-                      <select className={`${input} mt-1`} value={project.creativeBrief.quickFormat}
-                        onChange={event => patch({ creativeBrief: { ...project.creativeBrief, quickFormat: event.target.value as StoryProject['creativeBrief']['quickFormat'] } })}>
-                        <option value="dialogue">Diálogo</option><option value="meme">Meme</option><option value="parody">Parodia</option>
-                        <option value="sketch">Sketch</option><option value="viral">Viral</option><option value="announcement">Anuncio</option>
-                      </select>
-                    </label>
-                    <label className="block text-[10px] text-text-muted">
-                      Duración objetivo · {project.creativeBrief.durationSeconds}s
-                      <input type="range" min={5} max={120} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
-                        onChange={event => patch({ creativeBrief: { ...project.creativeBrief, durationSeconds: Number(event.target.value) } })} />
-                    </label>
-                  </div>
-                )}
-                <div className="grid xl:grid-cols-[1fr_360px] gap-4">
-                  <div className={`${panel} grid md:grid-cols-2 gap-3`}>
-                    <Field required label="Title" value={project.title} onChange={title => patch({ title })} />
-                    <label className="block text-[10px] text-violet-200">
-                      Language<span className="ml-1 text-violet-300" title="Required">●</span>
-                      <EditableLanguageInput
-                        className={`${input} ${requiredInput} mt-1`}
-                        value={project.language}
-                        onChange={language => patch({ language })}
-                        required
-                      />
-                    </label>
-                    <label className="block text-[10px] text-violet-200">
-                      Idioma hablado del vídeo
-                      <select className={`${input} mt-1`} value={project.spokenLanguage} onChange={event => patch({ spokenLanguage: event.target.value })}>
-                        <option value="">Automático según el diálogo</option>
-                        <option value="Español de España">Español de España</option>
-                        <option value="Español latinoamericano">Español latinoamericano</option>
-                        <option value="English">English</option>
-                        <option value="French">Français</option>
-                        <option value="Italian">Italiano</option>
-                      </select>
-                      <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">Fuerza el idioma en cada prompt. El acento regional depende de la adherencia del modelo.</span>
-                    </label>
-                    {project.projectType === 'music_video' && <label className="block text-[10px] text-violet-200">
-                      Variedad de localizaciones
-                      <select className={`${input} mt-1`} value={project.locationVariety} onChange={event => patch({ locationVariety: event.target.value as StoryProject['locationVariety'] })}>
-                        <option value="balanced">Equilibrada · mínimo 3 entornos</option>
-                        <option value="single_location">Una sola localización intencionada</option>
-                      </select>
-                    </label>}
-                    <div className="md:col-span-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
-                      <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
-                        <input type="checkbox" checked={project.protagonistConsistency} onChange={event => patch({ protagonistConsistency: event.target.checked, protagonistCharacterId: event.target.checked ? (project.protagonistCharacterId || project.characters[0]?.id || '') : project.protagonistCharacterId, ...(event.target.checked && project.musicVideoGenerationMode === 'direct_video' ? { musicVideoGenerationMode: 'image_guided' as const } : {}) })} className="mt-0.5 accent-violet-400" />
-                        <span><span className="block text-violet-200">Crear primero y fijar protagonista</span><span className="block text-[9px] text-text-muted">Opcional. Exige una identidad principal aprobada y la coloca como primera referencia en todos los vídeos compatibles.</span></span>
-                      </label>
-                      {project.protagonistConsistency && <select className={input} value={project.protagonistCharacterId} onChange={event => patch({ protagonistCharacterId: event.target.value })}>
-                        <option value="">Selecciona protagonista</option>
-                        {project.characters.map(character => <option key={character.id} value={character.id}>{character.name || 'Sin nombre'}</option>)}
-                      </select>}
-                      {project.protagonistConsistency && <p className={`text-[9px] ${protagonistReferenceReady ? 'text-emerald-200' : 'text-amber-300'}`}>{protagonistReferenceReady ? 'Identidad principal aprobada y lista.' : 'Ve a Personajes, crea o sube la identidad del protagonista, selecciónala como principal y apruébala.'}</p>}
-                    </div>
-                    {promptHealthWarnings.length > 0 && <div className="md:col-span-2 rounded-lg border border-amber-500/35 bg-amber-500/5 p-3">
-                      <p className="text-[10px] font-medium text-amber-200">Análisis preventivo del prompt</p>
-                      <ul className="mt-2 list-disc space-y-1 pl-4 text-[9px] leading-relaxed text-amber-100">{promptHealthWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
-                    </div>}
-                    {project.projectType === 'full_story' && (
-                      <>
-                        <Choice required label="Genre" value={project.genre} options={GENRES} onChange={genre => patch({ genre })} />
-                        <Choice required label="Tone" value={project.tone} options={TONES} onChange={tone => patch({ tone })} />
-                        <Field label="Audience" value={project.audience} onChange={audience => patch({ audience })} />
-                        <Field label="Theme" value={project.theme} onChange={theme => patch({ theme })} />
-                        <Field required label="What the story is about / premise" value={project.premise} onChange={premise => patch({ premise })} rows={5} placeholder="Who wants what, what stops them, and what happens if they fail?" />
-                      </>
-                    )}
-                    <Field required label="Visual style / independent art direction" value={project.visualStyle} onChange={visualStyle => patch({ visualStyle })} rows={5} placeholder="For example: hand-painted 2D animation, watercolor backgrounds, clean ink contours, warm muted palette…" />
-                    <div className="space-y-1.5">
-                      <Field
-                        required
-                        label="Estilo visual de los personajes"
-                        value={project.characterVisualStyle}
-                        onChange={characterVisualStyle => patch({ characterVisualStyle })}
-                        rows={5}
-                        placeholder="Realistas, plastilina, anime… Describe aquí el material, proporciones y acabado que deben compartir todas las personas."
-                      />
-                      <div className="flex flex-wrap gap-1.5">
-                        {CHARACTER_STYLE_PRESETS.map(([label, value]) => (
-                          <button
-                            key={label}
-                            type="button"
-                            className={`${button} px-2 py-1 text-[10px] ${project.characterVisualStyle === value ? 'border-accent-blue text-accent-blue' : ''}`}
-                            onClick={() => patch({ characterVisualStyle: value, enforceVisualStyle: true })}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="md:col-span-2 rounded-lg border border-border bg-bg-tertiary/50 p-3 space-y-2">
-                      <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={project.enforceVisualStyle}
-                          onChange={event => patch({ enforceVisualStyle: event.target.checked })}
-                        />
-                        <span>
-                          <span className="font-medium text-text-primary">Enforce these styles on every Story image</span>
-                          <span className="block mt-0.5 text-[10px] text-text-muted">Adds the global art direction and character rendering as highest-priority locks, so every visible person keeps the selected medium.</span>
-                        </span>
-                      </label>
-                      <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={project.allowClipText}
-                          onChange={event => patch({ allowClipText: event.target.checked })}
-                        />
-                        <span>
-                          <span className="font-medium text-text-primary">Permitir generar clips con textos</span>
-                          <span className="block mt-0.5 text-[10px] text-text-muted">Desactivado por defecto. Las letras y diálogos siguen guiando el audio y la acción, pero no se convierten en subtítulos, carteles ni palabras visibles.</span>
-                        </span>
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        <button className={button} disabled={!storyRenderStyle(project)} onClick={writeStyleIntoPrompts}>
-                          <Palette size={13} /> Write/replace style lock in existing prompts
-                        </button>
-                        <button className={button} disabled={!storyRenderStyle(project) || !styledReferenceTargetCount || Boolean(imageBusy) || referenceBatchBusy} onClick={regenerateStyledReferences}>
-                          <RefreshCcw size={13} /> Prepare {styledReferenceTargetCount} reference{styledReferenceTargetCount === 1 ? '' : 's'} for style conversion
-                        </button>
-                      </div>
-                      <p className="text-[9px] leading-relaxed text-text-muted">
-                        Opens all attached references in Images with the current art direction prefilled. Originals are preserved; new variants remain drafts until you approve them.
-                      </p>
-                    </div>
-                    <div className="md:col-span-2 border-t border-border pt-3">
-                      <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-text-muted">
-                        {project.projectType === 'full_story' ? 'Story treatment' : 'Tratamiento generado y editable'}
-                      </p>
-                      <div className="space-y-3">
-                        <Field label="Logline" value={project.logline} onChange={logline => patch({ logline })} rows={2} />
-                        <Field label="Synopsis" value={project.synopsis} onChange={synopsis => patch({ synopsis })} rows={8} />
-                        <Field label="Ending / final image" value={project.ending} onChange={ending => patch({ ending })} rows={3} />
-                      </div>
-                    </div>
-                  </div>
-                  <ProviderPanel project={project} patch={patch} onProfileModeChange={setStoryProfileMode} />
-                </div>
+                <StoryOverviewTab
+                  project={project}
+                  patch={patch}
+                  update={update}
+                  busy={busy}
+                  instruction={instruction}
+                  setInstruction={setInstruction}
+                  generate={generate}
+                  approve={approve}
+                  isApproved={isApproved}
+                  setTrailerDuration={setTrailerDuration}
+                  protagonistReferenceReady={protagonistReferenceReady}
+                  promptHealthWarnings={promptHealthWarnings}
+                  writeStyleIntoPrompts={writeStyleIntoPrompts}
+                  regenerateStyledReferences={regenerateStyledReferences}
+                  imageBusy={imageBusy}
+                  referenceBatchBusy={referenceBatchBusy}
+                  styledReferenceTargetCount={styledReferenceTargetCount}
+                  onProfileModeChange={setStoryProfileMode}
+                />
                 {project.projectType !== 'full_story' && (
                   <CompactVideoWorkspace
                     project={project}

@@ -107,7 +107,10 @@ test('Story Lab panel uses shared editors instead of passing component props', a
   assert.match(panel, /import \{ StoryTrailerTab \} from '\.\/StoryTrailerTab'/)
   assert.match(panel, /import \{ StoryProductionsTab \} from '\.\/StoryProductionsTab'/)
   assert.match(panel, /import \{ CompactVideoWorkspace \} from '\.\/CompactVideoWorkspace'/)
+  assert.match(panel, /import \{ StoryOverviewTab \} from '\.\/StoryOverviewTab'/)
   assert.equal(panel.includes('function ReferenceGallery'), false)
+  assert.equal(panel.includes('function Choice'), false)
+  assert.equal(panel.includes('Canción e historia visual'), false)
   assert.equal(panel.includes('function LocationEditor'), false)
   assert.equal(panel.includes('function CharacterEditor'), false)
   assert.equal(panel.includes('function BeatEditor'), false)
@@ -350,6 +353,17 @@ function sampleMusicCue() {
     candidates: [] as Array<Record<string, unknown>>,
   }
 }
+
+test('Story Lab overview tab is extracted with i18n chrome', async () => {
+  const { readFileSync } = await import('node:fs')
+  const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
+  const tab = readFileSync(new URL('../src/features/stories/StoryOverviewTab.tsx', import.meta.url), 'utf8')
+  assert.match(panel, /<StoryOverviewTab/)
+  assert.equal(panel.includes('Interpretar y rellenar todo'), false)
+  assert.match(tab, /t\('overview.interpretAll'\)/)
+  assert.match(tab, /t\('overview.trailerPlanHint'\)/)
+  assert.match(tab, /id="story-review-overview"/)
+})
 
 test('Story Lab music tab is extracted with i18n chrome', async () => {
   const { readFileSync } = await import('node:fs')

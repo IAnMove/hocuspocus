@@ -43,7 +43,7 @@ def test_trailer_is_a_standalone_story_project_type_without_music():
     assert "projectType === 'trailer' ? 60" in model
     assert "{ id: 'trailer', label: 'Tráiler cinematográfico'" in panel
     assert "{ id: 'trailer', label: 'Crear tráiler'" in panel
-    assert "No escribirá ni exigirá una canción" in panel
+    assert "No escribirá ni exigirá una canción" in CATALOG_ES.read_text(encoding="utf-8")
     assert "musicVideoGenerationMode: 'image_guided' as const" in panel
     assert "project.projectType === 'trailer' ? 'trailer' : 'productions'" in panel
     assert 'if project_type in {"trailer", "quick_video"}' in backend
