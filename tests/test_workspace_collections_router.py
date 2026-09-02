@@ -24,4 +24,6 @@ def test_workspace_collection_crud_and_revision_conflict(tmp_path):
         "expected_revision": 1, "name": "Old",
     })
     assert stale.status_code == 409
+    assert client.put(f"/api/v1/workspace-collections/{workspace_id}", json=[]).status_code == 400
+    assert client.post("/api/v1/workspace-collections", json=[]).status_code == 400
     assert client.delete(f"/api/v1/workspace-collections/{workspace_id}").status_code == 204

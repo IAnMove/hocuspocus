@@ -118,11 +118,22 @@ class WorkspaceRegistry:
             if not isinstance(current, dict):
                 raise KeyError(workspace_id)
             expected = value.get("expected_revision")
-            if expected is not None and _revision(expected) != _revision(current.get("revision")):
-                raise RuntimeError("Workspace changed since it was opened")
+            if expected is not None:
+                if isinstance(expected, bool):
+                    raise ValueError("expected_revision must be a positive integer")
+                try:
+                    expected_value = int(expected)
+                except (TypeError, ValueError, OverflowError) as exc:
+                    raise ValueError("expected_revision must be a positive integer") from exc
+                if expected_value < 1:
+                    raise ValueError("expected_revision must be a positive integer")
+                if expected_value != _revision(current.get("revision")):
+                    raise RuntimeError("Workspace changed since it was opened")
             name = str(value.get("name", current.get("name")) or "").strip()
             if not name:
                 raise ValueError("Workspace name is required")
+            if len(name) > 160:
+                raise ValueError("Workspace name is too long")
             merged = {
                 **current,
                 **{key: value[key] for key in (

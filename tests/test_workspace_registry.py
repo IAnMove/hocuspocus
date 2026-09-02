@@ -31,5 +31,11 @@ def test_workspace_registry_updates_optimistically_and_deletes(tmp_path):
         pass
     else:
         raise AssertionError("stale workspace update was accepted")
+    try:
+        registry.update(created["id"], {"expected_revision": "invalid", "name": "Bad"})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid expected_revision was accepted")
     assert registry.delete(created["id"]) is True
     assert registry.get(created["id"]) is None

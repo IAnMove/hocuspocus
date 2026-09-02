@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -27,17 +27,21 @@ def create_workspace_collections_router(*, registry: Callable[[], WorkspaceRegis
 
     @router.post("/api/v1/workspace-collections", status_code=201)
     async def create_workspace_collection(request: Request):
-        body: dict[str, Any] = await request.json()
+        body: Any = await request.json()
+        if not isinstance(body, Mapping):
+            raise HTTPException(status_code=400, detail="Request body must be an object")
         try:
-            return registry().create(body)
+            return registry().create(dict(body))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.put("/api/v1/workspace-collections/{workspace_id}")
     async def update_workspace_collection(workspace_id: str, request: Request):
-        body: dict[str, Any] = await request.json()
+        body: Any = await request.json()
+        if not isinstance(body, Mapping):
+            raise HTTPException(status_code=400, detail="Request body must be an object")
         try:
-            return registry().update(workspace_id, body)
+            return registry().update(workspace_id, dict(body))
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Workspace not found") from exc
         except RuntimeError as exc:
