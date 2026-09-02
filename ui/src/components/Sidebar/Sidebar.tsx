@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
-import { Settings, X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen, WandSparkles } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Clapperboard, Film, Settings, X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { GenerationModeSelector } from './GenerationModeSelector'
@@ -34,17 +34,10 @@ import { HardwareStatusBar } from './HardwareStatusBar'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
 import { PanoramaLoopPanel } from './PanoramaLoopPanel'
 import { BrandIdentity } from '../BrandIdentity'
-import { useCanonicalTaskFeed } from '../../features/activity/canonicalTaskFeed'
-
-const AgentAssistantPanel = lazy(() =>
-  import('../../features/agent/AgentAssistantPanel').then(module => ({ default: module.AgentAssistantPanel })),
-)
 
 export function Sidebar() {
-  const [sidebarView, setSidebarView] = useState<'wizard' | 'studio'>(() =>
-    window.localStorage.getItem('hocuspocus-sidebar-view') === 'studio' ? 'studio' : 'wizard')
-  const [wizardCollapsed, setWizardCollapsed] = useState(() =>
-    window.localStorage.getItem('hocuspocus-wizard-sidebar-collapsed') === 'true')
+  const [toolsCollapsed, setToolsCollapsed] = useState(() =>
+    window.localStorage.getItem('hocuspocus-tools-sidebar-collapsed') === 'true')
   const toggleSettings = useStore(s => s.toggleSettings)
   const generationMode = useStore(s => s.generationMode)
   const imageMode = useStore(s => s.params.image_mode)
@@ -53,8 +46,8 @@ export function Sidebar() {
   const appVersion = useStore(s => s.systemConfig?.app_version)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
   const setSidebarMode = useStore(s => s.setSidebarMode)
-  const activeWorkspace = useStore(s => s.activeWorkspace)
-  const tasks = useCanonicalTaskFeed()
+  const setDashboardOpen = useStore(s => s.setDashboardOpen)
+  const setMediaFilter = useStore(s => s.setMediaFilter)
   const editSubMode = useStore(s => s.editSubMode)
   const modelType = useStore(s => s.params.model_type)
   const openLoraBrowser = useStore(s => s.setLoraBrowserOpen)
@@ -77,67 +70,30 @@ export function Sidebar() {
   const isMultiClip = isVideo && !isOmniReference && imageMode === 2
   const isContinue = isVideo && !isOmniReference && imageMode === 3
   const isBlend = isVideo && !isOmniReference && imageMode === 4
-  const isWizard = sidebarView === 'wizard'
   const isI2vOnly = modelOptions?.i2v_class && !modelOptions?.t2v_class
-  const setWizardSidebarCollapsed = (collapsed: boolean) => {
-    setWizardCollapsed(collapsed)
-    window.localStorage.setItem('hocuspocus-wizard-sidebar-collapsed', String(collapsed))
-  }
-  const selectSidebarView = (view: 'wizard' | 'studio') => {
-    setSidebarView(view)
-    window.localStorage.setItem('hocuspocus-sidebar-view', view)
-    if (view === 'wizard') setWizardSidebarCollapsed(false)
-    if (view === 'studio') setSidebarMode('studio')
+  const previousToolContext = useRef(`${generationMode}:${editSubMode}`)
+  const setToolsSidebarCollapsed = (collapsed: boolean) => {
+    setToolsCollapsed(collapsed)
+    window.localStorage.setItem('hocuspocus-tools-sidebar-collapsed', String(collapsed))
   }
 
   useEffect(() => {
-    const openWizard = () => {
-      selectSidebarView('wizard')
-      setWizardSidebarCollapsed(false)
-      setSidebarOpen(true)
-    }
     const openStudio = () => {
-      selectSidebarView('studio')
+      setSidebarMode('studio')
+      setToolsSidebarCollapsed(false)
       setSidebarOpen(true)
     }
-    window.addEventListener('hocuspocus:wizard-open', openWizard)
     window.addEventListener('hocuspocus:studio-open', openStudio)
-    return () => {
-      window.removeEventListener('hocuspocus:wizard-open', openWizard)
-      window.removeEventListener('hocuspocus:studio-open', openStudio)
-    }
+    return () => window.removeEventListener('hocuspocus:studio-open', openStudio)
   // The event bridge deliberately tracks stable Zustand actions only.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const modeToggle = (size: 'sm' | 'md') => (
-    <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
-      <button
-        onClick={() => selectSidebarView('wizard')}
-        className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
-          // bg-toggle-active is flat accent-blue in the Classic theme
-          // and a blue gradient in HocusPocus Blue. The glow token stays
-          // theme-aware without changing this component's layout.
-          isWizard ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
-        }`}
-      >
-        <WandSparkles size={12} className="inline" /> Wizard
-      </button>
-      <button
-        onClick={() => selectSidebarView('studio')}
-        className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
-          // Studio active intentionally uses bg-toggle-active too so the
-          // currently-active mode reads with the same prominence in
-          // HocusPocus Blue. Classic theme: flat
-          // accent-blue (was bg-bg-active dark elevation — small change
-          // that brings the two buttons into visual parity).
-          !isWizard ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
-        }`}
-      >
-        Studio
-      </button>
-    </div>
-  )
+  useEffect(() => {
+    const context = `${generationMode}:${editSubMode}`
+    if (context !== previousToolContext.current) setToolsSidebarCollapsed(false)
+    previousToolContext.current = context
+  }, [editSubMode, generationMode])
 
   // Edit mode sub-controls based on sub-mode
   const editControls = (
@@ -312,7 +268,9 @@ export function Sidebar() {
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <BrandIdentity appVersion={appVersion} />
             <div className="flex items-center gap-1.5">
-              {modeToggle('sm')}
+              <button onClick={() => setDashboardOpen(true)} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary" title="Director"><Clapperboard size={16} /></button>
+              <button onClick={() => { setMediaFilter('videoeditor'); setSidebarOpen(false) }} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary" title="Video Editor"><Film size={16} /></button>
+              <button onClick={toggleSettings} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary" title="Settings"><Settings size={16} /></button>
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
@@ -321,30 +279,26 @@ export function Sidebar() {
               </button>
             </div>
           </div>
-          {isWizard ? (
-            <Suspense fallback={<div className="flex flex-1 items-center justify-center text-xs text-text-muted">Opening the Wizard…</div>}>
-              <AgentAssistantPanel workspace={activeWorkspace} tasks={tasks} onClose={() => setSidebarOpen(false)} embedded />
-            </Suspense>
-          ) : studioControls}
+          {studioControls}
           <HardwareStatusBar />
         </aside>
       </>
     )
   }
 
-  if (isWizard && wizardCollapsed) {
+  if (toolsCollapsed) {
     return (
       <aside className="w-11 h-full bg-bg-secondary border-r border-border flex flex-col items-center shrink-0">
         <button
-          onClick={() => setWizardSidebarCollapsed(false)}
+          onClick={() => setToolsSidebarCollapsed(false)}
           className="m-1.5 p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          title="Expand Ask to the Wizard"
-          aria-label="Expand Ask to the Wizard"
+          title="Expand Studio tools"
+          aria-label="Expand Studio tools"
         >
           <PanelLeftOpen size={17} />
         </button>
         <span className="mt-2 text-[10px] uppercase tracking-[0.2em] text-text-muted [writing-mode:vertical-rl]">
-          Wizard
+          Studio
         </span>
       </aside>
     )
@@ -357,17 +311,9 @@ export function Sidebar() {
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <BrandIdentity appVersion={appVersion} />
         <div className="flex items-center gap-2">
-          {modeToggle('md')}
-          {isWizard && (
-            <button
-              onClick={() => setWizardSidebarCollapsed(true)}
-              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="Collapse Ask to the Wizard"
-              aria-label="Collapse Ask to the Wizard"
-            >
-              <PanelLeftClose size={16} />
-            </button>
-          )}
+          <span className="text-xs font-medium text-text-secondary">Studio & tools</span>
+          <button onClick={() => setDashboardOpen(true)} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors" title="Director" aria-label="Open Director"><Clapperboard size={16} /></button>
+          <button onClick={() => setMediaFilter('videoeditor')} className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors" title="Video Editor" aria-label="Open Video Editor"><Film size={16} /></button>
           <button
             onClick={toggleSettings}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
@@ -375,13 +321,17 @@ export function Sidebar() {
           >
             <Settings size={16} />
           </button>
+          <button
+            onClick={() => setToolsSidebarCollapsed(true)}
+            className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
+            title="Collapse Studio tools"
+            aria-label="Collapse Studio tools"
+          >
+            <PanelLeftClose size={16} />
+          </button>
         </div>
       </div>
-      {isWizard ? (
-        <Suspense fallback={<div className="flex flex-1 items-center justify-center text-xs text-text-muted">Opening the Wizard…</div>}>
-          <AgentAssistantPanel workspace={activeWorkspace} tasks={tasks} onClose={() => setWizardSidebarCollapsed(true)} embedded />
-        </Suspense>
-      ) : studioControls}
+      {studioControls}
       <HardwareStatusBar />
     </aside>
   )

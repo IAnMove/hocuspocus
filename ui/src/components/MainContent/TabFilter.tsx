@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Activity, BookOpen, Boxes, ChevronDown, Clapperboard, FolderKanban,
-  Library, MonitorPlay, Search, Settings, Sparkles, Video, WandSparkles, X,
+  Activity, BookOpen, Boxes, ChevronDown, FolderKanban,
+  Library, MonitorPlay, Search, Sparkles, Video, WandSparkles, X,
 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
@@ -86,8 +86,6 @@ export function TabFilter() {
   const { t } = useUiTranslation('navigation')
   const mediaFilter = useStore(s => s.mediaFilter)
   const setMediaFilter = useStore(s => s.setMediaFilter)
-  const setDashboardOpen = useStore(s => s.setDashboardOpen)
-  const toggleSettings = useStore(s => s.toggleSettings)
   const developerMode = useStore(s => s.developerMode)
   const searchQuery = useStore(s => s.outputSearchQuery)
   const setSearchQuery = useStore(s => s.setOutputSearchQuery)
@@ -111,8 +109,6 @@ export function TabFilter() {
     { value: 'stories', label: t('tabs.storyLab'), description: t('descriptions.storyLab'), icon: <BookOpen size={15} />, action: () => openFilter('stories') },
     { value: 'series', label: t('tabs.seriesLab'), description: t('descriptions.seriesLab'), icon: <Library size={15} />, action: () => openFilter('series') },
     { value: 'comics', label: t('tabs.comics'), description: t('descriptions.comics'), icon: <BookOpen size={15} />, action: () => openFilter('comics') },
-    { label: t('labs.director'), description: t('descriptions.director'), icon: <Clapperboard size={15} />, action: () => setDashboardOpen(true) },
-    { value: 'videoeditor', label: t('tabs.videoEditor'), description: t('descriptions.editor'), icon: <Video size={15} />, action: () => openFilter('videoeditor') },
     { value: 'scene3d', label: t('tabs.scene3d'), description: t('descriptions.video3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('scene3d') },
     { value: 'characters', label: t('tabs.characters'), description: t('descriptions.characters'), icon: <WandSparkles size={15} />, action: () => openFilter('characters') },
   ]
@@ -153,7 +149,6 @@ export function TabFilter() {
       <PrimaryButton active={LIBRARY_FILTERS.has(mediaFilter)} icon={<Library size={14} />} label={t('primary.library')} menu={<NavigationMenu title={t('menu.library')} items={libraryItems} activeValue={mediaFilter} />} />
       <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.workspaces.value} icon={<FolderKanban size={14} />} label={t('tabs.workspaces')} onClick={() => openFilter(PRIMARY_DESTINATIONS.workspaces.value)} />
       <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.activity.value} icon={<Activity size={14} />} label={t('primary.activity')} ariaLabel={`${t('tabs.runs')} · ${t('primary.activity')}`} onClick={() => openFilter(PRIMARY_DESTINATIONS.activity.value)} />
-      <PrimaryButton icon={<Settings size={14} />} label="Settings" onClick={toggleSettings} />
 
       <div className="ml-auto">
         {searchOpen ? (
