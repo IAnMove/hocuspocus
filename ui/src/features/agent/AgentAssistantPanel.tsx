@@ -449,8 +449,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
 
   const panel = (
     <section
-      role="dialog"
-      aria-modal="true"
+      role={embedded && !expanded ? 'region' : 'dialog'}
+      aria-modal={embedded && !expanded ? undefined : 'true'}
       aria-label={t('title')}
       data-expanded={expanded ? 'true' : 'false'}
       className={`hp-agent-panel z-[100] flex flex-col overflow-hidden border border-amber-200/20 bg-[#0d0b13]/95 shadow-2xl backdrop-blur-xl ${expanded
@@ -579,7 +579,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         <div className="flex items-end gap-2 rounded-xl border border-white/10 bg-black/25 p-2 focus-within:border-amber-200/35">
           <Sparkles size={14} className="mb-1 shrink-0 text-amber-200/55" />
           <textarea
-            autoFocus
+            autoFocus={!embedded}
             rows={2}
             value={draft}
             disabled={busy}

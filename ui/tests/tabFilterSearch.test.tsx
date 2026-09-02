@@ -44,7 +44,7 @@ test('primary navigation exposes four stable categories and highlights the selec
   const { useStore } = await import('../src/stores/useStore.ts')
   ensureUiI18n()
   await setUiLanguage('en')
-  useStore.setState({ developerMode: false, mediaFilter: 'all', outputSearchQuery: '', activeWorkspace: 'default', browsingUploads: false, loadOutputs: async () => undefined })
+  useStore.setState({ developerMode: false, mediaFilter: 'all', outputSearchQuery: '', activeWorkspace: 'default', browsingUploads: false, sidebarOpen: false, sidebarMode: 'studio', dashboardOpen: false, loadOutputs: async () => undefined })
   try {
     render(<TabFilter />)
     const direct = screen.getByRole('button', { name: 'Direct generation' })
@@ -62,6 +62,7 @@ test('primary navigation exposes four stable categories and highlights the selec
     assert.ok(document.querySelector('.hp-navigation-children[data-navigation-category="media"]'))
     const outputFolder = screen.getByRole('button', { name: /Switch output folder: default/ })
     assert.equal(screen.getByRole('navigation').contains(outputFolder), true)
+    assert.equal(outputFolder.closest('[class*="overflow-x-auto"]'), null)
 
     fireEvent.click(studios)
     fireEvent.click(screen.getByRole('tab', { name: 'Story Lab' }))
@@ -153,8 +154,35 @@ test('video result filters are listed beside Videos', { concurrency: false }, as
     assert.ok(screen.getByRole('tab', { name: /Videoclips/i }))
     assert.ok(screen.getByRole('tab', { name: /Trailers/i }))
     assert.ok(screen.getByRole('tab', { name: /Episodes/i }))
+    assert.ok(screen.getByRole('tab', { name: 'Scenes' }))
+    assert.ok(screen.getByRole('tab', { name: 'Style sheet' }))
+    assert.ok(screen.getByRole('tab', { name: 'Edits' }))
+    assert.ok(screen.getByRole('tab', { name: 'Multi-clip' }))
     assert.equal(screen.queryByRole('tab', { name: /Internal dev audit/i }), null)
   } finally {
+    cleanup()
+  }
+})
+
+test('navigation follows destinations changed outside the top bar', { concurrency: false }, async () => {
+  const { render, screen, cleanup, act } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
+  useStore.setState({ developerMode: false, mediaFilter: 'all', sidebarOpen: false, dashboardOpen: false, loadOutputs: async () => undefined })
+  try {
+    render(<TabFilter />)
+    await act(async () => { useStore.getState().setMediaFilter('stories') })
+    assert.equal(screen.getByRole('button', { name: 'Studios' }).getAttribute('data-navigation-active'), 'true')
+    assert.ok(document.querySelector('.hp-navigation-children[data-navigation-category="studios"]'))
+
+    await act(async () => { useStore.getState().setDashboardOpen(true) })
+    assert.equal(screen.getByRole('button', { name: 'Production' }).getAttribute('data-navigation-active'), 'true')
+    assert.ok(document.querySelector('.hp-navigation-children[data-navigation-category="production"]'))
+  } finally {
+    useStore.setState({ dashboardOpen: false })
     cleanup()
   }
 })

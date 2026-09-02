@@ -106,6 +106,7 @@ export function TabFilter() {
   const categoryRefs = useRef<Partial<Record<NavigationCategory, HTMLButtonElement | null>>>({})
   const topRowRef = useRef<HTMLDivElement>(null)
   const childBarRef = useRef<HTMLDivElement>(null)
+  const locallySelectedFilterRef = useRef<MediaFilter | null>(null)
   const magicTimerRef = useRef<number | null>(null)
   const initialCategory = categoryForMediaFilter(mediaFilter) || 'direct-generation'
   const [activeCategory, setActiveCategory] = useState<NavigationCategory | null>(initialCategory)
@@ -115,6 +116,29 @@ export function TabFilter() {
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus()
   }, [searchOpen])
+
+  useEffect(() => useStore.subscribe((state, previousState) => {
+    let category: NavigationCategory | null | undefined
+    if (state.mediaFilter !== previousState.mediaFilter) {
+      if (locallySelectedFilterRef.current === state.mediaFilter) {
+        locallySelectedFilterRef.current = null
+      } else {
+        category = state.dashboardOpen ? 'production' : categoryForMediaFilter(state.mediaFilter)
+      }
+    }
+    if (state.dashboardOpen !== previousState.dashboardOpen) {
+      category = state.dashboardOpen ? 'production' : categoryForMediaFilter(state.mediaFilter)
+    }
+    if (
+      state.sidebarOpen
+      && (state.sidebarOpen !== previousState.sidebarOpen || state.sidebarMode !== previousState.sidebarMode)
+    ) {
+      category = state.sidebarMode === 'director' ? 'production' : 'direct-generation'
+    }
+    if (category === undefined) return
+    setActiveCategory(category)
+    setExpandedCategory(category)
+  }), [])
 
   useEffect(() => () => {
     if (debounceRef.current !== null) window.clearTimeout(debounceRef.current)
@@ -175,6 +199,7 @@ export function TabFilter() {
     const category = categoryForMediaFilter(filter)
     setActiveCategory(category)
     setExpandedCategory(category)
+    locallySelectedFilterRef.current = filter
     setMediaFilter(filter)
   }
   const openDirectGeneration = (mode: GenerationMode) => {
@@ -184,7 +209,9 @@ export function TabFilter() {
     state.setSettingsOpen(false)
     state.setDashboardOpen(false)
     state.setGenerationMode(mode)
-    state.setMediaFilter(DIRECT_GENERATION_MEDIA[mode])
+    const filter = DIRECT_GENERATION_MEDIA[mode]
+    locallySelectedFilterRef.current = filter
+    state.setMediaFilter(filter)
     state.setSidebarMode('studio')
     window.dispatchEvent(new Event('hocuspocus:studio-open'))
   }
@@ -232,6 +259,10 @@ export function TabFilter() {
     { value: 'series_episodes', label: t('tabs.episodes'), description: t('descriptions.mediaFilters'), icon: <Video size={15} />, action: () => openFilter('series_episodes') },
     { value: 'audio', label: t('tabs.audio'), description: t('descriptions.mediaFilters'), icon: <Activity size={15} />, action: () => openFilter('audio') },
     { value: 'model3d', label: t('tabs.model3d'), description: t('descriptions.mediaFilters'), icon: <Boxes size={15} />, action: () => openFilter('model3d') },
+    { value: 'scenes', label: t('tabs.scenes'), description: t('descriptions.mediaFilters'), icon: <MonitorPlay size={15} />, action: () => openFilter('scenes') },
+    { value: 'styles', label: t('tabs.styles'), description: t('descriptions.mediaFilters'), icon: <WandSparkles size={15} />, action: () => openFilter('styles') },
+    { value: 'avatars', label: t('tabs.edits'), description: t('descriptions.mediaFilters'), icon: <WandSparkles size={15} />, action: () => openFilter('avatars') },
+    { value: 'multiclip', label: t('tabs.multiclip'), description: t('descriptions.mediaFilters'), icon: <Clapperboard size={15} />, action: () => openFilter('multiclip') },
     { value: 'favorites', label: t('tabs.favorites'), description: t('descriptions.mediaFilters'), icon: <Sparkles size={15} />, action: () => openFilter('favorites') },
     ...(developerMode ? [{ value: 'auditdev' as const, label: t('tabs.auditDev'), description: t('descriptions.mediaFilters'), icon: <Activity size={15} />, action: () => openFilter('auditdev') }] : []),
   ]
@@ -265,15 +296,17 @@ export function TabFilter() {
 
   return (
     <nav aria-label={t('aria.sections')} className="flex min-w-0 flex-1 flex-col rounded-xl border border-border bg-bg-tertiary/70 p-1">
-      <div ref={topRowRef} className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <PrimaryButton active={activeCategory === 'direct-generation'} expanded={expandedCategory === 'direct-generation'} category="direct-generation" buttonRef={element => { categoryRefs.current['direct-generation'] = element }} icon={<Sparkles size={14} />} label={t('primary.directGeneration')} onClick={() => selectCategory('direct-generation')} />
-        <PrimaryButton active={activeCategory === 'studios'} expanded={expandedCategory === 'studios'} category="studios" buttonRef={element => { categoryRefs.current.studios = element }} icon={<BookOpen size={14} />} label={t('primary.studios')} onClick={() => selectCategory('studios')} />
-        <PrimaryButton active={activeCategory === 'production'} expanded={expandedCategory === 'production'} category="production" buttonRef={element => { categoryRefs.current.production = element }} icon={<Clapperboard size={14} />} label={t('primary.production')} onClick={() => selectCategory('production')} />
-        <PrimaryButton active={activeCategory === 'media'} expanded={expandedCategory === 'media'} category="media" buttonRef={element => { categoryRefs.current.media = element }} icon={<Library size={14} />} label={t('primary.media')} onClick={() => selectCategory('media')} />
-        <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.workspaces.value} icon={<FolderKanban size={14} />} label={t('tabs.workspaces')} onClick={() => openFilter(PRIMARY_DESTINATIONS.workspaces.value)} />
-        <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.activity.value} icon={<Activity size={14} />} label={t('primary.activity')} ariaLabel={`${t('tabs.runs')} · ${t('primary.activity')}`} onClick={() => openFilter(PRIMARY_DESTINATIONS.activity.value)} />
+      <div className="flex min-w-0 items-center gap-1">
+        <div ref={topRowRef} className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <PrimaryButton active={activeCategory === 'direct-generation'} expanded={expandedCategory === 'direct-generation'} category="direct-generation" buttonRef={element => { categoryRefs.current['direct-generation'] = element }} icon={<Sparkles size={14} />} label={t('primary.directGeneration')} onClick={() => selectCategory('direct-generation')} />
+          <PrimaryButton active={activeCategory === 'studios'} expanded={expandedCategory === 'studios'} category="studios" buttonRef={element => { categoryRefs.current.studios = element }} icon={<BookOpen size={14} />} label={t('primary.studios')} onClick={() => selectCategory('studios')} />
+          <PrimaryButton active={activeCategory === 'production'} expanded={expandedCategory === 'production'} category="production" buttonRef={element => { categoryRefs.current.production = element }} icon={<Clapperboard size={14} />} label={t('primary.production')} onClick={() => selectCategory('production')} />
+          <PrimaryButton active={activeCategory === 'media'} expanded={expandedCategory === 'media'} category="media" buttonRef={element => { categoryRefs.current.media = element }} icon={<Library size={14} />} label={t('primary.media')} onClick={() => selectCategory('media')} />
+          <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.workspaces.value} icon={<FolderKanban size={14} />} label={t('tabs.workspaces')} onClick={() => openFilter(PRIMARY_DESTINATIONS.workspaces.value)} />
+          <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.activity.value} icon={<Activity size={14} />} label={t('primary.activity')} ariaLabel={`${t('tabs.runs')} · ${t('primary.activity')}`} onClick={() => openFilter(PRIMARY_DESTINATIONS.activity.value)} />
+        </div>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <OutputFolderSelector />
           {searchOpen ? (
             <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary px-2 py-0.5">

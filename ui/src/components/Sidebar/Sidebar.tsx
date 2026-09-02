@@ -95,8 +95,7 @@ export function Sidebar() {
       setSidebarOpen(true)
     }
     const openSettings = () => {
-      setToolsSidebarCollapsed(false)
-      setSidebarOpen(true)
+      setSidebarOpen(false)
       setSettingsOpen(true)
     }
     const openDirector = () => {
