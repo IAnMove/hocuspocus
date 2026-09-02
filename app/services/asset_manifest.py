@@ -404,6 +404,71 @@ def read_asset_manifest(
     return adapt_legacy_sidecar(output_path, value, workspace_id=workspace_id)
 
 
+def _existing_canonical_asset_id(output_path: str | os.PathLike[str]) -> str | None:
+    path = sidecar_path(output_path)
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(value, Mapping) or value.get("schema") != SCHEMA_NAME:
+        return None
+    asset = value.get("asset")
+    if not isinstance(asset, Mapping):
+        return None
+    return _clean_text(asset.get("id"))
+
+
+def publish_generation_sidecar(
+    output_path: str | os.PathLike[str],
+    sidecar: Mapping[str, Any],
+    *,
+    workspace_id: str | None = None,
+    tool: str | None = None,
+    actor: str | None = None,
+    capability: str | None = None,
+) -> Path:
+    """Persist a v1 manifest for a newly generated file.
+
+    Gallery consumers still read top-level legacy keys such as ``params`` and
+    ``job_id``. Those are retained beside the canonical document. A retry of
+    the same output keeps its asset ID; a distinct file gets a new ID.
+    """
+    payload = dict(sidecar)
+    asset_id = (
+        _existing_canonical_asset_id(output_path)
+        or _clean_text(payload.get("asset_id"))
+        or f"asset_{uuid.uuid4().hex}"
+    )
+    manifest = adapt_legacy_sidecar(output_path, payload, workspace_id=workspace_id)
+    manifest["asset"]["id"] = asset_id
+    origin = dict(manifest.get("origin") or {})
+    origin["tool"] = (
+        _clean_text(tool)
+        or _clean_text(payload.get("tool"))
+        or _clean_text(origin.get("tool"))
+        or "studio"
+    )
+    origin["actor"] = (
+        _clean_text(actor)
+        or _clean_text(payload.get("actor"))
+        or "user"
+    )
+    published_capability = _clean_text(capability) or _clean_text(payload.get("capability"))
+    if published_capability:
+        origin["capability"] = published_capability
+    manifest["origin"] = origin
+    technical = {
+        key: value
+        for key, value in dict(manifest.get("technical") or {}).items()
+        if key != "legacy_sidecar"
+    }
+    technical["published_on_generate"] = True
+    manifest["technical"] = technical
+    return write_asset_manifest(output_path, manifest, legacy_fields=payload)
+
+
 def write_asset_manifest(
     output_path: str | os.PathLike[str],
     manifest: Mapping[str, Any],
@@ -453,6 +518,6 @@ def write_asset_manifest(
 __all__ = [
     "ASSET_KINDS", "AssetManifestError", "SCHEMA_NAME", "SCHEMA_VERSION",
     "adapt_legacy_sidecar", "build_asset_manifest", "infer_asset_kind",
-    "read_asset_manifest", "sidecar_path", "validate_asset_manifest",
-    "write_asset_manifest",
+    "publish_generation_sidecar", "read_asset_manifest", "sidecar_path",
+    "validate_asset_manifest", "write_asset_manifest",
 ]

@@ -130,4 +130,5 @@ or invalid sidecars; reading it never moves or rewrites the underlying files.
   distinct asset ID.
 - The contract stays independent of FastAPI, WanGP and model imports.
 - Tests cover redaction, timing, identity, legacy adaptation and atomic
-  round-trip before the first generator integration.
+  round-trip. Studio generate (including the simulated worker, native WGP
+  outputs, H3 Legacy and MMAudio SFX) is the first writer of the v1 sidecar.
