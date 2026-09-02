@@ -14,6 +14,8 @@ import { getOutputReference } from '../../lib/outputReference'
 import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
 import { StoryProductionTimeline } from './StoryProductionTimeline'
 import { StoryLabNavigation } from './StoryLabNavigation'
+import { StoryRelationshipsTab } from './StoryRelationshipsTab'
+import { button, input, panel, requiredInput, Field, SectionHeader } from './storyLabChrome'
 import { readDirectorClipReplacementResult } from './directorClipHandoff'
 import { AudioRangeSelector } from './AudioRangeSelector'
 import { createStoryActivityLifecycle } from './activityLifecycle'
@@ -51,10 +53,6 @@ import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
 import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, normalizeStoryMusicModel, songWriteTarget } from './musicModel'
 import { listenForAgentStoryDraft, listenForAgentStorySection, listenForAgentStoryVisualGeneration } from '../../lib/uiBus'
 
-const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
-const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
-const panel = 'rounded-xl border border-border bg-bg-secondary p-3 md:p-4'
-const requiredInput = 'border-violet-400/70 bg-violet-500/5 shadow-[0_0_14px_rgba(139,92,246,0.22)] focus:border-violet-300 focus:shadow-[0_0_18px_rgba(139,92,246,0.32)]'
 const requiredPreparationButton = 'border-violet-400/70 bg-violet-500/10 text-violet-200 shadow-[0_0_14px_rgba(139,92,246,0.22)] hover:border-violet-300 hover:bg-violet-500/20 hover:text-violet-100 disabled:shadow-none'
 const completeGenerationButton = 'border-emerald-400/70 bg-emerald-500/10 text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.24)] hover:border-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100 disabled:shadow-none'
 const storyLookupName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
@@ -539,27 +537,6 @@ function draftPaths(result: Record<string, unknown>): string[] {
   return paths
 }
 
-function Field({
-  label, value, onChange, rows = 1, placeholder = '', required = false,
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  rows?: number
-  placeholder?: string
-  required?: boolean
-}) {
-  const requiredClass = required ? requiredInput : ''
-  return (
-    <label className={`block text-[10px] ${required ? 'text-violet-200' : 'text-text-muted'}`}>
-      {label}{required && <span className="ml-1 text-violet-300" title="Required">●</span>}
-      {rows > 1
-        ? <textarea className={`${input} ${requiredClass} mt-1`} rows={rows} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} required={required} aria-required={required} />
-        : <input className={`${input} ${requiredClass} mt-1`} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} required={required} aria-required={required} />}
-    </label>
-  )
-}
-
 function Choice({
   label, value, options, onChange, required = false,
 }: {
@@ -826,45 +803,6 @@ function ReferenceGallery({
         document.body,
       )}
     </>
-  )
-}
-
-function SectionHeader({
-  title, description, scope, busy, approved, instruction, setInstruction, onGenerate, onApprove,
-}: {
-  title: string
-  description: string
-  scope: StoryGenerationScope
-  busy: StoryGenerationScope | null
-  approved: boolean
-  instruction: string
-  setInstruction: (value: string) => void
-  onGenerate: (scope: StoryGenerationScope) => void
-  onApprove: () => void
-}) {
-  return (
-    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3 mb-4">
-      <div>
-        <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
-        <p className="text-xs text-text-muted mt-1">{description}</p>
-      </div>
-      <div className="lg:max-w-[680px]">
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input className={`${input} sm:w-72`} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="Optional regeneration instruction…" />
-          <button className={button} disabled={Boolean(busy)} onClick={() => onGenerate(scope)}
-            title="Uses the LLM to generate or rewrite this section's text. It does not generate images.">
-            {busy === scope ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate text
-          </button>
-          <button className={`${button} ${approved ? 'border-emerald-500 text-emerald-400' : ''}`} onClick={onApprove}
-            title="Confirms the current version of this section. It does not generate content.">
-            <Check size={13} /> {approved ? 'Approved' : 'Approve'}
-          </button>
-        </div>
-        <p className="mt-1.5 text-[9px] leading-relaxed text-text-muted">
-          LLM text only: generates or rewrites this section's fields and preserves existing image references; it does not render images. Guided mode lets you review the draft before applying it. Approve only confirms the current version.
-        </p>
-      </div>
-    </div>
   )
 }
 
@@ -5593,22 +5531,16 @@ export function StoryLabPanel() {
             )}
 
             {tab === 'relationships' && (
-              <>
-                <div id="story-review-relationships" className="scroll-mt-4">
-                  <SectionHeader title="Relationships" description="Conflict and change often live between characters, not inside isolated biographies." scope="relationships" busy={busy} approved={isApproved('relationships')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('relationships')} />
-                </div>
-                <div className="flex justify-end mb-3">
-                  <button className={button} disabled={project.characters.length < 2} onClick={() => update(current => {
-                    current.relationships.push({ id: storyId('relationship'), fromCharacterId: current.characters[0]?.id || '', toCharacterId: current.characters[1]?.id || '', label: '', dynamic: '', evolution: '' })
-                    return current
-                  })}><Plus size={13} /> Relationship</button>
-                </div>
-                <div className="space-y-3">
-                  {project.relationships.map(relationship => (
-                    <RelationshipEditor key={relationship.id} relationship={relationship} project={project} update={update} />
-                  ))}
-                </div>
-              </>
+              <StoryRelationshipsTab
+                project={project}
+                update={update}
+                busy={busy}
+                instruction={instruction}
+                setInstruction={setInstruction}
+                generate={generate}
+                approve={approve}
+                isApproved={isApproved}
+              />
             )}
 
             {tab === 'structure' && (
@@ -7362,40 +7294,6 @@ function LocationEditor({
         <button className={button} onClick={upload}><Upload size={13} /> Add reference</button>
       </div>
       <ReferenceGallery ids={location.referenceAssetIds} assets={project.assets} onRemove={removeReference} />
-    </div>
-  )
-}
-
-function RelationshipEditor({
-  relationship, project, update,
-}: {
-  relationship: StoryRelationship
-  project: StoryProject
-  update: (updater: (project: StoryProject) => StoryProject) => void
-}) {
-  const set = (patch: Partial<StoryRelationship>) => update(current => {
-    current.relationships = current.relationships.map(item => item.id === relationship.id ? { ...item, ...patch } : item)
-    return current
-  })
-  return (
-    <div className={`${panel} grid md:grid-cols-2 gap-3`}>
-      <label className="text-[10px] text-text-muted">From
-        <select className={`${input} mt-1`} value={relationship.fromCharacterId} onChange={event => set({ fromCharacterId: event.target.value })}>
-          {project.characters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
-        </select>
-      </label>
-      <label className="text-[10px] text-text-muted">To
-        <select className={`${input} mt-1`} value={relationship.toCharacterId} onChange={event => set({ toCharacterId: event.target.value })}>
-          {project.characters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
-        </select>
-      </label>
-      <Field label="Relationship" value={relationship.label} onChange={label => set({ label })} />
-      <button className="text-red-400 justify-self-end" onClick={() => update(current => {
-        current.relationships = current.relationships.filter(item => item.id !== relationship.id)
-        return current
-      })}><Trash2 size={14} /></button>
-      <Field label="Current dynamic" value={relationship.dynamic} onChange={dynamic => set({ dynamic })} rows={3} />
-      <Field label="How it changes" value={relationship.evolution} onChange={evolution => set({ evolution })} rows={3} />
     </div>
   )
 }
