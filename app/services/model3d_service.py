@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from . import execution_mode, resource_scheduler
-from .asset_manifest import publish_generation_sidecar
+from .asset_manifest import publish_generation_sidecar_best_effort
 from .hunyuan3d.weight_integrity import dit_cache_root, purge_truncated_safetensors, truncated_safetensors
 from .minimax_image_service import MiniMaxImageError, generate_image as generate_minimax_image
 
@@ -1120,30 +1120,27 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
 
         # The mesh is on disk. Sidecar/status failures must not delete it.
         generation_committed = True
-        try:
-            publish_generation_sidecar(
-                output_path,
-                {
-                    "generation_mode": "model3d",
-                    "mode": "model3d",
-                    "job_id": job_id,
-                    "task_id": _canonical_task_id(job_id),
-                    "root_task_id": _canonical_task_id(job_id),
-                    "created_at": time.time(),
-                    "params": {
-                        **request_data["settings"],
-                        "model_id": model_id,
-                        "operation": operation,
-                        "source_model": os.path.basename(request_data["source_mesh"]) if request_data.get("source_mesh") else None,
-                        "preset": request_data["preset"],
-                        "images": request_data["images"],
-                    },
+        publish_generation_sidecar_best_effort(
+            output_path,
+            {
+                "generation_mode": "model3d",
+                "mode": "model3d",
+                "job_id": job_id,
+                "task_id": _canonical_task_id(job_id),
+                "root_task_id": _canonical_task_id(job_id),
+                "created_at": time.time(),
+                "params": {
+                    **request_data["settings"],
+                    "model_id": model_id,
+                    "operation": operation,
+                    "source_model": os.path.basename(request_data["source_mesh"]) if request_data.get("source_mesh") else None,
+                    "preset": request_data["preset"],
+                    "images": request_data["images"],
                 },
-                workspace_id=current_job.get("workspace"),
-                tool="model3d",
-            )
-        except Exception as sidecar_error:
-            print(f"[Hunyuan3D] Failed to publish sidecar for {filename}: {sidecar_error}")
+            },
+            workspace_id=current_job.get("workspace"),
+            tool="model3d",
+        )
         _update_job(
             job_id,
             status="completed",

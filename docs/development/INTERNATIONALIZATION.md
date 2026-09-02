@@ -14,7 +14,8 @@ Typed JSON under `ui/src/i18n/locales/<lng>/<namespace>.json`.
 | `navigation` | Tabs, entity names, output folders, labs |
 | `settings` | Settings drawer and language selector |
 | `wizard` | Ask to the Wizard chrome |
-| `activity` | Activity footer, Inbox / Legacy, collection counts |
+| `activity` | Activity footer, Inbox / Legacy, Extra info inspector, Assets catalog chrome |
+| `extraInfo` | Video Extra info dialog body (title stays `activity.extraInfo`) |
 
 Add a namespace only when a new product surface needs its own file. Do not grow a single giant JSON.
 
@@ -28,7 +29,8 @@ Keys are semantic, never the English sentence:
 - Detected order: `localStorage` key `hocuspocus-ui-language` → `navigator.language` (`es*` → `es`, otherwise `en`) → `en`.
 - Changing language calls `setUiLanguage`, writes storage, sets `document.documentElement.lang`, and re-renders without a reload.
 - Missing keys fall back to English, then to the key itself. They must not throw.
-- Interpolation is escaped. Do not put HTML in catalog strings.
+- Interpolation uses `escapeValue: false` so React text nodes are not
+  double-escaped. Do not put HTML in catalog strings.
 
 ## Glossary (human labels only)
 

@@ -26,7 +26,8 @@
         "tool": { "type": "string", "minLength": 1 },
         "capability": { "type": "string" },
         "actor": { "enum": ["user", "wizard", "system", "unknown"] },
-        "workspace_id": { "type": ["string", "null"] },
+        "workspace_id": { "type": ["string", "null"], "description": "Workspace collection ID, never an absolute path." },
+        "output_folder": { "type": ["string", "null"], "description": "Physical output-folder name, never an absolute path." },
         "project": { "$ref": "#/$defs/entityRef" },
         "production": { "$ref": "#/$defs/entityRef" }
       },

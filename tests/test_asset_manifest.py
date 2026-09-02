@@ -12,8 +12,13 @@ from app.services.asset_manifest import (
     build_asset_manifest,
     infer_asset_kind,
     publish_generation_sidecar,
+    publish_generation_sidecar_best_effort,
     read_asset_manifest,
     write_asset_manifest,
+)
+from app.services.generation_provenance import (
+    provenance_from_manifest,
+    resolve_generation_location,
 )
 
 
@@ -297,3 +302,77 @@ def test_non_finite_metadata_is_normalized_to_valid_json(tmp_path: Path):
     encoded = json.dumps(manifest, allow_nan=False)
     assert "NaN" not in encoded
     assert manifest["generation"]["parameters"]["guidance"] is None
+
+
+def test_legacy_workspace_kwarg_is_also_recorded_as_output_folder(tmp_path: Path):
+    output = tmp_path / "clip.mp4"
+    output.write_bytes(b"video")
+    publish_generation_sidecar(
+        output,
+        {"params": {"prompt": "compat"}, "job_id": "job-1"},
+        workspace_id="night-shift",
+        tool="studio",
+    )
+    loaded = read_asset_manifest(output, workspace_id="night-shift")
+    assert loaded is not None
+    assert loaded["origin"]["workspace_id"] == "night-shift"
+    assert loaded["origin"]["output_folder"] == "night-shift"
+
+
+def test_collection_id_is_distinct_from_output_folder(tmp_path: Path):
+    output = tmp_path / "clip.mp4"
+    output.write_bytes(b"video")
+    publish_generation_sidecar(
+        output,
+        {"params": {"prompt": "split location", "provider": "local", "model_type": "minimax_h3"}},
+        workspace_id="ws_collection_1",
+        output_folder="night-shift",
+        tool="studio",
+        actor="wizard",
+        capability="start_generation",
+    )
+    loaded = read_asset_manifest(output)
+    assert loaded is not None
+    assert loaded["origin"]["workspace_id"] == "ws_collection_1"
+    assert loaded["origin"]["output_folder"] == "night-shift"
+    assert loaded["origin"]["actor"] == "wizard"
+    assert loaded["generation"]["model"]["provider"] == "local"
+    assert loaded["generation"]["model"]["id"] == "minimax_h3"
+    proven = provenance_from_manifest(loaded)
+    assert proven["actor"] == "wizard"
+    assert proven["tool"] == "studio"
+    assert proven["provider"] == "local"
+    assert proven["model_id"] == "minimax_h3"
+    assert proven["workspace_id"] == "ws_collection_1"
+    assert proven["output_folder"] == "night-shift"
+
+
+def test_output_folder_alone_does_not_invent_a_workspace_collection(tmp_path: Path):
+    output = tmp_path / "clip.mp4"
+    output.write_bytes(b"video")
+    location = resolve_generation_location(output_folder="uploads")
+    assert location == {"workspace_id": None, "output_folder": "uploads"}
+    publish_generation_sidecar(
+        output, {"params": {"prompt": "folder only"}}, output_folder="uploads", tool="studio",
+    )
+    loaded = read_asset_manifest(output)
+    assert loaded is not None
+    assert loaded["origin"].get("workspace_id") in (None, "")
+    assert loaded["origin"]["output_folder"] == "uploads"
+
+
+def test_sidecar_best_effort_does_not_raise_or_delete_media(tmp_path: Path, monkeypatch):
+    output = tmp_path / "keep-me.mp4"
+    output.write_bytes(b"video")
+
+    def boom(*_args, **_kwargs):
+        raise AssetManifestError("disk full while writing sidecar")
+
+    monkeypatch.setattr(
+        "app.services.asset_manifest.write_asset_manifest", boom,
+    )
+    assert publish_generation_sidecar_best_effort(
+        output, {"params": {"prompt": "keep"}}, workspace_id="lab", tool="studio",
+    ) is None
+    assert output.read_bytes() == b"video"
+    assert not (tmp_path / "keep-me.meta.json").is_file()

@@ -204,8 +204,7 @@ def test_model3d_keeps_generated_file_when_sidecar_publish_fails(tmp_path, monke
         lambda *_args, **_kwargs: str(dummy_ref),
     )
     monkeypatch.setattr(
-        model3d_service,
-        "publish_generation_sidecar",
+        "app.services.asset_manifest.publish_generation_sidecar",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssetManifestError("disk full while writing sidecar")
         ),
@@ -249,8 +248,7 @@ def test_rig_keeps_generated_file_when_sidecar_publish_fails(tmp_path, monkeypat
     monkeypatch.setattr(rig_service, "_python_path", lambda: Path("/fake/python"))
     monkeypatch.setattr(rig_service.subprocess, "Popen", _successful_popen)
     monkeypatch.setattr(
-        rig_service,
-        "publish_generation_sidecar",
+        "app.services.asset_manifest.publish_generation_sidecar",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssetManifestError("disk full while writing sidecar")
         ),

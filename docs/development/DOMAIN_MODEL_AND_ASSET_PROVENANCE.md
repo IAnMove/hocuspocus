@@ -48,8 +48,48 @@ will expose registries/read models before any physical file move:
 7. place unclaimed legacy records in the virtual `Inbox / Legacy` collection.
 
 The migration must be additive and reversible. No old output is deleted or
-moved merely because its metadata cannot be upgraded. Remaining slices after
-the i18n and Studio generate PRs are listed in `SLICE_QUEUE.md`.
+moved merely because its metadata cannot be upgraded. Remaining work is listed
+in `SLICE_QUEUE.md`.
+
+## Workspace vs output folder
+
+`origin.workspace_id` is an optional **Workspace collection** ID from
+`/api/v1/workspace-collections`. It must not be inferred merely because a
+directory exists.
+
+`origin.output_folder` is the **physical output-folder name** (never an
+absolute host path). Catalog scans still walk those folders; `locations[]`
+expose both fields. A folder name is not a Workspace.
+
+Python helpers live in `app/services/generation_provenance.py`:
+
+- `CommandContext` — command, workflow, run, task, job, pipeline IDs
+- `GenerationProvenance` — initiator (`actor` / `tool` / `capability`) vs
+  provider/model (`generation.model.provider` / `generation.model.id`) vs
+  location (`workspace_id` / `output_folder`)
+- `resolve_generation_location` — splits the two location fields
+- `provenance_from_manifest` — read model over a canonical sidecar
+
+Legacy writers that only pass `workspace_id=` still store that string on both
+fields so existing readers keep working. New writers should pass
+`output_folder=` for the directory and `workspace_id=` only when a collection
+ID is known.
+
+## Initiator vs provider
+
+Who started the work is `origin.actor` (`user` | `wizard` | `system` |
+`unknown`) plus `origin.tool` and optional `origin.capability`. What computed
+the bytes is `generation.model` (`provider`, `id`, `revision`). Do not store
+the model provider in `origin.actor` or the initiator in `generation.model`.
+
+## Sidecar failure policy
+
+The media file is the generation commit. After the file exists on disk,
+`publish_generation_sidecar_best_effort` writes provenance and **never
+raises**. A metadata failure must not delete the artifact or mark a successful
+generation as failed. Hunyuan3D and Rig already follow this rule; other
+writers should switch to the helper instead of wrapping `json.dump` in the
+same `try` as inference.
 
 ## Project record v1
 
@@ -98,7 +138,8 @@ Every newly generated or imported item eventually receives one adjacent
 `asset-manifest-v1.schema.json`. The canonical data records:
 
 - immutable asset ID, type, filename and media properties;
-- origin tool/capability/actor and optional project/workspace/production refs;
+- origin tool/capability/actor, optional Workspace collection ID, output-folder
+  name, and optional project/production refs;
 - command, workflow, run, task, job and pipeline correlation IDs;
 - original/effective/negative/audio prompts and their language;
 - provider, model, revision, seed and effective parameters;

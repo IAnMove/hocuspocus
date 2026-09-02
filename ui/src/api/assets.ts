@@ -5,6 +5,7 @@ export type AssetMetadataStatus = 'canonical' | 'legacy' | 'missing' | 'unreadab
 
 export interface AssetLocation {
   workspace_id: string
+  output_folder?: string | null
   filename: string
   url: string
 }
@@ -23,12 +24,17 @@ export interface AssetCatalogItem {
   origin: {
     tool: string
     capability?: string | null
+    actor?: string | null
+    workspace_id?: string | null
+    output_folder?: string | null
     project?: Record<string, unknown> | null
     production?: Record<string, unknown> | null
   }
   execution: {
     status?: string | null
     mode?: string | null
+    command_id?: string | null
+    workflow_id?: string | null
     run_id?: string | null
     task_id?: string | null
     job_id?: string | null
