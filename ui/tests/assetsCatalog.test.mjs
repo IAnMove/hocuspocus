@@ -21,6 +21,8 @@ test('asset API sends global filters and exposes the canonical client facade', a
     assert.equal(url.searchParams.get('workspace'), 'film')
     assert.equal(url.searchParams.get('limit'), '25')
     assert.equal(url.searchParams.get('offset'), '5')
+    await client.fetchAssets({ collection: 'inbox_legacy' })
+    assert.equal(new URL(calls[1].url, 'http://localhost').searchParams.get('collection'), 'inbox_legacy')
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -36,5 +38,8 @@ test('Assets is a first-class tab with its own panel, not a fake active workspac
   assert.match(tabs, /value: 'assets'/)
   assert.match(main, /<AssetsPanel/)
   assert.match(panel, /aria-label="All assets"/)
+  assert.match(panel, /Inbox \/ Legacy/)
+  assert.match(panel, /Extra info/)
+  assert.match(panel, /JSON completo/)
   assert.doesNotMatch(panel, /setActiveWorkspace|switchWorkspace/)
 })

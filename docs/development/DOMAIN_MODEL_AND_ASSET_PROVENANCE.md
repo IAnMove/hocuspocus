@@ -111,6 +111,10 @@ and offer the raw JSON as an advanced copy/download view. Missing legacy data
 is labelled as unavailable, never invented. This presentation is intentionally
 scheduled after the canonical manifest and catalog are stable.
 
+The global Assets tab now provides that inspector for every catalogued media
+kind. **Inbox / Legacy** is a virtual filter over missing, legacy, unreadable
+or invalid sidecars; reading it never moves or rewrites the underlying files.
+
 ## Compatibility and acceptance
 
 - Existing sidecars are adapted in memory and are not rewritten on read.

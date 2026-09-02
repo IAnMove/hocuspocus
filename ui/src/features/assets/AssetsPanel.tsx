@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, FileText, Film, Image as ImageIcon, Loader2, Music2, RefreshCw, Search } from 'lucide-react'
-import { fetchAssets, type AssetCatalogItem, type AssetKind } from '../../api/client'
+import { Box, FileText, Film, Image as ImageIcon, Info, Loader2, Music2, RefreshCw, Search } from 'lucide-react'
+import { fetchAsset, fetchAssets, type AssetCatalogItem, type AssetKind } from '../../api/client'
 import { useStore } from '../../stores/useStore'
 
 const PAGE_SIZE = 100
@@ -69,7 +69,9 @@ export function AssetsPanel() {
     setError('')
     try {
       const result = await fetchAssets({
-        search, kind: kind || undefined, workspace: workspace || undefined,
+        search, kind: kind || undefined,
+        workspace: workspace && workspace !== '__legacy__' ? workspace : undefined,
+        collection: workspace === '__legacy__' ? 'inbox_legacy' : undefined,
         limit: PAGE_SIZE, offset,
       })
       if (request !== requestRef.current) return
@@ -97,7 +99,17 @@ export function AssetsPanel() {
     { name: '', label: 'Todos los workspaces' },
     ...workspaces.map(item => ({ name: item.name, label: item.name })),
     { name: '__uploads__', label: 'Uploads' },
+    { name: '__legacy__', label: 'Inbox / Legacy' },
   ], [workspaces])
+  const [inspecting, setInspecting] = useState<AssetCatalogItem | null>(null)
+  const [inspectorLoading, setInspectorLoading] = useState(false)
+
+  const inspect = async (asset: AssetCatalogItem) => {
+    setInspectorLoading(true); setError('')
+    try { setInspecting(await fetchAsset(asset.id)) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo cargar Extra info') }
+    finally { setInspectorLoading(false) }
+  }
 
   return (
     <section aria-label="All assets" className="flex h-full min-h-0 flex-col bg-bg-primary">
@@ -170,6 +182,7 @@ export function AssetsPanel() {
                     {asset.workspace_ids.map(name => <span key={name} className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[9px] text-text-muted">{name}</span>)}
                     {asset.model.id && <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[9px] text-violet-200">{asset.model.id}</span>}
                   </div>
+                  <button type="button" className="inline-flex items-center gap-1 text-[10px] text-accent-blue hover:underline" onClick={() => void inspect(asset)}><Info size={11} /> Extra info</button>
                 </div>
               </article>
             ))}
@@ -187,6 +200,20 @@ export function AssetsPanel() {
           </button>
         )}
       </div>
+      {(inspecting || inspectorLoading) && <AssetExtraInfoDialog asset={inspecting} loading={inspectorLoading} onClose={() => setInspecting(null)} />}
     </section>
   )
+}
+
+function AssetExtraInfoDialog({ asset, loading, onClose }: { asset: AssetCatalogItem | null; loading: boolean; onClose: () => void }) {
+  const manifest = asset?.manifest || {}
+  const prompts = (manifest.generation as { prompts?: Record<string, unknown> } | undefined)?.prompts || {}
+  const timing = (manifest.timing as Record<string, unknown> | undefined) || {}
+  const raw = asset ? JSON.stringify(manifest, null, 2) : ''
+  const copy = async (value: string) => { await navigator.clipboard?.writeText(value) }
+  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="asset-extra-info-title" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary shadow-2xl"><header className="flex items-center justify-between border-b border-border p-3"><div><h2 id="asset-extra-info-title" className="text-sm font-semibold text-text-primary">Extra info</h2><p className="text-[10px] text-text-muted">{asset?.filename || 'Cargando metadata…'}</p></div><button onClick={onClose} className="rounded px-2 py-1 text-xs text-text-muted hover:bg-bg-hover">Cerrar</button></header>{loading || !asset ? <div className="flex items-center justify-center gap-2 p-12 text-xs text-text-muted"><Loader2 size={15} className="animate-spin" /> Leyendo manifest…</div> : <div className="space-y-4 overflow-y-auto p-4 text-xs"><InfoSection title="Identidad" values={{ asset_id: asset.id, kind: asset.kind, metadata_status: asset.metadata_status, locations: asset.workspace_ids.join(', ') }} /><InfoSection title="Origen y ejecución" values={{ tool: asset.origin.tool, capability: asset.origin.capability, run_id: asset.execution.run_id, task_id: asset.execution.task_id, job_id: asset.execution.job_id, pipeline_id: asset.execution.pipeline_id, status: asset.execution.status }} /><InfoSection title="Modelo y tiempos" values={{ provider: asset.model.provider, model: asset.model.id, created_at: timing.created_at, queued_at: timing.queued_at, started_at: timing.started_at, completed_at: timing.completed_at, queue_seconds: timing.queue_seconds, inference_seconds: timing.inference_seconds, total_seconds: timing.total_seconds }} />{Object.entries(prompts).map(([name, value]) => typeof value === 'string' && value ? <section key={name} className="rounded-lg border border-border bg-bg-primary p-3"><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold text-text-primary">Prompt · {name}</h3><button onClick={() => void copy(value)} className="text-[10px] text-accent-blue">Copiar</button></div><pre className="whitespace-pre-wrap break-words text-[11px] text-text-secondary">{value}</pre></section> : null)}<section className="rounded-lg border border-border bg-bg-primary p-3"><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold text-text-primary">JSON completo</h3><button onClick={() => void copy(raw)} className="text-[10px] text-accent-blue">Copiar JSON</button></div><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words text-[10px] text-text-muted">{raw || 'Metadata no disponible'}</pre></section></div>}</div></div>
+}
+
+function InfoSection({ title, values }: { title: string; values: Record<string, unknown> }) {
+  return <section className="rounded-lg border border-border bg-bg-primary p-3"><h3 className="mb-2 font-semibold text-text-primary">{title}</h3><dl className="grid gap-1 sm:grid-cols-2">{Object.entries(values).map(([name, value]) => <div key={name} className="grid grid-cols-[7rem_1fr] gap-2"><dt className="text-text-muted">{name}</dt><dd className="break-all text-text-secondary">{value == null || value === '' ? 'No disponible' : String(value)}</dd></div>)}</dl></section>
 }
