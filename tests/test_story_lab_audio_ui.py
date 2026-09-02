@@ -19,6 +19,9 @@ def stories_ui() -> str:
     return "\n".join(path.read_text(encoding="utf-8") for path in sorted(STORIES.glob("*.tsx")))
 
 
+CATALOG_EN = ROOT / "ui" / "src" / "i18n" / "locales" / "en" / "storyLab.json"
+
+
 STORY_VIDEO_FORMAT = ROOT / "ui" / "src" / "features" / "stories" / "StoryVideoFormatControls.tsx"
 STORY_VIDEO_FORMAT_HELPERS = ROOT / "ui" / "src" / "features" / "stories" / "storyLabVideoFormat.ts"
 STORY_GALLERY = ROOT / "ui" / "src" / "features" / "stories" / "ReferenceGallery.tsx"
@@ -152,12 +155,13 @@ def test_story_assets_support_reviewed_non_destructive_style_variants():
     assert "approval: StoryApprovalState" in types
     assert "derivedFromAssetId?: string" in types
     assert "stylePrompt?: string" in types
-    assert "Convert selected images to a style" in panel
+    catalog = CATALOG_EN.read_text(encoding="utf-8")
+    assert "Convert selected images to a style" in catalog
     assert "QWEN_STYLE_EDIT_MODEL = 'qwen_image_edit_20B_gguf_q4_k_m'" in panel
     assert "FLUX_STYLE_EDIT_MODEL = 'flux2_klein_9b'" in panel
-    assert "Style conversion model" in panel
-    assert "MiniMax Image-01 · characters only" in panel
-    assert "Install selected local editor" in panel
+    assert "Style conversion model" in catalog
+    assert "MiniMax Image-01 · characters only" in catalog
+    assert "Install selected local editor" in catalog
     assert "Review and approve only the images Director should use" in panel
     assert "approval: item.approval === 'draft' ? 'draft' : 'approved'" in model
 
@@ -175,9 +179,9 @@ def test_story_library_can_bulk_remove_only_selected_drafts():
     assert "character.referenceAssetIds.filter" in deletion
     assert "delete current.assets[id]" in deletion
     assert "Generated files remain in Gallery" in deletion
-    assert "Delete selected Draft" in panel
+    assert "Delete selected Draft" in CATALOG_EN.read_text(encoding="utf-8")
     assert "visualAssetsNewestFirst" in panel
-    assert "Newest images appear first" in panel
+    assert "Newest images appear first" in CATALOG_EN.read_text(encoding="utf-8")
 
 
 def test_story_reference_images_confirm_removal_and_open_in_a_modal():
@@ -207,7 +211,7 @@ def test_story_style_converter_warns_about_photo_to_photo_noops_and_honors_reque
     assert "normalizedStyle" in prompt_builder
     assert ".replace(/\\s+/g, ' ')" in prompt_builder
     assert "Render only the visible wording explicitly requested" in prompt_builder
-    assert "a photorealistic remake will look almost unchanged" in panel
+    assert "a photorealistic remake will look almost unchanged" in CATALOG_EN.read_text(encoding="utf-8")
 
 
 def test_story_style_conversion_uses_true_qwen_edit_semantics_for_scenes():
@@ -229,7 +233,7 @@ def test_story_style_conversion_uses_flux_klein_as_a_true_four_step_image_editor
 
     assert "styleUsesFlux" in panel
     assert "styleUsesFlux ? 'flux' : 'qwen'" in panel
-    assert "fast 4-step edit" in panel
+    assert "fast 4-step edit" in CATALOG_EN.read_text(encoding="utf-8")
     assert "selected === 'flux2_klein_9b'" in generation
     assert "referenceParams.num_inference_steps = 4" in generation
     assert "referenceParams.guidance_scale = 1" in generation
