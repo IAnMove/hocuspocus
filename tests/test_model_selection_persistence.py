@@ -15,6 +15,17 @@ STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
 STORY_PATH = os.path.join(
     ROOT, "ui", "src", "features", "stories", "StoryLabPanel.tsx",
 )
+STORY_UI_PATHS = (
+    STORY_PATH,
+    os.path.join(ROOT, "ui", "src", "features", "stories", "StoryTrailerTab.tsx"),
+    os.path.join(ROOT, "ui", "src", "features", "stories", "StoryProductionsTab.tsx"),
+    os.path.join(ROOT, "ui", "src", "features", "stories", "StoryProductionsMusicPanel.tsx"),
+    os.path.join(ROOT, "ui", "src", "features", "stories", "StoryVideoFormatControls.tsx"),
+    os.path.join(ROOT, "ui", "src", "features", "stories", "storyLabVideoFormat.ts"),
+    os.path.join(ROOT, "ui", "src", "features", "stories", "actions.ts"),
+    os.path.join(ROOT, "ui", "src", "i18n", "locales", "en", "storyLab.json"),
+    os.path.join(ROOT, "ui", "src", "i18n", "locales", "es", "storyLab.json"),
+)
 STORY_MODEL_PATH = os.path.join(
     ROOT, "ui", "src", "features", "stories", "model.ts",
 )
@@ -29,6 +40,10 @@ STORY_TYPES_PATH = os.path.join(
 def _source(path: str) -> str:
     with open(path, "r", encoding="utf-8") as handle:
         return handle.read()
+
+
+def _story_ui() -> str:
+    return "\n".join(_source(path) for path in STORY_UI_PATHS)
 
 
 class TestModelSelectionPersistence(unittest.TestCase):
@@ -88,13 +103,13 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn("durableSelections?.selected_models || {}", store)
 
     def test_story_lab_explains_the_ltx_gemma_dependency(self):
-        story = _source(STORY_PATH)
+        story = _story_ui()
         self.assertIn("Gemma 3 12B", story)
         self.assertIn("LTX dependency, not a separate setting", story)
         self.assertIn("This exact MiniMax H3 selection", story)
 
     def test_story_lab_video_format_is_selectable_and_reopenable(self):
-        story = _source(STORY_PATH)
+        story = _story_ui()
         self.assertIn("Landscape", story)
         self.assertIn("Portrait / Shorts", story)
         self.assertIn("20-step ConvRot recipe", story)
@@ -108,7 +123,7 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn("production.targetSnapshot?.aspectRatio", story)
 
     def test_story_video_override_is_durable_local_and_explicitly_handed_to_director(self):
-        story = _source(STORY_PATH)
+        story = _story_ui()
         model = _source(STORY_MODEL_PATH)
         story_store = _source(STORY_STORE_PATH)
         types = _source(STORY_TYPES_PATH)

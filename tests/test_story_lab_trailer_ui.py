@@ -4,12 +4,25 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PANEL = ROOT / "ui" / "src" / "features" / "stories" / "StoryLabPanel.tsx"
-ADAPTATIONS = ROOT / "ui" / "src" / "features" / "stories" / "adaptations.ts"
-MODEL = ROOT / "ui" / "src" / "features" / "stories" / "model.ts"
-TYPES = ROOT / "ui" / "src" / "features" / "stories" / "types.ts"
+STORIES = ROOT / "ui" / "src" / "features" / "stories"
+PANEL = STORIES / "StoryLabPanel.tsx"
+TRAILER = STORIES / "StoryTrailerTab.tsx"
+COMPACT = STORIES / "CompactVideoWorkspace.tsx"
+VIDEO_FORMAT = STORIES / "storyLabVideoFormat.ts"
+VIDEO_CONTROLS = STORIES / "StoryVideoFormatControls.tsx"
+ADAPTATIONS = STORIES / "adaptations.ts"
+MODEL = STORIES / "model.ts"
+TYPES = STORIES / "types.ts"
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 DIRECTOR_CHAT = ROOT / "ui" / "src" / "components" / "Sidebar" / "DirectorChat.tsx"
+CATALOG_EN = ROOT / "ui" / "src" / "i18n" / "locales" / "en" / "storyLab.json"
+CATALOG_ES = ROOT / "ui" / "src" / "i18n" / "locales" / "es" / "storyLab.json"
+
+
+def story_lab_trailer_ui() -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in (
+        PANEL, TRAILER, COMPACT, VIDEO_FORMAT, VIDEO_CONTROLS, CATALOG_EN, CATALOG_ES,
+    ))
 
 
 def test_trailer_is_a_persisted_story_production_kind():
@@ -51,56 +64,61 @@ def test_trailer_adapter_enforces_a_story_arc_without_revealing_the_ending():
 
 
 def test_story_lab_exposes_editable_trailer_controls_and_timed_preview():
+    source = story_lab_trailer_ui()
     panel = PANEL.read_text(encoding="utf-8")
+    trailer = TRAILER.read_text(encoding="utf-8")
 
     assert "{ id: 'trailer', label: 'Tráiler'" in panel
-    assert "Creador de tráileres cinematográficos" in panel
-    assert "TRAILER_ARC.map" in panel
-    assert "setTrailerDuration" in panel
-    assert "setTrailerFormat" in panel
-    assert "setTrailerNarration" in panel
-    assert "setTrailerSpoiler" in panel
-    assert "setTrailerIntensity" in panel
-    assert "setTrailerTagline" in panel
-    assert "setTrailerTitleCards" in panel
+    assert "Creador de tráileres cinematográficos" in source
+    assert "TRAILER_ARC.map" in trailer
+    assert "setTrailerDuration" in trailer
+    assert "setTrailerFormat" in trailer
+    assert "setTrailerNarration" in trailer
+    assert "setTrailerSpoiler" in trailer
+    assert "setTrailerIntensity" in trailer
+    assert "setTrailerTagline" in trailer
+    assert "setTrailerTitleCards" in trailer
 
 
 def test_compact_trailer_review_uses_full_width_rows():
-    panel = PANEL.read_text(encoding="utf-8")
-    workspace = panel.split("function CompactVideoWorkspace", 1)[1].split(
-        "function CompactSubjectEditor", 1,
-    )[0]
+    workspace = COMPACT.read_text(encoding="utf-8")
+    catalog = CATALOG_ES.read_text(encoding="utf-8")
 
+    assert "export function CompactVideoWorkspace" in workspace
     assert '<div className="space-y-4">' in workspace
     assert '<div className="grid gap-4 2xl:grid-cols-3">' not in workspace
-    assert "1 · Entorno y dirección visual" in workspace
-    assert "Protagonistas y antagonistas" in workspace
-    assert "Arco y momentos de tráiler" in workspace
+    assert "1 · Entorno y dirección visual" in catalog
+    assert "Protagonistas y antagonistas" in catalog
+    assert "Arco y momentos de tráiler" in catalog
+    assert "t('compact.worldStep')" in workspace
+    assert "t('compact.subjectsTrailer')" in workspace
+    assert "t('compact.sequenceTrailer')" in workspace
 
 
 def test_trailer_orientation_can_override_the_global_landscape_default_inline():
+    source = story_lab_trailer_ui()
     panel = PANEL.read_text(encoding="utf-8")
-    trailer = panel.split("{tab === 'trailer'", 1)[1].split("{tab === 'productions'", 1)[0]
+    trailer = TRAILER.read_text(encoding="utf-8")
     handler = panel.split("const setStoryVideoFormat", 1)[1].split("useEffect", 1)[0]
 
-    assert "Portrait / Shorts" in panel
+    assert "Portrait / Shorts" in source
     assert "disabled={!storyVideoOptionsReady}" in trailer
     assert "provider: { ...project.provider, useGlobalProfile: false }" in handler
     assert "if (project.provider.useGlobalProfile) return" not in handler
-    assert "Formato seleccionado" in panel
-    assert "aria-pressed={aspectRatio === option.value}" in panel
+    assert "Formato seleccionado" in source
+    assert "aria-pressed={aspectRatio === option.value}" in source
     assert "Formato de vídeo actualizado:" in handler
 
 
 def test_trailer_supports_text_only_direct_video_without_visual_inputs():
-    panel = PANEL.read_text(encoding="utf-8")
+    source = story_lab_trailer_ui()
+    trailer = TRAILER.read_text(encoding="utf-8")
     store = STORE.read_text(encoding="utf-8")
     director_chat = DIRECTOR_CHAT.read_text(encoding="utf-8")
     pipeline = ROOT.joinpath("app", "services", "director_pipeline.py").read_text(encoding="utf-8")
 
-    trailer = panel.split("{tab === 'trailer'", 1)[1].split("{tab === 'productions'", 1)[0]
-    assert "Vídeo directo" in trailer
-    assert "T2V · sin imágenes" in trailer
+    assert "Vídeo directo" in source
+    assert "T2V · sin imágenes" in source
     assert "musicVideoGenerationMode: 'direct_video', protagonistConsistency: false" in trailer
     assert "directVideoMasterReady" in trailer
     assert "disabled={directVideo || directReferenceVideo}" in trailer
@@ -123,6 +141,7 @@ def test_direct_trailer_cast_approval_does_not_require_identity_images():
 
 def test_trailer_can_review_generate_reopen_and_reuse_ordered_assembly():
     panel = PANEL.read_text(encoding="utf-8")
+    trailer = TRAILER.read_text(encoding="utf-8")
     stage = panel.split("const stageTrailer", 1)[1].split("const writeStorySong", 1)[0]
     reopen = panel.split("const reopenProduction", 1)[1].split(
         "const restoreProductionSource", 1,
@@ -131,7 +150,7 @@ def test_trailer_can_review_generate_reopen_and_reuse_ordered_assembly():
     assert "buildTrailerAdaptation" in panel
     assert "kind: 'trailer'" in stage
     assert "pipelineId: useStore.getState().pipelineId" in stage
-    assert "stageTrailer(true)" in panel
-    assert "stageTrailer(false)" in panel
+    assert "stageTrailer(true)" in trailer
+    assert "stageTrailer(false)" in trailer
     assert "production.kind === 'trailer'" in reopen
     assert "trailerOptions" in reopen
