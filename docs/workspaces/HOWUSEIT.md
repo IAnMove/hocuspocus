@@ -1,8 +1,8 @@
 # HOWUSEIT — Workspaces tab (Director threads)
 
-The **Workspaces** gallery tab is a **Director generation-thread dashboard**. It is **not** the sidebar switcher that isolates output directories (also called “Workspaces” in the README).
+The **Workspaces** gallery tab is a **Director generation-thread dashboard**. It is **not** the sidebar selector for physical output folders, and it is not the explicit Workspace collection registry.
 
-UI tab: **Workspaces** (`mediaFilter: workspaces`). Code: `ui/src/features/workspaces/`. Persistence: `app/services/director_pipeline.py`. HTTP: `app/_launch_runtime.py`.
+UI tab: **Workspaces** (`mediaFilter: workspaces`). Code: `ui/src/features/workspaces/`. Persistence: `app/services/director_pipeline.py`. HTTP: `app/_launch_runtime.py`. Domain terminology: [Domain model and asset provenance](../development/DOMAIN_MODEL_AND_ASSET_PROVENANCE.md).
 
 Related: [Video Editor / mixes](../video-editor/HOWUSEIT.md), [H3 prompt revisions](../h3-prompt-revisions.md).
 
@@ -12,20 +12,23 @@ Related: [Video Editor / mixes](../video-editor/HOWUSEIT.md), [H3 prompt revisio
 
 | Name | What it is |
 |---|---|
-| Output workspace | Isolated save directory (`services.active_workspace`, default `default`). Favorites and outputs are per directory. |
-| Workspaces tab | List of saved Director / music-video **pipelines** in the **active** output workspace. Inspect the shot queue, edit prompts, toggle vocal drive, batch-rewrite, resume, rejoin. |
+| Output folder | Isolated physical save directory (`services.active_workspace`, default `default`). Favorites and outputs are per directory. The older API often calls this value `workspace`. |
+| Workspace collection | Explicit logical collection of project, asset and Production IDs. It is not a directory and does not move files. Its API is `/api/v1/workspace-collections`. |
+| Workspaces tab | List of saved Director / music-video **pipelines** in the **active** output folder. Inspect the shot queue, edit prompts, toggle vocal drive, batch-rewrite, resume, rejoin. |
 
-Director pipeline routes **do not** take `?workspace=`. They always read/write the server’s active workspace.
+Director pipeline routes **do not** take `?workspace=`. They always read/write the server’s active **output folder**. A logical Workspace collection is metadata only and does not change this routing rule.
 
-Typical flow: generate a song or Director video elsewhere → the thread appears in the left list (newest first) → select it → edit shots → **Start / resume videos** or **Regenerar vídeo completo** (rejoin).
+Typical flow: generate a song or Director video elsewhere → the thread appears in the left list (newest first) → select it → edit shots → **Start / resume videos** or **Regenerar vídeo completo** (rejoin). The run may optionally be linked to a Workspace collection, but the files remain in the selected output folder.
 
 ---
 
 ## 2. Queue inspection
 
-`GET /api/v1/director/pipelines` — saved threads.  
-`GET /api/v1/director/pipelines/active` — in-memory runs (recovery).  
+`GET /api/v1/director/pipelines` — saved threads (newest first).
+`GET /api/v1/director/pipelines/active` — in-memory runs (recovery).
 `GET /api/v1/director/pipelines/{pid}` — full state, **hydrated**.
+
+List query: `?limit=&offset=`. **`limit=0` (default) returns every saved pipeline** and parses each JSON. The Workspaces UI pages **8** (`DASHBOARD_PIPELINE_PAGE_SIZE`) and uses `total` plus `loadMorePipelineList` so opening the tab does not hydrate the whole archive. `GET …/{pid}` is still required for the selected thread. Status polls are serialised in the UI; do not fire a full unpaged list on an interval.
 
 Hydration (`hydrate_queue_clips`):
 
@@ -128,7 +131,8 @@ Rejoin uses the mix path in [Video Editor / mixes](../video-editor/HOWUSEIT.md) 
 
 ## 7. Pitfalls
 
-- Confusing this tab with the **output-directory** switcher. Threads are scoped to whichever directory is active.
+- Calling `GET /api/v1/director/pipelines` with the default `limit=0` from a poller. That re-parses every pipeline JSON. Use `limit`/`offset` (the tab uses 8).
+- Confusing this tab with the **output-folder** selector or with a logical Workspace collection. Threads are scoped to whichever output folder is active.
 - Editing prompts while Director is sampling → `409`.
 - Batch rewrite without a loaded local LLM → `POST /api/v1/llm/generate` fails.
 - Toggling a shot to mute without cleaning vocal verbs in the visual prose → H3 preflight rejects the shot.

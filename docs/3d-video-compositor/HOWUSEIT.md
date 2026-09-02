@@ -1,6 +1,6 @@
 # HOWUSEIT — 3D Video compositor (Scene Animator)
 
-Agent operations guide for Loreframe Lab’s programmatic compositor.
+Agent operations guide for HocusPocus’s programmatic compositor.
 
 This document is the agent operations guide. The **3D Video** tab provides the Recipe runner (intent → JSON → assets → editable scene → MP4), template mounting and the selected-layer copilot. Story Lab / trailers / videoclips remain separate consumers.
 
@@ -19,8 +19,9 @@ A **layered compositor**, not MiniMax H3.
 | Scene Animator | **3D Video** | Stack images, videos, GLBs, camera, rain/fog/etc. Animate them. Record a clip |
 | MiniMax H3 | Studio / Story Lab | Native video + stereo audio (acting, dialogue, locations) |
 | Video Editor | **Video Editor** | Join compositor clips with H3 clips |
+| Character Kits | **3D Video** sidebar | Reusable 2D cutout puppets + Face Rig mouth overlays. Operator guide: [Character Kits](../character-kits/HOWUSEIT.md) |
 
-Use the compositor when you need **controllable motion of a known object** over plates: a ship crossing stars, a UFO rising behind mountains, a logo flying in, rain over a still. Use H3 when you need **performance, speech, or a living location**. Mix them: H3 for people/places, compositor for the vehicle insert, Video Editor to cut them together.
+Use the compositor when you need **controllable motion of a known object** over plates: a ship crossing stars, a UFO rising behind mountains, a logo flying in, rain over a still. Use H3 when you need **performance, speech, or a living location**. Mix them: H3 for people/places, compositor for the vehicle insert, Video Editor to cut them together. Use a **Character Kit** when the known object is a graphic puppet that must speak with mouth overlays—not a Hunyuan mesh and not H3 lip-sync.
 
 Do **not** ask H3 to “keep this exact GLB flying on a perfect path.” H3 will invent a new ship. The compositor keeps the mesh.
 
@@ -86,7 +87,7 @@ Camera shake lives on the **camera** layer: `animation.shake = { amount, frequen
 4. Set scene size (match the H3 aspect if you will cut together: 16:9 e.g. 1280×720 or 960×544).
 5. Assign motion presets (see §7).
 6. Optional: camera preset + atmosphere.
-7. **Save to Loreframe Lab** → writes `*.scene.json` + preview PNG (gallery tab **Scenes**).
+7. **Save to HocusPocus** → writes `*.scene.json` + preview PNG (gallery tab **Scenes**).
 8. **Export MP4** → validated H.264 MP4 in **Videos**. Then import it into **Video Editor** with H3 clips.
 
 Motion JSON can be imported separately (2 MB max) via the panel’s movement loader.
@@ -95,7 +96,10 @@ Motion JSON can be imported separately (2 MB max) via the panel’s movement loa
 
 ## 5. Asset APIs (phase 1, fully scriptable)
 
-Base URL: the running Lab (`http://127.0.0.1:<port>`). Workspace query: `?workspace=default` on file URLs; **never** put that query into probe/source filenames.
+Base URL: the running HocusPocus instance (`http://127.0.0.1:<port>`). The
+legacy `workspace` query selects a physical output folder on file URLs;
+**never** put that query into probe/source filenames. It is not a logical
+Workspace collection selector.
 
 ### 5.1 List outputs
 
@@ -184,9 +188,10 @@ Direct Hunyuan API:
 }
 ```
 
-Image values are workspace filenames, upload names, or `/api/v1/file/...` **without** `?workspace=` (the resolver strips it, but filenames are safer).
+Image values are output-folder filenames, upload names, or `/api/v1/file/...`
+**without** `?workspace=` (the resolver strips it, but filenames are safer).
 
-In **Hunyuan3D Studio**, every reference slot offers both **Upload** (local disk) and **Loreframe** (images already stored in the active workspace). The selected Loreframe filename is sent with that workspace, so no duplicate upload is needed.
+In **Hunyuan3D Studio**, every reference slot offers both **Upload** (local disk) and **HocusPocus** (images already stored in the active output folder). The selected HocusPocus filename is sent with that output-folder token, so no duplicate upload is needed.
 
 Poll `GET /api/v1/model3d/status/{job_id}`. Result `filename` is a `.glb`.
 
@@ -228,9 +233,24 @@ Without a real PNG preview the endpoint rejects the body.
 
 ### 5.8 Video Editor (join plates)
 
-Import H3 MP4s + recorded WebM. Multi-select in **From Loreframe Lab**. Export MP4.
+Import H3 MP4s + recorded WebM. Multi-select in **From HocusPocus**. Export MP4.
 
 Director / Series **auto-joins** (not the editor) use a 0.5 s last-frame freeze + ~0.4 s crossfade when there is no driving audio. Full probe/export/`result_kind` contract: [Video Editor / mixes](../video-editor/HOWUSEIT.md).
+
+### 5.9 Character Kits (2D puppets)
+
+Character Kit library: `GET`, `PATCH`, and `DELETE`
+`/api/v1/character-kits/library…`. Face Rig overlay cleanup:
+`POST /api/v1/character-kits/face-rig/cleanup`. Both routes use the physical
+output-folder token in their `workspace` field; it is not a logical Workspace
+collection ID. Character Creator can hand a saved view into this editor via
+`hocuspocus:character-kit-face-rig-handoff`, but it does not generate visemes.
+
+Only **approved** poses and overlays mount into the scene or enter Recipe
+inventory (`APPROVED_CHARACTER_KIT`). Spoken cutout dialogue is persisted as
+`scene.dialogueBeats` and compiled into held/snap opacity keyframes; it is not
+phoneme-perfect lip-sync. Read the full CAS, review, mouth-pack, and dialogue
+contract in [Character Kits / Face Rig](../character-kits/HOWUSEIT.md).
 
 ---
 
@@ -451,11 +471,12 @@ Need both in one sequence?
 Do this **in the browser tab**, not as a Python overnight script. UI: `SceneRecipePanel`. Code: `ui/src/lib/sceneRecipe.ts`, `ui/src/lib/sceneRecipeAssets.ts`.
 
 1. **Interpretation contract**: the selected LLM receives a closed JSON Schema plus a multilingual virtual-production guide. It silently separates subjects, setting, chronological beats, format, camera and atmosphere; generation prompts are written in concise cinematic English while proper names and quoted dialogue are preserved.
-2. **Validation and repair**: local llama-server output is grammar-constrained. Other providers receive the exact schema in context. Loreframe then validates unique ids, asset/layer compatibility, supported presets, rig clips and references; one malformed response gets a bounded correction pass before any GPU job starts.
+2. **Validation and repair**: local llama-server output is grammar-constrained. Other providers receive the exact schema in context. HocusPocus then validates unique ids, asset/layer compatibility, supported presets, rig clips and references; one malformed response gets a bounded correction pass before any GPU job starts.
 3. **Manual**: pick GLBs/plates already in Outputs, **Write recipe**, **Compose**. Output sidecar prompts and embedded clip names are passed to the LLM as untrusted inventory descriptions, so it can understand assets whose filenames are vague. A requested rig profile is applied even to a manually loaded static GLB. Edit the inspector, then Record.
 4. **Auto**: **Generate + compose** creates missing plates/meshes. One `identity` per object — a UFO series uses **one** GLB and several `shots[]`. Static environments use image plates; inherently moving scenery can use an H3 video plate. Rain, fog, snow and particles use procedural effects instead of redundant generated overlays. Default `record`/`save` are false so you preview first.
 5. GPU jobs and Hunyuan poll with timeouts; **Cancel** aborts the run. If Lab dies (segfault), the runner errors instead of spinning forever.
 6. After compose, switch shots in the recipe panel without regenerating the mesh. A recipe rig `clip` is mounted into the Scene Animator and disables unintended turntable spin.
+7. Approved Character Kits enter inventory as `APPROVED_CHARACTER_KIT` rows. Spoken cutout shots need a `speech` audio entry and a top-level `dialogueBeats` row whose `mouthLayerIds` name the overlays. Keep body and face pieces from the same kit ID.
 
 Keep the 3D Video tab visible while it records. Browser capture is validated
 and published as H.264 MP4; import that output in Video Editor to join it with
@@ -479,6 +500,7 @@ H3 clips.
 | `app/services/rig_service.py` | Rig profiles and clips |
 | `docs/minimax-h3-prompting.md` | H3 prompt dialect |
 | `docs/video-editor/HOWUSEIT.md` | Cut compositor WebM with H3 MP4s; mix kinds |
+| `docs/character-kits/HOWUSEIT.md` | Character Kit library, Face Rig, and cutout dialogue |
 | `ui/src/features/characters/orbitPrompt.ts` | Orbit A/B prompts and still-frame indices |
 
 When in doubt: **one identity per mesh, one path per compositor shot, H3 never draws that mesh.**
