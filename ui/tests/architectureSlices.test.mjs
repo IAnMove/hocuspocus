@@ -140,6 +140,32 @@ test('sidebar slice toggles open through the public facade', async () => {
   assert.equal(useStore.getState().sidebarOpen, false)
 })
 
+test('retake dialog slice opens and closes through the public facade', async () => {
+  const { createRetakeDialogSlice } = await import('../src/stores/retakeDialogSlice.ts')
+  let state
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  state = createRetakeDialogSlice(set)
+  assert.equal(state.retakeDialogOpen, false)
+  assert.equal(state.retakeSourceFile, null)
+  state.openRetakeDialog('clip.mp4')
+  assert.equal(state.retakeDialogOpen, true)
+  assert.equal(state.retakeSourceFile, 'clip.mp4')
+  state.closeRetakeDialog()
+  assert.equal(state.retakeDialogOpen, false)
+  assert.equal(state.retakeSourceFile, null)
+
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.getState().openRetakeDialog('source.mp4')
+  assert.equal(useStore.getState().retakeDialogOpen, true)
+  assert.equal(useStore.getState().retakeSourceFile, 'source.mp4')
+  useStore.getState().closeRetakeDialog()
+  assert.equal(useStore.getState().retakeDialogOpen, false)
+  assert.equal(useStore.getState().retakeSourceFile, null)
+})
+
 test('developer-mode slice persists the local flag through the public facade', async () => {
   if (!globalThis.localStorage) {
     const { JSDOM } = await import('jsdom')
