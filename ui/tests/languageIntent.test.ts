@@ -80,13 +80,16 @@ test('quoted user dialogue is protected deterministically while a quoted style i
     reply: 'Je prépare la scène.', conversationLanguage: 'fr',
     actions: [{
       type: 'prepare_video', prompt: 'Two protagonists greet each other.',
-      languageIntent: normalizeLanguageIntent({ technical_prompt_language: 'auto' }),
+      languageIntent: normalizeLanguageIntent({
+        spoken_language: 'en', technical_prompt_language: 'auto',
+      }),
     }],
   })
   const action = protectedTurn.actions[0]
   assert.equal(action.type, 'prepare_video')
   assert.equal(action.type === 'prepare_video' && action.languageIntent?.verbatimSegments[0]?.text, '¡Hola, mundo!')
   assert.equal(action.type === 'prepare_video' && action.languageIntent?.technicalPromptLanguage, 'auto')
+  assert.equal(action.type === 'prepare_video' && action.languageIntent?.spokenLanguage, 'es')
 })
 
 test('merge keeps persisted literals when a later action only changes spoken language', () => {

@@ -1732,7 +1732,10 @@ export function protectUserVerbatimSegments(request: string, turn: AgentTurn): A
       const contentLanguage = 'language' in action && typeof action.language === 'string' ? action.language : ''
       const lyricsLanguage = 'lyricsLanguage' in action && typeof action.lyricsLanguage === 'string'
         ? action.lyricsLanguage : ''
-      const spokenLanguage = current?.spokenLanguage || lyricsLanguage || contentLanguage
+      const explicitSpokenLanguage = verbatimSegments.find(segment => (
+        (segment.kind === 'dialogue' || segment.kind === 'lyrics') && segment.language
+      ))?.language || ''
+      const spokenLanguage = explicitSpokenLanguage || current?.spokenLanguage || lyricsLanguage || contentLanguage
       const deterministic = normalizeLanguageIntent({
         conversation_language: current?.conversationLanguage || turn.conversationLanguage,
         content_language: current?.contentLanguage || contentLanguage,
