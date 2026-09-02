@@ -34,7 +34,7 @@ function installDom() {
 installDom()
 
 test('Runs and collection Workspaces are distinct tabs', async () => {
-  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
   useStore.setState({ mediaFilter: 'all', outputSearchQuery: '' })
@@ -42,6 +42,7 @@ test('Runs and collection Workspaces are distinct tabs', async () => {
     render(<TabFilter />)
     assert.ok(screen.getByRole('tab', { name: /^Runs/ }))
     assert.ok(screen.getByRole('tab', { name: /Workspaces/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Studios/ }))
     assert.ok(screen.getByRole('tab', { name: /Story Lab/ }))
     assert.ok(screen.getByRole('tab', { name: /Series Lab/ }))
   } finally {

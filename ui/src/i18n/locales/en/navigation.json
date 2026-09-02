@@ -29,6 +29,10 @@
   "primary": {
     "create": "Create",
     "library": "Library",
+    "directGeneration": "Direct generation",
+    "studios": "Studios",
+    "production": "Production",
+    "media": "Media",
     "activity": "Activity",
     "studio": "Studio"
   },
@@ -36,7 +40,10 @@
     "create": "Choose a creative workspace",
     "library": "Find projects and generated media",
     "directGeneration": "Direct generation",
-    "guidedCreation": "Guided creation"
+    "guidedCreation": "Guided creation",
+    "studios": "Develop guided creative projects",
+    "production": "Prepare, supervise and edit productions",
+    "media": "Browse projects and generated assets"
   },
   "panel": {
     "directGeneration": "Direct generation",
@@ -58,6 +65,8 @@
     "director": "Prepare and supervise multi-shot productions.",
     "editor": "Assemble and export existing clips.",
     "video3d": "Compose camera-driven videos from 3D scenes.",
+    "animate3d": "Animate characters and objects inside a 3D scene.",
+    "productions": "Review prepared productions and their progress.",
     "characters": "Build reusable characters and references.",
     "projects": "Durable creative documents you can reopen and edit.",
     "assets": "Reusable source files and generated results.",
@@ -96,6 +105,7 @@
     "styles": "Style sheet",
     "comics": "Comics",
     "videoEditor": "Video Editor",
+    "productions": "Productions",
     "scene3d": "3D Video",
     "animate3d": "Animate",
     "edits": "Edits",
