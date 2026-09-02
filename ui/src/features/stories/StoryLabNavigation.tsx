@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useUiTranslation } from '../../i18n'
 
 export interface StoryLabNavigationTab<T extends string = string> {
   id: T
@@ -15,6 +16,7 @@ interface StoryLabNavigationProps<T extends string> {
 }
 
 export function StoryLabNavigation<T extends string>({ tabs, activeTab, onChange, notes }: StoryLabNavigationProps<T>) {
+  const { t } = useUiTranslation('storyLab')
   return (
     <nav aria-label="Story Lab sections" className="flex w-full shrink-0 gap-1 overflow-x-auto border-b border-border bg-bg-secondary p-2 md:w-48 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:border-b-0 md:border-r">
       {tabs.map(item => (
@@ -28,7 +30,7 @@ export function StoryLabNavigation<T extends string>({ tabs, activeTab, onChange
           <item.icon size={14} aria-hidden="true" /> <span>{item.label}</span>
         </button>
       ))}
-      <span className="shrink-0 self-center px-1 text-[9px] text-text-muted md:hidden" aria-hidden="true">Desliza para más secciones</span>
+      <span className="shrink-0 self-center px-1 text-[9px] text-text-muted md:hidden" aria-hidden="true">{t('nav.swipe')}</span>
       <div className="hidden space-y-1.5 border-t border-border pt-3 text-[9px] text-text-muted md:block">
         {notes}
       </div>

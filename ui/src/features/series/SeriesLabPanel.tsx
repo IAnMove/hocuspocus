@@ -12,15 +12,17 @@ import { Pill } from './components'
 import { primaryButton, secondaryButton } from './styles'
 import type { SeriesJobStatus, SeriesProject } from './types'
 import { listenForAgentSeriesRenderJob, listenForAgentSeriesSection } from '../../lib/uiBus'
+import { useUiTranslation } from '../../i18n'
 
 type LabTab = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
-const tabs: Array<{ id: LabTab; label: string }> = [
-  { id: 'setup', label: '1 · Setup' }, { id: 'canon', label: '2 · Canon' },
-  { id: 'episode', label: '3 · Episode room' }, { id: 'shots', label: '4 · Shots' },
-  { id: 'review', label: '5 · Render & review' },
-]
 
 export function SeriesLabPanel() {
+  const { t } = useUiTranslation('seriesLab')
+  const tabs: Array<{ id: LabTab; label: string }> = [
+    { id: 'setup', label: t('tabs.setup') }, { id: 'canon', label: t('tabs.canon') },
+    { id: 'episode', label: t('tabs.episode') }, { id: 'shots', label: t('tabs.shots') },
+    { id: 'review', label: t('tabs.review') },
+  ]
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const productionProfile = useStore(state => state.productionProfile)
   const {

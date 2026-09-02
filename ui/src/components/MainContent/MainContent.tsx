@@ -15,6 +15,7 @@ import {
   clearDirectorClipReplacementTarget,
   readDirectorClipReplacementTarget,
 } from '../../features/stories/directorClipHandoff'
+import { useUiTranslation } from '../../i18n'
 
 const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
   .then(module => ({ default: module.SceneAnimatorPanel })))
@@ -283,6 +284,7 @@ function PipelinePlaceholder() {
 }
 
 export function MainContent() {
+  const { t: tActivity } = useUiTranslation('activity')
   const outputs = useStore(s => s.filteredOutputs())
   const outputsLoading = useStore(s => s.outputsLoading)
   const jobs = useStore(s => s.jobs)
@@ -663,8 +665,7 @@ export function MainContent() {
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
                 <Film size={14} className="shrink-0" />
                 <span className="min-w-0 flex-1">
-                  Rehaciendo la posición {replacementTarget.clipIndex + 1} del montaje: <strong>{replacementTarget.originalName}</strong>.
-                  Genera un vídeo nuevo y después pulsa “Usar en posición {replacementTarget.clipIndex + 1}”.
+                  {tActivity('montage.redoingEditorSlot', { n: replacementTarget.clipIndex + 1, name: replacementTarget.originalName })}
                 </span>
                 <button
                   type="button"
@@ -674,7 +675,7 @@ export function MainContent() {
                   }}
                   className="rounded border border-emerald-400/30 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-500/20"
                 >
-                  Cancelar reemplazo
+                  {tActivity('montage.cancelReplacement')}
                 </button>
               </div>
             )}
@@ -682,8 +683,7 @@ export function MainContent() {
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-100">
                 <RefreshCw size={14} className="shrink-0" />
                 <span className="min-w-0 flex-1">
-                  Rehaciendo el clip {directorReplacementTarget.clipIndex + 1} de Montaje.
-                  Ajusta sus datos, genera una o varias versiones y pulsa “Usar en Montaje · clip {directorReplacementTarget.clipIndex + 1}” en la que quieras conservar.
+                  {tActivity('montage.redoingAssemblyClip', { n: directorReplacementTarget.clipIndex + 1 })}
                 </span>
                 <button
                   type="button"
@@ -693,7 +693,7 @@ export function MainContent() {
                   }}
                   className="rounded border border-violet-400/30 px-2 py-1 text-[10px] text-violet-100 hover:bg-violet-500/20"
                 >
-                  Cancelar reemplazo
+                  {tActivity('montage.cancelReplacement')}
                 </button>
               </div>
             )}

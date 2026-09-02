@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab']
+const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab']
 const LANGUAGES = ['en', 'es']
 
 function load(language, namespace) {
@@ -45,6 +45,16 @@ const PILOT_FILES = [
   'src/features/workspaceCollections/WorkspaceCollectionsPanel.tsx',
   'src/features/workspaces/WorkspacesPanel.tsx',
   'src/features/stories/storyLabChrome.tsx',
+  'src/features/stories/StoryLabNavigation.tsx',
+  'src/features/stories/storyLabTabs.ts',
+  'src/features/stories/StoryLabLibraryChrome.tsx',
+  'src/features/stories/StoryProductionTimeline.tsx',
+  'src/components/WelcomeModal.tsx',
+  'src/components/QueueRecoveryDialog.tsx',
+  'src/features/series/SeriesLabPanel.tsx',
+  'src/features/series/SeriesReviewPanel.tsx',
+  'src/features/series/SeriesShotDurationControl.tsx',
+  'src/features/stories/StoryAssemblyTab.tsx',
   'src/features/stories/StoryOverviewTab.tsx',
   'src/features/stories/StoryAssetsTab.tsx',
   'src/features/stories/StoryAssetsImporter.tsx',
@@ -107,6 +117,16 @@ const FORBIDDEN = [
   'Cinematic trailer creator',
   'Generate / refresh Lyria prompt',
   'Import custom MP3',
+  'Montaje de producciones',
+  'Smart assets',
+  'Guided · approve stages',
+  'Preparar historia completa · solo texto',
+  'Desliza para más secciones',
+  'Novedades de HocusPocus',
+  'Entrar al estudio',
+  'Montaje ordenado',
+  'Usar en Montaje',
+  'Hay una cola de generación por recuperar',
 ]
 
 export function forbiddenLiterals() {

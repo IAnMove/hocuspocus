@@ -71,6 +71,12 @@ test('required glossary keys exist in both languages', async () => {
     ['storyLab', 'trailer.title'],
     ['storyLab', 'productions.title'],
     ['storyLab', 'compact.musicTitle'],
+    ['storyLab', 'assembly.title'],
+    ['storyLab', 'library.storypack'],
+    ['storyLab', 'issues.approveConcept'],
+    ['director', 'queueRecovery.resumeQueue'],
+    ['seriesLab', 'review.orderedAssembly'],
+    ['common', 'welcome.enter'],
   ]
   for (const language of ['en', 'es']) {
     await i18n.changeLanguage(language)
@@ -87,6 +93,8 @@ test('required glossary keys exist in both languages', async () => {
   assert.equal(i18n.t('extraInfo', { ns: 'activity', lng: 'es' }), 'Información adicional')
   assert.equal(i18n.t('catalog.loadMore', { ns: 'activity', lng: 'es' }), 'Cargar más')
   assert.equal(i18n.t('world.title', { ns: 'storyLab', lng: 'es' }), 'Biblia del mundo')
+  assert.equal(i18n.t('assembly.title', { ns: 'storyLab', lng: 'es' }), 'Montaje de producciones')
+  assert.equal(i18n.t('library.storypack', { ns: 'storyLab', lng: 'es' }), 'Storypack')
   assert.equal(i18n.t('catalog.reload', { ns: 'activity', lng: 'es' }), 'Actualizar catálogo')
   assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'en' }), 'Could not load Extra info')
   assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'es' }), 'No se pudo cargar Información adicional')
@@ -239,7 +247,7 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
 
 test('resources register the extraInfo and storyLab namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)

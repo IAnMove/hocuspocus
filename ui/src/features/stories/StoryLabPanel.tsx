@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
-import {
-  BookOpen, Boxes, Check, ChevronRight, Download, Film, ImagePlus, Loader2,
-  Music, Network, Play, Plus, Sparkles, Trash2, Upload, Users,
-} from 'lucide-react'
+import { Check, Loader2 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
-import { StoryProductionTimeline } from './StoryProductionTimeline'
 import { StoryLabNavigation } from './StoryLabNavigation'
 import { StoryRelationshipsTab } from './StoryRelationshipsTab'
 import { StoryWorldTab } from './StoryWorldTab'
@@ -22,11 +19,14 @@ import { StoryProductionsTab } from './StoryProductionsTab'
 import { CompactVideoWorkspace } from './CompactVideoWorkspace'
 import { StoryOverviewTab } from './StoryOverviewTab'
 import { StoryAssetsTab } from './StoryAssetsTab'
+import { StoryAssemblyTab } from './StoryAssemblyTab'
+import { StoryLabLibraryChrome } from './StoryLabLibraryChrome'
+import { storyLabTabs } from './storyLabTabs'
 import type { PendingSmartAsset } from './storyLabAssets'
 import { StoryLabVisualsProvider } from './StoryLabVisualsProvider'
 import { emptyCharacter, pruneUnusedAssets } from './storyLabEditors'
 import {
-  button, input, panel, requiredPreparationButton,
+  button, requiredPreparationButton,
   type ProductionReviewIssue, type StoryGenerationOptions, type StoryLabTab as StoryTab,
 } from './storyLabChrome'
 import {
@@ -41,7 +41,6 @@ import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
 import { syncTrailerDuration, trailerDurationForProject } from './trailerDefaults'
 import { resolveStoryWritingProvider } from './provider'
-import { StoryLibraryConflictNotice } from './StoryLibraryConflictNotice'
 import {
   buildComicAdaptation,
   buildMusicVideoAdaptation,
@@ -199,13 +198,6 @@ const storyJobKey = (workspace: string, projectId: string) =>
 const storyResultKey = (workspace: string, projectId: string) =>
   `maestro-story-plan-result:${workspace}:${projectId}`
 
-const STORY_PROJECT_TYPES: Array<{ id: StoryProjectType; label: string; description: string }> = [
-  { id: 'full_story', label: 'Historia completa', description: 'Mundo, personajes, estructura, música y adaptaciones.' },
-  { id: 'music_video', label: 'Videoclip', description: 'Canción original y una historia visual construida alrededor de ella.' },
-  { id: 'trailer', label: 'Tráiler cinematográfico', description: 'Tráiler de película con tensión, montaje y gancho final; no requiere canción.' },
-  { id: 'quick_video', label: 'Vídeo rápido', description: 'Diálogo, meme, parodia, sketch, viral o anuncio breve.' },
-]
-
 function storyStyledReferenceTargets(
   project: StoryProject,
   options: { includeLocations: boolean; existingOnly: boolean },
@@ -296,6 +288,7 @@ function draftPaths(result: Record<string, unknown>): string[] {
 }
 
 export function StoryLabPanel() {
+  const { t } = useUiTranslation('storyLab')
   const project = useStoryStore(state => state.project)
   const productionProfile = useStore(state => state.productionProfile)
   const projects = useStoryStore(state => state.projects)
@@ -443,7 +436,6 @@ export function StoryLabPanel() {
   const [styleConversionModel, setStyleConversionModel] = useState(QWEN_STYLE_EDIT_MODEL)
   const [styleModelDownloading, setStyleModelDownloading] = useState('')
   const [styleModelDownloadError, setStyleModelDownloadError] = useState('')
-  const importRef = useRef<HTMLInputElement>(null)
   const smartAssetRef = useRef<HTMLInputElement>(null)
   const uploadRef = useRef<HTMLInputElement>(null)
   const musicCoverRef = useRef<HTMLInputElement>(null)
@@ -569,7 +561,9 @@ export function StoryLabPanel() {
     })
     setNotice({
       kind: 'ok',
-      text: `Formato de vídeo actualizado: ${aspectLabel} · ${format.aspectRatio} · ${format.resolution} · ${outputSize}.`,
+      text: t('notice.videoFormatUpdated', {
+        aspect: aspectLabel, ratio: format.aspectRatio, resolution: format.resolution, size: outputSize,
+      }),
     })
   }
 
@@ -2211,7 +2205,6 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: (error as Error).message })
     } finally {
       endProjectOperation(sourceProjectId)
-      if (importRef.current) importRef.current.value = ''
     }
   }
 
@@ -2475,32 +2468,32 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'error',
         text: legacyVideoOverridePending
-          ? 'Restaurando el modelo y formato anterior de esta Story. Inténtalo de nuevo en un momento.'
-          : 'Comprobando los formatos compatibles del modelo de vídeo. Inténtalo de nuevo en un momento.',
+          ? t('notice.restoringPreviousModel')
+          : t('notice.checkingVideoFormats'),
       })
       return
     }
     if (!project.synopsis.trim() || !project.characters.length) {
-      setNotice({ kind: 'error', text: 'El tráiler necesita una sinopsis y al menos un personaje.' })
+      setNotice({ kind: 'error', text: t('notice.trailerNeedSynopsis') })
       return
     }
     if (trailerTitleCards && !project.allowClipText) {
       setNotice({
         kind: 'error',
-        text: 'Activa “Permitir texto visible” en Story para generar cartelas; o selecciona “Sin cartelas”.',
+        text: t('notice.trailerNeedVisibleText'),
       })
       return
     }
     if (!directVideoMasterReady) {
-      setNotice({ kind: 'error', text: 'El vídeo directo necesita un prompt maestro de mundo y estilo.' })
+      setNotice({ kind: 'error', text: t('notice.directVideoNeedMaster') })
       return
     }
     if (!directReferenceVideoReady) {
       setNotice({
         kind: 'error',
         text: directReferenceVideoSupported
-          ? 'Aprueba al menos una imagen antes de usar referencias directas.'
-          : 'Elige un modelo MiniMax H3 antes de usar referencias directas.',
+          ? t('notice.approveImageBeforeDirectRefs')
+          : t('notice.chooseH3BeforeDirectRefs'),
       })
       return
     }
@@ -2514,11 +2507,11 @@ export function StoryLabPanel() {
     const confirmed = autoStart
       ? window.confirm(
         directVideo
-          ? `¿Generar el tráiler de “${project.title}” (${trailerDuration}s) como T2V puro? No se crearán ni enviarán imágenes o referencias.`
-          : `¿Generar el tráiler épico completo de “${project.title}” (${trailerDuration}s)? El borrador actual de Director se sustituirá y la generación puede consumir créditos.`,
+          ? t('notice.generateTrailerT2vConfirm', { title: project.title, seconds: trailerDuration })
+          : t('notice.generateTrailerFullConfirm', { title: project.title, seconds: trailerDuration }),
       )
       : !hasDirectorWork || window.confirm(
-        '¿Abrir este tráiler en Director? El borrador actual de Director se sustituirá.',
+        t('notice.openTrailerConfirm'),
       )
     if (!confirmed) return
     beginProjectOperation(sourceProjectId)
@@ -2583,14 +2576,14 @@ export function StoryLabPanel() {
         kind: 'ok',
         text: directVideo
           ? autoStart
-            ? 'El tráiler T2V está ejecutándose en Director sin imágenes ni referencias.'
-            : 'El tráiler T2V está abierto en Director; sólo se han cargado el guion visual y el prompt maestro.'
+            ? t('notice.trailerT2vRunning')
+            : t('notice.trailerT2vOpen')
           : autoStart
-            ? 'El tráiler está ejecutándose en Director y queda recuperable en Montaje.'
-            : 'El arco, canon y referencias del tráiler están cargados en Director para revisar y editar.',
+            ? t('notice.trailerRunningRecoverable')
+            : t('notice.trailerLoadedForReview'),
       })
     } catch (error) {
-      setNotice({ kind: 'error', text: `No se pudo preparar el tráiler: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.trailerPrepareFailed', { message: (error as Error).message }) })
     } finally {
       endProjectOperation(sourceProjectId)
       setProductionBusy(null)
@@ -4002,7 +3995,7 @@ export function StoryLabPanel() {
     )
     if (hasWork && !window.confirm(
       production.kind === 'trailer'
-        ? '¿Reabrir este tráiler? El borrador actual de Director se sustituirá.'
+        ? t('notice.reopenTrailerConfirm')
         : 'Reopen this film staging? The current Director draft will be replaced.',
     )) return
     const direction = typeof production.targetSnapshot?.direction === 'string'
@@ -4071,42 +4064,23 @@ export function StoryLabPanel() {
     setNotice({ kind: 'ok', text: 'The adaptation source was restored as a new editable story; the current version was preserved.' })
   }
 
-  const tabs: Array<{ id: StoryTab; label: string; icon: typeof BookOpen }> = project.projectType === 'music_video'
-    ? [
-      { id: 'overview', label: 'Videoclip', icon: Film },
-      { id: 'assets', label: 'Imágenes', icon: ImagePlus },
-      { id: 'music', label: 'Canción', icon: Music },
-      { id: 'trailer', label: 'Tráiler', icon: Film },
-      { id: 'productions', label: 'Generar', icon: Sparkles },
-      { id: 'assembly', label: 'Montaje', icon: Play },
-    ]
-    : project.projectType === 'trailer'
-      ? [
-        { id: 'overview', label: 'Tráiler', icon: Film },
-        { id: 'assets', label: 'Imágenes', icon: ImagePlus },
-        { id: 'trailer', label: 'Crear tráiler', icon: Sparkles },
-        { id: 'assembly', label: 'Montaje', icon: Play },
-      ]
-      : project.projectType === 'quick_video'
-      ? [
-        { id: 'overview', label: 'Vídeo rápido', icon: Film },
-        { id: 'assets', label: 'Imágenes', icon: ImagePlus },
-        { id: 'trailer', label: 'Tráiler', icon: Film },
-        { id: 'productions', label: 'Generar', icon: Sparkles },
-        { id: 'assembly', label: 'Montaje', icon: Play },
-      ]
-      : [
-        { id: 'overview', label: 'Story', icon: BookOpen },
-        { id: 'assets', label: 'Assets', icon: ImagePlus },
-        { id: 'world', label: 'World', icon: Boxes },
-        { id: 'characters', label: 'Characters', icon: Users },
-        { id: 'music', label: 'Music', icon: Music },
-        { id: 'relationships', label: 'Relationships', icon: Network },
-        { id: 'structure', label: 'Structure', icon: ChevronRight },
-        { id: 'trailer', label: 'Tráiler', icon: Film },
-        { id: 'productions', label: 'Productions', icon: Film },
-        { id: 'assembly', label: 'Assembly', icon: Play },
-      ]
+  const changeProjectType = (projectType: StoryProjectType) => {
+    const durationSeconds = projectType === 'quick_video' && project.projectType !== 'quick_video'
+      ? 15
+      : projectType === 'music_video' && project.projectType !== 'music_video'
+        ? 90
+        : projectType === 'trailer' && project.projectType !== 'trailer'
+          ? 60
+          : project.creativeBrief.durationSeconds
+    patch({
+      projectType,
+      creativeBrief: { ...project.creativeBrief, durationSeconds },
+      ...(projectType === 'trailer' && project.projectType !== 'trailer'
+        ? { musicVideoGenerationMode: 'image_guided' as const }
+        : {}),
+    })
+  }
+  const tabs = storyLabTabs(project.projectType, t)
   const visibleTabIds = tabs.map(item => item.id)
   const foundationChecks = project.projectType === 'music_video'
     ? [
@@ -4140,23 +4114,23 @@ export function StoryLabPanel() {
     if (project.projectType === 'full_story' && project.relationships.length) required.push('relationships')
     const sectionLabels: Record<keyof StoryProject['approvals'], string> = {
       overview: project.projectType === 'music_video'
-        ? 'Aprobar canción e historia visual'
-        : project.projectType === 'trailer' ? 'Aprobar concepto del tráiler' : 'Aprobar concepto',
+        ? t('issues.approveSongAndVisual')
+        : project.projectType === 'trailer' ? t('issues.approveTrailerConcept') : t('issues.approveConcept'),
       world: project.projectType === 'music_video'
-        ? 'Aprobar entorno y dirección visual'
-        : project.projectType === 'trailer' ? 'Aprobar mundo cinematográfico' : 'Aprobar mundo',
-      characters: project.projectType === 'trailer' ? 'Aprobar protagonistas' : 'Aprobar conjunto de personajes',
-      relationships: 'Aprobar relaciones',
+        ? t('issues.approveMusicWorld')
+        : project.projectType === 'trailer' ? t('issues.approveTrailerWorld') : t('issues.approveWorld'),
+      characters: project.projectType === 'trailer' ? t('issues.approveLeads') : t('issues.approveCast'),
+      relationships: t('issues.approveRelationships'),
       structure: project.projectType === 'music_video'
-        ? 'Aprobar momentos visuales'
-        : project.projectType === 'trailer' ? 'Aprobar arco del tráiler' : 'Aprobar estructura',
+        ? t('issues.approveVisualMoments')
+        : project.projectType === 'trailer' ? t('issues.approveTrailerArc') : t('issues.approveStructure'),
     }
     const issues: ProductionReviewIssue[] = required
       .filter(section => section !== 'characters' && !isApproved(section))
       .map(section => ({
         id: `section:${section}`,
         label: sectionLabels[section],
-        detail: 'Abre la sección, revisa el contenido y pulsa Aprobar.',
+        detail: t('issues.openSectionDetail'),
         tab: section as StoryTab,
         anchorId: `story-review-${section}`,
       }))
@@ -4167,15 +4141,15 @@ export function StoryLabPanel() {
         || project.assets[character.primaryReferenceAssetId]?.approval !== 'approved'
       )))
     if (incompleteCharacters.length) {
-      const names = incompleteCharacters.map(character => character.name || 'Sin nombre').join(', ')
+      const names = incompleteCharacters.map(character => character.name || t('issues.unnamed')).join(', ')
       issues.push({
         id: 'characters:items',
         label: requiresVisualIdentities
-          ? `Revisar identidades: ${names}`
-          : `Aprobar descripciones: ${names}`,
+          ? t('issues.reviewIdentities', { names })
+          : t('issues.approveDescriptions', { names }),
         detail: requiresVisualIdentities
-          ? 'Cada personaje necesita una imagen principal aprobada y su identidad confirmada.'
-          : 'En vídeo directo no hacen falta imágenes; Aprobar conjunto confirma todas las descripciones de una vez.',
+          ? t('issues.identitiesDetail')
+          : t('issues.descriptionsDetail'),
         tab: 'characters',
         anchorId: `story-review-character-${incompleteCharacters[0].id}`,
       })
@@ -4183,7 +4157,7 @@ export function StoryLabPanel() {
       issues.push({
         id: 'section:characters',
         label: sectionLabels.characters,
-        detail: 'Las fichas individuales están listas; sólo falta confirmar el conjunto.',
+        detail: t('issues.confirmSetDetail'),
         tab: 'characters',
         anchorId: 'story-review-characters',
       })
@@ -4211,135 +4185,44 @@ export function StoryLabPanel() {
       removeReference,
     }}>
     <div className="h-full min-h-0 flex flex-col rounded-xl border border-border bg-bg-primary overflow-hidden">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-bg-secondary px-3 py-2">
-        <div className="mr-auto">
-          <div className="flex items-center gap-2">
-            <BookOpen size={16} className="text-accent-blue" />
-            <span className="text-sm font-semibold text-text-primary">Story Lab</span>
-            <span className="text-[10px] text-text-muted">v{project.revision} · {progress}/{foundationTotal} {project.projectType === 'full_story' ? 'foundations' : 'requisitos'}</span>
-            {storyLoading
-              ? <span className="text-[9px] text-text-muted">loading workspace…</span>
-              : storySaveError
-                ? <span className="text-[9px] text-red-300" title={storySaveError}>local fallback · save unavailable</span>
-                : dirty
-                  ? <span className="text-[9px] text-amber-300">saving to workspace…</span>
-                  : storyHydrated
-                    ? <span className="text-[9px] text-emerald-400">saved in workspace</span>
-                    : <span className="text-[9px] text-text-muted">cached locally</span>}
-          </div>
-          <p className="text-[9px] text-text-muted mt-0.5">
-            {STORY_PROJECT_TYPES.find(item => item.id === project.projectType)?.description}
-          </p>
-          <StoryLibraryConflictNotice conflicts={storyLibraryConflicts} onResolve={resolveStoryLibraryConflict} />
-          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[9px]">
-            <span className="inline-flex items-center gap-1.5 text-violet-200">
-              <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.8)]" /> Campo o preparación necesaria
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-emerald-200">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]" /> Genera el resultado completo
-            </span>
-          </div>
-        </div>
-        <select
-          className={`${input} w-44`}
-          value={project.id}
-          disabled={Boolean(busy || imageBusy || projectOperationBusy)}
-          title={`Story Lab library · ${activeWorkspace}`}
-          onChange={event => openProject(event.target.value)}
-        >
-          {Object.values(projects)
-            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-            .map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
-        </select>
-        <select
-          className={`${input} w-40`}
-          value={project.projectType}
-          disabled={Boolean(busy || imageBusy || projectOperationBusy)}
-          title="Tipo de proyecto Story Lab"
-          onChange={event => {
-            const projectType = event.target.value as StoryProjectType
-            const durationSeconds = projectType === 'quick_video' && project.projectType !== 'quick_video'
-              ? 15
-              : projectType === 'music_video' && project.projectType !== 'music_video'
-                ? 90
-                : projectType === 'trailer' && project.projectType !== 'trailer'
-                  ? 60
-                : project.creativeBrief.durationSeconds
-            patch({
-              projectType,
-              creativeBrief: { ...project.creativeBrief, durationSeconds },
-              ...(projectType === 'trailer' && project.projectType !== 'trailer'
-                ? { musicVideoGenerationMode: 'image_guided' as const }
-                : {}),
-            })
-          }}
-        >
-          {STORY_PROJECT_TYPES.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
-        </select>
-        <select className={`${input} w-auto`} value={project.workflowMode} onChange={event => patch({ workflowMode: event.target.value as StoryProject['workflowMode'] })}>
-          <option value="guided">Guided · approve stages</option>
-          <option value="automatic">Automatic · one click</option>
-        </select>
-        <button className={`${button} ${progress < foundationTotal ? requiredPreparationButton : ''}`} onClick={() => generate('all')}
-          disabled={Boolean(busy || referenceBatchBusy)}
-          title="Prepara con el LLM todos los campos de texto; no genera audio, imágenes ni vídeo.">
-          {busy === 'all' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {jobProgress || (
-            project.projectType === 'music_video' ? 'Preparar canción e historia visual · solo texto'
-              : project.projectType === 'trailer' ? 'Preparar tráiler cinematográfico · solo texto'
-              : project.projectType === 'quick_video' ? 'Preparar vídeo rápido · solo texto'
-                : 'Preparar historia completa · solo texto'
-          )}
-        </button>
-        <button className={`${button} ${progress < foundationTotal ? requiredPreparationButton : ''}`} onClick={() => generate('all', { generateImages: true })}
-          disabled={Boolean(busy || referenceBatchBusy)}
-          title="Prepara todos los textos y después genera las imágenes conceptuales que todavía falten. Puede consumir créditos de imagen.">
-          {busy === 'all' || referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-          {project.projectType === 'music_video' ? 'Preparar canción e historia visual + imágenes'
-            : project.projectType === 'trailer' ? 'Preparar tráiler cinematográfico + imágenes'
-            : project.projectType === 'quick_video' ? 'Preparar vídeo rápido + imágenes'
-              : 'Preparar historia completa + imágenes'}
-        </button>
-        {busy && recoveryJobId && (
-          <button className={`${button} border-red-500/50 text-red-300`} onClick={cancelGeneration}>
-            Cancel
-          </button>
-        )}
-        {recoveryJobId && !pendingDraft && (
-          <button className={button} onClick={resumeGeneration} disabled={Boolean(busy)} title={`Resume ${recoveryJobId}`}>
-            Resume
-          </button>
-        )}
-        <button className={button} onClick={exportStorypack}><Download size={13} /> Storypack</button>
-        <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button>
-        <button className={button} disabled={smartAssetBusy} onClick={() => {
+      <StoryLabLibraryChrome
+        project={project}
+        projects={projects}
+        activeWorkspace={activeWorkspace}
+        progress={progress}
+        foundationTotal={foundationTotal}
+        storyLoading={storyLoading}
+        storySaveError={storySaveError}
+        dirty={dirty}
+        storyHydrated={storyHydrated}
+        storyLibraryConflicts={storyLibraryConflicts}
+        resolveStoryLibraryConflict={resolveStoryLibraryConflict}
+        busy={busy}
+        imageBusy={imageBusy}
+        projectOperationBusy={projectOperationBusy}
+        referenceBatchBusy={referenceBatchBusy}
+        jobProgress={jobProgress}
+        showCancel={Boolean(busy && recoveryJobId)}
+        showResume={Boolean(recoveryJobId && !pendingDraft)}
+        recoveryJobId={recoveryJobId}
+        smartAssetBusy={smartAssetBusy}
+        onOpenProject={openProject}
+        onProjectTypeChange={changeProjectType}
+        onWorkflowModeChange={workflowMode => patch({ workflowMode })}
+        onPrepareText={() => generate('all')}
+        onPrepareImages={() => generate('all', { generateImages: true })}
+        onCancel={cancelGeneration}
+        onResume={resumeGeneration}
+        onExportStorypack={() => void exportStorypack()}
+        onImport={file => void importStorypack(file)}
+        onSmartAssets={() => {
           setTab('assets')
           smartAssetRef.current?.click()
-        }} title="Upload a group of images and let the selected Story Lab LLM classify them">
-          {smartAssetBusy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} Smart assets
-        </button>
-        <details className="relative">
-          <summary className={`${button} list-none cursor-pointer`}><Plus size={13} /> New</summary>
-          <div className="absolute right-0 z-40 mt-1 w-64 rounded-lg border border-border bg-bg-primary p-1.5 shadow-xl">
-            {STORY_PROJECT_TYPES.map(item => (
-              <button key={item.id} type="button" disabled={Boolean(busy || imageBusy || projectOperationBusy)}
-                className="block w-full rounded-md px-2.5 py-2 text-left hover:bg-bg-hover disabled:opacity-40"
-                onClick={event => {
-                  newProject(item.id)
-                  const details = event.currentTarget.closest('details') as HTMLDetailsElement | null
-                  details?.removeAttribute('open')
-                }}>
-                <span className="block text-xs font-medium text-text-primary">{item.label}</span>
-                <span className="mt-0.5 block text-[9px] text-text-muted">{item.description}</span>
-              </button>
-            ))}
-          </div>
-        </details>
-        <button className={button} disabled={Boolean(busy || imageBusy || projectOperationBusy)} onClick={() => duplicateProject()} title="Duplicate current story">Duplicate</button>
-        <button className={button} onClick={() => {
-          if (window.confirm(`Delete "${project.title}" from this workspace's Story Lab library?`)) deleteProject(project.id)
-        }} disabled={Boolean(busy || imageBusy || projectOperationBusy)} title="Delete current story"><Trash2 size={13} /></button>
-        <input ref={importRef} type="file" accept=".storypack,.zip,.json" className="hidden" onChange={event => importStorypack(event.target.files?.[0])} />
-      </div>
+        }}
+        onNewProject={newProject}
+        onDuplicate={() => duplicateProject()}
+        onDelete={() => deleteProject(project.id)}
+      />
 
       {notice && (
         <div className={`px-3 py-2 text-xs border-b border-border ${notice.kind === 'error' ? 'text-red-300 bg-red-500/10' : 'text-emerald-300 bg-emerald-500/10'}`}>
@@ -4353,15 +4236,15 @@ export function StoryLabPanel() {
           onChange={setTab}
           notes={project.projectType === 'full_story' ? (
             <>
-              <p>Manual edits are always authoritative.</p>
-              <p>Regeneration preserves existing reference images.</p>
-              <p>Adaptations remember the source revision.</p>
+              <p>{t('nav.fullStoryNote1')}</p>
+              <p>{t('nav.fullStoryNote2')}</p>
+              <p>{t('nav.fullStoryNote3')}</p>
             </>
           ) : (
             <>
-              <p>Concepto, imágenes y secuencia viven juntos.</p>
-              <p>Las referencias aprobadas pasan a Director.</p>
-              <p>Puedes editar cualquier resultado antes de generar.</p>
+              <p>{t('nav.compactNote1')}</p>
+              <p>{t('nav.compactNote2')}</p>
+              <p>{t('nav.compactNote3')}</p>
             </>
           )}
         />
@@ -4733,15 +4616,11 @@ export function StoryLabPanel() {
             )}
 
             {tab === 'assembly' && (
-              <div className={panel}>
-                <div className="mb-4"><h2 className="text-lg font-semibold text-text-primary">Montaje de producciones</h2><p className="mt-1 text-xs text-text-muted">Cada trabajo conserva su secuencia completa. El último se abre automáticamente; al acabar una regeneración, su clip vuelve a aparecer en la misma posición.</p></div>
-                {project.productions.length ? [...project.productions].reverse().map((item, index) => (
-                  <div key={item.id} className="border-b border-border py-3 text-xs last:border-0"><div className="flex flex-col justify-between gap-2 lg:flex-row lg:items-center">
-                    <div><span className="text-text-primary capitalize">{item.kind === 'music_video' ? 'Music video' : item.kind} · {item.targetName || item.title}</span><span className="ml-2 text-text-muted">source v{item.sourceVersion} · {new Date(item.createdAt).toLocaleString()}</span>{item.sourceSnapshot?.sectionVersions && JSON.stringify(item.sourceSnapshot.sectionVersions) !== JSON.stringify(project.sectionVersions) && <span className="ml-2 text-amber-300">source changed since staging</span>}</div>
-                    <div className="flex gap-2"><button className={button} onClick={() => reopenProduction(item.id)}>Reopen target</button>{item.sourceSnapshot && <button className={button} onClick={() => restoreProductionSource(item.id)}>Restore source as copy</button>}</div>
-                  </div><StoryProductionTimeline production={item} initiallyOpen={index === 0} /></div>
-                )) : <p className="text-xs text-text-muted">No adaptation has been staged yet.</p>}
-              </div>
+              <StoryAssemblyTab
+                project={project}
+                reopenProduction={reopenProduction}
+                restoreProductionSource={restoreProductionSource}
+              />
             )}
           </div>
         </div>

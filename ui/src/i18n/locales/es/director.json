@@ -1,0 +1,18 @@
+{
+  "queueRecovery": {
+    "titleBusy": "Hay restos antiguos además de la generación actual",
+    "titleIdle": "Hay una cola de generación por recuperar",
+    "bodyBusy_one": "Ya hay {{count}} generación en curso. Estos trabajos son un resto de un cierre anterior, no el clip que se está decodeando ahora. Retomarlos los pondrá en cola detrás y los rehará desde cero.",
+    "bodyBusy_other": "Ya hay {{count}} generaciones en curso. Estos trabajos son restos de un cierre anterior, no el clip que se está decodeando ahora. Retomarlos los pondrá en cola detrás y los rehará desde cero.",
+    "bodyIdle_one": "HocusPocus guardó {{count}} trabajo antes de cerrarse. Puedes retomarlo en el mismo orden o descartarlo y arrancar con la cola vacía.",
+    "bodyIdle_other": "HocusPocus guardó {{count}} trabajos antes de cerrarse. Puedes retomarlos en el mismo orden o descartarlos y arrancar con la cola vacía.",
+    "unknownModel": "Modelo desconocido",
+    "interrupted": "Interrumpido",
+    "waiting": "En espera",
+    "duplicateWarning": "No pulses Retomar si el Activity ya muestra un H3 en sampling/decode: eso duplica GPU. Descarta los restos y deja terminar el trabajo vivo.",
+    "rerunWarning": "El clip que estaba ejecutándose volverá a empezar desde el principio; los clips que estaban esperando conservarán su orden.",
+    "discardClean": "Descartar y empezar limpio",
+    "resumeAnyway": "Aun así retomar restos antiguos",
+    "resumeQueue": "Retomar cola"
+  }
+}

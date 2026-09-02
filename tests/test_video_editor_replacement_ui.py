@@ -29,7 +29,10 @@ def test_generated_video_can_replace_only_the_original_timeline_slot():
 
     assert "maestro-video-editor-replacement-target-v1" in handoff
     assert "maestro-video-editor-replacement-result-v1" in handoff
-    assert "Usar en posición" in feed
+    assert "t('montage.useInPosition'" in feed
+    assert '"useInPosition": "Usar en posición {{n}}"' in (
+        ROOT / "ui" / "src" / "i18n" / "locales" / "es" / "activity.json"
+    ).read_text(encoding="utf-8")
     assert "writeVideoEditorReplacementResult" in feed
     assert "clearVideoEditorReplacementTarget" in main
     assert "readVideoEditorReplacementResult" in editor

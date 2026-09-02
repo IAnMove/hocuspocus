@@ -1,0 +1,18 @@
+{
+  "queueRecovery": {
+    "titleBusy": "Older leftovers besides the current generation",
+    "titleIdle": "A generation queue can be recovered",
+    "bodyBusy_one": "There is already {{count}} generation in progress. These leftover jobs are from a previous shutdown, not the clip decoding now. Resuming them queues them behind and reruns them from scratch.",
+    "bodyBusy_other": "There are already {{count}} generations in progress. These leftover jobs are from a previous shutdown, not the clip decoding now. Resuming them queues them behind and reruns them from scratch.",
+    "bodyIdle_one": "HocusPocus saved {{count}} job before closing. You can resume them in the same order or discard them and start with an empty queue.",
+    "bodyIdle_other": "HocusPocus saved {{count}} jobs before closing. You can resume them in the same order or discard them and start with an empty queue.",
+    "unknownModel": "Unknown model",
+    "interrupted": "Interrupted",
+    "waiting": "Waiting",
+    "duplicateWarning": "Do not press Resume if Activity already shows an H3 in sampling/decode: that duplicates the GPU. Discard leftovers and let the live job finish.",
+    "rerunWarning": "The clip that was running will start again from the beginning; waiting clips keep their order.",
+    "discardClean": "Discard and start clean",
+    "resumeAnyway": "Resume old leftovers anyway",
+    "resumeQueue": "Resume queue"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "tabs": {
+    "setup": "1 · Setup",
+    "canon": "2 · Canon",
+    "episode": "3 · Episode room",
+    "shots": "4 · Shots",
+    "review": "5 · Render & review"
+  },
+  "review": {
+    "orderedAssembly": "Ordered episode assembly",
+    "historyAttempts": "History and attempts",
+    "finishCanon": "Finish and canon",
+    "assemblyTitle": "Ordered episode assembly",
+    "assemblyDescription": "{{ready}}/{{total}} positions have video. After a successful regeneration, the new attempt automatically replaces the previous one in this slot; the old one stays in History.",
+    "noDialogueDuration": "No dialogue: visual duration is editable.",
+    "syllables": "{{count}} syllables · {{rate}} s/syllable",
+    "recalculating": "Recalculating as the dialogue changes…",
+    "minimumLimited": "The model’s native minimum leaves unspoken visual room.",
+    "requiresSplit": "The dialogue exceeds one clip’s maximum; split it before rendering."
+  },
+  "duration": {
+    "seconds": "{{count}} seconds",
+    "estimatedVoice": "Estimated voice",
+    "requestedClip": "Requested clip",
+    "calculating": "calculating…",
+    "shotAria": "Requested clip for shot {{order}}"
+  }
+}

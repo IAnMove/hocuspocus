@@ -186,8 +186,8 @@ test('recovery dialog resumes the durable queue through its accessible button', 
   mockRecoveryFetch()
 
   render(<QueueRecoveryDialog />)
-  await screen.findByRole('dialog', { name: /cola de generación por recuperar/i })
-  const resume = screen.getByRole('button', { name: 'Retomar cola' })
+  await screen.findByRole('dialog', { name: /generation queue can be recovered/i })
+  const resume = screen.getByRole('button', { name: 'Resume queue' })
   assert.equal(resume.disabled, false)
   resume.click()
   await waitFor(() => assert.equal(reconnects, 1))
@@ -205,10 +205,10 @@ test('recovery dialog warns that leftover jobs would duplicate a live generation
   })
 
   render(<QueueRecoveryDialog />)
-  await screen.findByRole('dialog', { name: /restos antiguos además de la generación actual/i })
-  assert.ok(screen.getByText(/duplica GPU/i))
-  assert.equal(screen.getByRole('button', { name: 'Aun así retomar restos antiguos' }).disabled, false)
-  assert.equal(screen.getByRole('button', { name: 'Descartar y empezar limpio' }).disabled, false)
+  await screen.findByRole('dialog', { name: /Older leftovers besides the current generation/i })
+  assert.ok(screen.getByText(/duplicates the GPU/i))
+  assert.equal(screen.getByRole('button', { name: 'Resume old leftovers anyway' }).disabled, false)
+  assert.equal(screen.getByRole('button', { name: 'Discard and start clean' }).disabled, false)
   cleanup()
 })
 
