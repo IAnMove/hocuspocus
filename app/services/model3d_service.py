@@ -1036,6 +1036,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         "PYTORCH_CUDA_ALLOC_CONF": env.get("PYTORCH_CUDA_ALLOC_CONF") or "expandable_segments:True",
     })
     lines: list[str] = []
+    generation_committed = False
     try:
         process = _spawn_worker_if_active(
             job_id,
@@ -1117,27 +1118,32 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             detail = "\n".join(lines[-25:]) or f"Worker exited with code {exit_code}"
             raise RuntimeError(detail[-4000:])
 
-        publish_generation_sidecar(
-            output_path,
-            {
-                "generation_mode": "model3d",
-                "mode": "model3d",
-                "job_id": job_id,
-                "task_id": _canonical_task_id(job_id),
-                "root_task_id": _canonical_task_id(job_id),
-                "created_at": time.time(),
-                "params": {
-                    **request_data["settings"],
-                    "model_id": model_id,
-                    "operation": operation,
-                    "source_model": os.path.basename(request_data["source_mesh"]) if request_data.get("source_mesh") else None,
-                    "preset": request_data["preset"],
-                    "images": request_data["images"],
+        # The mesh is on disk. Sidecar/status failures must not delete it.
+        generation_committed = True
+        try:
+            publish_generation_sidecar(
+                output_path,
+                {
+                    "generation_mode": "model3d",
+                    "mode": "model3d",
+                    "job_id": job_id,
+                    "task_id": _canonical_task_id(job_id),
+                    "root_task_id": _canonical_task_id(job_id),
+                    "created_at": time.time(),
+                    "params": {
+                        **request_data["settings"],
+                        "model_id": model_id,
+                        "operation": operation,
+                        "source_model": os.path.basename(request_data["source_mesh"]) if request_data.get("source_mesh") else None,
+                        "preset": request_data["preset"],
+                        "images": request_data["images"],
+                    },
                 },
-            },
-            workspace_id=current_job.get("workspace"),
-            tool="model3d",
-        )
+                workspace_id=current_job.get("workspace"),
+                tool="model3d",
+            )
+        except Exception as sidecar_error:
+            print(f"[Hunyuan3D] Failed to publish sidecar for {filename}: {sidecar_error}")
         _update_job(
             job_id,
             status="completed",
@@ -1159,7 +1165,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 message=("Hunyuan3D retexture failed" if operation == "retexture" else "Hunyuan3D generation failed"),
                 error=str(exc),
             )
-        _cleanup_partial_output(output_path)
+        if not generation_committed:
+            _cleanup_partial_output(output_path)
     finally:
         with _lock:
             _processes.pop(job_id, None)

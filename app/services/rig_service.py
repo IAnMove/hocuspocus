@@ -638,6 +638,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     env.update({"PYTHONUNBUFFERED": "1"})
     lines: list[str] = []
     result_summary: dict[str, Any] = {}
+    generation_committed = False
     try:
         process = _spawn_worker_if_active(
             job_id,
@@ -713,6 +714,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             detail = "\n".join(lines[-15:]) or f"Rig worker exited with code {exit_code}"
             raise RuntimeError(detail[-4000:])
 
+        # The rigged GLB is on disk. Sidecar/status failures must not delete it.
+        generation_committed = True
         rig_metrics = (
             {
                 "joint_count": result_summary.get("joint_count", 0),
@@ -721,31 +724,34 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             if engine == "unirig"
             else {"spine_joints": result_summary.get("joints", request_data["spine_joints"])}
         )
-        publish_generation_sidecar(
-            output_path,
-            {
-                "generation_mode": "model3d",
-                "mode": "model3d",
-                "job_id": job_id,
-                "task_id": _canonical_task_id(job_id),
-                "root_task_id": _canonical_task_id(job_id),
-                "created_at": time.time(),
-                "params": {
-                    "model_type": f"rig-{request_data['engine']}",
-                    "rigged": True,
-                    "rig_engine": request_data["engine"],
-                    "rig_profile": request_data.get("rig_profile", DEFAULT_RIG_PROFILE),
-                    "source_file": source.name,
-                    "animations": result_summary.get("animations") or request_data["animations"],
-                    **rig_metrics,
-                    "axis_mode": result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
-                    "weight_falloff": result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
-                    "prompt": f"Rigged from {source.name}",
+        try:
+            publish_generation_sidecar(
+                output_path,
+                {
+                    "generation_mode": "model3d",
+                    "mode": "model3d",
+                    "job_id": job_id,
+                    "task_id": _canonical_task_id(job_id),
+                    "root_task_id": _canonical_task_id(job_id),
+                    "created_at": time.time(),
+                    "params": {
+                        "model_type": f"rig-{request_data['engine']}",
+                        "rigged": True,
+                        "rig_engine": request_data["engine"],
+                        "rig_profile": request_data.get("rig_profile", DEFAULT_RIG_PROFILE),
+                        "source_file": source.name,
+                        "animations": result_summary.get("animations") or request_data["animations"],
+                        **rig_metrics,
+                        "axis_mode": result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
+                        "weight_falloff": result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
+                        "prompt": f"Rigged from {source.name}",
+                    },
                 },
-            },
-            workspace_id=current_job.get("workspace"),
-            tool="rig",
-        )
+                workspace_id=current_job.get("workspace"),
+                tool="rig",
+            )
+        except Exception as sidecar_error:
+            print(f"[Rig] Failed to publish sidecar for {filename}: {sidecar_error}")
         # Reuse the source's gallery preview for the rigged copy.
         source_preview = source.with_suffix(".preview.png")
         if source_preview.is_file():
@@ -773,7 +779,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             cancelled = _jobs.get(job_id, {}).get("status") == "cancelled"
         if not cancelled:
             _update_job(job_id, status="failed", phase="failed", message="Rigging failed", error=str(exc))
-        _cleanup_partial_output(output_path)
+        if not generation_committed:
+            _cleanup_partial_output(output_path)
     finally:
         with _lock:
             _processes.pop(job_id, None)
