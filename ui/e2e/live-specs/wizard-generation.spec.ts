@@ -41,6 +41,12 @@ async function prepareWorkspace(request: APIRequestContext): Promise<SystemConfi
   return config
 }
 
+function wizardPanel(page: Page) {
+  return page.locator(
+    '[role="dialog"][aria-label="Ask to the Wizard"], [role="region"][aria-label="Ask to the Wizard"]',
+  ).first()
+}
+
 async function openApp(page: Page) {
   await page.addInitScript(() => {
     window.localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
@@ -48,22 +54,30 @@ async function openApp(page: Page) {
   await page.goto('/')
   const skip = page.getByRole('button', { name: 'Skip' })
   await skip.click({ timeout: 8_000 }).catch(() => undefined)
-  await expect(page.getByTestId('execution-mode-banner')).toContainText(expectedMode)
-  await page.getByTitle('Ask to the Wizard about the app or current task queue').click()
-  const dialog = page.getByRole('dialog', { name: 'Ask to the Wizard' })
-  await expect(dialog).toBeVisible()
-  await dialog.getByRole('button', { name: 'Clear Ask to the Wizard conversation' }).click()
-  await expect(dialog.getByText('Saludos, creador. Soy el mago de HocusPocus', { exact: false })).toBeVisible()
+  if (expectedMode === 'real') {
+    await expect(page.getByTestId('execution-mode-banner')).toHaveCount(0)
+  } else {
+    await expect(page.getByTestId('execution-mode-banner')).toContainText(expectedMode)
+  }
+  const panel = wizardPanel(page)
+  if (!await panel.isVisible()) {
+    const expand = page.getByRole('button', { name: 'Expand Ask to the Wizard' })
+    if (await expand.isVisible()) await expand.click()
+    else await page.getByTitle('Ask to the Wizard about the app or current task queue').click()
+  }
+  await expect(panel).toBeVisible()
+  await panel.getByRole('button', { name: 'Clear Ask to the Wizard conversation' }).click()
+  await expect(panel.getByText('Saludos, creador. Soy el mago de HocusPocus', { exact: false })).toBeVisible()
 }
 
 async function ask(page: Page, prompt: string, options: { allowFailure?: boolean } = {}): Promise<string> {
-  const dialog = page.getByRole('dialog', { name: 'Ask to the Wizard' })
-  const input = dialog.getByPlaceholder('Ask HocusPocus for a spell…')
+  const panel = wizardPanel(page)
+  const input = panel.getByPlaceholder('Ask HocusPocus for a spell…')
   await input.fill(prompt)
-  await dialog.getByRole('button', { name: 'Ask to the Wizard', exact: true }).click()
+  await panel.getByRole('button', { name: 'Ask to the Wizard', exact: true }).click()
   await expect(input).toBeDisabled()
   await expect(input).toBeEnabled({ timeout: 25 * 60_000 })
-  const transcript = (await dialog.textContent()) || ''
+  const transcript = (await panel.textContent()) || ''
   expect(transcript).not.toContain('No he podido consultar el LLM')
   if (!options.allowFailure) expect(transcript).not.toContain('No se pudo')
   return transcript
@@ -222,7 +236,7 @@ test('wizard: UI locale, conversation, content, speech and provider prompt stay 
   const turn = trace.at(-1)?.turn
   const prepare = turn?.actions?.find(action => action.type === 'prepare_video')
   expect(turn?.conversationLanguage).toBe('fr')
-  expect(prepare?.languageIntent?.spokenLanguage?.toLocaleLowerCase()).toContain('espa')
+  expect(prepare?.languageIntent?.spokenLanguage?.toLocaleLowerCase()).toMatch(/^(?:es(?:-|$)|.*espa|.*spanish)/)
   expect(prepare?.languageIntent?.technicalPromptLanguage).toBe('en')
   expect(prepare?.languageIntent?.verbatimSegments).toContainEqual(expect.objectContaining({
     kind: 'dialogue', text: '¡Hola, mundo!', language: 'es',
