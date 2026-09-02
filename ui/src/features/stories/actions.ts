@@ -9,6 +9,7 @@ import {
 } from '../../lib/labHelpers'
 import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
+import { applyStoryLanguageIntent, seedStoryLanguageIntent } from './languageIntent'
 import { applyMusicVideoDirectVideoDefaults, resolveMusicVideoVisualStyle } from './musicVideoLook'
 import type {
   ApplyStoryProposalCommand,
@@ -140,17 +141,10 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
       projectType: 'music_video',
       musicVideoGenerationMode: 'direct_video',
     })
-  const languageIntent = mergeLanguageIntent(targetBase.languageIntent, action.languageIntent, {
-    contentLanguage: targetBase.language,
-    spokenLanguage: targetBase.spokenLanguage,
+  const target = normalizeStoryProject(applyStoryLanguageIntent(targetBase, action.languageIntent, {
     technicalPromptLanguage: 'en',
-  })
-  const target = normalizeStoryProject({
-    ...targetBase,
-    language: languageIntent.contentLanguage || targetBase.language,
-    spokenLanguage: languageIntent.spokenLanguage || targetBase.spokenLanguage,
-    languageIntent,
-  })
+  }))
+  const languageIntent = target.languageIntent
   if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
   const lyricsLanguage = explicitMusicLanguage(
     action.lyricsLanguage || languageIntent.spokenLanguage || languageIntent.contentLanguage || target.language,
@@ -400,11 +394,7 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
   }
 
   const base = createStoryProject(action.projectType || 'full_story')
-  const languageIntent = mergeLanguageIntent(base.languageIntent, action.languageIntent, {
-    contentLanguage: action.language || base.language,
-    spokenLanguage: action.language || base.spokenLanguage,
-    technicalPromptLanguage: 'en',
-  })
+  const languageIntent = seedStoryLanguageIntent(base, action.language, action.languageIntent).languageIntent
   const resolvedVisualStyle = resolveMusicVideoVisualStyle(
     action.projectType || 'full_story',
     action.visualStyle,
@@ -573,12 +563,7 @@ export async function updateFilledStory(action: UpdateStoryCommand): Promise<Com
     if (!action.languageIntent?.spokenLanguage) candidate.spokenLanguage = action.language
   }
   if (action.languageIntent) {
-    candidate.languageIntent = mergeLanguageIntent(candidate.languageIntent, action.languageIntent, {
-      contentLanguage: candidate.language,
-      spokenLanguage: candidate.spokenLanguage,
-    })
-    candidate.language = candidate.languageIntent.contentLanguage || candidate.language
-    candidate.spokenLanguage = candidate.languageIntent.spokenLanguage || candidate.spokenLanguage
+    Object.assign(candidate, applyStoryLanguageIntent(candidate, action.languageIntent))
   }
 
   action.characters.forEach(character => {
@@ -727,17 +712,11 @@ export async function generateStorySectionDraft(
       || intendedSpokenLanguage !== storedProject.spokenLanguage
     ) {
       project = await saveActiveStoryProjectMutation(workspace, current, storedProject.id, source => {
-        const languageIntent = mergeLanguageIntent(source.languageIntent, action.languageIntent, {
-          contentLanguage: source.language,
-          spokenLanguage: source.spokenLanguage,
-        })
+        const intendedSource = applyStoryLanguageIntent(source, action.languageIntent)
         const approvals = { ...source.approvals }
         delete approvals.overview
         return normalizeStoryProject({
-          ...source,
-          language: languageIntent.contentLanguage || source.language,
-          spokenLanguage: languageIntent.spokenLanguage || source.spokenLanguage,
-          languageIntent,
+          ...intendedSource,
           revision: source.revision + 1,
           sectionVersions: {
             ...source.sectionVersions,
@@ -1281,12 +1260,9 @@ export async function stageStoryComic(action: StageStoryComicCommand): Promise<C
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
   if (!storedTarget) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
-  const target = action.languageIntent ? normalizeStoryProject({
-    ...storedTarget,
-    languageIntent: mergeLanguageIntent(storedTarget.languageIntent, action.languageIntent),
-    language: action.languageIntent.contentLanguage || storedTarget.language,
-    spokenLanguage: action.languageIntent.spokenLanguage || storedTarget.spokenLanguage,
-  }) : storedTarget
+  const target = action.languageIntent
+    ? normalizeStoryProject(applyStoryLanguageIntent(storedTarget, action.languageIntent))
+    : storedTarget
   if (current.activeProjectOperations[target.id]) {
     throw new Error(`La historia “${target.title}” tiene una operación activa.`)
   }
@@ -1379,12 +1355,9 @@ export async function stageStoryVideo(action: StageStoryVideoCommand): Promise<C
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
   if (!storedTarget) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
-  const target = action.languageIntent ? normalizeStoryProject({
-    ...storedTarget,
-    languageIntent: mergeLanguageIntent(storedTarget.languageIntent, action.languageIntent),
-    language: action.languageIntent.contentLanguage || storedTarget.language,
-    spokenLanguage: action.languageIntent.spokenLanguage || storedTarget.spokenLanguage,
-  }) : storedTarget
+  const target = action.languageIntent
+    ? normalizeStoryProject(applyStoryLanguageIntent(storedTarget, action.languageIntent))
+    : storedTarget
   if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
   if (!target.synopsis.trim() || !target.characters.length) throw new Error('La producción necesita una sinopsis y al menos un personaje.')
   const duration = boundedDuration(action.durationSeconds, target.creativeBrief.durationSeconds || (action.kind === 'trailer' ? 60 : 90))
@@ -1501,12 +1474,9 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de preparar el videoclip.')
   const stored = resolveStoryProject(current.projects, current.project, action.targetStoryId, action.targetStoryTitle)
-  const found = action.languageIntent ? normalizeStoryProject({
-    ...stored,
-    languageIntent: mergeLanguageIntent(stored.languageIntent, action.languageIntent),
-    language: action.languageIntent.contentLanguage || stored.language,
-    spokenLanguage: action.languageIntent.spokenLanguage || stored.spokenLanguage,
-  }) : stored
+  const found = action.languageIntent
+    ? normalizeStoryProject(applyStoryLanguageIntent(stored, action.languageIntent))
+    : stored
   if (current.activeProjectOperations[found.id]) throw new Error(`La historia “${found.title}” tiene una operación activa.`)
   const { cue, candidate } = selection.resolveStoryMusicSelection(found, action.songName, action.cueTitle, action.cueId)
   const resolvedCue = selection.effectiveStoryMusicCue(found, cue, candidate)
@@ -1566,12 +1536,9 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
       const latestBase = applyMusicVideoDirectVideoDefaults(source.projectType === 'music_video'
         ? source
         : { ...source, projectType: 'music_video', musicVideoGenerationMode: 'direct_video' })
-      const latestTarget = action.languageIntent ? normalizeStoryProject({
-        ...latestBase,
-        languageIntent: mergeLanguageIntent(latestBase.languageIntent, action.languageIntent),
-        language: action.languageIntent.contentLanguage || latestBase.language,
-        spokenLanguage: action.languageIntent.spokenLanguage || latestBase.spokenLanguage,
-      }) : latestBase
+      const latestTarget = action.languageIntent
+        ? normalizeStoryProject(applyStoryLanguageIntent(latestBase, action.languageIntent))
+        : latestBase
       const latestCue = latestTarget.music.cues.find(item => item.id === resolvedCue.id)
       const latestCandidate = latestCue?.candidates.find(item => item.id === candidate.id)
       if (!latestCue || !latestCandidate) {

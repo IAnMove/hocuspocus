@@ -18,6 +18,7 @@ import {
   parseRegisteredCapability,
 } from '../src/features/agent/capabilityRegistry'
 import { changedSections, createStoryProject, normalizeStoryProject } from '../src/features/stories/model'
+import { seedStoryLanguageIntent } from '../src/features/stories/languageIntent'
 import { createComicProject, normalizeComicProject } from '../src/features/comics/model'
 import { normalizeSeriesProject } from '../src/features/series/model'
 
@@ -202,6 +203,13 @@ test('legacy Story, Series and Comics documents migrate to a persistent language
   })
   assert.equal(series?.languageIntent.contentLanguage, 'Deutsch')
   assert.equal(series?.languageIntent.technicalPromptLanguage, 'en')
+})
+
+test('a legacy Story language selection seeds the durable contract', () => {
+  const base = createStoryProject()
+  const selected = seedStoryLanguageIntent(base, 'Français', undefined)
+  assert.equal(selected.languageIntent.contentLanguage, 'Français')
+  assert.equal(selected.languageIntent.spokenLanguage, 'Français')
 })
 
 test('changing only protected Story literals is a real persisted overview change', () => {
