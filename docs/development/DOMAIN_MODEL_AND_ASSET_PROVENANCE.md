@@ -65,6 +65,15 @@ filename; the source file is not rewritten. Video Editor drafts remain
 excluded until they have durable server-side storage: browser `localStorage`
 is not sufficient evidence for a global project registry.
 
+## Production and Run records v1
+
+The global read API separates an intended Production from each Run that tries
+to execute it. `GET /api/v1/productions` groups retry attempts by immutable
+`production_id`; `GET /api/v1/runs` exposes their status, timing and legacy
+pipeline/task/job correlations. Director snapshots without canonical IDs are
+adapted to deterministic IDs without rewriting their files. The schemas are
+`production-record-v1.schema.json` and `run-record-v1.schema.json`.
+
 ## Asset manifest v1
 
 Every newly generated or imported item eventually receives one adjacent

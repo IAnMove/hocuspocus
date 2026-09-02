@@ -2963,13 +2963,53 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/productions",
+      "endpoint": "list_productions",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/productions.py",
+      "ordinal": 296
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/productions/{production_id}",
+      "endpoint": "get_production",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/productions.py",
+      "ordinal": 297
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/runs",
+      "endpoint": "list_runs",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/productions.py",
+      "ordinal": 298
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/runs/{run_id}",
+      "endpoint": "get_run",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/productions.py",
+      "ordinal": 299
+    },
+    {
+      "method": "GET",
       "path": "/classic",
       "endpoint": "_classic_redirect",
       "status_code": null,
       "response_model": null,
       "include_in_schema": false,
       "source": "app/_launch_runtime.py",
-      "ordinal": 296
+      "ordinal": 300
     },
     {
       "method": "GET",
@@ -2979,7 +3019,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 297
+      "ordinal": 301
     }
   ]
 }

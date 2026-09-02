@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hocuspocus.local/schemas/run-record-v1.schema.json",
+  "title": "HocusPocus Run Record",
+  "type": "object",
+  "required": ["schema", "schema_version", "id", "production_id", "attempt", "status", "workspace_id", "correlations", "output_count"],
+  "properties": {
+    "schema": { "const": "hocuspocus.run-record" },
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "production_id": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "status": { "type": "string", "minLength": 1 },
+    "phase": { "type": "string" },
+    "workspace_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": ["string", "null"], "format": "date-time" },
+    "started_at": { "type": ["string", "null"], "format": "date-time" },
+    "updated_at": { "type": ["string", "null"], "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+    "correlations": { "type": "object" },
+    "output_count": { "type": "integer", "minimum": 0 },
+    "error": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

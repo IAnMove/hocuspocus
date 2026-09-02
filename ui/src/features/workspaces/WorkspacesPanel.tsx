@@ -43,7 +43,7 @@ function audioPlanLabel(clip: PipelineClipState): string {
   return clipWantsDrive(clip) ? 'canto · drive' : 'mute'
 }
 
-export function WorkspacesPanel() {
+export function RunsPanel() {
   const pipelineList = useStore(s => s.dashboardPipelineList)
   const pipelineTotal = useStore(s => s.dashboardPipelineTotal)
   const selectedPipeline = useStore(s => s.dashboardSelectedPipeline)
@@ -144,14 +144,14 @@ export function WorkspacesPanel() {
   }
 
   return (
-    <section aria-label="Workspaces" className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary md:flex-row">
-      <aside aria-label="Generation threads" className="flex w-full shrink-0 flex-col border-b border-border bg-bg-secondary md:w-64 md:border-b-0 md:border-r xl:w-72">
+    <section aria-label="Production runs" className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary md:flex-row">
+      <aside aria-label="Saved runs" className="flex w-full shrink-0 flex-col border-b border-border bg-bg-secondary md:w-64 md:border-b-0 md:border-r xl:w-72">
         <div className="border-b border-border p-3">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-text-primary">Workspaces</h2>
+              <h2 className="text-sm font-semibold text-text-primary">Runs</h2>
               <p className="text-[10px] text-text-muted">
-                El último hilo se abre solo. El resto se carga al pulsar, o con “más hilos”.
+                Cada fila es un intento de ejecutar una Production. El más reciente se abre automáticamente.
               </p>
             </div>
             <button type="button" className={button} onClick={() => void loadPipelineList()} title="Reload threads">
@@ -162,7 +162,7 @@ export function WorkspacesPanel() {
             type="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder="Buscar hilo…"
+            placeholder="Buscar run…"
             className="mt-2 w-full rounded-md border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary"
           />
           <div className="mt-2 flex gap-1">
@@ -170,7 +170,7 @@ export function WorkspacesPanel() {
             <button type="button" className={`${button} flex-1 ${!newestFirst ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setNewestFirst(false)}>Viejo → nuevo</button>
           </div>
         </div>
-        <nav aria-label="Saved threads" className="flex min-h-0 max-h-36 flex-1 gap-2 overflow-x-auto p-2 md:block md:max-h-none md:overflow-x-hidden md:overflow-y-auto">
+        <nav aria-label="Saved production runs" className="flex min-h-0 max-h-36 flex-1 gap-2 overflow-x-auto p-2 md:block md:max-h-none md:overflow-x-hidden md:overflow-y-auto">
           {pendingLive && livePipelineId && (
             <button
               type="button"
@@ -178,7 +178,7 @@ export function WorkspacesPanel() {
               className="mb-0 min-w-52 shrink-0 rounded-lg border border-blue-500/40 bg-blue-500/10 p-2 text-left md:mb-1.5 md:w-full md:min-w-0"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-medium text-text-primary">Hilo en preparación</span>
+                <span className="truncate text-xs font-medium text-text-primary">Run en preparación</span>
                 <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] bg-blue-500/20 text-chip-blue">{livePipelineStatus?.status || 'running'}</span>
               </div>
               <div className="mt-1 text-[10px] text-text-muted">Se está escribiendo el plan. Pulsa para reintentar la carga.</div>
@@ -203,7 +203,7 @@ export function WorkspacesPanel() {
           ))}
           {!pipelineList.length && !pendingLive && (
             <p className="min-w-64 p-3 text-[11px] leading-relaxed text-text-muted">
-              Genera una canción o un vídeo Director y el hilo aparece aquí. No hace falta escribir un ID: pulsa el más nuevo de la lista.
+              Ejecuta una Production de canción o vídeo y su run aparecerá aquí. No necesitas escribir su ID.
             </p>
           )}
           {pipelineList.length > 0 && !sortedThreads.length && (
@@ -215,7 +215,7 @@ export function WorkspacesPanel() {
               className={`${button} mt-1 w-full md:w-full`}
               onClick={() => void loadMorePipelineList()}
             >
-              Más hilos ({pipelineList.length}/{pipelineTotal})
+                Más runs ({pipelineList.length}/{pipelineTotal})
             </button>
           )}
         </nav>
@@ -226,12 +226,12 @@ export function WorkspacesPanel() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-0 flex-1">
               <h2 className="truncate text-sm font-semibold text-text-primary">
-                {selectedPipeline ? pipelineLabel(selectedPipeline) : 'Processing'}
+                {selectedPipeline ? pipelineLabel(selectedPipeline) : 'Run details'}
               </h2>
               <p className="text-[10px] text-text-muted">
                 {queue
                   ? `${queue.image_model || 'no image model'} + ${queue.video_model || 'no video model'} · ${readyVideos}/${queue.clips.length} videos`
-                  : 'Load a thread to inspect its queue'}
+                  : 'Carga un run para inspeccionar sus tareas y outputs'}
               </p>
             </div>
             {selectedPipeline && (
@@ -264,9 +264,9 @@ export function WorkspacesPanel() {
           {!loading && !selectedPipeline && (
             <div className="mx-auto mt-16 max-w-lg rounded-2xl border border-violet-500/30 bg-violet-500/10 p-8 text-center">
               <Layers size={28} className="mx-auto text-violet-300" />
-              <h3 className="mt-3 text-base font-semibold text-text-primary">Carga un hilo de la lista</h3>
+              <h3 className="mt-3 text-base font-semibold text-text-primary">Carga un run de la lista</h3>
               <p className="mt-2 text-xs leading-relaxed text-text-muted">
-                A la izquierda están todos los hilos, del más nuevo al más viejo. Pulsa uno para ver prompts, referencias, modelos y vídeos. Si acabas de generar, espera a que aparezca o pulsa “Hilo en preparación”.
+                A la izquierda están los intentos de ejecución, del más nuevo al más viejo. Pulsa uno para ver sus prompts, referencias, tareas y outputs.
               </p>
             </div>
           )}
@@ -660,4 +660,7 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
   )
 }
 
-export default WorkspacesPanel
+/** @deprecated Temporary source-level alias while old deep links migrate to Runs. */
+export const WorkspacesPanel = RunsPanel
+
+export default RunsPanel

@@ -658,7 +658,7 @@ export function DirectorChat() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => useStore.getState().setMediaFilter('workspaces')}
+              onClick={() => useStore.getState().setMediaFilter('runs')}
               className="text-[10px] text-accent-blue hover:text-accent-blue/80 flex items-center gap-0.5 transition-colors"
               title="Open Workspaces to inspect prompts, references and the generation queue"
             >

@@ -30,8 +30,8 @@ const SeriesLabPanel = lazy(() => import('../../features/series/SeriesLabPanel')
   .then(module => ({ default: module.SeriesLabPanel })))
 const StyleSheetPanel = lazy(() => import('../../features/styles/StyleSheetPanel')
   .then(module => ({ default: module.StyleSheetPanel })))
-const WorkspacesPanel = lazy(() => import('../../features/workspaces/WorkspacesPanel')
-  .then(module => ({ default: module.WorkspacesPanel })))
+const RunsPanel = lazy(() => import('../../features/workspaces/WorkspacesPanel')
+  .then(module => ({ default: module.RunsPanel })))
 const CharacterCreatorPanel = lazy(() => import('../../features/characters/CharacterCreatorPanel')
   .then(module => ({ default: module.CharacterCreatorPanel })))
 const AuditDevPanel = lazy(() => import('../../features/auditdev/AuditDevPanel')
@@ -750,7 +750,7 @@ export function MainContent() {
               : mediaFilter === 'comics' ? 'Comic Studio'
               : mediaFilter === 'stories' ? 'Story Lab'
               : mediaFilter === 'series' ? 'Series Lab'
-              : mediaFilter === 'workspaces' ? 'Workspaces'
+              : mediaFilter === 'runs' || mediaFilter === 'workspaces' ? 'Runs'
               : mediaFilter === 'characters' ? 'Character Creator'
               : mediaFilter === 'styles' ? 'Hoja de estilos'
               : mediaFilter === 'videoeditor' ? 'Video Editor'
@@ -794,10 +794,10 @@ export function MainContent() {
               <SeriesLabPanel />
             </div>
           </div>
-        ) : mediaFilter === 'workspaces' ? (
+        ) : mediaFilter === 'runs' || mediaFilter === 'workspaces' ? (
           <div className="flex-1 overflow-hidden p-2 md:p-4">
             <div className="max-w-[1900px] mx-auto h-full">
-              <WorkspacesPanel />
+              <RunsPanel />
             </div>
           </div>
         ) : mediaFilter === 'characters' ? (

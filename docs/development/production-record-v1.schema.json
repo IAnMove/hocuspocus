@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hocuspocus.local/schemas/production-record-v1.schema.json",
+  "title": "HocusPocus Production Record",
+  "type": "object",
+  "required": ["schema", "schema_version", "id", "kind", "title", "workspace_ids", "plan", "run_ids"],
+  "properties": {
+    "schema": { "const": "hocuspocus.production-record" },
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "kind": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "project": {
+      "type": ["object", "null"],
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "workspace_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "created_at": { "type": ["string", "null"], "format": "date-time" },
+    "updated_at": { "type": ["string", "null"], "format": "date-time" },
+    "plan": { "type": "object" },
+    "run_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+  },
+  "additionalProperties": false
+}
