@@ -757,5 +757,99 @@
     "approveProduction": "Aprobar para producción",
     "empty": "Aún no se han importado assets visuales.",
     "reviewDirector": "Revisa y aprueba solo las imágenes que Director debe usar"
+  },
+  "library": {
+    "title": "Story Lab",
+    "foundations": "fundamentos",
+    "requirements": "requisitos",
+    "revisionProgress": "v{{revision}} · {{progress}}/{{total}} {{unit}}",
+    "saveLoading": "cargando Workspace…",
+    "saveLocalFallback": "fallback local · guardado no disponible",
+    "saveSaving": "guardando en el Workspace…",
+    "saveSaved": "guardado en el Workspace",
+    "saveCached": "en caché local",
+    "legendRequired": "Campo o preparación necesaria",
+    "legendComplete": "Genera el resultado completo",
+    "workflowGuided": "Guiado · aprobar etapas",
+    "workflowAutomatic": "Automático · un clic",
+    "prepareTextTitle": "Prepara con el LLM todos los campos de texto; no genera audio, imágenes ni vídeo.",
+    "prepareImagesTitle": "Prepara todos los textos y después genera las imágenes conceptuales que todavía falten. Puede consumir créditos de imagen.",
+    "prepareTextFullStory": "Preparar historia completa · solo texto",
+    "prepareTextMusicVideo": "Preparar canción e historia visual · solo texto",
+    "prepareTextTrailer": "Preparar tráiler cinematográfico · solo texto",
+    "prepareTextQuickVideo": "Preparar vídeo rápido · solo texto",
+    "prepareImagesFullStory": "Preparar historia completa + imágenes",
+    "prepareImagesMusicVideo": "Preparar canción e historia visual + imágenes",
+    "prepareImagesTrailer": "Preparar tráiler cinematográfico + imágenes",
+    "prepareImagesQuickVideo": "Preparar vídeo rápido + imágenes",
+    "cancel": "Cancelar",
+    "resume": "Reanudar",
+    "resumeTitle": "Reanudar {{jobId}}",
+    "storypack": "Storypack",
+    "import": "Importar",
+    "smartAssets": "Assets inteligentes",
+    "smartAssetsTitle": "Sube un grupo de imágenes y deja que el LLM seleccionado de Story Lab las clasifique",
+    "new": "Nuevo",
+    "duplicate": "Duplicar",
+    "duplicateTitle": "Duplicar la Story actual",
+    "deleteTitle": "Eliminar la Story actual",
+    "deleteConfirm": "¿Eliminar \"{{title}}\" de la biblioteca de Story Lab de este Workspace?",
+    "libraryTitle": "Biblioteca de Story Lab · {{workspace}}",
+    "projectTypeTitle": "Tipo de proyecto de Story Lab"
+  },
+  "projectTypes": {
+    "full_story": {
+      "label": "Historia completa",
+      "description": "Mundo, personajes, estructura, música y adaptaciones."
+    },
+    "music_video": {
+      "label": "Videoclip",
+      "description": "Canción original y una historia visual construida alrededor de ella."
+    },
+    "trailer": {
+      "label": "Tráiler cinematográfico",
+      "description": "Tráiler de película con tensión, montaje y gancho final; no requiere canción."
+    },
+    "quick_video": {
+      "label": "Vídeo rápido",
+      "description": "Diálogo, meme, parodia, sketch, viral o anuncio breve."
+    }
+  },
+  "tabs": {
+    "story": "Story",
+    "assets": "Assets",
+    "images": "Imágenes",
+    "world": "Mundo",
+    "characters": "Personajes",
+    "music": "Música",
+    "song": "Canción",
+    "relationships": "Relaciones",
+    "structure": "Estructura",
+    "trailer": "Tráiler",
+    "createTrailer": "Crear tráiler",
+    "productions": "Producciones",
+    "generate": "Generar",
+    "assembly": "Montaje",
+    "musicVideo": "Videoclip",
+    "quickVideo": "Vídeo rápido"
+  },
+  "nav": {
+    "swipe": "Desliza para más secciones",
+    "fullStoryNote1": "Las ediciones manuales siempre tienen autoridad.",
+    "fullStoryNote2": "La regeneración conserva las imágenes de referencia existentes.",
+    "fullStoryNote3": "Las adaptaciones recuerdan la revisión de origen.",
+    "compactNote1": "Concepto, imágenes y secuencia viven juntos.",
+    "compactNote2": "Las referencias aprobadas pasan a Director.",
+    "compactNote3": "Puedes editar cualquier resultado antes de generar."
+  },
+  "assembly": {
+    "title": "Montaje de producciones",
+    "description": "Cada trabajo conserva su secuencia completa. El último se abre automáticamente; al acabar una regeneración, su clip vuelve a aparecer en la misma posición.",
+    "empty": "Aún no se ha preparado ninguna adaptación.",
+    "reopen": "Reabrir destino",
+    "restore": "Restaurar origen como copia",
+    "sourceChanged": "el origen cambió desde la preparación",
+    "sourceMeta": "origen v{{version}} · {{when}}",
+    "musicVideo": "Videoclip"
   }
 }
