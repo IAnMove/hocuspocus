@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.services import director_pipeline
+from app.services.asset_manifest import SCHEMA_NAME, read_asset_manifest
 
 
 def test_pipeline_timing_metadata_normalizes_live_terminal_state():
@@ -177,3 +178,57 @@ def test_pipeline_stage_times_accumulate_across_resumed_work():
         assert pipeline["updated_at"] == 150.0
     finally:
         director_pipeline._pipelines = original_pipelines
+
+
+def test_director_assembly_sidecar_publishes_canonical_manifest(tmp_path: Path):
+    first = tmp_path / "minimax_h3_pipe-22_multiclip.mp4"
+    second = tmp_path / "minimax_h3_pipe-22_multiclip-b.mp4"
+    first.write_bytes(b"video-a")
+    second.write_bytes(b"video-b")
+    sidecar = {
+        "params": {
+            "model_type": "minimax_h3",
+            "resolution": "960x544",
+            "source_clips": ["clip-a.mp4", "clip-b.mp4"],
+            "director_pipeline_id": "pipe-22",
+            "pipeline_type": "short_film_story",
+            "production_kind": "story",
+            "result_kind": "video",
+            "director_generation_mode": "direct_video",
+            "direct_video_master_prompt": "a joined short",
+            "api_key": "secret",
+        },
+        "generation_mode": "video",
+        "result_kind": "video",
+        "created_at": 1_700_000_100,
+    }
+
+    director_pipeline._write_director_assembly_sidecar(
+        str(first), sidecar, "night-shift",
+    )
+    published = tmp_path / "minimax_h3_pipe-22_multiclip.meta.json"
+    raw = json.loads(published.read_text(encoding="utf-8"))
+    loaded = read_asset_manifest(first, workspace_id="night-shift")
+
+    assert raw["schema"] == SCHEMA_NAME
+    assert raw["params"]["director_pipeline_id"] == "pipe-22"
+    assert raw["generation_mode"] == "video"
+    assert raw["result_kind"] == "video"
+    assert "secret" not in published.read_text(encoding="utf-8")
+    assert loaded is not None
+    assert loaded["origin"]["tool"] == "director"
+    assert loaded["origin"]["actor"] == "unknown"
+    assert loaded["origin"]["workspace_id"] == "night-shift"
+    assert loaded["origin"].get("project") is None
+    assert loaded["origin"].get("production") is None
+    assert loaded["execution"]["pipeline_id"] == "pipe-22"
+    first_id = loaded["asset"]["id"]
+
+    director_pipeline._write_director_assembly_sidecar(
+        str(first), sidecar, "night-shift",
+    )
+    director_pipeline._write_director_assembly_sidecar(
+        str(second), sidecar, "night-shift",
+    )
+    assert read_asset_manifest(first, workspace_id="night-shift")["asset"]["id"] == first_id
+    assert read_asset_manifest(second, workspace_id="night-shift")["asset"]["id"] != first_id
