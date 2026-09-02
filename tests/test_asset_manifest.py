@@ -215,6 +215,9 @@ def test_generate_publish_writes_canonical_manifest_and_keeps_gallery_keys(tmp_p
     assert loaded["asset"]["kind"] == "video"
     assert loaded["asset"]["id"].startswith("asset_")
     assert loaded["origin"]["tool"] == "studio"
+    assert loaded["origin"]["actor"] == "unknown"
+    assert loaded["origin"].get("capability") in (None, "")
+    assert loaded["origin"].get("project") is None
     assert loaded["origin"]["workspace_id"] == "night-shift"
     assert loaded["execution"]["mode"] == "simulate"
     assert loaded["execution"]["job_id"] == "job-sim-1"
@@ -225,6 +228,65 @@ def test_generate_publish_writes_canonical_manifest_and_keeps_gallery_keys(tmp_p
     other = publish_generation_sidecar(second, sidecar, workspace_id="night-shift", tool="studio")
     assert json.loads(retry.read_text(encoding="utf-8"))["asset"]["id"] == raw["asset"]["id"]
     assert json.loads(other.read_text(encoding="utf-8"))["asset"]["id"] != raw["asset"]["id"]
+
+
+def test_studio_publish_does_not_invent_user_actor(tmp_path: Path):
+    output = tmp_path / "studio.mp4"
+    output.write_bytes(b"video")
+    publish_generation_sidecar(
+        output,
+        {"params": {"prompt": "direct studio", "generation_mode": "video"}, "job_id": "studio-1"},
+        workspace_id="lab",
+        tool="studio",
+    )
+    loaded = read_asset_manifest(output, workspace_id="lab")
+    assert loaded is not None
+    assert loaded["origin"]["tool"] == "studio"
+    assert loaded["origin"]["actor"] == "unknown"
+    assert loaded["origin"].get("capability") in (None, "")
+    assert loaded["execution"].get("command_id") in (None, "")
+    assert loaded["execution"].get("workflow_id") in (None, "")
+
+
+def test_director_pipeline_id_attributes_origin_to_director(tmp_path: Path):
+    output = tmp_path / "clip.mp4"
+    output.write_bytes(b"video")
+    publish_generation_sidecar(
+        output,
+        {
+            "params": {
+                "prompt": "directed clip",
+                "generation_mode": "video",
+                "_director_pipeline_id": "pipe-22",
+            },
+            "job_id": "job-dir",
+        },
+        workspace_id="lab",
+        tool="studio",
+    )
+    loaded = read_asset_manifest(output, workspace_id="lab")
+    assert loaded is not None
+    assert loaded["origin"]["tool"] == "director"
+    assert loaded["origin"]["actor"] == "unknown"
+    assert loaded["origin"].get("project") is None
+    assert loaded["origin"].get("production") is None
+    assert loaded["execution"]["pipeline_id"] == "pipe-22"
+
+
+def test_explicit_actor_and_capability_are_preserved(tmp_path: Path):
+    output = tmp_path / "wizard.mp4"
+    output.write_bytes(b"video")
+    publish_generation_sidecar(
+        output,
+        {"params": {"prompt": "from wizard"}, "actor": "wizard", "capability": "start_generation"},
+        workspace_id="lab",
+        actor="wizard",
+        capability="start_generation",
+    )
+    loaded = read_asset_manifest(output, workspace_id="lab")
+    assert loaded is not None
+    assert loaded["origin"]["actor"] == "wizard"
+    assert loaded["origin"]["capability"] == "start_generation"
 
 
 def test_non_finite_metadata_is_normalized_to_valid_json(tmp_path: Path):

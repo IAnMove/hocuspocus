@@ -420,6 +420,23 @@ def _existing_canonical_asset_id(output_path: str | os.PathLike[str]) -> str | N
     return _clean_text(asset.get("id"))
 
 
+def _director_pipeline_id(payload: Mapping[str, Any]) -> str | None:
+    params = payload.get("params") if isinstance(payload.get("params"), Mapping) else {}
+    return _clean_text(
+        payload.get("pipeline_id")
+        or payload.get("director_pipeline_id")
+        or params.get("director_pipeline_id")
+        or params.get("_director_pipeline_id")
+    )
+
+
+def _initiating_tool(payload: Mapping[str, Any], explicit_tool: str | None) -> str:
+    requested = _clean_text(explicit_tool) or _clean_text(payload.get("tool"))
+    if _director_pipeline_id(payload) and (not requested or requested == "studio"):
+        return "director"
+    return requested or "studio"
+
+
 def publish_generation_sidecar(
     output_path: str | os.PathLike[str],
     sidecar: Mapping[str, Any],
@@ -434,6 +451,11 @@ def publish_generation_sidecar(
     Gallery consumers still read top-level legacy keys such as ``params`` and
     ``job_id``. Those are retained beside the canonical document. A retry of
     the same output keeps its asset ID; a distinct file gets a new ID.
+
+    ``command_id``, ``workflow_id``, ``capability`` and ``actor`` are stored
+    only when supplied. Missing actor is ``unknown``, never invented as
+    ``user``. A ``_director_pipeline_id`` attributes origin to ``director``
+    without inventing Story or Series project refs.
     """
     payload = dict(sidecar)
     asset_id = (
@@ -444,20 +466,17 @@ def publish_generation_sidecar(
     manifest = adapt_legacy_sidecar(output_path, payload, workspace_id=workspace_id)
     manifest["asset"]["id"] = asset_id
     origin = dict(manifest.get("origin") or {})
-    origin["tool"] = (
-        _clean_text(tool)
-        or _clean_text(payload.get("tool"))
-        or _clean_text(origin.get("tool"))
-        or "studio"
-    )
-    origin["actor"] = (
-        _clean_text(actor)
-        or _clean_text(payload.get("actor"))
-        or "user"
-    )
+    origin["tool"] = _initiating_tool(payload, tool)
+    origin["actor"] = _clean_text(actor) or _clean_text(payload.get("actor")) or "unknown"
     published_capability = _clean_text(capability) or _clean_text(payload.get("capability"))
     if published_capability:
         origin["capability"] = published_capability
+    else:
+        origin.pop("capability", None)
+    if origin.get("project") is None:
+        origin.pop("project", None)
+    if origin.get("production") is None:
+        origin.pop("production", None)
     manifest["origin"] = origin
     technical = {
         key: value
