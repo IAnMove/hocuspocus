@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, FileText, Film, Image as ImageIcon, Info, Loader2, Music2, RefreshCw, Search } from 'lucide-react'
 import { fetchAsset, fetchAssets, type AssetCatalogItem, type AssetKind } from '../../api/client'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 
 const PAGE_SIZE = 100
 const kinds: Array<{ value: AssetKind | ''; label: string }> = [
@@ -49,6 +50,8 @@ function AssetPreview({ asset }: { asset: AssetCatalogItem }) {
 }
 
 export function AssetsPanel() {
+  const { t } = useUiTranslation('navigation')
+  const { t: tActivity } = useUiTranslation('activity')
   const workspaces = useStore(state => state.workspaces)
   const loadWorkspaces = useStore(state => state.loadWorkspaces)
   const [assets, setAssets] = useState<AssetCatalogItem[]>([])
@@ -96,11 +99,11 @@ export function AssetsPanel() {
   useEffect(() => () => { requestRef.current += 1 }, [])
 
   const workspaceOptions = useMemo(() => [
-    { name: '', label: 'Todos los workspaces' },
+    { name: '', label: t('filters.allWorkspaces') },
     ...workspaces.map(item => ({ name: item.name, label: item.name })),
     { name: '__uploads__', label: 'Uploads' },
-    { name: '__legacy__', label: 'Inbox / Legacy' },
-  ], [workspaces])
+    { name: '__legacy__', label: tActivity('inboxLegacy') },
+  ], [t, tActivity, workspaces])
   const [inspecting, setInspecting] = useState<AssetCatalogItem | null>(null)
   const [inspectorLoading, setInspectorLoading] = useState(false)
 
@@ -112,10 +115,10 @@ export function AssetsPanel() {
   }
 
   return (
-    <section aria-label="All assets" className="flex h-full min-h-0 flex-col bg-bg-primary">
+    <section aria-label={t('headings.assets')} className="flex h-full min-h-0 flex-col bg-bg-primary">
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
         <div className="flex items-center gap-1.5 text-sm font-semibold text-text-primary">
-          <Box size={16} className="text-accent-blue" /> Assets
+          <Box size={16} className="text-accent-blue" /> {t('headings.assets')}
         </div>
         <span className="text-[10px] text-text-muted">{total} elementos en todas las ubicaciones</span>
         <div className="min-w-0 flex-1" />

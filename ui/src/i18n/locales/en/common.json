@@ -1,0 +1,25 @@
+{
+  "language": {
+    "name": "English",
+    "nativeName": "English"
+  },
+  "actions": {
+    "close": "Close",
+    "save": "Save",
+    "cancel": "Cancel",
+    "reload": "Reload",
+    "create": "Create",
+    "search": "Search"
+  },
+  "status": {
+    "running": "Running",
+    "queued": "Queued",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+  "count": {
+    "item_one": "{{count}} item",
+    "item_other": "{{count}} items"
+  }
+}

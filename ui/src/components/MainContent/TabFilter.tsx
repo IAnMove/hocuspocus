@@ -1,38 +1,43 @@
 import { useState, useRef, useEffect } from 'react'
 import { Heart, Film, Search, X, Box, PersonStanding, BookOpen, Library, Palette, Layers, ShieldAlert } from 'lucide-react'
+import type { ParseKeys } from 'i18next'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
 import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
 
-const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: string }[] = [
-  { value: 'all', label: 'All', shortLabel: 'All' },
-  { value: 'assets', label: 'Assets', shortLabel: 'Assets', icon: 'layers' },
-  { value: 'projects', label: 'Projects', shortLabel: 'Proj', icon: 'library' },
-  { value: 'workspaces', label: 'Workspaces', shortLabel: 'Work', icon: 'layers' },
-  { value: 'images', label: 'Images', shortLabel: 'Img' },
-  { value: 'videos', label: 'Videos', shortLabel: 'Vid' },
-  { value: 'videoclips', label: 'Videoclips', shortLabel: 'Clip' },
-  { value: 'trailers', label: 'Tráilers', shortLabel: 'Trail' },
-  { value: 'series_episodes', label: 'Capítulos', shortLabel: 'Cap' },
-  { value: 'audio', label: 'Audio', shortLabel: 'Aud' },
-  { value: 'model3d', label: '3D', shortLabel: '3D', icon: 'box' },
-  { value: 'scenes', label: 'Scenes', shortLabel: 'Scn', icon: 'film' },
-  { value: 'stories', label: 'Story Lab', shortLabel: 'Lab', icon: 'library' },
-  { value: 'series', label: 'Series Lab', shortLabel: 'Series', icon: 'library' },
-  { value: 'runs', label: 'Runs', shortLabel: 'Runs', icon: 'layers' },
-  { value: 'characters', label: 'Character Creator', shortLabel: 'Char', icon: 'person' },
-  { value: 'styles', label: 'Hoja de estilos', shortLabel: 'Styles', icon: 'palette' },
-  { value: 'comics', label: 'Comics', shortLabel: 'Comic', icon: 'book' },
-  { value: 'videoeditor', label: 'Video Editor', shortLabel: 'Edit', icon: 'film' },
-  { value: 'scene3d', label: '3D Video', shortLabel: '3DV', icon: 'film' },
-  { value: 'animate3d', label: 'Animate', shortLabel: 'Anim', icon: 'person' },
-  { value: 'avatars', label: 'Edits', shortLabel: 'Edit' },
-  { value: 'multiclip', label: 'Multi-clip', shortLabel: 'MC', icon: 'film' },
-  { value: 'auditdev', label: 'Auditoría interna dev', shortLabel: 'Audit', icon: 'shield' },
-  { value: 'favorites', label: 'Favorites', shortLabel: '', icon: 'heart' },
+type NavigationKey = ParseKeys<'navigation'>
+
+const tabs: { value: MediaFilter; labelKey: NavigationKey; shortKey?: NavigationKey; icon?: string }[] = [
+  { value: 'all', labelKey: 'tabs.all', shortKey: 'short.all' },
+  { value: 'assets', labelKey: 'tabs.assets', shortKey: 'short.assets', icon: 'layers' },
+  { value: 'projects', labelKey: 'tabs.projects', shortKey: 'short.projects', icon: 'library' },
+  { value: 'workspaces', labelKey: 'tabs.workspaces', shortKey: 'short.workspaces', icon: 'layers' },
+  { value: 'images', labelKey: 'tabs.images', shortKey: 'short.images' },
+  { value: 'videos', labelKey: 'tabs.videos', shortKey: 'short.videos' },
+  { value: 'videoclips', labelKey: 'tabs.videoclips', shortKey: 'short.videoclips' },
+  { value: 'trailers', labelKey: 'tabs.trailers', shortKey: 'short.trailers' },
+  { value: 'series_episodes', labelKey: 'tabs.episodes', shortKey: 'short.episodes' },
+  { value: 'audio', labelKey: 'tabs.audio', shortKey: 'short.audio' },
+  { value: 'model3d', labelKey: 'tabs.model3d', shortKey: 'short.model3d', icon: 'box' },
+  { value: 'scenes', labelKey: 'tabs.scenes', shortKey: 'short.scenes', icon: 'film' },
+  { value: 'stories', labelKey: 'tabs.storyLab', shortKey: 'short.storyLab', icon: 'library' },
+  { value: 'series', labelKey: 'tabs.seriesLab', shortKey: 'short.seriesLab', icon: 'library' },
+  { value: 'runs', labelKey: 'tabs.runs', shortKey: 'short.runs', icon: 'layers' },
+  { value: 'characters', labelKey: 'tabs.characters', shortKey: 'short.characters', icon: 'person' },
+  { value: 'styles', labelKey: 'tabs.styles', shortKey: 'short.styles', icon: 'palette' },
+  { value: 'comics', labelKey: 'tabs.comics', shortKey: 'short.comics', icon: 'book' },
+  { value: 'videoeditor', labelKey: 'tabs.videoEditor', shortKey: 'short.videoEditor', icon: 'film' },
+  { value: 'scene3d', labelKey: 'tabs.scene3d', shortKey: 'short.scene3d', icon: 'film' },
+  { value: 'animate3d', labelKey: 'tabs.animate3d', shortKey: 'short.animate3d', icon: 'person' },
+  { value: 'avatars', labelKey: 'tabs.edits', shortKey: 'short.edits' },
+  { value: 'multiclip', labelKey: 'tabs.multiclip', shortKey: 'short.multiclip', icon: 'film' },
+  { value: 'auditdev', labelKey: 'tabs.auditDev', shortKey: 'short.auditDev', icon: 'shield' },
+  { value: 'favorites', labelKey: 'tabs.favorites', icon: 'heart' },
 ]
 
 export function TabFilter() {
+  const { t } = useUiTranslation('navigation')
   const mediaFilter = useStore(s => s.mediaFilter)
   const setMediaFilter = useStore(s => s.setMediaFilter)
   const developerMode = useStore(s => s.developerMode)
@@ -83,7 +88,7 @@ export function TabFilter() {
     <div className="flex min-w-0 flex-1 items-center gap-1">
       <HorizontalScrollTabs
         activeKey={mediaFilter}
-        ariaLabel="Workspace sections"
+        ariaLabel={t('aria.sections')}
         className="flex-1"
         viewportClassName="flex gap-0.5 bg-bg-tertiary rounded-lg p-0.5 border border-border"
       >
@@ -113,8 +118,8 @@ export function TabFilter() {
             {tab.icon === 'palette' && <Palette size={11} />}
             {tab.icon === 'layers' && <Layers size={11} />}
             {tab.icon === 'shield' && <ShieldAlert size={11} />}
-            <span className="hidden md:inline">{tab.label}</span>
-            <span className="md:hidden">{tab.shortLabel}</span>
+            <span className="hidden md:inline">{t(tab.labelKey)}</span>
+            <span className="md:hidden">{tab.shortKey ? t(tab.shortKey) : ''}</span>
           </button>
         ))}
       </HorizontalScrollTabs>

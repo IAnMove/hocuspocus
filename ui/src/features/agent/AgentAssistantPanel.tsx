@@ -19,6 +19,7 @@ import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
+import { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 
@@ -121,6 +122,7 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
 }
 
 export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistantPanelProps) {
+  const { t } = useUiTranslation('wizard')
   const [messages, setMessages] = useState<AgentMessage[]>(() => readMessages(workspace))
   const [conversationWorkspace, setConversationWorkspace] = useState(workspace)
   const [hydratedWorkspace, setHydratedWorkspace] = useState<string | null>(null)
@@ -448,7 +450,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
     <section
       role="dialog"
       aria-modal="true"
-      aria-label="Ask to the Wizard"
+      aria-label={t('title')}
       data-expanded={expanded ? 'true' : 'false'}
       className={`hp-agent-panel z-[100] flex flex-col overflow-hidden border border-amber-200/20 bg-[#0d0b13]/95 shadow-2xl backdrop-blur-xl ${expanded
         ? 'hp-agent-panel--expanded fixed inset-0 rounded-none text-sm sm:inset-2 sm:rounded-2xl'
@@ -460,7 +462,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
           <AgentAvatar state={state} size={48} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h2 className="hp-wordmark text-lg font-semibold text-amber-50">Ask to the Wizard</h2>
+              <h2 className="hp-wordmark text-lg font-semibold text-amber-50">{t('title')}</h2>
               <span className="rounded-full border border-amber-200/20 bg-amber-200/10 px-1.5 py-0.5 text-[8px] uppercase tracking-wider text-amber-100/70">Guía · acciones</span>
             </div>
             <p className="truncate text-[10px] text-white/45">Workspace: {workspace}</p>
@@ -470,13 +472,13 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
             onClick={() => setExpanded(current => !current)}
             className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white"
             title={expanded ? 'Restore chat size' : 'Maximize chat'}
-            aria-label={expanded ? 'Restore Ask to the Wizard size' : 'Maximize Ask to the Wizard'}
+            aria-label={expanded ? t('restore') : t('maximize')}
             aria-pressed={expanded}
           >
             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
-          <button type="button" onClick={clearConversation} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title="Clear conversation" aria-label="Clear Ask to the Wizard conversation"><Trash2 size={13} /></button>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title="Close" aria-label="Close Ask to the Wizard"><X size={14} /></button>
+          <button type="button" onClick={clearConversation} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('clear')} aria-label={t('clear')}><Trash2 size={13} /></button>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white" title={t('close')} aria-label={t('close')}><X size={14} /></button>
         </div>
         <div className="relative mt-2 flex items-center gap-2 text-[9px] text-white/45">
           <span className={`h-1.5 w-1.5 rounded-full ${activeCount ? 'animate-pulse bg-blue-300' : 'bg-emerald-300'}`} />
@@ -583,10 +585,10 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
             disabled={busy}
             onChange={event => { setDraft(event.target.value); if (!busy) setState(event.target.value ? 'listening' : 'idle') }}
             onKeyDown={handleKeyDown}
-            placeholder="Pide un hechizo en HocusPocus…"
+            placeholder={t('placeholder')}
             className={`${expanded ? 'max-h-40' : 'max-h-24'} min-h-9 flex-1 resize-none bg-transparent text-[11px] leading-relaxed text-white outline-none placeholder:text-white/30 disabled:opacity-50`}
           />
-          <button type="submit" disabled={busy || !draft.trim()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-200 text-[#1a1208] transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Ask to the Wizard">
+          <button type="submit" disabled={busy || !draft.trim()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-200 text-[#1a1208] transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-30" aria-label={t('title')}>
             {busy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUp size={14} />}
           </button>
         </div>

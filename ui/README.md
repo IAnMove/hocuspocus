@@ -59,6 +59,8 @@ sequence used by CI. The build output is `ui/dist`; do not edit it manually.
 - `src/features/` owns large workflows such as Series Lab, Story Lab and the
   video editor.
 - `src/components/` contains reusable application and navigation UI.
+- `src/i18n/` is the English/Spanish catalog and language preference. See
+  [internationalization](../docs/development/INTERNATIONALIZATION.md).
 - `tests/` uses Node's test runner, jsdom and Testing Library for behavioural
   regression tests.
 - `scripts/check-build-budget.mjs` prevents accidental growth of the entry

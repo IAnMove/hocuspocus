@@ -1,0 +1,8 @@
+{
+  "title": "Actividad",
+  "openHistory": "Mostrar el historial canónico de tareas",
+  "inboxLegacy": "Inbox / Legacy",
+  "extraInfo": "Extra info",
+  "collectionsHint": "Colecciones de referencias. No son carpetas de outputs.",
+  "collectionCounts": "{{projects}} proyectos · {{assets}} recursos · {{productions}} producciones"
+}

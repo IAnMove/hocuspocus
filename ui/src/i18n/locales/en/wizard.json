@@ -1,0 +1,9 @@
+{
+  "title": "Ask to the Wizard",
+  "open": "Ask to the Wizard about the app or current task queue",
+  "placeholder": "Ask HocusPocus for a spell…",
+  "close": "Close Ask to the Wizard",
+  "clear": "Clear Ask to the Wizard conversation",
+  "maximize": "Maximize Ask to the Wizard",
+  "restore": "Restore Ask to the Wizard size"
+}

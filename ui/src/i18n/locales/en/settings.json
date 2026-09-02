@@ -1,0 +1,25 @@
+{
+  "title": "Settings",
+  "close": "Close settings",
+  "sections": "Settings sections",
+  "tabs": {
+    "performance": "Performance",
+    "integrations": "Integrations"
+  },
+  "appearance": {
+    "title": "Appearance",
+    "mode": "Mode",
+    "dark": "Dark",
+    "light": "Light",
+    "auto": "Auto",
+    "autoHint": "Follows your system's appearance — currently {{variant}}.",
+    "theme": "Theme"
+  },
+  "language": {
+    "title": "Language",
+    "label": "Interface language",
+    "help": "Applies to labels in the app. Generated content, prompts and file names stay as they are.",
+    "optionEn": "English",
+    "optionEs": "Español"
+  }
+}

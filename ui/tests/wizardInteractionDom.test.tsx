@@ -156,7 +156,7 @@ test('Wizard DOM interaction navigates, accepts form input, and restores a pendi
     const pending = await screen.findByRole('group', { name: 'Wizard pending question' })
     assert.match(pending.textContent || '', /Elige la canción exacta/)
     assert.ok(screen.getByRole('button', { name: 'Himno v2 · recomendado' }))
-    const textarea = screen.getByPlaceholderText('Pide un hechizo en HocusPocus…') as HTMLTextAreaElement
+    const textarea = screen.getByPlaceholderText('Ask HocusPocus for a spell…') as HTMLTextAreaElement
     fireEvent.change(textarea, { target: { value: 'usa el audio recomendado' } })
     assert.equal(textarea.value, 'usa el audio recomendado')
 
