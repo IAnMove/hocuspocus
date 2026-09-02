@@ -23172,6 +23172,7 @@ def _write_tool_sidecar(
     job_id,
     task_id=None,
     root_task_id=None,
+    workspace=None,
 ):
     """Write a .meta.json sidecar so a Tools output shows up in the gallery
     with the right mode + edit_sub_mode tag (mirrors _run_sfx_generation)."""
@@ -23186,10 +23187,13 @@ def _write_tool_sidecar(
         "generation_time": round(elapsed),
         "created_at": time.time(),
     }
-    meta_path = os.path.join(out_dir, os.path.splitext(filename)[0] + ".meta.json")
     try:
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(sidecar, f, indent=2)
+        publish_generation_sidecar(
+            os.path.join(out_dir, filename),
+            sidecar,
+            workspace_id=workspace,
+            tool=tool,
+        )
     except Exception:
         pass
 
@@ -23342,6 +23346,7 @@ def _run_tool_upscale(job_id: str):
                     job_id=job_id,
                     task_id=job.get("task_id"),
                     root_task_id=job.get("root_task_id"),
+                    workspace=job.get("workspace"),
                 )
 
             completed = finish_job(
@@ -23488,6 +23493,7 @@ def _run_tool_revoice(job_id: str):
                 job_id=job_id,
                 task_id=job.get("task_id"),
                 root_task_id=job.get("root_task_id"),
+                workspace=job.get("workspace"),
             )
 
             completed = finish_job(
