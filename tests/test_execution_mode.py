@@ -310,6 +310,72 @@ def test_tool_sidecar_publishes_canonical_manifest_without_invented_actor(tmp_pa
     assert read_asset_manifest(other, workspace_id="lab")["origin"]["tool"] == "revoice"
 
 
+@pytest.mark.parametrize(
+    ("writer_name", "tool", "private_key"),
+    [
+        ("_write_recast_shot_aware_sidecar", "recast", "_recast_shot_temp_dir"),
+        ("_write_repaint_shot_aware_sidecar", "repaint", "_repaint_shot_temp_dir"),
+        ("_write_outpaint_shot_aware_sidecar", "outpaint", "_outpaint_shot_temp_dir"),
+    ],
+)
+def test_edit_shot_sidecar_publishes_canonical_manifest_without_invented_actor(
+    tmp_path, writer_name, tool, private_key,
+):
+    artifact = tmp_path / "clip.mp4"
+    artifact.write_bytes(b"video")
+    write = _load_launch_function(
+        writer_name,
+        {
+            "os": os,
+            "time": time,
+            "publish_generation_sidecar": publish_generation_sidecar,
+        },
+    )
+    job = {
+        "id": f"{tool}-job",
+        "workspace": "lab",
+        "params": {
+            "generation_mode": "video",
+            "prompt": "a restored shot",
+            "image_start": "/tmp/uploads/hero.png",
+            "api_key": "secret",
+            "_defer_output_publication": True,
+            private_key: "/tmp/private-shot",
+        },
+    }
+    shot_bundle = {
+        "frame_count": 16,
+        "resolved_seed": 42,
+        "published_shots": [{"id": "s1"}],
+        "preserve_source_audio": True,
+    }
+    write(job, str(artifact), shot_bundle, 1.5)
+    loaded = read_asset_manifest(artifact, workspace_id="lab")
+    raw = json.loads((tmp_path / "clip.meta.json").read_text(encoding="utf-8"))
+    text = (tmp_path / "clip.meta.json").read_text(encoding="utf-8")
+    assert loaded is not None
+    assert raw["schema"] == SCHEMA_NAME
+    assert private_key not in raw["params"]
+    assert "_defer_output_publication" not in raw["params"]
+    assert raw["params"]["video_length"] == 16
+    assert raw["params"]["seed"] == 42
+    assert raw["params"][f"edit_{tool}_shot_aware"] is True
+    assert raw["upload_filenames"]["image_start"] == "hero.png"
+    assert "secret" not in text
+    assert loaded["origin"]["tool"] == tool
+    assert loaded["origin"]["actor"] == "unknown"
+    assert loaded["origin"]["workspace_id"] == "lab"
+    assert loaded["execution"]["job_id"] == f"{tool}-job"
+    first_id = loaded["asset"]["id"]
+    write(job, str(artifact), shot_bundle, 1.5)
+    assert read_asset_manifest(artifact, workspace_id="lab")["asset"]["id"] == first_id
+    other = tmp_path / "clip-b.mp4"
+    other.write_bytes(b"video-b")
+    write(job, str(other), shot_bundle, 1.5)
+    assert read_asset_manifest(other, workspace_id="lab")["asset"]["id"] != first_id
+    assert read_asset_manifest(other, workspace_id="lab")["origin"]["tool"] == tool
+
+
 def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     source = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(
         encoding="utf-8",
@@ -341,7 +407,15 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
                 return ast.get_source_segment(source, node)
         raise AssertionError(name)
 
-    for name in ("_run_simulated_generation", "_write_output_sidecars", "_run_sfx_generation", "_write_tool_sidecar"):
+    for name in (
+        "_run_simulated_generation",
+        "_write_output_sidecars",
+        "_run_sfx_generation",
+        "_write_tool_sidecar",
+        "_write_recast_shot_aware_sidecar",
+        "_write_repaint_shot_aware_sidecar",
+        "_write_outpaint_shot_aware_sidecar",
+    ):
         body = function_source(name)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
