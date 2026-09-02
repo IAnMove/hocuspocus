@@ -16,6 +16,18 @@
     "loadFailed": "Could not load Extra info",
     "prompt": "Prompt · {{name}}"
   },
+  "catalog": {
+    "itemsAcrossLocations_one": "{{count}} item across all locations",
+    "itemsAcrossLocations_other": "{{count}} items across all locations",
+    "searchPlaceholder": "Search prompt, model, tool…",
+    "kindFilter": "Asset kind",
+    "workspaceFilter": "Asset workspace",
+    "reload": "Refresh catalog",
+    "loadFailed": "Could not load the catalog",
+    "reading": "Reading the catalog…",
+    "empty": "No assets match these filters.",
+    "loadMore": "Load more"
+  },
   "collectionsHint": "Reference collections. They are not output folders.",
   "projectCount_one": "{{count}} project",
   "projectCount_other": "{{count}} projects",

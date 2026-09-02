@@ -16,6 +16,18 @@
     "loadFailed": "No se pudo cargar Información adicional",
     "prompt": "Prompt · {{name}}"
   },
+  "catalog": {
+    "itemsAcrossLocations_one": "{{count}} elemento en todas las ubicaciones",
+    "itemsAcrossLocations_other": "{{count}} elementos en todas las ubicaciones",
+    "searchPlaceholder": "Buscar prompt, modelo, herramienta…",
+    "kindFilter": "Tipo de recurso",
+    "workspaceFilter": "Workspace del recurso",
+    "reload": "Actualizar catálogo",
+    "loadFailed": "No se pudo cargar el catálogo",
+    "reading": "Leyendo el catálogo…",
+    "empty": "No hay assets que coincidan con estos filtros.",
+    "loadMore": "Cargar más"
+  },
   "collectionsHint": "Colecciones de referencias. No son carpetas de salida.",
   "projectCount_one": "{{count}} proyecto",
   "projectCount_other": "{{count}} proyectos",
