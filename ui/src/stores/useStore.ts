@@ -3,7 +3,6 @@ import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPr
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import { type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
-import { loadDeveloperMode, saveDeveloperMode } from '../lib/developerMode'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
@@ -11,6 +10,7 @@ import { createActivityPublicationGate } from '../lib/activityPublication'
 import { isGenerationJobActive } from '../lib/generationJobState'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
 import { llmActivityPreview } from '../lib/llmActivityPreview'
+import { createDeveloperModeSlice } from './developerModeSlice'
 import { createDirectorSlice } from './directorSlice'
 import { createSettingsSlice } from './settingsSlice'
 import { createThemeSlice } from './themeSlice'
@@ -2330,6 +2330,10 @@ export const useStore = create<AppState>((set, get) => ({
     partial => set(partial as never),
     () => get(),
   ),
+  ...createDeveloperModeSlice(
+    partial => set(partial as never),
+    () => get(),
+  ),
   // Generation mode
   generationMode: 'video',
   editSubMode: 'retake' as import('../types').EditSubMode,
@@ -3040,15 +3044,6 @@ export const useStore = create<AppState>((set, get) => ({
   sidebarOpen: false,
   toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
-
-  developerMode: loadDeveloperMode(),
-  setDeveloperMode: (enabled) => {
-    saveDeveloperMode(enabled)
-    set(s => ({
-      developerMode: enabled,
-      mediaFilter: !enabled && s.mediaFilter === 'auditdev' ? 'all' : s.mediaFilter,
-    }))
-  },
 
   // CivitAI LoRA Browser
   // Director Pipeline Dashboard
