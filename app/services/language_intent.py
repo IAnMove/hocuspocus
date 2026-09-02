@@ -30,8 +30,8 @@ def normalize_language_intent(
         if not isinstance(candidate, dict):
             continue
         kind = _text(candidate.get("kind"), 40)
-        literal = _text(candidate.get("text"), 12_000)
-        if kind not in VERBATIM_KINDS or not literal:
+        literal = str(candidate.get("text") or "")[:12_000]
+        if kind not in VERBATIM_KINDS or not literal.strip():
             continue
         segment = {
             "kind": kind,

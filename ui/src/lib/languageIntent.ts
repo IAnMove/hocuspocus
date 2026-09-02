@@ -64,8 +64,8 @@ function segments(value: unknown): VerbatimContentSegment[] {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
     const raw = candidate as Record<string, unknown>
     const kind = text(raw.kind, 40)
-    const literal = text(raw.text, 12_000)
-    if (!kinds.has(kind) || !literal) return []
+    const literal = typeof raw.text === 'string' ? raw.text.slice(0, 12_000) : ''
+    if (!kinds.has(kind) || !literal.trim()) return []
     const speaker = text(raw.speaker, 300)
     return [{
       kind: kind as VerbatimContentKind,
@@ -165,6 +165,42 @@ export function hasLanguageIntent(value: unknown): boolean {
 
 export interface ProviderPromptOptions {
   medium: 'video' | 'image' | 'speech' | 'music' | 'sfx' | '3d' | 'story' | 'series' | 'comic'
+}
+
+const QUOTED_LITERAL = /["“«]([^"”»\n]{1,12000})["”»]/gu
+const TECHNICAL_QUOTE_PREFIX = /(?:style|estilo|prompt|look|aspecto|esthétique|stil|stile)\s*(?::|=|es|is)?\s*$/iu
+const LITERAL_CUES: Array<[VerbatimContentKind, RegExp]> = [
+  ['lyrics', /\b(?:lyrics?|letra|canci[oó]n|estribillo|coro|verso|chorus|verse|refrain|paroles|liedtext|testo)\b/iu],
+  ['subtitle', /\b(?:subt[ií]tulo|subtitle|sous-titre|untertitel|sottotitolo)\b/iu],
+  ['visible_text', /\b(?:cartel|r[oó]tulo|texto visible|sign|visible text|panneau|texte visible|schild|sichtbarer text|cartello|testo visibile)\b/iu],
+  ['name', /\b(?:titulado|llamad[oa]|named|titled|nomm[eé]|intitul[eé]|genannt|namens|intitolat[oa])\b/iu],
+  ['dialogue', /\b(?:diga|digan|dice|decir|hable|habla|di[aá]logo|say|says|speak|dialogue|dialog|dit|dire|parle|sagt|sprechen|dialog|dice|parla|dialogo)\b/iu],
+]
+const EXPLICIT_LANGUAGE = /\b(?:en|in|idioma|language|langue|sprache|lingua)\s+(espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic|[a-z]{2,3}(?:-[a-z0-9]{2,8})*)\b/iu
+
+/**
+ * Deterministic safety net for exact user-authored text. The LLM should emit
+ * these segments itself, but quoted dialogue/lyrics must not depend on model
+ * compliance. Technical style/prompt quotations are deliberately excluded.
+ */
+export function extractVerbatimSegments(request: string): VerbatimContentSegment[] {
+  const result: VerbatimContentSegment[] = []
+  for (const match of request.matchAll(QUOTED_LITERAL)) {
+    const literal = match[1]
+    const start = match.index || 0
+    const prefix = request.slice(Math.max(0, start - 120), start)
+    const context = `${prefix} ${request.slice(start + match[0].length, start + match[0].length + 80)}`
+    if (TECHNICAL_QUOTE_PREFIX.test(prefix)) continue
+    const kind = LITERAL_CUES.find(([, cue]) => cue.test(context))?.[0]
+    if (!kind) continue
+    const explicitLanguage = context.match(EXPLICIT_LANGUAGE)?.[1] || ''
+    result.push({
+      kind,
+      text: literal,
+      language: normalizeConversationLanguageTag(explicitLanguage),
+    })
+  }
+  return result
 }
 
 const LANGUAGE_CONTRACT_MARKER = 'HOCUSPOCUS LANGUAGE CONTRACT'

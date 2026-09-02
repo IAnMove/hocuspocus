@@ -10,6 +10,7 @@ import {
   HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
   humanReply,
   parseAgentTurn,
+  protectUserVerbatimSegments,
   reconcileAgentTurnWithRequest,
   type AgentActionResult,
 } from './agentActions'
@@ -389,10 +390,10 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         proposedTurn,
         nextMessages.map(message => ({ role: message.role, text: message.text })),
       )
-      const turn = {
+      const turn = protectUserVerbatimSegments(question, {
         ...reconciledTurn,
         conversationLanguage: reconciledTurn.conversationLanguage || proposedTurn.conversationLanguage,
-      }
+      })
       let results: AgentActionResult[] = []
       if (turn.actions.length) {
         setState('acting')

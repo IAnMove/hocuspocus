@@ -28,6 +28,15 @@ def test_normalizer_accepts_llm_and_persisted_shapes_without_ui_locale():
     assert "interfaceLanguage" not in llm
 
 
+def test_normalizer_preserves_literal_spacing_character_for_character():
+    normalized = normalize_language_intent({
+        "verbatim_segments": [{
+            "kind": "dialogue", "text": "  exact spacing  ", "language": "en",
+        }],
+    })
+    assert normalized["verbatimSegments"][0]["text"] == "  exact spacing  "
+
+
 def test_story_library_migrates_legacy_language_fields_durably():
     library = normalize_story_library({
         "revision": 0,

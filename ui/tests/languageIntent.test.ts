@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   compileProviderPrompt,
+  extractVerbatimSegments,
   mergeLanguageIntent,
   normalizeConversationLanguageTag,
   normalizeLanguageIntent,
@@ -10,6 +11,7 @@ import { buildAgentTurnPrompt } from '../src/features/agent/agentKnowledge'
 import {
   HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
   parseAgentTurn,
+  protectUserVerbatimSegments,
   type AgentAppSnapshot,
 } from '../src/features/agent/agentActions'
 import {
@@ -46,6 +48,10 @@ test('normalizes both LLM snake_case and persisted camelCase language contracts'
   assert.equal(normalizeConversationLanguageTag('Español'), 'es')
   assert.equal(normalizeConversationLanguageTag('pt-BR'), 'pt-BR')
   assert.equal(normalizeConversationLanguageTag('not a language'), '')
+  const spaced = normalizeLanguageIntent({
+    verbatim_segments: [{ kind: 'dialogue', text: '  exact spacing  ', language: 'en' }],
+  })
+  assert.equal(spaced.verbatimSegments[0]?.text, '  exact spacing  ')
 })
 
 test('provider compiler uses English direction and preserves only medium-relevant literals', () => {
@@ -63,6 +69,24 @@ test('provider compiler uses English direction and preserves only medium-relevan
 
   const image = compileProviderPrompt('One clean comic panel.', mixedIntent, { medium: 'image' })
   assert.doesNotMatch(image, /¡Hola, mundo!|Nunca cae el servidor/)
+})
+
+test('quoted user dialogue is protected deterministically while a quoted style is not', () => {
+  const request = 'Use style "classic painted animation" y haz que los protagonistas digan "¡Hola, mundo!" en español.'
+  assert.deepEqual(extractVerbatimSegments(request), [{
+    kind: 'dialogue', text: '¡Hola, mundo!', language: 'es',
+  }])
+  const protectedTurn = protectUserVerbatimSegments(request, {
+    reply: 'Je prépare la scène.', conversationLanguage: 'fr',
+    actions: [{
+      type: 'prepare_video', prompt: 'Two protagonists greet each other.',
+      languageIntent: normalizeLanguageIntent({ technical_prompt_language: 'auto' }),
+    }],
+  })
+  const action = protectedTurn.actions[0]
+  assert.equal(action.type, 'prepare_video')
+  assert.equal(action.type === 'prepare_video' && action.languageIntent?.verbatimSegments[0]?.text, '¡Hola, mundo!')
+  assert.equal(action.type === 'prepare_video' && action.languageIntent?.technicalPromptLanguage, 'auto')
 })
 
 test('merge keeps persisted literals when a later action only changes spoken language', () => {

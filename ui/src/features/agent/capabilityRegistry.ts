@@ -130,6 +130,10 @@ const LANGUAGE_AWARE_CAPABILITIES = new Set<AgentAction['type']>([
   'create_rhythmic_3d_video', 'create_comic',
 ])
 
+export function isLanguageAwareCapability(type: AgentAction['type']): boolean {
+  return LANGUAGE_AWARE_CAPABILITIES.has(type)
+}
+
 function languageAwareSchema(schema: Record<string, unknown>): Record<string, unknown> {
   const properties = schema.properties && typeof schema.properties === 'object'
     ? schema.properties as Record<string, unknown>

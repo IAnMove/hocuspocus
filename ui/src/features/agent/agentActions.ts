@@ -48,6 +48,7 @@ import {
   AGENT_TABS,
   currentAgentInterfaceLanguage,
   getCapability,
+  isLanguageAwareCapability,
   LANGUAGE_INTENT_SCHEMA,
   listCapabilities,
   normalizeConversationLanguageTag,
@@ -56,6 +57,7 @@ import {
   type AgentTab,
   type LanguageIntent,
 } from './capabilityRegistry'
+import { extractVerbatimSegments, mergeLanguageIntent, normalizeLanguageIntent } from '../../lib/languageIntent'
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
 import { inferStoryProjectTypeFromText } from '../stories/musicVideoLook'
@@ -1716,6 +1718,36 @@ export function parseAgentTurn(raw: string): AgentTurn {
     reply: reply || (actions.length ? 'El hechizo está trazado; voy a mover HocusPocus.' : humanReply(raw.trim())),
     actions,
     ...(conversationLanguage ? { conversationLanguage } : {}),
+  }
+}
+
+export function protectUserVerbatimSegments(request: string, turn: AgentTurn): AgentTurn {
+  const verbatimSegments = extractVerbatimSegments(request)
+  if (!verbatimSegments.length) return turn
+  return {
+    ...turn,
+    actions: turn.actions.map(action => {
+      if (!isLanguageAwareCapability(action.type)) return action
+      const current = 'languageIntent' in action ? action.languageIntent : undefined
+      const contentLanguage = 'language' in action && typeof action.language === 'string' ? action.language : ''
+      const lyricsLanguage = 'lyricsLanguage' in action && typeof action.lyricsLanguage === 'string'
+        ? action.lyricsLanguage : ''
+      const spokenLanguage = current?.spokenLanguage || lyricsLanguage || contentLanguage
+      const deterministic = normalizeLanguageIntent({
+        conversation_language: current?.conversationLanguage || turn.conversationLanguage,
+        content_language: current?.contentLanguage || contentLanguage,
+        spoken_language: spokenLanguage,
+        technical_prompt_language: current?.technicalPromptLanguage || 'en',
+        verbatim_segments: verbatimSegments.map(segment => ({
+          ...segment,
+          language: segment.language || spokenLanguage,
+        })),
+      })
+      return {
+        ...action,
+        languageIntent: mergeLanguageIntent(current, deterministic),
+      } as AgentAction
+    }),
   }
 }
 
