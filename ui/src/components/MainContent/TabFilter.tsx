@@ -26,6 +26,15 @@ const PRIMARY_DESTINATIONS = {
   activity: { value: 'runs' as const },
 }
 
+const DIRECT_GENERATION_MEDIA: Record<GenerationMode, MediaFilter> = {
+  image: 'images',
+  video: 'videos',
+  audio: 'audio',
+  model3d: 'model3d',
+  avatar: 'avatars',
+  tools: 'all',
+}
+
 function PrimaryButton({ active, expanded, icon, label, onClick, ariaLabel, category, buttonRef }: {
   active?: boolean
   expanded?: boolean
@@ -171,8 +180,12 @@ export function TabFilter() {
   const openDirectGeneration = (mode: GenerationMode) => {
     setActiveCategory('direct-generation')
     setExpandedCategory('direct-generation')
-    useStore.getState().setGenerationMode(mode)
-    useStore.getState().setSidebarMode('studio')
+    const state = useStore.getState()
+    state.setSettingsOpen(false)
+    state.setDashboardOpen(false)
+    state.setGenerationMode(mode)
+    state.setMediaFilter(DIRECT_GENERATION_MEDIA[mode])
+    state.setSidebarMode('studio')
     window.dispatchEvent(new Event('hocuspocus:studio-open'))
   }
   const directGenerationItems: MenuItem[] = [

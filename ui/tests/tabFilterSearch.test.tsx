@@ -70,11 +70,22 @@ test('primary navigation exposes four stable categories and highlights the selec
     assert.equal(media.hasAttribute('data-navigation-active'), false)
 
     fireEvent.click(direct)
-    const image = screen.getByRole('tab', { name: 'Image' })
-    fireEvent.click(image)
-    assert.equal(useStore.getState().generationMode, 'image')
+    const directDestinations = [
+      ['Image', 'image', 'images'],
+      ['Video', 'video', 'videos'],
+      ['Audio', 'audio', 'audio'],
+      ['3D', 'model3d', 'model3d'],
+      ['Edit', 'avatar', 'avatars'],
+      ['Tools', 'tools', 'all'],
+    ] as const
+    for (const [label, mode, filter] of directDestinations) {
+      fireEvent.click(screen.getByRole('tab', { name: label }))
+      assert.equal(useStore.getState().generationMode, mode)
+      assert.equal(useStore.getState().mediaFilter, filter)
+      assert.equal(useStore.getState().sidebarMode, 'studio')
+    }
     assert.equal(direct.getAttribute('data-navigation-active'), 'true')
-    assert.equal(image.getAttribute('aria-selected'), 'true')
+    assert.equal(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected'), 'true')
   } finally {
     cleanup()
   }
