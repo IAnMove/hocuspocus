@@ -49,8 +49,8 @@ export function SettingsDrawer() {
       )}
 
       {/* Drawer */}
-      <div className={`fixed top-0 left-0 h-full w-full md:w-[420px] bg-bg-secondary border-r border-border z-50 transform transition-transform duration-300 ease-in-out ${
-        settingsOpen ? 'translate-x-0' : '-translate-x-full'
+      <div className={`fixed top-0 right-0 h-full w-full md:w-[420px] bg-bg-secondary border-l border-border z-50 transform transition-transform duration-300 ease-in-out ${
+        settingsOpen ? 'translate-x-0' : 'translate-x-full'
       }`}>
         {/* Header */}
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">

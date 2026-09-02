@@ -33,7 +33,7 @@ test('Projects is global and does not mutate the active workspace', async () => 
   ])
   assert.match(tabs, /value: 'projects'/)
   assert.match(main, /<ProjectsPanel/)
-  assert.match(panel, /aria-label="All projects"/)
+  assert.match(panel, /aria-label=\{t\('aria'\)\}/)
   assert.doesNotMatch(panel, /setActiveWorkspace|switchWorkspace/)
 })
 

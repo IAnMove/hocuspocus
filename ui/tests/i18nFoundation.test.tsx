@@ -77,6 +77,12 @@ test('required glossary keys exist in both languages', async () => {
     ['director', 'queueRecovery.resumeQueue'],
     ['seriesLab', 'review.orderedAssembly'],
     ['common', 'welcome.enter'],
+    ['videoEditor', 'remake.action'],
+    ['director', 'spoken.label'],
+    ['workspaces', 'runs.search'],
+    ['styleSheet', 'title'],
+    ['projects', 'title'],
+    ['auditDev', 'banner'],
   ]
   for (const language of ['en', 'es']) {
     await i18n.changeLanguage(language)
@@ -86,7 +92,7 @@ test('required glossary keys exist in both languages', async () => {
     }
   }
   assert.equal(i18n.t('entities.workspace', { ns: 'navigation', lng: 'es' }), 'Workspace')
-  assert.equal(i18n.t('title', { ns: 'wizard', lng: 'es' }), 'Pregunta al mago')
+  assert.equal(i18n.t('title', { ns: 'wizard', lng: 'es' }), 'Ask to the Wizard')
   assert.equal(i18n.t('entities.outputFolder', { ns: 'navigation', lng: 'es' }), 'Carpeta de salida')
   assert.equal(i18n.t('outputFolder.uploads', { ns: 'navigation', lng: 'es' }), 'Subidas')
   assert.equal(i18n.t('tabs.documents', { ns: 'navigation', lng: 'es' }), 'Documentos')
@@ -247,7 +253,7 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
 
 test('resources register the extraInfo and storyLab namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)

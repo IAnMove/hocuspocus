@@ -41,6 +41,7 @@ import type {
   AgentUpdateCharacterKitAction,
 } from './characterKitActions'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
+import { announceWizardNavigation } from '../../lib/navigationCategories'
 
 export interface AdapterOutcome {
   message: string
@@ -235,6 +236,7 @@ async function navigate(tab: AgentTab): Promise<AdapterOutcome> {
     state.setSidebarOpen(false)
   }
   if (!isTabOpen(tab)) throw new Error(`HocusPocus no confirmó la navegación a ${TAB_LABELS[tab]}.`)
+  announceWizardNavigation(tab)
   return {
     message: alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`,
     target: target(tab),

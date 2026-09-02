@@ -18,6 +18,12 @@
     "minimumLimited": "El mínimo nativo del modelo deja margen visual no hablado.",
     "requiresSplit": "El diálogo supera el máximo de un clip; divídelo antes de renderizar."
   },
+  "library": {
+    "loading": "Cargando Series Lab…",
+    "empty": "Crea una serie original vacía o importa una biblia de Story Lab.",
+    "spoken": "Idioma hablado del vídeo",
+    "spokenHint": "Se fuerza en cada prompt de diálogo; el acento regional sigue dependiendo del modelo."
+  },
   "duration": {
     "seconds": "{{count}} segundos",
     "estimatedVoice": "Voz estimada",

@@ -6,6 +6,8 @@ import { useStore } from '../../stores/useStore'
 import { SeriesField, SectionCard } from './components'
 import { greenButton, inputClass, primaryButton, secondaryButton, selectClass, textareaClass } from './styles'
 import type { SeriesJobStatus, SeriesProject } from './types'
+import { useUiTranslation } from '../../i18n'
+import { SpokenLanguageOptions } from '../../i18n/SpokenLanguageOptions'
 
 export function SeriesSetupPanel({
   workspace, series, update, saveNow, replaceSeries, job, setJob,
@@ -18,6 +20,7 @@ export function SeriesSetupPanel({
   job: SeriesJobStatus | null
   setJob: (job: SeriesJobStatus | null) => void
 }) {
+  const { t } = useUiTranslation('seriesLab')
   const productionProfile = useStore(state => state.productionProfile)
   const [instruction, setInstruction] = useState('')
   const [knownSeriesRequest, setKnownSeriesRequest] = useState('')
@@ -238,7 +241,7 @@ export function SeriesSetupPanel({
           <SeriesField label="Premise" required><textarea className={textareaClass} value={series.premise} onChange={event => patch({ premise: event.target.value })} /></SeriesField>
           <SeriesField label="Logline"><textarea className={textareaClass} value={series.logline} onChange={event => patch({ logline: event.target.value })} /></SeriesField>
           <SeriesField label="Language"><input className={inputClass} value={series.language} onChange={event => patch({ language: event.target.value })} /></SeriesField>
-          <SeriesField label="Spoken video language" hint="Forces every dialogue prompt; regional accent remains model-dependent."><select className={selectClass} value={series.spokenLanguage} onChange={event => patch({ spokenLanguage: event.target.value })}><option value="">Auto from dialogue</option><option value="Español de España">Español de España</option><option value="Español latinoamericano">Español latinoamericano</option><option value="English">English</option><option value="French">Français</option><option value="Italian">Italiano</option></select></SeriesField>
+          <SeriesField label={t('library.spoken')} hint={t('library.spokenHint')}><select className={selectClass} value={series.spokenLanguage} onChange={event => patch({ spokenLanguage: event.target.value })}><SpokenLanguageOptions /></select></SeriesField>
           <SeriesField label="Default episode duration" hint="Long episodes add more shots. Dialogue shots are timed from syllables and rounded upward to the model's native duration."><input className={inputClass} type="number" min={15} max={3600} value={series.defaultEpisodeDurationSeconds} onChange={event => patch({ defaultEpisodeDurationSeconds: Number(event.target.value) })} /></SeriesField>
           <SeriesField label="Genre"><input className={inputClass} value={series.genre} onChange={event => patch({ genre: event.target.value })} /></SeriesField>
           <SeriesField label="Tone"><input className={inputClass} value={series.tone} onChange={event => patch({ tone: event.target.value })} /></SeriesField>

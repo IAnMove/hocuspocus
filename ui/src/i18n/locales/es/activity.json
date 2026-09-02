@@ -47,5 +47,6 @@
     "cancelReplacement": "Cancelar reemplazo",
     "redoingEditorSlot": "Rehaciendo la posición {{n}} del montaje: {{name}}. Genera un vídeo nuevo y después pulsa “Usar en posición {{n}}”.",
     "useInPosition": "Usar en posición {{n}}"
-  }
+  },
+  "editInVideoEditor": "Editar vídeo en Video Editor"
 }

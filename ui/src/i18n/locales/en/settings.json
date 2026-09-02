@@ -20,6 +20,7 @@
     "label": "Interface language",
     "help": "Applies to labels in the app. Generated content, prompts and file names stay as they are.",
     "optionEn": "English",
-    "optionEs": "Español"
+    "optionEs": "Español",
+    "quickAria": "Quick interface language"
   }
 }

@@ -13,7 +13,10 @@ FEED = ROOT / "ui" / "src" / "components" / "MainContent" / "MediaFeedItem.tsx"
 def test_selected_montage_clip_can_be_opened_in_video_creation():
     editor = EDITOR.read_text(encoding="utf-8")
 
-    assert "Rehacer en Creación de vídeo" in editor
+    assert "t('remake.action')" in editor
+    assert '"action": "Rehacer en Creación de vídeo"' in (
+        ROOT / "ui" / "src" / "i18n" / "locales" / "es" / "videoEditor.json"
+    ).read_text(encoding="utf-8")
     assert "fetchOutputMetadata(outputName, activeWorkspace)" in editor
     assert "loadSettingsFromOutput()" in editor
     assert "writeVideoEditorReplacementTarget" in editor

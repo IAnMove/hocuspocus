@@ -22,6 +22,9 @@ export async function gotoApp(page: Page): Promise<ApiRouteSession> {
     // Reduced-motion intro may already have dismissed itself.
   }
   await expect(page.getByText('HocusPocus UI failed to load')).toHaveCount(0)
+  const studios = page.getByRole('button', { name: 'Studios' })
+  await expect(studios).toBeVisible({ timeout: 15_000 })
+  await studios.click()
   await expect(page.getByRole('tab', { name: 'Story Lab' })).toBeVisible({ timeout: 15_000 })
   return session
 }

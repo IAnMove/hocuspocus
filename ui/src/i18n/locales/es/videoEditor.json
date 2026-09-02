@@ -1,0 +1,53 @@
+{
+  "timeCard": {
+    "default": "Momentos después…",
+    "label": "Texto de la cartela",
+    "hint": "Enter inserta un salto de línea manual. El texto también se ajusta solo para caber en la cartela.",
+    "size": "Tamaño del texto: {{size}}%"
+  },
+  "transitions": {
+    "hardCut": "Corte seco",
+    "hardCutHint": "Corte inmediato, sin solape.",
+    "crossfade": "Fundido cruzado",
+    "crossfadeHint": "Un plano se disuelve con suavidad en el siguiente.",
+    "fadeBlack": "Fundido a negro",
+    "fadeBlackHint": "Sale a negro y después revela el siguiente plano.",
+    "wipeLeft": "Barrido a la izquierda",
+    "wipeLeftHint": "El siguiente plano entra empujando desde la izquierda.",
+    "slideLeft": "Desliz a la izquierda",
+    "slideLeftHint": "Los dos planos viajan juntos en un movimiento lateral rápido.",
+    "slideRight": "Desliz a la derecha",
+    "slideRightHint": "Un desliz lateral inverso revela el siguiente plano.",
+    "iris": "Iris",
+    "irisHint": "El siguiente plano se abre desde el centro como un iris de cine.",
+    "dissolve": "Disolución de película",
+    "dissolveHint": "Un relevo texturado y orgánico entre planos.",
+    "pixel": "Píxel digital",
+    "pixelHint": "La imagen se rompe en píxeles al cambiar de plano.",
+    "blur": "Motion blur",
+    "blurHint": "Un desenfoque horizontal rápido oculta el corte entre planos en movimiento.",
+    "zoom": "Zoom portal",
+    "zoomHint": "Empuja a través de la imagen saliente y aterriza en el siguiente plano.",
+    "laterClock": "Momentos después · Reloj",
+    "laterClockHint": "Inserta una cartela original con un reloj analógico en movimiento.",
+    "laterMeme": "Momentos después · Meme",
+    "laterMemeHint": "Inserta una cartela tropical original inspirada en el meme clásico.",
+    "laterCinema": "Momentos después · Cine",
+    "laterCinemaHint": "Inserta un intertítulo cinematográfico elegante entre los dos clips.",
+    "named": "Transición: {{name}}"
+  },
+  "remake": {
+    "title": "Carga el prompt, modelo, duración y formato de este clip en Creación de vídeo para elegir después su reemplazo",
+    "loading": "Cargando ajustes de generación…",
+    "action": "Rehacer en Creación de vídeo",
+    "slotGone": "La posición original {{n}} ya no está disponible en el montaje.",
+    "noReusable": "Este clip no conserva ajustes de generación reutilizables.",
+    "openFailed": "No se pudo abrir el clip en Creación de vídeo: {{message}}"
+  },
+  "trim": {
+    "hint": "Arrastra los tiradores para fijar la entrada y la salida. El vídeo original no se modifica; estos cortes solo se aplican a la previsualización y al MP4 exportado.",
+    "exactIn": "Entrada exacta",
+    "exactOut": "Salida exacta",
+    "restore": "Restaurar clip completo"
+  }
+}
