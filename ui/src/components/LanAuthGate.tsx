@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { KeyRound, LoaderCircle, ShieldCheck } from 'lucide-react'
 import { useUiTranslation } from '../i18n'
 
@@ -13,6 +13,8 @@ type GateState = 'checking' | 'locked' | 'ready' | 'unreachable'
 export function LanAuthGate({ children }: { children: ReactNode }) {
   const { t } = useUiTranslation('shell')
   const { t: tCommon } = useUiTranslation('common')
+  const tRef = useRef(t)
+  tRef.current = t
   const [state, setState] = useState<GateState>('checking')
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
@@ -26,14 +28,14 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
         credentials: 'same-origin',
         cache: 'no-store',
       })
-      if (!response.ok) throw new Error(t('lan.statusFailed', { status: response.status }))
+      if (!response.ok) throw new Error(tRef.current('lan.statusFailed', { status: response.status }))
       const status = await response.json() as LanAuthStatus
       setState(!status.required || status.authenticated ? 'ready' : 'locked')
     } catch {
-      setError(t('lan.unreachable'))
+      setError(tRef.current('lan.unreachable'))
       setState('unreachable')
     }
-  }, [t])
+  }, [])
 
   useEffect(() => {
     void checkAccess()

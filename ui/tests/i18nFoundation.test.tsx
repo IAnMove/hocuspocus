@@ -198,6 +198,38 @@ test('language persists and switches without a reload', { concurrency: false }, 
   assert.equal(window.localStorage.getItem(LANGUAGE_STORAGE_KEY), 'en')
 })
 
+test('language switching keeps an authenticated LAN app mounted', { concurrency: false }, async () => {
+  const { render, screen, cleanup, waitFor } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
+  const { LanAuthGate } = await import('../src/components/LanAuthGate.tsx')
+  const originalFetch = globalThis.fetch
+  let statusChecks = 0
+  ensureUiI18n()
+  await setUiLanguage('en')
+  globalThis.fetch = async input => {
+    assert.equal(String(input), '/api/v1/auth/lan/status')
+    statusChecks += 1
+    return new Response(JSON.stringify({ enabled: true, required: true, authenticated: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  try {
+    render(<LanAuthGate><div data-testid="authenticated-app">App state</div></LanAuthGate>)
+    const app = await screen.findByTestId('authenticated-app')
+    assert.equal(statusChecks, 1)
+
+    await setUiLanguage('es')
+    await waitFor(() => assert.equal(document.documentElement.lang, 'es'))
+    assert.strictEqual(screen.getByTestId('authenticated-app'), app)
+    assert.equal(statusChecks, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+    cleanup()
+    await setUiLanguage('en')
+  }
+})
+
 test('pilot navigation and settings render translated labels', { concurrency: false }, async () => {
   const { render, screen, cleanup, fireEvent } = await import('@testing-library/react')
   const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
