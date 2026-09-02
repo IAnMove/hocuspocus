@@ -20,5 +20,18 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (
+            id.includes('node_modules/i18next')
+            || id.includes('node_modules/react-i18next')
+            || id.includes('/src/i18n/')
+          ) {
+            return 'i18n'
+          }
+        },
+      },
+    },
   },
 })

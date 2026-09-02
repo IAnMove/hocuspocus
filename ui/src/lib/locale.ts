@@ -12,7 +12,7 @@ export function getApplicationLocale(): AppLocale {
     if (documentLocale) return documentLocale
   }
   if (typeof navigator !== 'undefined' && navigator.language) return navigator.language
-  return 'en-US'
+  return 'en'
 }
 
 function timestampToMilliseconds(value: number | null | undefined): number | null {

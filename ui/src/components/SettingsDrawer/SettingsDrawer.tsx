@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { SystemSettingsPanel } from './SystemSettingsPanel'
 import { ServicesSettingsPanel } from './ServicesSettingsPanel'
@@ -26,14 +27,15 @@ import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
  * the chat sidebar where the work is happening.
  */
 export function SettingsDrawer() {
+  const { t } = useUiTranslation('settings')
   const settingsOpen = useStore(s => s.settingsOpen)
   const setSettingsOpen = useStore(s => s.setSettingsOpen)
   const settingsTab = useStore(s => s.settingsTab)
   const setSettingsTab = useStore(s => s.setSettingsTab)
 
   const tabs = [
-    { id: 'performance' as const, label: 'Performance' },
-    { id: 'integrations' as const, label: 'Integrations' },
+    { id: 'performance' as const, label: t('tabs.performance') },
+    { id: 'integrations' as const, label: t('tabs.integrations') },
   ]
 
   return (
@@ -52,9 +54,11 @@ export function SettingsDrawer() {
       }`}>
         {/* Header */}
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-          <h2 className="font-semibold text-sm">Settings</h2>
+          <h2 className="font-semibold text-sm">{t('title')}</h2>
           <button
+            type="button"
             onClick={() => setSettingsOpen(false)}
+            aria-label={t('close')}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
           >
             <X size={16} />
@@ -65,7 +69,7 @@ export function SettingsDrawer() {
         <div className="px-5 pt-3">
           <HorizontalScrollTabs
             activeKey={settingsTab}
-            ariaLabel="Settings sections"
+            ariaLabel={t('sections')}
             viewportClassName="flex bg-bg-tertiary rounded-lg p-0.5 border border-border"
           >
             {tabs.map(tab => (

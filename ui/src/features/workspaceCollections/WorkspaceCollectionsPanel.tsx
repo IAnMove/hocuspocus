@@ -5,6 +5,7 @@ import {
   fetchProjects, fetchWorkspaceCollections, updateWorkspaceCollection,
   type AssetCatalogItem, type ProductionCatalogItem, type ProjectCatalogItem, type WorkspaceCollection,
 } from '../../api/client'
+import { useUiTranslation } from '../../i18n'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-40'
 
@@ -13,6 +14,8 @@ function toggle(items: string[], id: string): string[] {
 }
 
 export function WorkspaceCollectionsPanel() {
+  const { t } = useUiTranslation('navigation')
+  const { t: tActivity } = useUiTranslation('activity')
   const [items, setItems] = useState<WorkspaceCollection[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [draft, setDraft] = useState<WorkspaceCollection | null>(null)
@@ -96,8 +99,8 @@ export function WorkspaceCollectionsPanel() {
     <section aria-label="Workspace collections" className="flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-bg-primary">
       <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-bg-secondary">
         <div className="border-b border-border p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold"><FolderKanban size={16} className="text-violet-300" /> Workspaces</div>
-          <p className="mt-1 text-[10px] text-text-muted">Colecciones de referencias. No son carpetas de outputs.</p>
+          <div className="flex items-center gap-2 text-sm font-semibold"><FolderKanban size={16} className="text-violet-300" /> {t('headings.workspaces')}</div>
+          <p className="mt-1 text-[10px] text-text-muted">{tActivity('collectionsHint')}</p>
           <div className="mt-3 flex gap-1">
             <input aria-label="New Workspace name" value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void create() }} placeholder="Nuevo workspace…" className="min-w-0 flex-1 rounded-md border border-border bg-bg-primary px-2 py-1.5 text-xs" />
             <button className={button} disabled={!newName.trim() || saving} onClick={() => void create()} title="Crear Workspace"><Plus size={13} /></button>
@@ -106,7 +109,7 @@ export function WorkspaceCollectionsPanel() {
         <nav aria-label="Saved Workspaces" className="min-h-0 flex-1 overflow-y-auto p-2">
           {items.map(item => <button key={item.id} onClick={() => select(item)} className={`mb-1 w-full rounded-lg border p-2 text-left ${item.id === selectedId ? 'border-violet-500/50 bg-violet-500/10' : 'border-transparent hover:bg-bg-hover'}`}>
             <div className="truncate text-xs font-medium text-text-primary">{item.name}</div>
-            <div className="mt-1 text-[10px] text-text-muted">{item.project_ids.length} projects · {item.asset_ids.length} assets · {item.production_ids.length} productions</div>
+            <div className="mt-1 text-[10px] text-text-muted">{tActivity('collectionCounts', { projects: item.project_ids.length, assets: item.asset_ids.length, productions: item.production_ids.length })}</div>
           </button>)}
           {!items.length && !loading && <p className="p-3 text-xs text-text-muted">Crea un Workspace para reunir elementos sin moverlos de sitio.</p>}
         </nav>
@@ -119,9 +122,9 @@ export function WorkspaceCollectionsPanel() {
         {error && <div role="alert" className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{error}</div>}
         {loading && !draft ? <div className="flex items-center justify-center gap-2 p-12 text-xs text-text-muted"><Loader2 size={15} className="animate-spin" /> Cargando…</div> : draft ? <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2"><label className="text-[10px] text-text-muted">Nombre<input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} className="mt-1 block w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-xs text-text-primary" /></label><label className="text-[10px] text-text-muted">Descripción<input value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} className="mt-1 block w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-xs text-text-primary" /></label></div>
-          <ReferenceGroup title="Projects" entries={projects.map(item => ({ id: item.id, label: item.title, hint: item.kind }))} selected={draft.project_ids} onToggle={id => setDraft({ ...draft, project_ids: toggle(draft.project_ids, id) })} />
-          <ReferenceGroup title="Assets" entries={assets.map(item => ({ id: item.id, label: item.filename, hint: item.kind }))} selected={draft.asset_ids} onToggle={id => setDraft({ ...draft, asset_ids: toggle(draft.asset_ids, id) })} />
-          <ReferenceGroup title="Productions" entries={productions.map(item => ({ id: item.id, label: item.title, hint: item.kind }))} selected={draft.production_ids} onToggle={id => setDraft({ ...draft, production_ids: toggle(draft.production_ids, id) })} />
+          <ReferenceGroup title={t('entities.project_other')} entries={projects.map(item => ({ id: item.id, label: item.title, hint: item.kind }))} selected={draft.project_ids} onToggle={id => setDraft({ ...draft, project_ids: toggle(draft.project_ids, id) })} />
+          <ReferenceGroup title={t('entities.asset_other')} entries={assets.map(item => ({ id: item.id, label: item.filename, hint: item.kind }))} selected={draft.asset_ids} onToggle={id => setDraft({ ...draft, asset_ids: toggle(draft.asset_ids, id) })} />
+          <ReferenceGroup title={t('entities.production_other')} entries={productions.map(item => ({ id: item.id, label: item.title, hint: item.kind }))} selected={draft.production_ids} onToggle={id => setDraft({ ...draft, production_ids: toggle(draft.production_ids, id) })} />
         </div> : null}
       </div>
     </section>

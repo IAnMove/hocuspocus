@@ -1,5 +1,6 @@
 import { lazy, Suspense, useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo, type JSX } from 'react'
 import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked, Upload, Trash2, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { TabFilter } from './TabFilter'
 import { ThumbnailGallery } from './ThumbnailGallery'
 import { MediaFeedItem } from './MediaFeedItem'
@@ -53,6 +54,7 @@ function PanelLoadingFallback() {
 }
 
 function OutputFolderSelector() {
+  const { t } = useUiTranslation('navigation')
   const workspaces = useStore(s => s.workspaces)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const browsingUploads = useStore(s => s.browsingUploads)
@@ -118,16 +120,16 @@ function OutputFolderSelector() {
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors border border-border"
-        title="Switch output folder"
+        title={t('outputFolder.switch')}
       >
         <FolderOpen size={12} />
-        <span className="max-w-[120px] truncate">{browsingUploads ? 'Uploads' : activeWorkspace}</span>
+        <span className="max-w-[120px] truncate">{browsingUploads ? t('outputFolder.uploads') : activeWorkspace}</span>
       </button>
 
       {open && (
         <div className="absolute right-0 top-full mt-1 w-56 bg-bg-secondary border border-border rounded-lg shadow-lg z-50 overflow-hidden">
           <div className="px-2 py-1.5 border-b border-border">
-            <span className="text-[10px] text-text-muted uppercase tracking-wider">Output folders</span>
+            <span className="text-[10px] text-text-muted uppercase tracking-wider">{t('outputFolder.list')}</span>
           </div>
           <div className="max-h-[200px] overflow-y-auto">
             {workspaces.map(ws => (
@@ -446,6 +448,8 @@ function PipelinePlaceholder() {
 }
 
 export function MainContent() {
+  const { t } = useUiTranslation('navigation')
+  const { t: tCommon } = useUiTranslation('common')
   const outputs = useStore(s => s.filteredOutputs())
   const outputsTotal = useStore(s => s.outputsTotal)
   const outputsLoading = useStore(s => s.outputsLoading)
@@ -745,22 +749,22 @@ export function MainContent() {
         <TabFilter />
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-[10px] md:text-xs text-text-muted hidden md:block">
-            {mediaFilter === 'scene3d' ? '3D Video editor'
-              : mediaFilter === 'assets' ? 'Assets'
-              : mediaFilter === 'projects' ? 'Projects'
-              : mediaFilter === 'workspaces' ? 'Workspaces'
-              : mediaFilter === 'animate3d' ? 'Rig & Animate'
-              : mediaFilter === 'comics' ? 'Comic Studio'
-              : mediaFilter === 'stories' ? 'Story Lab'
-              : mediaFilter === 'series' ? 'Series Lab'
-              : mediaFilter === 'runs' ? 'Runs'
-              : mediaFilter === 'characters' ? 'Character Creator'
-              : mediaFilter === 'styles' ? 'Hoja de estilos'
-              : mediaFilter === 'videoeditor' ? 'Video Editor'
-              : mediaFilter === 'auditdev' && developerMode ? 'Auditoría interna'
+            {mediaFilter === 'scene3d' ? t('headings.scene3d')
+              : mediaFilter === 'assets' ? t('headings.assets')
+              : mediaFilter === 'projects' ? t('headings.projects')
+              : mediaFilter === 'workspaces' ? t('headings.workspaces')
+              : mediaFilter === 'animate3d' ? t('headings.animate3d')
+              : mediaFilter === 'comics' ? t('headings.comics')
+              : mediaFilter === 'stories' ? t('headings.storyLab')
+              : mediaFilter === 'series' ? t('headings.seriesLab')
+              : mediaFilter === 'runs' ? t('headings.runs')
+              : mediaFilter === 'characters' ? t('headings.characters')
+              : mediaFilter === 'styles' ? t('headings.styles')
+              : mediaFilter === 'videoeditor' ? t('headings.videoEditor')
+              : mediaFilter === 'auditdev' && developerMode ? t('headings.auditDev')
               : outputsTotal > outputs.length
-              ? `${outputs.length} / ${outputsTotal} items`
-              : `${outputs.length} ${outputs.length === 1 ? 'item' : 'items'}`}
+              ? `${outputs.length} / ${outputsTotal}`
+              : tCommon('count.item', { count: outputs.length })}
           </div>
           {mediaFilter !== 'styles' && mediaFilter !== 'assets' && mediaFilter !== 'projects' && mediaFilter !== 'workspaces' && <OutputFolderSelector />}
         </div>

@@ -5,6 +5,7 @@ import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/u
 import * as api from '../../api/client'
 import type { GenerationMode } from '../../types'
 import { FAMILIES, resolveVariant, onOsThemeChange, type FamilyId, type ThemeMode } from '../../lib/theme'
+import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
 
 const profileLabels: Record<string, string> = {
   '1': 'Profile 1: High RAM + High VRAM',
@@ -610,7 +611,32 @@ function SelectField({ label, value, options, onChange }: {
   )
 }
 
+function LanguageSection() {
+  const { t, i18n } = useUiTranslation('settings')
+  const language: UiLanguage = String(i18n.resolvedLanguage || i18n.language).startsWith('es') ? 'es' : 'en'
+  return (
+    <div className="space-y-2">
+      <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('language.title')}</h3>
+      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block" htmlFor="ui-language">
+        {t('language.label')}
+      </label>
+      <select
+        id="ui-language"
+        aria-label={t('language.label')}
+        value={language === 'es' ? 'es' : 'en'}
+        onChange={event => { void setUiLanguage(event.target.value as UiLanguage) }}
+        className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+      >
+        <option value="es">{t('language.optionEs')}</option>
+        <option value="en">{t('language.optionEn')}</option>
+      </select>
+      <p className="text-[10px] text-text-muted">{t('language.help')}</p>
+    </div>
+  )
+}
+
 function ThemeSection() {
+  const { t } = useUiTranslation('settings')
   const prefs = useStore(s => s.themePrefs)
   const setThemeMode = useStore(s => s.setThemeMode)
   const setThemeFamily = useStore(s => s.setThemeFamily)
@@ -625,17 +651,17 @@ function ThemeSection() {
   // toggling Dark/Light/Auto updates the preview immediately.
   const swatch = family[variant].swatch
   const modes: { value: ThemeMode; label: string }[] = [
-    { value: 'dark', label: 'Dark' },
-    { value: 'light', label: 'Light' },
-    { value: 'auto', label: 'Auto' },
+    { value: 'dark', label: t('appearance.dark') },
+    { value: 'light', label: t('appearance.light') },
+    { value: 'auto', label: t('appearance.auto') },
   ]
 
   return (
     <div className="space-y-3">
-      <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Appearance</h3>
+      <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('appearance.title')}</h3>
       <div>
         <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-          Mode
+          {t('appearance.mode')}
         </label>
         <div className="flex rounded-lg border border-border overflow-hidden">
           {modes.map(m => (
@@ -654,13 +680,13 @@ function ThemeSection() {
         </div>
         {prefs.mode === 'auto' && (
           <p className="text-[10px] text-text-muted mt-1.5">
-            Follows your system's appearance — currently {variant}.
+            {t('appearance.autoHint', { variant })}
           </p>
         )}
       </div>
       <div>
         <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-          Theme
+          {t('appearance.theme')}
         </label>
         <div className="flex items-center gap-2">
           {/* Swatch — three colors stacked horizontally for a quick
@@ -1084,6 +1110,7 @@ export function SystemSettingsPanel() {
 
   return (
     <div className="space-y-5">
+      <LanguageSection />
       <ThemeSection />
 
       <hr className="border-border" />

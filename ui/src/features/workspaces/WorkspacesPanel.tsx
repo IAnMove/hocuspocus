@@ -7,6 +7,7 @@ import {
 import * as api from '../../api/client'
 import { getFileUrl } from '../../api/client'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import type { PipelineClipState, SavedPipelineState } from '../../types'
 import {
   attemptsForClip, fileLabel, hydratePipelineQueue, pipelineBusy, pipelineCanLaunch,
@@ -44,6 +45,7 @@ function audioPlanLabel(clip: PipelineClipState): string {
 }
 
 export function RunsPanel() {
+  const { t } = useUiTranslation('navigation')
   const pipelineList = useStore(s => s.dashboardPipelineList)
   const pipelineTotal = useStore(s => s.dashboardPipelineTotal)
   const selectedPipeline = useStore(s => s.dashboardSelectedPipeline)
@@ -144,12 +146,12 @@ export function RunsPanel() {
   }
 
   return (
-    <section aria-label="Production runs" className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary md:flex-row">
-      <aside aria-label="Saved runs" className="flex w-full shrink-0 flex-col border-b border-border bg-bg-secondary md:w-64 md:border-b-0 md:border-r xl:w-72">
+    <section aria-label={t('aria.runsPanel')} className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary md:flex-row">
+      <aside aria-label={t('aria.savedRuns')} className="flex w-full shrink-0 flex-col border-b border-border bg-bg-secondary md:w-64 md:border-b-0 md:border-r xl:w-72">
         <div className="border-b border-border p-3">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-text-primary">Runs</h2>
+              <h2 className="text-sm font-semibold text-text-primary">{t('headings.runs')}</h2>
               <p className="text-[10px] text-text-muted">
                 Cada fila es un intento de ejecutar una Production. El más reciente se abre automáticamente.
               </p>
@@ -170,7 +172,7 @@ export function RunsPanel() {
             <button type="button" className={`${button} flex-1 ${!newestFirst ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setNewestFirst(false)}>Viejo → nuevo</button>
           </div>
         </div>
-        <nav aria-label="Saved production runs" className="flex min-h-0 max-h-36 flex-1 gap-2 overflow-x-auto p-2 md:block md:max-h-none md:overflow-x-hidden md:overflow-y-auto">
+        <nav aria-label={t('aria.savedProductionRuns')} className="flex min-h-0 max-h-36 flex-1 gap-2 overflow-x-auto p-2 md:block md:max-h-none md:overflow-x-hidden md:overflow-y-auto">
           {pendingLive && livePipelineId && (
             <button
               type="button"

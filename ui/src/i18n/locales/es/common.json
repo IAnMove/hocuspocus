@@ -1,0 +1,25 @@
+{
+  "language": {
+    "name": "Spanish",
+    "nativeName": "Español"
+  },
+  "actions": {
+    "close": "Cerrar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "reload": "Recargar",
+    "create": "Crear",
+    "search": "Buscar"
+  },
+  "status": {
+    "running": "En marcha",
+    "queued": "En cola",
+    "completed": "Completado",
+    "failed": "Fallido",
+    "cancelled": "Cancelado"
+  },
+  "count": {
+    "item_one": "{{count}} elemento",
+    "item_other": "{{count}} elementos"
+  }
+}

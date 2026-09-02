@@ -58,7 +58,7 @@ async function openApp(page: Page) {
 
 async function ask(page: Page, prompt: string, options: { allowFailure?: boolean } = {}): Promise<string> {
   const dialog = page.getByRole('dialog', { name: 'Ask to the Wizard' })
-  const input = dialog.getByPlaceholder('Pide un hechizo en HocusPocus…')
+  const input = dialog.getByPlaceholder('Ask HocusPocus for a spell…')
   await input.fill(prompt)
   await dialog.getByRole('button', { name: 'Ask to the Wizard', exact: true }).click()
   await expect(input).toBeDisabled()

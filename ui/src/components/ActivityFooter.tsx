@@ -7,6 +7,7 @@ import { formatAppAction, formatAppTimestamp } from '../lib/locale'
 import { useStore } from '../stores/useStore'
 import { AgentAvatar } from '../features/agent/AgentAvatar'
 import { listenForAgentActivityDetails } from '../features/agent/agentUiBus'
+import { useUiTranslation } from '../i18n'
 
 const AgentAssistantPanel = lazy(() =>
   import('../features/agent/AgentAssistantPanel').then(module => ({ default: module.AgentAssistantPanel })),
@@ -227,6 +228,8 @@ function truncatePrompt(prompt: string, limit = 180): string {
 }
 
 export function ActivityFooter() {
+  const { t: tWizard } = useUiTranslation('wizard')
+  const { t: tActivity } = useUiTranslation('activity')
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const workspaceRef = useRef(activeWorkspace)
   workspaceRef.current = activeWorkspace
@@ -634,14 +637,14 @@ export function ActivityFooter() {
           onClick={() => { setAgentOpen(open => !open); setDetailsOpen(false) }}
           className={`hp-agent-trigger flex w-full items-center gap-2 rounded-lg border px-2 py-0.5 text-left transition ${agentOpen ? 'border-amber-200/45 bg-amber-200/10 text-amber-50' : 'border-amber-200/15 bg-amber-100/[.025] text-amber-100/75 hover:border-amber-200/35 hover:bg-amber-100/[.055] hover:text-amber-50'}`}
           aria-expanded={agentOpen}
-          title="Ask to the Wizard about the app or current task queue"
+          title={tWizard('open')}
         >
           <AgentAvatar state={agentOpen ? 'listening' : 'idle'} size={24} />
-          <span className="font-medium whitespace-nowrap">Ask to the Wizard</span>
+          <span className="font-medium whitespace-nowrap">{tWizard('title')}</span>
         </button>
       </div>
 
-      <button type="button" onClick={() => { setDetailsOpen(open => !open); setAgentOpen(false) }} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title="Show canonical task history">
+      <button type="button" onClick={() => { setDetailsOpen(open => !open); setAgentOpen(false) }} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title={tActivity('openHistory')}>
         {isActive
           ? <Loader2 size={13} className="animate-spin text-accent-blue" />
           : hasError
@@ -649,7 +652,7 @@ export function ActivityFooter() {
             : primaryVisualState === 'cancelled'
               ? <CircleSlash2 size={13} className="text-text-muted" />
               : <CheckCircle2 size={13} className="text-emerald-400" />}
-        <span className="font-medium text-text-primary">Activity</span>
+        <span className="font-medium text-text-primary">{tActivity('title')}</span>
         {activeTasks.length > 0 && <span className="rounded-full bg-accent-blue/15 px-1.5 py-0.5 text-accent-blue tabular-nums">{activeTasks.length}</span>}
         {detailsOpen ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
       </button>

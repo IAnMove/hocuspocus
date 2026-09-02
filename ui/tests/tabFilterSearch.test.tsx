@@ -39,15 +39,18 @@ installDom()
 
 test('video result filters are listed beside Videos', { concurrency: false }, async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
   useStore.setState({ developerMode: false, mediaFilter: 'all' })
   try {
     render(<TabFilter />)
     assert.ok(screen.getByRole('tab', { name: /Videoclips/i }))
-    assert.ok(screen.getByRole('tab', { name: /Tráilers/i }))
-    assert.ok(screen.getByRole('tab', { name: /Capítulos/i }))
-    assert.equal(screen.queryByRole('tab', { name: /Auditoría interna/i }), null)
+    assert.ok(screen.getByRole('tab', { name: /Trailers/i }))
+    assert.ok(screen.getByRole('tab', { name: /Episodes/i }))
+    assert.equal(screen.queryByRole('tab', { name: /Internal dev audit/i }), null)
   } finally {
     cleanup()
   }
@@ -55,12 +58,15 @@ test('video result filters are listed beside Videos', { concurrency: false }, as
 
 test('Auditoría interna is only listed in developer mode', { concurrency: false }, async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
   useStore.setState({ developerMode: true, mediaFilter: 'all' })
   try {
     render(<TabFilter />)
-    assert.ok(screen.getByRole('tab', { name: /Auditoría interna/i }))
+    assert.ok(screen.getByRole('tab', { name: /Internal dev audit/i }))
   } finally {
     useStore.setState({ developerMode: false })
     cleanup()
@@ -69,8 +75,11 @@ test('Auditoría interna is only listed in developer mode', { concurrency: false
 
 test('closing or unmounting search cancels its hidden debounce', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
   const originalSetTimeout = window.setTimeout
   const originalClearTimeout = window.clearTimeout
   const timers = new Map<number, TimerHandler>()

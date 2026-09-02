@@ -1,0 +1,8 @@
+{
+  "title": "Activity",
+  "openHistory": "Show canonical task history",
+  "inboxLegacy": "Inbox / Legacy",
+  "extraInfo": "Extra info",
+  "collectionsHint": "Reference collections. They are not output folders.",
+  "collectionCounts": "{{projects}} projects · {{assets}} assets · {{productions}} productions"
+}

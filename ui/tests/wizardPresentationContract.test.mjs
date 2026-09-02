@@ -50,7 +50,7 @@ test('Wizard panel keeps dialog, live-region and pending-question ARIA contracts
   assert.match(panelSource, /role="dialog"[\s\S]{0,160}aria-modal="true"/)
   assert.match(panelSource, /aria-live="polite"/)
   assert.match(panelSource, /role="group" aria-label="Wizard pending question"/)
-  assert.match(panelSource, /aria-label="Ask to the Wizard"/)
+  assert.match(panelSource, /aria-label=\{t\('title'\)\}/)
 })
 
 test('Wizard magic animations have a reduced-motion escape hatch', async () => {
