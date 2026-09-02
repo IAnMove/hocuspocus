@@ -12,6 +12,7 @@ import { mapDirectorClipImages } from '../lib/directorClipImages'
 import { llmActivityPreview } from '../lib/llmActivityPreview'
 import { createDeveloperModeSlice } from './developerModeSlice'
 import { createDirectorSlice } from './directorSlice'
+import { createRetakeDialogSlice } from './retakeDialogSlice'
 import { createSettingsSlice } from './settingsSlice'
 import { createSidebarSlice } from './sidebarSlice'
 import { createThemeSlice } from './themeSlice'
@@ -2335,6 +2336,7 @@ export const useStore = create<AppState>((set, get) => ({
     partial => set(partial as never),
     () => get(),
   ),
+  ...createRetakeDialogSlice(partial => set(partial as never)),
   ...createDeveloperModeSlice(
     partial => set(partial as never),
     () => get(),
@@ -3048,11 +3050,6 @@ export const useStore = create<AppState>((set, get) => ({
 
   // CivitAI LoRA Browser
   // Director Pipeline Dashboard
-  retakeDialogOpen: false,
-  retakeSourceFile: null,
-  openRetakeDialog: (filename) => set({ retakeDialogOpen: true, retakeSourceFile: filename }),
-  closeRetakeDialog: () => set({ retakeDialogOpen: false, retakeSourceFile: null }),
-
   dashboardOpen: false,
   dashboardPipelineList: [],
   dashboardPipelineTotal: 0,
