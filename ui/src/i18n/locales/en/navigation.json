@@ -158,6 +158,7 @@
     "auditDev": "Internal audit"
   },
   "outputFolder": {
+    "option": "Output",
     "switch": "Switch output folder",
     "list": "Output folders",
     "uploads": "Uploads"

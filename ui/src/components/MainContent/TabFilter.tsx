@@ -9,6 +9,7 @@ import {
 } from '../../lib/navigationCategories'
 import { useStore } from '../../stores/useStore'
 import type { GenerationMode, MediaFilter } from '../../types'
+import { OutputFolderSelector } from './OutputFolderSelector'
 
 interface MenuItem {
   value?: MediaFilter
@@ -55,9 +56,9 @@ function PrimaryButton({ active, expanded, icon, label, onClick, ariaLabel, cate
   )
 }
 
-function NavigationBar({ category, title, items, activeValue }: { category: NavigationCategory; title: string; items: MenuItem[]; activeValue: MediaFilter }) {
+function NavigationBar({ category, title, items, activeValue, barRef }: { category: NavigationCategory; title: string; items: MenuItem[]; activeValue: MediaFilter; barRef: (element: HTMLDivElement | null) => void }) {
   return (
-    <div className="hp-navigation-children flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border px-1.5 py-1" data-navigation-category={category} aria-label={title} role="tablist">
+    <div ref={barRef} className="hp-navigation-children relative flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border px-1.5 py-1" data-navigation-category={category} aria-label={title} role="tablist">
       <div className="flex min-w-max items-center gap-1">
         {items.map(item => (
           <button
@@ -94,6 +95,8 @@ export function TabFilter() {
   const searchRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<number | null>(null)
   const categoryRefs = useRef<Partial<Record<NavigationCategory, HTMLButtonElement | null>>>({})
+  const topRowRef = useRef<HTMLDivElement>(null)
+  const childBarRef = useRef<HTMLDivElement>(null)
   const magicTimerRef = useRef<number | null>(null)
   const initialCategory = categoryForMediaFilter(mediaFilter) || 'direct-generation'
   const [activeCategory, setActiveCategory] = useState<NavigationCategory | null>(initialCategory)
@@ -108,6 +111,29 @@ export function TabFilter() {
     if (debounceRef.current !== null) window.clearTimeout(debounceRef.current)
     useStore.setState({ outputSearchQuery: '', selectedOutput: 0 })
   }, [])
+
+  useEffect(() => {
+    const alignJoin = () => {
+      if (!expandedCategory) return
+      const button = categoryRefs.current[expandedCategory]
+      const bar = childBarRef.current
+      if (!button || !bar) return
+      const buttonBox = button.getBoundingClientRect()
+      const barBox = bar.getBoundingClientRect()
+      const left = Math.max(0, buttonBox.left - barBox.left)
+      const width = Math.max(0, Math.min(buttonBox.width, barBox.width - left))
+      bar.style.setProperty('--hp-navigation-notch-left', `${left}px`)
+      bar.style.setProperty('--hp-navigation-notch-width', `${width}px`)
+    }
+    alignJoin()
+    const row = topRowRef.current
+    row?.addEventListener('scroll', alignJoin, { passive: true })
+    window.addEventListener('resize', alignJoin)
+    return () => {
+      row?.removeEventListener('scroll', alignJoin)
+      window.removeEventListener('resize', alignJoin)
+    }
+  }, [expandedCategory])
 
   useEffect(() => {
     const reveal = (event: Event) => {
@@ -225,8 +251,8 @@ export function TabFilter() {
   const expandedTitle = expandedCategory ? t(`menu.${expandedCategory === 'direct-generation' ? 'directGeneration' : expandedCategory}`) : ''
 
   return (
-    <nav aria-label={t('aria.sections')} className="flex min-w-0 flex-1 flex-col gap-1 rounded-xl border border-border bg-bg-tertiary/70 p-1">
-      <div className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <nav aria-label={t('aria.sections')} className="flex min-w-0 flex-1 flex-col rounded-xl border border-border bg-bg-tertiary/70 p-1">
+      <div ref={topRowRef} className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <PrimaryButton active={activeCategory === 'direct-generation'} expanded={expandedCategory === 'direct-generation'} category="direct-generation" buttonRef={element => { categoryRefs.current['direct-generation'] = element }} icon={<Sparkles size={14} />} label={t('primary.directGeneration')} onClick={() => selectCategory('direct-generation')} />
         <PrimaryButton active={activeCategory === 'studios'} expanded={expandedCategory === 'studios'} category="studios" buttonRef={element => { categoryRefs.current.studios = element }} icon={<BookOpen size={14} />} label={t('primary.studios')} onClick={() => selectCategory('studios')} />
         <PrimaryButton active={activeCategory === 'production'} expanded={expandedCategory === 'production'} category="production" buttonRef={element => { categoryRefs.current.production = element }} icon={<Clapperboard size={14} />} label={t('primary.production')} onClick={() => selectCategory('production')} />
@@ -235,30 +261,31 @@ export function TabFilter() {
         <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.activity.value} icon={<Activity size={14} />} label={t('primary.activity')} ariaLabel={`${t('tabs.runs')} · ${t('primary.activity')}`} onClick={() => openFilter(PRIMARY_DESTINATIONS.activity.value)} />
 
         <div className="ml-auto flex items-center gap-1">
-        {searchOpen ? (
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary px-2 py-0.5">
-            <Search size={12} className="shrink-0 text-text-muted" />
-            <input ref={searchRef} value={draftQuery} onChange={event => handleSearchChange(event.target.value)} placeholder={t('search.placeholder')} className="w-24 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted md:w-36" />
-            <button type="button" onClick={closeSearch} aria-label={t('search.close')} className="text-text-muted hover:text-text-secondary"><X size={12} /></button>
-          </div>
-        ) : (
-          <button type="button" onClick={() => { setDraftQuery(searchQuery); setSearchOpen(true) }} className={`rounded-lg p-1.5 ${searchQuery ? 'bg-accent-blue/10 text-accent-blue' : 'text-text-muted hover:bg-bg-hover hover:text-text-secondary'}`} title="Search outputs" aria-label={t('search.open')}>
-            <Search size={14} />
+          <OutputFolderSelector />
+          {searchOpen ? (
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary px-2 py-0.5">
+              <Search size={12} className="shrink-0 text-text-muted" />
+              <input ref={searchRef} value={draftQuery} onChange={event => handleSearchChange(event.target.value)} placeholder={t('search.placeholder')} className="w-24 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted md:w-36" />
+              <button type="button" onClick={closeSearch} aria-label={t('search.close')} className="text-text-muted hover:text-text-secondary"><X size={12} /></button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => { setDraftQuery(searchQuery); setSearchOpen(true) }} className={`rounded-lg p-1.5 ${searchQuery ? 'bg-accent-blue/10 text-accent-blue' : 'text-text-muted hover:bg-bg-hover hover:text-text-secondary'}`} title="Search outputs" aria-label={t('search.open')}>
+              <Search size={14} />
+            </button>
+          )}
+          <label className="flex items-center gap-1 rounded-lg px-2 py-1 text-text-muted hover:bg-bg-hover" title="Interface language">
+            <Languages size={14} />
+            <select value={language} onChange={event => { void setUiLanguage(event.target.value as UiLanguage) }} className="cursor-pointer bg-transparent text-[10px] font-medium text-text-secondary outline-none" aria-label="Quick interface language">
+              <option value="es">ES</option>
+              <option value="en">EN</option>
+            </select>
+          </label>
+          <button type="button" onClick={() => window.dispatchEvent(new Event('hocuspocus:settings-open'))} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-bg-hover hover:text-text-primary" aria-label="Settings">
+            <Settings size={14} /><span>Settings</span>
           </button>
-        )}
-        <label className="flex items-center gap-1 rounded-lg px-2 py-1 text-text-muted hover:bg-bg-hover" title="Interface language">
-          <Languages size={14} />
-          <select value={language} onChange={event => { void setUiLanguage(event.target.value as UiLanguage) }} className="cursor-pointer bg-transparent text-[10px] font-medium text-text-secondary outline-none" aria-label="Quick interface language">
-            <option value="es">ES</option>
-            <option value="en">EN</option>
-          </select>
-        </label>
-        <button type="button" onClick={() => window.dispatchEvent(new Event('hocuspocus:settings-open'))} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-bg-hover hover:text-text-primary" aria-label="Settings">
-          <Settings size={14} /><span>Settings</span>
-        </button>
         </div>
       </div>
-      {expandedCategory && <NavigationBar category={expandedCategory} title={expandedTitle} items={expandedItems} activeValue={mediaFilter} />}
+      {expandedCategory && <NavigationBar barRef={element => { childBarRef.current = element }} category={expandedCategory} title={expandedTitle} items={expandedItems} activeValue={mediaFilter} />}
     </nav>
   )
 }

@@ -44,7 +44,7 @@ test('primary navigation exposes four stable categories and highlights the selec
   const { useStore } = await import('../src/stores/useStore.ts')
   ensureUiI18n()
   await setUiLanguage('en')
-  useStore.setState({ developerMode: false, mediaFilter: 'all', outputSearchQuery: '', loadOutputs: async () => undefined })
+  useStore.setState({ developerMode: false, mediaFilter: 'all', outputSearchQuery: '', activeWorkspace: 'default', browsingUploads: false, loadOutputs: async () => undefined })
   try {
     render(<TabFilter />)
     const direct = screen.getByRole('button', { name: 'Direct generation' })
@@ -60,6 +60,8 @@ test('primary navigation exposes four stable categories and highlights the selec
     assert.equal(document.querySelector('details'), null)
     assert.equal(document.querySelectorAll('.hp-navigation-children').length, 1)
     assert.ok(document.querySelector('.hp-navigation-children[data-navigation-category="media"]'))
+    const outputFolder = screen.getByRole('button', { name: /Switch output folder: default/ })
+    assert.equal(screen.getByRole('navigation').contains(outputFolder), true)
 
     fireEvent.click(studios)
     fireEvent.click(screen.getByRole('tab', { name: 'Story Lab' }))

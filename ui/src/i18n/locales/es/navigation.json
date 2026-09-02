@@ -158,6 +158,7 @@
     "auditDev": "Auditoría interna"
   },
   "outputFolder": {
+    "option": "Salida",
     "switch": "Cambiar carpeta de salida",
     "list": "Carpetas de salida",
     "uploads": "Subidas"

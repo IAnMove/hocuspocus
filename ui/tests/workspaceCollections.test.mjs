@@ -29,14 +29,17 @@ test('Workspace collection client persists exact references and revisions', asyn
 
 test('Workspaces panel is a collection editor and physical locations are labelled output folders', async () => {
   const fs = await import('node:fs/promises')
-  const [tabs, main, panel] = await Promise.all([
+  const [tabs, main, outputSelector, panel] = await Promise.all([
     fs.readFile(new URL('../src/components/MainContent/TabFilter.tsx', import.meta.url), 'utf8'),
     fs.readFile(new URL('../src/components/MainContent/MainContent.tsx', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../src/components/MainContent/OutputFolderSelector.tsx', import.meta.url), 'utf8'),
     fs.readFile(new URL('../src/features/workspaceCollections/WorkspaceCollectionsPanel.tsx', import.meta.url), 'utf8'),
   ])
   assert.match(tabs, /value: 'workspaces'/)
+  assert.match(tabs, /<OutputFolderSelector/)
   assert.match(main, /<WorkspaceCollectionsPanel/)
-  assert.match(main, /outputFolder\.list/)
+  assert.doesNotMatch(main, /outputFolder\.list|<OutputFolderSelector/)
+  assert.match(outputSelector, /outputFolder\.list/)
   assert.match(panel, /aria-label="Workspace collections"/)
   assert.doesNotMatch(panel, /switchWorkspace|setActiveWorkspace/)
 })
