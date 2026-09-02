@@ -3,13 +3,15 @@ import navigationEn from './locales/en/navigation.json'
 import settingsEn from './locales/en/settings.json'
 import wizardEn from './locales/en/wizard.json'
 import activityEn from './locales/en/activity.json'
+import extraInfoEn from './locales/en/extraInfo.json'
 import commonEs from './locales/es/common.json'
 import navigationEs from './locales/es/navigation.json'
 import settingsEs from './locales/es/settings.json'
 import wizardEs from './locales/es/wizard.json'
 import activityEs from './locales/es/activity.json'
+import extraInfoEs from './locales/es/extraInfo.json'
 
-export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity'] as const
+export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo'] as const
 export type I18nNamespace = (typeof NAMESPACES)[number]
 
 export const resources = {
@@ -19,6 +21,7 @@ export const resources = {
     settings: settingsEn,
     wizard: wizardEn,
     activity: activityEn,
+    extraInfo: extraInfoEn,
   },
   es: {
     common: commonEs,
@@ -26,6 +29,7 @@ export const resources = {
     settings: settingsEs,
     wizard: wizardEs,
     activity: activityEs,
+    extraInfo: extraInfoEs,
   },
 } as const
 

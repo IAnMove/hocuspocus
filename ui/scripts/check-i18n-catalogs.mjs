@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity']
+const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo']
 const LANGUAGES = ['en', 'es']
 
 function load(language, namespace) {
@@ -52,6 +52,8 @@ const FORBIDDEN = [
   'Pregunta al mago',
   'Carpetas de salida',
   'Extra info',
+  'Clip information',
+  'Wait for generation to finish',
 ]
 
 export function forbiddenLiterals() {

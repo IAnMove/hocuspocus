@@ -1,0 +1,71 @@
+{
+  "waitForGeneration": "Wait for generation to finish",
+  "language": "Language",
+  "savedPrompts_one": "{{count}} saved prompt",
+  "savedPrompts_other": "{{count}} saved prompts",
+  "directorContext": "Director production context",
+  "intro": "This is written from the prompts and production properties already saved with the video. The media is not re-analysed.",
+  "clip": {
+    "title": "Clip information",
+    "file": "File",
+    "generated": "Generated",
+    "generationTime": "Generation time",
+    "fileSize": "File size",
+    "model": "Model",
+    "resolution": "Resolution",
+    "frames": "Frames",
+    "inferenceSteps": "Inference steps",
+    "guidance": "Guidance",
+    "seed": "Seed",
+    "jobId": "Job ID",
+    "timingBreakdown": "Timing breakdown",
+    "generationPrompt": "Generation prompt",
+    "noPrompt": "No prompt was saved for this clip.",
+    "audioPrompt": "Audio prompt",
+    "negativePrompt": "Negative prompt",
+    "allSavedSettings": "All saved settings",
+    "prompt": "Prompt",
+    "allSavedMetadata": "All saved metadata"
+  },
+  "copy": {
+    "action": "Copy",
+    "copied": "Copied",
+    "title": "Copy {{label}}",
+    "clipInformation": "clip information",
+    "generationPrompt": "generation prompt",
+    "audioPrompt": "audio prompt",
+    "negativePrompt": "negative prompt",
+    "allSavedSettings": "all saved settings",
+    "overview": "overview",
+    "youtubeTitle": "YouTube title",
+    "youtubeDescription": "YouTube description",
+    "xPost": "x.com post",
+    "allExtraInfo": "all Extra info"
+  },
+  "status": {
+    "writing": "Writing platform copy…",
+    "checking": "Checking saved Extra info…"
+  },
+  "errors": {
+    "loadFailed": "Failed to load Extra info",
+    "generateFailed": "Failed to generate Extra info"
+  },
+  "empty": {
+    "title": "No copy saved in this language yet",
+    "hint": "Generate a summary, YouTube metadata, and an x.com post.",
+    "generate": "Generate"
+  },
+  "publishing": {
+    "heading": "Publishing copy",
+    "overview": "What the video is",
+    "youtube": "YouTube",
+    "optimizedTitle": "Optimized title · {{length}}/100",
+    "optimizedDescription": "Optimized description",
+    "xPost": "X.com · {{length}}/280",
+    "xCom": "X.com"
+  },
+  "actions": {
+    "generating": "Generating…",
+    "regenerate": "Regenerate"
+  }
+}
