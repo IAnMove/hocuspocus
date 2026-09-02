@@ -30,7 +30,13 @@ export async function fetchWorkspaceCollections(signal?: AbortSignal) {
   })
 }
 
-export async function createWorkspaceCollection(value: { name: string; description?: string }) {
+export async function createWorkspaceCollection(value: {
+  name: string
+  description?: string
+  project_ids?: string[]
+  asset_ids?: string[]
+  production_ids?: string[]
+}) {
   return request<WorkspaceCollection>('/api/v1/workspace-collections', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value),
   })

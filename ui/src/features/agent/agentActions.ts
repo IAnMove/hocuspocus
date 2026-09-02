@@ -534,6 +534,26 @@ export interface AgentCreateWorkspaceAction {
   workspaceName: string
 }
 
+export interface AgentCreateWorkspaceCollectionAction {
+  type: 'create_workspace_collection'
+  name: string
+  description: string
+  projectIds: string[]
+  assetIds: string[]
+  productionIds: string[]
+}
+
+export interface AgentUpdateWorkspaceCollectionAction {
+  type: 'update_workspace_collection'
+  workspaceId: string
+  expectedRevision?: number
+  name?: string
+  description?: string
+  projectIds?: string[]
+  assetIds?: string[]
+  productionIds?: string[]
+}
+
 export type AgentAction = AgentOpenTabAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
@@ -581,6 +601,8 @@ export type AgentAction = AgentOpenTabAction
   | AgentRetryTaskAction
   | AgentSelectWorkspaceAction
   | AgentCreateWorkspaceAction
+  | AgentCreateWorkspaceCollectionAction
+  | AgentUpdateWorkspaceCollectionAction
   | AgentCreateCharacterKitAction
   | AgentOpenCharacterKitAction
   | AgentUpdateCharacterKitAction
@@ -809,6 +831,8 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   retrytask: 'retry_task',
   selectworkspace: 'select_workspace',
   createworkspace: 'create_workspace',
+  createworkspacecollection: 'create_workspace_collection',
+  updateworkspacecollection: 'update_workspace_collection',
 }
 
 const cleanString = (value: unknown, maxLength: number): string => (
@@ -931,7 +955,8 @@ const CANONICAL_FIELD_NAMES = [
   'clip_names', 'clip_name', 'trim_start', 'trim_end', 'project_name',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
   'loras', 'weight',
-  'workspace_name',
+  'workspace_name', 'workspace_id', 'expected_revision', 'description',
+  'project_ids', 'asset_ids', 'production_ids',
   'dialogue', 'sfx', 'scene', 'actions', 'reply',
 ] as const
 
@@ -1538,6 +1563,27 @@ function parseAction(value: unknown): AgentAction | null {
     return type === 'select_workspace'
       ? { type: 'select_workspace', workspaceName }
       : { type: 'create_workspace', workspaceName }
+  }
+  if (type === 'create_workspace_collection' || type === 'update_workspace_collection') {
+    const ids = (value: unknown): string[] | undefined => {
+      if (!Array.isArray(value)) return undefined
+      return [...new Set(value.map(item => cleanString(item, 200)).filter(Boolean))].slice(0, 500)
+    }
+    const name = cleanString(raw.name, 160)
+    const description = cleanString(raw.description, 2000)
+    const projectIds = ids(raw.project_ids)
+    const assetIds = ids(raw.asset_ids)
+    const productionIds = ids(raw.production_ids)
+    if (type === 'create_workspace_collection') {
+      if (!name) return null
+      return { type, name, description, projectIds: projectIds || [], assetIds: assetIds || [], productionIds: productionIds || [] }
+    }
+    const workspaceId = cleanString(raw.workspace_id, 200)
+    if (!workspaceId) return null
+    const expectedRevision = optionalNumber(raw.expected_revision, 1, Number.MAX_SAFE_INTEGER, true)
+    if (raw.expected_revision !== undefined && expectedRevision === undefined) return null
+    if (!name && raw.description === undefined && projectIds === undefined && assetIds === undefined && productionIds === undefined) return null
+    return { type, workspaceId, expectedRevision, name: name || undefined, description: raw.description === undefined ? undefined : description, projectIds, assetIds, productionIds }
   }
   if (type === 'create_character_kit') {
     const name = cleanString(raw.title, 160) || cleanString(raw.kit_name, 160)
@@ -2404,6 +2450,12 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           replace_existing: { type: 'boolean' },
           remove_background: { type: 'boolean' },
           workspace_name: { type: 'string', maxLength: 120 },
+          workspace_id: { type: 'string', maxLength: 200 },
+          expected_revision: { type: 'integer', minimum: 1 },
+          description: { type: 'string', maxLength: 2_000 },
+          project_ids: { type: 'array', maxItems: 500, items: { type: 'string', maxLength: 200 } },
+          asset_ids: { type: 'array', maxItems: 500, items: { type: 'string', maxLength: 200 } },
+          production_ids: { type: 'array', maxItems: 500, items: { type: 'string', maxLength: 200 } },
           loras: {
             type: 'array', maxItems: 12,
             items: {

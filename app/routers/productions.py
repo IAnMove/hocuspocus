@@ -57,7 +57,16 @@ def create_productions_router(
         production = next((item for item in result["productions"] if item["id"] == production_id), None)
         if production is None:
             raise HTTPException(status_code=404, detail="Production not found")
-        production_runs = [item for item in result["runs"] if item["production_id"] == production_id]
+        runs_by_id = {
+            item["id"]: item for item in result["runs"]
+            if item["production_id"] == production_id
+        }
+        # The embedded detail follows the production's canonical lineage,
+        # rather than the independent global Runs listing sort order.
+        production_runs = [
+            runs_by_id[run_id] for run_id in production["run_ids"]
+            if run_id in runs_by_id
+        ]
         return {**production, "runs": production_runs}
 
     @router.get("/api/v1/runs")

@@ -44,6 +44,18 @@ export function WorkspaceCollectionsPanel() {
   }, [selectedId])
 
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const open = (event: Event) => {
+      const collection = (event as CustomEvent<{ collection?: WorkspaceCollection }>).detail?.collection
+      if (!collection?.id) return
+      setItems(current => [collection, ...current.filter(item => item.id !== collection.id)])
+      setSelectedId(collection.id)
+      setDraft(collection)
+      setError('')
+    }
+    window.addEventListener('hocuspocus:workspace-collection-open', open)
+    return () => window.removeEventListener('hocuspocus:workspace-collection-open', open)
+  }, [])
 
   const dirty = useMemo(() => {
     const original = items.find(item => item.id === draft?.id)

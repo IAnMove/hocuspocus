@@ -2,12 +2,14 @@ import type {
   AgentAction,
   AgentCancelTaskAction,
   AgentCreateWorkspaceAction,
+  AgentCreateWorkspaceCollectionAction,
   AgentInspectQueueAction,
   AgentOpenSeriesSectionAction,
   AgentOpenStorySectionAction,
   AgentResumeTaskAction,
   AgentRetryTaskAction,
   AgentSelectWorkspaceAction,
+  AgentUpdateWorkspaceCollectionAction,
 } from './agentActions'
 import type {
   CapabilityDefinition,
@@ -88,6 +90,45 @@ function workspaceName<TAction extends AgentSelectWorkspaceAction | AgentCreateW
 ): TAction | null {
   const name = text(raw.workspace_name, 120)
   return name ? { type, workspaceName: name } as TAction : null
+}
+
+function idList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return [...new Set(value.map(item => text(item, 200)).filter(Boolean))].slice(0, 500)
+}
+
+function createWorkspaceCollection(raw: Record<string, unknown>): AgentCreateWorkspaceCollectionAction | null {
+  const name = text(raw.name, 160)
+  if (!name) return null
+  return {
+    type: 'create_workspace_collection',
+    name,
+    description: text(raw.description, 2000),
+    projectIds: idList(raw.project_ids) || [],
+    assetIds: idList(raw.asset_ids) || [],
+    productionIds: idList(raw.production_ids) || [],
+  }
+}
+
+function updateWorkspaceCollection(raw: Record<string, unknown>): AgentUpdateWorkspaceCollectionAction | null {
+  const workspaceId = text(raw.workspace_id, 200)
+  if (!workspaceId) return null
+  const name = text(raw.name, 160)
+  const description = text(raw.description, 2000)
+  const projectIds = idList(raw.project_ids)
+  const assetIds = idList(raw.asset_ids)
+  const productionIds = idList(raw.production_ids)
+  if (!name && raw.description === undefined && projectIds === undefined && assetIds === undefined && productionIds === undefined) return null
+  const revision = raw.expected_revision
+  const expectedRevision = typeof revision === 'number' && Number.isSafeInteger(revision) && revision > 0
+    ? revision : undefined
+  if (revision !== undefined && expectedRevision === undefined) return null
+  return {
+    type: 'update_workspace_collection', workspaceId, expectedRevision,
+    name: name || undefined,
+    description: raw.description === undefined ? undefined : description,
+    projectIds, assetIds, productionIds,
+  }
 }
 
 function navigationOutcome(
@@ -385,6 +426,61 @@ export function registerNavigationQueueCapabilities(
     report: { targetKind: 'workspace', successState: 'completed' },
     summarize(_action, outcome) { return outcome.message },
     presentation: { destination: 'action', anchors: ['workspace'], replay: 'atomic' },
+  })
+
+  register<AgentCreateWorkspaceCollectionAction>({
+    name: 'create_workspace_collection',
+    title: 'Create a Workspace reference collection',
+    description: 'Create and visibly open a Workspace that groups exact project, asset and production IDs without moving files.',
+    useWhen: 'The user asks to group related HocusPocus items into a new Workspace collection.',
+    parameters: ['name', 'description', 'project_ids', 'asset_ids', 'production_ids'],
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        type: { const: 'create_workspace_collection' }, name: { type: 'string', maxLength: 160 },
+        description: { type: 'string', maxLength: 2000 },
+        project_ids: { type: 'array', items: { type: 'string' }, maxItems: 500 },
+        asset_ids: { type: 'array', items: { type: 'string' }, maxItems: 500 },
+        production_ids: { type: 'array', items: { type: 'string' }, maxItems: 500 },
+      }, required: ['type', 'name'],
+    },
+    risk: 'edit', confirmation: 'none', progress: 'Creando el Workspace de referencias…',
+    resolve: createWorkspaceCollection,
+    validate(action) { return action.name.trim() ? [] : ['name is required'] },
+    async prepare(action) { return action },
+    async execute(action, context) { return context.adapters.workspace.createCollection(action) },
+    correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+    report: { targetKind: 'workspace_collection', successState: 'completed' },
+    summarize(_action, outcome) { return outcome.message },
+    presentation: { destination: 'workspaces', anchors: ['workspace-collection'], replay: 'atomic' },
+  })
+
+  register<AgentUpdateWorkspaceCollectionAction>({
+    name: 'update_workspace_collection',
+    title: 'Update a Workspace reference collection',
+    description: 'Update one Workspace by immutable ID and visibly open the persisted revision; omitted fields are preserved.',
+    useWhen: 'The user asks to change the membership or description of an identified Workspace collection.',
+    parameters: ['workspace_id', 'expected_revision', 'name', 'description', 'project_ids', 'asset_ids', 'production_ids'],
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        type: { const: 'update_workspace_collection' }, workspace_id: { type: 'string', maxLength: 200 },
+        expected_revision: { type: 'integer', minimum: 1 }, name: { type: 'string', maxLength: 160 },
+        description: { type: 'string', maxLength: 2000 },
+        project_ids: { type: 'array', items: { type: 'string' }, maxItems: 500 },
+        asset_ids: { type: 'array', items: { type: 'string' }, maxItems: 500 },
+        production_ids: { type: 'array', items: { type: 'string' }, maxItems: 500 },
+      }, required: ['type', 'workspace_id'],
+    },
+    risk: 'edit', confirmation: 'none', progress: 'Actualizando el Workspace de referencias…',
+    resolve: updateWorkspaceCollection,
+    validate(action) { return action.workspaceId.trim() ? [] : ['workspace_id is required'] },
+    async prepare(action) { return action },
+    async execute(action, context) { return context.adapters.workspace.updateCollection(action) },
+    correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
+    report: { targetKind: 'workspace_collection', successState: 'completed' },
+    summarize(_action, outcome) { return outcome.message },
+    presentation: { destination: 'workspaces', anchors: ['workspace-collection'], replay: 'atomic' },
   })
 
   registeredRegistrars.add(register)

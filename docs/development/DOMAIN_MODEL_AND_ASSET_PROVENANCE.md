@@ -83,6 +83,13 @@ or deletes generated files. The older physical directory selector remains
 available during migration but is labelled **Output folder** in the UI. The
 portable contract is `workspace-record-v1.schema.json`.
 
+The Wizard uses the same collection API as the visible editor. It can create
+a collection with exact project, asset and Production IDs, or update one only
+by its immutable `workspace_id` (optionally guarded by `expected_revision`).
+After persistence it opens Workspaces and selects the returned record. The
+legacy `select_workspace` and `create_workspace` capabilities remain scoped to
+physical **Output folders** and are deliberately not aliases for collections.
+
 ## Asset manifest v1
 
 Every newly generated or imported item eventually receives one adjacent

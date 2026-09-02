@@ -63,6 +63,8 @@ export const AGENT_ACTION_TYPES = [
   'retry_task',
   'select_workspace',
   'create_workspace',
+  'create_workspace_collection',
+  'update_workspace_collection',
   'create_character_kit',
   'open_character_kit',
   'update_character_kit',

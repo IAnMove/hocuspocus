@@ -4,7 +4,7 @@ import { rememberedCharacterKitLibrary } from '../characters/session'
 import type { SeriesAssemblyJob } from '../series/assemblyContract'
 import type { SeriesJobStatus } from '../series/types'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentAttachStudioReferencesAction, AgentCommitSeriesCanonAction, AgentConfigureStudioLorasAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentCreateWorkspaceAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentPrepare3dAction, AgentPrepareAudioAction, AgentPrepareImageAction, AgentPrepareVideoAction, AgentQueueSfxPackAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentSelectWorkspaceAction, AgentStartGenerationAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentAttachStudioReferencesAction, AgentCommitSeriesCanonAction, AgentConfigureStudioLorasAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentCreateWorkspaceAction, AgentCreateWorkspaceCollectionAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentPrepare3dAction, AgentPrepareAudioAction, AgentPrepareImageAction, AgentPrepareVideoAction, AgentQueueSfxPackAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentSelectWorkspaceAction, AgentStartGenerationAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction, AgentUpdateWorkspaceCollectionAction } from './agentActions'
 import type {
   AgentAttachVideoclipAlternativeSongAction,
   AgentMountVideoclipAlternativeSongAction,
@@ -139,6 +139,8 @@ export interface QueueAdapter {
 export interface WorkspaceAdapter {
   select(action: AgentSelectWorkspaceAction): Promise<AdapterOutcome>
   create(action: AgentCreateWorkspaceAction): Promise<AdapterOutcome>
+  createCollection(action: AgentCreateWorkspaceCollectionAction): Promise<AdapterOutcome>
+  updateCollection(action: AgentUpdateWorkspaceCollectionAction): Promise<AdapterOutcome>
 }
 export interface VideoclipAdapter {
   attachAlternativeSong(action: AgentAttachVideoclipAlternativeSongAction): Promise<AdapterOutcome>
@@ -754,6 +756,45 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async create(action) {
       const { createWorkspace } = await import('../workspaces/adapters')
       return presentWorkspaceSliceResult(await createWorkspace({ workspaceName: action.workspaceName }))
+    },
+    async createCollection(action) {
+      await navigate('workspaces')
+      const { createWorkspaceCollection } = await import('../../api/workspaceCollections')
+      const created = await createWorkspaceCollection({
+        name: action.name,
+        description: action.description,
+        project_ids: action.projectIds,
+        asset_ids: action.assetIds,
+        production_ids: action.productionIds,
+      })
+      window.dispatchEvent(new CustomEvent('hocuspocus:workspace-collection-open', { detail: { collection: created } }))
+      return {
+        message: `He creado el Workspace “${created.name}” y lo he abierto con sus referencias exactas.`,
+        target: { kind: 'workspace_collection', id: created.id, title: created.name },
+      }
+    },
+    async updateCollection(action) {
+      const { fetchWorkspaceCollections, updateWorkspaceCollection } = await import('../../api/workspaceCollections')
+      const page = await fetchWorkspaceCollections()
+      const current = page.workspaces.find(item => item.id === action.workspaceId)
+      if (!current) throw new Error(`No existe el Workspace con ID “${action.workspaceId}”.`)
+      if (action.expectedRevision !== undefined && current.revision !== action.expectedRevision) {
+        throw new Error(`El Workspace cambió desde la revisión ${action.expectedRevision}; ahora está en la ${current.revision}. Vuelve a consultarlo antes de sobrescribirlo.`)
+      }
+      const changed = await updateWorkspaceCollection({
+        ...current,
+        name: action.name ?? current.name,
+        description: action.description ?? current.description,
+        project_ids: action.projectIds ?? current.project_ids,
+        asset_ids: action.assetIds ?? current.asset_ids,
+        production_ids: action.productionIds ?? current.production_ids,
+      })
+      await navigate('workspaces')
+      window.dispatchEvent(new CustomEvent('hocuspocus:workspace-collection-open', { detail: { collection: changed } }))
+      return {
+        message: `He actualizado el Workspace “${changed.name}” por su ID exacto.`,
+        target: { kind: 'workspace_collection', id: changed.id, title: changed.name },
+      }
     },
   }
   adapters.videoclips = {
