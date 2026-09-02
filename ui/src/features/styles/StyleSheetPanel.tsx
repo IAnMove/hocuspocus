@@ -28,6 +28,7 @@ import {
   type StyleLibraryPage,
   type StyleSource,
 } from '../../api/client'
+import { useUiTranslation } from '../../i18n'
 
 
 const PAGE_SIZE = 60
@@ -55,6 +56,7 @@ async function copyText(value: string): Promise<void> {
 }
 
 function SourceAttribution({ source }: { source: StyleSource }) {
+  const { t } = useUiTranslation('styleSheet')
   return (
     <div className="rounded-xl border border-border bg-bg-secondary p-3 md:p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -62,7 +64,7 @@ function SourceAttribution({ source }: { source: StyleSource }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-text-primary">{source.name}</span>
             <span className="rounded-full border border-border bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-muted">
-              {source.styleCount.toLocaleString()} estilos instalados
+              {t('installed', { count: source.styleCount })}
             </span>
             {source.revision && (
               <span className="font-mono text-[10px] text-text-muted" title={source.revision}>
@@ -78,12 +80,12 @@ function SourceAttribution({ source }: { source: StyleSource }) {
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-accent-blue hover:underline"
             >
-              Fuente: {source.repoId} · Hugging Face <ExternalLink size={10} />
+              {t('sourceHf', { repo: source.repoId })} <ExternalLink size={10} />
             </a>
-            <span>Autor: {source.author}</span>
+            <span>{t('author', { name: source.author })}</span>
             <span>{formatBytes(source.expectedBytes)}</span>
             <span className="inline-flex items-center gap-1 text-indicator-warning">
-              <AlertTriangle size={10} /> {source.license || source.licenseNotice || 'Licencia no especificada'}
+              <AlertTriangle size={10} /> {source.license || source.licenseNotice || t('licenseMissing')}
             </span>
             {source.storagePath && (
               <span className="max-w-full truncate font-mono" title={source.storagePath}>
@@ -107,6 +109,7 @@ function ImportProgress({
   onCancel: () => void
   cancelling: boolean
 }) {
+  const { t } = useUiTranslation('styleSheet')
   const usingBytes = job.stage === 'downloading' && job.expectedBytes > 0
   const ratio = usingBytes
     ? job.downloadedBytes / job.expectedBytes
@@ -133,7 +136,7 @@ function ImportProgress({
               className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 px-2 py-1 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-50"
             >
               {cancelling || job.status === 'cancelling' ? <Loader2 size={10} className="animate-spin" /> : <Square size={9} />}
-              Cancelar
+              {t('import.cancel')}
             </button>
           )}
         </div>
@@ -144,8 +147,8 @@ function ImportProgress({
       {job.error && <p className="mt-2 text-[11px] text-red-300">{job.error}</p>}
       {job.preflight && (
         <p className="mt-2 text-[10px] text-text-muted">
-          Libre: {formatBytes(job.preflight.freeBytes)} · Necesario ahora: {formatBytes(job.preflight.requiredBytes)}
-          {job.resumed ? ` · Reanudación ${job.resumeCount || 1}` : ''}
+          {t('import.free', { free: formatBytes(job.preflight.freeBytes), required: formatBytes(job.preflight.requiredBytes) })}
+          {job.resumed ? t('import.resumed', { count: job.resumeCount || 1 }) : ''}
         </p>
       )}
     </div>
@@ -161,6 +164,7 @@ function StyleCard({
   onOpen: (style: StyleLibraryItem) => void
   onDelete: (style: StyleLibraryItem) => void
 }) {
+  const { t } = useUiTranslation('styleSheet')
   const [copied, setCopied] = useState(false)
   const handleCopy = async (event: React.MouseEvent) => {
     event.stopPropagation()
@@ -176,7 +180,7 @@ function StyleCard({
         <div className="relative aspect-video bg-black">
           <img
             src={style.previewUrl}
-            alt={`Preview ${style.title}`}
+            alt={t('preview', { title: style.title })}
             loading="lazy"
             decoding="async"
             className="h-full w-full object-contain"
@@ -194,7 +198,7 @@ function StyleCard({
             <span className="shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-[9px] text-text-muted">{style.group}</span>
           </div>
           <p className="mt-2 line-clamp-4 text-[11px] leading-relaxed text-text-secondary" title={style.prompt}>{style.prompt}</p>
-          <p className="mt-2 truncate text-[9px] text-text-muted" title={style.source.url}>Fuente: {style.source.repoId}</p>
+          <p className="mt-2 truncate text-[9px] text-text-muted" title={style.source.url}>{t('source', { repo: style.source.repoId })}</p>
         </div>
       </button>
       <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
@@ -204,14 +208,14 @@ function StyleCard({
           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] text-text-secondary hover:bg-bg-hover hover:text-text-primary"
         >
           {copied ? <Check size={12} className="text-accent-green" /> : <Clipboard size={12} />}
-          {copied ? 'Copiado' : 'Copiar prompt'}
+          {copied ? t('copied') : t('copyPrompt')}
         </button>
         <button
           type="button"
           onClick={() => onDelete(style)}
           className="rounded-lg p-1.5 text-text-muted hover:bg-red-500/10 hover:text-red-400"
-          title="Eliminar estilo"
-          aria-label={`Eliminar ${style.title}`}
+          title={t('deleteTitle')}
+          aria-label={t('deleteAria', { title: style.title })}
         >
           <Trash2 size={12} />
         </button>
@@ -221,6 +225,8 @@ function StyleCard({
 }
 
 export function StyleSheetPanel() {
+  const { t } = useUiTranslation('styleSheet')
+  const { t: tCommon } = useUiTranslation('common')
   const [sources, setSources] = useState<StyleSource[]>([])
   const [page, setPage] = useState<StyleLibraryPage | null>(null)
   const [loading, setLoading] = useState(true)
@@ -342,8 +348,8 @@ export function StyleSheetPanel() {
   const groups = page?.facets.groups || []
   const importBusy = !!importJob && ['queued', 'running', 'cancelling'].includes(importJob.status)
   const sourceLabel = importJob?.resumeAvailable
-    ? 'Reanudar descarga de estilos'
-    : source?.installed ? 'Sincronizar fuente' : 'Descargar estilos de ostris/minimax_h3_1k'
+    ? t('import.resume')
+    : source?.installed ? t('import.sync') : t('import.download')
 
   const activeFilters = useMemo(() => [collection, group, query].filter(Boolean).length, [collection, group, query])
 
@@ -354,9 +360,9 @@ export function StyleSheetPanel() {
           <div>
             <div className="flex items-center gap-2">
               <Palette size={17} className="text-accent-blue" />
-              <h1 className="text-base font-semibold text-text-primary">Hoja de estilos</h1>
+              <h1 className="text-base font-semibold text-text-primary">{t('title')}</h1>
             </div>
-            <p className="mt-1 text-xs text-text-muted">Biblioteca visual de prompts con ejemplos reproducibles y fuente trazable.</p>
+            <p className="mt-1 text-xs text-text-muted">{t('subtitle')}</p>
           </div>
           <button
             type="button"
@@ -368,7 +374,7 @@ export function StyleSheetPanel() {
             {sourceLabel}
           </button>
         </div>
-        <div className="mt-3 flex gap-1" role="tablist" aria-label="Modelos de hoja de estilos">
+        <div className="mt-3 flex gap-1" role="tablist" aria-label={t('tabsAria')}>
           <button type="button" role="tab" aria-selected="true" className="rounded-lg bg-bg-active px-3 py-1.5 text-xs font-medium text-text-primary">
             MiniMax
           </button>
@@ -394,35 +400,35 @@ export function StyleSheetPanel() {
                 <input
                   value={queryInput}
                   onChange={event => setQueryInput(event.target.value)}
-                  placeholder="Buscar en prompts, nombres o tags…"
+                  placeholder={t('search')}
                   className="min-w-0 flex-1 bg-transparent py-2 text-xs text-text-primary outline-none placeholder:text-text-muted"
                 />
                 {queryInput && <button type="button" onClick={() => setQueryInput('')} className="text-text-muted hover:text-text-primary"><X size={12} /></button>}
               </label>
               <select value={collection} onChange={event => { setCollection(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
-                <option value="">Todas las colecciones</option>
+                <option value="">{t('allCollections')}</option>
                 {collections.map(value => <option key={value} value={value}>{value}</option>)}
               </select>
               <select value={group} onChange={event => { setGroup(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
-                <option value="">Todos los grupos</option>
+                <option value="">{t('allGroups')}</option>
                 {groups.map(value => <option key={value} value={value}>{value}</option>)}
               </select>
               <select value={sort} onChange={event => { setSort(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
-                <option value="source_order">Orden de la fuente</option>
-                <option value="newest">Más recientes</option>
-                <option value="oldest">Más antiguos</option>
-                <option value="prompt_asc">Prompt A → Z</option>
-                <option value="prompt_desc">Prompt Z → A</option>
+                <option value="source_order">{t('sort.source')}</option>
+                <option value="newest">{t('sort.newest')}</option>
+                <option value="oldest">{t('sort.oldest')}</option>
+                <option value="prompt_asc">{t('sort.promptAsc')}</option>
+                <option value="prompt_desc">{t('sort.promptDesc')}</option>
               </select>
               <div className="flex items-center justify-end gap-2 px-1 text-[10px] text-text-muted">
-                {activeFilters > 0 && <span>{activeFilters} filtros</span>}
-                <span>{(page?.total || 0).toLocaleString()} estilos</span>
+                {activeFilters > 0 && <span>{t('filters', { count: activeFilters })}</span>}
+                <span>{t('stylesCount', { count: page?.total || 0 })}</span>
               </div>
             </div>
           </div>
 
           {loading ? (
-            <div className="flex min-h-[260px] items-center justify-center gap-2 text-xs text-text-muted"><Loader2 size={17} className="animate-spin" /> Cargando estilos…</div>
+            <div className="flex min-h-[260px] items-center justify-center gap-2 text-xs text-text-muted"><Loader2 size={17} className="animate-spin" /> {t('loading')}</div>
           ) : page && page.styles.length > 0 ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
               {page.styles.map(style => <StyleCard key={style.id} style={style} onOpen={setSelected} onDelete={setDeleteCandidate} />)}
@@ -430,16 +436,16 @@ export function StyleSheetPanel() {
           ) : (
             <div className="flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-bg-secondary px-6 text-center">
               <Palette size={30} className="text-text-muted" />
-              <h2 className="mt-3 text-sm font-medium text-text-primary">Aún no hay estilos MiniMax instalados</h2>
-              <p className="mt-1 max-w-lg text-xs text-text-muted">Descarga la fuente de Hugging Face para importar sus 1.000 prompts, vídeos y previews ligeras.</p>
+              <h2 className="mt-3 text-sm font-medium text-text-primary">{t('emptyTitle')}</h2>
+              <p className="mt-1 max-w-lg text-xs text-text-muted">{t('emptyBody')}</p>
             </div>
           )}
 
           {page && page.total > 0 && (
             <div className="flex items-center justify-center gap-3 py-3">
-              <button type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} className="rounded-lg border border-border p-2 text-text-secondary hover:bg-bg-hover disabled:opacity-30" aria-label="Página anterior"><ChevronLeft size={14} /></button>
-              <span className="text-[11px] text-text-muted">Página {pageNumber} de {pageCount}</span>
-              <button type="button" disabled={offset + PAGE_SIZE >= page.total} onClick={() => setOffset(offset + PAGE_SIZE)} className="rounded-lg border border-border p-2 text-text-secondary hover:bg-bg-hover disabled:opacity-30" aria-label="Página siguiente"><ChevronRight size={14} /></button>
+              <button type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} className="rounded-lg border border-border p-2 text-text-secondary hover:bg-bg-hover disabled:opacity-30" aria-label={t('previous')}><ChevronLeft size={14} /></button>
+              <span className="text-[11px] text-text-muted">{t('page', { current: pageNumber, total: pageCount })}</span>
+              <button type="button" disabled={offset + PAGE_SIZE >= page.total} onClick={() => setOffset(offset + PAGE_SIZE)} className="rounded-lg border border-border p-2 text-text-secondary hover:bg-bg-hover disabled:opacity-30" aria-label={t('next')}><ChevronRight size={14} /></button>
             </div>
           )}
         </div>
@@ -449,7 +455,7 @@ export function StyleSheetPanel() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 md:p-8" onClick={() => setSelected(null)}>
           <div className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-bg-secondary shadow-2xl" onClick={event => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div className="min-w-0"><h2 className="truncate text-sm font-semibold text-text-primary">{selected.title}</h2><p className="mt-0.5 truncate text-[10px] text-text-muted">Fuente: {selected.source.repoId} · #{selected.sourceOrder}</p></div>
+              <div className="min-w-0"><h2 className="truncate text-sm font-semibold text-text-primary">{selected.title}</h2><p className="mt-0.5 truncate text-[10px] text-text-muted">{t('source', { repo: selected.source.repoId })} · #{selected.sourceOrder}</p></div>
               <button type="button" onClick={() => setSelected(null)} className="rounded-lg p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary"><X size={16} /></button>
             </div>
             <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.85fr)]">
@@ -460,13 +466,13 @@ export function StyleSheetPanel() {
                 <div className="flex flex-wrap gap-1.5">{selected.tags.map(tag => <span key={tag} className="rounded-full bg-bg-tertiary px-2 py-1 text-[9px] text-text-muted">{tag}</span>)}</div>
                 <p className="mt-4 whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">{selected.prompt}</p>
                 <div className="mt-4 space-y-2 border-t border-border pt-4 text-[10px] text-text-muted">
-                  <a href={selected.source.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-accent-blue hover:underline">Ver fuente original <ExternalLink size={10} /></a>
-                  <p>Autor: {selected.source.author}</p>
-                  <p>Revisión: <span className="font-mono">{selected.source.revision || 'no registrada'}</span></p>
+                  <a href={selected.source.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-accent-blue hover:underline">{t('seeOriginal')} <ExternalLink size={10} /></a>
+                  <p>{t('author', { name: selected.source.author })}</p>
+                  <p>{t('revision', { value: selected.source.revision || t('revisionMissing') })}</p>
                   <p className="text-indicator-warning">{selected.source.license || selected.source.licenseNotice}</p>
                 </div>
                 <button type="button" onClick={() => { void copyText(selected.prompt).then(() => { setModalCopied(true); window.setTimeout(() => setModalCopied(false), 1400) }) }} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-blue px-3 py-2 text-xs font-medium text-white hover:bg-accent-blue-hover">
-                  {modalCopied ? <Check size={14} /> : <Clipboard size={14} />} {modalCopied ? 'Prompt copiado' : 'Copiar prompt'}
+                  {modalCopied ? <Check size={14} /> : <Clipboard size={14} />} {modalCopied ? t('promptCopied') : t('copyPrompt')}
                 </button>
               </div>
             </div>
@@ -477,8 +483,8 @@ export function StyleSheetPanel() {
       {deleteCandidate && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4" onClick={() => !deleting && setDeleteCandidate(null)}>
           <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-bg-secondary p-5 shadow-2xl" onClick={event => event.stopPropagation()}>
-            <div className="flex items-start gap-3"><div className="rounded-full bg-red-500/10 p-2 text-red-400"><Trash2 size={18} /></div><div><h2 className="text-sm font-semibold text-text-primary">¿Eliminar este estilo?</h2><p className="mt-1 text-xs text-text-muted">Se eliminarán su prompt, vídeo y preview locales. Las sincronizaciones posteriores respetarán esta decisión y no lo restaurarán automáticamente.</p><p className="mt-2 truncate text-[10px] text-text-secondary">{deleteCandidate.title}</p></div></div>
-            <div className="mt-5 flex justify-end gap-2"><button type="button" disabled={deleting} onClick={() => setDeleteCandidate(null)} className="rounded-lg border border-border px-3 py-2 text-xs text-text-secondary hover:bg-bg-hover">Cancelar</button><button type="button" disabled={deleting} onClick={confirmDelete} className="flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50">{deleting && <Loader2 size={13} className="animate-spin" />} Eliminar</button></div>
+            <div className="flex items-start gap-3"><div className="rounded-full bg-red-500/10 p-2 text-red-400"><Trash2 size={18} /></div><div><h2 className="text-sm font-semibold text-text-primary">{t('deleteConfirmTitle')}</h2><p className="mt-1 text-xs text-text-muted">{t('deleteConfirmBody')}</p><p className="mt-2 truncate text-[10px] text-text-secondary">{deleteCandidate.title}</p></div></div>
+            <div className="mt-5 flex justify-end gap-2"><button type="button" disabled={deleting} onClick={() => setDeleteCandidate(null)} className="rounded-lg border border-border px-3 py-2 text-xs text-text-secondary hover:bg-bg-hover">{tCommon('actions.cancel')}</button><button type="button" disabled={deleting} onClick={confirmDelete} className="flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50">{deleting && <Loader2 size={13} className="animate-spin" />} {tCommon('actions.delete')}</button></div>
           </div>
         </div>
       )}

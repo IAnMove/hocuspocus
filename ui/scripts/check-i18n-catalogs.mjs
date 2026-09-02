@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab']
+const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev']
 const LANGUAGES = ['en', 'es']
 
 function load(language, namespace) {
@@ -99,6 +99,13 @@ const PILOT_FILES = [
   'src/features/stories/CompactSubjectEditor.tsx',
   'src/features/stories/CompactBeatEditor.tsx',
   'src/features/stories/StoryVideoFormatControls.tsx',
+  'src/components/Sidebar/DirectorChat.tsx',
+  'src/features/video-editor/VideoEditorPanel.tsx',
+  'src/features/workspaces/WorkspacesPanel.tsx',
+  'src/features/workspaceCollections/WorkspaceCollectionsPanel.tsx',
+  'src/features/styles/StyleSheetPanel.tsx',
+  'src/features/projects/ProjectsPanel.tsx',
+  'src/features/auditdev/AuditDevPanel.tsx',
 ]
 
 const FORBIDDEN = [
@@ -127,6 +134,15 @@ const FORBIDDEN = [
   'Montaje ordenado',
   'Usar en Montaje',
   'Hay una cola de generación por recuperar',
+  'Idioma hablado del vídeo',
+  'Vídeo directo · T2V puro · sin imágenes',
+  'Vídeo directo · text only, no images',
+  'Momentos después…',
+  'Editar vídeo en Video Editor',
+  'Buscar run…',
+  'Nuevo workspace…',
+  'Hoja de estilos',
+  'Auditoría interna: marca los clips',
 ]
 
 export function forbiddenLiterals() {

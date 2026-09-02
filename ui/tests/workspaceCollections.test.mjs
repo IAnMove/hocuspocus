@@ -40,6 +40,6 @@ test('Workspaces panel is a collection editor and physical locations are labelle
   assert.match(main, /<WorkspaceCollectionsPanel/)
   assert.doesNotMatch(main, /outputFolder\.list|<OutputFolderSelector/)
   assert.match(outputSelector, /outputFolder\.list/)
-  assert.match(panel, /aria-label="Workspace collections"/)
+  assert.match(panel, /aria-label=\{tWs\('collections.aria'\)\}/)
   assert.doesNotMatch(panel, /switchWorkspace|setActiveWorkspace/)
 })

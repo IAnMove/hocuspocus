@@ -1,0 +1,32 @@
+{
+  "title": "Proyectos",
+  "aria": "Todos los proyectos",
+  "durable_one": "{{count}} proyecto durable",
+  "durable_other": "{{count}} proyectos durables",
+  "unreadable_one": "{{count}} fuente no legible",
+  "unreadable_other": "{{count}} fuentes no legibles",
+  "search": "Buscar título, ID o tipo…",
+  "kindAria": "Tipo de proyecto",
+  "workspaceAria": "Workspace del proyecto",
+  "allWorkspaces": "Todos los workspaces",
+  "refresh": "Actualizar registro",
+  "loading": "Leyendo proyectos…",
+  "empty": "No hay proyectos que coincidan con estos filtros.",
+  "loadFailed": "No se pudo cargar el registro",
+  "openFailed": "No se pudo abrir el proyecto",
+  "open": "Abrir proyecto",
+  "copyId": "Copiar ID",
+  "copyIdAria": "Copiar ID de {{title}}",
+  "noDate": "Fecha no disponible",
+  "belongsTo": "Pertenece a {{kind}}: {{id}}",
+  "kinds": {
+    "all": "Todos",
+    "story": "Stories",
+    "series": "Series",
+    "episode": "Episodios",
+    "comic": "Cómics",
+    "scene3d": "Escenas 3D",
+    "characterKit": "Character Kits",
+    "videoEditor": "Video Editor"
+  }
+}

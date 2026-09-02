@@ -11,6 +11,8 @@ import { formatSeconds, recommendedWindowProfile } from './DurationSlider'
 import { DirectorClipImagePreview } from './DirectorClipImagePreview'
 import { DirectorPlanRecoveryCard } from './DirectorPlanRecoveryCard'
 import { useObjectUrl } from '../../lib/useObjectUrl'
+import { useUiTranslation } from '../../i18n'
+import { SpokenLanguageOptions } from '../../i18n/SpokenLanguageOptions'
 
 const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
   .then(module => ({ default: module.ComicDirectorPanel })))
@@ -365,6 +367,7 @@ function LlmLogStage({ stage, label }: { stage: string; label: string }) {
 }
 
 export function DirectorChat() {
+  const { t } = useUiTranslation('director')
   const step = useStore(s => s.directorStep)
   const loading = useStore(s => s.directorLoading)
   // Sub-status text ("Loading transcription model (first use downloads
@@ -904,16 +907,11 @@ export function DirectorChat() {
           <>
             {atStep('style') && <SystemBubble>
               <label className="block">
-                <span className="text-[10px] text-text-muted">Idioma hablado del vídeo</span>
+                <span className="text-[10px] text-text-muted">{t('spoken.label')}</span>
                 <select className="mt-1 w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
-                  <option value="">Automático según el diálogo</option>
-                  <option value="Español de España">Español de España</option>
-                  <option value="Español latinoamericano">Español latinoamericano</option>
-                  <option value="English">English</option>
-                  <option value="French">Français</option>
-                  <option value="Italian">Italiano</option>
+                  <SpokenLanguageOptions />
                 </select>
-                <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">Se añade a todos los planos; la variante regional es best effort del modelo.</span>
+                <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">{t('spoken.hint')}</span>
               </label>
             </SystemBubble>}
             {/* Story path: show reference image + characters + duration here (since no upload step) */}
@@ -1018,9 +1016,9 @@ export function DirectorChat() {
                       className="mt-0.5 accent-accent-blue"
                     />
                     <div>
-                      <span className="text-[10px] text-text-primary">Permitir generar clips con textos</span>
+                      <span className="text-[10px] text-text-primary">{t('clipText.label')}</span>
                       <p className="text-[9px] text-text-muted leading-tight">
-                        Off by default. Dialogue and lyrics remain audio-only and are not rendered as visible lettering.
+                        {t('clipText.hint')}
                       </p>
                     </div>
                   </label>
@@ -1046,7 +1044,7 @@ export function DirectorChat() {
             {isMusicVideo && pastStep('style') && (
               <UserBubble>
                 <p className="text-[10px] text-text-secondary">
-                  {isDirectVideo ? 'Vídeo directo · T2V puro · sin imágenes' : `${musicVideoTreatment.mode} · ${musicVideoTreatment.performer_presence}% performance · ${musicVideoTreatment.recurring_sets.length} recurring sets`}
+                  {isDirectVideo ? t('directVideo.mode') : `${musicVideoTreatment.mode} · ${musicVideoTreatment.performer_presence}% performance · ${musicVideoTreatment.recurring_sets.length} recurring sets`}
                 </p>
               </UserBubble>
             )}
@@ -1284,6 +1282,7 @@ function MusicVideoTreatmentEditor({
   treatment: MusicVideoTreatment
   onChange: (partial: Partial<MusicVideoTreatment>) => void
 }) {
+  const { t } = useUiTranslation('director')
   const inputClass = 'w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] text-text-primary focus:border-accent-blue focus:outline-none'
   return (
     <div className="space-y-3">
@@ -1297,35 +1296,35 @@ function MusicVideoTreatmentEditor({
       </div>
 
       <div className="rounded-lg border border-border bg-bg-tertiary/60 p-2 space-y-2">
-        <label className="block text-[9px] text-text-muted">Video generation mode
+        <label className="block text-[9px] text-text-muted">{t('directVideo.generationMode')}
           <select
             value={treatment.generation_mode}
             onChange={event => onChange({ generation_mode: event.target.value as MusicVideoTreatment['generation_mode'] })}
             className={`${inputClass} mt-1`}
           >
-            <option value="image_guided">Image-guided · create a start frame</option>
-            <option value="direct_video">Vídeo directo · text only, no images</option>
+            <option value="image_guided">{t('directVideo.imageGuided')}</option>
+            <option value="direct_video">{t('directVideo.option')}</option>
           </select>
         </label>
         {treatment.generation_mode === 'direct_video' && (
           <div className="space-y-2 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 p-2">
             <div>
-              <p className="text-[10px] font-medium text-fuchsia-200">T2V puro · sin contaminación de imágenes</p>
+              <p className="text-[10px] font-medium text-fuchsia-200">{t('directVideo.pure')}</p>
               <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
-                HocusPocus repetirá este prompt maestro completo en cada clip. El LLM solo escribirá la situación concreta. No se generarán primeros fotogramas ni se enviarán referencias visuales a H3; los campos de estilo antiguos tampoco se mezclarán con este mundo.
+                {t('directVideo.masterHint')}
               </p>
             </div>
-            <label className="block text-[9px] text-text-muted">Prompt maestro inmutable
+            <label className="block text-[9px] text-text-muted">{t('directVideo.masterLabel')}
               <textarea
                 value={treatment.direct_video_master_prompt}
                 rows={8}
                 onChange={event => onChange({ direct_video_master_prompt: event.target.value })}
                 className={`${inputClass} mt-1 resize-y leading-relaxed`}
-                placeholder="Define aquí el mundo y el estilo que debe repetirse en todos los vídeos"
+                placeholder={t('directVideo.masterPlaceholder')}
               />
             </label>
             <p className="text-[9px] leading-relaxed text-amber-200/80">
-              Las imágenes y referencias que ya estuvieran cargadas se conservarán en la sesión, pero este modo las ignorará por completo.
+              {t('directVideo.ignoreLoaded')}
             </p>
           </div>
         )}
@@ -3365,6 +3364,7 @@ function VideoPromptsReview({
    *  status control that previously said "Auto Generating...". */
   generationError?: string | null
 }) {
+  const { t } = useUiTranslation('director')
   const directVideo = useStore(s => s.directorMusicVideoTreatment.generation_mode === 'direct_video')
   return (
     <div className="space-y-2">
@@ -3381,7 +3381,7 @@ function VideoPromptsReview({
 
       {directVideo && (
         <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-1.5 text-[9px] leading-relaxed text-fuchsia-100">
-          Vídeo directo: cada prompt incluye el mundo maestro y la situación de este clip. La generación será T2V pura, sin fotograma inicial ni referencias.
+          {t('directVideo.promptNote')}
         </div>
       )}
 

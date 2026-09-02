@@ -10,10 +10,18 @@
     "reload": "Reload",
     "create": "Create",
     "search": "Search",
-    "discard": "Discard"
+    "discard": "Discard",
+    "delete": "Delete",
+    "refresh": "Refresh",
+    "loadMore": "Load more"
+  },
+  "fields": {
+    "name": "Name",
+    "description": "Description"
   },
   "status": {
     "running": "Running",
+    "loading": "Loading…",
     "queued": "Queued",
     "completed": "Completed",
     "failed": "Failed",

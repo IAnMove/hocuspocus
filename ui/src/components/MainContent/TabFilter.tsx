@@ -90,6 +90,7 @@ function NavigationBar({ category, title, items, activeValue, barRef }: { catego
 
 export function TabFilter() {
   const { t, i18n } = useUiTranslation('navigation')
+  const { t: tSettings } = useUiTranslation('settings')
   const mediaFilter = useStore(s => s.mediaFilter)
   const developerMode = useStore(s => s.developerMode)
   const generationMode = useStore(s => s.generationMode)
@@ -320,19 +321,19 @@ export function TabFilter() {
               <button type="button" onClick={closeSearch} aria-label={t('search.close')} className="text-text-muted hover:text-text-secondary"><X size={12} /></button>
             </div>
           ) : (
-            <button type="button" onClick={() => { setDraftQuery(searchQuery); setSearchOpen(true) }} className={`rounded-lg p-1.5 ${searchQuery ? 'bg-accent-blue/10 text-accent-blue' : 'text-text-muted hover:bg-bg-hover hover:text-text-secondary'}`} title="Search outputs" aria-label={t('search.open')}>
+            <button type="button" onClick={() => { setDraftQuery(searchQuery); setSearchOpen(true) }} className={`rounded-lg p-1.5 ${searchQuery ? 'bg-accent-blue/10 text-accent-blue' : 'text-text-muted hover:bg-bg-hover hover:text-text-secondary'}`} title={t('search.open')} aria-label={t('search.open')}>
               <Search size={14} />
             </button>
           )}
-          <label className="flex items-center gap-1 rounded-lg px-2 py-1 text-text-muted hover:bg-bg-hover" title="Interface language">
+          <label className="flex items-center gap-1 rounded-lg px-2 py-1 text-text-muted hover:bg-bg-hover" title={tSettings('language.label')}>
             <Languages size={14} />
-            <select value={language} onChange={event => { void setUiLanguage(event.target.value as UiLanguage) }} className="cursor-pointer bg-transparent text-[10px] font-medium text-text-secondary outline-none" aria-label="Quick interface language">
+            <select value={language} onChange={event => { void setUiLanguage(event.target.value as UiLanguage) }} className="cursor-pointer bg-transparent text-[10px] font-medium text-text-secondary outline-none" aria-label={tSettings('language.quickAria')}>
               <option value="es">ES</option>
               <option value="en">EN</option>
             </select>
           </label>
-          <button type="button" onClick={() => window.dispatchEvent(new Event('hocuspocus:settings-open'))} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-bg-hover hover:text-text-primary" aria-label="Settings">
-            <Settings size={14} /><span>Settings</span>
+          <button type="button" onClick={() => window.dispatchEvent(new Event('hocuspocus:settings-open'))} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-bg-hover hover:text-text-primary" aria-label={tSettings('title')}>
+            <Settings size={14} /><span>{tSettings('title')}</span>
           </button>
         </div>
       </div>

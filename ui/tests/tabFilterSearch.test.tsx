@@ -235,7 +235,7 @@ test('closing or unmounting search cancels its hidden debounce', { concurrency: 
 
   try {
     const view = render(<TabFilter />)
-    fireEvent.click(screen.getByTitle('Search outputs'))
+    fireEvent.click(screen.getByTitle('Search library'))
     const firstInput = screen.getByPlaceholderText('Search...') as HTMLInputElement
     fireEvent.change(firstInput, { target: { value: 'hidden query' } })
     assert.equal(firstInput.value, 'hidden query')
@@ -246,7 +246,7 @@ test('closing or unmounting search cancels its hidden debounce', { concurrency: 
     assert.equal(useStore.getState().outputSearchQuery, '')
     assert.equal(outputLoads, 0)
 
-    fireEvent.click(screen.getByTitle('Search outputs'))
+    fireEvent.click(screen.getByTitle('Search library'))
     fireEvent.change(screen.getByPlaceholderText('Search...'), {
       target: { value: 'unmounted query' },
     })
