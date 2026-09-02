@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Menu, Settings } from 'lucide-react'
 import { Sidebar } from './components/Sidebar/Sidebar'
+import { WizardSidebar } from './components/Sidebar/WizardSidebar'
 import { MainContent } from './components/MainContent/MainContent'
 import { SettingsDrawer } from './components/SettingsDrawer/SettingsDrawer'
 import { LoraBrowser } from './components/LoraBrowser/LoraBrowser'
@@ -181,6 +182,7 @@ function AppContent() {
       )}
 
       <div className="flex flex-1 min-h-0 w-full">
+        <WizardSidebar />
         <Sidebar />
         <MainContent />
       </div>

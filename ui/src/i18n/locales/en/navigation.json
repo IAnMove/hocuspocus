@@ -26,6 +26,64 @@
     "series": "Series Lab",
     "director": "Director"
   },
+  "primary": {
+    "create": "Create",
+    "library": "Library",
+    "directGeneration": "Direct generation",
+    "studios": "Studios",
+    "production": "Production",
+    "media": "Media",
+    "activity": "Activity",
+    "studio": "Studio"
+  },
+  "menu": {
+    "create": "Choose a creative workspace",
+    "library": "Find projects and generated media",
+    "directGeneration": "Direct generation",
+    "guidedCreation": "Guided creation",
+    "studios": "Develop guided creative projects",
+    "production": "Prepare, supervise and edit productions",
+    "media": "Browse projects and generated assets"
+  },
+  "panel": {
+    "directGeneration": "Direct generation",
+    "director": "Director"
+  },
+  "directModes": {
+    "image": "Image",
+    "video": "Video",
+    "audio": "Audio",
+    "model3d": "3D",
+    "avatar": "Edit",
+    "tools": "Tools"
+  },
+  "descriptions": {
+    "studio": "Generate a single image, video, song or 3D asset.",
+    "storyLab": "Develop stories and music videos with a reusable canon.",
+    "seriesLab": "Plan a series and create its episodes.",
+    "comics": "Lay out pages, panels and their images.",
+    "director": "Prepare and supervise multi-shot productions.",
+    "editor": "Assemble and export existing clips.",
+    "video3d": "Compose camera-driven videos from 3D scenes.",
+    "animate3d": "Animate characters and objects inside a 3D scene.",
+    "productions": "Review prepared productions and their progress.",
+    "characters": "Build reusable characters and references.",
+    "projects": "Durable creative documents you can reopen and edit.",
+    "assets": "Reusable source files and generated results.",
+    "allOutputs": "Browse every generated output in the current output folder.",
+    "mediaFilters": "Filter the output library by this media type.",
+    "directImage": "Create one image with complete control over its model and references.",
+    "directVideo": "Create one video or continue an existing clip.",
+    "directAudio": "Create speech, music, effects or a mix.",
+    "direct3d": "Generate a standalone 3D asset.",
+    "directEdit": "Edit, restyle, inpaint or recast an existing result.",
+    "directTools": "Run post-processing tools on an existing asset."
+  },
+  "search": {
+    "placeholder": "Search...",
+    "open": "Search library",
+    "close": "Close search"
+  },
   "tabs": {
     "all": "All",
     "assets": "Assets",
@@ -47,6 +105,7 @@
     "styles": "Style sheet",
     "comics": "Comics",
     "videoEditor": "Video Editor",
+    "productions": "Productions",
     "scene3d": "3D Video",
     "animate3d": "Animate",
     "edits": "Edits",
@@ -99,6 +158,7 @@
     "auditDev": "Internal audit"
   },
   "outputFolder": {
+    "option": "Output",
     "switch": "Switch output folder",
     "list": "Output folders",
     "uploads": "Uploads"

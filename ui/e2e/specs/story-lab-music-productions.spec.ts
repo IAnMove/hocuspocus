@@ -4,6 +4,7 @@ import { closeApp, gotoApp } from '../helpers/gotoApp'
 test('opens extracted Story Lab Music, Trailer and Productions chrome', async ({ page }) => {
   const session = await gotoApp(page)
 
+  await page.getByRole('button', { name: 'Studios' }).click()
   const storyTab = page.getByRole('tab', { name: 'Story Lab' })
   await expect(storyTab).toBeVisible()
   await storyTab.click()

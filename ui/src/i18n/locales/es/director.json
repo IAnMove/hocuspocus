@@ -14,5 +14,31 @@
     "discardClean": "Descartar y empezar limpio",
     "resumeAnyway": "Aun así retomar restos antiguos",
     "resumeQueue": "Retomar cola"
+  },
+  "spoken": {
+    "label": "Idioma hablado del vídeo",
+    "auto": "Automático según el diálogo",
+    "spain": "Español de España",
+    "latam": "Español latinoamericano",
+    "english": "English",
+    "french": "Français",
+    "italian": "Italiano",
+    "hint": "Se añade a todos los planos; la variante regional es best effort del modelo."
+  },
+  "clipText": {
+    "label": "Permitir generar clips con textos",
+    "hint": "Desactivado por defecto. El diálogo y la letra siguen siendo solo audio y no se pintan como letreros visibles."
+  },
+  "directVideo": {
+    "mode": "Vídeo directo · T2V puro · sin imágenes",
+    "pure": "T2V puro · sin contaminación de imágenes",
+    "generationMode": "Modo de generación de vídeo",
+    "imageGuided": "Guiado por imagen · crea un fotograma inicial",
+    "masterLabel": "Prompt maestro inmutable",
+    "masterHint": "HocusPocus repetirá este prompt maestro completo en cada clip. El LLM solo escribirá la situación concreta. No se generarán primeros fotogramas ni se enviarán referencias visuales a H3; los campos de estilo antiguos tampoco se mezclarán con este mundo.",
+    "masterPlaceholder": "Define aquí el mundo y el estilo que debe repetirse en todos los vídeos",
+    "ignoreLoaded": "Las imágenes y referencias que ya estuvieran cargadas se conservarán en la sesión, pero este modo las ignorará por completo.",
+    "option": "Vídeo directo · solo texto, sin imágenes",
+    "promptNote": "Vídeo directo: cada prompt incluye el mundo maestro y la situación de este clip. La generación será T2V pura, sin fotograma inicial ni referencias."
   }
 }

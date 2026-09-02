@@ -97,8 +97,8 @@ test('style import exposes durable storage, resume, and cooperative cancel contr
     assert.ok(await screen.findByText('Storage: /pinokio/cache/maestro/style-library'))
     assert.ok(screen.getByText('Import cancelled. Partial files were preserved and can be resumed.'))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reanudar descarga de estilos' }))
-    const cancel = await screen.findByRole('button', { name: 'Cancelar' })
+    fireEvent.click(screen.getByRole('button', { name: 'Resume style download' }))
+    const cancel = await screen.findByRole('button', { name: 'Cancel' })
     fireEvent.click(cancel)
 
     await waitFor(() => assert.ok(calls.some(value => value.endsWith('POST /api/v1/style-library/imports/style-import-resume/cancel'))))

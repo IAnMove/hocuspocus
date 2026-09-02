@@ -81,7 +81,12 @@ test('required glossary keys exist in both languages', async () => {
     ['videoEditor', 'toolbar.exportMp4'],
     ['videoEditor', 'empty.drop'],
     ['videoEditor', 'actions.retryHandoff'],
-    ['videoEditor', 'inspector.redoInVideoCreation'],
+    ['videoEditor', 'remake.action'],
+    ['director', 'spoken.label'],
+    ['workspaces', 'runs.search'],
+    ['styleSheet', 'title'],
+    ['projects', 'title'],
+    ['auditDev', 'banner'],
   ]
   for (const language of ['en', 'es']) {
     await i18n.changeLanguage(language)
@@ -91,7 +96,7 @@ test('required glossary keys exist in both languages', async () => {
     }
   }
   assert.equal(i18n.t('entities.workspace', { ns: 'navigation', lng: 'es' }), 'Workspace')
-  assert.equal(i18n.t('title', { ns: 'wizard', lng: 'es' }), 'Pregunta al mago')
+  assert.equal(i18n.t('title', { ns: 'wizard', lng: 'es' }), 'Ask to the Wizard')
   assert.equal(i18n.t('entities.outputFolder', { ns: 'navigation', lng: 'es' }), 'Carpeta de salida')
   assert.equal(i18n.t('outputFolder.uploads', { ns: 'navigation', lng: 'es' }), 'Subidas')
   assert.equal(i18n.t('tabs.documents', { ns: 'navigation', lng: 'es' }), 'Documentos')
@@ -255,7 +260,7 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
 
 test('resources register the extraInfo, storyLab and videoEditor namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)
@@ -313,7 +318,7 @@ test('Video Editor chrome uses the videoEditor catalog', async () => {
   assert.match(panel, /t\('toolbar\.import'\)/)
   assert.match(panel, /t\('empty\.drop'\)/)
   assert.match(panel, /t\('actions\.retryHandoff'\)/)
-  assert.match(panel, /t\('inspector\.redoInVideoCreation'\)/)
+  assert.match(panel, /t\('remake\.action'\)/)
   assert.doesNotMatch(panel, /['"`]Export MP4['"`]/)
   assert.doesNotMatch(panel, /['"`]From HocusPocus['"`]/)
   assert.doesNotMatch(panel, /['"`]Drop videos here or click to import['"`]/)

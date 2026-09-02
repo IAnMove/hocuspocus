@@ -40,12 +40,9 @@ function clipWantsDrive(clip: PipelineClipState): boolean {
   return Boolean(plan.lip_sync_critical) && (mode === 'audio_driven' || mode === 'dialogue_driven')
 }
 
-function audioPlanLabel(clip: PipelineClipState): string {
-  return clipWantsDrive(clip) ? 'canto · drive' : 'mute'
-}
-
 export function RunsPanel() {
   const { t } = useUiTranslation('navigation')
+  const { t: tWs } = useUiTranslation('workspaces')
   const pipelineList = useStore(s => s.dashboardPipelineList)
   const pipelineTotal = useStore(s => s.dashboardPipelineTotal)
   const selectedPipeline = useStore(s => s.dashboardSelectedPipeline)
@@ -153,10 +150,10 @@ export function RunsPanel() {
             <div>
               <h2 className="text-sm font-semibold text-text-primary">{t('headings.runs')}</h2>
               <p className="text-[10px] text-text-muted">
-                Cada fila es un intento de ejecutar una Production. El más reciente se abre automáticamente.
+                {tWs('runs.intro')}
               </p>
             </div>
-            <button type="button" className={button} onClick={() => void loadPipelineList()} title="Reload threads">
+            <button type="button" className={button} onClick={() => void loadPipelineList()} title={tWs('runs.reload')}>
               <RefreshCw size={13} />
             </button>
           </div>
@@ -164,12 +161,12 @@ export function RunsPanel() {
             type="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder="Buscar run…"
+            placeholder={tWs('runs.search')}
             className="mt-2 w-full rounded-md border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary"
           />
           <div className="mt-2 flex gap-1">
-            <button type="button" className={`${button} flex-1 ${newestFirst ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setNewestFirst(true)}>Nuevo → viejo</button>
-            <button type="button" className={`${button} flex-1 ${!newestFirst ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setNewestFirst(false)}>Viejo → nuevo</button>
+            <button type="button" className={`${button} flex-1 ${newestFirst ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setNewestFirst(true)}>{tWs('runs.newestFirst')}</button>
+            <button type="button" className={`${button} flex-1 ${!newestFirst ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setNewestFirst(false)}>{tWs('runs.oldestFirst')}</button>
           </div>
         </div>
         <nav aria-label={t('aria.savedProductionRuns')} className="flex min-h-0 max-h-36 flex-1 gap-2 overflow-x-auto p-2 md:block md:max-h-none md:overflow-x-hidden md:overflow-y-auto">
@@ -180,10 +177,10 @@ export function RunsPanel() {
               className="mb-0 min-w-52 shrink-0 rounded-lg border border-blue-500/40 bg-blue-500/10 p-2 text-left md:mb-1.5 md:w-full md:min-w-0"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-medium text-text-primary">Run en preparación</span>
+                <span className="truncate text-xs font-medium text-text-primary">{tWs('runs.preparing')}</span>
                 <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] bg-blue-500/20 text-chip-blue">{livePipelineStatus?.status || 'running'}</span>
               </div>
-              <div className="mt-1 text-[10px] text-text-muted">Se está escribiendo el plan. Pulsa para reintentar la carga.</div>
+              <div className="mt-1 text-[10px] text-text-muted">{tWs('runs.writingPlan')}</div>
             </button>
           )}
           {sortedThreads.map(item => (
@@ -205,11 +202,11 @@ export function RunsPanel() {
           ))}
           {!pipelineList.length && !pendingLive && (
             <p className="min-w-64 p-3 text-[11px] leading-relaxed text-text-muted">
-              Ejecuta una Production de canción o vídeo y su run aparecerá aquí. No necesitas escribir su ID.
+              {tWs('runs.empty')}
             </p>
           )}
           {pipelineList.length > 0 && !sortedThreads.length && (
-            <p className="min-w-64 p-3 text-[11px] text-text-muted">Ningún hilo coincide con “{query}”.</p>
+            <p className="min-w-64 p-3 text-[11px] text-text-muted">{tWs('runs.noMatch', { query })}</p>
           )}
           {pipelineList.length < pipelineTotal && (
             <button
@@ -217,7 +214,7 @@ export function RunsPanel() {
               className={`${button} mt-1 w-full md:w-full`}
               onClick={() => void loadMorePipelineList()}
             >
-                Más runs ({pipelineList.length}/{pipelineTotal})
+                {tWs('runs.more', { shown: pipelineList.length, total: pipelineTotal })}
             </button>
           )}
         </nav>
@@ -228,23 +225,28 @@ export function RunsPanel() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-0 flex-1">
               <h2 className="truncate text-sm font-semibold text-text-primary">
-                {selectedPipeline ? pipelineLabel(selectedPipeline) : 'Run details'}
+                {selectedPipeline ? pipelineLabel(selectedPipeline) : tWs('runs.details')}
               </h2>
               <p className="text-[10px] text-text-muted">
                 {queue
-                  ? `${queue.image_model || 'no image model'} + ${queue.video_model || 'no video model'} · ${readyVideos}/${queue.clips.length} videos`
-                  : 'Carga un run para inspeccionar sus tareas y outputs'}
+                  ? tWs('runs.models', {
+                    image: queue.image_model || tWs('runs.noImageModel'),
+                    video: queue.video_model || tWs('runs.noVideoModel'),
+                    ready: readyVideos,
+                    total: queue.clips.length,
+                  })
+                  : tWs('runs.loadToInspect')}
               </p>
             </div>
             {selectedPipeline && (
               <>
                 <button type="button" className={primary} disabled={launching || !pipelineCanLaunch(queue)} onClick={() => void launch()}>
                   {launching ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-                  {queue?.status === 'paused' ? 'Continue videos' : 'Start / resume videos'}
+                  {queue?.status === 'paused' ? tWs('runs.continueVideos') : tWs('runs.startResume')}
                 </button>
                 <button type="button" className={button} disabled={rejoining || readyVideos < 2} onClick={() => void rejoin()}>
                   {rejoining ? <Loader2 size={13} className="animate-spin" /> : <Combine size={13} />}
-                  Regenerar vídeo completo
+                  {tWs('runs.rejoin')}
                 </button>
               </>
             )}
@@ -255,20 +257,20 @@ export function RunsPanel() {
           {(loadError || actionError) && (
             <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
               <span className="min-w-0 flex-1">{actionError || loadError}</span>
-              {loadError && <button type="button" className={button} onClick={() => void retryLoad()}>Retry</button>}
+              {loadError && <button type="button" className={button} onClick={() => void retryLoad()}>{tWs('runs.retry')}</button>}
             </div>
           )}
           {loading && !selectedPipeline && (
             <div className="flex items-center justify-center gap-2 py-16 text-xs text-text-muted">
-              <Loader2 size={16} className="animate-spin" /> Loading thread…
+              <Loader2 size={16} className="animate-spin" /> {tWs('runs.loadingThread')}
             </div>
           )}
           {!loading && !selectedPipeline && (
             <div className="mx-auto mt-16 max-w-lg rounded-2xl border border-violet-500/30 bg-violet-500/10 p-8 text-center">
               <Layers size={28} className="mx-auto text-violet-300" />
-              <h3 className="mt-3 text-base font-semibold text-text-primary">Carga un run de la lista</h3>
+              <h3 className="mt-3 text-base font-semibold text-text-primary">{tWs('runs.loadFromList')}</h3>
               <p className="mt-2 text-xs leading-relaxed text-text-muted">
-                A la izquierda están los intentos de ejecución, del más nuevo al más viejo. Pulsa uno para ver sus prompts, referencias, tareas y outputs.
+                {tWs('runs.listHint')}
               </p>
             </div>
           )}
@@ -280,6 +282,7 @@ export function RunsPanel() {
 }
 
 function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
+  const { t } = useUiTranslation('workspaces')
   const updateClipPrompt = useStore(s => s.updateClipPrompt)
   const [instruction, setInstruction] = useState('')
   const [shorten, setShorten] = useState(true)
@@ -298,9 +301,9 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
   }, [pipeline.pipeline_id])
 
   const refs = [
-    ...(pipeline.character_ref_paths || []).map(path => ({ kind: 'Character', path })),
-    ...(pipeline.location_ref_paths || []).map(path => ({ kind: 'Location', path })),
-    pipeline.reference_image_path ? { kind: 'Reference', path: pipeline.reference_image_path } : null,
+    ...(pipeline.character_ref_paths || []).map(path => ({ kind: t('meta.character'), path })),
+    ...(pipeline.location_ref_paths || []).map(path => ({ kind: t('meta.location'), path })),
+    pipeline.reference_image_path ? { kind: t('meta.reference'), path: pipeline.reference_image_path } : null,
   ].filter(Boolean) as Array<{ kind: string; path: string }>
   const finalOutput = pipeline.final_output_filename || [...(pipeline.output_files || [])]
     .reverse()
@@ -325,7 +328,7 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
     const targets = pipeline.clips.filter(clip => selected.has(clip.index))
     if (!targets.length) return
     if (!instruction.trim() && !shorten) {
-      setRewriteError('Escribe una consigna o marca acortar para MiniMax.')
+      setRewriteError(t('rewrite.needInstruction'))
       return
     }
     setRewriting(true)
@@ -334,7 +337,7 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
       const { extractRewrittenPrompt, workspaceRewriteSystemPrompt } = await import('./rewrite')
       const system = workspaceRewriteSystemPrompt(instruction, shorten)
       for (const [offset, clip] of targets.entries()) {
-        setRewriteStatus(`Reescribiendo shot ${clip.index + 1} (${offset + 1}/${targets.length})…`)
+        setRewriteStatus(t('rewrite.rewriting', { shot: clip.index + 1, current: offset + 1, total: targets.length }))
         const original = shotPrompt(clip)
         const text = await api.generateLlmText({
           prompt: original,
@@ -347,7 +350,7 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
           [clip.index]: extractRewrittenPrompt(text, original),
         }))
       }
-      setRewriteStatus(`Listas ${targets.length} propuestas. Revisa y guarda las que quieras.`)
+      setRewriteStatus(t('rewrite.proposalsReady', { count: targets.length }))
     } catch (reason) {
       setRewriteError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -362,7 +365,7 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
     setRewriteError(null)
     try {
       for (const [offset, clip] of targets.entries()) {
-        setRewriteStatus(`Guardando shot ${clip.index + 1} (${offset + 1}/${targets.length})…`)
+        setRewriteStatus(t('rewrite.saving', { shot: clip.index + 1, current: offset + 1, total: targets.length }))
         await updateClipPrompt(pipeline.pipeline_id, clip.index, { video_prompt: proposals[clip.index] })
       }
       setProposals(current => {
@@ -370,7 +373,7 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
         targets.forEach(clip => { delete next[clip.index] })
         return next
       })
-      setRewriteStatus(`Guardados ${targets.length} prompts.`)
+      setRewriteStatus(t('rewrite.saved', { count: targets.length }))
     } catch (reason) {
       setRewriteError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -385,15 +388,15 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
           <span className={`rounded px-2 py-0.5 ${statusTone(pipeline.status)}`}>{pipeline.phase || pipeline.status}</span>
           <span className="text-text-muted">{pipeline.pipeline_type.replace(/_/g, ' ')}</span>
           {pipeline.queue_source && pipeline.queue_source !== 'clips' && (
-            <span className="rounded bg-amber-500/15 px-2 py-0.5 text-amber-200">Queue from planned prompts</span>
+            <span className="rounded bg-amber-500/15 px-2 py-0.5 text-amber-200">{t('meta.queueFromPlanned')}</span>
           )}
         </div>
         {pipeline.error && <p className="mt-2 text-xs text-red-300">{pipeline.error}</p>}
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <MetaChip label="Image model" value={pipeline.image_model || '—'} />
-          <MetaChip label="Video model" value={pipeline.video_model || '—'} />
-          <MetaChip label="Shots in queue" value={String(pipeline.clips.length)} />
-          <MetaChip label="Created" value={formatDate(pipeline.created_at)} />
+          <MetaChip label={t('meta.imageModel')} value={pipeline.image_model || '—'} />
+          <MetaChip label={t('meta.videoModel')} value={pipeline.video_model || '—'} />
+          <MetaChip label={t('meta.shotsInQueue')} value={String(pipeline.clips.length)} />
+          <MetaChip label={t('meta.created')} value={formatDate(pipeline.created_at)} />
         </div>
         {refs.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -415,30 +418,30 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
 
       <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-[11px] font-medium uppercase tracking-wider text-violet-100">Consigna del hilo</h3>
-          <span className="text-[10px] text-text-muted">{selectedCount} seleccionados · {proposalCount} con propuesta</span>
+          <h3 className="text-[11px] font-medium uppercase tracking-wider text-violet-100">{t('rewrite.title')}</h3>
+          <span className="text-[10px] text-text-muted">{t('rewrite.selected', { selected: selectedCount, proposals: proposalCount })}</span>
         </div>
         <textarea
           value={instruction}
           onChange={event => setInstruction(event.target.value)}
           rows={3}
-          placeholder='Ejemplo: quita todos los MC, hoodies y cadenas. Quédate solo con enanos de Tolkien.'
+          placeholder={t('rewrite.placeholder')}
           className="w-full resize-y rounded-md border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary"
         />
         <label className="flex items-center gap-2 text-[11px] text-text-secondary">
           <input type="checkbox" checked={shorten} onChange={event => setShorten(event.target.checked)} />
-          Acortar el cuerpo visual para MiniMax H3 (conserva campos y refs)
+          {t('rewrite.shorten')}
         </label>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={button} onClick={selectAll}>Select all</button>
-          <button type="button" className={button} onClick={selectNone}>Quitar selección</button>
+          <button type="button" className={button} onClick={selectAll}>{t('rewrite.selectAll')}</button>
+          <button type="button" className={button} onClick={selectNone}>{t('rewrite.clearSelection')}</button>
           <button type="button" className={primary} disabled={rewriting || savingBatch || selectedCount === 0} onClick={() => void proposeSelected()}>
             {rewriting ? <Loader2 size={12} className="animate-spin" /> : null}
-            Proponer en seleccionados
+            {t('rewrite.propose')}
           </button>
           <button type="button" className={button} disabled={savingBatch || rewriting || proposalCount === 0} onClick={() => void saveSelected()}>
             {savingBatch ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-            Guardar seleccionados
+            {t('rewrite.saveSelected')}
           </button>
         </div>
         {rewriteStatus && <p className="text-[11px] text-text-secondary">{rewriteStatus}</p>}
@@ -447,7 +450,7 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
 
       <div className="space-y-3">
         <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">
-          Queue ({pipeline.clips.length})
+          {t('queue.title', { count: pipeline.clips.length })}
         </h3>
         {pipeline.clips.map(clip => (
           <QueueShotCard
@@ -461,7 +464,7 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
         ))}
         {!pipeline.clips.length && (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-text-muted">
-            This thread has no planned shots yet.
+            {t('queue.empty')}
           </p>
         )}
       </div>
@@ -485,6 +488,7 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
   proposal?: string
   onToggleSelected: () => void
 }) {
+  const { t } = useUiTranslation('workspaces')
   const updateClipPrompt = useStore(s => s.updateClipPrompt)
   const rerunClipVideo = useStore(s => s.rerunClipVideo)
   const selectClipVideo = useStore(s => s.selectClipVideo)
@@ -548,7 +552,7 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1.5 text-xs text-text-secondary">
           <input type="checkbox" checked={selected} onChange={onToggleSelected} />
-          <span className="font-semibold text-text-primary">Shot {clip.index + 1}</span>
+          <span className="font-semibold text-text-primary">{t('queue.shot', { n: clip.index + 1 })}</span>
         </label>
         {duration != null && <span className="text-[10px] text-text-muted">{duration.toFixed(1)}s</span>}
         <span className="text-[10px] text-text-muted">{clip._director_h3_prompt_mode || pipeline.video_model}</span>
@@ -557,24 +561,24 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
           className={`rounded px-1.5 py-0.5 text-[9px] ${wantsDrive ? 'bg-violet-500/20 text-violet-100' : 'bg-bg-tertiary text-text-muted'}`}
           disabled={togglingDrive || busy}
           onClick={() => void toggleDrive()}
-          title={wantsDrive ? 'Este plano recibe el vocal de la canción. Clic para dejarlo mute.' : 'Este plano no recibe vocal. Clic para marcar canto/drive.'}
+          title={wantsDrive ? t('queue.driveOn') : t('queue.driveOff')}
         >
-          {togglingDrive ? '…' : audioPlanLabel(clip)}
+          {togglingDrive ? '…' : wantsDrive ? t('queue.singDrive') : t('queue.mute')}
         </button>
         <span className={`rounded px-1.5 py-0.5 text-[9px] ${attempt ? 'bg-green-500/15 text-indicator-success' : 'bg-bg-tertiary text-text-muted'}`}>
-          {attempt ? `${attempts.length} take${attempts.length === 1 ? '' : 's'}` : 'placeholder'}
+          {attempt ? t('queue.takes', { count: attempts.length }) : t('queue.placeholder')}
         </span>
         <div className="ml-auto flex items-center gap-1">
           <button type="button" className={button} onClick={() => { setEditing(value => !value); setDraft(shotPrompt(clip)) }}>
-            <Pencil size={11} /> Edit
+            <Pencil size={11} /> {t('queue.edit')}
           </button>
           {editing && (
             <button type="button" className={primary} disabled={saving || busy} onClick={() => void save()}>
-              {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save prompt
+              {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} {t('queue.savePrompt')}
             </button>
           )}
-          <button type="button" className={button} disabled={rerunning || busy} onClick={() => void rerun()} title="Repeat this shot and keep previous takes">
-            {rerunning ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} Repeat
+          <button type="button" className={button} disabled={rerunning || busy} onClick={() => void rerun()} title={t('queue.repeatTitle')}>
+            {rerunning ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} {t('queue.repeat')}
           </button>
         </div>
       </div>
@@ -584,11 +588,11 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
           {attempt?.filename ? (
             <video src={getFileUrl(attempt.filename)} controls preload="metadata" className="aspect-video w-full object-contain" />
           ) : clip.start_image_filename ? (
-            <img src={getFileUrl(clip.start_image_filename)} alt={`Shot ${clip.index + 1}`} className="aspect-video w-full object-cover" />
+            <img src={getFileUrl(clip.start_image_filename)} alt={t('queue.shot', { n: clip.index + 1 })} className="aspect-video w-full object-cover" />
           ) : (
             <div className="flex aspect-video flex-col items-center justify-center gap-1 text-text-muted">
               <ImageIcon size={18} />
-              <span className="text-[10px]">Video placeholder</span>
+              <span className="text-[10px]">{t('queue.videoPlaceholder')}</span>
             </div>
           )}
         </div>
@@ -601,11 +605,11 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
               className="w-full resize-y rounded-md border border-violet-400/50 bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary focus:outline-none"
             />
           ) : (
-            <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-text-secondary">{shotPrompt(clip) || 'No prompt yet'}</p>
+            <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-text-secondary">{shotPrompt(clip) || t('queue.noPrompt')}</p>
           )}
           {proposal && proposal !== shotPrompt(clip) && (
             <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-2">
-              <div className="mb-1 text-[9px] uppercase tracking-wider text-emerald-200">Propuesta</div>
+              <div className="mb-1 text-[9px] uppercase tracking-wider text-emerald-200">{t('rewrite.proposal')}</div>
               <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-emerald-100">{proposal}</p>
             </div>
           )}
@@ -630,7 +634,7 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
       {attempts.length > 0 && (
         <div className="mt-3">
           <div className="mb-1 flex items-center gap-1 text-[10px] font-medium text-text-secondary">
-            <History size={11} /> Takes for this slot — choose which one stays in the cut
+            <History size={11} /> {t('queue.takesForSlot')}
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
             {attempts.map((item, index) => {
@@ -645,11 +649,11 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
                 >
                   <div className="relative aspect-video bg-black">
                     <video src={`${getFileUrl(item.filename)}#t=0.1`} muted playsInline preload="metadata" className="h-full w-full object-contain" />
-                    {selected && <span className="absolute right-1 top-1 inline-flex items-center gap-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-[8px] text-white"><Check size={8} />In cut</span>}
+                    {selected && <span className="absolute right-1 top-1 inline-flex items-center gap-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-[8px] text-white"><Check size={8} />{t('queue.inCut')}</span>}
                   </div>
                   <div className="p-1.5">
-                    <div className="truncate text-[9px] text-text-primary">Take {index + 1} · {item.source || 'historical'}</div>
-                    <div className="truncate text-[8px] text-text-muted">seed {item.seed ?? '—'}</div>
+                    <div className="truncate text-[9px] text-text-primary">{t('queue.take', { n: index + 1, source: item.source || t('queue.historical') })}</div>
+                    <div className="truncate text-[8px] text-text-muted">{t('queue.seed', { seed: item.seed ?? '—' })}</div>
                   </div>
                 </button>
               )

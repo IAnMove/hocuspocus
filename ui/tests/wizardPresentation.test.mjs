@@ -98,4 +98,6 @@ test('Studio video prototype exposes stable anchors and an accessible motion esc
   assert.equal((generate.match(/data-wizard-anchor="generate"/g) || []).length, 2)
   assert.match(css, /@keyframes hp-wizard-field-fill/)
   assert.match(css, /prefers-reduced-motion:[ ]*reduce[\s\S]*data-wizard-anchor/)
+  assert.match(css, /hp-navigation-primary\[data-navigation-expanded='true'\][\s\S]*translateY\(1px\)/)
+  assert.match(css, /hp-navigation-children::before[\s\S]*--hp-navigation-notch-left/)
 })

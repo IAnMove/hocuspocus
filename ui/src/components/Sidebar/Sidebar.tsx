@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Settings, X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
-import { GenerationModeSelector } from './GenerationModeSelector'
 import { InputsPanel } from './InputsPanel'
 import { OmniReferenceSection } from './OmniReferenceSection'
 import { PromptInput } from './PromptInput'
@@ -18,7 +17,6 @@ import { AdvancedSettings } from './AdvancedSettings'
 import { GenerateButton } from './GenerateButton'
 import { ModelSelector } from './ModelSelector'
 import { MultiClipEditor } from './MultiClipEditor'
-import { DirectorChat } from './DirectorChat'
 import { EditSubModeToggle } from './EditSubModeToggle'
 import { RestyleControls } from './RestyleControls'
 import { InpaintControls } from './InpaintControls'
@@ -35,19 +33,23 @@ import { HardwareStatusBar } from './HardwareStatusBar'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
 import { PanoramaLoopPanel } from './PanoramaLoopPanel'
 import { BrandIdentity } from '../BrandIdentity'
+import { DirectorChat } from './DirectorChat'
+import { useUiTranslation } from '../../i18n'
 
 export function Sidebar() {
-  const [directorCollapsed, setDirectorCollapsed] = useState(() =>
-    window.localStorage.getItem('maestro-director-sidebar-collapsed') === 'true')
-  const toggleSettings = useStore(s => s.toggleSettings)
+  const { t } = useUiTranslation('navigation')
+  const [toolsCollapsed, setToolsCollapsed] = useState(() =>
+    window.localStorage.getItem('hocuspocus-tools-sidebar-collapsed') === 'true')
   const generationMode = useStore(s => s.generationMode)
   const imageMode = useStore(s => s.params.image_mode)
   const modelOptions = useStore(s => s.modelOptions)
   const sidebarOpen = useStore(s => s.sidebarOpen)
   const appVersion = useStore(s => s.systemConfig?.app_version)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
-  const sidebarMode = useStore(s => s.sidebarMode)
   const setSidebarMode = useStore(s => s.setSidebarMode)
+  const sidebarMode = useStore(s => s.sidebarMode)
+  const setSettingsOpen = useStore(s => s.setSettingsOpen)
+  const setDashboardOpen = useStore(s => s.setDashboardOpen)
   const editSubMode = useStore(s => s.editSubMode)
   const modelType = useStore(s => s.params.model_type)
   const openLoraBrowser = useStore(s => s.setLoraBrowserOpen)
@@ -60,6 +62,7 @@ export function Sidebar() {
   const audioSubMode = useStore(s => s.audioSubMode)
   const isEdit = generationMode === 'avatar'
   const isTools = generationMode === 'tools'
+  const isDirector = sidebarMode === 'director'
   const isRetake = isEdit && editSubMode === 'retake'
   const isRestyle = isEdit && editSubMode === 'restyle'
   const isInpaint = isEdit && editSubMode === 'inpaint'
@@ -70,47 +73,55 @@ export function Sidebar() {
   const isMultiClip = isVideo && !isOmniReference && imageMode === 2
   const isContinue = isVideo && !isOmniReference && imageMode === 3
   const isBlend = isVideo && !isOmniReference && imageMode === 4
-  const isDirector = sidebarMode === 'director'
   const isI2vOnly = modelOptions?.i2v_class && !modelOptions?.t2v_class
-  const setDirectorSidebarCollapsed = (collapsed: boolean) => {
-    setDirectorCollapsed(collapsed)
-    window.localStorage.setItem('maestro-director-sidebar-collapsed', String(collapsed))
+  const directModeLabel = {
+    image: t('directModes.image'),
+    video: t('directModes.video'),
+    audio: t('directModes.audio'),
+    model3d: t('directModes.model3d'),
+    avatar: t('directModes.avatar'),
+    tools: t('directModes.tools'),
+  }[generationMode]
+  const panelTitle = isDirector ? t('panel.director') : `${t('panel.directGeneration')} · ${directModeLabel}`
+  const previousToolContext = useRef(`${generationMode}:${editSubMode}`)
+  const setToolsSidebarCollapsed = (collapsed: boolean) => {
+    setToolsCollapsed(collapsed)
+    window.localStorage.setItem('hocuspocus-tools-sidebar-collapsed', String(collapsed))
   }
 
   useEffect(() => {
-    const openDirector = () => setDirectorSidebarCollapsed(false)
+    const openStudio = () => {
+      setSidebarMode('studio')
+      setToolsSidebarCollapsed(false)
+      setSidebarOpen(true)
+    }
+    const openSettings = () => {
+      setDashboardOpen(false)
+      setSidebarOpen(false)
+      setSettingsOpen(true)
+    }
+    const openDirector = () => {
+      setSidebarMode('director')
+      setToolsSidebarCollapsed(false)
+      setSidebarOpen(true)
+    }
+    window.addEventListener('hocuspocus:studio-open', openStudio)
+    window.addEventListener('hocuspocus:settings-open', openSettings)
     window.addEventListener('maestro:director-open', openDirector)
-    return () => window.removeEventListener('maestro:director-open', openDirector)
+    return () => {
+      window.removeEventListener('hocuspocus:studio-open', openStudio)
+      window.removeEventListener('hocuspocus:settings-open', openSettings)
+      window.removeEventListener('maestro:director-open', openDirector)
+    }
+  // The event bridge deliberately tracks stable Zustand actions only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const modeToggle = (size: 'sm' | 'md') => (
-    <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
-      <button
-        onClick={() => setSidebarMode('director')}
-        className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
-          // bg-toggle-active is flat accent-blue in the Classic theme
-          // and a blue gradient in HocusPocus Blue. The glow token stays
-          // theme-aware without changing this component's layout.
-          isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
-        }`}
-      >
-        Director
-      </button>
-      <button
-        onClick={() => setSidebarMode('studio')}
-        className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
-          // Studio active intentionally uses bg-toggle-active too so the
-          // currently-active mode reads with the same prominence in
-          // HocusPocus Blue. Classic theme: flat
-          // accent-blue (was bg-bg-active dark elevation — small change
-          // that brings the two buttons into visual parity).
-          !isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
-        }`}
-      >
-        Studio
-      </button>
-    </div>
-  )
+  useEffect(() => {
+    const context = `${generationMode}:${editSubMode}`
+    if (context !== previousToolContext.current) setToolsSidebarCollapsed(false)
+    previousToolContext.current = context
+  }, [editSubMode, generationMode])
 
   // Edit mode sub-controls based on sub-mode
   const editControls = (
@@ -165,8 +176,6 @@ export function Sidebar() {
           added + hardware bar expanded), instead of letting flex-shrink
           crush sections into each other. */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 min-h-0 [&>*]:shrink-0">
-        <GenerationModeSelector />
-
         {/* Tools mode: standalone post-processing (upscale / revoice) on any
             existing clip. Renders in place of the generation controls. */}
         {isTools ? <ToolsPanel /> : isModel3d ? <Hunyuan3DPanel /> : (
@@ -228,7 +237,7 @@ export function Sidebar() {
             mode (basic, multi-clip, continue, blend) — it's the same
             generation path that consumes `directorVoiceRef` server-side.
             Director mode renders its own copy in DirectorChat. */}
-        {isVideo && !isDirector && !isOmniReference && imageMode !== 0 && imageMode !== 3 && <VoiceRefSection />}
+        {isVideo && !isOmniReference && imageMode !== 0 && imageMode !== 3 && <VoiceRefSection />}
         </>
         )}
       </div>
@@ -285,7 +294,6 @@ export function Sidebar() {
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <BrandIdentity appVersion={appVersion} />
             <div className="flex items-center gap-1.5">
-              {modeToggle('sm')}
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
@@ -301,19 +309,19 @@ export function Sidebar() {
     )
   }
 
-  if (isDirector && directorCollapsed) {
+  if (toolsCollapsed) {
     return (
       <aside className="w-11 h-full bg-bg-secondary border-r border-border flex flex-col items-center shrink-0">
         <button
-          onClick={() => setDirectorSidebarCollapsed(false)}
+          onClick={() => setToolsSidebarCollapsed(false)}
           className="m-1.5 p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          title="Expand Director panel"
-          aria-label="Expand Director panel"
+          title="Expand Studio tools"
+          aria-label="Expand Studio tools"
         >
           <PanelLeftOpen size={17} />
         </button>
         <span className="mt-2 text-[10px] uppercase tracking-[0.2em] text-text-muted [writing-mode:vertical-rl]">
-          Director
+          {panelTitle}
         </span>
       </aside>
     )
@@ -326,23 +334,14 @@ export function Sidebar() {
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <BrandIdentity appVersion={appVersion} />
         <div className="flex items-center gap-2">
-          {modeToggle('md')}
-          {isDirector && (
-            <button
-              onClick={() => setDirectorSidebarCollapsed(true)}
-              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="Collapse Director panel"
-              aria-label="Collapse Director panel"
-            >
-              <PanelLeftClose size={16} />
-            </button>
-          )}
+          <span className="text-xs font-medium text-text-secondary">{panelTitle}</span>
           <button
-            onClick={toggleSettings}
+            onClick={() => setToolsSidebarCollapsed(true)}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-            title="Settings"
+            title="Collapse Studio tools"
+            aria-label="Collapse Studio tools"
           >
-            <Settings size={16} />
+            <PanelLeftClose size={16} />
           </button>
         </div>
       </div>

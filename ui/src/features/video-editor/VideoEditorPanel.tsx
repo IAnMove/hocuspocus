@@ -23,10 +23,11 @@ import {
   X,
 } from 'lucide-react'
 import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ParseKeys } from 'i18next'
+import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { ModalShell } from '../../components/common/ModalShell'
-import { useUiTranslation } from '../../i18n'
 import {
   clearVideoEditorReplacementResult,
   clearVideoEditorReplacementTarget,
@@ -160,21 +161,27 @@ function pendingVideoEditorExport(jobId: string, message: string): api.VideoEdit
   }
 }
 
-const TRANSITIONS: Array<{ value: Transition; label: string; description: string }> = [
-  { value: 'none', label: 'Hard cut', description: 'Immediate cut with no overlap.' },
-  { value: 'crossfade', label: 'Crossfade', description: 'One shot dissolves smoothly into the next.' },
-  { value: 'fade-black', label: 'Fade black', description: 'Fade out through black, then reveal the next shot.' },
-  { value: 'wipe-left', label: 'Wipe left', description: 'The next shot pushes in from the left.' },
-  { value: 'slide-left', label: 'Slide left', description: 'Both shots travel together in a fast lateral camera move.' },
-  { value: 'slide-right', label: 'Slide right', description: 'A reverse lateral slide reveals the next shot.' },
-  { value: 'circle-open', label: 'Iris reveal', description: 'The next shot opens from the centre like a cinematic iris.' },
-  { value: 'dissolve', label: 'Film dissolve', description: 'A textured, organic hand-off between shots.' },
-  { value: 'pixelize', label: 'Digital pixel', description: 'The image breaks into pixels while changing shots.' },
-  { value: 'blur', label: 'Motion blur', description: 'A fast horizontal blur hides the cut between moving shots.' },
-  { value: 'zoom-in', label: 'Zoom portal', description: 'Push through the outgoing image and land inside the next shot.' },
-  { value: 'later-clock', label: 'Momentos después · Reloj', description: 'Inserts an original time card with a moving analogue clock.' },
-  { value: 'later-tropical', label: 'Momentos después · Meme', description: 'Inserts an original tropical time-card inspired by the classic meme format.' },
-  { value: 'later-cinematic', label: 'Momentos después · Cine', description: 'Inserts an elegant cinematic intertitle between the two clips.' },
+type VideoEditorKey = ParseKeys<'videoEditor'>
+
+const TRANSITIONS: Array<{
+  value: Transition
+  labelKey: VideoEditorKey
+  descriptionKey: VideoEditorKey
+}> = [
+  { value: 'none', labelKey: 'transitions.hardCut', descriptionKey: 'transitions.hardCutHint' },
+  { value: 'crossfade', labelKey: 'transitions.crossfade', descriptionKey: 'transitions.crossfadeHint' },
+  { value: 'fade-black', labelKey: 'transitions.fadeBlack', descriptionKey: 'transitions.fadeBlackHint' },
+  { value: 'wipe-left', labelKey: 'transitions.wipeLeft', descriptionKey: 'transitions.wipeLeftHint' },
+  { value: 'slide-left', labelKey: 'transitions.slideLeft', descriptionKey: 'transitions.slideLeftHint' },
+  { value: 'slide-right', labelKey: 'transitions.slideRight', descriptionKey: 'transitions.slideRightHint' },
+  { value: 'circle-open', labelKey: 'transitions.iris', descriptionKey: 'transitions.irisHint' },
+  { value: 'dissolve', labelKey: 'transitions.dissolve', descriptionKey: 'transitions.dissolveHint' },
+  { value: 'pixelize', labelKey: 'transitions.pixel', descriptionKey: 'transitions.pixelHint' },
+  { value: 'blur', labelKey: 'transitions.blur', descriptionKey: 'transitions.blurHint' },
+  { value: 'zoom-in', labelKey: 'transitions.zoom', descriptionKey: 'transitions.zoomHint' },
+  { value: 'later-clock', labelKey: 'transitions.laterClock', descriptionKey: 'transitions.laterClockHint' },
+  { value: 'later-tropical', labelKey: 'transitions.laterMeme', descriptionKey: 'transitions.laterMemeHint' },
+  { value: 'later-cinematic', labelKey: 'transitions.laterCinema', descriptionKey: 'transitions.laterCinemaHint' },
 ]
 
 const DEFAULT_SEQUENCE_STYLE: SequenceStyle = {
@@ -266,7 +273,8 @@ function LaterCard({
   progress?: number
   compact?: boolean
 }) {
-  const safeText = text.trim() || 'Momentos después…'
+  const { t } = useUiTranslation('videoEditor')
+  const safeText = text.trim() || t('timeCard.default')
   if (transition === 'later-clock') {
     return (
       <div
@@ -844,7 +852,7 @@ export function VideoEditorPanel() {
       fit: 'fit',
       transition: 'none',
       transitionDuration: 0.5,
-      transitionText: 'Momentos después…',
+      transitionText: tRef.current('timeCard.default'),
       transitionTextSize: 100,
     }
   }, [activeWorkspace])
@@ -957,7 +965,7 @@ export function VideoEditorPanel() {
     if (!target) {
       clearVideoEditorReplacementResult()
       clearVideoEditorReplacementTarget()
-      setError(t('errors.slotGone', { n: replacement.clipIndex + 1 }))
+      setError(t('remake.slotGone', { n: replacement.clipIndex + 1 }))
       return
     }
 
@@ -1006,7 +1014,7 @@ export function VideoEditorPanel() {
     const outputName = outputNameFromEditorClip(selected.source, selected.name)
     try {
       const metadata = await api.fetchOutputMetadata(outputName, activeWorkspace)
-      if (!metadata.params) throw new Error(t('errors.noReusableSettings'))
+      if (!metadata.params) throw new Error(t('remake.noReusable'))
 
       const store = useStore.getState()
       store.setSidebarMode('studio')
@@ -1026,7 +1034,7 @@ export function VideoEditorPanel() {
       })
       useStore.getState().setMediaFilter('videos')
     } catch (reason) {
-      setError(t('errors.openInVideoCreation', { message: (reason as Error).message }))
+      setError(t('remake.openFailed', { message: (reason as Error).message }))
       setPreparingReplacement(false)
     }
   }
@@ -2330,7 +2338,7 @@ export function VideoEditorPanel() {
                           ? 'border-purple-400 bg-purple-500/10'
                           : 'border-border bg-bg-tertiary/40 hover:border-border-light'
                       }`}
-                      title={option.description}
+                      title={t(option.descriptionKey)}
                     >
                       <div className="h-8 rounded bg-black/60 overflow-hidden relative mb-1.5">
                         <div className="absolute inset-y-0 left-0 w-[58%] bg-gradient-to-br from-cyan-500 to-blue-700" />
@@ -2373,13 +2381,13 @@ export function VideoEditorPanel() {
                         {isInterstitialTransition(option.value) && (
                           <LaterCard
                             transition={option.value}
-                            text="Momentos después…"
+                            text={t('timeCard.default')}
                             compact
                           />
                         )}
                       </div>
                       <span className={`text-[9px] ${active ? 'text-purple-300' : 'text-text-secondary'}`}>
-                        {option.label}
+                        {t(option.labelKey)}
                       </span>
                     </button>
                   )
@@ -2391,23 +2399,23 @@ export function VideoEditorPanel() {
                   {isInterstitialTransition(clips[selectedTransitionIndex].transition) && (
                     <div className="space-y-3">
                       <label className="block text-[10px] text-text-muted">
-                        Card text
+                        {t('timeCard.label')}
                         <textarea
                           rows={3}
                           maxLength={240}
                           value={clips[selectedTransitionIndex].transitionText}
-                          placeholder="Momentos después…"
+                          placeholder={t('timeCard.default')}
                           onChange={event => patchClip(clips[selectedTransitionIndex].id, {
                             transitionText: event.target.value,
                           })}
                           className="mt-1 block w-full resize-y rounded border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary"
                         />
                         <span className="mt-1 block text-[9px] text-text-secondary">
-                          Enter adds a manual line break. The text also wraps automatically to fit the card.
+                          {t('timeCard.hint')}
                         </span>
                       </label>
                       <label className="block text-[10px] text-text-muted">
-                        Text size: {Math.round(clips[selectedTransitionIndex].transitionTextSize)}%
+                        {t('timeCard.size', { size: Math.round(clips[selectedTransitionIndex].transitionTextSize) })}
                         <input
                           type="range"
                           min={50}
@@ -2490,12 +2498,12 @@ export function VideoEditorPanel() {
                 onClick={() => void openSelectedInVideoCreation()}
                 disabled={preparingReplacement}
                 className="mb-3 flex w-full items-center justify-center gap-1.5 rounded border border-accent-blue/40 bg-accent-blue/10 px-2 py-2 text-[10px] font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
-                title={t('inspector.redoInVideoCreationTitle')}
+                title={t('remake.title')}
               >
                 {preparingReplacement
                   ? <Loader2 size={12} className="animate-spin" />
                   : <Film size={12} />}
-                {preparingReplacement ? t('inspector.loadingGenerationSettings') : t('inspector.redoInVideoCreation')}
+                {preparingReplacement ? t('remake.loading') : t('remake.action')}
               </button>
 
               <ClipTrimBar
@@ -2505,12 +2513,12 @@ export function VideoEditorPanel() {
                 onChange={patch => patchClip(selected.id, patch)}
               />
               <p className="mt-2 text-[9px] leading-relaxed text-text-muted">
-                Arrastra los tiradores para fijar la entrada y la salida. El vídeo original no se modifica; estos cortes solo se aplican a la previsualización y al MP4 exportado.
+                {t('trim.hint')}
               </p>
 
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <label className="text-[10px] text-text-muted">
-                  Entrada exacta
+                  {t('trim.exactIn')}
                   <input
                     type="number"
                     min={0}
@@ -2524,7 +2532,7 @@ export function VideoEditorPanel() {
                   />
                 </label>
                 <label className="text-[10px] text-text-muted">
-                  Salida exacta
+                  {t('trim.exactOut')}
                   <input
                     type="number"
                     min={selected.trimStart + 0.05}
@@ -2544,7 +2552,7 @@ export function VideoEditorPanel() {
                   onClick={() => patchClip(selected.id, { trimStart: 0, trimEnd: selected.duration })}
                   className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-border px-2 py-1.5 text-[10px] text-text-muted hover:bg-bg-hover hover:text-text-secondary"
                 >
-                  <RotateCcw size={11} /> Restaurar clip completo
+                  <RotateCcw size={11} /> {t('trim.restore')}
                 </button>
               )}
 
@@ -2715,7 +2723,7 @@ export function VideoEditorPanel() {
               className="max-w-[11rem] rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-[10px] text-text-secondary"
             >
               {TRANSITIONS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
               ))}
             </select>
             <button
@@ -2859,13 +2867,13 @@ export function VideoEditorPanel() {
                               ? 'border-purple-500/40 bg-purple-500/10 text-purple-400'
                               : 'border-dashed border-border text-text-muted hover:border-purple-500/50 hover:text-purple-300'
                         }`}
-                        title={t('timeline.transitionNamed', { label: TRANSITIONS.find(option => option.value === clip.transition)?.label || 'Hard cut' })}
+                        title={t('transitions.named', { name: t(TRANSITIONS.find(option => option.value === clip.transition)?.labelKey || 'transitions.hardCut') })}
                       >
                         {clip.transition === 'none' ? <Plus size={13} /> : <ChevronsRight size={15} />}
                         <span className="max-w-[48px] truncate text-[8px]">
                           {clip.transition === 'none'
-                            ? t('timeline.transition')
-                            : TRANSITIONS.find(option => option.value === clip.transition)?.label}
+                            ? t('transitions.hardCut')
+                            : t(TRANSITIONS.find(option => option.value === clip.transition)?.labelKey || 'transitions.hardCut')}
                         </span>
                       </button>
                     )}

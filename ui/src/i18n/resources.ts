@@ -8,6 +8,10 @@ import storyLabEn from './locales/en/storyLab.json'
 import directorEn from './locales/en/director.json'
 import seriesLabEn from './locales/en/seriesLab.json'
 import videoEditorEn from './locales/en/videoEditor.json'
+import workspacesEn from './locales/en/workspaces.json'
+import styleSheetEn from './locales/en/styleSheet.json'
+import projectsEn from './locales/en/projects.json'
+import auditDevEn from './locales/en/auditDev.json'
 import commonEs from './locales/es/common.json'
 import navigationEs from './locales/es/navigation.json'
 import settingsEs from './locales/es/settings.json'
@@ -18,8 +22,12 @@ import storyLabEs from './locales/es/storyLab.json'
 import directorEs from './locales/es/director.json'
 import seriesLabEs from './locales/es/seriesLab.json'
 import videoEditorEs from './locales/es/videoEditor.json'
+import workspacesEs from './locales/es/workspaces.json'
+import styleSheetEs from './locales/es/styleSheet.json'
+import projectsEs from './locales/es/projects.json'
+import auditDevEs from './locales/es/auditDev.json'
 
-export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor'] as const
+export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev'] as const
 export type I18nNamespace = (typeof NAMESPACES)[number]
 
 export const resources = {
@@ -34,6 +42,10 @@ export const resources = {
     director: directorEn,
     seriesLab: seriesLabEn,
     videoEditor: videoEditorEn,
+    workspaces: workspacesEn,
+    styleSheet: styleSheetEn,
+    projects: projectsEn,
+    auditDev: auditDevEn,
   },
   es: {
     common: commonEs,
@@ -46,6 +58,10 @@ export const resources = {
     director: directorEs,
     seriesLab: seriesLabEs,
     videoEditor: videoEditorEs,
+    workspaces: workspacesEs,
+    styleSheet: styleSheetEs,
+    projects: projectsEs,
+    auditDev: auditDevEs,
   },
 } as const
 

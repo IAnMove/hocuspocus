@@ -47,7 +47,12 @@ test('Wizard avatar state is visible to assistive technology without leaking dec
 
 test('Wizard panel keeps dialog, live-region and pending-question ARIA contracts', async () => {
   const panelSource = await readFile(new URL('../src/features/agent/AgentAssistantPanel.tsx', import.meta.url), 'utf8')
-  assert.match(panelSource, /role="dialog"[\s\S]{0,160}aria-modal="true"/)
+  assert.match(panelSource, /function agentPanelPresentation/)
+  assert.match(panelSource, /return \{ role: 'region' as const, ariaModal: undefined, autoFocus: false \}/)
+  assert.match(panelSource, /return \{ role: 'dialog' as const, ariaModal: 'true' as const, autoFocus: !embedded \}/)
+  assert.match(panelSource, /role=\{panelPresentation\.role\}/)
+  assert.match(panelSource, /aria-modal=\{panelPresentation\.ariaModal\}/)
+  assert.match(panelSource, /autoFocus=\{panelPresentation\.autoFocus\}/)
   assert.match(panelSource, /aria-live="polite"/)
   assert.match(panelSource, /role="group" aria-label="Wizard pending question"/)
   assert.match(panelSource, /aria-label=\{t\('title'\)\}/)

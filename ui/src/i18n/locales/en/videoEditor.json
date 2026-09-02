@@ -109,5 +109,56 @@
   },
   "actions": {
     "retryHandoff": "Retry hand-off"
+  },
+  "timeCard": {
+    "default": "Moments later…",
+    "label": "Card text",
+    "hint": "Enter adds a manual line break. The text also wraps automatically to fit the card.",
+    "size": "Text size: {{size}}%"
+  },
+  "transitions": {
+    "hardCut": "Hard cut",
+    "hardCutHint": "Immediate cut with no overlap.",
+    "crossfade": "Crossfade",
+    "crossfadeHint": "One shot dissolves smoothly into the next.",
+    "fadeBlack": "Fade black",
+    "fadeBlackHint": "Fade out through black, then reveal the next shot.",
+    "wipeLeft": "Wipe left",
+    "wipeLeftHint": "The next shot pushes in from the left.",
+    "slideLeft": "Slide left",
+    "slideLeftHint": "Both shots travel together in a fast lateral camera move.",
+    "slideRight": "Slide right",
+    "slideRightHint": "A reverse lateral slide reveals the next shot.",
+    "iris": "Iris reveal",
+    "irisHint": "The next shot opens from the centre like a cinematic iris.",
+    "dissolve": "Film dissolve",
+    "dissolveHint": "A textured, organic hand-off between shots.",
+    "pixel": "Digital pixel",
+    "pixelHint": "The image breaks into pixels while changing shots.",
+    "blur": "Motion blur",
+    "blurHint": "A fast horizontal blur hides the cut between moving shots.",
+    "zoom": "Zoom portal",
+    "zoomHint": "Push through the outgoing image and land inside the next shot.",
+    "laterClock": "Moments later · Clock",
+    "laterClockHint": "Inserts an original time card with a moving analogue clock.",
+    "laterMeme": "Moments later · Meme",
+    "laterMemeHint": "Inserts an original tropical time-card inspired by the classic meme format.",
+    "laterCinema": "Moments later · Cinema",
+    "laterCinemaHint": "Inserts an elegant cinematic intertitle between the two clips.",
+    "named": "Transition: {{name}}"
+  },
+  "remake": {
+    "title": "Load this clip’s prompt, model, duration and format into Video creation so you can pick its replacement afterwards",
+    "loading": "Loading generation settings…",
+    "action": "Remake in Video creation",
+    "slotGone": "The original position {{n}} is no longer available in the assembly.",
+    "noReusable": "This clip does not keep reusable generation settings.",
+    "openFailed": "Could not open the clip in Video creation: {{message}}"
+  },
+  "trim": {
+    "hint": "Drag the handles to set the in and out points. The original video is not modified; these cuts apply only to the preview and the exported MP4.",
+    "exactIn": "Exact in",
+    "exactOut": "Exact out",
+    "restore": "Restore full clip"
   }
 }
