@@ -2,31 +2,15 @@
 
 from __future__ import annotations
 
-import ast
-import re
 import unittest
-from pathlib import Path
 
-
-def _load_functions(*names: str):
-    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    selected = [
-        node for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in names
-    ]
-    namespace = {"re": re}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
-    return tuple(namespace[name] for name in names)
-
-
-_minimax_song_request_prompt, _normalize_minimax_song_output, _parse_song_output, _parse_lyria_output, _optional_lyria_warning, _ace_song_request_prompt = _load_functions(
-    "_minimax_song_request_prompt",
-    "_normalize_minimax_song_output",
-    "_parse_song_output",
-    "_parse_lyria_output",
-    "_optional_lyria_warning",
-    "_ace_song_request_prompt",
+from routers.llm import (
+    _ace_song_request_prompt,
+    _minimax_song_request_prompt,
+    _normalize_minimax_song_output,
+    _optional_lyria_warning,
+    _parse_lyria_output,
+    _parse_song_output,
 )
 
 
