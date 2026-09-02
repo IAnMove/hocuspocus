@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanJob, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
-import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
+import { type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { loadDeveloperMode, saveDeveloperMode } from '../lib/developerMode'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
@@ -12,6 +12,7 @@ import { isGenerationJobActive } from '../lib/generationJobState'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
 import { llmActivityPreview } from '../lib/llmActivityPreview'
 import { createDirectorSlice } from './directorSlice'
+import { createThemeSlice } from './themeSlice'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 import {
   extractSingleClipStudioParams,
@@ -2320,6 +2321,10 @@ async function _syncGlobalProductionVideoFormat(
 
 export const useStore = create<AppState>((set, get) => ({
   ...createDirectorSlice(partial => set(partial as never)),
+  ...createThemeSlice(
+    partial => set(partial as never),
+    () => get(),
+  ),
   // Generation mode
   generationMode: 'video',
   editSubMode: 'retake' as import('../types').EditSubMode,
@@ -3034,22 +3039,6 @@ export const useStore = create<AppState>((set, get) => ({
   toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
-  // Theme — initial value reads from localStorage (with legacy
-  // single-theme migration) so it matches what the inline script in
-  // index.html applied to <html>. The setters write to the DOM and
-  // localStorage via applyThemePrefs, which also installs the OS
-  // scheme listener that makes 'auto' live-switch.
-  themePrefs: getStoredPrefs(),
-  setThemeMode: (mode) => {
-    const prefs = { ...get().themePrefs, mode }
-    applyThemePrefs(prefs)
-    set({ themePrefs: prefs })
-  },
-  setThemeFamily: (family) => {
-    const prefs = { ...get().themePrefs, family }
-    applyThemePrefs(prefs)
-    set({ themePrefs: prefs })
-  },
   developerMode: loadDeveloperMode(),
   setDeveloperMode: (enabled) => {
     saveDeveloperMode(enabled)

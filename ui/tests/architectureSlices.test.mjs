@@ -65,6 +65,34 @@ test('Director slice keeps the public setter behavior while state is composed se
   assert.equal(state.directorAutoMode, false)
 })
 
+test('theme slice keeps mode and family persistence keys through the public facade', async () => {
+  const { JSDOM } = await import('jsdom')
+  const dom = new JSDOM('<!doctype html><html><head><meta name="theme-color"></head><body></body></html>', { url: 'http://localhost/' })
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    localStorage: dom.window.localStorage,
+  })
+  const { createThemeSlice } = await import('../src/stores/themeSlice.ts')
+  let state
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  state = createThemeSlice(set, () => state)
+  state.setThemeMode('light')
+  assert.equal(state.themePrefs.mode, 'light')
+  state.setThemeFamily('onyx')
+  assert.equal(state.themePrefs.family, 'onyx')
+  assert.equal(globalThis.localStorage.getItem('maestro-theme-mode'), 'light')
+  assert.equal(globalThis.localStorage.getItem('maestro-theme-family'), 'onyx')
+
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.getState().setThemeMode('auto')
+  assert.equal(useStore.getState().themePrefs.mode, 'auto')
+  assert.equal(globalThis.localStorage.getItem('maestro-theme-mode'), 'auto')
+})
+
 test('useStore keeps Director actions available through its existing public facade', async () => {
   const { useStore } = await import('../src/stores/useStore.ts')
   useStore.setState({ directorAutoMode: true, directorSeamless: true })
