@@ -14,6 +14,7 @@ import {
   parseSceneRecipe,
   parseSceneRecipeText,
   recipeAssetDuration,
+  recipeAudioDuration,
 } from '../src/lib/sceneRecipe.ts'
 
 test('example saucer recipe compiles to a 4-layer scene with space-cruise motion', () => {
@@ -393,6 +394,52 @@ test('H3 plates use supported model canvases and enough temporal-grid frames', (
     scene: { width: 1280, height: 720, fps: 30, duration: 9, layers: [{ id: 'clouds-layer', type: 'video', asset: 'clouds', fill: true }] },
   })
   assert.equal(recipeAssetDuration(recipe, 'clouds'), 9)
+})
+
+test('audio duration follows the scoped shots and authored dialogue beats', () => {
+  const layers = [
+    { id: 'hero', type: 'image', asset: 'hero-art' },
+    { id: 'mouth', type: 'overlay', asset: 'mouth-art' },
+  ]
+  const recipe = parseSceneRecipe({
+    version: 1,
+    name: 'scoped-audio-duration',
+    assets: [
+      { id: 'hero-art', kind: 'image', source: 'hero.png' },
+      { id: 'mouth-art', kind: 'image', source: 'mouth.png' },
+    ],
+    audio: [
+      { id: 'voice', kind: 'speech', prompt: 'A line reused in two shots.' },
+      { id: 'beat-only', kind: 'speech', prompt: 'A line described only by its beat.' },
+    ],
+    dialogueBeats: [
+      { id: 'voice-beat', text: 'A line reused in two shots.', start: .2, end: 9, mouthLayerIds: ['mouth'], audioTrackId: 'voice', confidence: 'known-text' },
+      { id: 'beat-only-line', text: 'A line described only by its beat.', start: .2, end: 13, mouthLayerIds: ['mouth'], audioTrackId: 'beat-only', confidence: 'known-text' },
+    ],
+    shots: [
+      { name: 'silent-hold', duration: 22, audioTrackIds: [], dialogueBeatIds: [], layers },
+      { name: 'first-line', duration: 7, audioTrackIds: ['voice'], dialogueBeatIds: ['voice-beat'], layers },
+      { name: 'second-line', duration: 11, audioTrackIds: ['voice'], dialogueBeatIds: ['voice-beat'], layers },
+    ],
+    scene: { width: 1280, height: 720, fps: 30, duration: 5, layers },
+  })
+
+  // Reusing one source in two shots does not concatenate it: the longest
+  // consumer and its authored beat are the required generation length.
+  assert.equal(recipeAudioDuration(recipe, 'voice'), 11)
+  // An unscoped beat still protects its track from a short scene fallback.
+  assert.equal(recipeAudioDuration(recipe, 'beat-only'), 13)
+
+  const legacy = parseSceneRecipe({
+    ...recipe,
+    dialogueBeats: undefined,
+    shots: [
+      { name: 'legacy-short', duration: 4, layers },
+      { name: 'explicit-silence', duration: 18, audioTrackIds: [], dialogueBeatIds: [], layers },
+    ],
+  })
+  // Omitted scope means legacy "all tracks"; explicit [] remains silent.
+  assert.equal(recipeAudioDuration(legacy, 'voice'), 4)
 })
 
 const gradedRecipe = grade => parseSceneRecipe({
