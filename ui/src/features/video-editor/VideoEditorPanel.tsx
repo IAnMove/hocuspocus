@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ParseKeys } from 'i18next'
 import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
@@ -160,7 +161,13 @@ function pendingVideoEditorExport(jobId: string): api.VideoEditorExportJob {
   }
 }
 
-const TRANSITIONS: Array<{ value: Transition; labelKey: string; descriptionKey: string }> = [
+type VideoEditorKey = ParseKeys<'videoEditor'>
+
+const TRANSITIONS: Array<{
+  value: Transition
+  labelKey: VideoEditorKey
+  descriptionKey: VideoEditorKey
+}> = [
   { value: 'none', labelKey: 'transitions.hardCut', descriptionKey: 'transitions.hardCutHint' },
   { value: 'crossfade', labelKey: 'transitions.crossfade', descriptionKey: 'transitions.crossfadeHint' },
   { value: 'fade-black', labelKey: 'transitions.fadeBlack', descriptionKey: 'transitions.fadeBlackHint' },
