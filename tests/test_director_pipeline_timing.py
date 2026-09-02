@@ -3,7 +3,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.services import director_pipeline
-from app.services.asset_manifest import SCHEMA_NAME, read_asset_manifest
+from app.services.asset_manifest import (
+    SCHEMA_NAME,
+    publish_generation_sidecar,
+    read_asset_manifest,
+)
 
 
 def test_pipeline_timing_metadata_normalizes_live_terminal_state():
@@ -44,6 +48,7 @@ def test_final_output_sidecar_persists_total_and_phase_timings(tmp_path: Path):
         "params": {},
         "generation_mode": "video",
     }), encoding="utf-8")
+    (tmp_path / "final.mp4").write_bytes(b"video")
     pipeline = {
         "id": "timed-final",
         "created_at": 100.0,
@@ -80,6 +85,55 @@ def test_final_output_sidecar_persists_total_and_phase_timings(tmp_path: Path):
     assert saved["params"]["resolution"] == "960x544"
     assert saved["params"]["director_resolution_preset"] == "540p"
     assert saved["params"]["director_aspect_ratio"] == "16:9"
+    assert saved["schema"] == SCHEMA_NAME
+    assert saved["origin"]["tool"] == "director"
+    assert saved["origin"]["actor"] == "unknown"
+
+
+def test_final_output_timing_preserves_canonical_asset_id(tmp_path: Path):
+    media = tmp_path / "final.mp4"
+    media.write_bytes(b"video")
+    published = publish_generation_sidecar(
+        media,
+        {
+            "params": {"director_pipeline_id": "timed-stable"},
+            "generation_mode": "video",
+        },
+        workspace_id="night-shift",
+        tool="director",
+    )
+    original_id = json.loads(published.read_text(encoding="utf-8"))["asset"]["id"]
+    pipeline = {
+        "id": "timed-stable",
+        "workspace": "night-shift",
+        "created_at": 100.0,
+        "_completed_at": 410.0,
+        "_prompt_generation_time_sec": 10.0,
+        "_image_generation_time_sec": 20.0,
+        "_video_generation_time_sec": 250.0,
+        "_assembly_time_sec": 5.0,
+    }
+
+    assert director_pipeline.persist_pipeline_output_timing(
+        str(tmp_path), "final.mp4", pipeline,
+    )
+    assert director_pipeline.persist_pipeline_output_timing(
+        str(tmp_path), "final.mp4", pipeline,
+    )
+
+    saved = json.loads((tmp_path / "final.meta.json").read_text(encoding="utf-8"))
+    loaded = read_asset_manifest(media, workspace_id="night-shift")
+    assert saved["schema"] == SCHEMA_NAME
+    assert saved["asset"]["id"] == original_id
+    assert saved["director_pipeline_id"] == "timed-stable"
+    assert saved["params"]["director_pipeline_id"] == "timed-stable"
+    assert loaded is not None
+    assert loaded["asset"]["id"] == original_id
+    assert loaded["origin"]["tool"] == "director"
+    assert loaded["origin"]["actor"] == "unknown"
+    assert loaded["origin"]["workspace_id"] == "night-shift"
+    assert loaded["origin"].get("project") is None
+    assert loaded["origin"].get("production") is None
 
 
 def test_output_enrichment_restores_missing_model_and_resolution():
