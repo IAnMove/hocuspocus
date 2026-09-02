@@ -1,13 +1,13 @@
 {
   "version": 1,
   "summary": {
-    "production_files": 458,
-    "production_lines": 232966,
-    "production_non_blank_lines": 215871,
-    "test_files": 278,
-    "test_lines": 63300,
-    "functions_measured": 14589,
-    "complex_functions": 767,
+    "production_files": 467,
+    "production_lines": 233357,
+    "production_non_blank_lines": 216247,
+    "test_files": 279,
+    "test_lines": 63761,
+    "functions_measured": 14601,
+    "complex_functions": 771,
     "max_complexity": 667
   },
   "hotspots": {
@@ -15,9 +15,9 @@
     "app/wgp.py": 14624,
     "app/services/director_pipeline.py": 14441,
     "ui/src/stores/useStore.ts": 10945,
-    "ui/src/features/stories/StoryLabPanel.tsx": 7012,
     "app/services/director/planners/short_film.py": 6685,
     "app/services/llm_service.py": 6671,
+    "ui/src/features/stories/StoryLabPanel.tsx": 5389,
     "ui/src/components/Sidebar/DirectorChat.tsx": 3496,
     "ui/src/features/agent/agentActions.ts": 3246,
     "ui/src/components/Sidebar/SceneAnimatorPanel.tsx": 3197,
@@ -28,7 +28,7 @@
     "app/services/director/h3_dialogue.py": 2069,
     "ui/src/types/index.ts": 1887,
     "ui/src/features/stories/actions.ts": 1755,
-    "ui/src/lib/sceneRecipe.ts": 1628,
+    "ui/src/lib/sceneRecipe.ts": 1650,
     "app/services/director/planners/music_video.py": 1613,
     "app/services/director/planners/comic_movie.py": 1600,
     "app/services/series_library.py": 1574,
@@ -50,7 +50,6 @@
   },
   "complexity_hotspots": {
     "app/wgp.py": 667,
-    "ui/src/features/stories/StoryLabPanel.tsx": 435,
     "ui/src/stores/useStore.ts": 373,
     "app/_launch_runtime.py": 356,
     "ui/src/components/Sidebar/SceneAnimatorPanel.tsx": 272,
@@ -58,6 +57,7 @@
     "app/services/director_pipeline.py": 254,
     "ui/src/features/agent/agentActions.ts": 241,
     "ui/src/components/Sidebar/AdvancedSettings.tsx": 168,
+    "ui/src/features/stories/StoryLabPanel.tsx": 163,
     "ui/src/components/Sidebar/InputsPanel.tsx": 157,
     "ui/src/components/Sidebar/DirectorChat.tsx": 151,
     "app/services/series_reference_router.py": 142,
@@ -68,6 +68,7 @@
     "ui/src/lib/sceneRecipe.ts": 107,
     "app/services/llm_service.py": 103,
     "ui/src/features/comics/ComicEditorPanel.tsx": 101,
+    "ui/src/features/stories/StoryProductionsMusicPanel.tsx": 101,
     "ui/src/features/comics/ComicWorkflowPanels.tsx": 99,
     "ui/src/components/Sidebar/Sidebar.tsx": 91,
     "ui/src/features/agent/wizardContext.ts": 90,
@@ -88,6 +89,7 @@
     "ui/src/components/Sidebar/DirectorPanel.tsx": 62,
     "ui/src/components/LoraBrowser/ModelDetail.tsx": 61,
     "ui/src/features/comics/model.ts": 61,
+    "ui/src/features/stories/StoryProductionsTab.tsx": 59,
     "ui/src/components/Sidebar/HardwareStatusBar.tsx": 58,
     "ui/src/features/series/SeriesSetupPanel.tsx": 58,
     "app/services/audio_analysis.py": 55,
@@ -103,9 +105,11 @@
     "ui/src/components/Sidebar/DurationSlider.tsx": 48,
     "app/routers/quick_video_batches.py": 47,
     "ui/src/features/series/actions.ts": 47,
+    "ui/src/features/stories/StoryTrailerTab.tsx": 47,
     "ui/src/features/workspaces/WorkspacesPanel.tsx": 47,
     "app/services/provider_profile.py": 46,
     "app/services/rig_service.py": 46,
+    "ui/src/features/stories/CompactVideoWorkspace.tsx": 46,
     "ui/src/features/series/SeriesLabPanel.tsx": 45,
     "ui/src/lib/imageGeneration.ts": 43,
     "app/services/asset_catalog.py": 42,
@@ -120,6 +124,7 @@
     "ui/src/features/styles/StyleSheetPanel.tsx": 39,
     "ui/src/lib/sceneCopilot.ts": 39,
     "ui/src/components/Sidebar/GenerateButton.tsx": 38,
+    "ui/src/features/stories/StoryMusicTab.tsx": 38,
     "ui/src/features/stories/StoryProductionTimeline.tsx": 36,
     "ui/src/features/stories/directorClipHandoff.ts": 36,
     "app/services/hunyuan3d/procedural_rig.py": 35,
@@ -243,12 +248,6 @@
       "complexity": 667
     },
     {
-      "path": "ui/src/features/stories/StoryLabPanel.tsx",
-      "name": "Function 'StoryLabPanel'",
-      "line": 684,
-      "complexity": 435
-    },
-    {
       "path": "ui/src/stores/useStore.ts",
       "name": "Async method 'startGeneration'",
       "line": 4525,
@@ -339,6 +338,12 @@
       "complexity": 168
     },
     {
+      "path": "ui/src/features/stories/StoryLabPanel.tsx",
+      "name": "Function 'StoryLabPanel'",
+      "line": 466,
+      "complexity": 163
+    },
+    {
       "path": "ui/src/components/Sidebar/InputsPanel.tsx",
       "name": "Function 'InputsPanel'",
       "line": 88,
@@ -413,7 +418,7 @@
     {
       "path": "ui/src/lib/sceneRecipe.ts",
       "name": "Arrow function",
-      "line": 1493,
+      "line": 1515,
       "complexity": 107
     }
   ]
