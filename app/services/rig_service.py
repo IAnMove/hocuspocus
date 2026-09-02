@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from . import resource_scheduler
-from .asset_manifest import publish_generation_sidecar
+from .asset_manifest import publish_generation_sidecar_best_effort
 
 SERVICE_DIR = Path(__file__).resolve().parent / "hunyuan3d"
 ENV_DIR = SERVICE_DIR / "env"
@@ -724,34 +724,31 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             if engine == "unirig"
             else {"spine_joints": result_summary.get("joints", request_data["spine_joints"])}
         )
-        try:
-            publish_generation_sidecar(
-                output_path,
-                {
-                    "generation_mode": "model3d",
-                    "mode": "model3d",
-                    "job_id": job_id,
-                    "task_id": _canonical_task_id(job_id),
-                    "root_task_id": _canonical_task_id(job_id),
-                    "created_at": time.time(),
-                    "params": {
-                        "model_type": f"rig-{request_data['engine']}",
-                        "rigged": True,
-                        "rig_engine": request_data["engine"],
-                        "rig_profile": request_data.get("rig_profile", DEFAULT_RIG_PROFILE),
-                        "source_file": source.name,
-                        "animations": result_summary.get("animations") or request_data["animations"],
-                        **rig_metrics,
-                        "axis_mode": result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
-                        "weight_falloff": result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
-                        "prompt": f"Rigged from {source.name}",
-                    },
+        publish_generation_sidecar_best_effort(
+            output_path,
+            {
+                "generation_mode": "model3d",
+                "mode": "model3d",
+                "job_id": job_id,
+                "task_id": _canonical_task_id(job_id),
+                "root_task_id": _canonical_task_id(job_id),
+                "created_at": time.time(),
+                "params": {
+                    "model_type": f"rig-{request_data['engine']}",
+                    "rigged": True,
+                    "rig_engine": request_data["engine"],
+                    "rig_profile": request_data.get("rig_profile", DEFAULT_RIG_PROFILE),
+                    "source_file": source.name,
+                    "animations": result_summary.get("animations") or request_data["animations"],
+                    **rig_metrics,
+                    "axis_mode": result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
+                    "weight_falloff": result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
+                    "prompt": f"Rigged from {source.name}",
                 },
-                workspace_id=current_job.get("workspace"),
-                tool="rig",
-            )
-        except Exception as sidecar_error:
-            print(f"[Rig] Failed to publish sidecar for {filename}: {sidecar_error}")
+            },
+            workspace_id=current_job.get("workspace"),
+            tool="rig",
+        )
         # Reuse the source's gallery preview for the rigged copy.
         source_preview = source.with_suffix(".preview.png")
         if source_preview.is_file():

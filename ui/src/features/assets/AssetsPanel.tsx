@@ -212,12 +212,23 @@ export function AssetsPanel() {
   )
 }
 
+function formatTimingMs(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null
+  const seconds = value / 1000
+  return Number.isInteger(seconds) ? `${seconds}s` : `${seconds.toFixed(1)}s`
+}
+
 function AssetExtraInfoDialog({ asset, loading, onClose }: { asset: AssetCatalogItem | null; loading: boolean; onClose: () => void }) {
   const { t: tActivity } = useUiTranslation('activity')
   const { t: tCommon } = useUiTranslation('common')
+  const { t: tNav } = useUiTranslation('navigation')
   const manifest = asset?.manifest || {}
   const prompts = (manifest.generation as { prompts?: Record<string, unknown> } | undefined)?.prompts || {}
   const timing = (manifest.timing as Record<string, unknown> | undefined) || {}
+  const origin = (manifest.origin as Record<string, unknown> | undefined) || {}
+  const execution = (manifest.execution as Record<string, unknown> | undefined) || {}
+  const generation = (manifest.generation as { model?: Record<string, unknown> } | undefined) || {}
+  const model = generation.model || {}
   const raw = asset ? JSON.stringify(manifest, null, 2) : ''
   const copy = async (value: string) => { await navigator.clipboard?.writeText(value) }
   return (
@@ -247,12 +258,40 @@ function AssetExtraInfoDialog({ asset, loading, onClose }: { asset: AssetCatalog
               values={{ asset_id: asset.id, kind: asset.kind, metadata_status: asset.metadata_status, locations: asset.workspace_ids.join(', ') }}
             />
             <InfoSection
+              title={tActivity('inspector.initiator')}
+              values={{
+                [tActivity('inspector.actor')]: origin.actor || asset.origin.actor,
+                tool: origin.tool || asset.origin.tool,
+                capability: origin.capability || asset.origin.capability,
+              }}
+            />
+            <InfoSection
               title={tActivity('inspector.origin')}
-              values={{ tool: asset.origin.tool, capability: asset.origin.capability, run_id: asset.execution.run_id, task_id: asset.execution.task_id, job_id: asset.execution.job_id, pipeline_id: asset.execution.pipeline_id, status: asset.execution.status }}
+              values={{
+                [tNav('entities.workspace')]: origin.workspace_id || asset.origin.workspace_id,
+                [tNav('entities.outputFolder')]: origin.output_folder || asset.origin.output_folder,
+                command_id: execution.command_id || asset.execution.command_id,
+                workflow_id: execution.workflow_id || asset.execution.workflow_id,
+                run_id: execution.run_id || asset.execution.run_id,
+                task_id: execution.task_id || asset.execution.task_id,
+                job_id: execution.job_id || asset.execution.job_id,
+                pipeline_id: execution.pipeline_id || asset.execution.pipeline_id,
+                status: execution.status || asset.execution.status,
+              }}
             />
             <InfoSection
               title={tActivity('inspector.modelTiming')}
-              values={{ provider: asset.model.provider, model: asset.model.id, created_at: timing.created_at, queued_at: timing.queued_at, started_at: timing.started_at, completed_at: timing.completed_at, queue_seconds: timing.queue_seconds, inference_seconds: timing.inference_seconds, total_seconds: timing.total_seconds }}
+              values={{
+                [tActivity('inspector.provider')]: model.provider || asset.model.provider,
+                model: model.id || asset.model.id,
+                created_at: timing.created_at,
+                queued_at: timing.queued_at,
+                started_at: timing.started_at,
+                completed_at: timing.completed_at,
+                [tActivity('inspector.queue')]: formatTimingMs(timing.queue_ms),
+                [tActivity('inspector.inference')]: formatTimingMs(timing.inference_ms),
+                [tActivity('inspector.totalTime')]: formatTimingMs(timing.total_ms),
+              }}
             />
             {Object.entries(prompts).map(([name, value]) => typeof value === 'string' && value ? (
               <section key={name} className="rounded-lg border border-border bg-bg-primary p-3">

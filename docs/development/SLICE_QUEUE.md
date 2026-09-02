@@ -1,6 +1,10 @@
 # Slice queue
 
-Humans own merges. Agents do not merge and do not open a second PR on the same hotspot.
+Humans own merges. Agents do not merge until checks are green, and never
+open a second PR on the same hotspot.
+
+PRs should be **medium and cohesive** (about 300–1,000 net lines) with one
+verifiable contract. Do not open a PR per property, action or tiny component.
 
 Canonical sources in git:
 
@@ -8,39 +12,58 @@ Canonical sources in git:
 - i18n boy scout: `docs/development/INTERNATIONALIZATION.md`
 - Architecture contracts: `docs/development/ARCHITECTURE_FOUNDATION.md`
 
-Working notes under `comunicaciones/` are session handoff only. They are gitignored and are not canonical for the repository.
+Working notes under `comunicaciones/` are session handoff only. They are
+gitignored and are not canonical.
 
-## Landed on main
+## Landed on main (as of #85)
 
-- i18n foundation: navigation, canonical entity names, Settings language, Wizard/Activity chrome
-- Studio generate writes asset-manifest v1 (simulated worker, native WGP outputs, H3 Legacy, MMAudio SFX)
+Asset-manifest v1 writers: Studio generate (simulated, WGP, H3, SFX), Tools
+upscale/revoice, Recast/Repaint/Outpaint, MiniMax image, Series assembly, 3D,
+Rig, Director H3 join, Director timing attach, alternative songs, scene
+recording, Video Editor screenshot/export, comic animatic.
 
-## Next slices (one PR each)
+Sidecar failure: Hunyuan3D and Rig keep the GLB when provenance write fails.
 
-### A. Next asset-manifest writer: Tools
+`useStore` slices (facade kept): theme, settings, developerMode, sidebar,
+retake dialog. `openModelVisibility` still lives in `useStore` because it
+writes settings fields. `developerModeSlice` still writes `mediaFilter` when
+leaving `auditdev`.
 
-`publish_generation_sidecar` on `_write_tool_sidecar` only. Not Director, Series, Recast, 3D, or other writers.
+Story Lab: `relationships` and `world` tabs extracted. `StoryWorldTab` is an
+intermediate cut (too many props; `LocationEditor` / `ReferenceGallery` still
+owned by the panel). Visible copy on extracted tabs is still hardcoded English.
 
-### B. First bounded `useStore` slice
+i18n: foundation + Extra info inspector + Extra info video dialog (`extraInfo`
+namespace) + Assets catalog list chrome.
 
-Extract `create<Slice>Slice(set, get)` for a cohesive non-Story/Series/Comics slice. Keep `useStore.ts` as the public facade.
+## Next medium PRs
 
-### C. ADR §6 — one mutating surface
-
-Replace implicit `active_workspace` fallbacks on one family of mutating APIs. Keep JSON contracts.
-
-### D. Later
-
-- Other `.meta.json` writers (Recast/Repaint/Outpaint, Director, Series, 3D, scene recordings)
-- Further `useStore` slices after A/B-style cuts stay green
-- `StoryLabPanel` tab split (design first)
-- `director_pipeline.py` only with an explicit assignment
+1. **Domain provenance contract** (this track): `workspace_id` vs
+   `output_folder`, `GenerationProvenance` / `CommandContext`, initiator vs
+   provider/model, uniform sidecar-failure helper, Extra info timing keys.
+2. **Typed Zustand composition**: drop `as never`, typed slice merge, stop
+   cross-slice writes (`developerMode` → `mediaFilter`), extract 2–3 *related*
+   areas together.
+3. **Story Lab simple tabs**: extract shared `ReferenceGallery` /
+   `LocationEditor` / controllers first, then Characters + Structure (and other
+   purely visual tabs) in one PR, with i18n and tests. Do not pass 16 props.
+   Music and Productions stay a later PR with Wizard E2E.
+4. **Backend by domain**: one complete router + services per PR (Assets, Music,
+   Series, Comics, …). Preserve route-table ordinals. Do not split
+   `_launch_runtime.py` by line count.
+5. **Provenance applied by flow** (after 1): Studio+Wizard, Story Lab+videoclip,
+   Series+Comics, 3D+Director.
 
 ## Standing rules
 
-- Boy scout: migrate visible copy of the touched UI zone, EN+ES in the same commit, glossary first. Do not mass-translate the app.
+- Boy scout: migrate visible copy of the touched UI zone, EN+ES in the same
+  commit, glossary first. Do not mass-translate the app.
 - Workspace stays the product name; physical directories stay **Output folder**.
-- No WanGP / models / launchers. No `agentActions.ts` unless the assigned slice already owns it.
+- No WanGP / models / launchers. No `agentActions.ts` unless the assigned
+  slice already owns it.
 - `#48` stays draft unless a human asks to revive it.
-- Video Editor drafts stay out of the global project registry until they have durable server storage.
-- Only one pending PR may touch `_launch_runtime.py`. Only one pending PR may touch `useStore.ts`.
+- Video Editor drafts stay out of the global project registry until they have
+  durable server storage.
+- Only one pending PR may touch `_launch_runtime.py`. Only one pending PR may
+  touch `useStore.ts`. Independent PRs may proceed in parallel when files do
+  not overlap.

@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .generation_provenance import resolve_generation_location
+
 
 SCHEMA_NAME = "hocuspocus.asset-manifest"
 SCHEMA_VERSION = 1
@@ -159,6 +161,7 @@ def build_asset_manifest(
     asset_id: str | None = None,
     kind: str | None = None,
     workspace_id: str | None = None,
+    output_folder: str | None = None,
     project: Mapping[str, Any] | None = None,
     production: Mapping[str, Any] | None = None,
     tool: str = "unknown",
@@ -230,6 +233,22 @@ def build_asset_manifest(
         )},
         "error": _redact(dict(error)) if isinstance(error, Mapping) else None,
     }
+    location = resolve_generation_location(
+        workspace_id=workspace_id, output_folder=output_folder,
+    )
+    origin = {
+        "tool": _clean_text(tool) or "unknown",
+        "capability": _clean_text(capability),
+        "actor": actor,
+        "workspace_id": location.get("workspace_id"),
+        "output_folder": location.get("output_folder"),
+        "project": _entity_ref(project),
+        "production": _entity_ref(production),
+    }
+    if origin["workspace_id"] is None:
+        origin.pop("workspace_id", None)
+    if origin["output_folder"] is None:
+        origin.pop("output_folder", None)
     manifest = {
         "schema": SCHEMA_NAME,
         "schema_version": SCHEMA_VERSION,
@@ -240,14 +259,7 @@ def build_asset_manifest(
             "uri": filename,
             "media": _redact(media_value),
         },
-        "origin": {
-            "tool": _clean_text(tool) or "unknown",
-            "capability": _clean_text(capability),
-            "actor": actor,
-            "workspace_id": _clean_text(workspace_id),
-            "project": _entity_ref(project),
-            "production": _entity_ref(production),
-        },
+        "origin": origin,
         "execution": execution,
         "generation": {
             "prompts": _redact(dict(prompts or {})),
@@ -318,6 +330,7 @@ def adapt_legacy_sidecar(
     legacy: Mapping[str, Any],
     *,
     workspace_id: str | None = None,
+    output_folder: str | None = None,
 ) -> dict[str, Any]:
     """Return a canonical read model for a legacy sidecar without rewriting it."""
     params = legacy.get("params") if isinstance(legacy.get("params"), Mapping) else {}
@@ -352,11 +365,17 @@ def adapt_legacy_sidecar(
             or params.get("_director_pipeline_id")
         )
     stable_workspace = workspace_id or legacy.get("workspace") or params.get("workspace")
+    stable_folder = (
+        output_folder
+        or legacy.get("output_folder")
+        or params.get("output_folder")
+        or None
+    )
     legacy_asset_id = _clean_text(legacy.get("asset_id")) or (
         "asset_legacy_"
         + uuid.uuid5(
             uuid.NAMESPACE_URL,
-            f"hocuspocus:{stable_workspace or 'unscoped'}:{Path(output_path).name}",
+            f"hocuspocus:{stable_workspace or stable_folder or 'unscoped'}:{Path(output_path).name}",
         ).hex
     )
     return build_asset_manifest(
@@ -364,6 +383,7 @@ def adapt_legacy_sidecar(
         asset_id=legacy_asset_id,
         kind=infer_asset_kind(str(output_path), generation_mode),
         workspace_id=stable_workspace,
+        output_folder=stable_folder,
         tool=legacy.get("tool") or params.get("source") or "legacy",
         capability=legacy.get("capability"),
         actor=legacy.get("actor") or "unknown",
@@ -442,6 +462,7 @@ def publish_generation_sidecar(
     sidecar: Mapping[str, Any],
     *,
     workspace_id: str | None = None,
+    output_folder: str | None = None,
     tool: str | None = None,
     actor: str | None = None,
     capability: str | None = None,
@@ -456,14 +477,26 @@ def publish_generation_sidecar(
     only when supplied. Missing actor is ``unknown``, never invented as
     ``user``. A ``_director_pipeline_id`` attributes origin to ``director``
     without inventing Story or Series project refs.
+
+    ``workspace_id`` is a Workspace collection ID. ``output_folder`` is the
+    physical directory name. Legacy callers that only pass ``workspace_id``
+    keep that string on both fields.
     """
     payload = dict(sidecar)
+    location = resolve_generation_location(
+        workspace_id=workspace_id, output_folder=output_folder,
+    )
     asset_id = (
         _existing_canonical_asset_id(output_path)
         or _clean_text(payload.get("asset_id"))
         or f"asset_{uuid.uuid4().hex}"
     )
-    manifest = adapt_legacy_sidecar(output_path, payload, workspace_id=workspace_id)
+    manifest = adapt_legacy_sidecar(
+        output_path,
+        payload,
+        workspace_id=location.get("workspace_id"),
+        output_folder=location.get("output_folder"),
+    )
     manifest["asset"]["id"] = asset_id
     origin = dict(manifest.get("origin") or {})
     origin["tool"] = _initiating_tool(payload, tool)
@@ -477,6 +510,14 @@ def publish_generation_sidecar(
         origin.pop("project", None)
     if origin.get("production") is None:
         origin.pop("production", None)
+    if location.get("workspace_id"):
+        origin["workspace_id"] = location["workspace_id"]
+    else:
+        origin.pop("workspace_id", None)
+    if location.get("output_folder"):
+        origin["output_folder"] = location["output_folder"]
+    else:
+        origin.pop("output_folder", None)
     manifest["origin"] = origin
     technical = {
         key: value
@@ -486,6 +527,23 @@ def publish_generation_sidecar(
     technical["published_on_generate"] = True
     manifest["technical"] = technical
     return write_asset_manifest(output_path, manifest, legacy_fields=payload)
+
+
+def publish_generation_sidecar_best_effort(
+    output_path: str | os.PathLike[str],
+    sidecar: Mapping[str, Any],
+    **kwargs: Any,
+) -> Path | None:
+    """Write provenance after the media file is committed.
+
+    Sidecar failure must not delete or fail a generation whose bytes are
+    already on disk. Callers catch nothing: this helper never raises.
+    """
+    try:
+        return publish_generation_sidecar(output_path, sidecar, **kwargs)
+    except Exception as exc:
+        print(f"[asset-manifest] sidecar publish failed for {Path(output_path).name}: {exc}")
+        return None
 
 
 def write_asset_manifest(
@@ -537,6 +595,7 @@ def write_asset_manifest(
 __all__ = [
     "ASSET_KINDS", "AssetManifestError", "SCHEMA_NAME", "SCHEMA_VERSION",
     "adapt_legacy_sidecar", "build_asset_manifest", "infer_asset_kind",
-    "publish_generation_sidecar", "read_asset_manifest", "sidecar_path",
+    "publish_generation_sidecar", "publish_generation_sidecar_best_effort",
+    "read_asset_manifest", "sidecar_path",
     "validate_asset_manifest", "write_asset_manifest",
 ]
