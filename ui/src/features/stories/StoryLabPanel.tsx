@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
   BookOpen, Boxes, Check, ChevronRight, Download, Film, ImagePlus, Loader2,
-  Music, Network, Palette, Play, Plus, Sparkles, Trash2, Upload, Users,
+  Music, Network, Play, Plus, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
@@ -21,10 +21,12 @@ import { StoryTrailerTab } from './StoryTrailerTab'
 import { StoryProductionsTab } from './StoryProductionsTab'
 import { CompactVideoWorkspace } from './CompactVideoWorkspace'
 import { StoryOverviewTab } from './StoryOverviewTab'
+import { StoryAssetsTab } from './StoryAssetsTab'
+import type { PendingSmartAsset } from './storyLabAssets'
 import { StoryLabVisualsProvider } from './StoryLabVisualsProvider'
 import { emptyCharacter, pruneUnusedAssets } from './storyLabEditors'
 import {
-  button, input, panel, Field, requiredPreparationButton,
+  button, input, panel, requiredPreparationButton,
   type ProductionReviewIssue, type StoryGenerationOptions, type StoryLabTab as StoryTab,
 } from './storyLabChrome'
 import {
@@ -60,7 +62,7 @@ import {
   storyRenderStyle,
 } from './model'
 import type {
-  StoryAssetKind, StoryBeat, StoryGenerationScope, StoryLocation, StoryProject,
+  StoryBeat, StoryGenerationScope, StoryLocation, StoryProject,
   StoryImageProvider, StoryMusicCandidate, StoryMusicCue, StoryProjectType, StoryRelationship, StoryVisualAsset,
   StoryTrailerFormat, StoryTrailerIntensity, StoryTrailerNarration, StoryTrailerSpoiler, StoryWritingProvider,
 } from './types'
@@ -173,7 +175,6 @@ type StyledReferenceTarget = {
   label: string
   prompt: string
 }
-type PendingSmartAsset = api.StoryAssetSuggestion & { selected: boolean }
 type PendingDraft = {
   scope: StoryGenerationScope
   result: Record<string, unknown>
@@ -4462,309 +4463,43 @@ export function StoryLabPanel() {
             )}
 
             {tab === 'assets' && (
-              <>
-                <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-text-primary">Smart asset importer</h2>
-                    <p className="mt-1 max-w-3xl text-xs text-text-muted">
-                      Drop related images as one batch. The selected Story Lab LLM identifies characters, locations,
-                      world references, props and style references, and groups alternate views before anything changes.
-                    </p>
-                  </div>
-                  <div className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-[10px] text-text-muted">
-                    Analyzer: {project.provider.writingProvider === 'maestro'
-                      ? 'HocusPocus current LLM'
-                      : `${project.provider.writingProvider} · ${project.provider.writingModel || 'configured model'}`}
-                  </div>
-                </div>
-
-                <div className={`${panel} mb-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]`}>
-                  <button
-                    type="button"
-                    disabled={smartAssetBusy}
-                    className="min-h-44 rounded-xl border-2 border-dashed border-border bg-bg-tertiary/40 p-6 text-center transition-colors hover:border-accent-blue hover:bg-accent-blue/5 disabled:opacity-50"
-                    onClick={() => smartAssetRef.current?.click()}
-                    onDragOver={event => event.preventDefault()}
-                    onDrop={event => {
-                      event.preventDefault()
-                      void analyzeSmartAssets(Array.from(event.dataTransfer.files))
-                    }}
-                  >
-                    {smartAssetBusy
-                      ? <Loader2 size={28} className="mx-auto mb-3 animate-spin text-accent-blue" />
-                      : <Upload size={28} className="mx-auto mb-3 text-accent-blue" />}
-                    <span className="block text-sm font-medium text-text-primary">
-                      {smartAssetBusy ? 'Uploading and analyzing the batch…' : 'Drop images here or choose files'}
-                    </span>
-                    <span className="mt-2 block text-[10px] text-text-muted">
-                      Up to 24 images per batch. Several views of one subject can be assigned to the same entity.
-                    </span>
-                  </button>
-                  <div>
-                    <Field
-                      label="Optional context for the complete batch"
-                      value={smartAssetDescription}
-                      onChange={setSmartAssetDescription}
-                      rows={6}
-                      placeholder="For example: photos of Córdoba for a contemporary mystery; the woman in red is the protagonist and the old station is the main location."
-                    />
-                    <p className="mt-2 text-[9px] text-text-muted">
-                      This context is sent once with the ordered image batch. HocusPocus proposes changes; you review every assignment below.
-                    </p>
-                  </div>
-                </div>
-
-                {pendingSmartAssets.length > 0 && (
-                  <section className="mb-5">
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <h3 className="text-sm font-semibold text-text-primary">Review proposed assignments</h3>
-                        <p className="text-[10px] text-text-muted">Names, prompts, types and destinations remain editable. Uncheck anything you do not want to import.</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button className={button} onClick={() => setPendingSmartAssets([])}>Discard batch</button>
-                        <button className={`${button} border-emerald-500/50 text-emerald-300`}
-                          disabled={!pendingSmartAssets.some(item => item.selected && item.kind !== 'ignore')}
-                          onClick={applySmartAssets}>
-                          <Check size={13} /> Apply selected
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      {pendingSmartAssets.map((item, index) => {
-                        const newKey = stableTextKey(`${item.name}-${index}`)
-                        const targetOptions = item.kind === 'character'
-                          ? [
-                            ...project.characters.map(character => ({ id: character.id, label: `Existing · ${character.name}` })),
-                            { id: item.targetId.startsWith('new-character:') ? item.targetId : `new-character:${newKey}`, label: `New character · ${item.name}` },
-                          ]
-                          : item.kind === 'location'
-                            ? [
-                              ...project.world.locations.map(location => ({ id: location.id, label: `Existing · ${location.name}` })),
-                              { id: item.targetId.startsWith('new-location:') ? item.targetId : `new-location:${newKey}`, label: `New location · ${item.name}` },
-                            ]
-                            : [{ id: 'world', label: item.kind === 'prop' ? 'World library · prop' : item.kind === 'style' ? 'World library · style' : 'World references' }]
-                        return (
-                          <article key={`${item.source}-${index}`} className={`${panel} ${item.selected ? '' : 'opacity-60'}`}>
-                            <div className="grid gap-3 lg:grid-cols-[140px_minmax(0,1fr)_minmax(260px,0.7fr)]">
-                              <div>
-                                <img src={item.source} alt={item.name} className="h-32 w-full rounded-lg border border-border object-cover" />
-                                <label className="mt-2 flex items-center gap-2 text-[10px] text-text-secondary">
-                                  <input type="checkbox" checked={item.selected}
-                                    onChange={event => patchPendingSmartAsset(index, { selected: event.target.checked })} />
-                                  Import this image
-                                </label>
-                                <p className="mt-1 truncate text-[9px] text-text-muted" title={item.nameOriginal}>{item.nameOriginal}</p>
-                              </div>
-                              <div className="space-y-3">
-                                <Field label="Editable name" value={item.name}
-                                  onChange={name => patchPendingSmartAsset(index, { name })} />
-                                <Field label="What the image contains" value={item.description}
-                                  onChange={description => patchPendingSmartAsset(index, { description })} rows={3} />
-                                <Field label="Reusable visual prompt" value={item.visualPrompt}
-                                  onChange={visualPrompt => patchPendingSmartAsset(index, { visualPrompt })} rows={3} />
-                              </div>
-                              <div className="space-y-3">
-                                <label className="block text-[10px] text-text-muted">Asset type
-                                  <select className={`${input} mt-1`} value={item.kind} onChange={event => {
-                                    const kind = event.target.value as StoryAssetKind
-                                    const targetId = kind === 'character'
-                                      ? (project.characters[0]?.id || `new-character:${newKey}`)
-                                      : kind === 'location'
-                                        ? (project.world.locations[0]?.id || `new-location:${newKey}`)
-                                        : 'world'
-                                    patchPendingSmartAsset(index, { kind, targetId, selected: kind !== 'ignore' })
-                                  }}>
-                                    <option value="character">Character</option>
-                                    <option value="location">Location</option>
-                                    <option value="world">World</option>
-                                    <option value="prop">Prop</option>
-                                    <option value="style">Style reference</option>
-                                    <option value="ignore">Ignore</option>
-                                  </select>
-                                </label>
-                                {item.kind !== 'ignore' && (
-                                  <label className="block text-[10px] text-text-muted">Destination
-                                    <select className={`${input} mt-1`} value={targetOptions.some(option => option.id === item.targetId) ? item.targetId : targetOptions[0]?.id}
-                                      onChange={event => patchPendingSmartAsset(index, { targetId: event.target.value })}>
-                                      {targetOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-                                    </select>
-                                  </label>
-                                )}
-                                <div className="rounded-md border border-border bg-bg-tertiary/60 p-2 text-[9px] text-text-muted">
-                                  <p>Confidence: {Math.round(item.confidence * 100)}%</p>
-                                  <p className="mt-1">{item.reason}</p>
-                                </div>
-                              </div>
-                            </div>
-                          </article>
-                        )
-                      })}
-                    </div>
-                  </section>
-                )}
-
-                <section className={`${panel} mb-5 border-violet-500/30 bg-violet-500/5`}>
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-                    <div>
-                      <h3 className="text-sm font-semibold text-violet-100">Convert selected images to a style</h3>
-                      <p className="mt-1 text-[10px] leading-relaxed text-text-muted">
-                        Choose the editing engine for this batch. Qwen prioritizes strict source preservation; Flux 2 Klein
-                        performs fast four-step prompt-driven image editing; MiniMax preserves character identity but is not a scene editor.
-                        Originals remain intact and every generated variant stays in Draft until you approve it.
-                      </p>
-                      <textarea
-                        className={`${input} mt-3 min-h-24 resize-y`}
-                        value={styleConversion}
-                        onChange={event => setStyleConversion(event.target.value)}
-                        placeholder="For example: GTA V promotional artwork, grounded proportions, saturated cinematic color grading, crisp painted edges…"
-                        aria-label="Destination style for selected images"
-                      />
-                      {/photoreal|photo-real|fotorreal/i.test(styleConversion) && (
-                        <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[9px] leading-relaxed text-amber-200">
-                          If the inputs are already photographs, a photorealistic remake will look almost unchanged. For a GTA conversion, describe the target as a stylized game screenshot or painted promotional key art and avoid “photorealistic remake”.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col justify-end gap-2">
-                      <label className="block text-[10px] text-text-muted">Style conversion model
-                        <select
-                          className={`${input} mt-1`}
-                          value={styleConversionModel}
-                          disabled={styleConversionBusy || Boolean(styleModelDownloading)}
-                          onChange={event => {
-                            setStyleConversionModel(event.target.value)
-                            setStyleModelDownloadError('')
-                          }}
-                        >
-                          <optgroup label="External API">
-                            <option value={MINIMAX_IMAGE_API_MODEL}>MiniMax Image-01 · characters only</option>
-                          </optgroup>
-                          <optgroup label="HocusPocus local · true image editing">
-                            {localStyleModels.map(model => (
-                              <option key={model.model_type} value={model.model_type}>
-                                {model.name}{model.model_type === QWEN_STYLE_EDIT_MODEL ? ' · strict preservation' : model.model_type === FLUX_STYLE_EDIT_MODEL ? ' · fast 4-step edit' : ''}{model.is_downloaded ? ' · installed' : ' · not installed'}
-                              </option>
-                            ))}
-                          </optgroup>
-                        </select>
-                      </label>
-                      <div className="rounded-md border border-border bg-bg-primary/40 p-2 text-[10px] text-text-muted">
-                        {styleAssetIds.length} image{styleAssetIds.length === 1 ? '' : 's'} selected · {styleUsesMiniMax
-                          ? 'MiniMax Image-01 API · paid subject reference'
-                          : `${selectedStyleModel?.name || styleConversionModel} · local · ${selectedStyleModel?.is_downloaded ? 'ready' : 'installation required'}`}
-                      </div>
-                      {!styleUsesMiniMax && !styleModelReady && !styleModelDownloading && (
-                        <button className={`${button} border-sky-500/60 text-sky-200`} onClick={() => void installStyleConversionModel()}>
-                          <Download size={13} /> Install selected local editor
-                        </button>
-                      )}
-                      {styleModelDownloading && (
-                        <div className="rounded-md border border-sky-500/40 bg-sky-500/5 p-2 text-[10px] text-sky-200">
-                          <Loader2 size={12} className="mr-1 inline animate-spin" /> Downloading model files… progress is also shown in Activity.
-                        </div>
-                      )}
-                      {styleModelDownloadError && <p className="text-[9px] text-red-300">{styleModelDownloadError}</p>}
-                      {miniMaxIncompatibleSelection && (
-                        <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[9px] leading-relaxed text-amber-200">
-                          This selection contains non-character images. MiniMax cannot preserve their layout; choose Qwen Image Edit or Flux 2 Klein.
-                        </p>
-                      )}
-                      {styleConversionBusy ? (
-                        <button className={`${button} border-amber-500/60 text-amber-200`} onClick={cancelStyleConversion}>
-                          <Loader2 size={13} className="animate-spin" /> Stop after current image
-                        </button>
-                      ) : (
-                        <button
-                          className={`${button} border-violet-400/60 text-violet-200`}
-                          disabled={!styleAssetIds.length || !styleConversion.trim() || !styleModelReady || miniMaxIncompatibleSelection || Boolean(styleModelDownloading)}
-                          onClick={() => void convertSelectedAssetsToStyle()}
-                        >
-                          <Palette size={13} /> Convert selected to style
-                        </button>
-                      )}
-                      <p className="text-[9px] leading-relaxed text-text-muted">
-                        Qwen and Flux both send the original as the main landscape/subject (`KI`) and use the nearest supported aspect ratio. Flux freezes its distilled 4-step edit recipe. MiniMax remains available only for people and character identity.
-                      </p>
-                    </div>
-                  </div>
-                </section>
-
-                <section>
-                  <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-semibold text-text-primary">Visual reference library · {Object.keys(project.assets).length}</h3>
-                      <p className="mt-0.5 text-[9px] text-text-muted">
-                        {Object.values(project.assets).filter(asset => asset.approval === 'approved').length} approved for Director. Newest images appear first; only approved images leave Story Lab with a production.
-                      </p>
-                    </div>
-                    {Object.keys(project.assets).length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          className={button}
-                          onClick={() => setStyleAssetIds(styleAssetIds.length === Object.keys(project.assets).length
-                            ? [] : Object.keys(project.assets))}
-                        >
-                          {styleAssetIds.length === Object.keys(project.assets).length ? 'Clear selection' : 'Select all'}
-                        </button>
-                        <button
-                          className={`${button} border-red-500/60 text-red-300`}
-                          disabled={!selectedDraftAssetIds.length || styleConversionBusy}
-                          onClick={deleteSelectedDraftAssets}
-                          title="Remove only the selected Draft records from this Story; approved images and Gallery files are protected"
-                        >
-                          <Trash2 size={13} /> Delete selected Draft ({selectedDraftAssetIds.length})
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  {Object.keys(project.assets).length ? (
-                    <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                      {visualAssetsNewestFirst.map(asset => (
-                        <div key={asset.id} className={`${panel} p-2.5 ${asset.approval === 'approved' ? 'border-emerald-500/40' : ''}`}>
-                          <div className="relative">
-                            <img src={asset.source} alt={asset.name} className="h-44 w-full rounded-md border border-border object-cover" />
-                            <label className="absolute left-2 top-2 flex items-center gap-1.5 rounded bg-black/75 px-2 py-1 text-[9px] text-white">
-                              <input type="checkbox" checked={styleAssetIds.includes(asset.id)} onChange={() => toggleStyleAsset(asset.id)} />
-                              Select
-                            </label>
-                            <span className={`absolute right-2 top-2 rounded border px-1.5 py-0.5 text-[9px] ${asset.approval === 'approved'
-                              ? 'border-emerald-400/70 bg-emerald-950/80 text-emerald-200'
-                              : 'border-amber-400/60 bg-amber-950/80 text-amber-200'}`}>
-                              {asset.approval === 'approved' ? 'Approved' : 'Draft'}
-                            </span>
-                          </div>
-                          <input className={`${input} mt-2`} value={asset.name}
-                            onChange={event => patchVisualAsset(asset.id, { name: event.target.value })}
-                            aria-label={`Name for ${asset.name}`} />
-                          <div className="mt-1 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wide text-text-muted">
-                            <span>{asset.assetKind || asset.provider}</span>
-                            <span>·</span>
-                            <span>{asset.variantKind === 'styled' ? 'styled variant' : 'original'}</span>
-                            {asset.model && <><span>·</span><span>{asset.provider}/{asset.model}</span></>}
-                            <span>·</span><span>{new Date(asset.createdAt).toLocaleString()}</span>
-                          </div>
-                          <textarea className={`${input} mt-2 min-h-16 resize-y`} value={asset.description || ''}
-                            onChange={event => patchVisualAsset(asset.id, { description: event.target.value })}
-                            placeholder="What is visibly present in this image?" aria-label={`Description for ${asset.name}`} />
-                          <textarea className={`${input} mt-2 min-h-20 resize-y`} value={asset.prompt}
-                            onChange={event => patchVisualAsset(asset.id, { prompt: event.target.value })}
-                            placeholder="Reusable prompt for this reference" aria-label={`Prompt for ${asset.name}`} />
-                          {asset.stylePrompt && <p className="mt-1 text-[9px] text-violet-200">Style: {asset.stylePrompt}</p>}
-                          <button
-                            className={`${button} mt-2 w-full ${asset.approval === 'approved' ? 'border-emerald-500/60 text-emerald-300' : 'border-amber-500/50 text-amber-200'}`}
-                            onClick={() => patchVisualAsset(asset.id, {
-                              approval: asset.approval === 'approved' ? 'draft' : 'approved',
-                            })}
-                          >
-                            <Check size={13} /> {asset.approval === 'approved' ? 'Approved for production' : 'Approve for production'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : <div className={`${panel} py-10 text-center text-xs text-text-muted`}>No visual assets have been imported yet.</div>}
-                </section>
-              </>
+              <StoryAssetsTab
+                project={project}
+                smartAssetBusy={smartAssetBusy}
+                smartAssetDescription={smartAssetDescription}
+                setSmartAssetDescription={setSmartAssetDescription}
+                smartAssetRef={smartAssetRef}
+                pendingSmartAssets={pendingSmartAssets}
+                setPendingSmartAssets={setPendingSmartAssets}
+                analyzeSmartAssets={analyzeSmartAssets}
+                applySmartAssets={applySmartAssets}
+                patchPendingSmartAsset={patchPendingSmartAsset}
+                styleConversion={styleConversion}
+                setStyleConversion={setStyleConversion}
+                styleConversionModel={styleConversionModel}
+                setStyleConversionModel={setStyleConversionModel}
+                styleConversionBusy={styleConversionBusy}
+                styleModelDownloading={styleModelDownloading}
+                setStyleModelDownloadError={setStyleModelDownloadError}
+                styleModelDownloadError={styleModelDownloadError}
+                localStyleModels={localStyleModels}
+                qwenModel={QWEN_STYLE_EDIT_MODEL}
+                fluxModel={FLUX_STYLE_EDIT_MODEL}
+                styleAssetIds={styleAssetIds}
+                setStyleAssetIds={setStyleAssetIds}
+                styleUsesMiniMax={styleUsesMiniMax}
+                selectedStyleModel={selectedStyleModel}
+                styleModelReady={styleModelReady}
+                miniMaxIncompatibleSelection={miniMaxIncompatibleSelection}
+                installStyleConversionModel={installStyleConversionModel}
+                cancelStyleConversion={cancelStyleConversion}
+                convertSelectedAssetsToStyle={convertSelectedAssetsToStyle}
+                selectedDraftAssetIds={selectedDraftAssetIds}
+                deleteSelectedDraftAssets={deleteSelectedDraftAssets}
+                toggleStyleAsset={toggleStyleAsset}
+                patchVisualAsset={patchVisualAsset}
+                visualAssetsNewestFirst={visualAssetsNewestFirst}
+              />
             )}
 
             {tab === 'world' && (
