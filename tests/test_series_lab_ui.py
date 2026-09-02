@@ -1,5 +1,7 @@
 """Source-level UI contract checks for Series Lab's lazy, recoverable workflow."""
 
+import json
+
 from pathlib import Path
 
 from tests.api_client_source import api_client_source
@@ -7,6 +9,7 @@ from tests.api_client_source import api_client_source
 
 ROOT = Path(__file__).resolve().parents[1]
 SERIES = ROOT / "ui" / "src" / "features" / "series"
+CATALOG_EN = ROOT / "ui" / "src" / "i18n" / "locales" / "en" / "seriesLab.json"
 
 
 def source(name: str) -> str:
@@ -27,36 +30,53 @@ def test_client_created_series_entities_use_browser_uuid():
 def test_setup_has_required_aura_explicit_models_and_canvas_choices():
     setup = source("SeriesSetupPanel.tsx")
     fields = source("components.tsx")
+    catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
     assert "shadow-[0_0_18px" in fields
-    assert "Prepare canon text" in setup
-    assert "Prepare canon + up to 4 images" in setup
-    assert "will not silently select or download a recommended model" in setup
+    assert "t('setup.prepareText')" in setup
+    assert catalog["setup"]["prepareText"] == "Prepare canon text"
+    assert "t('setup.prepareImages')" in setup
+    assert catalog["setup"]["prepareImages"] == "Prepare canon + up to 4 images"
+    assert "t('setup.needImageModel')" in setup
+    assert "will not silently select or download a recommended model" in catalog["setup"]["needImageModel"]
     assert "minimax_h3" in setup and "minimax_h3_full" in setup
     assert "480p" in setup and "720p" in setup
-    assert "Landscape" in setup and "Portrait" in setup
-    assert "Fill from a known series · one click" in setup
+    assert "t('providers.landscape')" in setup and "t('providers.portrait')" in setup
+    assert catalog["providers"]["landscape"].startswith("Landscape")
+    assert catalog["providers"]["portrait"].startswith("Portrait")
+    assert "t('setup.knownTitle')" in setup
+    assert catalog["setup"]["knownTitle"] == "Fill from a known series · one click"
     assert "bootstrapKnownSeries: true" in setup and "autoApply: true" in setup
-    assert "not live web research" in setup
-    assert "Nothing has been approved automatically" in setup
+    assert "t('setup.knownDisclaimer')" in setup
+    assert "not live web research" in catalog["setup"]["knownDisclaimer"]
+    assert "t('setup.draftReview')" in setup
+    assert "Nothing has been approved automatically" in catalog["setup"]["draftReview"]
 
 
 def test_shot_ui_exposes_exact_manifest_and_persistent_manual_policy():
     shots = source("SeriesShotsPanel.tsx")
-    assert "Exact routed manifest" in shots
+    catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
+    assert "t('shots.manifestTitle')" in shots
+    assert catalog["shots"]["manifestTitle"] == "Exact routed manifest"
     assert "manualIncludeAssetIds" in shots
     assert "manualExcludeAssetIds" in shots
     assert "composed_start_frame" in shots and "composed_end_frame" in shots
-    assert "Render selected" in shots and "Render missing" in shots and "Retry failed" in shots
-    assert "Select all" in shots and "Clear selection" in shots
-    assert "I understand · enable dialogue rendering" in shots
+    assert "t('shots.renderSelected'" in shots and "t('shots.renderMissing')" in shots and "t('shots.retryFailed')" in shots
+    assert catalog["shots"]["renderSelected"].startswith("Render selected")
+    assert catalog["shots"]["renderMissing"] == "Render missing"
+    assert catalog["shots"]["retryFailed"] == "Retry failed"
+    assert "t('shots.selectAll'" in shots and "t('shots.clearSelection')" in shots
+    assert "t('shots.lipSyncEnable')" in shots
+    assert catalog["shots"]["lipSyncEnable"] == "I understand · enable dialogue rendering"
     assert "onAcknowledgeLipSync" in shots
 
 
 def test_canon_facts_can_be_removed_individually():
     canon = source("SeriesCanonPanel.tsx")
-    assert 'title="Current facts"' in canon
+    catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
+    assert "title={t('canon.currentFacts')}" in canon
+    assert catalog["canon"]["currentFacts"] == "Current facts"
     assert "currentFacts: series.canon.currentFacts.filter(item => item.id !== fact.id)" in canon
-    assert "aria-label={`Delete fact: ${fact.description}`}" in canon
+    assert "aria-label={t('canon.deleteFact', { description: fact.description })}" in canon
 
 
 def test_review_is_thumbnail_first_and_exposes_ordered_editable_attempt_history():
@@ -94,23 +114,31 @@ def test_story_productions_have_an_in_place_ordered_clip_timeline():
 def test_backend_authority_selection_restore_and_recovery_cards_are_wired():
     store = source("store.ts")
     panel = source("SeriesLabPanel.tsx")
+    catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
     assert "fetchSeriesLibrary" in store
     assert "maestro-series-lab-active" in store
     assert "seriesId, episodeId" in store
     assert "fetchSeriesPlanRecovery" in store and "fetchSeriesRenderRecovery" in store
-    assert "Recoverable Series Lab work" in panel
-    assert ">Resume<" in panel and ">Discard state<" in panel
+    assert "t('recovery.title')" in panel
+    assert catalog["recovery"]["title"] == "Recoverable Series Lab work"
+    assert "t('chrome.resume')" in panel and "t('chrome.discardState')" in panel
 
 
 def test_episode_proposal_uses_readable_cards_and_manual_editing():
     panel = source("SeriesEpisodePanel.tsx")
     review = source("SeriesEpisodeProposalReview.tsx")
     client = api_client_source()
+    catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
     assert "SeriesEpisodeProposalReview" in panel
-    assert "Generated proposal — review and edit" in review
-    assert "Internal IDs remain protected" in review
-    assert 'title="Outline"' in review and 'title="Script"' in review and 'title="Timed shots"' in review
-    assert "Reset edits" in review and "Apply reviewed" in review
-    assert "Generation prompt" in review and "Visible characters" in review
-    assert "Technical JSON (optional, read-only)" in review
+    assert "t('proposal.title')" in review
+    assert catalog["proposal"]["title"] == "Generated proposal — review and edit"
+    assert "t('proposal.description')" in review
+    assert "Internal IDs remain protected" in catalog["proposal"]["description"]
+    assert "title={t('proposal.outline')}" in review
+    assert "title={t('proposal.script')}" in review
+    assert "title={t('proposal.timedTitle')}" in review
+    assert "t('proposal.reset')" in review and "t('proposal.apply')" in review
+    assert "t('proposal.prompt')" in review and "t('proposal.visibleCharacters')" in review
+    assert "t('proposal.technicalJson')" in review
+    assert catalog["proposal"]["technicalJson"] == "Technical JSON (optional, read-only)"
     assert "JSON.stringify(episodeResult ? { episodeResult } : {})" in client

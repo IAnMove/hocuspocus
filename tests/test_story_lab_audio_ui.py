@@ -1,5 +1,7 @@
 """Source-level contracts for Story Lab music import and cancellation UI."""
 
+import json
+
 from pathlib import Path
 
 from tests.api_client_source import api_client_source
@@ -130,8 +132,10 @@ def test_story_lab_status_polling_survives_transient_mobile_disconnects():
 
 def test_music_video_confirmation_names_the_frozen_video_model():
     source = STORY.read_text(encoding="utf-8")
+    catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
 
-    assert "Video model: ${selectedFilmVideoModel?.name || filmVideoModel} (${filmVideoModel})" in source
+    assert "t('notice.generateMusicVideoConfirm'" in source
+    assert "Video model: {{model}} ({{modelId}})" in catalog["notice"]["generateMusicVideoConfirm"]
     assert "Video model selection did not settle" in source
     assert "Director did not return a pipeline ID" in source
 
@@ -151,6 +155,7 @@ def test_story_assets_support_reviewed_non_destructive_style_variants():
     panel = STORY.read_text(encoding="utf-8")
     types = STORY_TYPES.read_text(encoding="utf-8")
     model = STORY_MODEL.read_text(encoding="utf-8")
+    catalog_data = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
 
     assert "approval: StoryApprovalState" in types
     assert "derivedFromAssetId?: string" in types
@@ -162,7 +167,8 @@ def test_story_assets_support_reviewed_non_destructive_style_variants():
     assert "Style conversion model" in catalog
     assert "MiniMax Image-01 · characters only" in catalog
     assert "Install selected local editor" in catalog
-    assert "Review and approve only the images Director should use" in panel
+    assert "t('notice.styleVariantsCreated'" in panel
+    assert "Review and approve only the images Director should use" in catalog_data["notice"]["styleVariantsCreated_other"]
     assert "approval: item.approval === 'draft' ? 'draft' : 'approved'" in model
 
 
@@ -171,6 +177,7 @@ def test_story_library_can_bulk_remove_only_selected_drafts():
     deletion = panel.split("const deleteSelectedDraftAssets", 1)[1].split(
         "const styleUsesMiniMax", 1,
     )[0]
+    catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
 
     assert "snapshot.assets[id]?.approval === 'draft'" in deletion
     assert "current.assets[id]?.approval === 'draft'" in deletion
@@ -178,7 +185,8 @@ def test_story_library_can_bulk_remove_only_selected_drafts():
     assert "location.referenceAssetIds.filter" in deletion
     assert "character.referenceAssetIds.filter" in deletion
     assert "delete current.assets[id]" in deletion
-    assert "Generated files remain in Gallery" in deletion
+    assert "t('notice.draftsRemoved'" in deletion
+    assert "Generated files remain in Gallery" in catalog["notice"]["draftsRemoved_other"]
     assert "Delete selected Draft" in CATALOG_EN.read_text(encoding="utf-8")
     assert "visualAssetsNewestFirst" in panel
     assert "Newest images appear first" in CATALOG_EN.read_text(encoding="utf-8")
@@ -217,10 +225,12 @@ def test_story_style_converter_warns_about_photo_to_photo_noops_and_honors_reque
 def test_story_style_conversion_uses_true_qwen_edit_semantics_for_scenes():
     panel = STORY.read_text(encoding="utf-8")
     generation = IMAGE_GENERATION.read_text(encoding="utf-8")
+    catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
 
     assert "referenceMode: 'edit'" in panel
     assert "resolution: STYLE_RESOLUTION_BY_ASPECT[aspectRatio]" in panel
-    assert "MiniMax Image-01 references are documented for character identity only" in panel
+    assert "t('notice.minimaxCharactersOnly')" in panel
+    assert "MiniMax Image-01 references are documented for character identity only" in catalog["notice"]["minimaxCharactersOnly"]
     assert "options.referenceMode === 'edit'" in generation
     assert "? 'KI'" in generation
     assert "referenceParams.model_mode = 0" in generation

@@ -78,6 +78,9 @@ _EDIT_SUBMODE_PATH = os.path.join(
 _LORA_SELECTOR_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "SettingsDrawer", "LoraSelector.tsx",
 )
+_STUDIO_EN_PATH = os.path.join(
+    _ROOT, "ui", "src", "i18n", "locales", "en", "studio.json",
+)
 
 
 def _read(path: str) -> str:
@@ -3628,6 +3631,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         wan_handler = _read(_WAN_HANDLER_PATH)
         store = _read(_STORE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn('if "preserve_bystanders" in body:', launch)
         self.assertIn('body.get("preserve_bystanders") is True', launch)
         self.assertIn('body.get("preserve_scene_reference") is True', launch)
@@ -3686,7 +3690,11 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("if map_native_bystanders:", launch)
         self.assertIn("skipping the second full SAM3 pass", launch)
         self.assertNotIn("Preserve other people natively", controls)
-        self.assertIn("preserves detected bystanders automatically", controls)
+        self.assertIn("t('recast.aboutText')", controls)
+        self.assertIn(
+            "preserves detected bystanders automatically",
+            studio["recast"]["aboutText"],
+        )
 
     def test_recast_discovers_mappings_across_the_selected_timeline(self):
         launch = _read(_LAUNCH_PATH)
@@ -3696,6 +3704,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         client = api_client_source()
         magic_mask = _read(_MAGIC_MASK_PATH)
         sam3 = _read(_SAM3_PREPROCESSOR_PATH)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
 
         self.assertIn("def _detect_recast_shot_ranges(", launch)
         self.assertIn("tracking_segments=shot_ranges", launch)
@@ -3714,7 +3723,11 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn("and not timeline_scene_reference", scail2)
         self.assertIn("end_time: editEndTime", controls)
-        self.assertIn("Not found in the selected timeline.", controls)
+        self.assertIn("t('recast.notFound')", controls)
+        self.assertEqual(
+            studio["recast"]["notFound"],
+            "Not found in the selected timeline.",
+        )
         self.assertIn("end_time?: number;", client)
         self.assertIn("tracking_segments=tracking_segments", magic_mask)
         self.assertIn("timeline_segments =", sam3)
@@ -3803,6 +3816,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         store = _read(_STORE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         selector = _read(_LORA_SELECTOR_PATH)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn(
             '_RECAST_RELIGHTING_LORA_FILENAME = "scail2_relighting_lora.safetensors"',
             launch,
@@ -3820,15 +3834,21 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("const recastSinglePhase =", store)
         self.assertIn("const recastSinglePhase =", selector)
         self.assertIn("const phases = recastSinglePhase ? 1", selector)
-        self.assertIn("Match lighting", controls)
-        self.assertIn("official SCAIL-2 Relighting LoRA", controls)
-        self.assertIn("single strength control", controls)
+        self.assertIn("t('recast.matchLighting')", controls)
+        self.assertIn("t('recast.aboutLightingText')", controls)
+        self.assertEqual(studio["recast"]["matchLighting"], "Match lighting")
+        self.assertIn(
+            "official SCAIL-2 Relighting LoRA",
+            studio["recast"]["aboutLightingText"],
+        )
+        self.assertIn("single strength control", studio["recast"]["aboutLightingText"])
 
     def test_recast_isolates_reference_background_by_default(self):
         launch = _read(_LAUNCH_PATH)
         scail2 = _read(_SCAIL2_PATH)
         store = _read(_STORE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn('body.get("isolate_reference") is not False', launch)
         self.assertIn('"scail2_isolate_reference_background": False', launch)
         self.assertIn('"scail2_reference_alpha_path"', launch)
@@ -3841,7 +3861,8 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("editRecastIsolateReference: true", store)
         self.assertIn("isolate_reference: true", store)
         self.assertNotIn("Isolate replacement from reference background", controls)
-        self.assertIn("HocusPocus isolates references", controls)
+        self.assertIn("t('recast.aboutText')", controls)
+        self.assertIn("HocusPocus isolates references", studio["recast"]["aboutText"])
 
     def test_recast_uses_identity_latents_and_trims_motion_preroll(self):
         launch = _read(_LAUNCH_PATH)
@@ -3905,10 +3926,12 @@ class TestMultiPersonRecast(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn('body.get("model_type") or _RECAST_FAST_MODEL_TYPE', launch)
         self.assertIn("? 'scail2_14B_recast_fast'", store)
-        self.assertIn("Fast is recommended (8 steps)", controls)
-        self.assertIn("HQ uses the full 40-step schedule", controls)
+        self.assertIn("t('recast.aboutText')", controls)
+        self.assertIn("Fast is recommended (8 steps)", studio["recast"]["aboutText"])
+        self.assertIn("HQ uses the full 40-step schedule", studio["recast"]["aboutText"])
         self.assertIn("initialModelType === 'scail2_14B_fast'", store)
         self.assertIn("editSubMode: 'restyle' as const", store)
         self.assertIn("editSubMode: 'recast' as const", store)
@@ -3996,11 +4019,16 @@ class TestMultiPersonRecast(unittest.TestCase):
         advanced = _read(_ADVANCED_SETTINGS_PATH)
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
 
         self.assertIn("const isScailEdit = isRecast || isRepaint", advanced)
         self.assertIn("{showInferenceSteps && (", advanced)
         self.assertIn("{showGuidanceScale && (", advanced)
-        self.assertIn("Fast keeps its distilled CFG 1 recipe", advanced)
+        self.assertIn("t('advanced.fastCfg')", advanced)
+        self.assertIn(
+            "Fast keeps its distilled CFG 1 recipe",
+            studio["advanced"]["fastCfg"],
+        )
         self.assertIn(
             "!isAudio && !isScailEdit && <PostProcessing />",
             advanced,
@@ -4069,6 +4097,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         store = _read(_STORE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         repaint_controls = _read(_REPAINT_CONTROLS_PATH)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn("editRecastMappings: RecastCharacterMapping[]", store)
         self.assertIn("character_mappings: recastMappings.map", store)
         self.assertIn("additional_ref_image_paths: mapping.additionalRefs", store)
@@ -4076,23 +4105,29 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("const refUrl = api.getFileUrl(refName)", store)
         self.assertNotIn("sendFrameToImageMode('recast')", controls)
         self.assertIn("sendFrameToImageMode('repaint')", repaint_controls)
-        self.assertIn("Characters ({mappings.length}/5)", controls)
-        self.assertIn("Add character", controls)
-        self.assertIn("More views", controls)
-        self.assertIn("Prepared references", controls)
+        self.assertIn("t('recast.characters'", controls)
+        self.assertIn("t('recast.addCharacter')", controls)
+        self.assertIn("t('recast.moreViews')", controls)
+        self.assertIn("t('recast.prepared')", controls)
+        self.assertEqual(studio["recast"]["characters"], "Characters ({{count}}/5)")
+        self.assertEqual(studio["recast"]["addCharacter"], "Add character")
+        self.assertEqual(studio["recast"]["moreViews"], "More views")
+        self.assertEqual(studio["recast"]["prepared"], "Prepared references")
         self.assertIn("editRecastRefAligned: boolean", store)
         self.assertIn(
             "reference_aligned_to_source: mapping.referenceAlignedToSource",
             store,
         )
         self.assertNotIn("Reference is a full edited copy of the selected first frame", controls)
-        self.assertIn("Edited first frame", repaint_controls)
+        self.assertIn("t('repaint.editedFrame')", repaint_controls)
+        self.assertEqual(studio["repaint"]["editedFrame"], "Edited first frame")
 
     def test_recast_auto_face_detail_is_previewed_saved_and_automatic(self):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         client = api_client_source()
+        studio = json.loads(_read(_STUDIO_EN_PATH))
 
         self.assertIn('body.get("auto_face_detail") is not False', launch)
         self.assertIn(
@@ -4107,8 +4142,10 @@ class TestMultiPersonRecast(unittest.TestCase):
             store,
         )
         self.assertNotIn("Automatically add a face-detail view", controls)
-        self.assertIn("adds a face-detail view", controls)
-        self.assertIn("'Face detail'", controls)
+        self.assertIn("t('recast.aboutText')", controls)
+        self.assertIn("adds a face-detail view", studio["recast"]["aboutText"])
+        self.assertIn("t('recast.faceDetail')", controls)
+        self.assertEqual(studio["recast"]["faceDetail"], "Face detail")
         self.assertIn("auto_face_detail?: boolean", client)
         self.assertIn("'auto_face_detail'", client)
 
@@ -4146,6 +4183,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         controls = _read(_REPAINT_CONTROLS_PATH)
         toggle = _read(_EDIT_SUBMODE_PATH)
         client = api_client_source()
+        studio = json.loads(_read(_STUDIO_EN_PATH))
 
         self.assertIn('@api.post("/api/v1/repaint")', launch)
         self.assertIn('@api.post("/api/v1/repaint/preview")', launch)
@@ -4164,20 +4202,27 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("target.anchor === 'repaint'", store)
         self.assertIn("submitRepaint", client)
         self.assertIn("repaintPreview", client)
-        self.assertIn("{ value: 'restyle', label: 'Repaint' }", toggle)
-        self.assertNotIn("{ value: 'restyle', label: 'Restyle', experimental: true }", toggle)
-        self.assertIn("Fast is recommended (6 steps)", controls)
-        self.assertIn("Track changed regions", controls)
-        self.assertIn("source-to-edited-frame mapping", controls)
+        self.assertIn("{ value: 'restyle', labelKey: 'editSubModes.restyle' }", toggle)
+        self.assertNotIn("{ value: 'restyle', labelKey: 'editSubModes.restyle', experimental: true }", toggle)
+        self.assertEqual(studio["editSubModes"]["restyle"], "Repaint")
+        self.assertIn("t('repaint.aboutText')", controls)
+        self.assertIn("Fast is recommended (6 steps)", studio["repaint"]["aboutText"])
+        self.assertIn("t('repaint.trackRegions')", controls)
+        self.assertEqual(studio["repaint"]["trackRegions"], "Track changed regions")
+        self.assertIn("t('repaint.aboutRegionsText')", controls)
+        self.assertIn(
+            "source-to-edited-frame mapping",
+            studio["repaint"]["aboutRegionsText"],
+        )
 
     def test_primary_edit_modes_use_the_product_order(self):
         toggle = _read(_EDIT_SUBMODE_PATH)
         ordered_modes = (
-            "{ value: 'retake', label: 'Retake' }",
-            "{ value: 'edit_anything', label: 'Edit Anything' }",
-            "{ value: 'outpaint', label: 'Outpaint' }",
-            "{ value: 'restyle', label: 'Repaint' }",
-            "{ value: 'recast', label: 'Recast' }",
+            "{ value: 'retake', labelKey: 'editSubModes.retake' }",
+            "{ value: 'edit_anything', labelKey: 'editSubModes.editAnything' }",
+            "{ value: 'outpaint', labelKey: 'editSubModes.outpaint' }",
+            "{ value: 'restyle', labelKey: 'editSubModes.restyle' }",
+            "{ value: 'recast', labelKey: 'editSubModes.recast' }",
         )
         positions = [toggle.index(mode) for mode in ordered_modes]
         self.assertEqual(positions, sorted(positions))
@@ -4188,6 +4233,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         resolution = _read(_SCAIL_RESOLUTION_SELECTOR_PATH)
         tooltip = _read(_INFO_TOOLTIP_PATH)
         prompt = _read(_PROMPT_INPUT_PATH)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
 
         for controls in (recast, repaint, resolution):
             self.assertIn("<InfoTooltip", controls)
@@ -4195,9 +4241,10 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('role="tooltip"', tooltip)
         self.assertIn("aria-describedby", tooltip)
         self.assertIn("aria-label={label}", tooltip)
-        self.assertIn(
+        self.assertIn("t('prompt.placeholderRecast')", prompt)
+        self.assertEqual(
+            studio["prompt"]["placeholderRecast"],
             "Describe the finished video and replacement characters...",
-            prompt,
         )
         self.assertIn("editSubMode === 'restyle'", prompt)
 
