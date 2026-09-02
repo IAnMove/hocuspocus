@@ -15,7 +15,7 @@ def source(name: str) -> str:
 
 def test_series_lab_is_top_level_immediately_after_story_lab():
     tabs = (ROOT / "ui" / "src" / "components" / "MainContent" / "TabFilter.tsx").read_text(encoding="utf-8")
-    assert tabs.index("Story Lab") < tabs.index("Series Lab") < tabs.index("Video Editor")
+    assert tabs.index("value: 'stories'") < tabs.index("value: 'series'") < tabs.index("value: 'videoeditor'")
 
 
 def test_client_created_series_entities_use_browser_uuid():
