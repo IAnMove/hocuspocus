@@ -15,6 +15,7 @@ import time
 import uuid
 from typing import Any, Callable
 
+from services.asset_manifest import SCHEMA_NAME, publish_generation_sidecar, read_asset_manifest
 from services.mix_concat import concatenate_multi_clip_videos, probe_duration_seconds
 from services.output_result_kind import classify_output_result_kind
 from services.video_editor import probe_audio
@@ -45,15 +46,66 @@ def load_sidecar(video_path: str) -> dict[str, Any]:
     return payload
 
 
-def save_sidecar(video_path: str, sidecar: dict[str, Any]) -> None:
-    path = sidecar_path(video_path)
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump(sidecar, handle, indent=2, ensure_ascii=False)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(tmp, path)
+def _clean_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _v1_origin(document: Any) -> dict[str, Any] | None:
+    if not isinstance(document, dict) or document.get("schema") != SCHEMA_NAME:
+        return None
+    origin = document.get("origin")
+    return origin if isinstance(origin, dict) else None
+
+
+def _has_director_pipeline(payload: dict[str, Any]) -> bool:
+    params = payload.get("params") if isinstance(payload.get("params"), dict) else {}
+    return any(
+        _clean_text(value)
+        for value in (
+            payload.get("pipeline_id"),
+            payload.get("director_pipeline_id"),
+            params.get("director_pipeline_id"),
+            params.get("_director_pipeline_id"),
+        )
+    )
+
+
+def save_sidecar(video_path: str, sidecar: dict[str, Any], *, tool: str | None = None) -> None:
+    """Publish gallery sidecar fields through the v1 asset-manifest writer.
+
+    An explicit ``tool`` wins. Otherwise a canonical ``origin.tool`` on the
+    payload or existing v1 file is preserved so series-assembly/director/studio
+    are not rewritten. If only a director pipeline id is present, tool is
+    omitted so publish can attribute director. Actor is never invented as
+    ``user``; missing workspace stays unset instead of ``default``.
+    """
+    payload = sidecar if isinstance(sidecar, dict) else {}
+    payload_origin = _v1_origin(payload)
+    disk_origin = None
+    existing = load_sidecar(video_path)
+    if _v1_origin(existing) is not None:
+        manifest = read_asset_manifest(video_path)
+        origin = None if manifest is None else manifest.get("origin")
+        disk_origin = origin if isinstance(origin, dict) else None
+    resolved_tool = (
+        _clean_text(tool)
+        or _clean_text((payload_origin or {}).get("tool"))
+        or _clean_text((disk_origin or {}).get("tool"))
+    )
+    if resolved_tool is None and _has_director_pipeline(payload):
+        resolved_tool = None
+    workspace_id = (
+        _clean_text(payload.get("workspace"))
+        or _clean_text((payload_origin or {}).get("workspace_id"))
+        or _clean_text((disk_origin or {}).get("workspace_id"))
+    )
+    publish_generation_sidecar(
+        video_path,
+        payload,
+        workspace_id=workspace_id,
+        tool=resolved_tool,
+    )
 
 
 def _song_list(sidecar: dict[str, Any]) -> list[dict[str, Any]]:
@@ -323,7 +375,7 @@ def write_mounted_sidecar(
         "created_at": time.time(),
         "parent_output": parent_name,
     }
-    save_sidecar(output_path, payload)
+    save_sidecar(output_path, payload, tool="alternative-songs")
     song["status"] = "mounted"
     song["mounted_output"] = os.path.basename(output_path)
     song["extra_clip_count"] = extra_count
@@ -335,7 +387,7 @@ def write_mounted_sidecar(
     )
     if classify != "music_video":
         payload["params"]["result_kind"] = "music_video"
-        save_sidecar(output_path, payload)
+        save_sidecar(output_path, payload, tool="alternative-songs")
 
 
 def remount_clips(
