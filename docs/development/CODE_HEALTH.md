@@ -17,6 +17,8 @@ python scripts/code_health.py
 python scripts/code_health.py --markdown
 ```
 
+`--markdown` without `--check` prints **Ratchet not evaluated.** CI uses `--check --markdown` so the PR comment shows passed or failed against the committed baseline.
+
 The report lists physical/non-blank lines, files over 1,000 lines, and the most
 complex Python and TypeScript/JavaScript functions. Python uses a classic
 AST-based McCabe count. UI complexity uses ESLint's built-in `complexity` rule.

@@ -96,9 +96,18 @@ def outer(a, b):
         self.assertIn("<!-- code-health-report -->", markdown)
         self.assertIn("| Production LOC |", markdown)
         self.assertIn("**Ratchet passed.**", markdown)
+        self.assertNotIn("**Ratchet not evaluated.**", markdown)
+
         preview = code_health._markdown_report(report)
+        self.assertIn("**Ratchet not evaluated.**", preview)
         self.assertNotIn("**Ratchet passed.**", preview)
         self.assertNotIn("**Ratchet failed.**", preview)
+
+        failed = code_health._markdown_report(report, report, [], ["new complexity hotspot ui/src/App.tsx is 40; limit is 25"])
+        self.assertIn("**Ratchet failed.**", failed)
+        self.assertIn("new complexity hotspot", failed)
+        self.assertNotIn("**Ratchet passed.**", failed)
+        self.assertNotIn("**Ratchet not evaluated.**", failed)
 
     def test_line_count_reports_physical_and_non_blank_lines(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -355,6 +355,8 @@ def _markdown_report(
         lines.append("**Ratchet failed.**")
     elif baseline is not None:
         lines.extend(["", "**Ratchet passed.**"])
+    else:
+        lines.extend(["", "**Ratchet not evaluated.**"])
     return "\n".join(lines) + "\n"
 
 
