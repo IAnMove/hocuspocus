@@ -288,8 +288,24 @@ test('Series language resolution invalidates canon only for production-relevant 
 
   const legacySelection = resolveSeriesLanguageIntent(series!, 'Français', undefined)
   assert.equal(legacySelection.contentLanguage, 'Français')
-  assert.equal(legacySelection.spokenLanguage, 'Français')
+  assert.equal(legacySelection.spokenLanguage, 'Español')
   assert.equal(seriesLanguageIntentAffectsCanon(series!, legacySelection), true)
+
+  const newSeriesSelection = resolveSeriesLanguageIntent(series!, 'Français', undefined, true)
+  assert.equal(newSeriesSelection.contentLanguage, 'Français')
+  assert.equal(newSeriesSelection.spokenLanguage, 'Français')
+})
+
+test('an existing Series keeps a precise spoken locale when legacy content language repeats', () => {
+  const series = normalizeSeriesProject({
+    id: 'series-regional-speech', title: 'Night Shift',
+    language: 'Español', spokenLanguage: 'Español de España',
+  })
+  assert.ok(series)
+  const resolved = resolveSeriesLanguageIntent(series!, 'Español', undefined)
+  assert.equal(resolved.contentLanguage, 'Español')
+  assert.equal(resolved.spokenLanguage, 'Español de España')
+  assert.equal(seriesLanguageIntentAffectsCanon(series!, resolved), false)
 })
 
 test('manual Story and Series language controls update visible and durable fields together', () => {

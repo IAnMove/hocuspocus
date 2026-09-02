@@ -5,6 +5,7 @@ export function resolveSeriesLanguageIntent(
   series: SeriesProject,
   legacyLanguage: string,
   update: LanguageIntent | undefined,
+  newSeries = false,
 ): LanguageIntent {
   const merged = mergeLanguageIntent(series.languageIntent, update, {
     contentLanguage: series.language,
@@ -15,7 +16,7 @@ export function resolveSeriesLanguageIntent(
   return {
     ...merged,
     contentLanguage: update?.contentLanguage || legacyLanguage,
-    spokenLanguage: update?.spokenLanguage || legacyLanguage,
+    spokenLanguage: update?.spokenLanguage || (newSeries ? legacyLanguage : merged.spokenLanguage),
   }
 }
 

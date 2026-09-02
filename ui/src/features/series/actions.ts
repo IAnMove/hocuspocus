@@ -113,7 +113,7 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
     purpose: location.purpose,
     description: location.description,
   }))
-  const languageIntent = resolveSeriesLanguageIntent(series, action.language, action.languageIntent)
+  const languageIntent = resolveSeriesLanguageIntent(series, action.language, action.languageIntent, createdSeries)
   const languageSetupChanged = seriesLanguageIntentAffectsCanon(series, languageIntent)
   const needsSetup = createdSeries
     || !series.premise.trim()
