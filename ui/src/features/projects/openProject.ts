@@ -25,6 +25,10 @@ async function selectWorkspace(workspace: string) {
 export async function openProject(project: ProjectCatalogItem): Promise<void> {
   const preferred = useStore.getState().activeWorkspace || 'default'
   const source = resolveProjectSource(project, preferred)
+  if (project.kind === 'comic') {
+    const { useComicStore } = await import('../comics/store')
+    if (useComicStore.getState().dirty && !window.confirm('¿Abrir este cómic y descartar los cambios sin guardar?')) return
+  }
   await selectWorkspace(source.workspace_id)
 
   if (project.kind === 'story') {
@@ -39,10 +43,17 @@ export async function openProject(project: ProjectCatalogItem): Promise<void> {
     const { useSeriesStore } = await import('../series/store')
     await useSeriesStore.getState().loadWorkspace(source.workspace_id)
     const seriesId = project.kind === 'series' ? project.id : project.parent?.id || ''
-    if (!seriesId || !useSeriesStore.getState().library.seriesById[seriesId]) {
+    if (
+      useSeriesStore.getState().workspace !== source.workspace_id
+      || !seriesId
+      || !useSeriesStore.getState().library.seriesById[seriesId]
+    ) {
       throw new Error('Series Lab no contiene la serie de ese proyecto.')
     }
     await useSeriesStore.getState().openSeries(seriesId)
+    if (useSeriesStore.getState().activeSeriesId !== seriesId) {
+      throw new Error('Series Lab no contiene la serie de ese proyecto.')
+    }
     if (project.kind === 'episode') {
       useSeriesStore.getState().openEpisode(project.id)
       if (useSeriesStore.getState().activeEpisodeId !== project.id) {
@@ -56,9 +67,7 @@ export async function openProject(project: ProjectCatalogItem): Promise<void> {
     const [{ loadComicProject }, { useComicStore }] = await Promise.all([
       import('../../api/comics'), import('../comics/store'),
     ])
-    const comic = useComicStore.getState()
-    if (comic.dirty && !window.confirm('¿Abrir este cómic y descartar los cambios sin guardar?')) return
-    comic.setProject(await loadComicProject(source.key), source.key)
+    useComicStore.getState().setProject(await loadComicProject(source.key), source.key)
     useStore.getState().setMediaFilter('comics')
     return
   }
