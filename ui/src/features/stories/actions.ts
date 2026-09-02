@@ -696,7 +696,7 @@ export async function generateStorySectionDraft(
 ): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Generar una propuesta de Story Lab requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
-  const [{ useStoryStore }, { resolveStoryWritingProvider }, api] = await Promise.all([
+  const [{ useStoryStore, normalizeStoryProject }, { resolveStoryWritingProvider }, api] = await Promise.all([
     import('./store'),
     import('./provider'),
     import('../../api/client'),
@@ -710,14 +710,44 @@ export async function generateStorySectionDraft(
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
   if (!storedProject) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
-  const project = action.languageIntent ? {
-    ...storedProject,
-    languageIntent: mergeLanguageIntent(storedProject.languageIntent, action.languageIntent),
-    language: action.languageIntent.contentLanguage || storedProject.language,
-    spokenLanguage: action.languageIntent.spokenLanguage || storedProject.spokenLanguage,
-  } : storedProject
-  if (current.activeProjectOperations[project.id]) {
-    throw new Error(`La historia “${project.title}” ya tiene una operación activa.`)
+  if (current.activeProjectOperations[storedProject.id]) {
+    throw new Error(`La historia “${storedProject.title}” ya tiene una operación activa.`)
+  }
+  let project = storedProject
+  if (action.languageIntent) {
+    const intended = mergeLanguageIntent(storedProject.languageIntent, action.languageIntent, {
+      contentLanguage: storedProject.language,
+      spokenLanguage: storedProject.spokenLanguage,
+    })
+    const intendedLanguage = intended.contentLanguage || storedProject.language
+    const intendedSpokenLanguage = intended.spokenLanguage || storedProject.spokenLanguage
+    if (
+      JSON.stringify(intended) !== JSON.stringify(storedProject.languageIntent)
+      || intendedLanguage !== storedProject.language
+      || intendedSpokenLanguage !== storedProject.spokenLanguage
+    ) {
+      project = await saveActiveStoryProjectMutation(workspace, current, storedProject.id, source => {
+        const languageIntent = mergeLanguageIntent(source.languageIntent, action.languageIntent, {
+          contentLanguage: source.language,
+          spokenLanguage: source.spokenLanguage,
+        })
+        const approvals = { ...source.approvals }
+        delete approvals.overview
+        return normalizeStoryProject({
+          ...source,
+          language: languageIntent.contentLanguage || source.language,
+          spokenLanguage: languageIntent.spokenLanguage || source.spokenLanguage,
+          languageIntent,
+          revision: source.revision + 1,
+          sectionVersions: {
+            ...source.sectionVersions,
+            overview: source.sectionVersions.overview + 1,
+          },
+          approvals,
+          updatedAt: new Date().toISOString(),
+        })
+      })
+    }
   }
   const premise = project.premise.trim()
     || project.creativeBrief.generalIdea.trim()

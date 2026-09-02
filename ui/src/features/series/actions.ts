@@ -287,11 +287,34 @@ export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Pro
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
     : []
   if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
-  const series = seriesMatches[0]
+  let series = seriesMatches[0]
     || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
   if (!series) throw new Error(action.seriesTitle
     ? `No existe la serie “${action.seriesTitle}” en este workspace.`
     : 'No hay una serie activa que planificar.')
+  if (action.languageIntent) {
+    const languageIntent = mergeLanguageIntent(series.languageIntent, action.languageIntent, {
+      contentLanguage: series.language,
+      spokenLanguage: series.spokenLanguage,
+    })
+    const language = languageIntent.contentLanguage || series.language
+    const spokenLanguage = languageIntent.spokenLanguage || series.spokenLanguage
+    if (
+      JSON.stringify(languageIntent) !== JSON.stringify(series.languageIntent)
+      || language !== series.language
+      || spokenLanguage !== series.spokenLanguage
+    ) {
+      series = await api.saveSeriesProject(workspace, {
+        ...series,
+        language,
+        spokenLanguage,
+        languageIntent,
+        updatedAt: new Date().toISOString(),
+      }, series.revision)
+      useSeriesStore.setState({ hydrated: false })
+      await useSeriesStore.getState().loadWorkspace(workspace)
+    }
+  }
   const episodeMatches = action.targetEpisodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
     : []

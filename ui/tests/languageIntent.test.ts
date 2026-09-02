@@ -155,6 +155,31 @@ test('Studio capability fills the visible form with the compiled auditable promp
   assert.match(received, /"hola"/)
 })
 
+test('language-only Story and Series updates survive capability resolution', () => {
+  const story = parseRegisteredCapability('update_story', {
+    type: 'update_story',
+    target_story_title: 'The Observatory',
+    language_intent: {
+      spoken_language: 'es',
+      verbatim_segments: [{ kind: 'dialogue', text: '¡Hola, mundo!', language: 'es' }],
+    },
+  })
+  assert.equal(story?.type, 'update_story')
+  assert.equal(story && 'languageIntent' in story && story.languageIntent?.spokenLanguage, 'es')
+
+  const episode = parseRegisteredCapability('update_series_episode', {
+    type: 'update_series_episode',
+    series_title: 'Night Shift',
+    target_episode_title: 'The Pager',
+    language_intent: {
+      content_language: 'fr',
+      verbatim_segments: [{ kind: 'subtitle', text: 'À suivre', language: 'fr' }],
+    },
+  })
+  assert.equal(episode?.type, 'update_series_episode')
+  assert.equal(episode && 'languageIntent' in episode && episode.languageIntent?.contentLanguage, 'fr')
+})
+
 test('legacy Story, Series and Comics documents migrate to a persistent language intent', () => {
   const story = normalizeStoryProject({ ...createStoryProject(), languageIntent: undefined, language: 'Italiano', spokenLanguage: 'Italiano' })
   assert.equal(story.languageIntent.contentLanguage, 'Italiano')

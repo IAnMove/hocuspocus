@@ -191,6 +191,106 @@ test('startDirectorProduction hydrates a persisted production that is not loaded
   assert.equal(useStoryStore.getState().projects[project.id]?.productions[0]?.id, production.id)
 })
 
+test('Story generation persists a new language contract before calling the writer', { concurrency: false }, async t => {
+  const workspace = 'wizard-story-language-persistence'
+  const [{ useStore }, { useStoryStore, createStoryProject, normalizeStoryProject }, { generateStorySectionDraft }] = await Promise.all([
+    import('../src/stores/useStore.ts'),
+    import('../src/features/stories/store.ts'),
+    import('../src/features/stories/actions.ts'),
+  ])
+  const project = normalizeStoryProject({
+    ...createStoryProject(),
+    title: 'The Observatory',
+    premise: 'A wizard protects a celestial archive.',
+  })
+  let savedLibrary = {
+    version: 2,
+    revision: 1,
+    activeId: project.id,
+    projects: { [project.id]: project },
+  }
+  const calls = []
+  let firstPersistedProject
+  let writerProject
+  const originalFetch = globalThis.fetch
+  const beforeWorkspace = useStore.getState().activeWorkspace
+  t.after(() => {
+    globalThis.fetch = originalFetch
+    useStore.setState({ activeWorkspace: beforeWorkspace })
+    window.localStorage.removeItem(`maestro-story-library-v2:${workspace}`)
+    window.localStorage.removeItem(`maestro-story-plan-result:${workspace}:${project.id}`)
+    window.localStorage.removeItem(`maestro-story-plan-job:${workspace}:${project.id}`)
+    window.localStorage.removeItem('maestro-story-library-v2:wizard-story-language-cleanup')
+  })
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    const method = init.method || 'GET'
+    const json = body => new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+    if (url.includes('/api/v1/stories/library') && method === 'PUT') {
+      calls.push('persist-language')
+      const body = JSON.parse(String(init.body || '{}'))
+      firstPersistedProject ||= structuredClone(body.library.projects[project.id])
+      savedLibrary = { ...body.library, revision: savedLibrary.revision + 1 }
+      return json(savedLibrary)
+    }
+    if (url.includes('/api/v1/stories/library')) return json(savedLibrary)
+    if (url.includes('/api/v1/stories/generate/start')) {
+      calls.push('start-writer')
+      writerProject = JSON.parse(String(init.body || '{}')).project
+      return json({ jobId: 'story-language-job', status: 'queued', stage: 'queued', message: 'Queued', current: 0, total: 1 })
+    }
+    if (url.includes('/api/v1/stories/generate/status/story-language-job')) {
+      return json({
+        jobId: 'story-language-job', status: 'completed', stage: 'completed', message: 'Done', current: 1, total: 1,
+        result: { result: { world: { summary: 'An observatory beyond time.' } } },
+      })
+    }
+    if (url.includes('/api/v1/outputs')) return json({ outputs: [], total: 0 })
+    return json({})
+  }
+
+  useStore.setState({ activeWorkspace: workspace })
+  useStoryStore.setState({
+    workspace,
+    project,
+    projects: { [project.id]: project },
+    libraryRevision: 1,
+    dirty: false,
+    hydrated: true,
+    loading: false,
+    saveError: null,
+    libraryConflicts: [],
+    activeProjectOperations: {},
+  })
+
+  await generateStorySectionDraft({
+    targetStoryTitle: project.title,
+    scope: 'world',
+    instruction: 'Expand the world.',
+    confirm: true,
+    languageIntent: {
+      conversationLanguage: 'fr',
+      contentLanguage: 'en',
+      spokenLanguage: 'es',
+      technicalPromptLanguage: 'en',
+      verbatimSegments: [{ kind: 'dialogue', text: '¡Hola, mundo!', language: 'es' }],
+    },
+  })
+
+  // Prevent the store's normal debounced autosave from scheduling another
+  // mock write after this isolated integration test has restored fetch.
+  useStoryStore.setState({ workspace: 'wizard-story-language-cleanup', hydrated: false })
+
+  assert.deepEqual(calls.slice(0, 2), ['persist-language', 'start-writer'])
+  assert.equal(firstPersistedProject.languageIntent.spokenLanguage, 'es')
+  assert.equal(firstPersistedProject.languageIntent.verbatimSegments[0].text, '¡Hola, mundo!')
+  assert.equal(writerProject.languageIntent.spokenLanguage, 'es')
+  assert.equal(writerProject.languageIntent.verbatimSegments[0].text, '¡Hola, mundo!')
+})
+
 test('generate_story_section, generate_comic and generate_comic_panel publish onStep progress', { concurrency: false }, async t => {
   const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
   const { defaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')

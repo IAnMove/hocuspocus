@@ -47,6 +47,7 @@ import type { GenerationSubmissionContext } from '../studio/generationProvenance
 import {
   LANGUAGE_INTENT_SCHEMA,
   compileProviderPrompt,
+  hasLanguageIntent,
   normalizeConversationLanguageTag,
   normalizeLanguageIntent,
   type LanguageIntent,
@@ -559,10 +560,10 @@ defineCapability<AgentUpdateStoryAction>({
   resolve(raw) {
     const fields = storyFields(raw)
     const action: AgentUpdateStoryAction = { type: 'update_story', targetStoryTitle: text(raw.target_story_title, 300), ...fields }
-    const hasPatch = action.title || action.creativeBrief || action.premise || action.logline || action.synopsis || action.theme || action.ending || action.genre || action.tone || action.visualStyle || action.worldSummary || action.language || action.characters.length || action.locations.length || action.outlineBeats.length || action.durationSeconds !== undefined
+    const hasPatch = action.title || action.creativeBrief || action.premise || action.logline || action.synopsis || action.theme || action.ending || action.genre || action.tone || action.visualStyle || action.worldSummary || action.language || action.characters.length || action.locations.length || action.outlineBeats.length || action.durationSeconds !== undefined || hasLanguageIntent(raw.language_intent)
     return hasPatch ? action : null
   },
-  validate(action) { return action.targetStoryTitle || action.title || action.premise ? [] : ['a target story or a patch is required'] }, async prepare(action) { return action },
+  validate(action) { return action.targetStoryTitle || action.title || action.premise || action.languageIntent ? [] : ['a target story or a patch is required'] }, async prepare(action) { return action },
   async execute(action, context) { return context.adapters.storyLab.update(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'story', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'story_lab', anchors: ['overview', 'characters', 'world', 'structure'], replay: 'atomic' },
@@ -704,9 +705,9 @@ defineCapability<AgentUpdateSeriesEpisodeAction>({
   resolve(raw) {
     const fields = seriesEpisodeFields(raw)
     const action: AgentUpdateSeriesEpisodeAction = { type: 'update_series_episode', seriesTitle: fields.seriesTitle, targetEpisodeTitle: text(raw.target_episode_title, 300), episodeTitle: fields.episodeTitle, episodePremise: fields.episodePremise, episodeLogline: fields.episodeLogline, outlineBeats: fields.outlineBeats, targetDurationSeconds: fields.targetDurationSeconds }
-    return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined ? action : null
+    return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined || hasLanguageIntent(raw.language_intent) ? action : null
   },
-  validate(action) { return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined ? [] : ['an episode patch is required'] }, async prepare(action) { return action },
+  validate(action) { return action.episodeTitle || action.episodePremise || action.episodeLogline || action.outlineBeats.length || action.targetDurationSeconds !== undefined || action.languageIntent ? [] : ['an episode patch is required'] }, async prepare(action) { return action },
   async execute(action, context) { return context.adapters.seriesLab.updateEpisode(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'series_episode', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'series_lab', anchors: ['episode'], replay: 'atomic' },
@@ -1105,12 +1106,17 @@ export function parseRegisteredCapability(
 ): AgentAction | null | undefined {
   const definition = definitions.get(name)
   if (!definition) return undefined
-  const action = definition.resolve(raw)
-  if (!action || definition.validate(action).length) return null
-  if (!LANGUAGE_AWARE_CAPABILITIES.has(action.type)) return action
+  const resolved = definition.resolve(raw)
+  if (!resolved) return null
+  let action: AgentAction = resolved
+  if (!LANGUAGE_AWARE_CAPABILITIES.has(action.type)) {
+    return definition.validate(action).length ? null : action
+  }
   const rawIntent = raw.language_intent
-  if (!rawIntent || typeof rawIntent !== 'object' || Array.isArray(rawIntent)) return action
-  return { ...action, languageIntent: normalizeLanguageIntent(rawIntent) } as AgentAction
+  if (rawIntent && typeof rawIntent === 'object' && !Array.isArray(rawIntent)) {
+    action = { ...action, languageIntent: normalizeLanguageIntent(rawIntent) } as AgentAction
+  }
+  return definition.validate(action).length ? null : action
 }
 
 export async function executeRegisteredCapability(
