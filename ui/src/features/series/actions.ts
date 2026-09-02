@@ -292,6 +292,23 @@ export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Pro
   if (!series) throw new Error(action.seriesTitle
     ? `No existe la serie “${action.seriesTitle}” en este workspace.`
     : 'No hay una serie activa que planificar.')
+  const episodeMatches = action.targetEpisodeTitle
+    ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
+    : []
+  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
+    ? useSeriesStore.getState().activeEpisodeId : ''
+  const episodes = Object.values(series.episodesById)
+  const episode = episodeMatches[0]
+    || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
+    || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
+  if (!episode) throw new Error(action.targetEpisodeTitle
+    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
+    : `“${series.title}” necesita un episodio activo o único.`)
+  if (!episode.premise.trim()) throw new Error(`“${episode.title}” necesita una premisa antes de planificarse.`)
+  if (action.scope === 'shots' && !episode.script.length) {
+    throw new Error('Regenerar shots requiere un guion existente; genera script o complete primero.')
+  }
   if (action.languageIntent) {
     const languageIntent = mergeLanguageIntent(series.languageIntent, action.languageIntent, {
       contentLanguage: series.language,
@@ -315,24 +332,6 @@ export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Pro
       await useSeriesStore.getState().loadWorkspace(workspace)
     }
   }
-  const episodeMatches = action.targetEpisodeTitle
-    ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
-    : []
-  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
-  const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
-    ? useSeriesStore.getState().activeEpisodeId : ''
-  const episodes = Object.values(series.episodesById)
-  const episode = episodeMatches[0]
-    || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
-    || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
-  if (!episode) throw new Error(action.targetEpisodeTitle
-    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
-    : `“${series.title}” necesita un episodio activo o único.`)
-  if (!episode.premise.trim()) throw new Error(`“${episode.title}” necesita una premisa antes de planificarse.`)
-  if (action.scope === 'shots' && !episode.script.length) {
-    throw new Error('Regenerar shots requiere un guion existente; genera script o complete primero.')
-  }
-
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
   const job = await api.startSeriesPlan(workspace, series.id, episode.id, {

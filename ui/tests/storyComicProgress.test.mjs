@@ -266,6 +266,33 @@ test('Story generation persists a new language contract before calling the write
     activeProjectOperations: {},
   })
 
+  const invalidProject = normalizeStoryProject({
+    ...project,
+    premise: '',
+    logline: '',
+    synopsis: '',
+    creativeBrief: { ...project.creativeBrief, generalIdea: '' },
+  })
+  useStoryStore.setState({
+    project: invalidProject,
+    projects: { [invalidProject.id]: invalidProject },
+  })
+  await assert.rejects(generateStorySectionDraft({
+    targetStoryTitle: invalidProject.title,
+    scope: 'world',
+    instruction: 'Expand the world.',
+    confirm: true,
+    languageIntent: {
+      conversationLanguage: 'fr', contentLanguage: 'en', spokenLanguage: 'es',
+      technicalPromptLanguage: 'en', verbatimSegments: [],
+    },
+  }), /necesita una premisa/)
+  assert.deepEqual(calls, [], 'invalid generation must not persist language intent')
+  useStoryStore.setState({
+    project,
+    projects: { [project.id]: project },
+  })
+
   await generateStorySectionDraft({
     targetStoryTitle: project.title,
     scope: 'world',
@@ -289,6 +316,62 @@ test('Story generation persists a new language contract before calling the write
   assert.equal(firstPersistedProject.languageIntent.verbatimSegments[0].text, '¡Hola, mundo!')
   assert.equal(writerProject.languageIntent.spokenLanguage, 'es')
   assert.equal(writerProject.languageIntent.verbatimSegments[0].text, '¡Hola, mundo!')
+})
+
+test('Series validation rejects before persisting a new language contract', { concurrency: false }, async t => {
+  const workspace = 'wizard-series-language-validation'
+  const [{ useStore }, { useSeriesStore }, { normalizeSeriesProject }, { generateSeriesPlan }] = await Promise.all([
+    import('../src/stores/useStore.ts'),
+    import('../src/features/series/store.ts'),
+    import('../src/features/series/model.ts'),
+    import('../src/features/series/actions.ts'),
+  ])
+  const episode = {
+    id: 'episode-invalid', title: 'Empty episode', premise: '', script: [],
+  }
+  const series = normalizeSeriesProject({
+    id: 'series-validation', title: 'Validation series', revision: 1,
+    seasons: [], episodesById: { [episode.id]: episode },
+  })
+  assert.ok(series)
+  const library = {
+    schema: 'series-library', version: 1, workspaceId: workspace,
+    seriesOrder: [series.id], seriesById: { [series.id]: series },
+  }
+  const writes = []
+  const originalFetch = globalThis.fetch
+  const beforeWorkspace = useStore.getState().activeWorkspace
+  t.after(() => {
+    globalThis.fetch = originalFetch
+    useStore.setState({ activeWorkspace: beforeWorkspace })
+    useSeriesStore.setState({ workspace: 'wizard-series-language-cleanup', hydrated: false })
+  })
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    const method = init.method || 'GET'
+    if (method !== 'GET' || url.includes('/plan/start')) writes.push(`${method} ${url}`)
+    return new Response(JSON.stringify(library), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })
+  }
+  useStore.setState({ activeWorkspace: workspace })
+  useSeriesStore.setState({
+    workspace, library, activeSeriesId: series.id, activeEpisodeId: episode.id,
+    serverRevision: 1, hydrated: true, loading: false, dirty: false, saving: false, error: null,
+  })
+
+  await assert.rejects(generateSeriesPlan({
+    seriesTitle: series.title,
+    targetEpisodeTitle: episode.title,
+    scope: 'complete',
+    instruction: 'Write the episode.',
+    confirm: true,
+    languageIntent: {
+      conversationLanguage: 'fr', contentLanguage: 'en', spokenLanguage: 'es',
+      technicalPromptLanguage: 'en', verbatimSegments: [],
+    },
+  }), /necesita una premisa/)
+  assert.deepEqual(writes, [], 'invalid planning must not persist language intent')
 })
 
 test('generate_story_section, generate_comic and generate_comic_panel publish onStep progress', { concurrency: false }, async t => {

@@ -698,6 +698,11 @@ export async function generateStorySectionDraft(
   if (current.activeProjectOperations[storedProject.id]) {
     throw new Error(`La historia “${storedProject.title}” ya tiene una operación activa.`)
   }
+  const premise = storedProject.premise.trim()
+    || storedProject.creativeBrief.generalIdea.trim()
+    || storedProject.logline.trim()
+    || storedProject.synopsis.trim()
+  if (!premise) throw new Error(`“${storedProject.title}” necesita una premisa o briefing antes de invocar al escritor.`)
   let project = storedProject
   if (action.languageIntent) {
     const intended = mergeLanguageIntent(storedProject.languageIntent, action.languageIntent, {
@@ -728,12 +733,6 @@ export async function generateStorySectionDraft(
       })
     }
   }
-  const premise = project.premise.trim()
-    || project.creativeBrief.generalIdea.trim()
-    || project.logline.trim()
-    || project.synopsis.trim()
-  if (!premise) throw new Error(`“${project.title}” necesita una premisa o briefing antes de invocar al escritor.`)
-
   useStoryStore.setState({ project, dirty: false })
   const visibleSection = action.scope === 'all' ? 'overview' : action.scope
   const resultKey = `maestro-story-plan-result:${workspace}:${project.id}`
