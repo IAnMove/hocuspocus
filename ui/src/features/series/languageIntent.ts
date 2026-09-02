@@ -31,3 +31,23 @@ export function seriesLanguageIntentAffectsCanon(
     || next.contentLanguage !== series.language
     || next.spokenLanguage !== series.spokenLanguage
 }
+
+export function seriesContentLanguagePatch(
+  series: SeriesProject,
+  language: string,
+): Pick<SeriesProject, 'language' | 'languageIntent'> {
+  return {
+    language,
+    languageIntent: { ...series.languageIntent, contentLanguage: language },
+  }
+}
+
+export function seriesSpokenLanguagePatch(
+  series: SeriesProject,
+  spokenLanguage: string,
+): Pick<SeriesProject, 'spokenLanguage' | 'languageIntent'> {
+  return {
+    spokenLanguage,
+    languageIntent: { ...series.languageIntent, spokenLanguage },
+  }
+}

@@ -56,3 +56,23 @@ export function applyLegacyStoryLanguage(
     },
   }
 }
+
+export function storyContentLanguagePatch(
+  project: StoryProject,
+  language: string,
+): Pick<StoryProject, 'language' | 'languageIntent'> {
+  return {
+    language,
+    languageIntent: { ...project.languageIntent, contentLanguage: language },
+  }
+}
+
+export function storySpokenLanguagePatch(
+  project: StoryProject,
+  spokenLanguage: string,
+): Pick<StoryProject, 'spokenLanguage' | 'languageIntent'> {
+  return {
+    spokenLanguage,
+    languageIntent: { ...project.languageIntent, spokenLanguage },
+  }
+}

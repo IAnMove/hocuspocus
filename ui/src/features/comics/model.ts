@@ -620,14 +620,24 @@ export function projectFromPlan(
     })
     return { ...page, elements }
   })
-  return {
+  return withComicContentLanguage({
     ...project,
     title: plan.title,
     synopsis: plan.synopsis,
-    language: plan.language,
     characters: plan.characters,
     pages,
     updatedAt: new Date().toISOString(),
+  }, plan.language)
+}
+
+export function withComicContentLanguage(
+  project: ComicProject,
+  language: string,
+): ComicProject {
+  return {
+    ...project,
+    language,
+    languageIntent: { ...project.languageIntent, contentLanguage: language },
   }
 }
 

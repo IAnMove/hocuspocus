@@ -24,7 +24,7 @@ import {
 import {
   comicId, COMIC_FORMATS, createComicProject, normalizeComicProject, panelsForCount,
   mergeComicVideoOverrideFields, normalizeComicPlan, planWithCanvasText, projectFromPlan,
-  repairComicText, simplifyDirectorText, varyDirectorLayouts,
+  repairComicText, simplifyDirectorText, varyDirectorLayouts, withComicContentLanguage,
 } from './model'
 import { COMIC_EFFECTS, COMIC_LAYOUTS, createEffect } from './presets'
 import { useComicStore } from './store'
@@ -1104,9 +1104,11 @@ export function ComicDirectorPanel({
       const state = useComicStore.getState()
       const plan = await transformTextPlan(mode, translationLanguage)
       const translated = mode === 'translate'
+      const languageProject = translated
+        ? withComicContentLanguage(state.project, translationLanguage)
+        : state.project
       const next = simplifyDirectorText({
-        ...state.project,
-        language: translated ? translationLanguage : state.project.language,
+        ...languageProject,
         director: { ...state.project.director!, plan },
       })
       state.patchProject(next)
@@ -1133,9 +1135,8 @@ export function ComicDirectorPanel({
     try {
       const plan = await transformTextPlan('translate')
       const translatedProject = simplifyDirectorText({
-        ...state.project,
+        ...withComicContentLanguage(state.project, targetLanguage.trim()),
         title: `${state.project.title} — ${targetLanguage.trim()}`,
-        language: targetLanguage.trim(),
         director: { ...state.project.director!, plan },
       })
       state.patchProject(translatedProject)

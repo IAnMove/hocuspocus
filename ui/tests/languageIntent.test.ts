@@ -20,12 +20,24 @@ import {
   parseRegisteredCapability,
 } from '../src/features/agent/capabilityRegistry'
 import { changedSections, createStoryProject, normalizeStoryProject } from '../src/features/stories/model'
-import { applyLegacyStoryLanguage, seedStoryLanguageIntent } from '../src/features/stories/languageIntent'
-import { createComicProject, normalizeComicProject } from '../src/features/comics/model'
+import {
+  applyLegacyStoryLanguage,
+  seedStoryLanguageIntent,
+  storyContentLanguagePatch,
+  storySpokenLanguagePatch,
+} from '../src/features/stories/languageIntent'
+import {
+  createComicProject,
+  normalizeComicProject,
+  projectFromPlan,
+  withComicContentLanguage,
+} from '../src/features/comics/model'
 import { normalizeSeriesProject } from '../src/features/series/model'
 import {
   resolveSeriesLanguageIntent,
+  seriesContentLanguagePatch,
   seriesLanguageIntentAffectsCanon,
+  seriesSpokenLanguagePatch,
 } from '../src/features/series/languageIntent'
 
 const mixedIntent = normalizeLanguageIntent({
@@ -278,6 +290,43 @@ test('Series language resolution invalidates canon only for production-relevant 
   assert.equal(legacySelection.contentLanguage, 'Français')
   assert.equal(legacySelection.spokenLanguage, 'Français')
   assert.equal(seriesLanguageIntentAffectsCanon(series!, legacySelection), true)
+})
+
+test('manual Story and Series language controls update visible and durable fields together', () => {
+  const story = createStoryProject()
+  assert.deepEqual(storyContentLanguagePatch(story, 'Deutsch'), {
+    language: 'Deutsch',
+    languageIntent: { ...story.languageIntent, contentLanguage: 'Deutsch' },
+  })
+  assert.deepEqual(storySpokenLanguagePatch(story, 'Italiano'), {
+    spokenLanguage: 'Italiano',
+    languageIntent: { ...story.languageIntent, spokenLanguage: 'Italiano' },
+  })
+
+  const series = normalizeSeriesProject({ id: 'series-controls', title: 'Controls' })
+  assert.ok(series)
+  assert.deepEqual(seriesContentLanguagePatch(series!, 'Français'), {
+    language: 'Français',
+    languageIntent: { ...series!.languageIntent, contentLanguage: 'Français' },
+  })
+  assert.deepEqual(seriesSpokenLanguagePatch(series!, ''), {
+    spokenLanguage: '',
+    languageIntent: { ...series!.languageIntent, spokenLanguage: '' },
+  })
+})
+
+test('manual Comic plans and translations keep the content-language contract synchronized', () => {
+  const comic = createComicProject()
+  const translated = withComicContentLanguage(comic, 'Italiano')
+  assert.equal(translated.language, 'Italiano')
+  assert.equal(translated.languageIntent.contentLanguage, 'Italiano')
+
+  const planned = projectFromPlan({
+    id: 'plan-language', title: 'La torre', synopsis: 'Una noche larga.', language: 'Español',
+    characters: [], pages: [],
+  }, comic)
+  assert.equal(planned.language, 'Español')
+  assert.equal(planned.languageIntent.contentLanguage, 'Español')
 })
 
 test('changing only protected Story literals is a real persisted overview change', () => {
