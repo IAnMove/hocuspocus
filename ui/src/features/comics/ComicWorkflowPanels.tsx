@@ -39,7 +39,7 @@ const resolutionMegapixels = (value: string): number => {
 }
 
 const comicMovieResolutions = (
-  t: TFunction,
+  t: TFunction<'comics'>,
   modelId: string,
   aspect: ComicMovieAspect,
 ): ComicMovieResolution[] => {
@@ -80,7 +80,7 @@ const comicMovieResolutions = (
   ]
 }
 
-const motionLevelLabel = (t: TFunction, level: number) => (
+const motionLevelLabel = (t: TFunction<'comics'>, level: number) => (
   level <= 0
     ? t('video.levelHold')
     : level === 1
@@ -90,7 +90,7 @@ const motionLevelLabel = (t: TFunction, level: number) => (
         : t('video.levelAction')
 )
 
-const motionMethodLabel = (t: TFunction, renderer?: string) => (
+const motionMethodLabel = (t: TFunction<'comics'>, renderer?: string) => (
   renderer === 'hold'
     ? t('video.methodExact')
     : renderer === 'parallax'

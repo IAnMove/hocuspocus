@@ -1881,7 +1881,7 @@ export function VideoEditorPanel() {
     } finally {
       if (exportPollingRef.current === jobId) exportPollingRef.current = null
     }
-  }, [activeWorkspace, refreshOutputs])
+  }, [activeWorkspace, refreshOutputs, t])
 
   useEffect(() => {
     exportPollEpochRef.current += 1

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ParseKeys } from 'i18next'
 import { useStore } from '../../stores/useStore'
 import { ensureUiI18n, useUiTranslation } from '../../i18n'
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { buildInfinitePanoramaPrompt, createTripleTileLayout } from '../../lib/panoramaLoop'
 
-const ts = (key: string, opts?: Record<string, unknown>) => ensureUiI18n().t(key, { ns: 'studio', ...opts })
+const ts = (key: ParseKeys<'studio'>, opts?: Record<string, unknown>) => ensureUiI18n().t(key, { ns: 'studio', ...opts })
 
 type PreparedPanorama = { file: File; url: string; width: number; height: number }
 

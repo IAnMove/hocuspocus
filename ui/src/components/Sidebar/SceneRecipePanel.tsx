@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import type { TFunction } from 'i18next'
 import { Box, FileJson, Image as ImageIcon, Loader2, Play, Sparkles, Square, Upload, Video, X } from 'lucide-react'
 import { fetchOutputMetadata, generateLlmText, getFileUrl, getOutputThumbnailUrl, uploadImage, type ApiOutput } from '../../api/client'
 import { useUiTranslation } from '../../i18n'
@@ -53,16 +54,16 @@ const INTENT_EXAMPLES = [
   },
 ] as const
 
-function assetKindLabel(kind: RecipeAssetKind, t: (key: string) => string) {
+function assetKindLabel(kind: RecipeAssetKind, t: TFunction<'scene3d'>) {
   return kind === 'model3d' ? t('recipe.typeModel') : kind === 'video' ? t('recipe.typeVideo') : t('recipe.typeStill')
 }
 
-function assetPlanLabel(asset: SceneRecipe['assets'][number], t: (key: string, options?: Record<string, string>) => string): string {
+function assetPlanLabel(asset: SceneRecipe['assets'][number], t: TFunction<'scene3d'>): string {
   const type = assetKindLabel(asset.kind, t)
   return asset.source ? t('recipe.useAsset', { type, source: asset.source }) : t('recipe.generateAsset', { type, prompt: asset.prompt || asset.id })
 }
 
-function shotPlanLabel(shot: SceneRecipeShot, t: (key: string) => string): string {
+function shotPlanLabel(shot: SceneRecipeShot, t: TFunction<'scene3d'>): string {
   if (shot.template) return `${shot.template} · ${Object.values(shot.slots ?? {}).join(' · ') || t('recipe.templateSlots')}`
   const layers = shot.layers ?? []
   const camera = layers.find(layer => layer.type === 'camera')?.cameraPreset || 'camera-locked'

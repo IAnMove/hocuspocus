@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ParseKeys } from 'i18next'
 import { Box, Camera, Loader2, PersonStanding, Plus, Upload, X } from 'lucide-react'
 import * as api from '../../api/client'
 import { getFileUrl } from '../../api/client'
@@ -471,7 +472,7 @@ export function CharacterCreatorPanel() {
     },
   })
 
-  const orbitViewLabel = (id: string) => t(kind === 'object' ? `creator.objectViews.${id}` : `creator.views.${id}`)
+  const orbitViewLabel = (id: string) => t((kind === 'object' ? `creator.objectViews.${id}` : `creator.views.${id}`) as ParseKeys<'characters'>)
 
   return (
     <section aria-label={t('creator.title')} className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary">
@@ -716,7 +717,7 @@ function RefPicker({
           onChange={event => onRole(event.target.value as OrbitRefRole)}
           className="mt-2 w-full rounded-md border border-border bg-bg-primary px-2 py-1 text-[11px] text-text-primary"
         >
-          {EXTRA_ROLE_IDS.map(id => <option key={id} value={id}>{t(`creator.roles.${id}`)}</option>)}
+          {EXTRA_ROLE_IDS.map(id => <option key={id} value={id}>{t(`creator.roles.${id}` as ParseKeys<'characters'>)}</option>)}
         </select>
       )}
       {value ? (

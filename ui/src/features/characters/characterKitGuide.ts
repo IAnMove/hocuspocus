@@ -1,4 +1,5 @@
 import type { CharacterKit, CharacterKitAsset, CharacterMouthState } from '../../lib/characterKit'
+import type { ParseKeys } from 'i18next'
 import i18n from '../../i18n'
 
 export type CharacterKitEditorTab = 'kit' | 'face-rig'
@@ -21,13 +22,13 @@ const KNOWN_POSES = ['base', 'pointing', 'reaction'] as const
 
 const MOUTH_STATES: CharacterMouthState[] = ['closed', 'small', 'wide', 'round']
 
-function tCharacters(key: string, options?: Record<string, unknown>): string {
-  return String(i18n.t(key, { ns: 'characters' as never, ...options }))
+function tCharacters(key: ParseKeys<'characters'>, options?: Record<string, unknown>): string {
+  return i18n.t(key, { ns: 'characters', ...options })
 }
 
 export function characterKitPoseLabel(poseId: string): string {
   const id = poseId.trim() || 'base'
-  if ((KNOWN_POSES as readonly string[]).includes(id)) return tCharacters(`poses.${id}`)
+  if ((KNOWN_POSES as readonly string[]).includes(id)) return tCharacters(`poses.${id}` as ParseKeys<'characters'>)
   return id.replace(/[-_]+/g, ' ')
 }
 

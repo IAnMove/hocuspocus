@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ParseKeys } from 'i18next'
 import {
   BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Eye, EyeOff, FileJson,
   History as HistoryIcon, ImagePlus, Loader2, Lock, PanelTop, Plus, Redo2, Save, Sparkles, Trash2,
@@ -50,6 +51,7 @@ const button = 'inline-flex items-center justify-center gap-1.5 rounded-md borde
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
 
 const wait = (milliseconds: number) => new Promise(resolve => window.setTimeout(resolve, milliseconds))
+const comicsKey = (key: string) => key as ParseKeys<'comics'>
 const comicTranslationCache = new Map<string, ComicPlanPage>()
 const writingForOperation = (
   input: ComicDirectorRequest,
@@ -549,7 +551,7 @@ function InspectorPanel() {
       ) : (
         <>
           <div className="flex items-center justify-between">
-            <strong className="text-xs capitalize text-text-primary">{t(`inspector.type${element.type.charAt(0).toUpperCase()}${element.type.slice(1)}`)}</strong>
+            <strong className="text-xs capitalize text-text-primary">{t(comicsKey(`inspector.type${element.type.charAt(0).toUpperCase()}${element.type.slice(1)}`))}</strong>
             <div className="flex gap-1">
               <button className={button} title={t('inspector.duplicateTitle')} onClick={() => useComicStore.getState().duplicateElement(pageId, element.id)}><Copy size={12} /></button>
               <button className={button} onClick={() => patch({ locked: !element.locked })}>{element.locked ? <Unlock size={12} /> : <Lock size={12} />}</button>
@@ -558,7 +560,7 @@ function InspectorPanel() {
           </div>
           <div className="grid grid-cols-2 gap-2">
             {(['x', 'y', 'width', 'height', 'rotation', 'zIndex'] as const).map(key => (
-              <Field key={key} label={t(`inspector.field${key.charAt(0).toUpperCase()}${key.slice(1)}`)}>
+              <Field key={key} label={t(comicsKey(`inspector.field${key.charAt(0).toUpperCase()}${key.slice(1)}`))}>
                 <input className={input} type="number" value={Math.round(Number(element[key]))}
                   onChange={event => patch({ [key]: Number(event.target.value) } as Partial<ComicElement>)} />
               </Field>
@@ -767,7 +769,7 @@ function SuggestedChoice({
         value={custom ? '__other__' : value}
         onChange={event => onChange(event.target.value === '__other__' ? '' : event.target.value)}
       >
-        {options.map(option => <option key={option} value={option}>{t(`${optionKey}.${option}`)}</option>)}
+        {options.map(option => <option key={option} value={option}>{t(comicsKey(`${optionKey}.${option}`))}</option>)}
         <option value="__other__">{t('planning.other')}</option>
       </select>
       {custom && (
@@ -1625,7 +1627,7 @@ export function ComicDirectorPanel({
             </select>
           </Field>
         ) : (
-          <Field label={t('planning.format')}><select className={input} value={request.format} onChange={event => patch('format', event.target.value as ComicDirectorRequest['format'])}>{Object.entries(COMIC_FORMATS).map(([id]) => <option key={id} value={id}>{t(`format.${id}`)}</option>)}</select></Field>
+          <Field label={t('planning.format')}><select className={input} value={request.format} onChange={event => patch('format', event.target.value as ComicDirectorRequest['format'])}>{Object.entries(COMIC_FORMATS).map(([id]) => <option key={id} value={id}>{t(comicsKey(`format.${id}`))}</option>)}</select></Field>
         )}
         <Field label={t('planning.genre')}>
           <SuggestedChoice
@@ -2044,7 +2046,7 @@ export function ComicDirectorPanel({
   )
 }
 
-const HISTORY_REASON_KEYS: Record<string, string> = {
+const HISTORY_REASON_KEYS: Record<string, ParseKeys<'comics'>> = {
   'Before history restore': 'history.reason.beforeRestore',
   'Comic opened or created': 'history.reason.opened',
   'Automatic editing checkpoint': 'history.reason.auto',

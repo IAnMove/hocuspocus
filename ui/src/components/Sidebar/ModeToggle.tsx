@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import type { ParseKeys } from 'i18next'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 
@@ -23,7 +24,7 @@ interface ModeCaps {
   videoContinuation: boolean
 }
 
-const MODES = [
+const MODES: Array<{ value: number; labelKey: ParseKeys<'studio'>; supported: (caps: ModeCaps) => boolean }> = [
   { value: 0, labelKey: 'videoSubModes.frames', supported: () => true },
   { value: 2, labelKey: 'videoSubModes.multiShot', supported: (c: ModeCaps) => c.allowed.includes('S') },
   { value: 3, labelKey: 'videoSubModes.extend', supported: (c: ModeCaps) => c.allowed.includes('V') || c.videoContinuation },

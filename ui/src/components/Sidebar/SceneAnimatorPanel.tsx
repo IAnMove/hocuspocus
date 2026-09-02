@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import type { ParseKeys } from 'i18next'
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { useUiTranslation } from '../../i18n'
@@ -59,6 +60,7 @@ type SpeechRecognizer = { lang: string; continuous: boolean; interimResults: boo
 type SpeechRecognizerConstructor = new () => SpeechRecognizer
 
 const makePoint = (x: number, y: number, scale: number): Point => ({ x, y, scale })
+const scene3dKey = (key: string) => key as ParseKeys<'scene3d'>
 const CAMERA_PRESETS: CameraPreset[] = [
   { id: 'camera-locked', label: 'Locked shot', start: { x: 50, y: 50, scale: 1, rotation: 0 }, end: { x: 50, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'linear' },
   { id: 'camera-pan-right', label: 'Pan right', start: { x: 35, y: 50, scale: 1, rotation: 0 }, end: { x: 65, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
@@ -417,7 +419,7 @@ const MotionPresetCard = memo(function MotionPresetCard({ preset, selected, onSe
   const stop = () => { setHovered(false); const video = videoRef.current; if (!video) return; video.pause(); video.currentTime = 0 }
   return <button type="button" onClick={onSelect} onPointerEnter={play} onPointerLeave={stop} onFocus={play} onBlur={stop} className={`overflow-hidden rounded border text-left transition-colors ${selected ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/40' : 'border-border bg-bg-primary hover:border-accent-blue/70'}`}>
     <div className="relative aspect-video overflow-hidden bg-[#07111f]"><img src={preset.poster} alt="" className="absolute inset-0 h-full w-full object-cover" /><video ref={videoRef} src={preset.preview} poster={preset.poster} muted loop playsInline preload="metadata" className={`pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`} /></div>
-    <div className="flex min-h-9 items-center justify-between gap-1 px-1.5 py-1"><span className="line-clamp-2 text-[9px] leading-tight text-text-secondary">{t(`motionPresets.${preset.id}`)}</span><span className="flex shrink-0 flex-col items-end gap-0.5">{preset.category !== 'classic' && <span className={`rounded px-1 py-0.5 text-[7px] uppercase ${preset.category === 'game' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-purple-500/15 text-purple-300'}`}>{t(`categories.${preset.category}`)}</span>}{preset.requiresTarget && <span className="rounded bg-accent-blue/15 px-1 py-0.5 text-[8px] text-accent-blue">{t('animator.twoLayers')}</span>}</span></div>
+    <div className="flex min-h-9 items-center justify-between gap-1 px-1.5 py-1"><span className="line-clamp-2 text-[9px] leading-tight text-text-secondary">{t(scene3dKey(`motionPresets.${preset.id}`))}</span><span className="flex shrink-0 flex-col items-end gap-0.5">{preset.category !== 'classic' && <span className={`rounded px-1 py-0.5 text-[7px] uppercase ${preset.category === 'game' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-purple-500/15 text-purple-300'}`}>{t(`categories.${preset.category}`)}</span>}{preset.requiresTarget && <span className="rounded bg-accent-blue/15 px-1 py-0.5 text-[8px] text-accent-blue">{t('animator.twoLayers')}</span>}</span></div>
   </button>
 }, (previous, next) => previous.preset === next.preset && previous.scopeId === next.scopeId && previous.selected === next.selected)
 
@@ -428,7 +430,7 @@ const PhotoMotionPresetCard = memo(function PhotoMotionPresetCard({ preset, sour
   const previewTransform = `translate(${(50 - camera.x) * .55}%, ${(50 - camera.y) * .55}%) scale(${camera.scale}) rotate(${-Number(camera.rotation ?? 0)}deg)`
   return <button
     type="button"
-    title={t(`photoPresets.${preset.id}.description`)}
+    title={t(scene3dKey(`photoPresets.${preset.id}.description`))}
     onClick={onSelect}
     onPointerEnter={() => setHovered(true)}
     onPointerLeave={() => setHovered(false)}
@@ -446,8 +448,8 @@ const PhotoMotionPresetCard = memo(function PhotoMotionPresetCard({ preset, sour
       {preset.shake && <span className="absolute right-1 top-1 rounded bg-black/55 px-1 py-0.5 text-[7px] text-cyan-100">{t('animator.organic')}</span>}
     </div>
     <div className="px-1.5 py-1">
-      <div className="text-[9px] leading-tight text-text-secondary">{t(`photoPresets.${preset.id}.label`)}</div>
-      <div className="mt-0.5 line-clamp-2 text-[7px] leading-tight text-text-muted">{t(`photoPresets.${preset.id}.description`)}</div>
+      <div className="text-[9px] leading-tight text-text-secondary">{t(scene3dKey(`photoPresets.${preset.id}.label`))}</div>
+      <div className="mt-0.5 line-clamp-2 text-[7px] leading-tight text-text-muted">{t(scene3dKey(`photoPresets.${preset.id}.description`))}</div>
     </div>
   </button>
 }, (previous, next) => previous.preset === next.preset && previous.source === next.source && previous.scopeId === next.scopeId && previous.selected === next.selected)
@@ -767,7 +769,7 @@ export function SceneAnimatorPanel() {
   }, [characterKitLibrary])
   useEffect(() => { historyRevisionRef.current = historyRevision }, [historyRevision])
   const replaceScene = (next: AnimatorScene) => { sceneRef.current = next; setScene(next) }
-  const updateScene = (updater: (current: AnimatorScene) => AnimatorScene) => {
+  const updateScene = useCallback((updater: (current: AnimatorScene) => AnimatorScene) => {
     const current = sceneRef.current
     let next = updater(current)
     if (next === current) return
@@ -785,7 +787,7 @@ export function SceneAnimatorPanel() {
     sceneRef.current = next
     setScene(next)
     setHistoryRevision(value => value + 1)
-  }
+  }, [t])
   const undoScene = () => {
     const previous = pastScenesRef.current.pop()
     if (!previous) return
@@ -1262,7 +1264,7 @@ export function SceneAnimatorPanel() {
       const nextDuration = Math.max(scene.duration, sceneTime + preset.duration)
       updateLayer(selected.id, layer => appendPresetAtPlayhead(layer, preset))
       updateScene(current => ({ ...current, duration: Math.max(current.duration, sceneTime + preset.duration) }))
-      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${t(`cameraPresets.${preset.id}`)} chained from frame ${Math.round(sceneTime * fps)} without a position jump.`)
+      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${t(scene3dKey(`cameraPresets.${preset.id}`))} chained from frame ${Math.round(sceneTime * fps)} without a position jump.`)
       return
     }
     updateLayer(selected.id, layer => ({ ...layer, relationship: preset.requiresTarget ? undefined : layer.relationship, animation: { start: preset.start, end: preset.end, duration: preset.duration, curve: preset.curve, events: normalizeSceneEvents(layer.animation.events, preset.duration, layer.id), spin: preset.spin, rotationSpeed: layer.animation.rotationSpeed, clip: layer.animation.clip, clipOffset: layer.animation.clipOffset, clipSpeed: layer.animation.clipSpeed, clipReverse: layer.animation.clipReverse, clipLoop: layer.animation.clipLoop, clipTrimStart: layer.animation.clipTrimStart, clipTrimEnd: layer.animation.clipTrimEnd, orbit: preset.requiresTarget && target ? { targetLayerId: target.id, radiusX: 18, radiusY: 9, turns: 2, phase: 0, count: 1, facing: 'fixed', centerOffsetX: 0, centerOffsetY: 0 } : undefined } }))
@@ -1283,12 +1285,12 @@ export function SceneAnimatorPanel() {
         return { ...chained, animation: { ...chained.animation, shake: preset.shake ? { ...preset.shake, startTime, endTime: startTime + preset.duration * timing.speed } : undefined } }
       })
       updateScene(current => ({ ...current, duration: Math.max(current.duration, sceneTime + preset.duration) }))
-      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${t(`cameraPresets.${preset.id}`)} camera move chained from frame ${Math.round(sceneTime * fps)}.`)
+      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${t(scene3dKey(`cameraPresets.${preset.id}`))} camera move chained from frame ${Math.round(sceneTime * fps)}.`)
       return
     }
     updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, events: normalizeSceneEvents(layer.animation.events, preset.duration, layer.id), duration: preset.duration, curve: preset.curve, offset: 0, speed: 1, loop: false, trimStart: 0, trimEnd: preset.duration, shake: preset.shake, orbit: undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
-    setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${t(`cameraPresets.${preset.id}`)} applied to ${selected.name}.`)
+    setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${t(scene3dKey(`cameraPresets.${preset.id}`))} applied to ${selected.name}.`)
   }
   const applyPhotoMotionPreset = (presetId: string) => {
     if (!selected || selected.type !== 'image' || selected.locked) return
@@ -1312,7 +1314,7 @@ export function SceneAnimatorPanel() {
           transform: { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 },
           animation: { start: makePoint(50, 50, 1), end: makePoint(50, 50, 1), duration: preset.duration, curve: preset.curve },
         }),
-        name: `Photo camera · ${t(`cameraPresets.${preset.id}`)}`,
+        name: `Photo camera · ${t(scene3dKey(`cameraPresets.${preset.id}`))}`,
         visible: true,
         relationship: undefined,
         transform: { x: preset.start.x, y: preset.start.y, scale: preset.start.scale, opacity: 1, rotation: preset.start.rotation ?? 0 },
@@ -1358,7 +1360,7 @@ export function SceneAnimatorPanel() {
     setSelectedKeyframeId(null)
     setSelectedEventId(null)
     setProgress(0)
-    setMessage(`${t(`cameraPresets.${preset.id}`)} prepared as a ${preset.duration}s cinematic photo shot.`)
+    setMessage(`${t(scene3dKey(`cameraPresets.${preset.id}`))} prepared as a ${preset.duration}s cinematic photo shot.`)
   }
   const confirmPresetRemoval = () => window.confirm(t('animator.removeEffect'))
   const removeLayerMotionPreset = () => {
@@ -1401,7 +1403,7 @@ export function SceneAnimatorPanel() {
     updateScene(current => ({
       ...current,
       layers: current.layers
-        .filter(layer => !(layer.type === 'camera' && layer.name === `Photo camera · ${t(`cameraPresets.${preset.id}`)}`))
+        .filter(layer => !(layer.type === 'camera' && layer.name === `Photo camera · ${t(scene3dKey(`cameraPresets.${preset.id}`))}`))
         .map(layer => layer.id === photoId ? {
           ...layer,
           animation: {
@@ -1421,7 +1423,7 @@ export function SceneAnimatorPanel() {
     setSelectedPresetId('')
     setSelectedKeyframeId(null)
     setProgress(0)
-    setMessage(t('animator.removedPreset', { preset: t(`cameraPresets.${preset.id}`), name: selected.name }))
+    setMessage(t('animator.removedPreset', { preset: t(scene3dKey(`cameraPresets.${preset.id}`)), name: selected.name }))
   }
   const updateCameraTransform = (id: string, field: 'x' | 'y' | 'scale' | 'rotation', value: number) => updateLayer(id, layer => {
     if (layer.type !== 'camera') return layer
@@ -2558,7 +2560,7 @@ export function SceneAnimatorPanel() {
     }
     if (request.type === 'open_3d_scene') throw new Error('La apertura estructurada se realiza mediante el control de escenas existente.')
     throw new Error('Operación 3D no reconocida.')
-  }), [workspace])
+  }), [workspace, updateScene])
   useEffect(() => listenForAgentSceneControl(async request => {
     const current = sceneRef.current
     if (request.type === 'save_3d_scene') {
@@ -2682,7 +2684,7 @@ export function SceneAnimatorPanel() {
     } finally {
       setRhythmBusy(false)
     }
-  }), [outputs, selectedId])
+  }), [outputs, selectedId, updateScene])
   const animateCutoutDialogue = () => {
     const text = cutoutDialogueText.trim()
     if (!text) { setMessage(t('animator.writeDialogueFirst')); return }
@@ -3093,7 +3095,7 @@ export function SceneAnimatorPanel() {
           {numberInput(t('animator.rotation'), selected.transform.rotation ?? 0, value => updateCameraTransform(selected.id, 'rotation', value), -360, 360, .5)}
           {numberInput(t('animator.zPriority'), selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}
         </div>
-        <div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.cameraShots')}</span><span className="text-[9px] text-text-muted">{t('animator.clickAgain')}</span></div><div className="grid grid-cols-2 gap-1">{CAMERA_PRESETS.map(preset => <button key={preset.id} onClick={() => selectedPresetId === preset.id ? removeLayerMotionPreset() : applyCameraPreset(preset.id)} className={`rounded border px-2 py-1.5 text-left text-[9px] ${selectedPresetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border bg-bg-primary text-text-secondary hover:border-cyan-400/60'}`}>{t(`cameraPresets.${preset.id}`)}</button>)}</div></div>
+        <div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.cameraShots')}</span><span className="text-[9px] text-text-muted">{t('animator.clickAgain')}</span></div><div className="grid grid-cols-2 gap-1">{CAMERA_PRESETS.map(preset => <button key={preset.id} onClick={() => selectedPresetId === preset.id ? removeLayerMotionPreset() : applyCameraPreset(preset.id)} className={`rounded border px-2 py-1.5 text-left text-[9px] ${selectedPresetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border bg-bg-primary text-text-secondary hover:border-cyan-400/60'}`}>{t(scene3dKey(`cameraPresets.${preset.id}`))}</button>)}</div></div>
         <div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] capitalize text-text-muted">{t(key === 'start' ? 'animator.startCamera' : 'animator.endCamera')}</div>{numberInput(t('animator.x'), selected.animation[key].x, value => updateLayerEndpoint(selected.id, key, { x: value }))}{numberInput(t('animator.y'), selected.animation[key].y, value => updateLayerEndpoint(selected.id, key, { y: value }))}{numberInput(t('animator.zoom'), selected.animation[key].scale, value => updateLayerEndpoint(selected.id, key, { scale: Math.max(.05, value) }), .05, 5, .05)}{numberInput(t('animator.rotation'), selected.animation[key].rotation ?? selected.transform.rotation ?? 0, value => updateLayerEndpoint(selected.id, key, { rotation: value }), -360, 360, .5)}</div>)}</div>
         <div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.duration'), selected.animation.duration, value => updateLayerDuration(selected.id, value), .1, 30, .05)}<label className="text-[10px] text-text-muted">{t('animator.allCurves')}<select value={selected.animation.curve} onChange={event => updateLayerCurve(selected.id, event.target.value as SceneCurve)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">{t('curves.linear')}</option><option value="ease">{t('curves.ease')}</option><option value="dramatic">{t('curves.dramatic')}</option><option value="bounce">{t('curves.bounce')}</option><option value="hold">{t('curves.hold')}</option></select></label></div>
         <div className="space-y-1.5 rounded border border-border bg-bg-primary p-2">

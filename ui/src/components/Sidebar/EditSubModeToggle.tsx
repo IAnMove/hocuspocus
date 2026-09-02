@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
+import type { ParseKeys } from 'i18next'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import type { EditSubMode } from '../../types'
 
-const ALL_SUB_MODES: { value: EditSubMode; labelKey: string; experimental?: boolean }[] = [
+const ALL_SUB_MODES: { value: EditSubMode; labelKey: ParseKeys<'studio'>; experimental?: boolean }[] = [
   { value: 'retake', labelKey: 'editSubModes.retake' },
   { value: 'edit_anything', labelKey: 'editSubModes.editAnything' },
   { value: 'outpaint', labelKey: 'editSubModes.outpaint' },

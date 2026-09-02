@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import type { ParseKeys } from 'i18next'
 import { analyzeAudio, cleanCharacterKitFaceOverlay, getFileUrl, uploadImage } from '../../api/client'
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
@@ -47,7 +48,7 @@ type Props = {
   onStatus?: (message: string) => void
 }
 
-const PLACEMENT_WARNING_KEYS: Record<string, string> = {
+const PLACEMENT_WARNING_KEYS: Record<string, ParseKeys<'characters'>> = {
   'This overlay sits far from the pose center and may miss the face.': 'faceRig.warnings.farFromCenter',
   'This overlay is unusually small compared with the pose.': 'faceRig.warnings.tooSmall',
   'This eye overlay is larger than a typical eye mask. Scale it down until it only covers the eyes.': 'faceRig.warnings.eyeTooLarge',
@@ -55,8 +56,8 @@ const PLACEMENT_WARNING_KEYS: Record<string, string> = {
   'Mouths on a full-body cutout usually sit above the chest. Nudge Down/Up until the overlay covers the lips, then lock all mouths.': 'faceRig.warnings.mouthTooLow',
 }
 
-function tCharacters(key: string, options?: Record<string, unknown>): string {
-  return String(i18n.t(key, { ns: 'characters' as never, ...options }))
+function tCharacters(key: ParseKeys<'characters'>, options?: Record<string, unknown>): string {
+  return i18n.t(key, { ns: 'characters', ...options })
 }
 
 function assetFor(kit: CharacterKit, state: CharacterKitFaceRigState): CharacterKitAsset | undefined {
