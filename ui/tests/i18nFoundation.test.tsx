@@ -50,7 +50,10 @@ test('required glossary keys exist in both languages', async () => {
     ['navigation', 'entities.outputFolder'],
     ['navigation', 'filters.allWorkspaces'],
     ['navigation', 'outputFolder.uploads'],
+    ['navigation', 'tabs.documents'],
     ['activity', 'extraInfo'],
+    ['activity', 'catalog.loadMore'],
+    ['activity', 'catalog.searchPlaceholder'],
     ['common', 'sample.named'],
     ['navigation', 'labs.story'],
     ['navigation', 'labs.series'],
@@ -69,7 +72,10 @@ test('required glossary keys exist in both languages', async () => {
   assert.equal(i18n.t('title', { ns: 'wizard', lng: 'es' }), 'Pregunta al mago')
   assert.equal(i18n.t('entities.outputFolder', { ns: 'navigation', lng: 'es' }), 'Carpeta de salida')
   assert.equal(i18n.t('outputFolder.uploads', { ns: 'navigation', lng: 'es' }), 'Subidas')
+  assert.equal(i18n.t('tabs.documents', { ns: 'navigation', lng: 'es' }), 'Documentos')
   assert.equal(i18n.t('extraInfo', { ns: 'activity', lng: 'es' }), 'Información adicional')
+  assert.equal(i18n.t('catalog.loadMore', { ns: 'activity', lng: 'es' }), 'Cargar más')
+  assert.equal(i18n.t('catalog.reload', { ns: 'activity', lng: 'es' }), 'Actualizar catálogo')
   assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'en' }), 'Could not load Extra info')
   assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'es' }), 'No se pudo cargar Información adicional')
   assert.equal(i18n.t('actions.close', { ns: 'common', lng: 'es' }), 'Cerrar')
@@ -96,6 +102,11 @@ test('interpolation and pluralization stay in the catalog', async () => {
   assert.equal(i18n.t('assetCount', { ns: 'activity', count: 1 }), '1 recurso')
   assert.equal(i18n.t('productionCount', { ns: 'activity', count: 1 }), '1 producción')
   assert.equal(i18n.t('productionCount', { ns: 'activity', count: 2 }), '2 producciones')
+  assert.equal(i18n.t('catalog.itemsAcrossLocations', { ns: 'activity', count: 1 }), '1 elemento en todas las ubicaciones')
+  assert.equal(i18n.t('catalog.itemsAcrossLocations', { ns: 'activity', count: 3 }), '3 elementos en todas las ubicaciones')
+  await i18n.changeLanguage('en')
+  assert.equal(i18n.t('catalog.itemsAcrossLocations', { ns: 'activity', count: 1 }), '1 item across all locations')
+  assert.equal(i18n.t('catalog.itemsAcrossLocations', { ns: 'activity', count: 3 }), '3 items across all locations')
 })
 
 test('react interpolation keeps special characters as text without double-escaping', async () => {
