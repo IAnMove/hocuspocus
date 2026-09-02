@@ -54,6 +54,9 @@ test('required glossary keys exist in both languages', async () => {
     ['activity', 'extraInfo'],
     ['activity', 'catalog.loadMore'],
     ['activity', 'catalog.searchPlaceholder'],
+    ['extraInfo', 'language'],
+    ['extraInfo', 'clip.title'],
+    ['extraInfo', 'copy.action'],
     ['common', 'sample.named'],
     ['navigation', 'labs.story'],
     ['navigation', 'labs.series'],
@@ -79,6 +82,13 @@ test('required glossary keys exist in both languages', async () => {
   assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'en' }), 'Could not load Extra info')
   assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'es' }), 'No se pudo cargar Información adicional')
   assert.equal(i18n.t('actions.close', { ns: 'common', lng: 'es' }), 'Cerrar')
+  assert.equal(i18n.t('language', { ns: 'extraInfo', lng: 'es' }), 'Idioma')
+  assert.equal(i18n.t('clip.title', { ns: 'extraInfo', lng: 'es' }), 'Información del clip')
+  assert.equal(i18n.t('errors.loadFailed', { ns: 'extraInfo', lng: 'es' }), 'No se pudo cargar Información adicional')
+  assert.equal(i18n.t('savedPrompts', { ns: 'extraInfo', lng: 'en', count: 1 }), '1 saved prompt')
+  assert.equal(i18n.t('savedPrompts', { ns: 'extraInfo', lng: 'en', count: 2 }), '2 saved prompts')
+  assert.equal(i18n.t('savedPrompts', { ns: 'extraInfo', lng: 'es', count: 1 }), '1 prompt guardado')
+  assert.equal(i18n.t('savedPrompts', { ns: 'extraInfo', lng: 'es', count: 2 }), '2 prompts guardados')
 })
 
 test('missing keys fall back to english without throwing', async () => {
@@ -218,6 +228,13 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
   assert.deepEqual(forbiddenLiterals(), [])
 })
 
+test('resources register the extraInfo namespace', async () => {
+  const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo'])
+  assert.ok('extraInfo' in resources.en)
+  assert.ok('extraInfo' in resources.es)
+})
+
 test('Extra info chrome and the Assets inspector use the activity catalog', async () => {
   const fs = await import('node:fs/promises')
   const files = [
@@ -250,4 +267,11 @@ test('Extra info chrome and the Assets inspector use the activity catalog', asyn
     assert.match(panel, new RegExp(`tActivity\\('${key.replace('.', '\\.')}'`), key)
   }
   assert.match(panel, /tCommon\('actions\.close'\)/)
+  const dialog = await fs.readFile(new URL('../src/components/MainContent/VideoExtraInfoDialog.tsx', import.meta.url), 'utf8')
+  assert.match(dialog, /useUiTranslation\('extraInfo'\)/)
+  assert.match(dialog, /tActivity\('extraInfo'\)/)
+  assert.match(dialog, /tCommon\('actions\.close'\)/)
+  assert.match(dialog, /t\('clip\.title'\)/)
+  assert.doesNotMatch(dialog, /['"`]Clip information['"`]/)
+  assert.doesNotMatch(dialog, /['"`]Wait for generation to finish['"`]/)
 })
