@@ -49,6 +49,7 @@ test('Wizard panel keeps dialog, live-region and pending-question ARIA contracts
   const panelSource = await readFile(new URL('../src/features/agent/AgentAssistantPanel.tsx', import.meta.url), 'utf8')
   assert.match(panelSource, /function agentPanelPresentation/)
   assert.match(panelSource, /return \{ role: 'region' as const, ariaModal: undefined, autoFocus: false \}/)
+  assert.match(panelSource, /return \{ role: 'dialog' as const, ariaModal: 'true' as const, autoFocus: !embedded \}/)
   assert.match(panelSource, /role=\{panelPresentation\.role\}/)
   assert.match(panelSource, /aria-modal=\{panelPresentation\.ariaModal\}/)
   assert.match(panelSource, /autoFocus=\{panelPresentation\.autoFocus\}/)
