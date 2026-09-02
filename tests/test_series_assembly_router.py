@@ -1,4 +1,5 @@
 import copy
+import json
 import os
 import shutil
 import threading
@@ -7,7 +8,12 @@ import time
 import pytest
 from fastapi import HTTPException
 
-from routers.series_assembly import SeriesAssemblyStartRequest, create_series_assembly_router
+from routers.series_assembly import (
+    SeriesAssemblyStartRequest,
+    _write_assembly_sidecar,
+    create_series_assembly_router,
+)
+from services.asset_manifest import SCHEMA_NAME, read_asset_manifest
 from services.series_jobs import SeriesJobStore
 from services.task_manager import forget_task_registry, get_task_registry
 
@@ -112,6 +118,13 @@ def test_router_joins_in_episode_order_and_persists_episode_asset(tmp_path):
     assert episode["latestAssemblyAssetId"] == status["assetId"]
     asset = library["seriesById"]["series-1"]["assets"][status["assetId"]]
     assert asset["metadata"]["orderedClipAssetIds"] == ["asset-1", "asset-2"]
+    joined = tmp_path / status["filename"]
+    sidecar = json.loads(joined.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    loaded = read_asset_manifest(joined, workspace_id="default")
+    assert sidecar["schema"] == SCHEMA_NAME
+    assert sidecar["params"]["seriesId"] == "series-1"
+    assert loaded["origin"]["tool"] == "series-assembly"
+    assert loaded["origin"]["actor"] == "unknown"
 
 
 def test_router_rejects_a_second_live_assembly_for_the_episode(tmp_path):
@@ -186,6 +199,27 @@ def test_cancelled_assembly_removes_output_created_during_cancellation(tmp_path)
     assert not list(tmp_path.glob("*_series_assembly.meta.json"))
     episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
     assert not episode.get("assemblyAssetIds")
+
+
+def test_write_assembly_sidecar_publishes_canonical_manifest_without_invented_actor(tmp_path):
+    output = tmp_path / "episode_series_assembly.mp4"
+    output.write_bytes(b"joined")
+    _write_assembly_sidecar(str(output), {
+        "jobId": "series-assembly-abc",
+        "workspace": "night-shift",
+        "seriesId": "series-1",
+        "episodeId": "episode-1",
+    })
+    raw = json.loads(output.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    loaded = read_asset_manifest(output, workspace_id="night-shift")
+    assert raw["schema"] == SCHEMA_NAME
+    assert raw["params"]["seriesId"] == "series-1"
+    assert raw["params"]["episodeId"] == "episode-1"
+    assert raw["params"]["assemblyJobId"] == "series-assembly-abc"
+    assert loaded is not None
+    assert loaded["origin"]["tool"] == "series-assembly"
+    assert loaded["origin"]["actor"] == "unknown"
+    assert loaded["origin"]["workspace_id"] == "night-shift"
 
 
 def test_cancelled_assembly_after_meta_removes_sidecar(tmp_path):
