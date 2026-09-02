@@ -5,7 +5,6 @@ import type { CanonicalTask } from '../api/client'
 import { applyCanonicalTaskEvent, canResumeCanonicalTask, canonicalTaskVisualState, reconcileCanonicalTaskSnapshot } from '../lib/canonicalTaskEvents'
 import { formatAppAction, formatAppTimestamp } from '../lib/locale'
 import { useStore } from '../stores/useStore'
-import { AgentAvatar } from '../features/agent/AgentAvatar'
 import { listenForAgentActivityDetails } from '../features/agent/agentUiBus'
 import { useUiTranslation } from '../i18n'
 import { publishCanonicalTasks } from '../features/activity/canonicalTaskFeed'
@@ -225,7 +224,6 @@ function truncatePrompt(prompt: string, limit = 180): string {
 }
 
 export function ActivityFooter() {
-  const { t: tWizard } = useUiTranslation('wizard')
   const { t: tActivity } = useUiTranslation('activity')
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const workspaceRef = useRef(activeWorkspace)
@@ -619,19 +617,6 @@ export function ActivityFooter() {
           </div>
         </div>
       )}
-
-      <div className="flex h-full w-44 shrink-0 items-center border-r border-amber-200/15 pr-3">
-        <button
-          type="button"
-          onClick={() => { window.dispatchEvent(new Event('hocuspocus:wizard-open')); setDetailsOpen(false) }}
-          className="hp-agent-trigger flex w-full items-center gap-2 rounded-lg border border-amber-200/15 bg-amber-100/[.025] px-2 py-0.5 text-left text-amber-100/75 transition hover:border-amber-200/35 hover:bg-amber-100/[.055] hover:text-amber-50"
-          aria-label={tWizard('open')}
-          title={tWizard('open')}
-        >
-          <AgentAvatar state="idle" size={24} />
-          <span className="font-medium whitespace-nowrap">{tWizard('title')}</span>
-        </button>
-      </div>
 
       <button type="button" onClick={() => setDetailsOpen(open => !open)} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title={tActivity('openHistory')}>
         {isActive
