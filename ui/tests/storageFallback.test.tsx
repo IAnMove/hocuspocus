@@ -43,11 +43,11 @@ test('WelcomeModal renders and dismisses when localStorage throws', { concurrenc
 
   try {
     render(<WelcomeModal />)
-    assert.ok(screen.getByText('Novedades de HocusPocus'))
+    assert.ok(screen.getByText('What’s new in HocusPocus'))
     assert.equal(screen.queryByText('Mature mode is off by default'), null)
     assert.equal(screen.queryByText(/PG-13/i), null)
-    fireEvent.click(screen.getByRole('button', { name: 'Entrar al estudio' }))
-    assert.equal(screen.queryByText('Novedades de HocusPocus'), null)
+    fireEvent.click(screen.getByRole('button', { name: 'Enter the studio' }))
+    assert.equal(screen.queryByText('What’s new in HocusPocus'), null)
     assert.equal(safeStorageGet('local', 'hocuspocus_welcome_seen_v1'), '1')
   } finally {
     cleanup()

@@ -9,7 +9,8 @@
     "cancel": "Cancel",
     "reload": "Reload",
     "create": "Create",
-    "search": "Search"
+    "search": "Search",
+    "discard": "Discard"
   },
   "status": {
     "running": "Running",
@@ -24,5 +25,15 @@
   },
   "sample": {
     "named": "{{name}}"
+  },
+  "welcome": {
+    "title": "What’s new in HocusPocus",
+    "subtitle": "Your local AI studio for video, images, audio and 3D. These are the keys to starting a production well.",
+    "modelsTitle": "Models download on first use",
+    "modelsBody": "The install set up the app, not the model weights. The first time you use a given model, its files download once — often tens of GB for a video model — before anything appears. Later runs are fast. Watch progress at the bottom-right; the very first video can take a while.",
+    "directorTitle": "Director runs on a local LLM",
+    "directorBody": "Director mode plans your video with a local language model (Gemma 4, ~5 GB, downloaded on first Director use) — nothing is sent to the cloud. You can switch models, or plug in an external API, under Settings → Services.",
+    "enter": "Enter the studio",
+    "closeAria": "Close"
   }
 }

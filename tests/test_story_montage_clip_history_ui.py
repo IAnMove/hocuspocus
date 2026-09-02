@@ -15,9 +15,9 @@ STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 def test_story_montage_exposes_slot_history_and_explicit_remake_action():
     timeline = TIMELINE.read_text(encoding="utf-8")
 
-    assert "Historial de esta posición" in timeline
-    assert "En montaje:" in timeline
-    assert "Rehacer este clip" in timeline
+    assert "t('timeline.slotHistory')" in timeline
+    assert "t('timeline.inAssembly'" in timeline
+    assert "t('timeline.remakeClip')" in timeline
     assert "selectPipelineClipVideo" in timeline
     assert "directorClipCreatorMetadata" in timeline
     assert "writeDirectorClipReplacementTarget" in timeline
@@ -43,9 +43,9 @@ def test_generated_video_can_be_selected_and_returns_to_story_montage():
     main = MAIN.read_text(encoding="utf-8")
     client = api_client_source()
 
-    assert "Usar en Montaje · clip" in media
+    assert "t('montage.useInAssembly'" in media
     assert "writeDirectorClipReplacementResult" in media
     assert "setMediaFilter('stories')" in media
-    assert "Ajusta sus datos, genera una o varias versiones" in main
-    assert "Cancelar reemplazo" in main
+    assert "tActivity('montage.redoingAssemblyClip'" in main
+    assert "tActivity('montage.cancelReplacement')" in main
     assert "/video-selection" in client

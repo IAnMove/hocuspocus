@@ -747,20 +747,20 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
               onClick={() => void handleUseAsDirectorReplacement()}
               disabled={selectingForMontage}
               className="flex items-center gap-1 rounded-lg border border-violet-500/40 bg-violet-500/10 px-2 py-1.5 text-[10px] font-medium text-violet-200 transition-colors hover:bg-violet-500/20 disabled:opacity-50"
-              title={`Elegir este vídeo como versión activa del clip ${directorReplacementTarget.clipIndex + 1}; las demás versiones se conservarán en su historial`}
+              title={t('montage.useInAssembly', { n: directorReplacementTarget.clipIndex + 1 })}
             >
               {selectingForMontage ? <Loader2 size={13} className="animate-spin" /> : <FolderInput size={13} />}
-              Usar en Montaje · clip {directorReplacementTarget.clipIndex + 1}
+              {t('montage.useInAssembly', { n: directorReplacementTarget.clipIndex + 1 })}
             </button>
           )}
           {file.type === 'video' && editorReplacementTarget && (
             <button
               onClick={handleUseAsEditorReplacement}
               className="flex items-center gap-1 rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-2 py-1.5 text-[10px] font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 hover:text-emerald-200"
-              title={`Usar este vídeo en la posición ${editorReplacementTarget.clipIndex + 1} del montaje`}
+              title={t('montage.useInPosition', { n: editorReplacementTarget.clipIndex + 1 })}
             >
               <FolderInput size={13} />
-              Usar en posición {editorReplacementTarget.clipIndex + 1}
+              {t('montage.useInPosition', { n: editorReplacementTarget.clipIndex + 1 })}
             </button>
           )}
           {file.type === 'video' && (

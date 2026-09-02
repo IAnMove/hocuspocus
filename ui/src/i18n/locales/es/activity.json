@@ -40,5 +40,12 @@
   "assetCount_one": "{{count}} recurso",
   "assetCount_other": "{{count}} recursos",
   "productionCount_one": "{{count}} producción",
-  "productionCount_other": "{{count}} producciones"
+  "productionCount_other": "{{count}} producciones",
+  "montage": {
+    "useInAssembly": "Usar en Montaje · clip {{n}}",
+    "redoingAssemblyClip": "Rehaciendo el clip {{n}} de Montaje. Ajusta sus datos, genera una o varias versiones y pulsa “Usar en Montaje · clip {{n}}” en la que quieras conservar.",
+    "cancelReplacement": "Cancelar reemplazo",
+    "redoingEditorSlot": "Rehaciendo la posición {{n}} del montaje: {{name}}. Genera un vídeo nuevo y después pulsa “Usar en posición {{n}}”.",
+    "useInPosition": "Usar en posición {{n}}"
+  }
 }

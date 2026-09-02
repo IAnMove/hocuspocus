@@ -73,12 +73,12 @@ test('editing dialogue recalculates and displays the authoritative requested cli
 
   try {
     render(<Harness />)
-    assert.match(screen.getByText(/Clip solicitado:/).textContent || '', /5\.167 s/)
+    assert.match(screen.getByText(/Requested clip:/).textContent || '', /5\.167 s/)
     fireEvent.change(screen.getByRole('textbox', { name: 'Dialogue' }), {
       target: { value: 'sol '.repeat(28).trim() },
     })
     await waitFor(() => {
-      assert.match(screen.getByText(/Clip solicitado:/).textContent || '', /6\.583 s/)
+      assert.match(screen.getByText(/Requested clip:/).textContent || '', /6\.583 s/)
     }, { timeout: 2000 })
     assert.equal(calls.length, 1)
     assert.equal((calls[0] as { workspace: string }).workspace, 'default')

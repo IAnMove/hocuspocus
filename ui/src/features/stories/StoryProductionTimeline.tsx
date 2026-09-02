@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Combine, ExternalLink, Film, History, Loader2, Play, RefreshCw, Square } from 'lucide-react'
 import * as api from '../../api/client'
 import { reconcilePlaybackCursor } from '../../lib/orderedClipTimeline'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import type { PipelineClipState, PipelineVideoAttempt, SavedPipelineState } from '../../types'
 import type { StoryProduction } from './types'
@@ -50,6 +51,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
   production: StoryProduction
   initiallyOpen?: boolean
 }) {
+  const { t } = useUiTranslation('storyLab')
   const pipelineId = typeof production.targetSnapshot?.pipelineId === 'string'
     ? production.targetSnapshot.pipelineId : ''
   const returnedSelection = useRef(readDirectorClipReplacementResult())
@@ -92,7 +94,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
     if (playbackCursor.outcome === 'stop' || !current?.video_filename) {
       setPlayingAll(false)
       setPlaybackShotId(null)
-      setError('Play all stopped because the active clip is no longer playable.')
+      setError(t('timeline.playAllStopped'))
       return
     }
     if (!playerRef.current) return
@@ -100,7 +102,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
     void playerRef.current.play().catch(reason => {
       setPlayingAll(false); setError((reason as Error).message)
     })
-  }, [current?.video_filename, playbackCursor.outcome, playingAll])
+  }, [current?.video_filename, playbackCursor.outcome, playingAll, t])
 
   useEffect(() => {
     if (!open || !pipelineId) return
@@ -204,7 +206,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
         targetWorkspace,
       )
       if (!metadata.params) {
-        throw new Error('Este intento no conserva ajustes de generación reutilizables.')
+        throw new Error(t('timeline.noReusableSettings'))
       }
       const prepared = directorClipCreatorMetadata(
         pipeline,
@@ -216,7 +218,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
       if (store.activeWorkspace !== targetWorkspace) {
         await store.switchWorkspace(targetWorkspace)
         if (useStore.getState().activeWorkspace !== targetWorkspace) {
-          throw new Error(`No se pudo cambiar al espacio de trabajo ${targetWorkspace}.`)
+          throw new Error(t('timeline.couldNotSwitchWorkspace', { workspace: targetWorkspace }))
         }
       }
       store.setSidebarMode('studio')
@@ -234,55 +236,55 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
       })
       useStore.getState().setMediaFilter('videos')
     } catch (reason) {
-      setError(`No se pudo abrir el clip en Creación de vídeo: ${(reason as Error).message}`)
+      setError(t('timeline.couldNotOpenCreator', { message: (reason as Error).message }))
       setPreparingCreator(false)
     }
   }
 
-  if (!pipelineId) return <span className="text-[9px] text-text-muted">Open the staged target once to create its clip pipeline.</span>
+  if (!pipelineId) return <span className="text-[9px] text-text-muted">{t('timeline.openOnce')}</span>
   const finalOutput = pipeline?.final_output_filename || [...(pipeline?.output_files || [])].reverse()
     .find(filename => /(?:rejoin|multiclip|_movie)\.(?:mp4|webm|mkv|mov)$/i.test(filename))
   return <div className="mt-2 w-full">
-    <button className={control} onClick={() => { setError(null); setOpen(value => !value) }}><Film size={11} />{open ? 'Hide ordered clips' : 'View ordered clips'}</button>
+    <button className={control} onClick={() => { setError(null); setOpen(value => !value) }}><Film size={11} />{open ? t('timeline.hideOrdered') : t('timeline.viewOrdered')}</button>
     {open && <div className="mt-2 rounded-xl border border-border bg-bg-secondary p-2">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="text-[10px] text-text-muted">Pipeline {pipelineId} · {playable.length}/{pipeline?.clips.length || 0} playable</span>
-        <button className={control} disabled={loading || refreshing} onClick={() => refreshRef.current?.()}>{refreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}Refresh timeline</button>
-        <button className={control} disabled={!playable.length || playingAll} onClick={() => { setPlaybackShotId(playable[0].shotId); setPlayingAll(true) }}><Play size={11} />Play all</button>
-        {playingAll && <button className={control} onClick={() => { playerRef.current?.pause(); setPlayingAll(false); setPlaybackShotId(null) }}><Square size={11} />Stop</button>}
-        <button className={control} disabled={playable.length < 2 || loading} onClick={() => { setLoading(true); setError(null); void rejoinPipelineClips(pipelineId).then(() => api.fetchSavedPipeline(pipelineId)).then(setPipeline).catch(reason => setError((reason as Error).message)).finally(() => setLoading(false)) }}>{loading ? <Loader2 size={11} className="animate-spin" /> : <Combine size={11} />}Join clips</button>
+        <span className="text-[10px] text-text-muted">{t('timeline.pipelineMeta', { id: pipelineId, playable: playable.length, total: pipeline?.clips.length || 0 })}</span>
+        <button className={control} disabled={loading || refreshing} onClick={() => refreshRef.current?.()}>{refreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}{t('timeline.refresh')}</button>
+        <button className={control} disabled={!playable.length || playingAll} onClick={() => { setPlaybackShotId(playable[0].shotId); setPlayingAll(true) }}><Play size={11} />{t('timeline.playAll')}</button>
+        {playingAll && <button className={control} onClick={() => { playerRef.current?.pause(); setPlayingAll(false); setPlaybackShotId(null) }}><Square size={11} />{t('timeline.stop')}</button>}
+        <button className={control} disabled={playable.length < 2 || loading} onClick={() => { setLoading(true); setError(null); void rejoinPipelineClips(pipelineId).then(() => api.fetchSavedPipeline(pipelineId)).then(setPipeline).catch(reason => setError((reason as Error).message)).finally(() => setLoading(false)) }}>{loading ? <Loader2 size={11} className="animate-spin" /> : <Combine size={11} />}{t('timeline.joinClips')}</button>
         <button className={control} onClick={() => {
           useStore.getState().setMediaFilter('runs')
           void useStore.getState().loadPipelineList(pipelineId)
           void useStore.getState().loadSavedPipeline(pipelineId)
           setDashboardOpen(false)
-        }}><ExternalLink size={11} />Edit/regenerate clips</button>
-        {finalOutput && <a className={control} href={api.getFileUrl(finalOutput, pipeline?.workspace)} target="_blank" rel="noreferrer">Open joined video</a>}
+        }}><ExternalLink size={11} />{t('timeline.editRegenerate')}</button>
+        {finalOutput && <a className={control} href={api.getFileUrl(finalOutput, pipeline?.workspace)} target="_blank" rel="noreferrer">{t('timeline.openJoined')}</a>}
       </div>
       {error && <p className="mb-2 rounded border border-red-500/30 bg-red-500/10 p-2 text-[10px] text-red-300">{error}</p>}
-      {loading && !pipeline && <div className="flex items-center gap-2 p-4 text-[10px] text-text-muted"><Loader2 size={12} className="animate-spin" />Loading clip history…</div>}
+      {loading && !pipeline && <div className="flex items-center gap-2 p-4 text-[10px] text-text-muted"><Loader2 size={12} className="animate-spin" />{t('timeline.loadingHistory')}</div>}
       {pipeline && <div className="grid min-h-72 overflow-hidden rounded-lg border border-border lg:grid-cols-[17rem_minmax(0,1fr)]">
         <div className="max-h-[40rem] overflow-y-auto border-b border-border p-2 lg:border-b-0 lg:border-r">{orderedClips.map(clip => {
           const attempt = selectedAttempt(clip)
           const attemptCount = attemptsForClip(clip).length
           return <button key={clip.shot_id || clip.index} className={`mb-1.5 w-full rounded border p-2 text-left ${current?.index === clip.index ? 'border-violet-400 bg-violet-500/15' : 'border-border bg-bg-primary'}`} onClick={() => { const next = playable.find(value => value.index === clip.index); if (next) { setPlayingAll(false); setPlaybackShotId(next.shotId) } }}>
-            <span className="text-[10px] font-medium text-text-primary">Clip {clip.index + 1}</span>
-            <span className="ml-2 text-[9px] text-text-muted">{attempt ? clip.video_stale ? 'stale' : 'ready' : 'missing'}</span>
-            <span className="ml-2 text-[9px] text-violet-300">{attemptCount} {attemptCount === 1 ? 'versión' : 'versiones'}</span>
-            {attempt && <p className="mt-1 truncate font-mono text-[8px] text-emerald-300" title={attempt.filename}>En montaje: {attempt.filename}</p>}
+            <span className="text-[10px] font-medium text-text-primary">{t('timeline.clipN', { n: clip.index + 1 })}</span>
+            <span className="ml-2 text-[9px] text-text-muted">{attempt ? clip.video_stale ? t('timeline.stale') : t('timeline.ready') : t('timeline.missing')}</span>
+            <span className="ml-2 text-[9px] text-violet-300">{t('timeline.version', { count: attemptCount })}</span>
+            {attempt && <p className="mt-1 truncate font-mono text-[8px] text-emerald-300" title={attempt.filename}>{t('timeline.inAssembly', { filename: attempt.filename })}</p>}
             <p className="mt-1 line-clamp-2 text-[9px] text-text-muted">{clip.video_prompt || clip.image_prompt}</p>
           </button>
         })}</div>
         {current?.video_filename ? <div className="min-w-0 bg-bg-primary">
           <div className="bg-black"><video key={current.video_filename} ref={playerRef} className="max-h-[28rem] w-full bg-black" src={api.getFileUrl(current.video_filename, pipeline.workspace)} controls autoPlay={playingAll} onEnded={() => { if (!playingAll) return; if (playIndex + 1 < playable.length) setPlaybackShotId(playable[playIndex + 1].shotId); else { setPlayingAll(false); setPlaybackShotId(null) } }} /></div>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
-            <span className="mr-auto text-[10px] text-text-muted">Clip {current.index + 1} · seed {current.attempt.seed ?? current.clip.seed ?? '—'} · {current.clip.duration_seconds || 0}s</span>
+            <span className="mr-auto text-[10px] text-text-muted">{t('timeline.clipMeta', { n: current.index + 1, seed: current.attempt.seed ?? current.clip.seed ?? '—', seconds: current.clip.duration_seconds || 0 })}</span>
             <button className="inline-flex items-center gap-1 rounded border border-violet-400/50 bg-violet-500/15 px-2.5 py-1.5 text-[10px] font-medium text-violet-200 hover:bg-violet-500/25 disabled:opacity-40" disabled={preparingCreator || Boolean(selectingAttempt)} onClick={() => void remakeCurrentClip()}>
-              {preparingCreator ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}Rehacer este clip
+              {preparingCreator ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}{t('timeline.remakeClip')}
             </button>
           </div>
           <div className="p-2">
-            <div className="mb-2 flex items-center gap-1 text-[10px] font-medium text-text-secondary"><History size={11} />Historial de esta posición · elige qué versión entra en el montaje</div>
+            <div className="mb-2 flex items-center gap-1 text-[10px] font-medium text-text-secondary"><History size={11} />{t('timeline.slotHistory')}</div>
             <div className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto xl:grid-cols-3">{attemptsForClip(current.clip).map((attempt, attemptIndex) => {
               const selected = attempt.filename === (current.clip.selected_video_filename || current.clip.video_filename)
               return <button key={attempt.id || attempt.filename} disabled={Boolean(selectingAttempt)} onClick={() => void chooseAttempt(current.clip, attempt)} className={`overflow-hidden rounded border text-left transition-colors disabled:opacity-50 ${selected ? 'border-emerald-400 bg-emerald-500/10' : 'border-border bg-bg-secondary hover:border-violet-400/60'}`}>
