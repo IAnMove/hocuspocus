@@ -7,6 +7,13 @@ from tests.api_client_source import api_client_source
 
 ROOT = Path(__file__).resolve().parents[1]
 STORY = ROOT / "ui" / "src" / "features" / "stories" / "StoryLabPanel.tsx"
+STORY_MUSIC = ROOT / "ui" / "src" / "features" / "stories" / "StoryMusicTab.tsx"
+STORY_PRODUCTIONS = ROOT / "ui" / "src" / "features" / "stories" / "StoryProductionsTab.tsx"
+STORY_PRODUCTIONS_MUSIC = ROOT / "ui" / "src" / "features" / "stories" / "StoryProductionsMusicPanel.tsx"
+STORY_TRAILER = ROOT / "ui" / "src" / "features" / "stories" / "StoryTrailerTab.tsx"
+STORY_COMPACT = ROOT / "ui" / "src" / "features" / "stories" / "CompactVideoWorkspace.tsx"
+STORY_VIDEO_FORMAT = ROOT / "ui" / "src" / "features" / "stories" / "StoryVideoFormatControls.tsx"
+STORY_VIDEO_FORMAT_HELPERS = ROOT / "ui" / "src" / "features" / "stories" / "storyLabVideoFormat.ts"
 STORY_GALLERY = ROOT / "ui" / "src" / "features" / "stories" / "ReferenceGallery.tsx"
 ACTIVITY = ROOT / "ui" / "src" / "components" / "ActivityFooter.tsx"
 STORY_TYPES = ROOT / "ui" / "src" / "features" / "stories" / "types.ts"
@@ -20,11 +27,12 @@ STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 
 def test_lyria_prompt_does_not_require_an_optional_reference_song():
     source = STORY.read_text(encoding="utf-8")
+    music = STORY_MUSIC.read_text(encoding="utf-8")
     function = source.split(
         "const adaptMusicCueWithLlm", 1,
     )[1].split("const uploadLyriaResult", 1)[0]
-    button = source.split(
-        "Generate / refresh Lyria prompt", 1,
+    button = music.split(
+        "music.lyriaRefresh", 1,
     )[0].rsplit("<button", 1)[1]
 
     assert "referenceSong.trim()" not in function
@@ -34,20 +42,22 @@ def test_lyria_prompt_does_not_require_an_optional_reference_song():
 
 def test_custom_mp3_can_be_imported_and_selected_as_story_music():
     source = STORY.read_text(encoding="utf-8")
+    music = STORY_MUSIC.read_text(encoding="utf-8")
 
     assert "const uploadCustomMusic" in source
     assert "custom-audio-upload" in source
-    assert "Import custom MP3" in source
+    assert "music.importCustomMp3" in music
     assert 'accept=".mp3,audio/mpeg,audio/*"' in source
     assert "setMusicProductionCandidateId(candidate.id)" in source
 
 
 def test_chained_music_and_director_workflows_expose_cancel_controls():
     story = STORY.read_text(encoding="utf-8")
+    music = STORY_MUSIC.read_text(encoding="utf-8")
     activity = ACTIVITY.read_text(encoding="utf-8")
 
     assert "cancelMusicQueue" in story
-    assert "Cancelling active request" in story
+    assert "music.cancellingRequest" in music
     assert "cancelStoryMusicCandidatesJob(jobId)" in story
     assert "api.cancelCanonicalTask(taskId, workspace)" in activity
     assert "active && task.cancelable" in activity
@@ -117,11 +127,14 @@ def test_music_video_confirmation_names_the_frozen_video_model():
 
 
 def test_story_lab_exposes_all_real_h3_legacy_resolution_tiers():
-    source = STORY.read_text(encoding="utf-8")
+    panel = STORY.read_text(encoding="utf-8")
+    controls = STORY_VIDEO_FORMAT.read_text(encoding="utf-8")
+    helpers = STORY_VIDEO_FORMAT_HELPERS.read_text(encoding="utf-8")
 
-    assert "preset !== '768p' || videoModel === 'minimax_h3_legacy'" in source
-    assert "STORY_VIDEO_SAVED_RESOLUTIONS" in source
-    assert "resolveResolution(options, resolution, aspectRatio)" in source
+    assert "preset !== '768p' || videoModel === 'minimax_h3_legacy'" in controls
+    assert "STORY_VIDEO_SAVED_RESOLUTIONS" in helpers
+    assert "resolveResolution(options, resolution, aspectRatio)" in controls
+    assert "from './storyLabVideoFormat'" in panel
 
 
 def test_story_assets_support_reviewed_non_destructive_style_variants():
@@ -163,10 +176,11 @@ def test_story_library_can_bulk_remove_only_selected_drafts():
 def test_story_reference_images_confirm_removal_and_open_in_a_modal():
     gallery = STORY_GALLERY.read_text(encoding="utf-8")
     panel = STORY.read_text(encoding="utf-8")
+    compact = STORY_COMPACT.read_text(encoding="utf-8")
 
     assert "export function ReferenceGallery" in gallery
     assert "function ReferenceGallery" not in panel
-    assert "from './ReferenceGallery'" in panel
+    assert "from './ReferenceGallery'" in compact
     assert "window.confirm(" in gallery
     assert "createPortal(" in gallery
     assert "Maximize2" in gallery
@@ -179,7 +193,7 @@ def test_story_reference_images_confirm_removal_and_open_in_a_modal():
 def test_story_style_converter_warns_about_photo_to_photo_noops_and_honors_requested_text():
     panel = STORY.read_text(encoding="utf-8")
     prompt_builder = panel.split("function styleConversionPrompt", 1)[1].split(
-        "function storySongBrief", 1,
+        "type StyledReferenceTarget", 1,
     )[0]
 
     assert "requestsVisibleText" in prompt_builder
@@ -222,8 +236,13 @@ def test_story_direct_reference_mode_uses_only_approved_visual_assets():
     types = STORY_TYPES.read_text(encoding="utf-8")
     adaptations = STORY_ADAPTATIONS.read_text(encoding="utf-8")
 
+    productions = STORY_PRODUCTIONS.read_text(encoding="utf-8")
+    productions_music = STORY_PRODUCTIONS_MUSIC.read_text(encoding="utf-8")
+    trailer = STORY_TRAILER.read_text(encoding="utf-8")
+
     assert "'direct_references'" in types
-    assert "H3 Ref2VA" in panel
+    assert "H3 Ref2VA" in productions or "H3 Ref2VA" in productions_music or "trailer.directReferencesHint" in trailer
+    assert "productions.h3NoStart" in productions
     assert "setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')" in panel
     assert "setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')" in panel
     assert "approvedReferenceIds" in adaptations

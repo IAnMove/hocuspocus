@@ -101,16 +101,20 @@ test('Story Lab panel uses shared editors instead of passing component props', a
   const chrome = readFileSync(new URL('../src/features/stories/storyLabChrome.tsx', import.meta.url), 'utf8')
 
   assert.match(panel, /import \{ StoryLabVisualsProvider \} from '\.\/StoryLabVisualsProvider'/)
-  assert.match(panel, /import \{ ReferenceGallery \} from '\.\/ReferenceGallery'/)
-  assert.match(panel, /import \{ LocationEditor \} from '\.\/LocationEditor'/)
   assert.match(panel, /import \{ StoryCharactersTab \} from '\.\/StoryCharactersTab'/)
   assert.match(panel, /import \{ StoryStructureTab \} from '\.\/StoryStructureTab'/)
+  assert.match(panel, /import \{ StoryMusicTab \} from '\.\/StoryMusicTab'/)
+  assert.match(panel, /import \{ StoryTrailerTab \} from '\.\/StoryTrailerTab'/)
+  assert.match(panel, /import \{ StoryProductionsTab \} from '\.\/StoryProductionsTab'/)
+  assert.match(panel, /import \{ CompactVideoWorkspace \} from '\.\/CompactVideoWorkspace'/)
   assert.equal(panel.includes('function ReferenceGallery'), false)
   assert.equal(panel.includes('function LocationEditor'), false)
   assert.equal(panel.includes('function CharacterEditor'), false)
   assert.equal(panel.includes('function BeatEditor'), false)
+  assert.equal(panel.includes('function CompactVideoWorkspace'), false)
   assert.equal(panel.includes('ReferenceGallery={'), false)
   assert.equal(panel.includes('LocationEditor={'), false)
+  assert.equal(panel.includes('Music bible'), false)
   assert.match(chrome, /export function SectionHeader/)
   assert.match(world, /id="story-review-world"/)
   assert.match(world, /useStoryLabVisuals/)
@@ -326,5 +330,330 @@ test('Story Lab structure tab is extracted with i18n chrome', async () => {
   )
   assert.equal(projectRef.current.beats.length, 2)
   assert.equal(projectRef.current.beats[1]?.stage, 'New beat')
+  cleanup()
+})
+
+function sampleMusicCue() {
+  return {
+    id: 'cue-story',
+    kind: 'story' as const,
+    targetId: 'story',
+    title: 'Theme song',
+    purpose: 'Closes the film',
+    referenceSong: 'Example — Artist',
+    brief: 'Hopeful anthem',
+    style: 'cinematic choir, slow tempo, original',
+    lyrics: '[Verse]\nWe begin\n[Chorus]\nWe rise',
+    lyriaPrompt: '',
+    instrumental: false,
+    durationSeconds: 90,
+    candidates: [] as Array<Record<string, unknown>>,
+  }
+}
+
+test('Story Lab music tab is extracted with i18n chrome', async () => {
+  const { readFileSync } = await import('node:fs')
+  const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
+  const tab = readFileSync(new URL('../src/features/stories/StoryMusicTab.tsx', import.meta.url), 'utf8')
+  assert.match(panel, /<StoryMusicTab/)
+  assert.equal(panel.includes('Music bible'), false)
+  assert.match(tab, /t\('music.title'\)/)
+  assert.match(tab, /t\('music.lyriaRefresh'\)/)
+  assert.match(tab, /t\('music.importCustomMp3'\)/)
+
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { StoryMusicTab } = await import('../src/features/stories/StoryMusicTab.tsx')
+  const { createStoryProject } = await import('../src/features/stories/model.ts')
+  const projectRef = {
+    current: {
+      ...createStoryProject('full_story'),
+      music: {
+        ...createStoryProject('full_story').music,
+        cues: [sampleMusicCue()],
+      },
+    },
+  }
+  const generated: string[] = []
+  const imports: string[] = []
+  render(
+    <StoryMusicTab
+      project={projectRef.current}
+      patch={() => {}}
+      instruction=""
+      setInstruction={() => {}}
+      busy={null}
+      productionBusy={null}
+      musicQueue={null}
+      musicCueBusy=""
+      newSongAction={null}
+      musicWritingReady
+      minimaxConfigured
+      storyVideoConfigurationReady
+      workspace="default"
+      musicVersionStyle={{}}
+      setMusicVersionStyle={() => {}}
+      musicVersionLanguage={{}}
+      setMusicVersionLanguage={() => {}}
+      lyricsTranslationLanguage={{}}
+      setLyricsTranslationLanguage={() => {}}
+      generate={scope => { generated.push(scope) }}
+      generateAllMusicCues={() => { generated.push('all-cues') }}
+      cancelMusicQueue={() => {}}
+      createNewMusicVideoSong={() => {}}
+      createAllMusicCueVersions={() => {}}
+      patchMusicCue={() => {}}
+      adaptMusicCueWithLlm={() => {}}
+      createMusicCueVersion={() => {}}
+      translateMusicCueLyrics={() => {}}
+      generateMusicCueAudio={() => {}}
+      openMusicalTrailer={() => {}}
+      onImportCustomMp3={cueId => { imports.push(cueId) }}
+      onImportLyria={() => {}}
+      onCopied={() => {}}
+      musicCoverRef={{ current: null }}
+      uploadCoverReference={() => {}}
+      writeStorySong={() => {}}
+      adaptStoryLyrics={() => {}}
+      translateManualSongLyrics={() => {}}
+      createManualSongVersion={() => {}}
+      generateMinimaxSongs={() => {}}
+    />,
+  )
+
+  assert.ok(document.getElementById('story-review-music'))
+  assert.ok(screen.getByRole('heading', { name: 'Music bible' }))
+  fireEvent.click(screen.getByRole('button', { name: /Generate LLM suggestions/ }))
+  fireEvent.click(screen.getAllByRole('button', { name: /Import custom MP3/ })[0])
+  assert.deepEqual(generated, ['music'])
+  assert.deepEqual(imports, ['cue-story'])
+  cleanup()
+})
+
+test('Story Lab trailer tab is extracted with i18n chrome', async () => {
+  const { readFileSync } = await import('node:fs')
+  const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
+  const tab = readFileSync(new URL('../src/features/stories/StoryTrailerTab.tsx', import.meta.url), 'utf8')
+  assert.match(panel, /<StoryTrailerTab/)
+  assert.match(tab, /t\('trailer.title'\)/)
+  assert.match(tab, /t\('trailer.generateFull'\)/)
+
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { StoryTrailerTab } = await import('../src/features/stories/StoryTrailerTab.tsx')
+  const { createStoryProject } = await import('../src/features/stories/model.ts')
+  const project = {
+    ...createStoryProject('trailer'),
+    synopsis: 'A city holds its breath',
+    characters: [sampleCharacter('c1', 'Ada')],
+    allowClipText: true,
+  }
+  const staged: boolean[] = []
+  render(
+    <StoryTrailerTab
+      project={project}
+      patch={() => {}}
+      trailerDuration={60}
+      setTrailerDuration={() => {}}
+      trailerDirection="Promise the chase"
+      setTrailerDirection={() => {}}
+      trailerTagline=""
+      setTrailerTagline={() => {}}
+      trailerFormat="theatrical"
+      setTrailerFormat={() => {}}
+      trailerNarration="hybrid"
+      setTrailerNarration={() => {}}
+      trailerSpoiler="balanced"
+      setTrailerSpoiler={() => {}}
+      trailerIntensity="rising"
+      setTrailerIntensity={() => {}}
+      trailerTitleCards={false}
+      setTrailerTitleCards={() => {}}
+      trailerPreserveVisualStyle
+      setTrailerPreserveVisualStyle={() => {}}
+      markTrailerTouched={() => {}}
+      directVideo={false}
+      directReferenceVideo={false}
+      approvedVisualReferenceCount={0}
+      directReferenceVideoReady
+      directReferenceVideoSupported
+      directVideoMasterReady
+      filmImageModel="flux2_klein_9b"
+      filmVideoModel="minimax_h3_legacy"
+      selectableImageModels={[]}
+      selectableVideoModels={[]}
+      selectDirectorImageModel={() => {}}
+      selectStoryVideoModel={() => {}}
+      storyVideoOptionsReady
+      storyVideoConfigurationReady
+      storyVideoResolution="540p"
+      storyVideoAspectRatio="16:9"
+      storyVideoOptions={null}
+      storyVideoAdjusted={false}
+      setStoryVideoFormat={() => {}}
+      trailerProductionIssues={[]}
+      productionBusy={null}
+      filmGenerationImageReady
+      stageTrailer={complete => { staged.push(complete) }}
+    />,
+  )
+
+  assert.ok(screen.getByRole('heading', { name: 'Cinematic trailer creator' }))
+  fireEvent.click(screen.getByRole('button', { name: /Generate complete trailer/ }))
+  assert.deepEqual(staged, [true])
+  cleanup()
+})
+
+test('Story Lab productions tab is extracted with i18n chrome', async () => {
+  const { readFileSync } = await import('node:fs')
+  const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
+  const tab = readFileSync(new URL('../src/features/stories/StoryProductionsTab.tsx', import.meta.url), 'utf8')
+  assert.match(panel, /<StoryProductionsTab/)
+  assert.equal(panel.includes('Adapt the same approved material without destroying the source story.'), false)
+  assert.match(tab, /t\('productions.title'\)/)
+  assert.match(tab, /t\('productions.generateFilmFull'\)/)
+
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { StoryProductionsTab } = await import('../src/features/stories/StoryProductionsTab.tsx')
+  const { createStoryProject } = await import('../src/features/stories/model.ts')
+  const project = {
+    ...createStoryProject('full_story'),
+    synopsis: 'A city holds its breath',
+    characters: [sampleCharacter('c1', 'Ada')],
+  }
+  const staged: string[] = []
+  render(
+    <StoryProductionsTab
+      project={project}
+      patch={() => {}}
+      workspace="default"
+      productionBusy={null}
+      comicDirection="Chapter one"
+      setComicDirection={() => {}}
+      comicPageCount={4}
+      setComicPageCount={() => {}}
+      comicPanelsPerPage={4}
+      setComicPanelsPerPage={() => {}}
+      stageComic={complete => { staged.push(`comic:${complete}`) }}
+      filmDirection="Short episode"
+      setFilmDirection={() => {}}
+      filmDuration={45}
+      setFilmDuration={() => {}}
+      filmPreserveVisualStyle
+      setFilmPreserveVisualStyle={() => {}}
+      stageFilm={complete => { staged.push(`film:${complete}`) }}
+      musicProductionCandidateId=""
+      setMusicProductionCandidateId={() => {}}
+      musicCandidateOptions={[]}
+      musicProductionMode="full"
+      setMusicProductionMode={() => {}}
+      musicProductionPacing="balanced"
+      setMusicProductionPacing={() => {}}
+      musicTrailerRange={{ start: 0, end: 0, duration: 0 }}
+      setMusicTrailerRange={() => {}}
+      stageMusicVideo={() => {}}
+      setMusicWritingProvider={() => {}}
+      patchMusicWritingProvider={() => {}}
+      directVideo={false}
+      directMusicVideo={false}
+      directReferenceVideo={false}
+      approvedVisualReferenceCount={0}
+      directReferenceVideoReady
+      directReferenceVideoSupported
+      directVideoMasterReady
+      protagonistReferenceReady
+      musicWritingReady
+      musicVideoImageReady
+      filmImageReady
+      filmGenerationImageReady
+      filmImageModel="flux2_klein_9b"
+      filmVideoModel="minimax_h3_legacy"
+      selectableImageModels={[]}
+      selectableVideoModels={[]}
+      selectDirectorImageModel={() => {}}
+      selectStoryVideoModel={() => {}}
+      storyVideoOptionsReady
+      storyVideoConfigurationReady
+      storyVideoResolution="540p"
+      storyVideoAspectRatio="16:9"
+      storyVideoOptions={null}
+      storyVideoAdjusted={false}
+      setStoryVideoFormat={() => {}}
+      productionIssues={[]}
+      musicProductionIssues={[]}
+      visibleProductionIssues={[]}
+      onNavigate={() => {}}
+      onOpenIssue={() => {}}
+      minimaxConfigured
+      musicCoverRef={{ current: null }}
+      uploadCoverReference={() => {}}
+      writeStorySong={() => {}}
+      adaptStoryLyrics={() => {}}
+      generateMinimaxSongs={() => {}}
+      openMusicalTrailer={() => {}}
+    />,
+  )
+
+  assert.ok(screen.getByRole('heading', { name: 'Productions' }))
+  fireEvent.click(screen.getByRole('button', { name: /Generate complete comic chapter/ }))
+  fireEvent.click(screen.getByRole('button', { name: /Generate complete short film/ }))
+  assert.deepEqual(staged, ['comic:true', 'film:true'])
+  cleanup()
+})
+
+test('Story Lab compact workspace is extracted and uses shared visuals', async () => {
+  const { readFileSync } = await import('node:fs')
+  const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
+  const compact = readFileSync(new URL('../src/features/stories/CompactVideoWorkspace.tsx', import.meta.url), 'utf8')
+  assert.match(panel, /<CompactVideoWorkspace/)
+  assert.equal(panel.includes('function CompactVideoWorkspace'), false)
+  assert.match(compact, /useStoryLabVisuals/)
+  assert.match(compact, /t\('compact.musicTitle'\)/)
+
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { CompactVideoWorkspace } = await import('../src/features/stories/CompactVideoWorkspace.tsx')
+  const { StoryLabVisualsProvider } = await import('../src/features/stories/StoryLabVisualsProvider.tsx')
+  const { createStoryProject } = await import('../src/features/stories/model.ts')
+  const projectRef = {
+    current: {
+      ...createStoryProject('music_video'),
+      world: {
+        ...createStoryProject('music_video').world,
+        summary: 'Neon docks',
+        visualLanguage: 'Pink sodium light',
+        visualPrompt: 'A rainy harbor stage',
+      },
+    },
+  }
+  const generated: string[] = []
+  const approved: string[] = []
+  const visuals: Array<{ kind: string }> = []
+  render(
+    <StoryLabVisualsProvider value={{
+      imageBusy: '',
+      referenceBatchBusy: false,
+      generateVisual: target => { visuals.push(target) },
+      requestUpload: () => {},
+      removeReference: () => {},
+    }}>
+      <CompactVideoWorkspace
+        project={projectRef.current}
+        update={updater => { projectRef.current = updater(structuredClone(projectRef.current)) }}
+        busy={null}
+        generateSection={scope => { generated.push(scope) }}
+        approveSection={key => { approved.push(String(key)) }}
+        isSectionApproved={() => false}
+        navigate={() => {}}
+        requiresVisualIdentities
+      />
+    </StoryLabVisualsProvider>,
+  )
+
+  assert.ok(document.getElementById('story-review-world'))
+  assert.ok(screen.getByRole('heading', { name: 'Images and sequence of the music video' }))
+  fireEvent.click(screen.getByRole('button', { name: /Prepare setting · text only/ }))
+  fireEvent.click(screen.getAllByRole('button', { name: /^Approve$/ })[0])
+  fireEvent.click(screen.getByRole('button', { name: /Generate image/ }))
+  assert.deepEqual(generated, ['world'])
+  assert.deepEqual(approved, ['world'])
+  assert.deepEqual(visuals, [{ kind: 'world' }])
   cleanup()
 })

@@ -6,6 +6,19 @@ export const button = 'inline-flex items-center justify-center gap-1.5 rounded-m
 export const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
 export const panel = 'rounded-xl border border-border bg-bg-secondary p-3 md:p-4'
 export const requiredInput = 'border-violet-400/70 bg-violet-500/5 shadow-[0_0_14px_rgba(139,92,246,0.22)] focus:border-violet-300 focus:shadow-[0_0_18px_rgba(139,92,246,0.32)]'
+export const requiredPreparationButton = 'border-violet-400/70 bg-violet-500/10 text-violet-200 shadow-[0_0_14px_rgba(139,92,246,0.22)] hover:border-violet-300 hover:bg-violet-500/20 hover:text-violet-100 disabled:shadow-none'
+export const completeGenerationButton = 'border-emerald-400/70 bg-emerald-500/10 text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.24)] hover:border-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100 disabled:shadow-none'
+
+export type StoryLabTab = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'trailer' | 'productions' | 'assembly'
+export type StoryGenerationOptions = { generateImages?: boolean }
+export type StoryMusicQueue = { ids: string[]; index: number; cancelling?: boolean }
+export type ProductionReviewIssue = {
+  id: string
+  label: string
+  detail: string
+  tab: StoryLabTab
+  anchorId: string
+}
 
 export type StoryLabSectionTabProps = {
   project: StoryProject
