@@ -133,3 +133,6 @@ or invalid sidecars; reading it never moves or rewrites the underlying files.
 - Tests cover redaction, timing, identity, legacy adaptation and atomic
   round-trip. Studio generate (including the simulated worker, native WGP
   outputs, H3 Legacy and MMAudio SFX) is the first writer of the v1 sidecar.
+  `command_id`, `workflow_id`, `capability` and `actor` are stored only when
+  known. Missing actor is `unknown`. A `_director_pipeline_id` attributes
+  origin to `director` without inventing Story or Series identities.
