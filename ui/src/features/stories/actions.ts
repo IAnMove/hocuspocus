@@ -53,6 +53,28 @@ function storyResult(
   })
 }
 
+function resolveStoryProject(
+  projects: Record<string, import('./types').StoryProject>,
+  current: import('./types').StoryProject,
+  targetStoryId = '',
+  targetStoryTitle = '',
+): import('./types').StoryProject {
+  const exactId = targetStoryId.trim()
+  if (exactId) {
+    const project = projects[exactId]
+    if (!project) throw new Error(`No existe la historia con ID “${exactId}” en este output folder.`)
+    if (targetStoryTitle && normalizeName(project.title) !== normalizeName(targetStoryTitle)) {
+      throw new Error(`La historia ${exactId} ahora se llama “${project.title}”; confirma ese destino antes de continuar.`)
+    }
+    return project
+  }
+  if (!targetStoryTitle) return current
+  const matches = Object.values(projects).filter(item => normalizeName(item.title) === normalizeName(targetStoryTitle))
+  if (matches.length > 1) throw new Error(`Hay varias historias llamadas “${targetStoryTitle}”. Abre una o indica su ID exacto.`)
+  if (!matches[0]) throw new Error(`No existe la historia “${targetStoryTitle}” en este output folder.`)
+  return matches[0]
+}
+
 async function saveActiveStoryProjectMutation(
   workspace: string,
   current: { libraryRevision: number; projects: Record<string, import('./types').StoryProject> },
@@ -109,10 +131,7 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de editar la canción.')
-  const found = action.targetStoryTitle
-    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
-    : current.project
-  if (!found) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  const found = resolveStoryProject(current.projects, current.project, action.targetStoryId, action.targetStoryTitle)
   const target = found.projectType === 'music_video'
     ? applyMusicVideoDirectVideoDefaults(found)
     : applyMusicVideoDirectVideoDefaults({
@@ -235,13 +254,13 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de generar la canción.')
-  const target = action.targetStoryTitle
-    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
-    : current.project
-  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
-  const exactCue = action.cueTitle
-    ? target.music.cues.find(item => normalizeName(item.title) === normalizeName(action.cueTitle))
-    : undefined
+  const target = resolveStoryProject(current.projects, current.project, action.targetStoryId, action.targetStoryTitle)
+  const exactCue = action.cueId
+    ? target.music.cues.find(item => item.id === action.cueId)
+    : action.cueTitle
+      ? target.music.cues.find(item => normalizeName(item.title) === normalizeName(action.cueTitle))
+      : undefined
+  if (action.cueId && !exactCue) throw new Error(`No existe el cue con ID “${action.cueId}” en “${target.title}”.`)
   // A resumed Wizard workflow may retain a guessed future candidate label
   // such as "Cue · Español". When the persisted project has exactly one cue,
   // its identity is unambiguous and must win over that stale label.
@@ -1402,12 +1421,9 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de preparar el videoclip.')
-  const found = action.targetStoryTitle
-    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
-    : current.project
-  if (!found) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  const found = resolveStoryProject(current.projects, current.project, action.targetStoryId, action.targetStoryTitle)
   if (current.activeProjectOperations[found.id]) throw new Error(`La historia “${found.title}” tiene una operación activa.`)
-  const { cue, candidate } = selection.resolveStoryMusicSelection(found, action.songName, action.cueTitle)
+  const { cue, candidate } = selection.resolveStoryMusicSelection(found, action.songName, action.cueTitle, action.cueId)
   const resolvedCue = selection.effectiveStoryMusicCue(found, cue, candidate)
   const target = applyMusicVideoDirectVideoDefaults(found.projectType === 'music_video'
     ? found
@@ -1619,10 +1635,7 @@ export async function startDirectorProduction(
   await useStoryStore.getState().loadWorkspace(workspace)
   const stories = useStoryStore.getState()
   if (stories.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de iniciar la producción.')
-  const target = action.targetStoryTitle
-    ? Object.values(stories.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
-    : stories.project
-  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  const target = resolveStoryProject(stories.projects, stories.project, action.targetStoryId, action.targetStoryTitle)
   if (stories.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
 
   const director = useStore.getState()
@@ -1633,6 +1646,9 @@ export async function startDirectorProduction(
   const production = target.productions.find(item => item.id === handoff.productionId)
   if (!production || (production.kind !== 'film' && production.kind !== 'trailer' && production.kind !== 'music_video')) {
     throw new Error('La producción preparada ya no existe en el historial de Story Lab.')
+  }
+  if (action.productionId && action.productionId !== production.id) {
+    throw new Error(`La producción preparada es ${production.id}, no ${action.productionId}. Vuelve a abrir el destino exacto.`)
   }
   if (action.kind && production.kind !== action.kind) {
     throw new Error(`La producción preparada es ${production.kind}, no ${action.kind}.`)

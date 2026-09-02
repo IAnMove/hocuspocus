@@ -168,6 +168,7 @@ def scan_asset_catalog(
     search: str = "",
     kind: str = "",
     workspace_id: str = "",
+    metadata_statuses: Iterable[str] = (),
     limit: int = 0,
     offset: int = 0,
     include_manifest: bool = False,
@@ -228,6 +229,9 @@ def scan_asset_catalog(
     wanted_kind = str(kind or "").strip().casefold()
     if wanted_kind:
         values = [item for item in values if item["kind"] == wanted_kind]
+    wanted_statuses = {str(item).strip().casefold() for item in metadata_statuses if str(item).strip()}
+    if wanted_statuses:
+        values = [item for item in values if item["metadata_status"] in wanted_statuses]
     needle = str(search or "").strip().casefold()
     if needle:
         values = [item for item in values if needle in " ".join((

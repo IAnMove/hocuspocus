@@ -31,6 +31,8 @@ test('navigation and queue registration is complete and idempotent', async () =>
     'retry_task',
     'select_workspace',
     'create_workspace',
+    'create_workspace_collection',
+    'update_workspace_collection',
   ])
   for (const definition of definitions) {
     assert.ok(definition.title)
@@ -89,6 +91,24 @@ test('registered resolvers preserve section, queue, confirmation and workspace c
   assert.deepEqual(create.resolve({ workspace_name: 'Nuevo taller' }), {
     type: 'create_workspace', workspaceName: 'Nuevo taller',
   })
+
+  const createCollection = definitions.get('create_workspace_collection')
+  assert.deepEqual(createCollection.resolve({
+    name: '  Campaña  ', project_ids: ['project-1', 'project-1'], asset_ids: ['asset-1'],
+  }), {
+    type: 'create_workspace_collection', name: 'Campaña', description: '',
+    projectIds: ['project-1'], assetIds: ['asset-1'], productionIds: [],
+  })
+  const updateCollection = definitions.get('update_workspace_collection')
+  assert.deepEqual(updateCollection.resolve({
+    workspace_id: 'workspace-1', expected_revision: 3, production_ids: ['production-1'],
+  }), {
+    type: 'update_workspace_collection', workspaceId: 'workspace-1', expectedRevision: 3,
+    name: undefined, description: undefined, projectIds: undefined, assetIds: undefined,
+    productionIds: ['production-1'],
+  })
+  assert.equal(updateCollection.resolve({ workspace_id: 'workspace-1' }), null)
+  assert.equal(updateCollection.resolve({ workspace_id: 'workspace-1', expected_revision: 'old', name: 'Bad' }), null)
 })
 
 test('section capabilities retain the visible lab navigation effect', async () => {
@@ -152,6 +172,14 @@ test('workspace capabilities execute through adapters instead of Agent Mode help
           seen.push(['create', action.workspaceName])
           return { message: `He creado “${action.workspaceName}”.`, target: { kind: 'workspace', id: action.workspaceName, title: action.workspaceName } }
         },
+        async createCollection(action) {
+          seen.push(['create-collection', action.name])
+          return { message: `He creado la colección “${action.name}”.`, target: { kind: 'workspace_collection', id: 'collection-1', title: action.name } }
+        },
+        async updateCollection(action) {
+          seen.push(['update-collection', action.workspaceId])
+          return { message: `He actualizado “${action.workspaceId}”.`, target: { kind: 'workspace_collection', id: action.workspaceId, title: action.workspaceId } }
+        },
       },
     },
   }
@@ -162,7 +190,18 @@ test('workspace capabilities execute through adapters instead of Agent Mode help
   const created = await definitions.get('create_workspace').execute(
     { type: 'create_workspace', workspaceName: 'Nuevo taller' }, context,
   )
+  const collection = await definitions.get('create_workspace_collection').execute({
+    type: 'create_workspace_collection', name: 'Campaña', description: '', projectIds: [], assetIds: [], productionIds: [],
+  }, context)
+  const updated = await definitions.get('update_workspace_collection').execute({
+    type: 'update_workspace_collection', workspaceId: 'collection-1', productionIds: ['production-1'],
+  }, context)
   assert.equal(selected.message, 'He cambiado a “Faro”.')
   assert.equal(created.message, 'He creado “Nuevo taller”.')
-  assert.deepEqual(seen, [['select', 'Faro'], ['create', 'Nuevo taller']])
+  assert.equal(collection.message, 'He creado la colección “Campaña”.')
+  assert.equal(updated.message, 'He actualizado “collection-1”.')
+  assert.deepEqual(seen, [
+    ['select', 'Faro'], ['create', 'Nuevo taller'],
+    ['create-collection', 'Campaña'], ['update-collection', 'collection-1'],
+  ])
 })

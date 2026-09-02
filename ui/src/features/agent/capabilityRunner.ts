@@ -125,6 +125,7 @@ export async function runRegisteredCapability(
     state: definition.report.successState,
     message,
     target,
+    projectTarget: tracked.projectTarget,
     taskId: tracked.taskId,
     pipelineId: tracked.pipelineId,
     outputNames: tracked.outputNames,

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hocuspocus.local/schemas/workspace-record-v1.schema.json",
+  "title": "HocusPocus Workspace Record",
+  "type": "object",
+  "required": ["schema", "schema_version", "id", "revision", "name", "description", "project_ids", "asset_ids", "production_ids"],
+  "properties": {
+    "schema": { "const": "hocuspocus.workspace-record" },
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "revision": { "type": "integer", "minimum": 1 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "description": { "type": "string" },
+    "project_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "asset_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "production_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "created_at": { "type": ["string", "null"], "format": "date-time" },
+    "updated_at": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "additionalProperties": false
+}

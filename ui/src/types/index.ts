@@ -615,7 +615,7 @@ export interface Scene {
 }
 
 export type VideoResultKind = 'music_video' | 'trailer' | 'series_episode' | 'chapter'
-export type MediaFilter = 'all' | 'assets' | 'projects' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces' | 'characters' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
+export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces' | 'characters' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
 export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
 export type ScailResolutionProfile = '480p' | '512p' | '704p'

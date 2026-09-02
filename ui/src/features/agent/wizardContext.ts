@@ -1147,6 +1147,7 @@ function contextCapabilities(location: WizardContextLocation): WizardContextCapa
     video_editor: ['create_video_editor_project', 'open_video_editor_project', 'add_video_editor_clips', 'order_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'validate_video_editor_timeline', 'export_video_editor'],
     character_kit: ['create_character_kit', 'open_character_kit', 'update_character_kit', 'attach_character_kit_references', 'build_character_kit', 'open_character_kit_rig', 'apply_character_kit_preset', 'track_character_kit_job'],
     director: ['start_director_production'],
+    workspaces: ['create_workspace_collection', 'update_workspace_collection'],
   }
   return { available: [...new Set([...common, ...(byTab[location.tab] || [])])], blocked: [] }
 }

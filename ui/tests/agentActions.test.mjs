@@ -339,15 +339,19 @@ test('runtime passes the persisted cue identity to song generation and videoclip
   const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
   const { defaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
   const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useStoryStore } = await import('../src/features/stories/store.ts')
   const original = {
     configureSong: defaultApplicationAdapters.storyLab.configureSong,
     generateSong: defaultApplicationAdapters.storyLab.generateSong,
     stageMusicVideo: defaultApplicationAdapters.storyLab.stageMusicVideo,
   }
   const received = []
+  const originalStory = useStoryStore.getState().project
+  useStoryStore.setState({ project: { ...originalStory, id: 'story-real', title: 'El Himno del Sysadmin 3' } })
   clearExecutionMemory()
   defaultApplicationAdapters.storyLab.configureSong = async action => ({
     message: 'Cue saved', target: { kind: 'story_song', id: 'cue-real', title: 'El Himno del Sysadmin' },
+    projectTarget: { kind: 'story', id: 'story-real', title: 'El Himno del Sysadmin 3' },
   })
   defaultApplicationAdapters.storyLab.generateSong = async action => {
     received.push(action)
@@ -369,7 +373,11 @@ test('runtime passes the persisted cue identity to song generation and videoclip
     }])
     assert.equal(results.every(result => result.ok), true)
     assert.equal(received[0].cueTitle, 'El Himno del Sysadmin')
+    assert.equal(received[0].cueId, 'cue-real')
+    assert.equal(received[0].targetStoryId, 'story-real')
     assert.equal(received[1].cueTitle, 'El Himno del Sysadmin')
+    assert.equal(received[1].cueId, 'cue-real')
+    assert.equal(received[1].targetStoryId, 'story-real')
     assert.equal(received[1].songName, '')
 
     const secondResults = await executeAgentActions([{
@@ -385,7 +393,35 @@ test('runtime passes the persisted cue identity to song generation and videoclip
     defaultApplicationAdapters.storyLab.configureSong = original.configureSong
     defaultApplicationAdapters.storyLab.generateSong = original.generateSong
     defaultApplicationAdapters.storyLab.stageMusicVideo = original.stageMusicVideo
+    useStoryStore.setState({ project: originalStory })
     clearExecutionMemory()
+  }
+})
+
+test('a Wizard turn stops and asks when its output-folder context changes mid-flight', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { defaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const originalConfigure = defaultApplicationAdapters.storyLab.configureSong
+  const originalWorkspace = useStore.getState().activeWorkspace
+  useStore.setState({ activeWorkspace: 'alpha' })
+  defaultApplicationAdapters.storyLab.configureSong = async () => {
+    useStore.setState({ activeWorkspace: 'beta' })
+    return { message: 'Cue saved', target: { kind: 'story_song', id: 'cue-real', title: 'Cue' }, projectTarget: { kind: 'story', id: 'story-real', title: 'Story' } }
+  }
+  try {
+    const results = await executeAgentActions([{
+      type: 'configure_story_song', targetStoryTitle: '', songTitle: 'Cue', brief: 'Brief', style: 'metal',
+      lyrics: '[Verse]\nCode', writeLyrics: false, lyricsLanguage: 'Español', instrumental: false,
+      model: 'ace_step_v1_5_xl_sft_lm_4b',
+    }, { type: 'generate_story_song', targetStoryTitle: '', cueTitle: 'Cue', confirm: true }])
+    assert.equal(results.length, 2)
+    assert.equal(results[1].ok, false)
+    assert.equal(results[1].report.state, 'awaiting_input')
+    assert.match(results[1].message, /cambió de “alpha” a “beta”/)
+  } finally {
+    defaultApplicationAdapters.storyLab.configureSong = originalConfigure
+    useStore.setState({ activeWorkspace: originalWorkspace })
   }
 })
 
@@ -448,6 +484,9 @@ test('resolves an exact Story song and cue, and rejects ambiguous names', async 
   const exact = resolveStoryMusicSelection(project, 'Marea de faro', 'Tema de Iria')
   assert.equal(exact.candidate.id, 'cand-1')
   assert.equal(exact.cue?.title, 'Tema de Iria')
+  const exactId = resolveStoryMusicSelection(project, '', 'etiqueta obsoleta', 'cue-1')
+  assert.equal(exactId.cue?.id, 'cue-1')
+  assert.throws(() => resolveStoryMusicSelection(project, '', '', 'cue-missing'), /cue con ID/)
   const unique = resolveStoryMusicSelection(project, '', '')
   assert.equal(unique.candidate.id, 'cand-1')
   project.music.candidates.push({

@@ -59,12 +59,16 @@ def create_assets_router(
         search: str = Query(default="", max_length=300),
         kind: str = Query(default="", max_length=30),
         workspace: str = Query(default="", max_length=160),
+        collection: str = Query(default="", max_length=40),
         limit: int = Query(default=100, ge=0, le=500),
         offset: int = Query(default=0, ge=0),
     ):
         wanted_kind = str(kind or "").strip().casefold()
         if wanted_kind and wanted_kind not in ASSET_KINDS:
             raise HTTPException(status_code=400, detail="Unknown asset kind")
+        wanted_collection = str(collection or "").strip().casefold()
+        if wanted_collection not in {"", "inbox_legacy"}:
+            raise HTTPException(status_code=400, detail="Unknown asset collection")
         available = roots()
         known_workspaces = {item["workspace_id"] for item in available}
         if workspace and workspace not in known_workspaces:
@@ -74,6 +78,7 @@ def create_assets_router(
             search=search,
             kind=wanted_kind,
             workspace_id=workspace,
+            metadata_statuses=("legacy", "missing", "unreadable", "invalid") if wanted_collection == "inbox_legacy" else (),
             limit=limit,
             offset=offset,
         )

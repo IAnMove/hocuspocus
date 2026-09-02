@@ -33,13 +33,14 @@ function installDom() {
 
 installDom()
 
-test('Workspaces tab is listed next to Story Lab and Series Lab', async () => {
+test('Runs and collection Workspaces are distinct tabs', async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
   useStore.setState({ mediaFilter: 'all', outputSearchQuery: '' })
   try {
     render(<TabFilter />)
+    assert.ok(screen.getByRole('tab', { name: /^Runs/ }))
     assert.ok(screen.getByRole('tab', { name: /Workspaces/ }))
     assert.ok(screen.getByRole('tab', { name: /Story Lab/ }))
     assert.ok(screen.getByRole('tab', { name: /Series Lab/ }))
@@ -48,9 +49,9 @@ test('Workspaces tab is listed next to Story Lab and Series Lab', async () => {
   }
 })
 
-test('Workspaces processing lists planned shots, models and a video placeholder', { concurrency: false }, async () => {
+test('Runs processing lists planned shots, models and a video placeholder', { concurrency: false }, async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
-  const { WorkspacesPanel } = await import('../src/features/workspaces/WorkspacesPanel.tsx')
+  const { RunsPanel } = await import('../src/features/workspaces/WorkspacesPanel.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
   useStore.setState({
     dashboardLoading: false,
@@ -121,11 +122,11 @@ test('Workspaces processing lists planned shots, models and a video placeholder'
   })
 
   try {
-    render(<WorkspacesPanel />)
-    assert.ok(screen.getByRole('region', { name: 'Workspaces' }))
-    assert.ok(screen.getByRole('navigation', { name: 'Saved threads' }))
+    render(<RunsPanel />)
+    assert.ok(screen.getByRole('region', { name: 'Production runs' }))
+    assert.ok(screen.getByRole('navigation', { name: 'Saved production runs' }))
     assert.ok(screen.getByRole('button', { name: /Nuevo → viejo/ }))
-    assert.ok(screen.getByPlaceholderText('Buscar hilo…'))
+    assert.ok(screen.getByPlaceholderText('Buscar run…'))
     assert.match(screen.getByRole('heading', { name: 'La Canción de Gandalf' }).textContent || '', /Gandalf/)
     assert.ok(screen.getAllByText(/minimax_h3_legacy/).length >= 1)
     assert.ok(screen.getByText('Gandalf mantiene la boca cerrada y nunca habla.'))
@@ -137,13 +138,13 @@ test('Workspaces processing lists planned shots, models and a video placeholder'
     assert.ok(screen.getByRole('button', { name: /Proponer en seleccionados/ }))
     assert.ok(screen.getByPlaceholderText(/quita todos los MC/))
     assert.ok(screen.getByText(/Queue from planned prompts/))
-    assert.ok(screen.getByRole('button', { name: /Más hilos \(1\/12\)/ }))
+    assert.ok(screen.getByRole('button', { name: /Más runs \(1\/12\)/ }))
   } finally {
     cleanup()
   }
 })
 
-test('Workspaces hydrates a failed song thread from planned prompts', async () => {
+test('Runs hydrates a failed song attempt from planned prompts', async () => {
   const { hydratePipelineQueue } = await import('../src/features/workspaces/queue.ts')
   const hydrated = hydratePipelineQueue({
     version: 1,

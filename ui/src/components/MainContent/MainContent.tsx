@@ -30,8 +30,8 @@ const SeriesLabPanel = lazy(() => import('../../features/series/SeriesLabPanel')
   .then(module => ({ default: module.SeriesLabPanel })))
 const StyleSheetPanel = lazy(() => import('../../features/styles/StyleSheetPanel')
   .then(module => ({ default: module.StyleSheetPanel })))
-const WorkspacesPanel = lazy(() => import('../../features/workspaces/WorkspacesPanel')
-  .then(module => ({ default: module.WorkspacesPanel })))
+const RunsPanel = lazy(() => import('../../features/workspaces/WorkspacesPanel')
+  .then(module => ({ default: module.RunsPanel })))
 const CharacterCreatorPanel = lazy(() => import('../../features/characters/CharacterCreatorPanel')
   .then(module => ({ default: module.CharacterCreatorPanel })))
 const AuditDevPanel = lazy(() => import('../../features/auditdev/AuditDevPanel')
@@ -40,6 +40,8 @@ const AssetsPanel = lazy(() => import('../../features/assets/AssetsPanel')
   .then(module => ({ default: module.AssetsPanel })))
 const ProjectsPanel = lazy(() => import('../../features/projects/ProjectsPanel')
   .then(module => ({ default: module.ProjectsPanel })))
+const WorkspaceCollectionsPanel = lazy(() => import('../../features/workspaceCollections/WorkspaceCollectionsPanel')
+  .then(module => ({ default: module.WorkspaceCollectionsPanel })))
 
 function PanelLoadingFallback() {
   return (
@@ -50,7 +52,7 @@ function PanelLoadingFallback() {
   )
 }
 
-function WorkspaceSelector() {
+function OutputFolderSelector() {
   const workspaces = useStore(s => s.workspaces)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const browsingUploads = useStore(s => s.browsingUploads)
@@ -116,7 +118,7 @@ function WorkspaceSelector() {
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors border border-border"
-        title="Switch workspace"
+        title="Switch output folder"
       >
         <FolderOpen size={12} />
         <span className="max-w-[120px] truncate">{browsingUploads ? 'Uploads' : activeWorkspace}</span>
@@ -125,7 +127,7 @@ function WorkspaceSelector() {
       {open && (
         <div className="absolute right-0 top-full mt-1 w-56 bg-bg-secondary border border-border rounded-lg shadow-lg z-50 overflow-hidden">
           <div className="px-2 py-1.5 border-b border-border">
-            <span className="text-[10px] text-text-muted uppercase tracking-wider">Workspaces</span>
+            <span className="text-[10px] text-text-muted uppercase tracking-wider">Output folders</span>
           </div>
           <div className="max-h-[200px] overflow-y-auto">
             {workspaces.map(ws => (
@@ -186,7 +188,7 @@ function WorkspaceSelector() {
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                  placeholder="workspace-name"
+                  placeholder="output-folder"
                   className="flex-1 bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
                   autoFocus
                 />
@@ -203,7 +205,7 @@ function WorkspaceSelector() {
                 onClick={() => setCreating(true)}
                 className="w-full text-left px-1 py-1 text-xs text-accent-blue hover:text-accent-blue-hover flex items-center gap-1"
               >
-                <Plus size={12} /> New Workspace
+                <Plus size={12} /> New output folder
               </button>
             )}
           </div>
@@ -746,11 +748,12 @@ export function MainContent() {
             {mediaFilter === 'scene3d' ? '3D Video editor'
               : mediaFilter === 'assets' ? 'Assets'
               : mediaFilter === 'projects' ? 'Projects'
+              : mediaFilter === 'workspaces' ? 'Workspaces'
               : mediaFilter === 'animate3d' ? 'Rig & Animate'
               : mediaFilter === 'comics' ? 'Comic Studio'
               : mediaFilter === 'stories' ? 'Story Lab'
               : mediaFilter === 'series' ? 'Series Lab'
-              : mediaFilter === 'workspaces' ? 'Workspaces'
+              : mediaFilter === 'runs' ? 'Runs'
               : mediaFilter === 'characters' ? 'Character Creator'
               : mediaFilter === 'styles' ? 'Hoja de estilos'
               : mediaFilter === 'videoeditor' ? 'Video Editor'
@@ -759,7 +762,7 @@ export function MainContent() {
               ? `${outputs.length} / ${outputsTotal} items`
               : `${outputs.length} ${outputs.length === 1 ? 'item' : 'items'}`}
           </div>
-          {mediaFilter !== 'styles' && mediaFilter !== 'assets' && mediaFilter !== 'projects' && <WorkspaceSelector />}
+          {mediaFilter !== 'styles' && mediaFilter !== 'assets' && mediaFilter !== 'projects' && mediaFilter !== 'workspaces' && <OutputFolderSelector />}
         </div>
       </div>
 
@@ -770,6 +773,8 @@ export function MainContent() {
           <AssetsPanel />
         ) : mediaFilter === 'projects' ? (
           <ProjectsPanel />
+        ) : mediaFilter === 'workspaces' ? (
+          <WorkspaceCollectionsPanel />
         ) : mediaFilter === 'scene3d' ? (
           <div className="flex-1 overflow-y-auto p-4 md:p-8">
             <div className="max-w-[1600px] mx-auto">
@@ -794,10 +799,10 @@ export function MainContent() {
               <SeriesLabPanel />
             </div>
           </div>
-        ) : mediaFilter === 'workspaces' ? (
+        ) : mediaFilter === 'runs' ? (
           <div className="flex-1 overflow-hidden p-2 md:p-4">
             <div className="max-w-[1900px] mx-auto h-full">
-              <WorkspacesPanel />
+              <RunsPanel />
             </div>
           </div>
         ) : mediaFilter === 'characters' ? (

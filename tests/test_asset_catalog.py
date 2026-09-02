@@ -94,3 +94,17 @@ def test_catalog_ignores_sidecars_previews_hidden_files_and_symlinks(tmp_path: P
     result = scan_asset_catalog([root])
     assert [item["filename"] for item in result["assets"]] == ["real.png"]
     assert result["assets"][0]["metadata_status"] == "legacy"
+
+
+def test_inbox_filter_contains_only_noncanonical_assets(tmp_path: Path):
+    root = _root(tmp_path / "outputs", "default")
+    unmanaged = Path(root["path"]) / "old.png"
+    unmanaged.write_bytes(b"old")
+    canonical = Path(root["path"]) / "new.png"
+    canonical.write_bytes(b"new")
+    write_asset_manifest(canonical, build_asset_manifest(canonical, asset_id="asset_new", tool="studio"))
+
+    result = scan_asset_catalog([root], metadata_statuses=("legacy", "missing", "unreadable", "invalid"))
+
+    assert result["total"] == 1
+    assert result["assets"][0]["filename"] == "old.png"

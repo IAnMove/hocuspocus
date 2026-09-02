@@ -65,6 +65,31 @@ filename; the source file is not rewritten. Video Editor drafts remain
 excluded until they have durable server-side storage: browser `localStorage`
 is not sufficient evidence for a global project registry.
 
+## Production and Run records v1
+
+The global read API separates an intended Production from each Run that tries
+to execute it. `GET /api/v1/productions` groups retry attempts by immutable
+`production_id`; `GET /api/v1/runs` exposes their status, timing and legacy
+pipeline/task/job correlations. Director snapshots without canonical IDs are
+adapted to deterministic IDs without rewriting their files. The schemas are
+`production-record-v1.schema.json` and `run-record-v1.schema.json`.
+
+## Workspace record v1
+
+A Workspace is now an explicitly created collection stored in the global
+registry, with optimistic revisions and lists of project, asset and Production
+IDs. Its API lives at `/api/v1/workspace-collections`; it never creates, moves
+or deletes generated files. The older physical directory selector remains
+available during migration but is labelled **Output folder** in the UI. The
+portable contract is `workspace-record-v1.schema.json`.
+
+The Wizard uses the same collection API as the visible editor. It can create
+a collection with exact project, asset and Production IDs, or update one only
+by its immutable `workspace_id` (optionally guarded by `expected_revision`).
+After persistence it opens Workspaces and selects the returned record. The
+legacy `select_workspace` and `create_workspace` capabilities remain scoped to
+physical **Output folders** and are deliberately not aliases for collections.
+
 ## Asset manifest v1
 
 Every newly generated or imported item eventually receives one adjacent
@@ -92,6 +117,10 @@ relationships and timing, provide copy buttons for complete prompts and IDs,
 and offer the raw JSON as an advanced copy/download view. Missing legacy data
 is labelled as unavailable, never invented. This presentation is intentionally
 scheduled after the canonical manifest and catalog are stable.
+
+The global Assets tab now provides that inspector for every catalogued media
+kind. **Inbox / Legacy** is a virtual filter over missing, legacy, unreadable
+or invalid sidecars; reading it never moves or rewrites the underlying files.
 
 ## Compatibility and acceptance
 

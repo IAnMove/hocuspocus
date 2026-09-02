@@ -252,7 +252,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
         {playingAll && <button className={control} onClick={() => { playerRef.current?.pause(); setPlayingAll(false); setPlaybackShotId(null) }}><Square size={11} />Stop</button>}
         <button className={control} disabled={playable.length < 2 || loading} onClick={() => { setLoading(true); setError(null); void rejoinPipelineClips(pipelineId).then(() => api.fetchSavedPipeline(pipelineId)).then(setPipeline).catch(reason => setError((reason as Error).message)).finally(() => setLoading(false)) }}>{loading ? <Loader2 size={11} className="animate-spin" /> : <Combine size={11} />}Join clips</button>
         <button className={control} onClick={() => {
-          useStore.getState().setMediaFilter('workspaces')
+          useStore.getState().setMediaFilter('runs')
           void useStore.getState().loadPipelineList(pipelineId)
           void useStore.getState().loadSavedPipeline(pipelineId)
           setDashboardOpen(false)

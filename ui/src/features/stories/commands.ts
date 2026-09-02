@@ -95,20 +95,25 @@ export interface StageStoryVideoCommand {
 }
 
 export interface StartDirectorProductionCommand {
+  targetStoryId?: string
   targetStoryTitle: string
+  productionId?: string
   kind?: 'film' | 'trailer' | 'music_video'
   confirm: true
 }
 
 export interface StageStoryMusicVideoCommand {
+  targetStoryId?: string
   targetStoryTitle: string
   songName: string
   cueTitle: string
+  cueId?: string
   pacing: 'cinematic' | 'balanced' | 'rhythmic'
   confirm: true
 }
 
 export interface ConfigureStorySongCommand {
+  targetStoryId?: string
   targetStoryTitle: string
   songTitle: string
   brief: string
@@ -122,7 +127,9 @@ export interface ConfigureStorySongCommand {
 }
 
 export interface GenerateStorySongCommand {
+  targetStoryId?: string
   targetStoryTitle: string
   cueTitle: string
+  cueId?: string
   confirm: true
 }

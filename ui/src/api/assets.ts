@@ -43,6 +43,7 @@ export async function fetchAssets(options: {
   search?: string
   kind?: AssetKind
   workspace?: string
+  collection?: 'inbox_legacy'
   limit?: number
   offset?: number
   signal?: AbortSignal
@@ -51,6 +52,7 @@ export async function fetchAssets(options: {
   if (options.search) params.set('search', options.search)
   if (options.kind) params.set('kind', options.kind)
   if (options.workspace) params.set('workspace', options.workspace)
+  if (options.collection) params.set('collection', options.collection)
   if (options.limit != null) params.set('limit', String(options.limit))
   if (options.offset != null) params.set('offset', String(options.offset))
   const response = await fetch(`${BASE}/api/v1/assets?${params}`, {

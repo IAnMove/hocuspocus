@@ -258,22 +258,27 @@ export interface AgentStageStoryVideoAction {
 
 export interface AgentStartDirectorProductionAction {
   type: 'start_director_production'
+  targetStoryId?: string
   targetStoryTitle: string
+  productionId?: string
   kind?: 'film' | 'trailer' | 'music_video'
   confirm: true
 }
 
 export interface AgentStageStoryMusicVideoAction {
   type: 'stage_story_music_video'
+  targetStoryId?: string
   targetStoryTitle: string
   songName: string
   cueTitle: string
+  cueId?: string
   pacing: 'cinematic' | 'balanced' | 'rhythmic'
   confirm: true
 }
 
 export interface AgentConfigureStorySongAction {
   type: 'configure_story_song'
+  targetStoryId?: string
   targetStoryTitle: string
   songTitle: string
   brief: string
@@ -288,8 +293,10 @@ export interface AgentConfigureStorySongAction {
 
 export interface AgentGenerateStorySongAction {
   type: 'generate_story_song'
+  targetStoryId?: string
   targetStoryTitle: string
   cueTitle: string
+  cueId?: string
   confirm: true
 }
 
@@ -527,6 +534,26 @@ export interface AgentCreateWorkspaceAction {
   workspaceName: string
 }
 
+export interface AgentCreateWorkspaceCollectionAction {
+  type: 'create_workspace_collection'
+  name: string
+  description: string
+  projectIds: string[]
+  assetIds: string[]
+  productionIds: string[]
+}
+
+export interface AgentUpdateWorkspaceCollectionAction {
+  type: 'update_workspace_collection'
+  workspaceId: string
+  expectedRevision?: number
+  name?: string
+  description?: string
+  projectIds?: string[]
+  assetIds?: string[]
+  productionIds?: string[]
+}
+
 export type AgentAction = AgentOpenTabAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
@@ -574,6 +601,8 @@ export type AgentAction = AgentOpenTabAction
   | AgentRetryTaskAction
   | AgentSelectWorkspaceAction
   | AgentCreateWorkspaceAction
+  | AgentCreateWorkspaceCollectionAction
+  | AgentUpdateWorkspaceCollectionAction
   | AgentCreateCharacterKitAction
   | AgentOpenCharacterKitAction
   | AgentUpdateCharacterKitAction
@@ -802,6 +831,8 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   retrytask: 'retry_task',
   selectworkspace: 'select_workspace',
   createworkspace: 'create_workspace',
+  createworkspacecollection: 'create_workspace_collection',
+  updateworkspacecollection: 'update_workspace_collection',
 }
 
 const cleanString = (value: unknown, maxLength: number): string => (
@@ -924,7 +955,8 @@ const CANONICAL_FIELD_NAMES = [
   'clip_names', 'clip_name', 'trim_start', 'trim_end', 'project_name',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
   'loras', 'weight',
-  'workspace_name',
+  'workspace_name', 'workspace_id', 'expected_revision', 'description',
+  'project_ids', 'asset_ids', 'production_ids',
   'dialogue', 'sfx', 'scene', 'actions', 'reply',
 ] as const
 
@@ -1531,6 +1563,27 @@ function parseAction(value: unknown): AgentAction | null {
     return type === 'select_workspace'
       ? { type: 'select_workspace', workspaceName }
       : { type: 'create_workspace', workspaceName }
+  }
+  if (type === 'create_workspace_collection' || type === 'update_workspace_collection') {
+    const ids = (value: unknown): string[] | undefined => {
+      if (!Array.isArray(value)) return undefined
+      return [...new Set(value.map(item => cleanString(item, 200)).filter(Boolean))].slice(0, 500)
+    }
+    const name = cleanString(raw.name, 160)
+    const description = cleanString(raw.description, 2000)
+    const projectIds = ids(raw.project_ids)
+    const assetIds = ids(raw.asset_ids)
+    const productionIds = ids(raw.production_ids)
+    if (type === 'create_workspace_collection') {
+      if (!name) return null
+      return { type, name, description, projectIds: projectIds || [], assetIds: assetIds || [], productionIds: productionIds || [] }
+    }
+    const workspaceId = cleanString(raw.workspace_id, 200)
+    if (!workspaceId) return null
+    const expectedRevision = optionalNumber(raw.expected_revision, 1, Number.MAX_SAFE_INTEGER, true)
+    if (raw.expected_revision !== undefined && expectedRevision === undefined) return null
+    if (!name && raw.description === undefined && projectIds === undefined && assetIds === undefined && productionIds === undefined) return null
+    return { type, workspaceId, expectedRevision, name: name || undefined, description: raw.description === undefined ? undefined : description, projectIds, assetIds, productionIds }
   }
   if (type === 'create_character_kit') {
     const name = cleanString(raw.title, 160) || cleanString(raw.kit_name, 160)
@@ -2397,6 +2450,12 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           replace_existing: { type: 'boolean' },
           remove_background: { type: 'boolean' },
           workspace_name: { type: 'string', maxLength: 120 },
+          workspace_id: { type: 'string', maxLength: 200 },
+          expected_revision: { type: 'integer', minimum: 1 },
+          description: { type: 'string', maxLength: 2_000 },
+          project_ids: { type: 'array', maxItems: 500, items: { type: 'string', maxLength: 200 } },
+          asset_ids: { type: 'array', maxItems: 500, items: { type: 'string', maxLength: 200 } },
+          production_ids: { type: 'array', maxItems: 500, items: { type: 'string', maxLength: 200 } },
           loras: {
             type: 'array', maxItems: 12,
             items: {
@@ -2615,12 +2674,17 @@ export async function executeAgentActions(
   onStep?: (message: string) => void,
 ): Promise<AgentActionResult[]> {
   const results: AgentActionResult[] = []
+  let executionWorkspace = useStore.getState().activeWorkspace || 'default'
   let preparedStudio = false
   let preparedStudioAction: AgentPrepareVideoAction | AgentPrepareImageAction | AgentPrepareAudioAction | AgentPrepare3dAction | null = null
   let createdComicId = ''
+  let createdStoryId = ''
+  let createdStoryTitle = ''
   let stagedProductionId = ''
   let configuredStorySong: {
+    targetStoryId: string
     targetStoryTitle: string
+    cueId: string
     cueTitle: string
     configuration: AgentConfigureStorySongAction
   } | null = null
@@ -2633,19 +2697,32 @@ export async function executeAgentActions(
     // the canonical cue title after persistence, so downstream steps consume
     // that identity even when the original LLM plan used a future candidate
     // display label or stale language/version suffix.
+    if (createdStoryId && action.type === 'configure_story_song' && !action.targetStoryId) {
+      action = { ...action, targetStoryId: createdStoryId, targetStoryTitle: createdStoryTitle }
+    }
     if (configuredStorySong && action.type === 'generate_story_song') {
       action = {
         ...action,
+        targetStoryId: configuredStorySong.targetStoryId,
         targetStoryTitle: configuredStorySong.targetStoryTitle,
+        cueId: configuredStorySong.cueId,
         cueTitle: configuredStorySong.cueTitle,
       }
     } else if (configuredStorySong && action.type === 'stage_story_music_video') {
       action = {
         ...action,
+        targetStoryId: configuredStorySong.targetStoryId,
         targetStoryTitle: configuredStorySong.targetStoryTitle,
+        cueId: configuredStorySong.cueId,
         cueTitle: configuredStorySong.cueTitle,
         songName: '',
       }
+    } else if (stagedProductionId && action.type === 'start_director_production') {
+      action = { ...action, productionId: stagedProductionId }
+    }
+    if (action.type === 'start_director_production' && !action.productionId) {
+      const handoffProductionId = useStore.getState().directorStoryProductionHandoff?.productionId || ''
+      if (handoffProductionId) action = { ...action, productionId: handoffProductionId }
     }
     const predecessors = (requiredPredecessor(action.type) || '').split('|').filter(Boolean)
     const failedPredecessor = predecessors.find(type => (
@@ -2664,6 +2741,18 @@ export async function executeAgentActions(
       })
       failedActionTypes.add(action.type)
       continue
+    }
+    const changesOutputFolder = action.type === 'select_workspace' || action.type === 'create_workspace'
+    const visibleWorkspace = useStore.getState().activeWorkspace || 'default'
+    if (!changesOutputFolder && visibleWorkspace !== executionWorkspace) {
+      const message = `El output folder cambió de “${executionWorkspace}” a “${visibleWorkspace}” durante el hechizo. ¿Quieres que continúe en “${visibleWorkspace}” o que vuelva a “${executionWorkspace}”?`
+      results.push({
+        action,
+        ok: false,
+        message,
+        report: executionReport({ state: 'awaiting_input', message, recoverable: true }),
+      })
+      break
     }
     const registeredProgress = getCapability(action.type)?.progress
     const working = registeredProgress || (action.type === 'open_tab'
@@ -2807,7 +2896,7 @@ export async function executeAgentActions(
           ? { action, configuration: configuredStorySong.configuration }
           : action
       const key = executionKey({
-        workspace: useStore.getState().activeWorkspace || 'default',
+        workspace: executionWorkspace,
         type: action.type,
         targetId,
         params: keyParams,
@@ -2837,22 +2926,36 @@ export async function executeAgentActions(
       }
       const registeredResult = await runRegisteredCapability(action, {
         adapters: defaultApplicationAdapters,
-        workspace: useStore.getState().activeWorkspace || 'default',
+        workspace: executionWorkspace,
         onStep,
       })
       if (registeredResult) {
         results.push(registeredResult)
+        if (changesOutputFolder && registeredResult.ok) {
+          executionWorkspace = useStore.getState().activeWorkspace || executionWorkspace
+        }
         if (action.type === 'prepare_video' || action.type === 'prepare_image'
           || action.type === 'prepare_audio' || action.type === 'prepare_3d') {
           preparedStudio = true
           preparedStudioAction = action
         }
+        if (action.type === 'create_story' && registeredResult.report?.target?.id) {
+          createdStoryId = registeredResult.report.target.id
+          createdStoryTitle = registeredResult.report.target.title
+        }
         if (action.type === 'configure_story_song' && registeredResult.report?.target?.title) {
+          const configuredProject = registeredResult.report.projectTarget
+          if (!configuredProject?.id) throw new Error('Story Lab no devolvió el ID exacto de la historia configurada.')
           configuredStorySong = {
-            targetStoryTitle: action.targetStoryTitle,
+            targetStoryId: configuredProject.id,
+            targetStoryTitle: configuredProject.title,
+            cueId: registeredResult.report.target.id,
             cueTitle: registeredResult.report.target.title,
             configuration: action,
           }
+        }
+        if ((action.type === 'stage_story_video' || action.type === 'stage_story_music_video') && registeredResult.report?.target?.id) {
+          stagedProductionId = registeredResult.report.target.id
         }
       } else if (action.type === 'open_story_section') {
         await defaultApplicationAdapters.storyLab.open()
@@ -2936,7 +3039,7 @@ export async function executeAgentActions(
             target: outcome.target,
             recoverable: true,
             executionKey: executionKey({
-              workspace: useStore.getState().activeWorkspace || 'default',
+              workspace: executionWorkspace,
               type: action.type,
               targetId: outcome.target.id || stagedProductionId,
               params: action,
@@ -3047,7 +3150,7 @@ export async function executeAgentActions(
             recoverable: outcome.state === 'partial' || outcome.state === 'failed',
             target: outcome.target,
             executionKey: executionKey({
-              workspace: useStore.getState().activeWorkspace || 'default',
+              workspace: executionWorkspace,
               type: action.type,
               targetId: outcome.target.id,
               params: action,
@@ -3126,7 +3229,7 @@ export async function executeAgentActions(
           target,
           recoverable: !last.ok,
           executionKey: executionKey({
-            workspace: useStore.getState().activeWorkspace || 'default',
+            workspace: executionWorkspace,
             type: action.type,
             targetId: target?.id || createdComicId || stagedProductionId,
             params: action,

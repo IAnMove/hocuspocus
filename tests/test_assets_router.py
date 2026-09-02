@@ -68,4 +68,20 @@ def test_route_rejects_unknown_filters_and_missing_assets(tmp_path: Path):
     client, _roots = _client(tmp_path)
     assert client.get("/api/v1/assets", params={"kind": "magic"}).status_code == 400
     assert client.get("/api/v1/assets", params={"workspace": "missing"}).status_code == 404
+    assert client.get("/api/v1/assets", params={"collection": "magic"}).status_code == 400
     assert client.get("/api/v1/assets/nope").status_code == 404
+
+
+def test_inbox_legacy_virtual_collection_does_not_move_files(tmp_path: Path):
+    client, roots = _client(tmp_path)
+    old = roots["default"] / "old.wav"
+    old.write_bytes(b"audio")
+    current = roots["film"] / "new.wav"
+    current.write_bytes(b"audio")
+    write_asset_manifest(current, build_asset_manifest(current, asset_id="asset_new", tool="studio"))
+
+    response = client.get("/api/v1/assets", params={"collection": "inbox_legacy"})
+
+    assert response.status_code == 200
+    assert [item["filename"] for item in response.json()["assets"]] == ["old.wav"]
+    assert old.is_file() and current.is_file()
