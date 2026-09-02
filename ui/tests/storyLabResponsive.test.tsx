@@ -108,6 +108,7 @@ test('Story Lab panel uses shared editors instead of passing component props', a
   assert.match(panel, /import \{ StoryProductionsTab \} from '\.\/StoryProductionsTab'/)
   assert.match(panel, /import \{ CompactVideoWorkspace \} from '\.\/CompactVideoWorkspace'/)
   assert.match(panel, /import \{ StoryOverviewTab \} from '\.\/StoryOverviewTab'/)
+  assert.match(panel, /import \{ StoryAssetsTab \} from '\.\/StoryAssetsTab'/)
   assert.equal(panel.includes('function ReferenceGallery'), false)
   assert.equal(panel.includes('function Choice'), false)
   assert.equal(panel.includes('Canción e historia visual'), false)
@@ -353,6 +354,17 @@ function sampleMusicCue() {
     candidates: [] as Array<Record<string, unknown>>,
   }
 }
+
+test('Story Lab assets tab is extracted with i18n chrome', async () => {
+  const { readFileSync } = await import('node:fs')
+  const panel = readFileSync(new URL('../src/features/stories/StoryLabPanel.tsx', import.meta.url), 'utf8')
+  const tab = readFileSync(new URL('../src/features/stories/StoryAssetsTab.tsx', import.meta.url), 'utf8')
+    + readFileSync(new URL('../src/features/stories/StoryAssetsStyleConverter.tsx', import.meta.url), 'utf8')
+  assert.match(panel, /<StoryAssetsTab/)
+  assert.equal(panel.includes('Smart asset importer'), false)
+  assert.match(tab, /t\('assets.styleTitle'\)/)
+  assert.match(tab, /t\('assets.fastFourStep'\)/)
+})
 
 test('Story Lab overview tab is extracted with i18n chrome', async () => {
   const { readFileSync } = await import('node:fs')
