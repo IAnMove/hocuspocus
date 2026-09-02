@@ -395,6 +395,7 @@ def adapt_legacy_sidecar(
         parameters=params,
         timing={
             "created_at": legacy.get("created_at"),
+            "queued_at": legacy.get("queued_at"),
             "started_at": started_at,
             "completed_at": completed_at,
             "inference_ms": inference_ms,

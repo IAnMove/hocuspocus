@@ -2906,7 +2906,10 @@ export async function executeAgentActions(
       const reusedTaskId = String(reused?.taskId || '')
       const reusedJob = reusedTaskId
         ? useStore.getState().jobs.find(job => (
-            job.id === reusedTaskId || `task-generation-${job.id}` === reusedTaskId
+            job.id === reusedTaskId
+            || job.taskId === reusedTaskId
+            || job.rootTaskId === reusedTaskId
+            || `task-generation-${job.id}` === reusedTaskId
           ))
         : undefined
       const reusableTask = !reusedJob || !['failed', 'cancelled', 'canceled'].includes(reusedJob.status)

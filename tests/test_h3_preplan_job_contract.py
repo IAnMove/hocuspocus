@@ -146,12 +146,19 @@ def _install_h3_fakes(monkeypatch, planner) -> None:
         "services.task_manager",
         task_context_scope=task_context_scope,
     )
+    provenance_module = _module(
+        "services.generation_provenance",
+        normalize_submission_provenance=lambda value: value or {
+            "actor": "unknown", "tool": "studio", "command": {},
+        },
+    )
     services_package = _module(
         "services",
         h3_window_planner=planner_module,
         llm_service=llm_module,
         minimax_h3_duration=duration_module,
         task_manager=task_module,
+        generation_provenance=provenance_module,
     )
     services_package.__path__ = []
     monkeypatch.setitem(sys.modules, "services", services_package)
@@ -171,6 +178,11 @@ def _install_h3_fakes(monkeypatch, planner) -> None:
         duration_module,
     )
     monkeypatch.setitem(sys.modules, "services.task_manager", task_module)
+    monkeypatch.setitem(
+        sys.modules,
+        "services.generation_provenance",
+        provenance_module,
+    )
 
 
 def _base_body() -> dict:
@@ -187,7 +199,12 @@ def _base_body() -> dict:
     }
 
 
-def _harness(monkeypatch, tmp_path: Path, planner) -> tuple[dict, dict, float]:
+def _harness(
+    monkeypatch,
+    tmp_path: Path,
+    planner,
+    publisher=None,
+) -> tuple[dict, dict, float]:
     _DeferredThread.instances = []
     _install_h3_fakes(monkeypatch, planner)
     events: list[tuple[str, str]] = []
@@ -201,10 +218,11 @@ def _harness(monkeypatch, tmp_path: Path, planner) -> tuple[dict, dict, float]:
         "minimax_h3_text_encoder_variants": {"qwen-test": {}},
     }
 
-    def publish(job: dict) -> dict:
-        task_id = f"task-generation-{job['id']}"
-        events.append(("publish", job["id"]))
-        return {"id": task_id, "root_id": task_id}
+    if publisher is None:
+        def publisher(job: dict) -> dict:
+            task_id = f"task-generation-{job['id']}"
+            events.append(("publish", job["id"]))
+            return {"id": task_id, "root_id": task_id}
 
     def persist(job: dict) -> None:
         events.append(("persist", job["id"]))
@@ -283,8 +301,11 @@ def _harness(monkeypatch, tmp_path: Path, planner) -> tuple[dict, dict, float]:
         "_normalize_video_prompt_type": lambda _body: None,
         "_normalize_image_prompt_type": lambda _body: None,
         "_get_active_workspace": lambda: "default",
+        "normalize_submission_provenance": lambda value: value or {
+            "actor": "unknown", "tool": "studio", "command": {},
+        },
         "_workspace_dir": lambda _workspace=None: str(tmp_path),
-        "_publish_generation_task": publish,
+        "_publish_generation_task": publisher,
         "_persist_generation_job": persist,
         "_remove_persisted_generation_job": lambda job: events.append(("remove", job["id"])),
         "_cancel_h3_idle_release": lambda: None,
@@ -341,6 +362,27 @@ def test_uncached_h3_submission_is_visible_and_returns_ids_within_250ms(
     assert len(_DeferredThread.instances) == 1
     assert _DeferredThread.instances[0].started is True
     assert _DeferredThread.instances[0].target.__name__ == "_run_generation_with_preparation"
+
+
+def test_submission_keeps_canonical_ids_when_activity_publication_fails(
+    tmp_path, monkeypatch,
+):
+    def broken_publisher(_job: dict) -> dict:
+        raise RuntimeError("activity unavailable")
+
+    namespace, result, _elapsed = _harness(
+        monkeypatch,
+        tmp_path,
+        lambda *_args, **_kwargs: {},
+        publisher=broken_publisher,
+    )
+
+    job = namespace["_jobs"][result["job_id"]]
+    assert result["status"] == "queued"
+    assert result["task_id"] == f"task-generation-{result['job_id']}"
+    assert result["root_task_id"] == result["task_id"]
+    assert job["task_id"] == result["task_id"]
+    assert job["root_task_id"] == result["root_task_id"]
 
 
 def test_cancel_before_preplanning_never_enters_or_reserves_gpu(

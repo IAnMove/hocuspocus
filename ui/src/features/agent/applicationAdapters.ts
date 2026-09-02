@@ -40,6 +40,7 @@ import type {
   AgentTrackCharacterKitJobAction,
   AgentUpdateCharacterKitAction,
 } from './characterKitActions'
+import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 
 export interface AdapterOutcome {
   message: string
@@ -67,10 +68,10 @@ export interface StudioAdapter {
   prepareImage(action: AgentPrepareImageAction): Promise<AdapterOutcome>
   prepareAudio(action: AgentPrepareAudioAction): Promise<AdapterOutcome>
   prepare3d(action: AgentPrepare3dAction): Promise<AdapterOutcome>
-  startGeneration(action: AgentStartGenerationAction): Promise<AdapterOutcome>
+  startGeneration(action: AgentStartGenerationAction, context?: GenerationSubmissionContext): Promise<AdapterOutcome>
   attachReferences(action: AgentAttachStudioReferencesAction): Promise<AdapterOutcome>
   configureLoras(action: AgentConfigureStudioLorasAction): Promise<AdapterOutcome>
-  queueSfxPack(action: AgentQueueSfxPackAction): Promise<AdapterOutcome>
+  queueSfxPack(action: AgentQueueSfxPackAction, context?: GenerationSubmissionContext): Promise<AdapterOutcome>
 }
 
 export interface StoryLabAdapter {
@@ -314,9 +315,11 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { prepare3dForm } = await import('../studio/adapters')
       return presentStudioSliceResult(await prepare3dForm(action), '3D')
     },
-    async startGeneration(action) {
+    async startGeneration(action, context) {
       const { startGeneration } = await import('../studio/adapters')
-      const result = await startGeneration()
+      const result = await startGeneration(context || {
+        actor: 'wizard', capability: action.type,
+      })
       const presented = await presentStudioSliceResult(result, 'Studio generation')
       const taskId = result.taskIds[0]
       return {
@@ -344,9 +347,11 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { configureLoras } = await import('../studio/adapters')
       return presentStudioSliceResult(await configureLoras(action), 'Image / Video')
     },
-    async queueSfxPack(action) {
+    async queueSfxPack(action, context) {
       const { queueSfx } = await import('../studio/adapters')
-      return presentStudioSliceResult(await queueSfx(action), 'Audio → SFX')
+      return presentStudioSliceResult(await queueSfx(action, context || {
+        actor: 'wizard', capability: action.type,
+      }), 'Audio → SFX')
     },
   }
   adapters.storyLab = {

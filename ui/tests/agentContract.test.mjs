@@ -152,6 +152,31 @@ test('common capability runner follows every stage and reports the verified adap
   assert.equal(result.commandResult.navigationTarget, undefined)
 })
 
+test('Wizard Studio generation receives the command context before execution', async () => {
+  const { resolveAndRunRegisteredCapability } = await import('../src/features/agent/capabilityRunner.ts')
+  let received
+  const result = await resolveAndRunRegisteredCapability('start_generation', {
+    type: 'start_generation', confirm: true,
+  }, {
+    workspace: 'physical-output-folder',
+    adapters: {
+      studio: {
+        async startGeneration(_action, context) {
+          received = context
+          return {
+            message: 'Queued', taskId: 'canonical-generation-demo',
+            target: { kind: 'generation_task', id: 'canonical-generation-demo', title: 'Generation' },
+          }
+        },
+      },
+    },
+  })
+  assert.equal(received.actor, 'wizard')
+  assert.equal(received.capability, 'start_generation')
+  assert.equal(received.commandId, result.command.commandId)
+  assert.equal('workspaceCollectionId' in received, false)
+})
+
 test('application adapters navigate and verify targets without rendering React', async () => {
   const { createDefaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
   const { useStore } = await import('../src/stores/useStore.ts')

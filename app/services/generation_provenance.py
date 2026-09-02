@@ -14,6 +14,7 @@ from typing import Any, Mapping, TypedDict
 
 
 INITIATORS = frozenset({"user", "wizard", "system", "unknown"})
+_SUBMISSION_COMMAND_FIELDS = ("command_id", "workflow_id", "run_id")
 
 
 class CommandContext(TypedDict, total=False):
@@ -70,6 +71,37 @@ def resolve_generation_location(
     return {"workspace_id": None, "output_folder": None}
 
 
+def normalize_submission_provenance(value: Any) -> GenerationProvenance:
+    """Validate the optional provenance attached to a generation request.
+
+    This is attribution data, not an authorization boundary. Runtime-owned
+    identifiers (job/task/pipeline) and the physical output folder are added
+    by the backend and therefore cannot be supplied by the browser.
+    """
+    raw = value if isinstance(value, Mapping) else {}
+    actor = _clean(raw.get("actor")) or "unknown"
+    if actor not in INITIATORS:
+        actor = "unknown"
+    capability = _clean(raw.get("capability"))
+    workspace_id = _clean(raw.get("workspace_id"))
+    command_raw = raw.get("command") if isinstance(raw.get("command"), Mapping) else {}
+    command: CommandContext = {}
+    for key in _SUBMISSION_COMMAND_FIELDS:
+        cleaned = _clean(command_raw.get(key))
+        if cleaned:
+            command[key] = cleaned[:200]
+    result: GenerationProvenance = {
+        "actor": actor,
+        "tool": "studio",
+        "command": command,
+    }
+    if capability:
+        result["capability"] = capability[:200]
+    if workspace_id:
+        result["workspace_id"] = workspace_id[:200]
+    return result
+
+
 def provenance_from_manifest(manifest: Mapping[str, Any] | None) -> GenerationProvenance:
     """Project a canonical manifest onto initiator vs provider/model vs location."""
     value = manifest if isinstance(manifest, Mapping) else {}
@@ -101,5 +133,6 @@ def provenance_from_manifest(manifest: Mapping[str, Any] | None) -> GenerationPr
 
 __all__ = [
     "CommandContext", "GenerationLocation", "GenerationProvenance", "INITIATORS",
-    "provenance_from_manifest", "resolve_generation_location",
+    "normalize_submission_provenance", "provenance_from_manifest",
+    "resolve_generation_location",
 ]

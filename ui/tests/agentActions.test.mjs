@@ -998,6 +998,7 @@ test('start_generation reports the real taskId and an identical repeat reuses it
     jobs: useStore.getState().jobs,
   }
   let generationCalls = 0
+  const generationContexts = []
   useStore.setState({
     modelsLoaded: true,
     loadOutputs: async () => {},
@@ -1017,11 +1018,14 @@ test('start_generation reports the real taskId and an identical repeat reuses it
     params: { ...useStore.getState().params, model_type: 'flux-test', prompt: '' },
     jobs: [],
     loadModelOptions: async () => {},
-    startGeneration: async () => {
+    startGeneration: async (_scheduledPrompt, context) => {
       generationCalls += 1
+      generationContexts.push(context)
       useStore.setState({
         jobs: [{
           id: `job-studio-${generationCalls}`,
+          taskId: `canonical-generation-job-studio-${generationCalls}`,
+          rootTaskId: `canonical-generation-job-studio-${generationCalls}`,
           status: 'queued',
           progress: 0,
           step: 0,
@@ -1045,11 +1049,14 @@ test('start_generation reports the real taskId and an identical repeat reuses it
     assert.equal(first[0].ok, true)
     assert.equal(first[1].ok, true)
     assert.equal(first[1].report.state, 'queued')
-    assert.equal(first[1].report.taskId, 'job-studio-1')
+    assert.equal(first[1].report.taskId, 'canonical-generation-job-studio-1')
     assert.equal(generationCalls, 1)
+    assert.equal(generationContexts[0].actor, 'wizard')
+    assert.equal(generationContexts[0].capability, 'start_generation')
+    assert.equal(generationContexts[0].commandId, first[1].command.commandId)
     const second = await executeAgentActions([prepare, { type: 'start_generation', confirm: true }])
     assert.match(second[1].message, /Reutilizo/)
-    assert.equal(second[1].report.taskId, 'job-studio-1')
+    assert.equal(second[1].report.taskId, 'canonical-generation-job-studio-1')
     assert.equal(generationCalls, 1)
 
     useStore.setState({
@@ -1060,7 +1067,7 @@ test('start_generation reports the real taskId and an identical repeat reuses it
     const retry = await executeAgentActions([prepare, { type: 'start_generation', confirm: true }])
     assert.equal(retry[1].ok, true)
     assert.doesNotMatch(retry[1].message, /Reutilizo/)
-    assert.equal(retry[1].report.taskId, 'job-studio-2')
+    assert.equal(retry[1].report.taskId, 'canonical-generation-job-studio-2')
     assert.equal(generationCalls, 2)
   } finally {
     useStore.setState(original)

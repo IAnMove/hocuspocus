@@ -127,6 +127,7 @@ async function waitForTerminalRoot(
     return terminalStatus
   }, { timeout: 20 * 60_000, intervals: [500, 1_000, 2_000, 5_000] }).toMatch(/completed|failed|cancelled/)
   if (expectedStatus === 'completed') expect(terminalStatus).toBe('completed')
+  return taskId
 }
 
 async function attachEvidence(page: Page, request: APIRequestContext, testInfo: TestInfo, transcript: string) {
@@ -162,7 +163,34 @@ test('wizard: Studio UI → canonical queue → generated video', async ({ page,
     ? 'Abre Studio → Video y rellena visiblemente el formulario con un plano de 5 segundos de un mago programador ante servidores. No lo generes.'
     : 'Abre Studio → Video, rellena visiblemente el formulario con un plano de 5 segundos de un mago programador ante servidores, y genéralo ahora. Decide tú los demás valores compatibles.')
   if (expectedMode !== 'plan') {
-    await waitForTerminalRoot(request, String(config.execution_workspace), before)
+    const workspace = String(config.execution_workspace)
+    const taskId = await waitForTerminalRoot(request, workspace, before, 'completed')
+    const tasks = await json(request, `/api/v1/tasks?status=all&workspace=${encodeURIComponent(workspace)}`) as {
+      tasks: Array<{ id: string; result_refs?: string[]; metadata?: Record<string, unknown> }>
+    }
+    const task = tasks.tasks.find(item => item.id === taskId)
+    const wizardTrace = await page.evaluate(() => (
+      window as Window & { __HOCUSPOCUS_WIZARD_TRACE__?: Array<Record<string, unknown>> }
+    ).__HOCUSPOCUS_WIZARD_TRACE__ || []) as Array<{ results?: Array<{ action?: { type?: string }; command?: { commandId?: string }; report?: { taskId?: string } }> }>
+    const generationResult = wizardTrace.flatMap(item => item.results || [])
+      .find(item => item.action?.type === 'start_generation')
+    const commandId = generationResult?.command?.commandId
+    expect(commandId).toBeTruthy()
+    expect(generationResult?.report?.taskId).toBe(taskId)
+    expect(task?.metadata?.actor).toBe('wizard')
+    expect(task?.metadata?.capability).toBe('start_generation')
+    expect(task?.metadata?.command_id).toBe(commandId)
+    const outputName = task?.result_refs?.[0]
+    expect(outputName).toBeTruthy()
+    const metadata = await json(
+      request,
+      `/api/v1/outputs/${encodeURIComponent(String(outputName))}/metadata?workspace=${encodeURIComponent(workspace)}`,
+    ) as { origin?: Record<string, unknown>; execution?: Record<string, unknown> }
+    expect(metadata.origin?.actor).toBe('wizard')
+    expect(metadata.origin?.capability).toBe('start_generation')
+    expect(metadata.origin?.output_folder).toBe(workspace)
+    expect(metadata.origin).not.toHaveProperty('workspace_id')
+    expect(metadata.execution?.command_id).toBe(commandId)
   } else {
     expect(await rootTaskIds(request, String(config.execution_workspace))).toEqual(before)
   }

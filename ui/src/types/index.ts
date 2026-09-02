@@ -299,6 +299,9 @@ export interface GenerationDetails {
 
 export interface GenerationJob {
   id: string
+  /** Canonical Activity identity; distinct from the backend polling job id. */
+  taskId?: string
+  rootTaskId?: string
   status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   progress: number
   step: number
