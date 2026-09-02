@@ -47,14 +47,22 @@ import type { GenerationSubmissionContext } from '../studio/generationProvenance
 import {
   LANGUAGE_INTENT_SCHEMA,
   compileProviderPrompt,
+  extractVerbatimSegments,
   hasLanguageIntent,
+  mergeLanguageIntent,
   normalizeConversationLanguageTag,
   normalizeLanguageIntent,
   type LanguageIntent,
 } from '../../lib/languageIntent'
 import { detectUiLanguage } from '../../i18n/language'
 
-export { LANGUAGE_INTENT_SCHEMA, normalizeConversationLanguageTag }
+export {
+  extractVerbatimSegments,
+  LANGUAGE_INTENT_SCHEMA,
+  mergeLanguageIntent,
+  normalizeConversationLanguageTag,
+  normalizeLanguageIntent,
+}
 export type { LanguageIntent }
 export const currentAgentInterfaceLanguage = detectUiLanguage
 

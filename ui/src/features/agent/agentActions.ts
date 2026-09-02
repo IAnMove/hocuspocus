@@ -47,17 +47,19 @@ import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
 import {
   AGENT_TABS,
   currentAgentInterfaceLanguage,
+  extractVerbatimSegments,
   getCapability,
   isLanguageAwareCapability,
   LANGUAGE_INTENT_SCHEMA,
   listCapabilities,
+  mergeLanguageIntent,
+  normalizeLanguageIntent,
   normalizeConversationLanguageTag,
   parseRegisteredCapability,
   registeredCapabilitySchemas,
   type AgentTab,
   type LanguageIntent,
 } from './capabilityRegistry'
-import { extractVerbatimSegments, mergeLanguageIntent, normalizeLanguageIntent } from '../../lib/languageIntent'
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
 import { inferStoryProjectTypeFromText } from '../stories/musicVideoLook'
