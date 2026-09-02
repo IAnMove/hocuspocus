@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab']
+const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor']
 const LANGUAGES = ['en', 'es']
 
 function load(language, namespace) {
@@ -54,6 +54,7 @@ const PILOT_FILES = [
   'src/features/series/SeriesLabPanel.tsx',
   'src/features/series/SeriesReviewPanel.tsx',
   'src/features/series/SeriesShotDurationControl.tsx',
+  'src/features/video-editor/VideoEditorPanel.tsx',
   'src/features/stories/StoryAssemblyTab.tsx',
   'src/features/stories/StoryOverviewTab.tsx',
   'src/features/stories/StoryAssetsTab.tsx',
@@ -127,6 +128,14 @@ const FORBIDDEN = [
   'Montaje ordenado',
   'Usar en Montaje',
   'Hay una cola de generación por recuperar',
+  'Export MP4',
+  'From HocusPocus',
+  'Drop videos here or click to import',
+  'Add your first video',
+  'Video editor tools',
+  'Retry hand-off',
+  'Add HocusPocus videos',
+  'Rehacer en Creación de vídeo',
 ]
 
 export function forbiddenLiterals() {

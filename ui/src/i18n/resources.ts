@@ -7,6 +7,7 @@ import extraInfoEn from './locales/en/extraInfo.json'
 import storyLabEn from './locales/en/storyLab.json'
 import directorEn from './locales/en/director.json'
 import seriesLabEn from './locales/en/seriesLab.json'
+import videoEditorEn from './locales/en/videoEditor.json'
 import commonEs from './locales/es/common.json'
 import navigationEs from './locales/es/navigation.json'
 import settingsEs from './locales/es/settings.json'
@@ -16,8 +17,9 @@ import extraInfoEs from './locales/es/extraInfo.json'
 import storyLabEs from './locales/es/storyLab.json'
 import directorEs from './locales/es/director.json'
 import seriesLabEs from './locales/es/seriesLab.json'
+import videoEditorEs from './locales/es/videoEditor.json'
 
-export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab'] as const
+export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor'] as const
 export type I18nNamespace = (typeof NAMESPACES)[number]
 
 export const resources = {
@@ -31,6 +33,7 @@ export const resources = {
     storyLab: storyLabEn,
     director: directorEn,
     seriesLab: seriesLabEn,
+    videoEditor: videoEditorEn,
   },
   es: {
     common: commonEs,
@@ -42,6 +45,7 @@ export const resources = {
     storyLab: storyLabEs,
     director: directorEs,
     seriesLab: seriesLabEs,
+    videoEditor: videoEditorEs,
   },
 } as const
 

@@ -26,6 +26,7 @@ import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as 
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { ModalShell } from '../../components/common/ModalShell'
+import { useUiTranslation } from '../../i18n'
 import {
   clearVideoEditorReplacementResult,
   clearVideoEditorReplacementTarget,
@@ -147,12 +148,12 @@ function clearVideoEditorExportId(workspace: string | null | undefined): void {
   }
 }
 
-function pendingVideoEditorExport(jobId: string): api.VideoEditorExportJob {
+function pendingVideoEditorExport(jobId: string, message: string): api.VideoEditorExportJob {
   return {
     job_id: jobId,
     status: 'queued',
     progress: 0,
-    message: 'Reconnecting to export…',
+    message,
     filename: null,
     url: null,
     error: null,
@@ -374,6 +375,7 @@ function SequenceScrubber({
   disabled?: boolean
   onScrub: (nextTime: number, phase: 'start' | 'move' | 'end') => void
 }) {
+  const { t } = useUiTranslation('videoEditor')
   const trackRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
   const ratio = duration > 0 ? Math.max(0, Math.min(1, time / duration)) : 0
@@ -390,11 +392,11 @@ function SequenceScrubber({
       ref={trackRef}
       role="slider"
       tabIndex={disabled ? -1 : 0}
-      aria-label="Timeline playhead"
+      aria-label={t('playback.playheadAria')}
       aria-valuemin={0}
       aria-valuemax={Number(duration.toFixed(2))}
       aria-valuenow={Number(Math.min(duration, Math.max(0, time)).toFixed(2))}
-      aria-valuetext={`${time.toFixed(2)} seconds`}
+      aria-valuetext={t('playback.playheadValue', { time: time.toFixed(2) })}
       aria-disabled={disabled || undefined}
       data-testid="timeline-playhead"
       className="relative h-7 min-w-0 flex-1 cursor-pointer rounded-full bg-black/50 touch-none focus:outline-none focus:ring-2 focus:ring-sky-400/60"
@@ -598,6 +600,7 @@ function ExportPreviewCanvas({
   children?: ReactNode
   overlay?: ReactNode
 }) {
+  const { t } = useUiTranslation('videoEditor')
   const viewportRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(0)
 
@@ -629,10 +632,10 @@ function ExportPreviewCanvas({
         <div
           className="flex shrink-0 flex-col"
           style={{ width: `${displayWidth}px`, height: `${displayHeight + 24}px` }}
-          aria-label={`Export preview ${width} by ${height} pixels, ${aspect}`}
+          aria-label={t('preview.aria', { width, height, aspect })}
         >
           <div className="flex h-6 shrink-0 items-center justify-between gap-2 px-1 text-[10px] text-text-muted tabular-nums">
-            <span className="truncate uppercase tracking-[.12em]">Export preview</span>
+            <span className="truncate uppercase tracking-[.12em]">{t('preview.label')}</span>
             <span className="shrink-0 text-text-secondary">{width}×{height} · {aspect} · {Math.round(scale * 100)}%</span>
           </div>
           <div
@@ -665,6 +668,8 @@ function wait(ms: number): Promise<void> {
 }
 
 export function VideoEditorPanel() {
+  const { t } = useUiTranslation('videoEditor')
+  const { t: tCommon } = useUiTranslation('common')
   const refreshOutputs = useStore(s => s.refreshOutputs)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const [draft] = useState(() => loadEditorDraft(activeWorkspace))
@@ -729,7 +734,7 @@ export function VideoEditorPanel() {
   const [error, setError] = useState<string | null>(draft.warning)
   const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(() => {
     const jobId = readVideoEditorExportId(activeWorkspace)
-    return jobId ? pendingVideoEditorExport(jobId) : null
+    return jobId ? pendingVideoEditorExport(jobId, t('status.reconnecting')) : null
   })
   const [capturingFrame, setCapturingFrame] = useState(false)
   const [capturedFrame, setCapturedFrame] = useState<api.VideoEditorScreenshot | null>(null)
@@ -871,7 +876,7 @@ export function VideoEditorPanel() {
           }]
         : [])
     if (!pendingSources.length) {
-      setError('The editor hand-off does not contain any valid video sources. It is still available to retry.')
+      setError(t('errors.handoffEmpty'))
       return
     }
 
@@ -889,20 +894,20 @@ export function VideoEditorPanel() {
       for (let index = 0; index < pendingSources.length; index++) {
         const item = pendingSources[index]
         setAddProgress(kind === 'sequence'
-          ? `Opening Series shot ${index + 1}/${pendingSources.length}`
-          : `Opening ${item.name || 'comic animatic'}`)
+          ? t('status.openingSeriesShot', { current: index + 1, total: pendingSources.length })
+          : t('status.openingNamed', { name: item.name || 'comic animatic' }))
         nextClips.push(await createClipFromSource(item.url, item.url, item.name || `Series shot ${index + 1}`))
       }
 
       if (clips.length && !window.confirm(
         kind === 'sequence'
-          ? `The editor already contains ${clips.length} clip${clips.length === 1 ? '' : 's'}. Replace this montage with the hand-off?`
-          : `The editor already contains ${clips.length} clip${clips.length === 1 ? '' : 's'}. Add the hand-off to this montage?`,
+          ? t('confirm.replaceMontage', { count: clips.length })
+          : t('confirm.addHandoff', { count: clips.length }),
       )) return
 
       const committedClips = kind === 'sequence' ? nextClips : [...clips, ...nextClips]
       if (!persistEditorDraft(committedClips, nextProjectName, nextResolution, fps, draftWorkspaceRef.current)) {
-        throw new Error('The editor draft could not be saved. The hand-off was kept for Retry.')
+        throw new Error(t('errors.draftSave'))
       }
       setClips(committedClips)
       setSelectedId((kind === 'sequence' ? committedClips[0] : nextClips[0])?.id || null)
@@ -914,13 +919,13 @@ export function VideoEditorPanel() {
       setPendingHandoff(null)
       setError(null)
     } catch (reason) {
-      setError(`Could not open the hand-off: ${(reason as Error).message}. The hand-off and current draft were kept; Retry when the source is available.`)
+      setError(t('errors.handoffOpen', { message: (reason as Error).message }))
     } finally {
       handoffProcessingRef.current = false
       setAdding(false)
       setAddProgress('')
     }
-  }, [clips, createClipFromSource, fps, projectName, resolution])
+  }, [clips, createClipFromSource, fps, projectName, resolution, t])
 
   useEffect(() => {
     let pending: PendingEditorSource | null = null
@@ -950,12 +955,12 @@ export function VideoEditorPanel() {
     if (!target) {
       clearVideoEditorReplacementResult()
       clearVideoEditorReplacementTarget()
-      setError(`La posición original ${replacement.clipIndex + 1} ya no está disponible en el montaje.`)
+      setError(t('errors.slotGone', { n: replacement.clipIndex + 1 }))
       return
     }
 
     setAdding(true)
-    setAddProgress(`Reemplazando clip ${replacement.clipIndex + 1}: ${target.name}`)
+    setAddProgress(t('status.replacingClip', { n: replacement.clipIndex + 1, name: target.name }))
     void api.probeVideoEditorClip(replacement.source)
       .then(media => {
         setClips(current => {
@@ -979,7 +984,7 @@ export function VideoEditorPanel() {
         setSelectedId(replacement.clipId)
         setError(null)
       })
-      .catch(reason => setError(`No se pudo reemplazar el clip ${replacement.clipIndex + 1}: ${(reason as Error).message}`))
+      .catch(reason => setError(t('errors.replaceFailed', { n: replacement.clipIndex + 1, message: (reason as Error).message })))
       .finally(() => {
         setAdding(false)
         setAddProgress('')
@@ -999,7 +1004,7 @@ export function VideoEditorPanel() {
     const outputName = outputNameFromEditorClip(selected.source, selected.name)
     try {
       const metadata = await api.fetchOutputMetadata(outputName, activeWorkspace)
-      if (!metadata.params) throw new Error('Este clip no conserva ajustes de generación reutilizables.')
+      if (!metadata.params) throw new Error(t('errors.noReusableSettings'))
 
       const store = useStore.getState()
       store.setSidebarMode('studio')
@@ -1019,7 +1024,7 @@ export function VideoEditorPanel() {
       })
       useStore.getState().setMediaFilter('videos')
     } catch (reason) {
-      setError(`No se pudo abrir el clip en Creación de vídeo: ${(reason as Error).message}`)
+      setError(t('errors.openInVideoCreation', { message: (reason as Error).message }))
       setPreparingReplacement(false)
     }
   }
@@ -1027,7 +1032,7 @@ export function VideoEditorPanel() {
   const addFiles = async (files: File[]) => {
     const videos = files.filter(file => file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v)$/i.test(file.name))
     if (!videos.length) {
-      setError('Choose one or more video files.')
+      setError(t('errors.chooseVideos'))
       return
     }
     setAdding(true)
@@ -1035,7 +1040,7 @@ export function VideoEditorPanel() {
     const failures: string[] = []
     for (let index = 0; index < videos.length; index++) {
       const file = videos[index]
-      setAddProgress(`Importing ${index + 1} of ${videos.length}: ${file.name}`)
+      setAddProgress(t('status.importingNamed', { current: index + 1, total: videos.length, name: file.name }))
       try {
         const uploaded = await api.uploadImage(file)
         await addSource(uploaded.url, uploaded.url, file.name)
@@ -1128,7 +1133,7 @@ export function VideoEditorPanel() {
       .map(name => maestroVideos.find(item => item.name === name))
       .filter((item): item is api.ApiOutput => Boolean(item))
     if (!selected.length) {
-      setError('Select one or more videos.')
+      setError(t('errors.selectVideos'))
       return
     }
     setAdding(true)
@@ -1137,7 +1142,7 @@ export function VideoEditorPanel() {
     const failures: string[] = []
     for (let index = 0; index < selected.length; index++) {
       const output = selected[index]
-      setAddProgress(`Adding ${index + 1} of ${selected.length}: ${output.name}`)
+      setAddProgress(t('status.addingNamed', { current: index + 1, total: selected.length, name: output.name }))
       try {
         const source = api.getFileUrl(output.name, activeWorkspace)
         await addSource(
@@ -1236,7 +1241,7 @@ export function VideoEditorPanel() {
     if (!target) return
     const parts = splitClipAtTime(target, cut, clipId())
     if (!parts) {
-      setError('Move the playhead inside the clip, away from the very start and end, then Split.')
+      setError(t('errors.splitPlayhead'))
       return
     }
     const [left, right] = parts
@@ -1306,7 +1311,7 @@ export function VideoEditorPanel() {
       inactive?.pause()
       return
     }
-    void active?.play().catch(() => setError('The browser could not start timeline playback.'))
+    void active?.play().catch(() => setError(t('errors.playback')))
     if (runtime.transitioning) {
       void inactive?.play().catch(() => undefined)
     }
@@ -1466,7 +1471,7 @@ export function VideoEditorPanel() {
           pendingSeekAtRef.current = 0
         }
         active.currentTime = located.sourceTime
-        if (play) void active.play().catch(() => setError('The browser could not start timeline playback.'))
+        if (play) void active.play().catch(() => setError(t('errors.playback')))
         else active.pause()
       }
       setSelectedId(clip.id)
@@ -1859,24 +1864,24 @@ export function VideoEditorPanel() {
       }
     } catch (reason) {
       if (mountedRef.current && epoch === exportPollEpochRef.current) {
-        setError(`Could not reconnect to export ${jobId}: ${(reason as Error).message}`)
+        setError(t('errors.reconnectExport', { jobId, message: (reason as Error).message }))
       }
     } finally {
       if (exportPollingRef.current === jobId) exportPollingRef.current = null
     }
-  }, [activeWorkspace, refreshOutputs])
+  }, [activeWorkspace, refreshOutputs, t])
 
   useEffect(() => {
     exportPollEpochRef.current += 1
     exportPollingRef.current = null
     const jobId = readVideoEditorExportId(activeWorkspace)
-    setExportJob(jobId ? pendingVideoEditorExport(jobId) : null)
+    setExportJob(jobId ? pendingVideoEditorExport(jobId, t('status.reconnecting')) : null)
     if (jobId) void pollExport(jobId)
     return () => {
       exportPollEpochRef.current += 1
       exportPollingRef.current = null
     }
-  }, [activeWorkspace, pollExport])
+  }, [activeWorkspace, pollExport, t])
 
   const startExport = async () => {
     if (!clips.length || exportSubmittingRef.current || isVideoEditorJobActive(exportJob)) return
@@ -1886,7 +1891,7 @@ export function VideoEditorPanel() {
     })
     if (!normalized.clips.length) {
       setClips([])
-      setError('No valid clips remain. Restore a source with a finite duration before exporting.')
+      setError(t('errors.noValidClips'))
       return
     }
     const recoveryMessage = editorClipRecoveryMessage(normalized)
@@ -1900,7 +1905,7 @@ export function VideoEditorPanel() {
       job_id: '',
       status: 'queued',
       progress: 0,
-      message: 'Submitting export…',
+      message: t('status.submitting'),
       filename: null,
       url: null,
       error: null,
@@ -1953,7 +1958,7 @@ export function VideoEditorPanel() {
       ...current,
       status: 'cancelling',
       phase: 'cancelling',
-      message: 'Cancelling at the next FFmpeg safe boundary…',
+      message: t('status.cancellingFfmpeg'),
     } : current)
     try {
       const cancelled = await api.cancelVideoEditorExport(exportJob.job_id)
@@ -2022,13 +2027,13 @@ export function VideoEditorPanel() {
         }}
       />
 
-      <div role="toolbar" aria-label="Video editor tools" className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border bg-bg-tertiary/40">
+      <div role="toolbar" aria-label={t('toolbar.aria')} className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border bg-bg-tertiary/40">
         <Film size={16} className="shrink-0 text-accent-blue" />
         <input
           value={projectName}
           onChange={event => setProjectName(event.target.value)}
           className="min-w-0 w-32 sm:w-40 md:w-56 bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
-          aria-label="Project name"
+          aria-label={t('toolbar.projectName')}
         />
         <div className="hidden flex-1 sm:block" />
         <button
@@ -2036,14 +2041,14 @@ export function VideoEditorPanel() {
           disabled={adding}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover disabled:opacity-50"
         >
-          <Upload size={13} /> Import
+          <Upload size={13} /> {t('toolbar.import')}
         </button>
         <button
           onClick={openMaestroPicker}
           disabled={adding}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover disabled:opacity-50"
         >
-          <FolderOpen size={13} /> From HocusPocus
+          <FolderOpen size={13} /> {t('toolbar.fromHocusPocus')}
         </button>
         <button
           onClick={startExport}
@@ -2053,7 +2058,7 @@ export function VideoEditorPanel() {
           {isVideoEditorJobActive(exportJob)
             ? <Loader2 size={13} className="animate-spin" />
             : <Download size={13} />}
-          Export MP4
+          {t('toolbar.exportMp4')}
         </button>
         {isVideoEditorJobActive(exportJob) && (
           <button
@@ -2064,7 +2069,7 @@ export function VideoEditorPanel() {
             {exportJob?.status === 'cancelling'
               ? <Loader2 size={13} className="animate-spin" />
               : <X size={13} />}
-            {exportJob?.status === 'cancelling' ? 'Cancelling…' : 'Cancel'}
+            {exportJob?.status === 'cancelling' ? t('toolbar.cancelling') : tCommon('actions.cancel')}
           </button>
         )}
       </div>
@@ -2150,8 +2155,8 @@ export function VideoEditorPanel() {
                     className="h-full w-full border-2 border-dashed border-border-light flex flex-col items-center justify-center gap-3 text-text-muted hover:text-text-secondary hover:border-accent-blue/60 transition-colors"
                   >
                     <Upload size={36} />
-                    <span className="text-sm">Drop videos here or click to import</span>
-                    <span className="text-[10px]">MP4, WebM, MOV, MKV, AVI · up to 500 MB each</span>
+                    <span className="text-sm">{t('empty.drop')}</span>
+                    <span className="text-[10px]">{t('empty.formats')}</span>
                   </button>
                 )}
               />
@@ -2164,8 +2169,8 @@ export function VideoEditorPanel() {
                 onClick={togglePlayback}
                 disabled={!clips.length}
                 className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-40"
-                aria-label={playing ? 'Pause' : 'Play'}
-                title="Play from the selected clip, transition, or playhead"
+                aria-label={playing ? t('playback.pause') : t('playback.play')}
+                title={t('playback.playTitle')}
               >
                 {playing ? <Pause size={15} /> : <Play size={15} />}
               </button>
@@ -2173,7 +2178,7 @@ export function VideoEditorPanel() {
                 onClick={() => startSequenceAt(0, undefined, false)}
                 disabled={!clips.length}
                 className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-40"
-                title="Return to the beginning"
+                title={t('playback.restartTitle')}
               >
                 <RotateCcw size={13} />
               </button>
@@ -2200,7 +2205,7 @@ export function VideoEditorPanel() {
                   min={0}
                   max={Number(totalDuration.toFixed(2))}
                   step={0.01}
-                  aria-label="Playhead seconds"
+                  aria-label={t('playback.playheadSeconds')}
                   data-testid="playhead-seconds"
                   disabled={!clips.length}
                   value={playheadDraft ?? playheadSeconds.toFixed(2)}
@@ -2224,35 +2229,39 @@ export function VideoEditorPanel() {
                 onClick={splitSelected}
                 disabled={!clips.length}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-hover disabled:opacity-40"
-                title="Split the clip at the current playhead"
+                title={t('playback.splitTitle')}
               >
-                <Scissors size={11} /> Split
+                <Scissors size={11} /> {t('playback.split')}
               </button>
               <button
                 onClick={takeScreenshot}
                 disabled={!selected || capturingFrame}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-hover disabled:opacity-40"
-                title="Save the exact current source frame as a reusable PNG in HocusPocus Outputs"
+                title={t('playback.screenshotTitle')}
               >
                 {capturingFrame
                   ? <Loader2 size={11} className="animate-spin" />
                   : <Camera size={11} />}
-                Take screenshot
+                {t('playback.screenshot')}
               </button>
             </div>
             {capturedFrame && (
               <div className="mt-1.5 flex items-center gap-2 text-[10px] text-emerald-400">
                 <Check size={11} />
-                Saved {capturedFrame.filename} at {formatTime(capturedFrame.time)}
-                · {capturedFrame.width}×{capturedFrame.height}
+                {t('playback.screenshotSaved', {
+                  filename: capturedFrame.filename,
+                  time: formatTime(capturedFrame.time),
+                  width: capturedFrame.width,
+                  height: capturedFrame.height,
+                })}
               </div>
             )}
           </div>
         </section>
 
-        <aside aria-label="Video editor inspector" className="min-h-0 overflow-y-auto p-3 space-y-4 bg-bg-secondary">
+        <aside aria-label={t('inspector.aria')} className="min-h-0 overflow-y-auto p-3 space-y-4 bg-bg-secondary">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">Output</label>
+            <label className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">{t('inspector.output')}</label>
             <select
               value={`${resolution.width}x${resolution.height}`}
               onChange={event => {
@@ -2269,13 +2278,13 @@ export function VideoEditorPanel() {
             </select>
             <div className="mt-2">
               <label className="text-[10px] text-text-muted">
-                Frame rate
+                {t('inspector.frameRate')}
                 <select
                   value={fps}
                   onChange={event => setFps(Number(event.target.value))}
                   className="block w-full mt-1 bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary"
                 >
-                  {[24, 25, 30, 50, 60].map(value => <option key={value} value={value}>{value} FPS</option>)}
+                  {[24, 25, 30, 50, 60].map(value => <option key={value} value={value}>{t('inspector.fps', { value })}</option>)}
                 </select>
               </label>
             </div>
@@ -2468,9 +2477,9 @@ export function VideoEditorPanel() {
                 <button
                   onClick={() => removeClip(selected.id)}
                   className="flex items-center gap-1 rounded border border-red-500/30 px-2 py-1 text-[10px] text-red-300 transition-colors hover:bg-red-500/15 hover:text-red-200"
-                  title="Remove this video from the timeline"
+                  title={t('inspector.removeTitle')}
                 >
-                  <Trash2 size={12} /> Remove
+                  <Trash2 size={12} /> {t('inspector.remove')}
                 </button>
               </div>
 
@@ -2479,12 +2488,12 @@ export function VideoEditorPanel() {
                 onClick={() => void openSelectedInVideoCreation()}
                 disabled={preparingReplacement}
                 className="mb-3 flex w-full items-center justify-center gap-1.5 rounded border border-accent-blue/40 bg-accent-blue/10 px-2 py-2 text-[10px] font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
-                title="Carga el prompt, modelo, duración y formato de este clip en Creación de vídeo para elegir después su reemplazo"
+                title={t('inspector.redoInVideoCreationTitle')}
               >
                 {preparingReplacement
                   ? <Loader2 size={12} className="animate-spin" />
                   : <Film size={12} />}
-                {preparingReplacement ? 'Cargando ajustes de generación…' : 'Rehacer en Creación de vídeo'}
+                {preparingReplacement ? t('inspector.loadingGenerationSettings') : t('inspector.redoInVideoCreation')}
               </button>
 
               <ClipTrimBar
@@ -2616,7 +2625,7 @@ export function VideoEditorPanel() {
             <div className="border-t border-border pt-3 space-y-2">
               {adding && (
                 <div className="flex items-center gap-2 text-[10px] text-accent-blue">
-                  <Loader2 size={12} className="animate-spin" /> {addProgress || 'Importing video…'}
+                  <Loader2 size={12} className="animate-spin" /> {addProgress || t('status.importing')}
                 </div>
               )}
               {exportJob && (
@@ -2648,7 +2657,7 @@ export function VideoEditorPanel() {
                       download={exportJob.filename || undefined}
                       className="mt-2 flex items-center justify-center gap-1.5 py-1.5 rounded bg-green-500/15 text-green-400 text-[10px] hover:bg-green-500/25"
                     >
-                      <Download size={11} /> Download {exportJob.filename}
+                      <Download size={11} /> {t('status.download', { filename: exportJob.filename })}
                     </a>
                   )}
                 </div>
@@ -2669,12 +2678,12 @@ export function VideoEditorPanel() {
                           const handoff = JSON.parse(window.localStorage.getItem(key) || 'null')
                           if (handoff) void processPendingHandoff(pendingHandoff, handoff)
                         } catch (reason) {
-                          setError(`Could not retry the hand-off: ${(reason as Error).message}`)
+                          setError(t('errors.handoffRetry', { message: (reason as Error).message }))
                         }
                       }}
                       className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded border border-red-500/30 text-[10px] text-red-300 hover:bg-red-500/10"
                     >
-                      <RotateCcw size={11} /> Retry hand-off
+                      <RotateCcw size={11} /> {t('actions.retryHandoff')}
                     </button>
                   )}
                 </div>
@@ -2684,21 +2693,21 @@ export function VideoEditorPanel() {
         </aside>
       </div>
 
-      <div role="region" aria-label="Video editor timeline" className="h-40 shrink-0 border-t border-border bg-bg-tertiary/30 flex flex-col">
+      <div role="region" aria-label={t('timeline.aria')} className="h-40 shrink-0 border-t border-border bg-bg-tertiary/30 flex flex-col">
         <div className="flex h-9 items-center gap-2 px-3 border-b border-border text-[10px] text-text-muted">
-          <span>Timeline · {clips.length} {clips.length === 1 ? 'clip' : 'clips'} · {formatTime(totalDuration)}</span>
+          <span>{t('timeline.summary', { count: clips.length, duration: formatTime(totalDuration) })}</span>
           {soundtrack && (
             <span
               className="flex max-w-56 items-center gap-1 truncate rounded border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-purple-200"
-              title={`Soundtrack: ${soundtrack.name}`}
+              title={t('timeline.soundtrack', { name: soundtrack.name })}
             >
-              <Volume2 size={10} /> {soundtrack.name}{soundtrack.loop ? ' · loop' : ''}
+              <Volume2 size={10} /> {soundtrack.name}{soundtrack.loop ? ` · ${t('timeline.loop')}` : ''}
             </span>
           )}
           <label className="ml-auto flex items-center gap-1.5">
-            <span>All gaps</span>
+            <span>{t('timeline.allGaps')}</span>
             <select
-              aria-label="Default transition for all gaps"
+              aria-label={t('timeline.defaultTransition')}
               value={bulkTransition}
               onChange={event => setBulkTransition(event.target.value as Transition)}
               className="max-w-[11rem] rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-[10px] text-text-secondary"
@@ -2713,7 +2722,7 @@ export function VideoEditorPanel() {
               disabled={clips.length < 2}
               className="rounded border border-purple-500/40 px-2 py-0.5 text-[10px] text-purple-300 hover:bg-purple-500/10 disabled:opacity-40"
             >
-              Apply to all
+              {t('timeline.applyToAll')}
             </button>
           </label>
         </div>
@@ -2768,7 +2777,7 @@ export function VideoEditorPanel() {
                           if (trimmingRef.current) return
                           selectTimelineClip(index)
                         }}
-                        aria-label={`Select clip ${index + 1}: ${clip.name}`}
+                        aria-label={t('timeline.selectClip', { n: index + 1, name: clip.name })}
                         className={`relative h-full w-full overflow-hidden rounded-lg border text-left transition-colors ${
                           selected?.id === clip.id && selectedTransitionIndex === null
                             ? 'border-accent-blue ring-1 ring-accent-blue/50'
@@ -2801,13 +2810,13 @@ export function VideoEditorPanel() {
                         </div>
                         <span
                           role="separator"
-                          aria-label={`Trim start of ${clip.name}`}
+                          aria-label={t('timeline.trimStart', { name: clip.name })}
                           onPointerDown={event => beginTimelineTrim(event, clip.id, 'start')}
                           className="absolute inset-y-0 left-0 z-30 w-2.5 cursor-ew-resize rounded-l-lg bg-accent-blue/0 hover:bg-accent-blue/50"
                         />
                         <span
                           role="separator"
-                          aria-label={`Trim end of ${clip.name}`}
+                          aria-label={t('timeline.trimEnd', { name: clip.name })}
                           onPointerDown={event => beginTimelineTrim(event, clip.id, 'end')}
                           className="absolute inset-y-0 right-0 z-30 w-2.5 cursor-ew-resize rounded-r-lg bg-accent-blue/0 hover:bg-accent-blue/50"
                         />
@@ -2819,10 +2828,10 @@ export function VideoEditorPanel() {
                           removeClip(clip.id)
                         }}
                         className="absolute right-1 top-1 z-40 flex items-center gap-1 rounded-md border border-red-400/30 bg-black/75 px-1.5 py-1 text-[9px] text-red-200 shadow transition-colors hover:bg-red-500/35 hover:text-white"
-                        title={`Remove ${clip.name} from the timeline`}
-                        aria-label={`Remove ${clip.name} from the timeline`}
+                        title={t('timeline.removeNamed', { name: clip.name })}
+                        aria-label={t('timeline.removeNamed', { name: clip.name })}
                       >
-                        <Trash2 size={10} /> Remove
+                        <Trash2 size={10} /> {t('inspector.remove')}
                       </button>
                     </div>
                     {index < clips.length - 1 && (
@@ -2840,7 +2849,7 @@ export function VideoEditorPanel() {
                         onClick={() => {
                           selectTimelineTransition(index)
                         }}
-                        aria-label={`Select transition ${index + 1}`}
+                        aria-label={t('timeline.selectTransition', { n: index + 1 })}
                         className={`w-14 shrink-0 rounded-lg border flex flex-col items-center justify-center gap-1 transition-colors ${
                           selectedTransitionIndex === index
                             ? 'border-purple-400 bg-purple-500/15 text-purple-300'
@@ -2848,12 +2857,12 @@ export function VideoEditorPanel() {
                               ? 'border-purple-500/40 bg-purple-500/10 text-purple-400'
                               : 'border-dashed border-border text-text-muted hover:border-purple-500/50 hover:text-purple-300'
                         }`}
-                        title={`Transition: ${TRANSITIONS.find(option => option.value === clip.transition)?.label || 'Hard cut'}`}
+                        title={t('timeline.transitionNamed', { label: TRANSITIONS.find(option => option.value === clip.transition)?.label || 'Hard cut' })}
                       >
                         {clip.transition === 'none' ? <Plus size={13} /> : <ChevronsRight size={15} />}
                         <span className="max-w-[48px] truncate text-[8px]">
                           {clip.transition === 'none'
-                            ? 'Transition'
+                            ? t('timeline.transition')
                             : TRANSITIONS.find(option => option.value === clip.transition)?.label}
                         </span>
                       </button>
@@ -2883,7 +2892,7 @@ export function VideoEditorPanel() {
                 }`}
               >
                 {draggedId ? <ChevronsRight size={16} /> : <Plus size={16} />}
-                <span className="text-[9px]">{draggedId ? 'Move to end' : 'Add clip'}</span>
+                <span className="text-[9px]">{draggedId ? t('timeline.moveToEnd') : t('timeline.addClip')}</span>
               </button>
             </div>
           ) : (
@@ -2891,7 +2900,7 @@ export function VideoEditorPanel() {
               onClick={() => fileInputRef.current?.click()}
               className="w-full h-full rounded-lg border border-dashed border-border flex items-center justify-center gap-2 text-xs text-text-muted hover:text-accent-blue hover:border-accent-blue"
             >
-              <Plus size={15} /> Add your first video
+              <Plus size={15} /> {t('empty.firstVideo')}
             </button>
           )}
         </div>
@@ -2900,7 +2909,7 @@ export function VideoEditorPanel() {
       {pickerOpen && (
         <ModalShell
           open
-          title="Add HocusPocus videos"
+          title={t('picker.title')}
           onClose={closeMaestroPicker}
           className="fixed inset-0 z-[80] bg-black/65 flex items-center justify-center p-4"
           onMouseDown={event => {
@@ -2910,11 +2919,11 @@ export function VideoEditorPanel() {
           <div className="w-full max-w-4xl max-h-[78vh] bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <FolderOpen size={15} className="text-accent-blue" />
-              <span className="text-sm font-medium">Add HocusPocus videos</span>
+              <span className="text-sm font-medium">{t('picker.title')}</span>
               {maestroVideoTotal > 0 && (
                 <span className="text-[10px] text-text-muted">{maestroVideos.length} / {maestroVideoTotal}</span>
               )}
-              <button type="button" onClick={closeMaestroPicker} aria-label="Close HocusPocus video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
+              <button type="button" onClick={closeMaestroPicker} aria-label={t('picker.closeAria')} className="ml-auto p-1 rounded hover:bg-bg-hover">
                 <X size={15} />
               </button>
             </div>
@@ -2924,7 +2933,7 @@ export function VideoEditorPanel() {
                   <Loader2 size={22} className="animate-spin" />
                 </div>
               ) : maestroVideos.length ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" role="listbox" aria-multiselectable="true" aria-label="HocusPocus videos">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" role="listbox" aria-multiselectable="true" aria-label={t('picker.listAria')}>
                   {maestroVideos.map(output => {
                     const selected = pickerSelectedSet.has(output.name)
                     return (
@@ -2966,7 +2975,7 @@ export function VideoEditorPanel() {
                 </div>
               ) : (
                 <div className="min-h-48 flex items-center justify-center text-xs text-text-muted">
-                  No videos found in workspace “{activeWorkspace}”.
+                  {t('picker.empty', { workspace: activeWorkspace })}
                 </div>
               )}
               {maestroVideos.length < maestroVideoTotal && (
@@ -2978,7 +2987,7 @@ export function VideoEditorPanel() {
                     className="flex items-center gap-2 rounded-lg border border-border bg-bg-tertiary px-3 py-2 text-xs text-text-secondary hover:border-accent-blue hover:text-text-primary disabled:opacity-60"
                   >
                     {pickerLoading && <Loader2 size={13} className="animate-spin" />}
-                    Load {Math.min(MAESTRO_PICKER_PAGE_SIZE, maestroVideoTotal - maestroVideos.length)} more
+                    {t('picker.loadMore', { count: Math.min(MAESTRO_PICKER_PAGE_SIZE, maestroVideoTotal - maestroVideos.length) })}
                   </button>
                 </div>
               )}
@@ -2990,7 +2999,7 @@ export function VideoEditorPanel() {
                   onClick={() => setPickerSelected(maestroVideos.map(item => item.name))}
                   className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover"
                 >
-                  Select all shown
+                  {t('picker.selectAllShown')}
                 </button>
                 <button
                   type="button"
@@ -3001,10 +3010,10 @@ export function VideoEditorPanel() {
                   disabled={!pickerSelected.length}
                   className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover disabled:opacity-40"
                 >
-                  Clear
+                  {t('picker.clear')}
                 </button>
                 <span className="text-[10px] text-text-muted">
-                  {pickerSelected.length} selected · click to toggle, Shift-click for a range
+                  {t('picker.hint', { count: pickerSelected.length })}
                 </span>
                 <button
                   type="button"
@@ -3013,8 +3022,8 @@ export function VideoEditorPanel() {
                   className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 disabled:opacity-40"
                 >
                   {pickerSelected.length
-                    ? `Add ${pickerSelected.length} ${pickerSelected.length === 1 ? 'video' : 'videos'}`
-                    : 'Add videos'}
+                    ? t('picker.addCount', { count: pickerSelected.length })
+                    : t('picker.addVideos')}
                 </button>
               </div>
             )}

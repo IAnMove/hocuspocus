@@ -77,6 +77,11 @@ test('required glossary keys exist in both languages', async () => {
     ['director', 'queueRecovery.resumeQueue'],
     ['seriesLab', 'review.orderedAssembly'],
     ['common', 'welcome.enter'],
+    ['videoEditor', 'toolbar.import'],
+    ['videoEditor', 'toolbar.exportMp4'],
+    ['videoEditor', 'empty.drop'],
+    ['videoEditor', 'actions.retryHandoff'],
+    ['videoEditor', 'inspector.redoInVideoCreation'],
   ]
   for (const language of ['en', 'es']) {
     await i18n.changeLanguage(language)
@@ -102,6 +107,9 @@ test('required glossary keys exist in both languages', async () => {
   assert.equal(i18n.t('language', { ns: 'extraInfo', lng: 'es' }), 'Idioma')
   assert.equal(i18n.t('clip.title', { ns: 'extraInfo', lng: 'es' }), 'Información del clip')
   assert.equal(i18n.t('errors.loadFailed', { ns: 'extraInfo', lng: 'es' }), 'No se pudo cargar Información adicional')
+  assert.equal(i18n.t('toolbar.exportMp4', { ns: 'videoEditor', lng: 'es' }), 'Exportar MP4')
+  assert.equal(i18n.t('inspector.redoInVideoCreation', { ns: 'videoEditor', lng: 'es' }), 'Rehacer en Creación de vídeo')
+  assert.equal(i18n.t('toolbar.aria', { ns: 'videoEditor', lng: 'en' }), 'Video editor tools')
   assert.equal(i18n.t('savedPrompts', { ns: 'extraInfo', lng: 'en', count: 1 }), '1 saved prompt')
   assert.equal(i18n.t('savedPrompts', { ns: 'extraInfo', lng: 'en', count: 2 }), '2 saved prompts')
   assert.equal(i18n.t('savedPrompts', { ns: 'extraInfo', lng: 'es', count: 1 }), '1 prompt guardado')
@@ -245,13 +253,15 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
   assert.deepEqual(forbiddenLiterals(), [])
 })
 
-test('resources register the extraInfo and storyLab namespaces', async () => {
+test('resources register the extraInfo, storyLab and videoEditor namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)
   assert.ok('storyLab' in resources.es)
+  assert.ok('videoEditor' in resources.en)
+  assert.ok('videoEditor' in resources.es)
 })
 
 test('Extra info chrome and the Assets inspector use the activity catalog', async () => {
@@ -293,4 +303,20 @@ test('Extra info chrome and the Assets inspector use the activity catalog', asyn
   assert.match(dialog, /t\('clip\.title'\)/)
   assert.doesNotMatch(dialog, /['"`]Clip information['"`]/)
   assert.doesNotMatch(dialog, /['"`]Wait for generation to finish['"`]/)
+})
+
+test('Video Editor chrome uses the videoEditor catalog', async () => {
+  const fs = await import('node:fs/promises')
+  const panel = await fs.readFile(new URL('../src/features/video-editor/VideoEditorPanel.tsx', import.meta.url), 'utf8')
+  assert.match(panel, /useUiTranslation\('videoEditor'\)/)
+  assert.match(panel, /t\('toolbar\.exportMp4'\)/)
+  assert.match(panel, /t\('toolbar\.import'\)/)
+  assert.match(panel, /t\('empty\.drop'\)/)
+  assert.match(panel, /t\('actions\.retryHandoff'\)/)
+  assert.match(panel, /t\('inspector\.redoInVideoCreation'\)/)
+  assert.doesNotMatch(panel, /['"`]Export MP4['"`]/)
+  assert.doesNotMatch(panel, /['"`]From HocusPocus['"`]/)
+  assert.doesNotMatch(panel, /['"`]Drop videos here or click to import['"`]/)
+  assert.doesNotMatch(panel, /['"`]Retry hand-off['"`]/)
+  assert.doesNotMatch(panel, /['"`]Rehacer en Creación de vídeo['"`]/)
 })

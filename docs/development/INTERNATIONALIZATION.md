@@ -19,6 +19,7 @@ Typed JSON under `ui/src/i18n/locales/<lng>/<namespace>.json`.
 | `storyLab` | Story Lab section chrome, world/characters/relationships/structure tabs, reference gallery and editors |
 | `director` | Director queue recovery and related chrome |
 | `seriesLab` | Series Lab tabs, review assembly and shot-duration chrome |
+| `videoEditor` | Video Editor toolbar, empty states, picker, timeline chrome and status |
 
 Add a namespace only when a new product surface needs its own file. Do not grow a single giant JSON.
 
@@ -48,6 +49,7 @@ Keys are semantic, never the English sentence:
 | All Workspaces | Todos los Workspaces |
 | Output folder | Carpeta de salida |
 | Story Lab | Story Lab |
+| Video Editor | Video Editor |
 | Series Lab | Series Lab |
 | Director | Director |
 | Activity | Actividad |
