@@ -91,7 +91,6 @@ function NavigationBar({ category, title, items, activeValue, barRef }: { catego
 export function TabFilter() {
   const { t, i18n } = useUiTranslation('navigation')
   const mediaFilter = useStore(s => s.mediaFilter)
-  const setMediaFilter = useStore(s => s.setMediaFilter)
   const developerMode = useStore(s => s.developerMode)
   const generationMode = useStore(s => s.generationMode)
   const sidebarMode = useStore(s => s.sidebarMode)
@@ -197,14 +196,15 @@ export function TabFilter() {
 
   const openFilter = (filter: MediaFilter) => {
     const category = categoryForMediaFilter(filter)
+    locallySelectedFilterRef.current = filter
+    const state = useStore.getState()
+    state.setSettingsOpen(false)
+    state.setDashboardOpen(false)
+    state.setMediaFilter(filter)
     setActiveCategory(category)
     setExpandedCategory(category)
-    locallySelectedFilterRef.current = filter
-    setMediaFilter(filter)
   }
   const openDirectGeneration = (mode: GenerationMode) => {
-    setActiveCategory('direct-generation')
-    setExpandedCategory('direct-generation')
     const state = useStore.getState()
     state.setSettingsOpen(false)
     state.setDashboardOpen(false)
@@ -214,6 +214,8 @@ export function TabFilter() {
     state.setMediaFilter(filter)
     state.setSidebarMode('studio')
     window.dispatchEvent(new Event('hocuspocus:studio-open'))
+    setActiveCategory('direct-generation')
+    setExpandedCategory('direct-generation')
   }
   const directGenerationItems: MenuItem[] = [
     { selected: activeCategory === 'direct-generation' && generationMode === 'image', label: t('directModes.image'), description: t('descriptions.directImage'), icon: <Sparkles size={15} />, action: () => openDirectGeneration('image') },
@@ -233,10 +235,13 @@ export function TabFilter() {
   ]
   const productionItems: MenuItem[] = [
     { selected: activeCategory === 'production' && sidebarMode === 'director' && sidebarOpen, label: t('labs.director'), description: t('descriptions.director'), icon: <Clapperboard size={15} />, action: () => {
+      const state = useStore.getState()
+      state.setSettingsOpen(false)
+      state.setDashboardOpen(false)
+      state.setSidebarMode('director')
+      window.dispatchEvent(new Event('maestro:director-open'))
       setActiveCategory('production')
       setExpandedCategory('production')
-      useStore.getState().setSidebarMode('director')
-      window.dispatchEvent(new Event('maestro:director-open'))
     } },
     { value: 'videoeditor', label: t('tabs.videoEditor'), description: t('descriptions.editor'), icon: <Video size={15} />, action: () => openFilter('videoeditor') },
     { selected: activeCategory === 'production' && dashboardOpen, label: t('tabs.productions'), description: t('descriptions.productions'), icon: <MonitorPlay size={15} />, action: () => {

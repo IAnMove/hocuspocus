@@ -49,6 +49,7 @@ export function Sidebar() {
   const setSidebarMode = useStore(s => s.setSidebarMode)
   const sidebarMode = useStore(s => s.sidebarMode)
   const setSettingsOpen = useStore(s => s.setSettingsOpen)
+  const setDashboardOpen = useStore(s => s.setDashboardOpen)
   const editSubMode = useStore(s => s.editSubMode)
   const modelType = useStore(s => s.params.model_type)
   const openLoraBrowser = useStore(s => s.setLoraBrowserOpen)
@@ -95,6 +96,7 @@ export function Sidebar() {
       setSidebarOpen(true)
     }
     const openSettings = () => {
+      setDashboardOpen(false)
       setSidebarOpen(false)
       setSettingsOpen(true)
     }

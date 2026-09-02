@@ -44,7 +44,7 @@ test('primary navigation exposes four stable categories and highlights the selec
   const { useStore } = await import('../src/stores/useStore.ts')
   ensureUiI18n()
   await setUiLanguage('en')
-  useStore.setState({ developerMode: false, mediaFilter: 'all', outputSearchQuery: '', activeWorkspace: 'default', browsingUploads: false, sidebarOpen: false, sidebarMode: 'studio', dashboardOpen: false, loadOutputs: async () => undefined })
+  useStore.setState({ developerMode: false, mediaFilter: 'all', outputSearchQuery: '', activeWorkspace: 'default', browsingUploads: false, sidebarOpen: false, sidebarMode: 'studio', settingsOpen: true, dashboardOpen: true, loadOutputs: async () => undefined })
   try {
     render(<TabFilter />)
     const direct = screen.getByRole('button', { name: 'Direct generation' })
@@ -67,6 +67,8 @@ test('primary navigation exposes four stable categories and highlights the selec
     fireEvent.click(studios)
     fireEvent.click(screen.getByRole('tab', { name: 'Story Lab' }))
     assert.equal(useStore.getState().mediaFilter, 'stories')
+    assert.equal(useStore.getState().settingsOpen, false)
+    assert.equal(useStore.getState().dashboardOpen, false)
     assert.equal(studios.getAttribute('data-navigation-active'), 'true')
     assert.equal(media.hasAttribute('data-navigation-active'), false)
 
