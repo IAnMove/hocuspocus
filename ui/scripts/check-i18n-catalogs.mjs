@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo']
+const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab']
 const LANGUAGES = ['en', 'es']
 
 function load(language, namespace) {
@@ -44,6 +44,15 @@ const PILOT_FILES = [
   'src/features/assets/AssetsPanel.tsx',
   'src/features/workspaceCollections/WorkspaceCollectionsPanel.tsx',
   'src/features/workspaces/WorkspacesPanel.tsx',
+  'src/features/stories/storyLabChrome.tsx',
+  'src/features/stories/ReferenceGallery.tsx',
+  'src/features/stories/LocationEditor.tsx',
+  'src/features/stories/CharacterEditor.tsx',
+  'src/features/stories/BeatEditor.tsx',
+  'src/features/stories/StoryWorldTab.tsx',
+  'src/features/stories/StoryCharactersTab.tsx',
+  'src/features/stories/StoryStructureTab.tsx',
+  'src/features/stories/StoryRelationshipsTab.tsx',
 ]
 
 const FORBIDDEN = [
@@ -54,6 +63,10 @@ const FORBIDDEN = [
   'Extra info',
   'Clip information',
   'Wait for generation to finish',
+  'World bible',
+  'Dramatic structure',
+  'Generate text',
+  'Optional regeneration instruction…',
 ]
 
 export function forbiddenLiterals() {

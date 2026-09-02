@@ -1,0 +1,116 @@
+{
+  "chrome": {
+    "required": "Obligatorio",
+    "regeneratePlaceholder": "Instrucción opcional de regeneración…",
+    "generateText": "Generar texto",
+    "generateTextTitle": "Usa el LLM para generar o reescribir el texto de esta sección. No genera imágenes.",
+    "approve": "Aprobar",
+    "approved": "Aprobado",
+    "approveTitle": "Confirma la versión actual de esta sección. No genera contenido.",
+    "llmHint": "Solo texto del LLM: genera o reescribe los campos de esta sección y conserva las referencias de imagen; no renderiza imágenes. El modo guiado te deja revisar el borrador antes de aplicarlo. Aprobar solo confirma la versión actual."
+  },
+  "status": {
+    "draft": "Borrador",
+    "approved": "Aprobado"
+  },
+  "gallery": {
+    "primary": "Principal",
+    "useAsPrimary": "Usar como principal",
+    "enlarge": "Ampliar imagen",
+    "enlargeNamed": "Ampliar {{name}}",
+    "remove": "Quitar imagen",
+    "removeNamed": "Quitar {{name}}",
+    "untitled": "esta imagen",
+    "removeConfirm": "¿Quitar “{{name}}” de este bloque? Si no se utiliza en otro lugar, también se eliminará de la biblioteca de Story Lab.",
+    "previewFallback": "Imagen de Story Lab",
+    "previewAlt": "Imagen ampliada de Story Lab",
+    "closePreview": "Cerrar imagen ampliada"
+  },
+  "world": {
+    "title": "Biblia del mundo",
+    "description": "Reglas, lugares y un lenguaje visual que cada producción puede reutilizar.",
+    "summary": "Resumen del mundo",
+    "period": "Periodo",
+    "geography": "Geografía",
+    "society": "Sociedad",
+    "technology": "Tecnología",
+    "rules": "Reglas — una por línea",
+    "visualLanguage": "Lenguaje visual propio del mundo (iluminación, paleta, motivos)",
+    "visualPrompt": "Prompt de concepto del mundo",
+    "negativePrompt": "Prompt visual negativo",
+    "generateConcept": "Generar concepto del mundo",
+    "generateAnotherConcept": "Generar otro concepto del mundo",
+    "addReference": "Añadir referencia",
+    "locations": "Localizaciones",
+    "addLocation": "Localización",
+    "newLocationName": "Nueva localización"
+  },
+  "location": {
+    "name": "Nombre",
+    "purpose": "Función dramática",
+    "description": "Descripción",
+    "conceptPrompt": "Prompt de concepto",
+    "negativePrompt": "Prompt negativo",
+    "generate": "Generar localización",
+    "generateAnother": "Generar otra localización",
+    "addReference": "Añadir referencia",
+    "moveUp": "Subir localización",
+    "moveDown": "Bajar localización"
+  },
+  "characters": {
+    "title": "Personajes",
+    "description": "Personalidad, función dramática, voz e identidad visual aprobada conviven aquí.",
+    "add": "Personaje",
+    "empty": "Genera el elenco o añade el primer personaje a mano.",
+    "newName": "Nuevo personaje",
+    "moveUp": "Subir personaje",
+    "moveDown": "Bajar personaje",
+    "generateFirst": "Generar primera identidad",
+    "generateVariation": "Generar variación de identidad",
+    "upload": "Subir referencias",
+    "fields": {
+      "name": "Nombre",
+      "role": "Papel",
+      "age": "Edad",
+      "pronouns": "Pronombres",
+      "personality": "Personalidad",
+      "desire": "Deseo",
+      "need": "Necesidad",
+      "flaw": "Falla",
+      "conflict": "Conflicto",
+      "arc": "Arco",
+      "voice": "Voz / diálogo",
+      "appearance": "Aspecto",
+      "wardrobe": "Vestuario / continuidad",
+      "visualPrompt": "Prompt de arte conceptual",
+      "negativePrompt": "Prompt visual negativo"
+    }
+  },
+  "structure": {
+    "title": "Estructura dramática",
+    "description": "Una secuencia causal: cada beat cambia la situación y motiva el siguiente.",
+    "add": "Beat",
+    "remove": "Quitar beat",
+    "moveUp": "Subir beat",
+    "moveDown": "Bajar beat",
+    "newStage": "Nuevo beat",
+    "fields": {
+      "stage": "Etapa",
+      "title": "Título",
+      "summary": "Qué ocurre",
+      "goal": "Objetivo dramático",
+      "conflict": "Conflicto",
+      "turn": "Giro / consecuencia"
+    }
+  },
+  "relationships": {
+    "title": "Relaciones",
+    "description": "El conflicto y el cambio suelen vivir entre personajes, no en biografías aisladas.",
+    "add": "Relación",
+    "from": "De",
+    "to": "A",
+    "label": "Relación",
+    "dynamic": "Dinámica actual",
+    "evolution": "Cómo cambia"
+  }
+}

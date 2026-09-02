@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import JSZip from 'jszip'
 import {
   BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, ExternalLink, Film, ImagePlus, Loader2,
-  Languages, Maximize2, Music, Network, Palette, Play, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users, X,
+  Languages, Music, Network, Palette, Play, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
@@ -16,6 +15,12 @@ import { StoryProductionTimeline } from './StoryProductionTimeline'
 import { StoryLabNavigation } from './StoryLabNavigation'
 import { StoryRelationshipsTab } from './StoryRelationshipsTab'
 import { StoryWorldTab } from './StoryWorldTab'
+import { StoryCharactersTab } from './StoryCharactersTab'
+import { StoryStructureTab } from './StoryStructureTab'
+import { ReferenceGallery } from './ReferenceGallery'
+import { LocationEditor } from './LocationEditor'
+import { StoryLabVisualsProvider } from './StoryLabVisualsProvider'
+import { emptyCharacter, moveItem, pruneUnusedAssets } from './storyLabEditors'
 import { button, input, panel, requiredInput, Field, SectionHeader } from './storyLabChrome'
 import { readDirectorClipReplacementResult } from './directorClipHandoff'
 import { AudioRangeSelector } from './AudioRangeSelector'
@@ -69,23 +74,6 @@ const CHARACTER_STYLE_PRESETS = [
   ['Plastilina', 'Handmade claymation characters sculpted from plasticine, visible fingerprints and tool marks, tactile matte clay surfaces, stop-motion proportions'],
   ['Anime', '2D anime characters, clean expressive linework, consistent cel shading, stylized facial proportions, illustrated skin and hair, never photorealistic'],
 ] as const
-
-function moveItem<T>(items: T[], from: number, to: number): void {
-  if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return
-  const [item] = items.splice(from, 1)
-  items.splice(to, 0, item)
-}
-
-function pruneUnusedAssets(project: StoryProject): void {
-  const used = new Set([
-    ...project.world.referenceAssetIds,
-    ...project.world.locations.flatMap(location => location.referenceAssetIds),
-    ...project.characters.flatMap(character => character.referenceAssetIds),
-  ])
-  Object.keys(project.assets).forEach(id => {
-    if (!used.has(id)) delete project.assets[id]
-  })
-}
 
 function stableTextKey(value: string): string {
   let hash = 2166136261
@@ -690,120 +678,6 @@ function ProviderPanel({
       </p>
       </fieldset>
     </div>
-  )
-}
-
-function ReferenceGallery({
-  ids, assets, primaryId, onPrimary, onRemove,
-}: {
-  ids: string[]
-  assets: Record<string, StoryVisualAsset>
-  primaryId?: string
-  onPrimary?: (id: string) => void
-  onRemove: (id: string) => void
-}) {
-  const [previewId, setPreviewId] = useState<string | null>(null)
-  const previewAsset = previewId ? assets[previewId] : undefined
-
-  useEffect(() => {
-    if (!previewAsset) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPreviewId(null)
-    }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => {
-      window.removeEventListener('keydown', closeOnEscape)
-      document.body.style.overflow = previousOverflow
-    }
-  }, [previewAsset])
-
-  const confirmRemove = (id: string, asset: StoryVisualAsset) => {
-    if (!window.confirm(
-      `¿Quitar “${asset.name || 'esta imagen'}” de este bloque? Si no se utiliza en otro lugar, también se eliminará de la biblioteca de Story Lab.`,
-    )) return
-    onRemove(id)
-  }
-
-  return (
-    <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
-        {ids.map(id => {
-          const asset = assets[id]
-          if (!asset) return null
-          return (
-            <div key={id} className={`relative rounded-lg overflow-hidden border ${id === primaryId ? 'border-emerald-400' : 'border-border'} bg-bg-tertiary`}>
-              <img src={asset.source} alt={asset.name} className="w-full aspect-square object-cover" />
-              <span className={`absolute right-1 top-1 rounded border px-1 py-0.5 text-[8px] ${asset.approval === 'approved'
-                ? 'border-emerald-400/70 bg-emerald-950/80 text-emerald-200'
-                : 'border-amber-400/60 bg-amber-950/80 text-amber-200'}`}>
-                {asset.approval === 'approved' ? 'Approved' : 'Draft'}
-              </span>
-              <div className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-black/65 p-1">
-                {onPrimary && <button type="button" className="text-[9px] text-white" onClick={() => onPrimary(id)}>{id === primaryId ? 'Primary' : 'Use as primary'}</button>}
-                <button
-                  type="button"
-                  className="ml-auto rounded p-1 text-white hover:bg-white/15"
-                  onClick={() => setPreviewId(id)}
-                  title="Ampliar imagen"
-                  aria-label={`Ampliar ${asset.name || 'imagen'}`}
-                >
-                  <Maximize2 size={13} />
-                </button>
-                <button
-                  type="button"
-                  className="rounded p-1 text-red-300 hover:bg-red-500/20"
-                  onClick={() => confirmRemove(id, asset)}
-                  title="Quitar imagen"
-                  aria-label={`Quitar ${asset.name || 'imagen'}`}
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      {previewAsset && createPortal(
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4 md:p-8"
-          onClick={() => setPreviewId(null)}
-          role="presentation"
-        >
-          <div
-            className="flex max-h-[94vh] max-w-[96vw] flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary shadow-2xl"
-            onClick={event => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="story-image-preview-title"
-          >
-            <div className="flex items-center gap-3 border-b border-border px-3 py-2.5">
-              <h2 id="story-image-preview-title" className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary">
-                {previewAsset.name || 'Imagen de Story Lab'}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setPreviewId(null)}
-                className="rounded-lg p-1.5 text-text-muted hover:bg-bg-hover hover:text-text-primary"
-                title="Cerrar"
-                aria-label="Cerrar imagen ampliada"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="flex min-h-0 items-center justify-center bg-black/35 p-2">
-              <img
-                src={previewAsset.source}
-                alt={previewAsset.name || 'Imagen ampliada de Story Lab'}
-                className="max-h-[84vh] max-w-[92vw] object-contain"
-              />
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
-    </>
   )
 }
 
@@ -4712,6 +4586,16 @@ export function StoryLabPanel() {
       : productionIssues
 
   return (
+    <StoryLabVisualsProvider value={{
+      imageBusy,
+      referenceBatchBusy,
+      generateVisual,
+      requestUpload: target => {
+        setUploadTarget(target)
+        uploadRef.current?.click()
+      },
+      removeReference,
+    }}>
     <div className="h-full min-h-0 flex flex-col rounded-xl border border-border bg-bg-primary overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-bg-secondary px-3 py-2">
         <div className="mr-auto">
@@ -5485,35 +5369,20 @@ export function StoryLabPanel() {
                 generate={generate}
                 approve={approve}
                 isApproved={isApproved}
-                imageBusy={imageBusy}
-                referenceBatchBusy={referenceBatchBusy}
-                generateVisual={generateVisual}
-                setUploadTarget={setUploadTarget}
-                uploadRef={uploadRef}
-                removeReference={removeReference}
-                ReferenceGallery={ReferenceGallery}
-                LocationEditor={LocationEditor}
               />
             )}
 
             {tab === 'characters' && (
-              <>
-                <div id="story-review-characters" className="scroll-mt-4">
-                  <SectionHeader title="Characters" description="Personality, dramatic function, voice and approved visual identity live together." scope="characters" busy={busy} approved={isApproved('characters')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('characters')} />
-                </div>
-                <div className="flex justify-end mb-3">
-                  <button className={button} onClick={() => update(current => {
-                    current.characters.push(emptyCharacter())
-                    return current
-                  })}><Plus size={13} /> Character</button>
-                </div>
-                <div className="space-y-4">
-                  {project.characters.map((character, index) => (
-                    <CharacterEditor key={character.id} character={character} index={index} total={project.characters.length} project={project} update={update} imageBusy={imageBusy} generateVisual={generateVisual} upload={() => { setUploadTarget({ kind: 'character', id: character.id }); uploadRef.current?.click() }} removeReference={id => removeReference('character', character.id, id)} />
-                  ))}
-                  {!project.characters.length && <div className={`${panel} text-sm text-text-muted text-center py-12`}>Generate the cast or add the first character manually.</div>}
-                </div>
-              </>
+              <StoryCharactersTab
+                project={project}
+                update={update}
+                busy={busy}
+                instruction={instruction}
+                setInstruction={setInstruction}
+                generate={generate}
+                approve={approve}
+                isApproved={isApproved}
+              />
             )}
 
             {tab === 'relationships' && (
@@ -5530,20 +5399,16 @@ export function StoryLabPanel() {
             )}
 
             {tab === 'structure' && (
-              <>
-                <div id="story-review-structure" className="scroll-mt-4">
-                  <SectionHeader title="Dramatic structure" description="A causal sequence: every beat changes the situation and motivates the next." scope="structure" busy={busy} approved={isApproved('structure')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('structure')} />
-                </div>
-                <div className="flex justify-end mb-3">
-                  <button className={button} onClick={() => update(current => {
-                    current.beats.push({ id: storyId('beat'), stage: 'New beat', title: '', summary: '', goal: '', conflict: '', turn: '' })
-                    return current
-                  })}><Plus size={13} /> Beat</button>
-                </div>
-                <div className="space-y-3">
-                  {project.beats.map((beat, index) => <BeatEditor key={beat.id} beat={beat} index={index} total={project.beats.length} update={update} />)}
-                </div>
-              </>
+              <StoryStructureTab
+                project={project}
+                update={update}
+                busy={busy}
+                instruction={instruction}
+                setInstruction={setInstruction}
+                generate={generate}
+                approve={approve}
+                isApproved={isApproved}
+              />
             )}
 
             {tab === 'music' && (
@@ -6830,16 +6695,8 @@ export function StoryLabPanel() {
       <input ref={customMusicUploadRef} type="file" accept=".mp3,audio/mpeg,audio/*" className="hidden"
         onChange={event => void uploadCustomMusic(event.target.files?.[0])} />
     </div>
+    </StoryLabVisualsProvider>
   )
-}
-
-function emptyCharacter(): StoryCharacter {
-  return {
-    id: storyId('character'), name: 'New character', role: '', age: '', pronouns: '',
-    personality: '', desire: '', need: '', flaw: '', conflict: '', arc: '', voice: '',
-    appearance: '', wardrobe: '', visualPrompt: '', negativePrompt: '',
-    referenceAssetIds: [], approval: 'draft',
-  }
 }
 
 function CompactVideoWorkspace({
@@ -6938,9 +6795,7 @@ function CompactVideoWorkspace({
               </div>
               {project.world.locations.map((location, index) => (
                 <LocationEditor key={location.id} location={location} index={index} total={project.world.locations.length}
-                  project={project} update={update} imageBusy={imageBusy} generateVisual={generateVisual}
-                  upload={() => upload({ kind: 'location', id: location.id })}
-                  removeReference={id => removeReference('location', location.id, id)} />
+                  project={project} update={update} />
               ))}
             </div>
           </details>
@@ -7152,179 +7007,6 @@ function CompactBeatEditor({ beat, index, total, update }: {
           <Field label="Objetivo del momento" value={beat.goal} onChange={goal => set({ goal })} rows={2} />
         </div>
       </details>
-    </div>
-  )
-}
-
-function CharacterEditor({
-  character, index, total, project, update, imageBusy, generateVisual, upload, removeReference,
-}: {
-  character: StoryCharacter
-  index: number
-  total: number
-  project: StoryProject
-  update: (updater: (project: StoryProject) => StoryProject) => void
-  imageBusy: string
-  generateVisual: (target: { kind: 'character'; id: string }, prompt: string) => void
-  upload: () => void
-  removeReference: (id: string) => void
-}) {
-  const set = (patch: Partial<StoryCharacter>) => update(current => {
-    current.characters = current.characters.map(item => item.id === character.id ? { ...item, approval: 'draft', ...patch } : item)
-    return current
-  })
-  return (
-    <div id={`story-review-character-${character.id}`} className={`${panel} scroll-mt-4 space-y-3`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-text-primary">{character.name}</h3>
-          <button className={`${button} ${character.approval === 'approved' ? 'border-emerald-500 text-emerald-400' : ''}`} onClick={() => set({ approval: character.approval === 'approved' ? 'draft' : 'approved' })}>
-            <Check size={12} /> {character.approval}
-          </button>
-        </div>
-        <div className="flex items-center gap-1">
-          <button className={button} disabled={index === 0} title="Move character up" onClick={() => update(current => {
-            moveItem(current.characters, index, index - 1)
-            return current
-          })}><ChevronUp size={13} /></button>
-          <button className={button} disabled={index === total - 1} title="Move character down" onClick={() => update(current => {
-            moveItem(current.characters, index, index + 1)
-            return current
-          })}><ChevronDown size={13} /></button>
-          <button className="text-red-400 p-1" onClick={() => update(current => {
-            current.characters = current.characters.filter(item => item.id !== character.id)
-            current.relationships = current.relationships.filter(item => item.fromCharacterId !== character.id && item.toCharacterId !== character.id)
-            pruneUnusedAssets(current)
-            return current
-          })}><Trash2 size={14} /></button>
-        </div>
-      </div>
-      <div className="grid md:grid-cols-3 gap-3">
-        <Field label="Name" value={character.name} onChange={name => set({ name })} />
-        <Field label="Role" value={character.role} onChange={role => set({ role })} />
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Age" value={character.age} onChange={age => set({ age })} />
-          <Field label="Pronouns" value={character.pronouns} onChange={pronouns => set({ pronouns })} />
-        </div>
-        <Field label="Personality" value={character.personality} onChange={personality => set({ personality })} rows={3} />
-        <Field label="Desire" value={character.desire} onChange={desire => set({ desire })} rows={3} />
-        <Field label="Need" value={character.need} onChange={need => set({ need })} rows={3} />
-        <Field label="Flaw" value={character.flaw} onChange={flaw => set({ flaw })} rows={3} />
-        <Field label="Conflict" value={character.conflict} onChange={conflict => set({ conflict })} rows={3} />
-        <Field label="Arc" value={character.arc} onChange={arc => set({ arc })} rows={3} />
-        <Field label="Voice / dialogue" value={character.voice} onChange={voice => set({ voice })} rows={3} />
-        <Field label="Appearance" value={character.appearance} onChange={appearance => set({ appearance })} rows={3} />
-        <Field label="Wardrobe / continuity" value={character.wardrobe} onChange={wardrobe => set({ wardrobe })} rows={3} />
-        <Field label="Concept-art prompt" value={character.visualPrompt} onChange={visualPrompt => set({ visualPrompt })} rows={4} />
-        <Field label="Negative visual prompt" value={character.negativePrompt} onChange={negativePrompt => set({ negativePrompt })} rows={4} />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <button className={button} disabled={Boolean(imageBusy) || !character.visualPrompt.trim()} onClick={() => generateVisual({ kind: 'character', id: character.id }, character.visualPrompt)}>
-          {imageBusy === `character:${character.id}` ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} {character.primaryReferenceAssetId ? 'Generate identity variation' : 'Generate first identity'}
-        </button>
-        <button className={button} onClick={upload}><Upload size={13} /> Upload references</button>
-      </div>
-      <ReferenceGallery ids={character.referenceAssetIds} assets={project.assets} primaryId={character.primaryReferenceAssetId} onPrimary={id => set({ primaryReferenceAssetId: id })} onRemove={removeReference} />
-    </div>
-  )
-}
-
-function LocationEditor({
-  location, index, total, project, update, imageBusy, generateVisual, upload, removeReference,
-}: {
-  location: StoryLocation
-  index: number
-  total: number
-  project: StoryProject
-  update: (updater: (project: StoryProject) => StoryProject) => void
-  imageBusy: string
-  generateVisual: (target: { kind: 'location'; id: string }, prompt: string) => void
-  upload: () => void
-  removeReference: (id: string) => void
-}) {
-  const set = (patch: Partial<StoryLocation>) => update(current => {
-    current.world.locations = current.world.locations.map(item => item.id === location.id ? { ...item, ...patch } : item)
-    return current
-  })
-  return (
-    <div className={`${panel} space-y-3`}>
-      <div className="flex justify-between gap-2">
-        <h4 className="text-sm font-semibold text-text-primary">{location.name}</h4>
-        <div className="flex items-center gap-1">
-          <button className={button} disabled={index === 0} title="Move location up" onClick={() => update(current => {
-            moveItem(current.world.locations, index, index - 1)
-            return current
-          })}><ChevronUp size={13} /></button>
-          <button className={button} disabled={index === total - 1} title="Move location down" onClick={() => update(current => {
-            moveItem(current.world.locations, index, index + 1)
-            return current
-          })}><ChevronDown size={13} /></button>
-          <button className="text-red-400 p-1" onClick={() => update(current => {
-            current.world.locations = current.world.locations.filter(item => item.id !== location.id)
-            pruneUnusedAssets(current)
-            return current
-          })}><Trash2 size={14} /></button>
-        </div>
-      </div>
-      <div className="grid md:grid-cols-2 gap-3">
-        <Field label="Name" value={location.name} onChange={name => set({ name })} />
-        <Field label="Dramatic purpose" value={location.purpose} onChange={purpose => set({ purpose })} />
-        <Field label="Description" value={location.description} onChange={description => set({ description })} rows={4} />
-        <Field label="Concept prompt" value={location.visualPrompt} onChange={visualPrompt => set({ visualPrompt })} rows={4} />
-        <Field label="Negative prompt" value={location.negativePrompt} onChange={negativePrompt => set({ negativePrompt })} rows={3} />
-      </div>
-      <div className="flex gap-2">
-        <button className={button} disabled={Boolean(imageBusy) || !location.visualPrompt.trim()} onClick={() => generateVisual({ kind: 'location', id: location.id }, location.visualPrompt)}>
-          {imageBusy === `location:${location.id}` ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} {location.referenceAssetIds.length ? 'Generate another location' : 'Generate location'}
-        </button>
-        <button className={button} onClick={upload}><Upload size={13} /> Add reference</button>
-      </div>
-      <ReferenceGallery ids={location.referenceAssetIds} assets={project.assets} onRemove={removeReference} />
-    </div>
-  )
-}
-
-function BeatEditor({
-  beat, index, total, update,
-}: {
-  beat: StoryBeat
-  index: number
-  total: number
-  update: (updater: (project: StoryProject) => StoryProject) => void
-}) {
-  const set = (patch: Partial<StoryBeat>) => update(current => {
-    current.beats = current.beats.map(item => item.id === beat.id ? { ...item, ...patch } : item)
-    return current
-  })
-  return (
-    <div className={`${panel} grid md:grid-cols-[60px_1fr_1fr] gap-3`}>
-      <div className="space-y-2">
-        <div className="text-2xl font-bold text-text-muted/40">{String(index + 1).padStart(2, '0')}</div>
-        <div className="flex gap-1">
-          <button className={button} disabled={index === 0} title="Move beat up" onClick={() => update(current => {
-            moveItem(current.beats, index, index - 1)
-            return current
-          })}><ChevronUp size={12} /></button>
-          <button className={button} disabled={index === total - 1} title="Move beat down" onClick={() => update(current => {
-            moveItem(current.beats, index, index + 1)
-            return current
-          })}><ChevronDown size={12} /></button>
-        </div>
-      </div>
-      <div className="space-y-3">
-        <Field label="Stage" value={beat.stage} onChange={stage => set({ stage })} />
-        <Field label="Title" value={beat.title} onChange={title => set({ title })} />
-        <Field label="What happens" value={beat.summary} onChange={summary => set({ summary })} rows={4} />
-      </div>
-      <div className="space-y-3">
-        <Field label="Dramatic goal" value={beat.goal} onChange={goal => set({ goal })} rows={2} />
-        <Field label="Conflict" value={beat.conflict} onChange={conflict => set({ conflict })} rows={2} />
-        <Field label="Turn / consequence" value={beat.turn} onChange={turn => set({ turn })} rows={3} />
-        <button className="text-red-400 text-xs flex items-center gap-1" onClick={() => update(current => {
-          current.beats = current.beats.filter(item => item.id !== beat.id)
-          return current
-        })}><Trash2 size={12} /> Remove beat</button>
-      </div>
     </div>
   )
 }

@@ -4,14 +4,16 @@ import settingsEn from './locales/en/settings.json'
 import wizardEn from './locales/en/wizard.json'
 import activityEn from './locales/en/activity.json'
 import extraInfoEn from './locales/en/extraInfo.json'
+import storyLabEn from './locales/en/storyLab.json'
 import commonEs from './locales/es/common.json'
 import navigationEs from './locales/es/navigation.json'
 import settingsEs from './locales/es/settings.json'
 import wizardEs from './locales/es/wizard.json'
 import activityEs from './locales/es/activity.json'
 import extraInfoEs from './locales/es/extraInfo.json'
+import storyLabEs from './locales/es/storyLab.json'
 
-export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo'] as const
+export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab'] as const
 export type I18nNamespace = (typeof NAMESPACES)[number]
 
 export const resources = {
@@ -22,6 +24,7 @@ export const resources = {
     wizard: wizardEn,
     activity: activityEn,
     extraInfo: extraInfoEn,
+    storyLab: storyLabEn,
   },
   es: {
     common: commonEs,
@@ -30,6 +33,7 @@ export const resources = {
     wizard: wizardEs,
     activity: activityEs,
     extraInfo: extraInfoEs,
+    storyLab: storyLabEs,
   },
 } as const
 

@@ -15,7 +15,7 @@ Canonical sources in git:
 Working notes under `comunicaciones/` are session handoff only. They are
 gitignored and are not canonical.
 
-## Landed on main (as of #85)
+## Landed on main (as of #87)
 
 Asset-manifest v1 writers: Studio generate (simulated, WGP, H3, SFX), Tools
 upscale/revoice, Recast/Repaint/Outpaint, MiniMax image, Series assembly, 3D,
@@ -24,33 +24,39 @@ recording, Video Editor screenshot/export, comic animatic.
 
 Sidecar failure: Hunyuan3D and Rig keep the GLB when provenance write fails.
 
+Domain provenance: `workspace_id` is the collection; `output_folder` is the
+physical directory. `GenerationProvenance` / `CommandContext` distinguish
+initiator (`origin.actor` / `tool` / `capability`) from provider/model.
+Inspector timing reads `queue_ms` / `inference_ms` / `total_ms`.
+
 `useStore` slices (facade kept): theme, settings (includes model-visibility
 focus), developerMode, sidebar, retake dialog. Slices bind through
 `bindSlice` without `as never`. `developerModeSlice` no longer writes
 `mediaFilter`; the facade still leaves `auditdev` when developer mode turns
 off.
 
-Story Lab: `relationships` and `world` tabs extracted. `StoryWorldTab` is an
-intermediate cut (too many props; `LocationEditor` / `ReferenceGallery` still
-owned by the panel). Visible copy on extracted tabs is still hardcoded English.
+Story Lab: shared `ReferenceGallery`, `LocationEditor`, `CharacterEditor`,
+`BeatEditor`, `storyLabVisuals` and `StoryLabVisualsProvider`. World, characters,
+relationships and structure tabs import those modules instead of receiving
+16 props. Visible copy on those tabs lives in the `storyLab` namespace
+(EN+ES). Compact music/trailer/quick-video prep still sits in the panel.
 
 i18n: foundation + Extra info inspector + Extra info video dialog (`extraInfo`
-namespace) + Assets catalog list chrome.
+namespace) + Assets catalog list chrome + Story Lab simple tabs (`storyLab`).
 
 ## Next medium PRs
 
 1. **Domain provenance contract** — landed (#86).
-2. **Typed Zustand composition** (this track): `bindSlice`, no `as never` at
-   compose time, settings owns model-visibility focus, developerMode does not
-   write `mediaFilter`.
-3. **Story Lab simple tabs**: extract shared `ReferenceGallery` /
-   `LocationEditor` / controllers first, then Characters + Structure (and other
-   purely visual tabs) in one PR, with i18n and tests. Do not pass 16 props.
-   Music and Productions stay a later PR with Wizard E2E.
-4. **Backend by domain**: one complete router + services per PR (Assets, Music,
+2. **Typed Zustand composition** — landed (#87).
+3. **Story Lab simple tabs** — this PR: shared gallery/editors/controller,
+   then Characters + Structure (and world/relationships i18n) without 16-prop
+   drilling.
+4. **Story Lab Music + Productions**: keep Wizard E2E with that PR. Do not
+   fold compact prep into another tiny extract.
+5. **Backend by domain**: one complete router + services per PR (Assets, Music,
    Series, Comics, …). Preserve route-table ordinals. Do not split
    `_launch_runtime.py` by line count.
-5. **Provenance applied by flow** (after 1): Studio+Wizard, Story Lab+videoclip,
+6. **Provenance applied by flow** (after 1): Studio+Wizard, Story Lab+videoclip,
    Series+Comics, 3D+Director.
 
 ## Standing rules

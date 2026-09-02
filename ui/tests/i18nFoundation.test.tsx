@@ -63,6 +63,10 @@ test('required glossary keys exist in both languages', async () => {
     ['navigation', 'labs.director'],
     ['wizard', 'title'],
     ['activity', 'title'],
+    ['storyLab', 'world.title'],
+    ['storyLab', 'characters.title'],
+    ['storyLab', 'structure.title'],
+    ['storyLab', 'relationships.title'],
   ]
   for (const language of ['en', 'es']) {
     await i18n.changeLanguage(language)
@@ -78,6 +82,7 @@ test('required glossary keys exist in both languages', async () => {
   assert.equal(i18n.t('tabs.documents', { ns: 'navigation', lng: 'es' }), 'Documentos')
   assert.equal(i18n.t('extraInfo', { ns: 'activity', lng: 'es' }), 'Información adicional')
   assert.equal(i18n.t('catalog.loadMore', { ns: 'activity', lng: 'es' }), 'Cargar más')
+  assert.equal(i18n.t('world.title', { ns: 'storyLab', lng: 'es' }), 'Biblia del mundo')
   assert.equal(i18n.t('catalog.reload', { ns: 'activity', lng: 'es' }), 'Actualizar catálogo')
   assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'en' }), 'Could not load Extra info')
   assert.equal(i18n.t('inspector.loadFailed', { ns: 'activity', lng: 'es' }), 'No se pudo cargar Información adicional')
@@ -228,11 +233,13 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
   assert.deepEqual(forbiddenLiterals(), [])
 })
 
-test('resources register the extraInfo namespace', async () => {
+test('resources register the extraInfo and storyLab namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
+  assert.ok('storyLab' in resources.en)
+  assert.ok('storyLab' in resources.es)
 })
 
 test('Extra info chrome and the Assets inspector use the activity catalog', async () => {
