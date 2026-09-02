@@ -119,6 +119,49 @@ test('settings slice toggles open and tab through the public facade', async () =
   assert.equal(useStore.getState().settingsOpen, false)
 })
 
+test('developer-mode slice persists the local flag through the public facade', async () => {
+  if (!globalThis.localStorage) {
+    const { JSDOM } = await import('jsdom')
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
+    Object.assign(globalThis, {
+      window: dom.window,
+      document: dom.window.document,
+      localStorage: dom.window.localStorage,
+    })
+  }
+  globalThis.localStorage.removeItem('hocuspocus-developer-mode-v1')
+
+  const { createDeveloperModeSlice } = await import('../src/stores/developerModeSlice.ts')
+  let state
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  state = createDeveloperModeSlice(set, () => state)
+  assert.equal(state.developerMode, false)
+  state.setDeveloperMode(true)
+  assert.equal(state.developerMode, true)
+  assert.equal(globalThis.localStorage.getItem('hocuspocus-developer-mode-v1'), '1')
+
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.getState().setDeveloperMode(true)
+  assert.equal(useStore.getState().developerMode, true)
+  assert.equal(globalThis.localStorage.getItem('hocuspocus-developer-mode-v1'), '1')
+  useStore.getState().setDeveloperMode(false)
+  assert.equal(useStore.getState().developerMode, false)
+  assert.equal(globalThis.localStorage.getItem('hocuspocus-developer-mode-v1'), null)
+
+  useStore.setState({ mediaFilter: 'auditdev', developerMode: true })
+  useStore.getState().setDeveloperMode(false)
+  assert.equal(useStore.getState().developerMode, false)
+  assert.equal(useStore.getState().mediaFilter, 'all')
+
+  useStore.setState({ mediaFilter: 'videos' })
+  useStore.getState().setDeveloperMode(true)
+  assert.equal(useStore.getState().developerMode, true)
+  assert.equal(useStore.getState().mediaFilter, 'videos')
+})
+
 test('useStore keeps Director actions available through its existing public facade', async () => {
   const { useStore } = await import('../src/stores/useStore.ts')
   useStore.setState({ directorAutoMode: true, directorSeamless: true })
