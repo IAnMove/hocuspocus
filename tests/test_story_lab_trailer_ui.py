@@ -20,8 +20,9 @@ CATALOG_ES = ROOT / "ui" / "src" / "i18n" / "locales" / "es" / "storyLab.json"
 
 
 def story_lab_trailer_ui() -> str:
+    extracted = sorted(STORIES.glob("StoryTrailer*.tsx")) + sorted(STORIES.glob("Compact*.tsx"))
     return "\n".join(path.read_text(encoding="utf-8") for path in (
-        PANEL, TRAILER, COMPACT, VIDEO_FORMAT, VIDEO_CONTROLS, CATALOG_EN, CATALOG_ES,
+        PANEL, TRAILER, COMPACT, VIDEO_FORMAT, VIDEO_CONTROLS, CATALOG_EN, CATALOG_ES, *extracted,
     ))
 
 
@@ -66,7 +67,7 @@ def test_trailer_adapter_enforces_a_story_arc_without_revealing_the_ending():
 def test_story_lab_exposes_editable_trailer_controls_and_timed_preview():
     source = story_lab_trailer_ui()
     panel = PANEL.read_text(encoding="utf-8")
-    trailer = TRAILER.read_text(encoding="utf-8")
+    trailer = source
 
     assert "{ id: 'trailer', label: 'Tráiler'" in panel
     assert "Creador de tráileres cinematográficos" in source
@@ -81,7 +82,7 @@ def test_story_lab_exposes_editable_trailer_controls_and_timed_preview():
 
 
 def test_compact_trailer_review_uses_full_width_rows():
-    workspace = COMPACT.read_text(encoding="utf-8")
+    workspace = story_lab_trailer_ui()
     catalog = CATALOG_ES.read_text(encoding="utf-8")
 
     assert "export function CompactVideoWorkspace" in workspace
@@ -98,7 +99,7 @@ def test_compact_trailer_review_uses_full_width_rows():
 def test_trailer_orientation_can_override_the_global_landscape_default_inline():
     source = story_lab_trailer_ui()
     panel = PANEL.read_text(encoding="utf-8")
-    trailer = TRAILER.read_text(encoding="utf-8")
+    trailer = source
     handler = panel.split("const setStoryVideoFormat", 1)[1].split("useEffect", 1)[0]
 
     assert "Portrait / Shorts" in source
@@ -112,7 +113,7 @@ def test_trailer_orientation_can_override_the_global_landscape_default_inline():
 
 def test_trailer_supports_text_only_direct_video_without_visual_inputs():
     source = story_lab_trailer_ui()
-    trailer = TRAILER.read_text(encoding="utf-8")
+    trailer = source
     store = STORE.read_text(encoding="utf-8")
     director_chat = DIRECTOR_CHAT.read_text(encoding="utf-8")
     pipeline = ROOT.joinpath("app", "services", "director_pipeline.py").read_text(encoding="utf-8")
@@ -141,7 +142,7 @@ def test_direct_trailer_cast_approval_does_not_require_identity_images():
 
 def test_trailer_can_review_generate_reopen_and_reuse_ordered_assembly():
     panel = PANEL.read_text(encoding="utf-8")
-    trailer = TRAILER.read_text(encoding="utf-8")
+    trailer = story_lab_trailer_ui()
     stage = panel.split("const stageTrailer", 1)[1].split("const writeStorySong", 1)[0]
     reopen = panel.split("const reopenProduction", 1)[1].split(
         "const restoreProductionSource", 1,

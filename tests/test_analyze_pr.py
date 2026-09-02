@@ -120,6 +120,19 @@ class TestAnalyzeFiles(unittest.TestCase):
         ])
         self.assertTrue(any(f.title == "Local-first policy risk" for f in review.findings))
 
+    def test_task_generation_ids_are_not_token_shaped_secrets(self):
+        review = analyze_files([
+            FileDiff(
+                path="ui/tests/agentActions.test.mjs",
+                status="modified",
+                added=[
+                    "taskId: `task-generation-job-studio-${generationCalls}`",
+                    "assert.equal(first[1].report.taskId, 'task-generation-job-studio-1')",
+                ],
+            ),
+        ])
+        self.assertFalse(any(f.title == "Possible secret in added lines" for f in review.findings))
+
     def test_docs_only_is_low_risk(self):
         review = analyze_files([
             FileDiff(path="README.md", status="modified", added=["# note"], removed=[]),
