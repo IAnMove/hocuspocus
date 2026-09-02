@@ -37316,6 +37316,16 @@ api.include_router(create_productions_router(
     list_pipelines=_list_canonical_production_pipelines,
 ))
 
+from routers.workspace_collections import create_workspace_collections_router
+from services.workspace_registry import WorkspaceRegistry
+
+_workspace_collection_registry = WorkspaceRegistry(os.path.join(
+    wgp.server_config.get("save_path", "outputs"), "_hocuspocus", "workspaces-v1.json",
+))
+api.include_router(create_workspace_collections_router(
+    registry=lambda: _workspace_collection_registry,
+))
+
 
 # ============================================================================
 # Mount Gradio classic UI at /classic

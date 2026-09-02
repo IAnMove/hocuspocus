@@ -74,6 +74,15 @@ pipeline/task/job correlations. Director snapshots without canonical IDs are
 adapted to deterministic IDs without rewriting their files. The schemas are
 `production-record-v1.schema.json` and `run-record-v1.schema.json`.
 
+## Workspace record v1
+
+A Workspace is now an explicitly created collection stored in the global
+registry, with optimistic revisions and lists of project, asset and Production
+IDs. Its API lives at `/api/v1/workspace-collections`; it never creates, moves
+or deletes generated files. The older physical directory selector remains
+available during migration but is labelled **Output folder** in the UI. The
+portable contract is `workspace-record-v1.schema.json`.
+
 ## Asset manifest v1
 
 Every newly generated or imported item eventually receives one adjacent

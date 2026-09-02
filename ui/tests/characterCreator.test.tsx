@@ -177,7 +177,7 @@ test('empty A prompt means MiniMax should describe the image', () => {
   assert.equal(needsVisionDescribe('<Picture 1> - keep the dwarf.'), false)
 })
 
-test('Character Creator tab sits next to Runs', async () => {
+test('Character Creator, Runs and collection Workspaces are first-class tabs', async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
@@ -185,6 +185,7 @@ test('Character Creator tab sits next to Runs', async () => {
   try {
     render(<TabFilter />)
     assert.ok(screen.getByRole('tab', { name: /Runs/ }))
+    assert.ok(screen.getByRole('tab', { name: /Workspaces/ }))
     assert.ok(screen.getByRole('tab', { name: /Character Creator/ }))
   } finally {
     cleanup()

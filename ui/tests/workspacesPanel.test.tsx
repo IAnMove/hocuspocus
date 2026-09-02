@@ -33,7 +33,7 @@ function installDom() {
 
 installDom()
 
-test('Runs tab replaces the misleading pipeline Workspaces label', async () => {
+test('Runs and collection Workspaces are distinct tabs', async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
@@ -41,7 +41,7 @@ test('Runs tab replaces the misleading pipeline Workspaces label', async () => {
   try {
     render(<TabFilter />)
     assert.ok(screen.getByRole('tab', { name: /^Runs/ }))
-    assert.equal(screen.queryByRole('tab', { name: /Workspaces/ }), null)
+    assert.ok(screen.getByRole('tab', { name: /Workspaces/ }))
     assert.ok(screen.getByRole('tab', { name: /Story Lab/ }))
     assert.ok(screen.getByRole('tab', { name: /Series Lab/ }))
   } finally {
@@ -144,7 +144,7 @@ test('Runs processing lists planned shots, models and a video placeholder', { co
   }
 })
 
-test('Workspaces hydrates a failed song thread from planned prompts', async () => {
+test('Runs hydrates a failed song attempt from planned prompts', async () => {
   const { hydratePipelineQueue } = await import('../src/features/workspaces/queue.ts')
   const hydrated = hydratePipelineQueue({
     version: 1,
