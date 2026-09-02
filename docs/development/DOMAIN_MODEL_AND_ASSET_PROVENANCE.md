@@ -48,7 +48,8 @@ will expose registries/read models before any physical file move:
 7. place unclaimed legacy records in the virtual `Inbox / Legacy` collection.
 
 The migration must be additive and reversible. No old output is deleted or
-moved merely because its metadata cannot be upgraded.
+moved merely because its metadata cannot be upgraded. Remaining slices after
+the i18n and Studio generate PRs are listed in `SLICE_QUEUE.md`.
 
 ## Project record v1
 

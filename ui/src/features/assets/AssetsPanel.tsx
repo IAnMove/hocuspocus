@@ -99,7 +99,7 @@ export function AssetsPanel() {
   useEffect(() => () => { requestRef.current += 1 }, [])
 
   const workspaceOptions = useMemo(() => [
-    { name: '', label: t('entities.workspace_other') },
+    { name: '', label: t('filters.allWorkspaces') },
     ...workspaces.map(item => ({ name: item.name, label: item.name })),
     { name: '__uploads__', label: 'Uploads' },
     { name: '__legacy__', label: tActivity('inboxLegacy') },

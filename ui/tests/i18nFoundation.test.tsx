@@ -48,6 +48,7 @@ test('required glossary keys exist in both languages', async () => {
     ['navigation', 'entities.asset'],
     ['navigation', 'entities.workspace'],
     ['navigation', 'entities.outputFolder'],
+    ['navigation', 'filters.allWorkspaces'],
     ['navigation', 'labs.story'],
     ['navigation', 'labs.series'],
     ['navigation', 'labs.director'],

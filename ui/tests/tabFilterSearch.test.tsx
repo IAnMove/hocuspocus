@@ -37,6 +37,24 @@ function installDom() {
 
 installDom()
 
+test('favorites compact label stays empty instead of leaking the catalog key', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  ensureUiI18n()
+  await setUiLanguage('en')
+  useStore.setState({ developerMode: false, mediaFilter: 'all' })
+  try {
+    render(<TabFilter />)
+    const favorites = screen.getByRole('tab', { name: /Favorites/i })
+    assert.ok(favorites)
+    assert.equal(favorites.textContent?.includes('short.favorites'), false)
+  } finally {
+    cleanup()
+  }
+})
+
 test('video result filters are listed beside Videos', { concurrency: false }, async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
   const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')

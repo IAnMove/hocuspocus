@@ -38,6 +38,7 @@ test('Assets is a first-class tab with its own panel, not a fake active workspac
   assert.match(tabs, /value: 'assets'/)
   assert.match(main, /<AssetsPanel/)
   assert.match(panel, /aria-label=\{t\('headings.assets'\)\}/)
+  assert.match(panel, /t\('filters.allWorkspaces'\)/)
   assert.match(panel, /tActivity\('inboxLegacy'\)/)
   assert.match(panel, /Extra info/)
   assert.match(panel, /JSON completo/)

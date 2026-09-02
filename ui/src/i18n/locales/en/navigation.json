@@ -77,8 +77,10 @@
     "animate3d": "Anim",
     "edits": "Edit",
     "multiclip": "MC",
-    "auditDev": "Audit",
-    "favorites": ""
+    "auditDev": "Audit"
+  },
+  "filters": {
+    "allWorkspaces": "All Workspaces"
   },
   "headings": {
     "assets": "Assets",

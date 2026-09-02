@@ -8,7 +8,7 @@ import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
 
 type NavigationKey = ParseKeys<'navigation'>
 
-const tabs: { value: MediaFilter; labelKey: NavigationKey; shortKey: NavigationKey; icon?: string }[] = [
+const tabs: { value: MediaFilter; labelKey: NavigationKey; shortKey?: NavigationKey; icon?: string }[] = [
   { value: 'all', labelKey: 'tabs.all', shortKey: 'short.all' },
   { value: 'assets', labelKey: 'tabs.assets', shortKey: 'short.assets', icon: 'layers' },
   { value: 'projects', labelKey: 'tabs.projects', shortKey: 'short.projects', icon: 'library' },
@@ -33,7 +33,7 @@ const tabs: { value: MediaFilter; labelKey: NavigationKey; shortKey: NavigationK
   { value: 'avatars', labelKey: 'tabs.edits', shortKey: 'short.edits' },
   { value: 'multiclip', labelKey: 'tabs.multiclip', shortKey: 'short.multiclip', icon: 'film' },
   { value: 'auditdev', labelKey: 'tabs.auditDev', shortKey: 'short.auditDev', icon: 'shield' },
-  { value: 'favorites', labelKey: 'tabs.favorites', shortKey: 'short.favorites', icon: 'heart' },
+  { value: 'favorites', labelKey: 'tabs.favorites', icon: 'heart' },
 ]
 
 export function TabFilter() {
@@ -119,7 +119,7 @@ export function TabFilter() {
             {tab.icon === 'layers' && <Layers size={11} />}
             {tab.icon === 'shield' && <ShieldAlert size={11} />}
             <span className="hidden md:inline">{t(tab.labelKey)}</span>
-            <span className="md:hidden">{t(tab.shortKey)}</span>
+            <span className="md:hidden">{tab.shortKey ? t(tab.shortKey) : ''}</span>
           </button>
         ))}
       </HorizontalScrollTabs>
