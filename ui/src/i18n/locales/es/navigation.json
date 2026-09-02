@@ -26,6 +26,35 @@
     "series": "Series Lab",
     "director": "Director"
   },
+  "primary": {
+    "create": "Crear",
+    "library": "Biblioteca",
+    "activity": "Actividad",
+    "studio": "Studio"
+  },
+  "menu": {
+    "create": "Elige un espacio creativo",
+    "library": "Encuentra proyectos y medios generados"
+  },
+  "descriptions": {
+    "studio": "Genera una imagen, vídeo, canción o recurso 3D individual.",
+    "storyLab": "Desarrolla historias y videoclips con un canon reutilizable.",
+    "seriesLab": "Planifica una serie y crea sus capítulos.",
+    "comics": "Compón páginas, viñetas y sus imágenes.",
+    "director": "Prepara y supervisa producciones con varios planos.",
+    "editor": "Monta y exporta clips existentes.",
+    "video3d": "Compón vídeos con cámara a partir de escenas 3D.",
+    "characters": "Crea personajes y referencias reutilizables.",
+    "projects": "Documentos creativos duraderos que puedes reabrir y editar.",
+    "assets": "Archivos fuente y resultados generados reutilizables.",
+    "allOutputs": "Explora todos los resultados de la carpeta de salida actual.",
+    "mediaFilters": "Filtra la biblioteca de resultados por este tipo de medio."
+  },
+  "search": {
+    "placeholder": "Buscar...",
+    "open": "Buscar en la biblioteca",
+    "close": "Cerrar búsqueda"
+  },
   "tabs": {
     "all": "Todo",
     "assets": "Recursos",

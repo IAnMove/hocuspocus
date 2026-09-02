@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, Copy, Eraser, ListVideo, Loader2 } from 'lucide-react'
 import * as api from '../api/client'
 import type { CanonicalTask } from '../api/client'
@@ -8,10 +8,7 @@ import { useStore } from '../stores/useStore'
 import { AgentAvatar } from '../features/agent/AgentAvatar'
 import { listenForAgentActivityDetails } from '../features/agent/agentUiBus'
 import { useUiTranslation } from '../i18n'
-
-const AgentAssistantPanel = lazy(() =>
-  import('../features/agent/AgentAssistantPanel').then(module => ({ default: module.AgentAssistantPanel })),
-)
+import { publishCanonicalTasks } from '../features/activity/canonicalTaskFeed'
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const CONNECTED_RECONCILE_MS = 60_000
@@ -237,7 +234,6 @@ export function ActivityFooter() {
   const [tasks, setTasks] = useState<CanonicalTask[]>([])
   const tasksRef = useRef<CanonicalTask[]>([])
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [agentOpen, setAgentOpen] = useState(false)
   const [clock, setClock] = useState(Date.now())
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
   const [controlFailures, setControlFailures] = useState<Record<string, TaskControlFailure>>({})
@@ -263,6 +259,7 @@ export function ActivityFooter() {
     const commitTasks = (next: CanonicalTask[]) => {
       tasksRef.current = next
       setTasks(next)
+      publishCanonicalTasks(next)
     }
     const refresh = async (): Promise<number | null> => {
       if (refreshPending) return null
@@ -332,6 +329,7 @@ export function ActivityFooter() {
 
     tasksRef.current = []
     setTasks([])
+    publishCanonicalTasks([])
     setControlFailures({})
     void connectAfterSnapshot()
     return () => {
@@ -456,15 +454,6 @@ export function ActivityFooter() {
 
   return (
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
-      {agentOpen && (
-        <Suspense fallback={null}>
-          <AgentAssistantPanel
-            workspace={activeWorkspace}
-            tasks={tasks}
-            onClose={() => setAgentOpen(false)}
-          />
-        </Suspense>
-      )}
       {detailsOpen && roots.length > 0 && (
         <div className="absolute bottom-full left-3 mb-2 w-[min(48rem,calc(100vw-1.5rem))] max-h-80 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
           <div className="mb-1.5 flex items-center justify-between px-1">
@@ -634,17 +623,17 @@ export function ActivityFooter() {
       <div className="flex h-full w-44 shrink-0 items-center border-r border-amber-200/15 pr-3">
         <button
           type="button"
-          onClick={() => { setAgentOpen(open => !open); setDetailsOpen(false) }}
-          className={`hp-agent-trigger flex w-full items-center gap-2 rounded-lg border px-2 py-0.5 text-left transition ${agentOpen ? 'border-amber-200/45 bg-amber-200/10 text-amber-50' : 'border-amber-200/15 bg-amber-100/[.025] text-amber-100/75 hover:border-amber-200/35 hover:bg-amber-100/[.055] hover:text-amber-50'}`}
-          aria-expanded={agentOpen}
+          onClick={() => { window.dispatchEvent(new Event('hocuspocus:wizard-open')); setDetailsOpen(false) }}
+          className="hp-agent-trigger flex w-full items-center gap-2 rounded-lg border border-amber-200/15 bg-amber-100/[.025] px-2 py-0.5 text-left text-amber-100/75 transition hover:border-amber-200/35 hover:bg-amber-100/[.055] hover:text-amber-50"
+          aria-label={tWizard('open')}
           title={tWizard('open')}
         >
-          <AgentAvatar state={agentOpen ? 'listening' : 'idle'} size={24} />
+          <AgentAvatar state="idle" size={24} />
           <span className="font-medium whitespace-nowrap">{tWizard('title')}</span>
         </button>
       </div>
 
-      <button type="button" onClick={() => { setDetailsOpen(open => !open); setAgentOpen(false) }} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title={tActivity('openHistory')}>
+      <button type="button" onClick={() => setDetailsOpen(open => !open)} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title={tActivity('openHistory')}>
         {isActive
           ? <Loader2 size={13} className="animate-spin text-accent-blue" />
           : hasError

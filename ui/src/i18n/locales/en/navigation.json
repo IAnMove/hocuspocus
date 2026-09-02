@@ -26,6 +26,35 @@
     "series": "Series Lab",
     "director": "Director"
   },
+  "primary": {
+    "create": "Create",
+    "library": "Library",
+    "activity": "Activity",
+    "studio": "Studio"
+  },
+  "menu": {
+    "create": "Choose a creative workspace",
+    "library": "Find projects and generated media"
+  },
+  "descriptions": {
+    "studio": "Generate a single image, video, song or 3D asset.",
+    "storyLab": "Develop stories and music videos with a reusable canon.",
+    "seriesLab": "Plan a series and create its episodes.",
+    "comics": "Lay out pages, panels and their images.",
+    "director": "Prepare and supervise multi-shot productions.",
+    "editor": "Assemble and export existing clips.",
+    "video3d": "Compose camera-driven videos from 3D scenes.",
+    "characters": "Build reusable characters and references.",
+    "projects": "Durable creative documents you can reopen and edit.",
+    "assets": "Reusable source files and generated results.",
+    "allOutputs": "Browse every generated output in the current output folder.",
+    "mediaFilters": "Filter the output library by this media type."
+  },
+  "search": {
+    "placeholder": "Search...",
+    "open": "Search library",
+    "close": "Close search"
+  },
   "tabs": {
     "all": "All",
     "assets": "Assets",

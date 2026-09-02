@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Settings, X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { Settings, X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen, WandSparkles } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { GenerationModeSelector } from './GenerationModeSelector'
@@ -18,7 +18,6 @@ import { AdvancedSettings } from './AdvancedSettings'
 import { GenerateButton } from './GenerateButton'
 import { ModelSelector } from './ModelSelector'
 import { MultiClipEditor } from './MultiClipEditor'
-import { DirectorChat } from './DirectorChat'
 import { EditSubModeToggle } from './EditSubModeToggle'
 import { RestyleControls } from './RestyleControls'
 import { InpaintControls } from './InpaintControls'
@@ -35,10 +34,17 @@ import { HardwareStatusBar } from './HardwareStatusBar'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
 import { PanoramaLoopPanel } from './PanoramaLoopPanel'
 import { BrandIdentity } from '../BrandIdentity'
+import { useCanonicalTaskFeed } from '../../features/activity/canonicalTaskFeed'
+
+const AgentAssistantPanel = lazy(() =>
+  import('../../features/agent/AgentAssistantPanel').then(module => ({ default: module.AgentAssistantPanel })),
+)
 
 export function Sidebar() {
-  const [directorCollapsed, setDirectorCollapsed] = useState(() =>
-    window.localStorage.getItem('maestro-director-sidebar-collapsed') === 'true')
+  const [sidebarView, setSidebarView] = useState<'wizard' | 'studio'>(() =>
+    window.localStorage.getItem('hocuspocus-sidebar-view') === 'studio' ? 'studio' : 'wizard')
+  const [wizardCollapsed, setWizardCollapsed] = useState(() =>
+    window.localStorage.getItem('hocuspocus-wizard-sidebar-collapsed') === 'true')
   const toggleSettings = useStore(s => s.toggleSettings)
   const generationMode = useStore(s => s.generationMode)
   const imageMode = useStore(s => s.params.image_mode)
@@ -46,8 +52,9 @@ export function Sidebar() {
   const sidebarOpen = useStore(s => s.sidebarOpen)
   const appVersion = useStore(s => s.systemConfig?.app_version)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
-  const sidebarMode = useStore(s => s.sidebarMode)
   const setSidebarMode = useStore(s => s.setSidebarMode)
+  const activeWorkspace = useStore(s => s.activeWorkspace)
+  const tasks = useCanonicalTaskFeed()
   const editSubMode = useStore(s => s.editSubMode)
   const modelType = useStore(s => s.params.model_type)
   const openLoraBrowser = useStore(s => s.setLoraBrowserOpen)
@@ -70,41 +77,61 @@ export function Sidebar() {
   const isMultiClip = isVideo && !isOmniReference && imageMode === 2
   const isContinue = isVideo && !isOmniReference && imageMode === 3
   const isBlend = isVideo && !isOmniReference && imageMode === 4
-  const isDirector = sidebarMode === 'director'
+  const isWizard = sidebarView === 'wizard'
   const isI2vOnly = modelOptions?.i2v_class && !modelOptions?.t2v_class
-  const setDirectorSidebarCollapsed = (collapsed: boolean) => {
-    setDirectorCollapsed(collapsed)
-    window.localStorage.setItem('maestro-director-sidebar-collapsed', String(collapsed))
+  const setWizardSidebarCollapsed = (collapsed: boolean) => {
+    setWizardCollapsed(collapsed)
+    window.localStorage.setItem('hocuspocus-wizard-sidebar-collapsed', String(collapsed))
+  }
+  const selectSidebarView = (view: 'wizard' | 'studio') => {
+    setSidebarView(view)
+    window.localStorage.setItem('hocuspocus-sidebar-view', view)
+    if (view === 'wizard') setWizardSidebarCollapsed(false)
+    if (view === 'studio') setSidebarMode('studio')
   }
 
   useEffect(() => {
-    const openDirector = () => setDirectorSidebarCollapsed(false)
-    window.addEventListener('maestro:director-open', openDirector)
-    return () => window.removeEventListener('maestro:director-open', openDirector)
+    const openWizard = () => {
+      selectSidebarView('wizard')
+      setWizardSidebarCollapsed(false)
+      setSidebarOpen(true)
+    }
+    const openStudio = () => {
+      selectSidebarView('studio')
+      setSidebarOpen(true)
+    }
+    window.addEventListener('hocuspocus:wizard-open', openWizard)
+    window.addEventListener('hocuspocus:studio-open', openStudio)
+    return () => {
+      window.removeEventListener('hocuspocus:wizard-open', openWizard)
+      window.removeEventListener('hocuspocus:studio-open', openStudio)
+    }
+  // The event bridge deliberately tracks stable Zustand actions only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const modeToggle = (size: 'sm' | 'md') => (
     <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
       <button
-        onClick={() => setSidebarMode('director')}
+        onClick={() => selectSidebarView('wizard')}
         className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
           // bg-toggle-active is flat accent-blue in the Classic theme
           // and a blue gradient in HocusPocus Blue. The glow token stays
           // theme-aware without changing this component's layout.
-          isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
+          isWizard ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
         }`}
       >
-        Director
+        <WandSparkles size={12} className="inline" /> Wizard
       </button>
       <button
-        onClick={() => setSidebarMode('studio')}
+        onClick={() => selectSidebarView('studio')}
         className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
           // Studio active intentionally uses bg-toggle-active too so the
           // currently-active mode reads with the same prominence in
           // HocusPocus Blue. Classic theme: flat
           // accent-blue (was bg-bg-active dark elevation — small change
           // that brings the two buttons into visual parity).
-          !isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
+          !isWizard ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
         }`}
       >
         Studio
@@ -228,7 +255,7 @@ export function Sidebar() {
             mode (basic, multi-clip, continue, blend) — it's the same
             generation path that consumes `directorVoiceRef` server-side.
             Director mode renders its own copy in DirectorChat. */}
-        {isVideo && !isDirector && !isOmniReference && imageMode !== 0 && imageMode !== 3 && <VoiceRefSection />}
+        {isVideo && !isOmniReference && imageMode !== 0 && imageMode !== 3 && <VoiceRefSection />}
         </>
         )}
       </div>
@@ -294,26 +321,30 @@ export function Sidebar() {
               </button>
             </div>
           </div>
-          {isDirector ? <DirectorChat /> : studioControls}
+          {isWizard ? (
+            <Suspense fallback={<div className="flex flex-1 items-center justify-center text-xs text-text-muted">Opening the Wizard…</div>}>
+              <AgentAssistantPanel workspace={activeWorkspace} tasks={tasks} onClose={() => setSidebarOpen(false)} embedded />
+            </Suspense>
+          ) : studioControls}
           <HardwareStatusBar />
         </aside>
       </>
     )
   }
 
-  if (isDirector && directorCollapsed) {
+  if (isWizard && wizardCollapsed) {
     return (
       <aside className="w-11 h-full bg-bg-secondary border-r border-border flex flex-col items-center shrink-0">
         <button
-          onClick={() => setDirectorSidebarCollapsed(false)}
+          onClick={() => setWizardSidebarCollapsed(false)}
           className="m-1.5 p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          title="Expand Director panel"
-          aria-label="Expand Director panel"
+          title="Expand Ask to the Wizard"
+          aria-label="Expand Ask to the Wizard"
         >
           <PanelLeftOpen size={17} />
         </button>
         <span className="mt-2 text-[10px] uppercase tracking-[0.2em] text-text-muted [writing-mode:vertical-rl]">
-          Director
+          Wizard
         </span>
       </aside>
     )
@@ -327,12 +358,12 @@ export function Sidebar() {
         <BrandIdentity appVersion={appVersion} />
         <div className="flex items-center gap-2">
           {modeToggle('md')}
-          {isDirector && (
+          {isWizard && (
             <button
-              onClick={() => setDirectorSidebarCollapsed(true)}
+              onClick={() => setWizardSidebarCollapsed(true)}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="Collapse Director panel"
-              aria-label="Collapse Director panel"
+              title="Collapse Ask to the Wizard"
+              aria-label="Collapse Ask to the Wizard"
             >
               <PanelLeftClose size={16} />
             </button>
@@ -346,7 +377,11 @@ export function Sidebar() {
           </button>
         </div>
       </div>
-      {isDirector ? <DirectorChat /> : studioControls}
+      {isWizard ? (
+        <Suspense fallback={<div className="flex flex-1 items-center justify-center text-xs text-text-muted">Opening the Wizard…</div>}>
+          <AgentAssistantPanel workspace={activeWorkspace} tasks={tasks} onClose={() => setWizardSidebarCollapsed(true)} embedded />
+        </Suspense>
+      ) : studioControls}
       <HardwareStatusBar />
     </aside>
   )

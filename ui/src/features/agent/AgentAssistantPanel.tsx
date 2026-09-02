@@ -33,6 +33,7 @@ interface AgentAssistantPanelProps {
   workspace: string
   tasks: CanonicalTask[]
   onClose: () => void
+  embedded?: boolean
 }
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
@@ -121,7 +122,7 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
   }
 }
 
-export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistantPanelProps) {
+export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = false }: AgentAssistantPanelProps) {
   const { t } = useUiTranslation('wizard')
   const [messages, setMessages] = useState<AgentMessage[]>(() => readMessages(workspace))
   const [conversationWorkspace, setConversationWorkspace] = useState(workspace)
@@ -454,7 +455,9 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       data-expanded={expanded ? 'true' : 'false'}
       className={`hp-agent-panel z-[100] flex flex-col overflow-hidden border border-amber-200/20 bg-[#0d0b13]/95 shadow-2xl backdrop-blur-xl ${expanded
         ? 'hp-agent-panel--expanded fixed inset-0 rounded-none text-sm sm:inset-2 sm:rounded-2xl'
-        : 'fixed bottom-12 left-2 h-[min(34rem,calc(100vh-5rem))] w-[min(25rem,calc(100vw-1rem))] rounded-2xl text-xs'}`}
+        : embedded
+          ? 'relative h-full w-full border-0 text-xs shadow-none'
+          : 'fixed bottom-12 left-2 h-[min(34rem,calc(100vh-5rem))] w-[min(25rem,calc(100vw-1rem))] rounded-2xl text-xs'}`}
     >
       <div className="relative overflow-hidden border-b border-white/10 px-3 py-3">
         <div className="hp-agent-panel-glow" aria-hidden="true" />
@@ -596,6 +599,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       </form>
     </section>
   )
+
+  if (embedded && !expanded) return panel
 
   return createPortal(
     <>

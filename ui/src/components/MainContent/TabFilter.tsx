@@ -1,156 +1,173 @@
-import { useState, useRef, useEffect } from 'react'
-import { Heart, Film, Search, X, Box, PersonStanding, BookOpen, Library, Palette, Layers, ShieldAlert } from 'lucide-react'
-import type { ParseKeys } from 'i18next'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  Activity, BookOpen, Boxes, ChevronDown, Clapperboard, FolderKanban,
+  Library, MonitorPlay, Search, Settings, Sparkles, Video, WandSparkles, X,
+} from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
-import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
 
-type NavigationKey = ParseKeys<'navigation'>
+interface MenuItem {
+  value?: MediaFilter
+  label: string
+  description: string
+  icon: ReactNode
+  action: () => void
+}
 
-const tabs: { value: MediaFilter; labelKey: NavigationKey; shortKey?: NavigationKey; icon?: string }[] = [
-  { value: 'all', labelKey: 'tabs.all', shortKey: 'short.all' },
-  { value: 'assets', labelKey: 'tabs.assets', shortKey: 'short.assets', icon: 'layers' },
-  { value: 'projects', labelKey: 'tabs.projects', shortKey: 'short.projects', icon: 'library' },
-  { value: 'workspaces', labelKey: 'tabs.workspaces', shortKey: 'short.workspaces', icon: 'layers' },
-  { value: 'images', labelKey: 'tabs.images', shortKey: 'short.images' },
-  { value: 'videos', labelKey: 'tabs.videos', shortKey: 'short.videos' },
-  { value: 'videoclips', labelKey: 'tabs.videoclips', shortKey: 'short.videoclips' },
-  { value: 'trailers', labelKey: 'tabs.trailers', shortKey: 'short.trailers' },
-  { value: 'series_episodes', labelKey: 'tabs.episodes', shortKey: 'short.episodes' },
-  { value: 'audio', labelKey: 'tabs.audio', shortKey: 'short.audio' },
-  { value: 'model3d', labelKey: 'tabs.model3d', shortKey: 'short.model3d', icon: 'box' },
-  { value: 'scenes', labelKey: 'tabs.scenes', shortKey: 'short.scenes', icon: 'film' },
-  { value: 'stories', labelKey: 'tabs.storyLab', shortKey: 'short.storyLab', icon: 'library' },
-  { value: 'series', labelKey: 'tabs.seriesLab', shortKey: 'short.seriesLab', icon: 'library' },
-  { value: 'runs', labelKey: 'tabs.runs', shortKey: 'short.runs', icon: 'layers' },
-  { value: 'characters', labelKey: 'tabs.characters', shortKey: 'short.characters', icon: 'person' },
-  { value: 'styles', labelKey: 'tabs.styles', shortKey: 'short.styles', icon: 'palette' },
-  { value: 'comics', labelKey: 'tabs.comics', shortKey: 'short.comics', icon: 'book' },
-  { value: 'videoeditor', labelKey: 'tabs.videoEditor', shortKey: 'short.videoEditor', icon: 'film' },
-  { value: 'scene3d', labelKey: 'tabs.scene3d', shortKey: 'short.scene3d', icon: 'film' },
-  { value: 'animate3d', labelKey: 'tabs.animate3d', shortKey: 'short.animate3d', icon: 'person' },
-  { value: 'avatars', labelKey: 'tabs.edits', shortKey: 'short.edits' },
-  { value: 'multiclip', labelKey: 'tabs.multiclip', shortKey: 'short.multiclip', icon: 'film' },
-  { value: 'auditdev', labelKey: 'tabs.auditDev', shortKey: 'short.auditDev', icon: 'shield' },
-  { value: 'favorites', labelKey: 'tabs.favorites', icon: 'heart' },
-]
+const CREATE_FILTERS = new Set<MediaFilter>([
+  'stories', 'series', 'comics', 'videoeditor', 'scene3d', 'animate3d', 'characters',
+])
+const LIBRARY_FILTERS = new Set<MediaFilter>([
+  'all', 'assets', 'projects', 'images', 'videos', 'videoclips', 'trailers',
+  'series_episodes', 'audio', 'model3d', 'scenes', 'styles', 'avatars', 'multiclip', 'favorites',
+])
+const PRIMARY_DESTINATIONS = {
+  workspaces: { value: 'workspaces' as const },
+  activity: { value: 'runs' as const },
+}
+
+function PrimaryButton({ active, icon, label, onClick, menu, ariaLabel }: {
+  active?: boolean
+  icon: ReactNode
+  label: string
+  onClick?: () => void
+  menu?: ReactNode
+  ariaLabel?: string
+}) {
+  if (menu) {
+    return (
+      <details className="group relative">
+        <summary className={`flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${active ? 'bg-bg-active text-text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-primary'}`}>
+          {icon}<span>{label}</span><ChevronDown size={12} className="transition group-open:rotate-180" />
+        </summary>
+        {menu}
+      </details>
+    )
+  }
+  return (
+    <button type="button" role="tab" aria-selected={active || false} aria-label={ariaLabel} onClick={onClick} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${active ? 'bg-bg-active text-text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-primary'}`}>
+      {icon}<span>{label}</span>
+    </button>
+  )
+}
+
+function NavigationMenu({ title, items, activeValue }: { title: string; items: MenuItem[]; activeValue: MediaFilter }) {
+  return (
+    <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-xl border border-border bg-bg-secondary p-2 shadow-2xl">
+      <p className="px-2 pb-1 pt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-text-muted">{title}</p>
+      <div className="grid gap-1">
+        {items.map(item => (
+          <button
+            key={item.label}
+            type="button"
+            role="tab"
+            aria-label={item.label}
+            aria-selected={item.value === activeValue}
+            onClick={event => {
+              item.action()
+              event.currentTarget.closest('details')?.removeAttribute('open')
+            }}
+            className="flex items-start gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-bg-hover"
+          >
+            <span className="mt-0.5 text-accent-blue">{item.icon}</span>
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-text-primary">{item.label}</span>
+              <span className="block text-[10px] leading-relaxed text-text-muted">{item.description}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function TabFilter() {
   const { t } = useUiTranslation('navigation')
   const mediaFilter = useStore(s => s.mediaFilter)
   const setMediaFilter = useStore(s => s.setMediaFilter)
+  const setDashboardOpen = useStore(s => s.setDashboardOpen)
+  const toggleSettings = useStore(s => s.toggleSettings)
   const developerMode = useStore(s => s.developerMode)
   const searchQuery = useStore(s => s.outputSearchQuery)
   const setSearchQuery = useStore(s => s.setOutputSearchQuery)
-  const visibleTabs = tabs.filter(tab => tab.value !== 'auditdev' || developerMode)
   const [searchOpen, setSearchOpen] = useState(false)
   const [draftQuery, setDraftQuery] = useState(searchQuery)
   const searchRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<number | null>(null)
 
   useEffect(() => {
-    if (searchOpen && searchRef.current) searchRef.current.focus()
+    if (searchOpen) searchRef.current?.focus()
   }, [searchOpen])
 
   useEffect(() => () => {
     if (debounceRef.current !== null) window.clearTimeout(debounceRef.current)
-    // Unmounting the filter must not leave a hidden backend search active.
-    // Set the store directly so teardown does not start a needless reload.
     useStore.setState({ outputSearchQuery: '', selectedOutput: 0 })
   }, [])
 
-  const cancelPendingSearch = () => {
-    if (debounceRef.current === null) return
-    window.clearTimeout(debounceRef.current)
-    debounceRef.current = null
-  }
+  const openFilter = (filter: MediaFilter) => setMediaFilter(filter)
+  const createItems: MenuItem[] = [
+    { label: t('primary.studio'), description: t('descriptions.studio'), icon: <Sparkles size={15} />, action: () => window.dispatchEvent(new Event('hocuspocus:studio-open')) },
+    { value: 'stories', label: t('tabs.storyLab'), description: t('descriptions.storyLab'), icon: <BookOpen size={15} />, action: () => openFilter('stories') },
+    { value: 'series', label: t('tabs.seriesLab'), description: t('descriptions.seriesLab'), icon: <Library size={15} />, action: () => openFilter('series') },
+    { value: 'comics', label: t('tabs.comics'), description: t('descriptions.comics'), icon: <BookOpen size={15} />, action: () => openFilter('comics') },
+    { label: t('labs.director'), description: t('descriptions.director'), icon: <Clapperboard size={15} />, action: () => setDashboardOpen(true) },
+    { value: 'videoeditor', label: t('tabs.videoEditor'), description: t('descriptions.editor'), icon: <Video size={15} />, action: () => openFilter('videoeditor') },
+    { value: 'scene3d', label: t('tabs.scene3d'), description: t('descriptions.video3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('scene3d') },
+    { value: 'characters', label: t('tabs.characters'), description: t('descriptions.characters'), icon: <WandSparkles size={15} />, action: () => openFilter('characters') },
+  ]
+  const libraryItems: MenuItem[] = [
+    { value: 'projects', label: t('tabs.projects'), description: t('descriptions.projects'), icon: <FolderKanban size={15} />, action: () => openFilter('projects') },
+    { value: 'assets', label: t('tabs.assets'), description: t('descriptions.assets'), icon: <Boxes size={15} />, action: () => openFilter('assets') },
+    { value: 'all', label: t('tabs.all'), description: t('descriptions.allOutputs'), icon: <Library size={15} />, action: () => openFilter('all') },
+    { value: 'images', label: t('tabs.images'), description: t('descriptions.mediaFilters'), icon: <Sparkles size={15} />, action: () => openFilter('images') },
+    { value: 'videos', label: t('tabs.videos'), description: t('descriptions.mediaFilters'), icon: <Video size={15} />, action: () => openFilter('videos') },
+    { value: 'videoclips', label: t('tabs.videoclips'), description: t('descriptions.mediaFilters'), icon: <Video size={15} />, action: () => openFilter('videoclips') },
+    { value: 'trailers', label: t('tabs.trailers'), description: t('descriptions.mediaFilters'), icon: <Video size={15} />, action: () => openFilter('trailers') },
+    { value: 'series_episodes', label: t('tabs.episodes'), description: t('descriptions.mediaFilters'), icon: <Video size={15} />, action: () => openFilter('series_episodes') },
+    { value: 'audio', label: t('tabs.audio'), description: t('descriptions.mediaFilters'), icon: <Activity size={15} />, action: () => openFilter('audio') },
+    { value: 'model3d', label: t('tabs.model3d'), description: t('descriptions.mediaFilters'), icon: <Boxes size={15} />, action: () => openFilter('model3d') },
+    { value: 'favorites', label: t('tabs.favorites'), description: t('descriptions.mediaFilters'), icon: <Sparkles size={15} />, action: () => openFilter('favorites') },
+    ...(developerMode ? [{ value: 'auditdev' as const, label: t('tabs.auditDev'), description: t('descriptions.mediaFilters'), icon: <Activity size={15} />, action: () => openFilter('auditdev') }] : []),
+  ]
 
-  const handleSearchChange = (val: string) => {
-    setDraftQuery(val)
-    cancelPendingSearch()
+  const handleSearchChange = (value: string) => {
+    setDraftQuery(value)
+    if (debounceRef.current !== null) window.clearTimeout(debounceRef.current)
     debounceRef.current = window.setTimeout(() => {
       debounceRef.current = null
-      setSearchQuery(val)
+      setSearchQuery(value)
     }, 400)
   }
-
   const closeSearch = () => {
-    cancelPendingSearch()
+    if (debounceRef.current !== null) window.clearTimeout(debounceRef.current)
+    debounceRef.current = null
     setDraftQuery('')
     setSearchOpen(false)
-    // A pending draft has never reached the store, so avoid an unnecessary
-    // normal-output reload when the canonical query is already empty.
     if (useStore.getState().outputSearchQuery) setSearchQuery('')
   }
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1">
-      <HorizontalScrollTabs
-        activeKey={mediaFilter}
-        ariaLabel={t('aria.sections')}
-        className="flex-1"
-        viewportClassName="flex gap-0.5 bg-bg-tertiary rounded-lg p-0.5 border border-border"
-      >
-        {visibleTabs.map(tab => (
-          <button
-            key={tab.value}
-            type="button"
-            role="tab"
-            aria-selected={mediaFilter === tab.value}
-            data-scroll-key={tab.value}
-            onClick={() => setMediaFilter(tab.value)}
-            className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-xs font-medium transition-all flex items-center gap-1 whitespace-nowrap shrink-0 ${
-              mediaFilter === tab.value
-                ? tab.value === 'favorites' ? 'bg-red-500/20 text-chip-red'
-                : tab.value === 'multiclip' || tab.value === 'videoclips' || tab.value === 'trailers' || tab.value === 'series_episodes' ? 'bg-purple-500/20 text-chip-purple'
-                : tab.value === 'auditdev' ? 'bg-amber-500/20 text-amber-200'
-                : 'bg-bg-active text-text-primary'
-                : 'text-text-muted hover:text-text-secondary'
-            }`}
-          >
-            {tab.icon === 'heart' && <Heart size={11} fill={mediaFilter === 'favorites' ? 'currentColor' : 'none'} />}
-            {tab.icon === 'film' && <Film size={11} />}
-            {tab.icon === 'box' && <Box size={11} />}
-            {tab.icon === 'person' && <PersonStanding size={11} />}
-            {tab.icon === 'book' && <BookOpen size={11} />}
-            {tab.icon === 'library' && <Library size={11} />}
-            {tab.icon === 'palette' && <Palette size={11} />}
-            {tab.icon === 'layers' && <Layers size={11} />}
-            {tab.icon === 'shield' && <ShieldAlert size={11} />}
-            <span className="hidden md:inline">{t(tab.labelKey)}</span>
-            <span className="md:hidden">{tab.shortKey ? t(tab.shortKey) : ''}</span>
-          </button>
-        ))}
-      </HorizontalScrollTabs>
+    <nav aria-label={t('aria.sections')} className="flex min-w-0 flex-1 items-center gap-1 rounded-xl border border-border bg-bg-tertiary/70 p-1">
+      <PrimaryButton active={CREATE_FILTERS.has(mediaFilter)} icon={<Sparkles size={14} />} label={t('primary.create')} menu={<NavigationMenu title={t('menu.create')} items={createItems} activeValue={mediaFilter} />} />
+      <PrimaryButton active={LIBRARY_FILTERS.has(mediaFilter)} icon={<Library size={14} />} label={t('primary.library')} menu={<NavigationMenu title={t('menu.library')} items={libraryItems} activeValue={mediaFilter} />} />
+      <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.workspaces.value} icon={<FolderKanban size={14} />} label={t('tabs.workspaces')} onClick={() => openFilter(PRIMARY_DESTINATIONS.workspaces.value)} />
+      <PrimaryButton active={mediaFilter === PRIMARY_DESTINATIONS.activity.value} icon={<Activity size={14} />} label={t('primary.activity')} ariaLabel={`${t('tabs.runs')} · ${t('primary.activity')}`} onClick={() => openFilter(PRIMARY_DESTINATIONS.activity.value)} />
+      <PrimaryButton icon={<Settings size={14} />} label="Settings" onClick={toggleSettings} />
 
-      {/* Search */}
-      {searchOpen ? (
-        <div className="flex items-center gap-1 bg-bg-tertiary border border-border rounded-lg px-2 py-0.5">
-          <Search size={12} className="text-text-muted shrink-0" />
-          <input
-            ref={searchRef}
-            type="text"
-            value={draftQuery}
-            onChange={e => handleSearchChange(e.target.value)}
-            placeholder="Search..."
-            className="bg-transparent text-xs text-text-primary placeholder:text-text-muted focus:outline-none w-24 md:w-36"
-          />
-          <button type="button" onClick={closeSearch} aria-label="Close search"
-            className="text-text-muted hover:text-text-secondary">
-            <X size={12} />
+      <div className="ml-auto">
+        {searchOpen ? (
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary px-2 py-0.5">
+            <Search size={12} className="shrink-0 text-text-muted" />
+            <input ref={searchRef} value={draftQuery} onChange={event => handleSearchChange(event.target.value)} placeholder={t('search.placeholder')} className="w-24 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted md:w-36" />
+            <button type="button" onClick={closeSearch} aria-label={t('search.close')} className="text-text-muted hover:text-text-secondary"><X size={12} /></button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => { setDraftQuery(searchQuery); setSearchOpen(true) }} className={`rounded-lg p-1.5 ${searchQuery ? 'bg-accent-blue/10 text-accent-blue' : 'text-text-muted hover:bg-bg-hover hover:text-text-secondary'}`} title="Search outputs" aria-label={t('search.open')}>
+            <Search size={14} />
           </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => { setDraftQuery(searchQuery); setSearchOpen(true) }}
-          className={`p-1.5 rounded-lg transition-colors ${searchQuery ? 'text-accent-blue bg-accent-blue/10' : 'text-text-muted hover:text-text-secondary hover:bg-bg-hover'}`}
-          title="Search outputs"
-        >
-          <Search size={14} />
-        </button>
-      )}
-    </div>
+        )}
+      </div>
+    </nav>
   )
 }
