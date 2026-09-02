@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import sys
@@ -20,8 +21,15 @@ from services.alternative_songs import (  # noqa: E402
     remove_song,
     resolve_remount_sources,
     save_sidecar,
+    sidecar_path,
     source_clip_names,
     unique_mounted_name,
+    write_mounted_sidecar,
+)
+from services.asset_manifest import (  # noqa: E402
+    SCHEMA_NAME,
+    publish_generation_sidecar,
+    read_asset_manifest,
 )
 from services.output_result_kind import classify_output_result_kind  # noqa: E402
 
@@ -147,6 +155,110 @@ class AlternativeSongPlannerTests(unittest.TestCase):
             songs = [public_song(item) for item in reloaded["params"]["alternative_songs"]]
             self.assertEqual(songs[0]["audio_name"], "en.mp3")
             self.assertTrue(songs[0]["id"].startswith("song-"))
+
+
+class AlternativeSongSidecarTests(unittest.TestCase):
+    def test_save_sidecar_publishes_v1_and_roundtrips_songs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video = os.path.join(tmp, "clip.mp4")
+            Path(video).write_bytes(b"not-a-real-mp4")
+            sidecar = load_sidecar(video)
+            attach_song(sidecar, audio_name="en.mp3", duration_seconds=9)
+            sidecar["params"]["api_key"] = "secret-key"
+            save_sidecar(video, sidecar)
+            raw = json.loads(Path(sidecar_path(video)).read_text(encoding="utf-8"))
+            loaded = read_asset_manifest(video)
+            text = Path(sidecar_path(video)).read_text(encoding="utf-8")
+            self.assertEqual(raw["schema"], SCHEMA_NAME)
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded["origin"]["actor"], "unknown")
+            self.assertEqual(raw["params"]["alternative_songs"][0]["audio_name"], "en.mp3")
+            self.assertTrue(raw["params"]["alternative_songs"][0]["id"].startswith("song-"))
+            self.assertNotIn("secret-key", text)
+            self.assertNotEqual(loaded["origin"].get("actor"), "user")
+
+    def test_save_sidecar_keeps_existing_v1_asset_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video = os.path.join(tmp, "clip.mp4")
+            Path(video).write_bytes(b"not-a-real-mp4")
+            sidecar = load_sidecar(video)
+            attach_song(sidecar, audio_name="en.mp3", duration_seconds=9)
+            save_sidecar(video, sidecar)
+            first = read_asset_manifest(video)
+            self.assertIsNotNone(first)
+            asset_id = first["asset"]["id"]
+            mutated = load_sidecar(video)
+            attach_song(mutated, audio_name="pt.mp3", duration_seconds=8)
+            save_sidecar(video, mutated)
+            again = read_asset_manifest(video)
+            raw = json.loads(Path(sidecar_path(video)).read_text(encoding="utf-8"))
+            self.assertIsNotNone(again)
+            self.assertEqual(again["asset"]["id"], asset_id)
+            self.assertEqual(len(raw["params"]["alternative_songs"]), 2)
+
+    def test_save_sidecar_keeps_series_assembly_origin_tool(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video = os.path.join(tmp, "episode.mp4")
+            Path(video).write_bytes(b"video")
+            publish_generation_sidecar(
+                video,
+                {
+                    "generation_mode": "video",
+                    "params": {"pipeline_type": "series_episode"},
+                },
+                workspace_id="lab",
+                tool="series-assembly",
+            )
+            before = read_asset_manifest(video)
+            self.assertIsNotNone(before)
+            sidecar = load_sidecar(video)
+            attach_song(sidecar, audio_name="en.mp3", duration_seconds=9)
+            save_sidecar(video, sidecar)
+            loaded = read_asset_manifest(video)
+            raw = json.loads(Path(sidecar_path(video)).read_text(encoding="utf-8"))
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded["origin"]["tool"], "series-assembly")
+            self.assertEqual(loaded["asset"]["id"], before["asset"]["id"])
+            self.assertEqual(raw["params"]["alternative_songs"][0]["audio_name"], "en.mp3")
+
+    def test_write_mounted_sidecar_publishes_alternative_songs_origin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = os.path.join(tmp, "clip_en_mv.mp4")
+            Path(output).write_bytes(b"video")
+            parent_sidecar = {
+                "params": {
+                    "pipeline_type": "music_video",
+                    "model_type": "ffmpeg_remount",
+                    "resolution": "720p",
+                },
+            }
+            song = attach_song({"params": {}}, audio_name="en.mp3", duration_seconds=9)
+            planned = [{
+                "name": "shot.mp4",
+                "path": os.path.join(tmp, "shot.mp4"),
+                "duration": 4,
+                "used": 4,
+                "extra": False,
+            }]
+            write_mounted_sidecar(
+                output_path=output,
+                parent_name="clip.mp4",
+                parent_sidecar=parent_sidecar,
+                song=song,
+                planned=planned,
+                job_id="alt-song-1",
+                workspace="night-shift",
+            )
+            raw = json.loads(Path(sidecar_path(output)).read_text(encoding="utf-8"))
+            loaded = read_asset_manifest(output, workspace_id="night-shift")
+            self.assertEqual(raw["schema"], SCHEMA_NAME)
+            self.assertEqual(raw["parent_output"], "clip.mp4")
+            self.assertEqual(raw["params"]["parent_output"], "clip.mp4")
+            self.assertEqual(song["status"], "mounted")
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded["origin"]["tool"], "alternative-songs")
+            self.assertEqual(loaded["origin"]["workspace_id"], "night-shift")
+            self.assertEqual(loaded["origin"]["actor"], "unknown")
 
 
 if __name__ == "__main__":
