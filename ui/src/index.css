@@ -726,10 +726,21 @@ input[type="range"]::-webkit-slider-thumb {
     opacity var(--hp-intro-fade) ease,
     transform var(--hp-intro-fade) cubic-bezier(0.4, 0, 0.2, 1),
     filter var(--hp-intro-fade) ease;
+  /* The plate lives for about five seconds and then dissolves, so it is
+     worth holding a compositor layer for its whole life: the exit is the
+     one moment where a raster on frame one would be seen. */
+  will-change: opacity, transform;
 }
 .hp-intro-root[data-leaving='true'] {
   opacity: 0;
   transform: scale(1.025);
+}
+/* Blurring the plate on the way out re-blurs every physical pixel of the
+   window for the length of the dissolve. That is affordable on a laptop
+   panel and is not on a 4K one, which is why the tier decides — see
+   INTRO_RICH_PIXEL_BUDGET in HocusPocusIntro.tsx. Without it the scale
+   and the fade carry the exit on their own. */
+.hp-intro-root[data-tier='rich'][data-leaving='true'] {
   filter: blur(6px);
 }
 
@@ -766,6 +777,10 @@ input[type="range"]::-webkit-slider-thumb {
 .hp-intro-art {
   object-fit: contain;
   object-position: bottom center;
+  /* Promoted before data-run flips so the seven-second push-in starts on
+     a layer that is already rastered, instead of paying for a
+     viewport-sized raster on its first frame. */
+  will-change: transform;
 }
 
 /* The art carries one practical light: the quill on the desk, at about
@@ -789,7 +804,10 @@ input[type="range"]::-webkit-slider-thumb {
     rgba(92, 58, 138, 0.13) 50%,
     transparent 72%
   );
-  filter: blur(12px);
+  /* No blur here on purpose: a 12px blur over a gradient this soft is
+     invisible, and it turned the breathing scale below into a
+     re-rendered filter on a viewport-sized element every frame. */
+  will-change: transform, opacity;
 }
 
 /* Legibility scrim, weighted to the copy side only. The previous plate
@@ -815,9 +833,18 @@ input[type="range"]::-webkit-slider-thumb {
 .hp-intro-grain {
   position: absolute;
   inset: 0;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* soft-light sits better over the warm plate than flat alpha does, but a
+   blend mode makes the whole stage one render surface that has to be
+   re-composited on every frame of the art's push-in. Full-window, that
+   cost tracks the resolution, so it is a rich-tier affordance and the
+   cheap path leans on plain opacity instead. */
+.hp-intro-root[data-tier='rich'] .hp-intro-grain {
   opacity: 0.13;
   mix-blend-mode: soft-light;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 @media (max-width: 1023px) {
@@ -853,11 +880,26 @@ input[type="range"]::-webkit-slider-thumb {
   background: rgba(255, 214, 150, 0.9);
   box-shadow: 0 0 7px rgba(255, 186, 92, 0.7);
   opacity: 0;
+  will-change: transform, opacity;
 }
 
 /* Type. Base rules are the *settled* state — the keyframes below supply
    the entrance — so switching the animations off under reduced motion
    leaves a correctly composed still. */
+
+/* The wordmark never wraps: its glyphs are inline-blocks so they can be
+   transformed, which would otherwise let the line break between any two
+   of them. The shadow is a text-shadow rather than a drop-shadow filter
+   because a filter on this element would pull its animating glyphs into
+   a single render surface and repaint the word on every frame. */
+.hp-intro-wordmark {
+  white-space: nowrap;
+  text-shadow: 0 2px 40px rgba(0, 0, 0, 0.65);
+}
+.hp-intro-glyph {
+  display: inline-block;
+  will-change: transform, opacity;
+}
 .hp-intro-rule {
   transform-origin: center;
 }
@@ -869,6 +911,7 @@ input[type="range"]::-webkit-slider-thumb {
 .hp-intro-progress {
   transform-origin: left center;
   transform: scaleX(0);
+  will-change: transform;
 }
 
 @keyframes hp-intro-fade {
@@ -893,11 +936,13 @@ input[type="range"]::-webkit-slider-thumb {
   0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   50% { opacity: 0.82; transform: translate(-50%, -50%) scale(1.035); }
 }
-/* The wordmark resolves out of the glow: wide, blurred and low, then
-   settling into its final tracking. */
-@keyframes hp-intro-wordmark {
-  from { opacity: 0; letter-spacing: 0.26em; filter: blur(8px); transform: translateY(10px); }
-  to { opacity: 1; letter-spacing: 0.005em; filter: blur(0); transform: none; }
+/* The wordmark resolves out of the glow: each glyph starts out at its
+   wide-tracked position and low, then slides home. Offsets come from the
+   component so the tracking is one number in one place; transform and
+   opacity are all this needs, so the beat never touches layout. */
+@keyframes hp-intro-glyph {
+  from { opacity: 0; transform: translate3d(var(--hp-glyph-offset), 10px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 @keyframes hp-intro-mote {
   0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.55); }
@@ -931,8 +976,8 @@ input[type="range"]::-webkit-slider-thumb {
 .hp-intro-root[data-run='true'] .hp-intro-beat {
   animation: hp-intro-rise 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.hp-intro-root[data-run='true'] .hp-intro-wordmark {
-  animation: hp-intro-wordmark 1500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+.hp-intro-root[data-run='true'] .hp-intro-glyph {
+  animation: hp-intro-glyph 1400ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .hp-intro-root[data-run='true'] .hp-intro-rule {
   animation: hp-intro-draw 1200ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -949,7 +994,7 @@ input[type="range"]::-webkit-slider-thumb {
     .hp-intro-art,
     .hp-intro-bloom,
     .hp-intro-beat,
-    .hp-intro-wordmark,
+    .hp-intro-glyph,
     .hp-intro-rule
   ) {
     animation: none;
@@ -966,7 +1011,8 @@ input[type="range"]::-webkit-slider-thumb {
     opacity: 0.5;
     transform: scaleX(1);
   }
-  .hp-intro-root[data-leaving='true'] {
+  .hp-intro-root[data-leaving='true'],
+  .hp-intro-root[data-tier='rich'][data-leaving='true'] {
     transform: none;
     filter: none;
   }
