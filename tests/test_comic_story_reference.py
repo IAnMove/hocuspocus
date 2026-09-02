@@ -5,26 +5,15 @@ from __future__ import annotations
 import ast
 import base64
 import copy
-import json
 import os
 import re
 import tempfile
-import time
-import types
 import unittest
-import uuid
 import sys
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 from services import minimax_image_service  # noqa: E402
-
-
-class HTTPException(Exception):
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(detail)
-        self.status_code = status_code
-        self.detail = detail
 
 
 def _load_launch_functions(*names: str, namespace: dict | None = None) -> dict:
@@ -69,49 +58,35 @@ class TestComicStoryReferences(unittest.TestCase):
         self.assertEqual(panel["characters"], ["vigil", "nara"])
 
     def test_local_reference_is_sent_to_minimax_as_one_character_subject(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from routers.comics import create_comics_router
+
         with tempfile.TemporaryDirectory() as workspace:
             post = Mock(return_value=_MiniMaxResponse())
-            requests = types.SimpleNamespace(post=post, RequestException=Exception)
-            wgp = types.SimpleNamespace(server_config={
-                "services": {"minimax_api_key": "configured-in-settings"},
-            })
 
             def safe_join(root: str, filename: str):
                 candidate = os.path.abspath(os.path.join(root, filename))
                 return candidate if candidate.startswith(os.path.abspath(root) + os.sep) else None
 
-            scope = _load_launch_functions(
-                "_comic_reference_image_file",
-                "generate_comic_minimax",
-                namespace={
-                    "HTTPException": HTTPException,
-                    "_safe_join": safe_join,
-                    "_get_active_workspace": lambda: "default",
-                    "_workspace_dir": lambda _workspace=None: workspace,
-                    "execution_mode": types.SimpleNamespace(
-                        validate_remote_provider=lambda _workspace, _provider: None,
-                    ),
-                    "base64": base64,
-                    "json": json,
-                    "os": os,
-                    "re": re,
-                    "requests": requests,
-                    "time": time,
-                    "uuid": uuid,
-                    "wgp": wgp,
-                },
-            )
+            app = FastAPI()
+            app.include_router(create_comics_router(
+                workspace_dir=lambda _workspace=None: workspace,
+                get_active_workspace=lambda: "default",
+                safe_join=safe_join,
+                get_services_config=lambda: {"minimax_api_key": "configured-in-settings"},
+                publish_legacy_task=lambda *_args, **_kwargs: None,
+            ))
             reference_path = os.path.join(workspace, "hero.png")
             with open(reference_path, "wb") as handle:
                 handle.write(b"reference-image")
 
-            scope["minimax_image_service"] = minimax_image_service
             with patch.object(minimax_image_service.requests, "post", post):
-                result = scope["generate_comic_minimax"]({
+                result = TestClient(app).post("/api/v1/comics/generate/minimax", json={
                     "prompt": "The hero crosses the salt desert at dusk.",
                     "aspect_ratio": "4:3",
                     "subject_reference": "/api/v1/file/hero.png",
-                })
+                }).json()
 
             payload = post.call_args.kwargs["json"]
             self.assertEqual(payload["model"], "image-01")
@@ -126,12 +101,11 @@ class TestComicStoryReferences(unittest.TestCase):
             self.assertEqual(result["asset"]["metadata"]["aspectRatio"], "4:3")
 
     def test_private_reference_url_is_rejected(self):
-        scope = _load_launch_functions(
-            "_comic_reference_image_file",
-            namespace={"HTTPException": HTTPException},
-        )
-        with self.assertRaises(HTTPException) as raised:
-            scope["_comic_reference_image_file"]("http://127.0.0.1/private.png")
+        from fastapi import HTTPException as FastAPIHTTPException
+        from routers.comics import _comic_reference_image_file
+
+        with self.assertRaises(FastAPIHTTPException) as raised:
+            _comic_reference_image_file("http://127.0.0.1/private.png")
         self.assertEqual(raised.exception.status_code, 400)
 
 

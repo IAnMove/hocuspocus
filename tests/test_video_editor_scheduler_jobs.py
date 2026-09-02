@@ -31,6 +31,7 @@ from services.asset_manifest import SCHEMA_NAME
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
+COMICS = ROOT / "app" / "routers" / "comics.py"
 LANE_KEY = "local_cpu:ffmpeg"
 
 
@@ -56,7 +57,14 @@ def _function(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
             selected = copy.deepcopy(node)
             selected.decorator_list = []
             return selected
-    raise AssertionError(f"Function {name!r} not found in app/_launch_runtime.py")
+    if name == "start_comic_animatic":
+        comics = ast.parse(COMICS.read_text(encoding="utf-8"), filename=str(COMICS))
+        for node in ast.walk(comics):
+            if isinstance(node, ast.FunctionDef) and node.name == name:
+                selected = copy.deepcopy(node)
+                selected.decorator_list = []
+                return selected
+    raise AssertionError(f"Function {name!r} not found in launch or comics router")
 
 
 def _load(*names: str, namespace: dict) -> dict:
@@ -227,6 +235,16 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
         "cancel_video_editor_export",
         namespace=namespace,
     )
+    namespace.update({
+        "get_active_workspace": namespace["_get_active_workspace"],
+        "workspace_dir": namespace["_workspace_dir"],
+        "video_editor_task_identity": namespace["_video_editor_task_identity"],
+        "register_video_editor_job": namespace["_register_video_editor_job"],
+        "ffmpeg_lane_key": LANE_KEY,
+        "run_comic_animatic": namespace["_run_comic_animatic"],
+        "video_editor_job_update": namespace["_video_editor_job_update"],
+        "public_video_editor_job": namespace["_public_video_editor_job"],
+    })
     namespace["_resolve_video_editor_source"] = (
         lambda source, workspace=None: str(tmp_path / str(workspace) / os.path.basename(source))
     )
