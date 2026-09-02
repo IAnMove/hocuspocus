@@ -25477,6 +25477,7 @@ def _write_recast_shot_aware_sidecar(
 ):
     """Persist restorable settings without leaking disposable shot paths."""
     import copy
+    from services.asset_manifest import publish_generation_sidecar
 
     output_name = os.path.basename(output_path)
     params = copy.deepcopy(job.get("params") or {})
@@ -25723,6 +25724,7 @@ def _write_repaint_shot_aware_sidecar(
 ):
     """Persist mapped Repaint settings without disposable shot artifacts."""
     import copy
+    from services.asset_manifest import publish_generation_sidecar
 
     output_name = os.path.basename(output_path)
     params = copy.deepcopy(job.get("params") or {})
@@ -25975,6 +25977,7 @@ def _write_outpaint_shot_aware_sidecar(
 ):
     """Persist restorable Outpaint settings without private shot paths."""
     import copy
+    from services.asset_manifest import publish_generation_sidecar
 
     output_name = os.path.basename(output_path)
     params = copy.deepcopy(job.get("params") or {})
