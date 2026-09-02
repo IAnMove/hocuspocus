@@ -11,6 +11,10 @@ import type {
   PrepareVideoCommand,
   QueueSfxPackCommand,
 } from './commands'
+import {
+  generationProvenancePayload,
+  type GenerationSubmissionContext,
+} from './generationProvenance'
 
 export type StudioSfxClip = {
   name: string
@@ -114,7 +118,10 @@ export async function selectAudioModel(
   return selectedModel?.name || selected
 }
 
-export async function queueSfxPack(action: QueueSfxPackCommand): Promise<CommandResult> {
+export async function queueSfxPack(
+  action: QueueSfxPackCommand,
+  context?: GenerationSubmissionContext,
+): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Encolar el pack de SFX requiere confirm=true tras una petición explícita.')
   if (!action.clips.length) throw new Error('El pack de SFX no incluye clips.')
   openStudioAudio('sfx')
@@ -124,7 +131,7 @@ export async function queueSfxPack(action: QueueSfxPackCommand): Promise<Command
   for (const clip of action.clips) {
     applySfxClip(clip, negative)
     const before = new Set(useStore.getState().jobs)
-    await useStore.getState().startGeneration()
+    await useStore.getState().startGeneration(undefined, context)
     const created = useStore.getState().jobs.find(job => !before.has(job))
     if (!created) throw new Error(`HocusPocus no encoló el efecto ${clip.name}.`)
     if (created.status === 'failed') throw new Error(created.error || created.message || `Falló ${clip.name}.`)
@@ -339,7 +346,7 @@ export async function prepareAudio(action: PrepareAudioCommand): Promise<Command
   )
 }
 
-export async function startPreparedGeneration(): Promise<CommandResult> {
+export async function startPreparedGeneration(context?: GenerationSubmissionContext): Promise<CommandResult> {
   const state = useStore.getState()
   if (state.generationMode === 'model3d') {
     const { startHunyuan3DJob } = await import('../../api/client')
@@ -350,29 +357,31 @@ export async function startPreparedGeneration(): Promise<CommandResult> {
       workspace: state.activeWorkspace || 'default',
       preset: prepared3dPreset,
       seed: typeof state.params.seed === 'number' ? state.params.seed : 1234,
+      provenance: generationProvenancePayload(context),
     })
-    if (!job.job_id) throw new Error('Hunyuan3D devolvió éxito sin jobId; no considero la generación encolada.')
+    if (!job.task_id) throw new Error('Hunyuan3D devolvió éxito sin taskId; no considero la generación encolada.')
     return studioResult(
       'generation',
       'Studio generation',
-      `He enviado el modelo 3D a Hunyuan3D (${job.job_id}). Aparecerá en la galería 3D al terminar.`,
-      { taskId: job.job_id },
+      `He enviado el modelo 3D a Hunyuan3D (${job.task_id}). Aparecerá en la galería 3D al terminar.`,
+      { taskId: job.task_id },
     )
   }
   const before = useStore.getState().jobs
   const knownJobs = new Set(before)
-  await useStore.getState().startGeneration()
+  await useStore.getState().startGeneration(undefined, context)
   const created = useStore.getState().jobs.find(job => !knownJobs.has(job))
   if (!created) throw new Error('HocusPocus no creó una tarea; revisa los requisitos del modelo y los campos visibles.')
   if (created.status === 'failed') throw new Error(created.error || created.message || 'La generación no pudo entrar en cola.')
-  if (!created.id) throw new Error('HocusPocus devolvió éxito sin taskId; no considero la generación encolada.')
+  const taskId = created.taskId
+  if (!taskId) throw new Error('HocusPocus devolvió éxito sin taskId; no considero la generación encolada.')
   const mode = useStore.getState().generationMode
   const kind = mode === 'image' ? 'imagen' : mode === 'audio' ? 'pista de audio' : 'vídeo'
   return studioResult(
     'generation',
     'Studio generation',
-    `He enviado la ${kind} a la cola (${created.id}).`,
-    { taskId: created.id },
+    `He enviado la ${kind} a la cola (${taskId}).`,
+    { taskId },
   )
 }
 

@@ -43,6 +43,7 @@ import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferen
 import { registerStudioCapabilities } from './studioCapabilities'
 import { registerNavigationQueueCapabilities } from './navigationQueueCapabilities'
 import { registerEditorAuxCapabilities } from './editorAuxCapabilities'
+import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
@@ -75,6 +76,7 @@ export interface CapabilityExecutionContext {
   adapters: WizardApplicationAdapters
   workspace?: string
   onStep?: (message: string) => void
+  generationContext?: GenerationSubmissionContext
 }
 
 export interface CapabilityDefinition<TAction extends AgentAction = AgentAction> {

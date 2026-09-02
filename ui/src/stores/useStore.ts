@@ -24,6 +24,10 @@ import {
   splitStudioClipPrompts,
 } from '../features/studio/studioRestore'
 import { GALLERY_LIST_FILTERS, galleryListQuery } from '../lib/galleryListQuery'
+import {
+  generationProvenancePayload,
+  type GenerationSubmissionContext,
+} from '../features/studio/generationProvenance'
 
 const DASHBOARD_PIPELINE_PAGE_SIZE = 8
 const CIVIT_DOWNLOAD_POLL_MS = 2000
@@ -1609,7 +1613,10 @@ interface AppState {
   isGenerating: boolean
   promptSchedulerEnabled: boolean
   setPromptSchedulerEnabled: (enabled: boolean) => void
-  startGeneration: (scheduledPrompt?: ScheduledPromptSubmission) => Promise<void>
+  startGeneration: (
+    scheduledPrompt?: ScheduledPromptSubmission,
+    submissionContext?: GenerationSubmissionContext,
+  ) => Promise<void>
   stopGeneration: (jobId?: string) => void
   dismissJob: (jobId: string) => void
   reconnectJobs: () => Promise<void>
@@ -4522,7 +4529,7 @@ export const useStore = create<AppState>((set, get) => {
   promptSchedulerEnabled: false,
   setPromptSchedulerEnabled: (enabled) => set({ promptSchedulerEnabled: enabled }),
 
-  startGeneration: async (scheduledPrompt) => {
+  startGeneration: async (scheduledPrompt, submissionContext) => {
     const initialState = get()
 
     // Studio Prompt Scheduler: each non-empty line becomes its own normal
@@ -4543,7 +4550,7 @@ export const useStore = create<AppState>((set, get) => {
           prompt: scheduledPrompts[index],
           position: index + 1,
           total: scheduledPrompts.length,
-        })
+        }, submissionContext)
       }
       return
     }
@@ -5162,6 +5169,8 @@ export const useStore = create<AppState>((set, get) => {
     }
 
     const params: Record<string, unknown> = { ...state.params, generation_mode: state.generationMode, workspace: state.activeWorkspace }
+    const provenance = generationProvenancePayload(submissionContext)
+    if (provenance) params.provenance = provenance
     if (scheduledPrompt) {
       params.prompt = scheduledPrompt.prompt
       params.repeat_generation = 1
@@ -5905,7 +5914,7 @@ export const useStore = create<AppState>((set, get) => {
     })
 
     try {
-      const { job_id, h3_window_plan } = await api.submitGeneration(params)
+      const { job_id, task_id, root_task_id, h3_window_plan } = await api.submitGeneration(params)
 
       if (h3_window_plan) {
         const planFps = state.modelOptions?.fps ?? 24
@@ -5923,6 +5932,8 @@ export const useStore = create<AppState>((set, get) => {
         jobs: s.jobs.map(j => j === newJob ? {
           ...j,
           id: job_id,
+          taskId: task_id || undefined,
+          rootTaskId: root_task_id || task_id || undefined,
           status: 'queued',
           message: 'Queued...',
           h3WindowPlan: h3_window_plan ?? null,

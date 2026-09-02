@@ -517,6 +517,31 @@ def _physical_output_folder(value: Any) -> str | None:
     return name or None
 
 
+def _publish_model3d_result(job: dict[str, Any], output_path: str | Path, sidecar: dict[str, Any]) -> None:
+    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    payload = dict(sidecar)
+    payload.setdefault("job_id", job.get("job_id"))
+    payload.setdefault("task_id", job.get("task_id"))
+    payload.setdefault("root_task_id", job.get("root_task_id") or job.get("task_id"))
+    payload["created_at"] = job.get("created_at") or payload.get("created_at") or time.time()
+    payload["queued_at"] = job.get("created_at") or payload.get("queued_at")
+    payload["started_at"] = job.get("started_at") or payload.get("started_at")
+    payload["completed_at"] = job.get("finished_at") or time.time()
+    for key in ("command_id", "workflow_id", "run_id"):
+        if command.get(key):
+            payload.setdefault(key, command[key])
+    publish_generation_sidecar_best_effort(
+        output_path,
+        payload,
+        workspace_id=provenance.get("workspace_id"),
+        output_folder=_physical_output_folder(job.get("workspace")),
+        tool=provenance.get("tool") or "model3d",
+        actor=provenance.get("actor"),
+        capability=provenance.get("capability"),
+    )
+
+
 def _prune_finished_jobs_locked() -> None:
     """Drop old terminal jobs; callers must hold _lock."""
     now = time.time()
@@ -622,6 +647,7 @@ def _start_remote_job(
         "model_id": model_id,
         "provider": provider,
         "workspace": str(workspace or "default"),
+        "provenance": dict(body.get("provenance") or {}),
         "created_at": time.time(),
         "updated_at": time.time(),
         "request": {
@@ -658,7 +684,10 @@ def _run_remote_job(job_id: str, output_dir: str) -> None:
     services = _services()
     stem = f"{provider}-{job_id[:8]}"
     try:
-        _update_job(job_id, status="running", phase="running", progress=0.1, message=f"Calling {provider}")
+        _update_job(
+            job_id, status="running", phase="running", progress=0.1,
+            message=f"Calling {provider}", started_at=time.time(),
+        )
         if cancelled():
             _settle_cancelled_job(job_id)
             return
@@ -700,6 +729,19 @@ def _run_remote_job(job_id: str, output_dir: str) -> None:
         else:
             raise RuntimeError(f"Unknown 3D provider: {provider}")
         filename = result["filename"]
+        with _lock:
+            current_job = dict(_jobs.get(job_id) or job)
+        _publish_model3d_result(current_job, os.path.join(output_dir, filename), {
+            "generation_mode": "model3d",
+            "mode": "model3d",
+            "params": {
+                "prompt": request_data.get("prompt"),
+                "model_id": request_data.get("model"),
+                "model_type": request_data.get("model"),
+                "provider": provider,
+                "image_path": os.path.basename(str(request_data.get("image_path") or "")) or None,
+            },
+        })
         _update_job(
             job_id,
             status="completed",
@@ -770,6 +812,7 @@ def start_job(
         "operation": request_data["operation"],
         "model_id": request_data["model"]["id"],
         "workspace": str(workspace or "default"),
+        "provenance": dict(body.get("provenance") or {}),
         "created_at": time.time(),
         "updated_at": time.time(),
         "request": request_data,
@@ -907,6 +950,7 @@ def _spawn_worker_if_active(
             "phase": "starting",
             "message": message,
             "progress": 0.02,
+            "started_at": time.time(),
             "updated_at": time.time(),
         })
         process = subprocess.Popen(
@@ -932,6 +976,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         _update_job(
             job_id, status="running", phase="simulated_inference",
             progress=0.08, message="Simulating Hunyuan3D inference…",
+            started_at=time.time(),
         )
         try:
             output = execution_mode.create_artifact(
@@ -943,6 +988,20 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 cancelled=lambda: bool((_jobs.get(job_id) or {}).get("cancel_requested")),
             )
             filename = os.path.basename(output)
+            with _lock:
+                current_job = dict(_jobs.get(job_id) or job)
+            _publish_model3d_result(current_job, output, {
+                "generation_mode": "model3d",
+                "mode": "model3d",
+                "simulated": True,
+                "execution_mode": "simulate",
+                "params": {
+                    **request_data.get("settings", {}),
+                    "model_id": (request_data.get("model") or {}).get("id"),
+                    "model_type": (request_data.get("model") or {}).get("id"),
+                    "provider": "hunyuan3d",
+                },
+            })
             _update_job(
                 job_id, status="completed", phase="completed", progress=1.0,
                 message="3D model ready · simulated artifact", filename=filename,
@@ -1129,7 +1188,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
 
         # The mesh is on disk. Sidecar/status failures must not delete it.
         generation_committed = True
-        publish_generation_sidecar_best_effort(
+        _publish_model3d_result(
+            current_job,
             output_path,
             {
                 "generation_mode": "model3d",
@@ -1149,8 +1209,6 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                     "images": request_data["images"],
                 },
             },
-            output_folder=_physical_output_folder(current_job.get("workspace")),
-            tool="model3d",
         )
         _update_job(
             job_id,

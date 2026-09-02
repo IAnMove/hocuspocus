@@ -449,7 +449,7 @@ from services.job_lifecycle import (
     unregister_abort_state,
     update_job,
 )
-from services.asset_manifest import publish_generation_sidecar
+from services.asset_manifest import publish_generation_sidecar, publish_generation_sidecar_best_effort
 from services import resource_scheduler
 
 _jobs: dict = {}
@@ -552,6 +552,7 @@ def _persist_generation_job(job: dict) -> None:
             "created_at": job.get("created_at", time.time()),
             "params": copy.deepcopy(job.get("params") or {}),
             "workspace": job.get("workspace") or "default",
+            "provenance": copy.deepcopy(job.get("provenance") or {}),
         })
     except Exception as exc:
         # Persistence should protect a generation, never prevent it from
@@ -576,6 +577,7 @@ def _new_generation_job(
     created_at: float | None = None,
     recovered: bool = False,
     reserve_generation: bool = True,
+    provenance: dict | None = None,
 ) -> dict:
     frozen_params = copy.deepcopy(params)
     execution_mode.validate_generation(workspace)
@@ -627,6 +629,7 @@ def _new_generation_job(
         "error": None,
         "workspace": workspace,
         "out_dir": _workspace_dir(workspace),
+        "provenance": copy.deepcopy(provenance or {}),
         "recovered": recovered,
     }
     # Reserve FIFO order synchronously. Starting one thread per request is
@@ -644,6 +647,45 @@ def _new_generation_job(
         except Exception as exc:
             print(f"[Task registry] Could not publish generation {job['id']}: {exc}")
     return job
+
+
+def _publish_generation_sidecar_for_studio_job(
+    job: dict,
+    output_path: str,
+    sidecar: dict,
+    *,
+    tool: str = "studio",
+) -> None:
+    """Publish one Studio result with its initiating command and real location."""
+    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    payload = dict(sidecar)
+    params = dict(payload.get("params") or {})
+    model_type = str(params.get("model_type") or "")
+    params.setdefault("provider", "minimax" if model_type.startswith("minimax:") else "local")
+    payload["params"] = params
+    if not payload.get("job_id"):
+        payload["job_id"] = job.get("id")
+    if not payload.get("task_id"):
+        payload["task_id"] = job.get("task_id")
+    if not payload.get("root_task_id"):
+        payload["root_task_id"] = job.get("root_task_id") or job.get("task_id")
+    payload["created_at"] = job.get("created_at") or payload.get("created_at") or time.time()
+    payload["queued_at"] = job.get("created_at") or payload.get("queued_at")
+    payload["started_at"] = job.get("started_at") or payload.get("started_at")
+    payload["completed_at"] = job.get("finished_at") or time.time()
+    for key in ("command_id", "workflow_id", "run_id"):
+        if command.get(key):
+            payload.setdefault(key, command[key])
+    publish_generation_sidecar_best_effort(
+        output_path,
+        payload,
+        workspace_id=provenance.get("workspace_id"),
+        output_folder=job.get("workspace"),
+        tool=tool,
+        actor=provenance.get("actor"),
+        capability=provenance.get("capability"),
+    )
 
 
 def _register_manual_generation_job(job: dict) -> dict:
@@ -7439,7 +7481,13 @@ def model3d_capabilities():
 @api.post("/api/v1/model3d/generate")
 async def generate_model3d(request: Request):
     from services import model3d_service
+    from services.generation_provenance import normalize_submission_provenance
+
     body = await request.json()
+    body["provenance"] = normalize_submission_provenance(body.pop("provenance", None))
+    collection_id = body["provenance"].get("workspace_id")
+    if collection_id and not _workspace_collection_registry.get(collection_id):
+        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
     workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
     _workspace_dir(workspace)
     try:
@@ -11150,7 +11198,13 @@ def _run_generation_with_preparation(job_id: str) -> bool:
 @api.post("/api/v1/generate")
 async def generate(request: Request):
     """Submit a generation job. Returns immediately with a job_id."""
+    from services.generation_provenance import normalize_submission_provenance
+
     body = await request.json()
+    provenance = normalize_submission_provenance(body.pop("provenance", None))
+    collection_id = provenance.get("workspace_id")
+    if collection_id and not _workspace_collection_registry.get(collection_id):
+        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
     # Execution mode is a boot-time trust boundary, never a request option.
     # Discard spoofed private fields before validating the captured workspace.
     body.pop("_execution_mode", None)
@@ -11619,6 +11673,7 @@ async def generate(request: Request):
         body,
         workspace,
         reserve_generation=not h3_preplan_pending,
+        provenance=provenance,
     )
     job_id = job["id"]
     job["out_dir"] = job_out_dir
@@ -22842,15 +22897,9 @@ def _run_sfx_generation(job: dict, raw_params: dict, start_time: float):
                 "generation_time": round(elapsed),
                 "created_at": time.time(),
             }
-            try:
-                publish_generation_sidecar(
-                    os.path.join(out_dir, fname),
-                    sidecar,
-                    workspace_id=job.get("workspace"),
-                    tool="studio-sfx",
-                )
-            except Exception:
-                pass
+            _publish_generation_sidecar_for_studio_job(
+                job, os.path.join(out_dir, fname), sidecar,
+            )
 
         completed = finish_job(
             job,
@@ -23647,12 +23696,7 @@ def _run_simulated_generation(job: dict, *, finalize: bool) -> bool:
         "simulated": True,
         "execution_mode": "simulate",
     }
-    publish_generation_sidecar(
-        generated_path,
-        sidecar,
-        workspace_id=job.get("workspace"),
-        tool="studio",
-    )
+    _publish_generation_sidecar_for_studio_job(job, generated_path, sidecar)
     if not finalize:
         return update_job(
             job,
@@ -23852,12 +23896,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 for path in generated:
                     file_sidecar = dict(sidecar)
                     file_sidecar["output_filename"] = os.path.basename(path)
-                    publish_generation_sidecar(
-                        path,
-                        file_sidecar,
-                        workspace_id=job.get("workspace"),
-                        tool="studio-h3-legacy",
-                    )
+                    _publish_generation_sidecar_for_studio_job(job, path, file_sidecar)
 
                 if not finalize:
                     return update_job(
@@ -24484,15 +24523,9 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                     else:
                         file_sidecar.pop("director_clip_index", None)
                     file_sidecar["output_filename"] = fname
-                    try:
-                        publish_generation_sidecar(
-                            os.path.join(out_dir, fname),
-                            file_sidecar,
-                            workspace_id=job.get("workspace"),
-                            tool="studio",
-                        )
-                    except Exception:
-                        pass
+                    _publish_generation_sidecar_for_studio_job(
+                        job, os.path.join(out_dir, fname), file_sidecar,
+                    )
 
             is_multiclip = total_tasks > 1 and any(t.get('params', {}).get('multi_clip_info') for t in queue)
 
@@ -26403,6 +26436,7 @@ def resume_generation_queue():
                 reserve_generation=not isinstance(
                     params.get("_h3_window_plan_pending"), dict,
                 ),
+                provenance=record.get("provenance") if isinstance(record.get("provenance"), dict) else None,
             )
             _jobs[job_id] = job
             _persist_generation_job(job)
@@ -36154,6 +36188,8 @@ def _publish_generation_task(job: dict) -> dict:
     task_id = f"task-generation-{legacy_id}"
     params = job.get("params") if isinstance(job.get("params"), dict) else {}
     owner_id = str(params.get("_director_pipeline_id") or "")
+    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
     if owner_id.startswith("series:"):
         series_job_id = owner_id.split(":", 1)[1]
         parent_task_id = f"task-series-render-{series_job_id}"
@@ -36215,6 +36251,12 @@ def _publish_generation_task(job: dict) -> dict:
         metadata={
             "adapter": "generation", "generation_details": details,
             "owner_pipeline_id": owner_id,
+            "actor": provenance.get("actor") or "unknown",
+            "tool": provenance.get("tool") or "studio",
+            "capability": provenance.get("capability"),
+            "command_id": command.get("command_id"),
+            "workflow_id": command.get("workflow_id"),
+            "run_id": command.get("run_id"),
         },
     )
 
@@ -36364,6 +36406,8 @@ def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
         or ""
     ) or None
     request_body = record.get("request") if isinstance(record.get("request"), dict) else {}
+    provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
     provider = str(
         record.get("provider")
         or request_body.get("writingProvider")
@@ -36425,11 +36469,20 @@ def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
                     and adapter != "comic-plan"),
         resumable=resumable, recoverable=resumable,
         error=({"message": str(record.get("error")), "retryable": resumable} if record.get("error") else None),
-        result_refs=list(record.get("output_files") or ([record["output"]] if record.get("output") else [])),
+        result_refs=list(record.get("output_files") or (
+            [record["output"]] if record.get("output") else
+            [record["filename"]] if record.get("filename") else []
+        )),
         metadata={
             "adapter": adapter,
             "cancel_mode": record.get("cancel_mode"),
             "safe_boundary": record.get("safe_boundary"),
+            "actor": provenance.get("actor") or "unknown",
+            "tool": provenance.get("tool") or adapter,
+            "capability": provenance.get("capability"),
+            "command_id": command.get("command_id"),
+            "workflow_id": command.get("workflow_id"),
+            "run_id": command.get("run_id"),
         },
     )
 

@@ -13,7 +13,12 @@ from types import SimpleNamespace
 import pytest
 
 from services import execution_mode
-from services.asset_manifest import SCHEMA_NAME, publish_generation_sidecar, read_asset_manifest
+from services.asset_manifest import (
+    SCHEMA_NAME,
+    publish_generation_sidecar,
+    publish_generation_sidecar_best_effort,
+    read_asset_manifest,
+)
 
 
 def _load_launch_function(name, namespace):
@@ -219,14 +224,23 @@ def test_simulated_generation_writes_canonical_asset_manifest(tmp_path):
         "record_job_outputs": lambda _job, names: recorded.extend(names),
         "finish_job": lambda *_args, **_kwargs: True,
         "publish_generation_sidecar": publish_generation_sidecar,
+        "publish_generation_sidecar_best_effort": publish_generation_sidecar_best_effort,
         "os": os,
         "time": time,
     }
+    _load_launch_function("_publish_generation_sidecar_for_studio_job", namespace)
     worker = _load_launch_function("_run_simulated_generation", namespace)
     job = {
         "id": "sim-job-1",
+        "created_at": 1_700_000_000.0,
+        "started_at": 1_700_000_002.0,
         "out_dir": str(tmp_path),
         "workspace": "night-shift",
+        "provenance": {
+            "actor": "wizard",
+            "capability": "start_generation",
+            "command": {"command_id": "command-1"},
+        },
         "task_id": "task-1",
         "root_task_id": "task-1",
         "params": {
@@ -246,8 +260,16 @@ def test_simulated_generation_writes_canonical_asset_manifest(tmp_path):
     assert raw["job_id"] == "sim-job-1"
     assert loaded is not None
     assert loaded["asset"]["kind"] == "video"
-    assert loaded["origin"]["workspace_id"] == "night-shift"
+    assert "workspace_id" not in loaded["origin"]
+    assert loaded["origin"]["output_folder"] == "night-shift"
+    assert loaded["origin"]["actor"] == "wizard"
+    assert loaded["origin"]["capability"] == "start_generation"
+    assert loaded["execution"]["command_id"] == "command-1"
+    assert loaded["generation"]["model"]["provider"] == "local"
     assert loaded["execution"]["mode"] == "simulate"
+    assert loaded["timing"]["queued_at"] == "2023-11-14T22:13:20Z"
+    assert loaded["timing"]["started_at"] == "2023-11-14T22:13:22Z"
+    assert loaded["timing"]["queue_ms"] == 2_000
     assert loaded["technical"]["published_on_generate"] is True
 
 

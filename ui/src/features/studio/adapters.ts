@@ -25,6 +25,7 @@ import type {
   QueueSfxPackCommand,
   QueueTaskCommand,
 } from './commands'
+import type { GenerationSubmissionContext } from './generationProvenance'
 
 export async function inspect(command: InspectQueueCommand) {
   return inspectCanonicalQueue(command.scope)
@@ -58,8 +59,8 @@ export async function prepare3dForm(command: Prepare3dCommand) {
   return prepare3d(command)
 }
 
-export async function startGeneration() {
-  return startPreparedGeneration()
+export async function startGeneration(context?: GenerationSubmissionContext) {
+  return startPreparedGeneration(context)
 }
 
 export async function attachReferences(command: AttachStudioReferencesCommand) {
@@ -70,6 +71,6 @@ export async function configureLoras(command: ConfigureStudioLorasCommand) {
   return configureStudioLoras(command)
 }
 
-export async function queueSfx(command: QueueSfxPackCommand) {
-  return queueSfxPack(command)
+export async function queueSfx(command: QueueSfxPackCommand, context?: GenerationSubmissionContext) {
+  return queueSfxPack(command, context)
 }

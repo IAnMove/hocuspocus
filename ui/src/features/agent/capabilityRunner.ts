@@ -88,9 +88,18 @@ export async function runRegisteredCapability(
   requireConfirmation(prepared, definition.confirmation === 'required')
 
   const executionCommandId = commandId()
+  const executionContext: CapabilityRunnerOptions = {
+    ...options,
+    generationContext: {
+      ...options.generationContext,
+      actor: 'wizard',
+      capability: prepared.type,
+      commandId: executionCommandId,
+    },
+  }
 
   stage(options, 'execute', action.type)
-  const executed = await definition.execute(prepared, options)
+  const executed = await definition.execute(prepared, executionContext)
 
   stage(options, 'correlate', action.type)
   const target = definition.correlate(prepared, executed)
@@ -117,7 +126,7 @@ export async function runRegisteredCapability(
   }
 
   stage(options, 'track', action.type)
-  const tracked = await definition.track(prepared, executed, options)
+  const tracked = await definition.track(prepared, executed, executionContext)
 
   stage(options, 'report', action.type)
   const message = definition.summarize(prepared, tracked)

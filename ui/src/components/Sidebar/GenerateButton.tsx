@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Play, AlertTriangle } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { splitPromptSchedule } from '../../lib/promptScheduler'
+import { newUserGenerationContext } from '../../features/studio/generationProvenance'
 
 export function GenerateButton() {
   const jobs = useStore(s => s.jobs)
@@ -54,7 +55,7 @@ export function GenerateButton() {
   const handleClick = () => {
     if (blocked) return
     setCooldown(true)
-    startGeneration()
+    startGeneration(undefined, newUserGenerationContext())
     setSidebarOpen(false)
   }
 

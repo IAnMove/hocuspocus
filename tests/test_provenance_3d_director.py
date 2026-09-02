@@ -155,6 +155,38 @@ def test_model3d_writer_passes_output_folder_not_workspace_collection(tmp_path, 
     assert proven["model_id"] == "hunyuan3d-2-turbo"
 
 
+def test_model3d_writer_keeps_wizard_command_provenance(tmp_path):
+    output = tmp_path / "wizard.glb"
+    output.write_bytes(b"mesh")
+    task_id = "canonical-model3d-wizard-job"
+    model3d_service._publish_model3d_result({
+        "job_id": "wizard-job",
+        "task_id": task_id,
+        "root_task_id": task_id,
+        "workspace": "physical-folder",
+        "created_at": 1_700_000_000,
+        "started_at": 1_700_000_002,
+        "provenance": {
+            "actor": "wizard",
+            "tool": "studio",
+            "capability": "start_generation",
+            "command": {"command_id": "command-wizard-3d"},
+        },
+    }, output, {
+        "generation_mode": "model3d",
+        "params": {"model_type": "hunyuan3d-2-turbo", "provider": "hunyuan3d"},
+    })
+
+    loaded = read_asset_manifest(output)
+    assert loaded["origin"]["tool"] == "studio"
+    assert loaded["origin"]["actor"] == "wizard"
+    assert loaded["origin"]["capability"] == "start_generation"
+    assert loaded["origin"]["output_folder"] == "physical-folder"
+    assert loaded["origin"].get("workspace_id") in (None, "")
+    assert loaded["execution"]["command_id"] == "command-wizard-3d"
+    assert loaded["execution"]["task_id"] == task_id
+
+
 def test_model3d_strips_absolute_output_folder_path(tmp_path, monkeypatch):
     job_id = "model3d-abs-folder"
     jobs_dir = tmp_path / "model3d-jobs"

@@ -283,6 +283,9 @@ def _harness(monkeypatch, tmp_path: Path, planner) -> tuple[dict, dict, float]:
         "_normalize_video_prompt_type": lambda _body: None,
         "_normalize_image_prompt_type": lambda _body: None,
         "_get_active_workspace": lambda: "default",
+        "normalize_submission_provenance": lambda value: value or {
+            "actor": "unknown", "tool": "studio", "command": {},
+        },
         "_workspace_dir": lambda _workspace=None: str(tmp_path),
         "_publish_generation_task": publish,
         "_persist_generation_job": persist,

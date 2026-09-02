@@ -42,6 +42,8 @@ export interface Hunyuan3DCapabilities {
 
 export interface Hunyuan3DJob {
   job_id: string
+  task_id?: string
+  root_task_id?: string
   operation?: 'generate' | 'retexture'
   status: 'queued' | 'waiting' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   progress: number
@@ -84,6 +86,7 @@ export async function startHunyuan3DJob(params: {
   reduce_face?: boolean
   target_face_num?: number
   mc_algo?: string
+  provenance?: Record<string, unknown>
 }): Promise<Hunyuan3DJob> {
   const res = await fetch(`${BASE}/api/v1/model3d/generate`, {
     method: 'POST',
