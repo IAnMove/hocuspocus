@@ -219,12 +219,67 @@ test('developer-mode slice persists the local flag through the public facade', a
   assert.equal('mediaFilter' in isolated, false)
 })
 
+test('gallery slice keeps workspace and output filters through the public facade', async () => {
+  const { createGallerySlice, galleryWorkspaceName } = await import('../src/stores/gallerySlice.ts')
+  let state
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  state = createGallerySlice(set, () => state)
+  assert.equal(state.activeWorkspace, 'default')
+  assert.equal(state.browsingUploads, false)
+  assert.equal(state.mediaFilter, 'all')
+  assert.equal(galleryWorkspaceName(state), 'default')
+  assert.equal(galleryWorkspaceName({ activeWorkspace: 'film', browsingUploads: true }), '__uploads__')
+
+  const image = {
+    name: 'still.png', url: '/still.png', type: 'image', mode: null, edit_sub_mode: null,
+    result_kind: null, favorite: false, size: 1, created_at: 1, completed_at: 1,
+    completion_time_source: 'file', thumbnail_url: null,
+  }
+  const video = {
+    name: 'clip.mp4', url: '/clip.mp4', type: 'video', mode: null, edit_sub_mode: null,
+    result_kind: null, favorite: true, size: 2, created_at: 2, completed_at: 2,
+    completion_time_source: 'file', thumbnail_url: null,
+  }
+  set({ outputs: [image, video], mediaFilter: 'images' })
+  assert.deepEqual(state.filteredOutputs().map(item => item.name), ['still.png'])
+  set({ mediaFilter: 'favorites' })
+  assert.deepEqual(state.filteredOutputs().map(item => item.name), ['clip.mp4'])
+  set({ galleryToast: { id: 1, message: 'ready' } })
+  state.clearGalleryToast()
+  assert.equal(state.galleryToast, null)
+  state.setGalleryFeedAtTop(false)
+  assert.equal(state.galleryFeedAtTop, false)
+
+  const isolated = createGallerySlice(set, () => state)
+  assert.equal('settingsOpen' in isolated, false)
+  assert.equal('startGeneration' in isolated, false)
+  assert.equal('loadSettingsFromOutput' in isolated, false)
+
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.setState({
+    mediaFilter: 'all',
+    selectedOutput: 3,
+    galleryToast: { id: 2, message: 'x' },
+    galleryFeedAtTop: true,
+  })
+  useStore.getState().clearGalleryToast()
+  assert.equal(useStore.getState().galleryToast, null)
+  useStore.getState().setMediaFilter('videos')
+  assert.equal(useStore.getState().mediaFilter, 'videos')
+  assert.equal(useStore.getState().selectedOutput, 0)
+  assert.equal(useStore.getState().galleryFeedAtTop, true)
+})
+
 test('composed slices bind without as-never casts at the useStore call site', async () => {
   const fs = await import('node:fs/promises')
   const source = await fs.readFile(new URL('../src/stores/useStore.ts', import.meta.url), 'utf8')
   const composition = source.split('export const useStore')[1].split('generationMode:')[0]
   assert.match(composition, /bindSlice\(set, get, createSettingsSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createThemeSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createGallerySlice\)/)
   assert.doesNotMatch(composition, /as never/)
 })
 
