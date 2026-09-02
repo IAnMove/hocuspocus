@@ -8,7 +8,6 @@ written to generation metadata.
 from __future__ import annotations
 
 import base64
-import json
 import math
 import mimetypes
 import os
@@ -20,6 +19,7 @@ import uuid
 import requests
 
 from . import resource_scheduler
+from .asset_manifest import publish_generation_sidecar
 
 
 MODEL_ID = "minimax:image-01"
@@ -164,9 +164,9 @@ def generate_image(
         handle.write(image_bytes)
     os.replace(path + ".tmp", path)
 
-    meta_path = os.path.join(output_dir, os.path.splitext(name)[0] + ".meta.json")
-    with open(meta_path + ".tmp", "w", encoding="utf-8") as handle:
-        json.dump({
+    publish_generation_sidecar(
+        path,
+        {
             "generation_mode": "image",
             "task_id": str(task_id or "") or None,
             "root_task_id": str(root_task_id or task_id or "") or None,
@@ -177,8 +177,9 @@ def generate_image(
                 "aspect_ratio": aspect_ratio,
             },
             "created_at": time.time(),
-        }, handle, ensure_ascii=False, indent=2)
-    os.replace(meta_path + ".tmp", meta_path)
+        },
+        tool="minimax-image",
+    )
     return {
         "name": name,
         "path": path,
