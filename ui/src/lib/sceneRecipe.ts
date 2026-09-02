@@ -1290,6 +1290,28 @@ export function recipeAssetDuration(recipe: SceneRecipe, assetId: string): numbe
   return Math.max(0.5, ...(durations.length ? durations : [recipe.scene.duration || 5]))
 }
 
+/**
+ * Returns the generation length needed by one recipe audio track.
+ *
+ * A track is a reusable source: when a recipe plays it in several shots we
+ * render it once and mount that same source in each shot, so those durations
+ * must be combined with `max`, not summed. Explicit per-shot scopes are
+ * authoritative (`[]` means silence); an omitted scope keeps the legacy
+ * behaviour where every track is available in that shot. Dialogue beat ends
+ * are included as a second guard because they describe the authored speech
+ * window and may extend beyond a scene-level fallback duration.
+ */
+export function recipeAudioDuration(recipe: SceneRecipe, trackId: string): number {
+  const fallback = recipe.scene.duration || 5
+  const shotDurations = listRecipeShots(recipe)
+    .filter(shot => shot.audioTrackIds === undefined || shot.audioTrackIds.includes(trackId))
+    .map(shot => shot.duration || fallback)
+  const beatEnds = (recipe.dialogueBeats ?? [])
+    .filter(beat => beat.audioTrackId === trackId)
+    .map(beat => beat.end)
+  return Math.max(0.5, ...(shotDurations.length ? shotDurations : [fallback]), ...beatEnds)
+}
+
 function scopeRecipeToShot(recipe: SceneRecipe, shot: SceneRecipeShot): SceneRecipe {
   const audioIds = shot.audioTrackIds === undefined ? undefined : new Set(shot.audioTrackIds)
   const beatIds = shot.dialogueBeatIds === undefined ? undefined : new Set(shot.dialogueBeatIds)

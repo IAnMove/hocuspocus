@@ -2,7 +2,7 @@ import * as api from '../api/client'
 import { useStore } from '../stores/useStore'
 import { generateImageAsset } from './imageGeneration'
 import type { SceneRecipe, SceneRecipeAsset, SceneRecipeAudio } from './sceneRecipe'
-import { aspectRatioForScene, h3FramesForDuration, h3ResolutionForScene, recipeAssetDuration } from './sceneRecipe'
+import { aspectRatioForScene, h3FramesForDuration, h3ResolutionForScene, recipeAssetDuration, recipeAudioDuration } from './sceneRecipe'
 
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 
@@ -214,7 +214,7 @@ async function resolveAudio(
   if (track.source) return track.source
   await waitForGpuIdle(onStatus, signal)
   onStatus?.(`Generating ${track.kind} “${track.id}”…`)
-  const started = await api.submitGeneration(recipeAudioGenerationParams(track, recipe.scene.duration || 5, workspace))
+  const started = await api.submitGeneration(recipeAudioGenerationParams(track, recipeAudioDuration(recipe, track.id), workspace))
   const status = await pollUntil(
     `${track.kind === 'speech' ? 'Voice' : track.kind === 'sfx' ? 'SFX' : 'Music'} “${track.id}”`,
     () => api.fetchJobStatus(started.job_id),
