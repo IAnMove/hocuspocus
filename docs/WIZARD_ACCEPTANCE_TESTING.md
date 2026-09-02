@@ -31,6 +31,19 @@ LLM tokens. `HOCUSPOCUS_E2E_ALLOW_PAID` governs media provider execution, not
 the LLM selected in Settings. Director frames configured for MiniMax are
 replaced at the provider boundary in `simulate`, without making the HTTP call.
 
+For a fast LLM-only mixed-language contract check (no navigation, queue or
+media inference), run:
+
+```bash
+cd ui
+HOCUSPOCUS_BASE_URL=http://127.0.0.1:<port> npm run test:wizard-language-live
+```
+
+It is restricted to loopback URLs, spends one configured LLM request, respects
+“do not generate”, and checks French conversation, English content/technical
+direction and exact Spanish dialogue independently of a synthetic German UI
+locale.
+
 Simulation deliberately happens after the real job owns its scheduler lane.
 It does not add a Wizard shortcut and does not bypass capability validation,
 entity correlation, API submission, queue state or task publication.
@@ -74,8 +87,10 @@ Replace `42001` with the port shown by Pinokio. The launcher chooses a free
 port, so `--base-url` is required unless
 `HOCUSPOCUS_BASE_URL` already contains the exact URL shown by Pinokio.
 
-Available scenarios are `smoke`, `full`, `studio`, `music-video`, `comic`,
-`series`, `failure`, `cancel` and `workspace`. `full` runs the principal successful flows serially.
+Available scenarios are `smoke`, `full`, `studio`, `language`, `music-video`, `comic`,
+`series`, `failure`, `cancel` and `workspace`. `language` verifies a live mixed-language
+turn (conversation, content, speech, exact quote and technical provider prompt).
+`full` runs the principal successful flows serially.
 Use `--headed` to watch the Wizard navigate and fill the application. Use
 `--resume` to ask Playwright to run only failures from its previous run.
 

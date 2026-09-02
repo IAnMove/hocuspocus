@@ -8334,19 +8334,19 @@ async def llm_test():
 _SONG_WRITER_FALLBACK = (
     "You are a songwriter for ACE-Step 1.5. From the user's brief, output EXACTLY "
     "two sections and nothing else:\n[STYLE]\nA dense prose paragraph describing "
-    "genre, instruments, mood, production, and vocal type (no numeric BPM/key).\n"
+    "genre, instruments, mood, production, and vocal type in English (no numeric BPM/key).\n"
     "[LYRICS]\nOriginal lyrics with [Verse]/[Chorus]/[Bridge] section tags on their "
     "own lines, ~6-10 syllables per line. Keep STYLE and LYRICS consistent."
 )
 _SONG_WRITER_FALLBACK_INSTRUMENTAL = (
     "You are a music producer for ACE-Step 1.5. Output EXACTLY two sections:\n"
     "[STYLE]\nA dense prose paragraph describing genre, instruments, mood, "
-    "production, and energy — instrumental, no vocals, no numeric BPM/key.\n"
+    "production, and energy in English — instrumental, no vocals, no numeric BPM/key.\n"
     "[LYRICS]\n[Instrumental]"
 )
 _SONG_WRITER_FALLBACK_MINIMAX = (
     "You write prompts for MiniMax Music. Output exactly [STYLE] and [LYRICS]. "
-    "Write both STYLE and LYRICS in the language requested by the user. STYLE is one "
+    "Write STYLE in English and LYRICS in the language requested by the user. STYLE is one "
     "comma-separated line of 10-300 characters containing "
     "genre, mood, instruments, vocal direction, tempo and production. Never put "
     "reference song or artist names in STYLE. LYRICS use supported tags such as "
@@ -8400,9 +8400,11 @@ def _minimax_song_request_prompt(body: dict, description: str, instrumental: boo
     sections = [
         f"MODE: {'instrumental' if instrumental else 'vocal song'}",
         f"TARGET MODEL: {model}",
-        f"STYLE AND LYRICS LANGUAGE: {language}",
-        f"LANGUAGE RULE: Write the visible STYLE prompt and all sung words in {language}. "
-        "Keep only provider structural tags such as [Verse] and [Chorus] in English.",
+        "STYLE LANGUAGE: English (provider-facing technical direction).",
+        f"LYRICS LANGUAGE: {language}.",
+        f"LANGUAGE RULE: Write STYLE only in English and all sung words in {language}. "
+        "Keep provider structural tags such as [Verse] and [Chorus] in English. Preserve "
+        "every protected exact segment character-for-character and never translate it.",
         f"TARGET DURATION: approximately {duration} seconds",
         "DURATION NOTE: MiniMax Music has no exact duration API parameter. Treat the target "
         "as a strict lyric and arrangement budget: keep the section count and sung lines "
@@ -8441,16 +8443,17 @@ def _normalize_minimax_song_output(style: str, lyrics: str, instrumental: bool, 
 
 
 def _ace_song_request_prompt(description: str, language: str, instrumental: bool) -> str:
-    """Keep the editable ACE-Step prompt in the language selected by the user."""
+    """Keep technical direction in English and lyrics in the selected language."""
     target = str(language or "English").strip()[:80] or "English"
     if instrumental:
-        rule = f"Write the visible STYLE prompt in {target}."
+        rule = "Write the visible provider-facing STYLE prompt in English."
     else:
         rule = (
-            f"Write both the visible STYLE prompt and all lyrics in {target}; "
-            "keep structural tags such as [Verse] and [Chorus] in English."
+            f"Write the visible provider-facing STYLE prompt in English and all lyrics in {target}; "
+            "keep structural tags such as [Verse] and [Chorus] in English. Preserve protected "
+            "exact segments character-for-character."
         )
-    return f"OUTPUT LANGUAGE: {target}. {rule}\n\n{str(description or '').strip()}"
+    return f"LYRICS LANGUAGE: {target}. TECHNICAL PROMPT LANGUAGE: English. {rule}\n\n{str(description or '').strip()}"
 
 
 @api.post("/api/v1/llm/write-song")
@@ -28153,7 +28156,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
 def _story_project_prompt_context(project: dict, scope: str) -> str:
     """Return bounded, valid JSON with editorial facts but no heavy runtime data."""
     overview_keys = (
-        "title", "projectType", "creativeBrief", "language", "spokenLanguage", "locationVariety",
+        "title", "projectType", "creativeBrief", "language", "spokenLanguage", "languageIntent", "locationVariety",
         "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience", "premise",
         "logline", "synopsis", "theme", "ending", "visualStyle",
         "characterVisualStyle", "enforceVisualStyle", "allowClipText",
@@ -31006,8 +31009,9 @@ style, or ignore. For a match, targetId is the exact existing id. For multiple
 images of the same new entity, give all of them the same stable grouping key:
 "new-character:<slug>" or "new-location:<slug>". World/prop/style use targetId
 "world". Describe only visible evidence; do not invent biography or plot facts.
-Write name, description, visualPrompt and reason in {language}. visualPrompt is
-a reusable single-image identity/environment reference prompt without grids,
+Write reader-facing name, description and reason in {language}. Write visualPrompt in
+English because it is provider-facing technical direction. visualPrompt is a reusable
+single-image identity/environment reference prompt without grids,
 collages, captions, logos or UI. Confidence is 0 to 1. Return strict JSON only."""
     schema = asset_import_schema(len(paths))
     override = _comic_writing_llm(body)
@@ -31105,7 +31109,7 @@ Music-video contract:
 - Target duration: {max(20, min(360, brief_duration or 90))} seconds.
 - referenceSong is an editable inspiration example in "Title — Artist" form. Use it only
   for broad tempo, instrumentation or emotional architecture; never copy melody or lyrics.
-- style is the final MiniMax Music prompt: one concise {language} comma-separated line,
+- style is the final MiniMax Music prompt: one concise English comma-separated line,
   10–300 characters, covering genre, mood, instruments, vocals, tempo and production.
 - Write lyrics in {language}, maximum 3500 characters, with a recurring hook and a clear
   narrative progression. Use supported English tags on their own lines: [Intro], [Verse],
@@ -31124,7 +31128,7 @@ Music-specific contract:
   reproduce the reference song's melody, lyrics, title phrases or distinctive arrangement.
 - Treat referenceSong, brief, the Story canon and requested lyric theme as INPUTS to transform.
   The final style field must never contain the reference title or artist name.
-- style is the final MiniMax Music prompt. Write one concise {language} comma-separated line,
+- style is the final MiniMax Music prompt. Write one concise English comma-separated line,
   10–300 characters, ordered as applicable: primary genre/subgenre, secondary influence,
   mood/atmosphere, key instruments, vocal direction, tempo or BPM, dynamics, production.
   Prefer concrete compatible traits; avoid contradictions, filler and narrative synopsis.
@@ -31188,7 +31192,13 @@ SOURCE BRIEF:
     base_prompt = f"""Create the requested editable Story Lab material.
 Generation scope: {scope}
 Premise: {premise}
-Language for every reader-facing field: {language}
+Language for reader-facing narrative fields: {language}
+Technical prompt language: English. Write visualStyle, characterVisualStyle,
+visualLanguage, visualPrompt, negativePrompt and every other provider-facing camera,
+rendering or production direction in English. Keep exact dialogue, lyrics, subtitles,
+visible text and names in the language declared by languageIntent and preserve them
+character-for-character; when a technical prompt needs one, isolate it as literal data
+and never translate or paraphrase it.
 Genre: {genre}
 Tone: {tone}
 Audience: {audience}

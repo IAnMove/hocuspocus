@@ -6,6 +6,7 @@ import type {
   ComicProject,
 } from '../comics/types'
 import type { ShortFilmCharacter } from '../../types'
+import { compileProviderPrompt, languageContractSummary } from '../../lib/languageIntent'
 import { storyNegativePromptForStyle, storyRenderStyle, stripStoryVisualStyle } from './model'
 import type {
   StoryCharacter,
@@ -29,8 +30,10 @@ export const DEFAULT_TRAILER_DIRECTION =
 const line = (label: string, value: string | undefined): string =>
   value?.trim() ? `${label}: ${value.trim()}` : ''
 
-const spokenLanguageContract = (project: StoryProject): string => project.spokenLanguage.trim()
-  ? `SPOKEN LANGUAGE CONTRACT: Every generated spoken word must be only in ${project.spokenLanguage.trim()}. Use a native regional accent and vocabulary, never switch to another language, and preserve supplied dialogue verbatim.`
+const spokenLanguageContract = (project: StoryProject): string => (
+  project.languageIntent.spokenLanguage || project.spokenLanguage
+).trim()
+  ? `SPOKEN LANGUAGE CONTRACT: Every generated spoken word must be only in ${(project.languageIntent.spokenLanguage || project.spokenLanguage).trim()}. Use a native regional accent and vocabulary, never switch to another language, and preserve supplied dialogue verbatim.`
   : ''
 
 const locationVarietyContract = (project: StoryProject): string => project.locationVariety === 'single_location'
@@ -133,6 +136,7 @@ function comicCharacter(
 /** A readable source-of-truth block that remains manually editable in Comic Director. */
 export function storyAdaptationContext(project: StoryProject): string {
   const sections = [
+    line('Language intent', languageContractSummary(project.languageIntent)),
     line('Source title', project.title),
     line('Premise', project.premise),
     line('Logline', project.logline),
@@ -219,6 +223,7 @@ export function buildComicAdaptation(
   comic.title = project.title
   comic.synopsis = project.synopsis
   comic.language = project.language
+  comic.languageIntent = project.languageIntent
   comic.assets = Object.fromEntries(Object.values(project.assets)
     .filter(asset => asset.approval === 'approved')
     .map(asset => [asset.id, {
@@ -253,23 +258,23 @@ export function buildComicAdaptation(
   ].filter(Boolean).join('\n')
 
   const request: ComicDirectorRequest = {
-    premise: [
+    premise: compileProviderPrompt([
       direction.trim() || DEFAULT_COMIC_CHAPTER_DIRECTION,
       `Source-story hook: ${project.logline || project.premise || project.synopsis}`,
-    ].join('\n\n'),
-    storyContext: [
+    ].join('\n\n'), project.languageIntent, { medium: 'comic' }),
+    storyContext: compileProviderPrompt([
       'ADAPTATION CONTRACT',
       'The production premise above defines the chapter to create. The material below is the master-story canon: preserve its established facts, relationships and long-term arcs, but do not treat every master beat as a scene that must be retold.',
       '',
       storyAdaptationContext(project),
-    ].join('\n'),
+    ].join('\n'), project.languageIntent, { medium: 'comic' }),
     sourceStory: {
       id: project.id,
       revision: project.revision,
       title: project.title,
     },
     pageCount,
-    language: project.language,
+    language: project.languageIntent.contentLanguage || project.language,
     format: 'a4',
     panelsPerPage,
     genre: project.genre,
@@ -433,7 +438,7 @@ export function buildMusicVideoAdaptation(
     focusKind,
     focusTargetId: targetCharacter?.id || (focusKind === 'world' ? 'world' : project.id),
     focusLabel,
-    sceneDescription: [
+    sceneDescription: compileProviderPrompt([
       'PRODUCTION TASK',
       `Create a song-led music video focused on ${focusLabel}.`,
       spokenLanguageContract(project),
@@ -469,7 +474,7 @@ export function buildMusicVideoAdaptation(
       project.allowClipText
         ? ''
         : 'FINAL VISIBLE-TEXT OVERRIDE: If any lyric, beat, location note or visual-language sentence above mentions words, code text, dialogue on screen or floating lettering, reinterpret that idea as nonverbal imagery. Do not include the quoted words or any text-rendering instruction in image_prompt, video_prompt, keyframes or window prompts.',
-    ].filter(Boolean).join('\n'),
+    ].filter(Boolean).join('\n'), project.languageIntent, { medium: 'video' }),
     characterReferences: directVideo ? [] : Array.from(
       new Map(characterReferences.map(reference => [reference.assetId, reference])).values(),
     ),
@@ -515,7 +520,7 @@ export function buildShortFilmAdaptation(
   ]
 
   return {
-    sceneDescription: [
+    sceneDescription: compileProviderPrompt([
       'PRODUCTION TASK',
       direction.trim() || DEFAULT_SHORT_FILM_DIRECTION,
       spokenLanguageContract(project),
@@ -536,7 +541,7 @@ export function buildShortFilmAdaptation(
         ...project.world.locations.map(location => compatibleNegative(location.negativePrompt)),
       ].filter(Boolean).join('; ')),
       preserveVisualStyle ? '' : 'Visual medium may be reinterpreted for this adaptation.',
-    ].filter(Boolean).join('\n'),
+    ].filter(Boolean).join('\n'), project.languageIntent, { medium: 'video' }),
     characters: project.characters.map(character => {
       const negativePrompt = compatibleNegative(character.negativePrompt)
       return {

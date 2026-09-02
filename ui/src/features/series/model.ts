@@ -1,6 +1,7 @@
 import type {
   SeriesCharacter, SeriesLibrary, SeriesLocation, SeriesProject, SeriesProp, SeriesVisualVariant,
 } from './types'
+import { normalizeLanguageIntent } from '../../lib/languageIntent'
 
 export const seriesId = (prefix: string): string =>
   `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -34,6 +35,11 @@ export function normalizeSeriesProject(value: unknown): SeriesProject | null {
     defaultEpisodeDurationSeconds: Math.max(15, Number(project.defaultEpisodeDurationSeconds) || 75),
     language: text(project.language, 'Español'), genre: text(project.genre),
     spokenLanguage: text(project.spokenLanguage, text(project.language, 'Español de España')),
+    languageIntent: normalizeLanguageIntent(project.languageIntent, {
+      contentLanguage: text(project.language, 'Español'),
+      spokenLanguage: text(project.spokenLanguage, text(project.language, 'Español de España')),
+      technicalPromptLanguage: 'en',
+    }),
     protagonistConsistency: project.protagonistConsistency === true,
     protagonistCharacterId: objects<SeriesCharacter>(project.characters)
       .some(character => character.id === text(project.protagonistCharacterId))

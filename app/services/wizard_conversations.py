@@ -105,7 +105,7 @@ def _clean_message(value: Any) -> dict[str, Any] | None:
         card = _clean_card(raw_card)
         if card:
             cards.append(card)
-    return {
+    normalized = {
         "id": message_id,
         "role": role,
         "text": text,
@@ -123,6 +123,10 @@ def _clean_message(value: Any) -> dict[str, Any] | None:
         "lastState": _clean_text(value.get("lastState"), 40),
         "error": _clean_text(value.get("error"), 2000),
     }
+    language = _clean_text(value.get("language"), 20)
+    if language:
+        normalized["language"] = language
+    return normalized
 
 
 def normalize_conversation(value: Any) -> dict[str, Any]:

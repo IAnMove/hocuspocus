@@ -1,5 +1,6 @@
 import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
 import { useStore } from '../../stores/useStore'
+import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
 import type { CreateComicCommand, GenerateComicCommand } from './commands'
 
 function workspaceName(): string {
@@ -69,6 +70,10 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
   ]
   const requestedPages = action.pages.length ? action.pages : [{ title: 'Página 1', stage: '', panels }]
   const allPanels = requestedPages.flatMap(page => page.panels)
+  const languageIntent = mergeLanguageIntent(undefined, action.languageIntent, {
+    contentLanguage: action.language || 'Español',
+    technicalPromptLanguage: 'en',
+  })
   const ending = allPanels.at(-1)?.dialogue
     || allPanels.at(-1)?.caption
     || `El conflicto de “${action.title}” se resuelve con una consecuencia visual clara.`
@@ -101,7 +106,7 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
     title: action.title,
     logline: action.synopsis,
     synopsis: action.synopsis || action.title,
-    language: action.language || 'Español',
+    language: languageIntent.contentLanguage || action.language || 'Español',
     styleBible: action.styleName || 'Tira cómica clara, 4 viñetas',
     characters,
     storyStructure: requestedPages.map((page, pageIndex) => ({
@@ -120,13 +125,13 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
           order: index + 1,
           narrativeRole: `${page.title} · viñeta ${index + 1}`,
           sceneDescription: beat,
-          imagePrompt: [
+          imagePrompt: compileProviderPrompt([
             `Single comic panel for "${action.title}".`,
             action.styleName,
             beat ? `Scene: ${beat}.` : '',
             who ? `Characters: ${who}.` : '',
             'Clear acting, readable silhouette, no lettering, no balloons, no captions.',
-          ].filter(Boolean).join(' '),
+          ].filter(Boolean).join(' '), languageIntent, { medium: 'image' }),
           characters: characters.map(character => character.id),
           framing: 'medium',
           dialogue: panel.dialogue ? [{ text: panel.dialogue, bubbleType: 'speech' as const }] : [],
@@ -138,6 +143,7 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
     })),
   }
   const project = projectFromPlan(plan)
+  project.languageIntent = languageIntent
   if (action.styleName) {
     project.style = {
       ...project.style,
@@ -162,10 +168,10 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
     input: {
       useGlobalProfile: true,
       premise: action.synopsis || action.title,
-      storyContext,
+      storyContext: compileProviderPrompt(storyContext, languageIntent, { medium: 'comic' }),
       productionMode: 'comic',
       pageCount: requestedPages.length,
-      language: action.language || 'Español',
+      language: languageIntent.contentLanguage || action.language || 'Español',
       format: project.format.preset,
       panelsPerPage: Math.max(...requestedPages.map(page => page.panels.length)),
       genre: 'Comedy',
@@ -256,12 +262,12 @@ export async function generateFilledComicArtwork(
             order: index + 1,
             narrativeRole: `Viñeta ${index + 1}`,
             sceneDescription: beat,
-            imagePrompt: [
+            imagePrompt: compileProviderPrompt([
               `Single comic panel for "${project.title}".`,
               project.style.name,
               beat ? `Scene: ${beat}.` : '',
               'Clear acting, readable silhouette, no lettering, no balloons, no captions.',
-            ].filter(Boolean).join(' '),
+            ].filter(Boolean).join(' '), project.languageIntent, { medium: 'image' }),
             characters: characters.map(character => character.id),
             framing: 'medium',
             dialogue: dialogue.map(text => ({ text, bubbleType: 'speech' as const })),

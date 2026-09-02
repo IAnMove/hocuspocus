@@ -374,11 +374,16 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
         json_schema: HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
       })
       if (!mountedRef.current) return
-      const turn = await reconcileAgentTurnWithRequest(
+      const proposedTurn = parseAgentTurn(answer)
+      const reconciledTurn = await reconcileAgentTurnWithRequest(
         question,
-        parseAgentTurn(answer),
+        proposedTurn,
         nextMessages.map(message => ({ role: message.role, text: message.text })),
       )
+      const turn = {
+        ...reconciledTurn,
+        conversationLanguage: reconciledTurn.conversationLanguage || proposedTurn.conversationLanguage,
+      }
       let results: AgentActionResult[] = []
       if (turn.actions.length) {
         setState('acting')
@@ -405,6 +410,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
           .filter(Boolean)
           .join('\n\n'),
         createdAt: Date.now(),
+        language: turn.conversationLanguage || undefined,
         cards: cards.length ? cards : undefined,
       }
       setMessages(current => [...current, assistantMessage].slice(-40))
@@ -490,7 +496,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3" aria-live="polite">
         {messages.map(message => (
           <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={message.role === 'user'
+            <div lang={message.language || undefined} className={message.role === 'user'
               ? `${expanded ? 'max-w-[min(42rem,70%)]' : 'max-w-[88%]'} whitespace-pre-wrap rounded-2xl rounded-br-sm bg-blue-500/20 px-3 py-2 leading-relaxed text-blue-50`
               : `${expanded ? 'max-w-[min(56rem,86%)]' : 'max-w-[92%]'} rounded-2xl rounded-bl-sm border border-amber-200/10 bg-amber-100/[.045] px-3 py-2 leading-relaxed text-amber-50/85`}>
               {message.role === 'assistant' ? <AgentMarkdown text={message.text} /> : message.text}

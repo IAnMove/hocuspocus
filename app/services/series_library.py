@@ -15,6 +15,8 @@ import re
 import uuid
 from typing import Any
 
+from .language_intent import normalize_language_intent
+
 
 SERIES_LIBRARY_FILENAME = ".series-library-v1.json"
 MAX_SERIES_PROJECTS = 100
@@ -139,6 +141,9 @@ def create_series_project(
         "title": title.strip() or "Untitled series", "logline": "", "premise": "",
         "format": "episodic", "defaultEpisodeDurationSeconds": 75,
         "language": "Español", "spokenLanguage": "Español de España",
+        "languageIntent": normalize_language_intent(
+            None, content_language="Español", spoken_language="Español de España"
+        ),
         "protagonistConsistency": False, "protagonistCharacterId": "",
         "genre": "", "tone": "Cinematic", "audience": "General",
         "visualStyle": "", "characterVisualStyle": "", "cameraLanguage": "",
@@ -829,6 +834,13 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "language": _text(project.get("language"), "Español"),
         "spokenLanguage": _text(
             project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
+        ),
+        "languageIntent": normalize_language_intent(
+            project.get("languageIntent"),
+            content_language=_text(project.get("language"), "Español"),
+            spoken_language=_text(
+                project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
+            ),
         ),
         "protagonistConsistency": project.get("protagonistConsistency") is True,
         "protagonistCharacterId": (

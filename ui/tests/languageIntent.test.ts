@@ -1,0 +1,183 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import {
+  compileProviderPrompt,
+  mergeLanguageIntent,
+  normalizeConversationLanguageTag,
+  normalizeLanguageIntent,
+} from '../src/lib/languageIntent'
+import { buildAgentTurnPrompt } from '../src/features/agent/agentKnowledge'
+import {
+  HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
+  parseAgentTurn,
+  type AgentAppSnapshot,
+} from '../src/features/agent/agentActions'
+import {
+  executeRegisteredCapability,
+  listCapabilities,
+  parseRegisteredCapability,
+} from '../src/features/agent/capabilityRegistry'
+import { changedSections, createStoryProject, normalizeStoryProject } from '../src/features/stories/model'
+import { createComicProject, normalizeComicProject } from '../src/features/comics/model'
+import { normalizeSeriesProject } from '../src/features/series/model'
+
+const mixedIntent = normalizeLanguageIntent({
+  conversation_language: 'fr',
+  content_language: 'English',
+  spoken_language: 'Español de España',
+  technical_prompt_language: 'en',
+  verbatim_segments: [{
+    kind: 'dialogue',
+    text: '¡Hola, mundo!',
+    language: 'es',
+    speaker: 'Ada',
+  }, {
+    kind: 'lyrics',
+    text: 'Nunca cae el servidor',
+    language: 'es',
+  }],
+})
+
+test('normalizes both LLM snake_case and persisted camelCase language contracts', () => {
+  assert.equal(mixedIntent.conversationLanguage, 'fr')
+  assert.equal(normalizeLanguageIntent(mixedIntent).spokenLanguage, 'Español de España')
+  assert.deepEqual(normalizeLanguageIntent(mixedIntent).verbatimSegments, mixedIntent.verbatimSegments)
+  assert.equal(normalizeConversationLanguageTag('Español'), 'es')
+  assert.equal(normalizeConversationLanguageTag('pt-BR'), 'pt-BR')
+  assert.equal(normalizeConversationLanguageTag('not a language'), '')
+})
+
+test('provider compiler uses English direction and preserves only medium-relevant literals', () => {
+  const video = compileProviderPrompt('Animated fantasy city at night.', mixedIntent, { medium: 'video' })
+  assert.match(video, /Technical direction language: English/)
+  assert.match(video, /Spoken or sung language: Español de España/)
+  assert.match(video, /"¡Hola, mundo!"/)
+  assert.doesNotMatch(video, /Nunca cae el servidor/)
+  assert.match(video, /remain metadata only/)
+  assert.equal(compileProviderPrompt(video, mixedIntent, { medium: 'video' }), video)
+
+  const music = compileProviderPrompt('Driving 1980s heavy metal anthem.', mixedIntent, { medium: 'music' })
+  assert.match(music, /"Nunca cae el servidor"/)
+  assert.doesNotMatch(music, /¡Hola, mundo!/)
+
+  const image = compileProviderPrompt('One clean comic panel.', mixedIntent, { medium: 'image' })
+  assert.doesNotMatch(image, /¡Hola, mundo!|Nunca cae el servidor/)
+})
+
+test('merge keeps persisted literals when a later action only changes spoken language', () => {
+  const merged = mergeLanguageIntent(mixedIntent, normalizeLanguageIntent({ spoken_language: 'Català' }))
+  assert.equal(merged.spokenLanguage, 'Català')
+  assert.deepEqual(merged.verbatimSegments, mixedIntent.verbatimSegments)
+})
+
+test('Wizard turn keeps conversation language independent from interface and action languages', () => {
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Je prépare la scène.',
+    conversation_language: 'French',
+    actions: [{
+      type: 'prepare_video',
+      prompt: 'A magician greets the audience in a candlelit observatory.',
+      language_intent: {
+        conversation_language: 'fr',
+        content_language: 'English',
+        spoken_language: 'Español',
+        technical_prompt_language: 'en',
+        verbatim_segments: [{ kind: 'dialogue', text: 'hola', language: 'es' }],
+      },
+    }],
+  }))
+  assert.equal(turn.conversationLanguage, 'fr')
+  assert.equal(turn.actions[0].type, 'prepare_video')
+  assert.equal('languageIntent' in turn.actions[0] && turn.actions[0].languageIntent?.spokenLanguage, 'Español')
+
+  const app = {
+    interface_language: 'de',
+    current: {},
+    available_video_models: [],
+    context: {},
+  } as unknown as AgentAppSnapshot
+  const prompt = buildAgentTurnPrompt('demo', [{ role: 'user', text: 'Haz que diga "hola" en español.' }], [], app)
+  assert.match(prompt, /Interface language: de \(presentation only/)
+  assert.match(prompt, /Haz que diga/)
+})
+
+test('every creative language-aware capability publishes and parses the shared contract', () => {
+  const expected = new Set([
+    'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d',
+    'create_story', 'update_story', 'generate_story_section', 'stage_story_comic',
+    'stage_story_video', 'configure_story_song', 'stage_story_music_video',
+    'create_series_episode', 'update_series_episode', 'generate_series_plan',
+    'create_rhythmic_3d_video', 'create_comic',
+  ])
+  for (const capability of listCapabilities()) {
+    if (!expected.has(capability.name)) continue
+    assert.ok(capability.parameters.includes('language_intent'), capability.name)
+    assert.ok((capability.inputSchema.properties as Record<string, unknown>).language_intent, capability.name)
+  }
+  const generic = HOCUSPOCUS_AGENT_RESPONSE_SCHEMA as {
+    properties: { actions: { items: { properties: Record<string, unknown> } } }
+  }
+  assert.ok(generic.properties.actions.items.properties.language_intent)
+
+  const action = parseRegisteredCapability('prepare_video', {
+    type: 'prepare_video', prompt: 'A quiet room.', language_intent: {
+      spoken_language: 'Español', technical_prompt_language: 'en',
+      verbatim_segments: [{ kind: 'dialogue', text: 'hola', language: 'es' }],
+    },
+  })
+  assert.equal(action?.type, 'prepare_video')
+  assert.equal(action && 'languageIntent' in action && action.languageIntent?.verbatimSegments[0].text, 'hola')
+})
+
+test('Studio capability fills the visible form with the compiled auditable prompt', async () => {
+  const action = parseRegisteredCapability('prepare_video', {
+    type: 'prepare_video',
+    prompt: 'A wizard faces the camera.',
+    language_intent: {
+      content_language: 'English', spoken_language: 'Español', technical_prompt_language: 'en',
+      verbatim_segments: [{ kind: 'dialogue', text: 'hola', language: 'es' }],
+    },
+  })
+  assert.ok(action)
+  let received = ''
+  const outcome = await executeRegisteredCapability(action!, {
+    adapters: {
+      studio: {
+        async prepareVideo(prepared) {
+          received = prepared.prompt
+          return { message: 'Prepared', target: { kind: 'studio_form', id: 'video', title: 'Video' } }
+        },
+      },
+    },
+  })
+  assert.equal(outcome?.message, 'Prepared')
+  assert.match(received, /HOCUSPOCUS LANGUAGE CONTRACT/)
+  assert.match(received, /"hola"/)
+})
+
+test('legacy Story, Series and Comics documents migrate to a persistent language intent', () => {
+  const story = normalizeStoryProject({ ...createStoryProject(), languageIntent: undefined, language: 'Italiano', spokenLanguage: 'Italiano' })
+  assert.equal(story.languageIntent.contentLanguage, 'Italiano')
+  assert.equal(story.languageIntent.technicalPromptLanguage, 'en')
+
+  const comic = createComicProject()
+  const migratedComic = normalizeComicProject({ ...comic, languageIntent: undefined, language: 'Français' })
+  assert.equal(migratedComic.languageIntent.contentLanguage, 'Français')
+
+  const series = normalizeSeriesProject({
+    id: 'series_1', title: 'Demo', language: 'Deutsch', spokenLanguage: 'Deutsch',
+  })
+  assert.equal(series?.languageIntent.contentLanguage, 'Deutsch')
+  assert.equal(series?.languageIntent.technicalPromptLanguage, 'en')
+})
+
+test('changing only protected Story literals is a real persisted overview change', () => {
+  const before = createStoryProject()
+  const after = normalizeStoryProject({
+    ...before,
+    languageIntent: mergeLanguageIntent(before.languageIntent, normalizeLanguageIntent({
+      verbatim_segments: [{ kind: 'dialogue', text: 'hola', language: 'es' }],
+    })),
+  })
+  assert.deepEqual(changedSections(before, after), ['overview'])
+})

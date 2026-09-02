@@ -8,6 +8,7 @@ import type {
   ComicTextElement,
   ComicVideoOverrideField,
 } from './types'
+import { normalizeLanguageIntent } from '../../lib/languageIntent'
 
 const COMIC_VIDEO_OVERRIDE_FIELDS: readonly ComicVideoOverrideField[] = [
   'included',
@@ -324,6 +325,10 @@ export function createComicProject(): ComicProject {
     title: 'Untitled comic',
     synopsis: '',
     language: 'English',
+    languageIntent: normalizeLanguageIntent(null, {
+      contentLanguage: 'English',
+      technicalPromptLanguage: 'en',
+    }),
     format: { preset: 'a4', width: 800, height: 1131, dpi: 300 },
     style: {
       name: 'Modern comic',
@@ -788,6 +793,10 @@ export function normalizeComicProject(raw: unknown): ComicProject {
   const doc = raw as Record<string, unknown>
   if (doc.version === 2 && Array.isArray(doc.pages)) {
     const project = repairComicText(doc as unknown as ComicProject)
+    project.languageIntent = normalizeLanguageIntent(project.languageIntent, {
+      contentLanguage: project.language || 'English',
+      technicalPromptLanguage: 'en',
+    })
     project.characters = (Array.isArray(project.characters) ? project.characters : []).map(character => ({
       ...character,
       referenceAssetIds: Array.from(new Set([

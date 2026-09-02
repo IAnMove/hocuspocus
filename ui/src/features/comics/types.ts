@@ -1,3 +1,5 @@
+import type { LanguageIntent } from '../../lib/languageIntent'
+
 export type ComicElementType = 'panel' | 'image' | 'text'
 export type ComicBubbleType =
   | 'none' | 'speech' | 'ellipse' | 'rect' | 'thought' | 'whisper'
@@ -132,6 +134,7 @@ export interface ComicProject {
   title: string
   synopsis: string
   language: string
+  languageIntent: LanguageIntent
   format: {
     preset: 'a4' | 'us-comic' | 'square' | 'webtoon' | 'custom'
     width: number

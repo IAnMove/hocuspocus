@@ -13,6 +13,8 @@ import threading
 import uuid
 from typing import Any
 
+from .language_intent import normalize_language_intent
+
 
 STORY_LIBRARY_FILENAME = ".story-library-v1.json"
 MAX_STORY_PROJECTS = 250
@@ -49,6 +51,11 @@ def normalize_story_library(value: Any) -> dict[str, Any]:
             raise ValueError("Story Lab project has an invalid id")
         project = dict(raw_project)
         project["id"] = project_id
+        project["languageIntent"] = normalize_language_intent(
+            project.get("languageIntent"),
+            content_language=str(project.get("language") or "Español"),
+            spoken_language=str(project.get("spokenLanguage") or project.get("language") or "Español de España"),
+        )
         projects[project_id] = project
 
     active_id = str(value.get("activeId") or "").strip()

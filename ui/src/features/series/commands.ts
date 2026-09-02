@@ -1,4 +1,5 @@
 import type { CreativeCharacter, CreativeLocation } from '../../lib/labHelpers'
+import type { LanguageIntent } from '../../lib/languageIntent'
 
 export interface CreateSeriesEpisodeCommand {
   seriesTitle: string
@@ -20,6 +21,7 @@ export interface CreateSeriesEpisodeCommand {
   targetDurationSeconds?: number
   createIfMissing: boolean
   knownUniverse: boolean
+  languageIntent?: LanguageIntent
 }
 
 export interface UpdateSeriesEpisodeCommand {
@@ -30,6 +32,7 @@ export interface UpdateSeriesEpisodeCommand {
   episodeLogline: string
   outlineBeats: string[]
   targetDurationSeconds?: number
+  languageIntent?: LanguageIntent
 }
 
 export interface GenerateSeriesPlanCommand {
@@ -38,6 +41,7 @@ export interface GenerateSeriesPlanCommand {
   scope: 'outline' | 'script' | 'shots' | 'complete'
   instruction: string
   confirm: true
+  languageIntent?: LanguageIntent
 }
 
 export interface ApplySeriesPlanCommand {

@@ -31,12 +31,13 @@ _minimax_song_request_prompt, _normalize_minimax_song_output, _parse_song_output
 
 
 class TestMiniMaxSongWriterPrompt(unittest.TestCase):
-    def test_ace_style_and_lyrics_follow_the_selected_language(self):
+    def test_ace_style_uses_english_while_lyrics_follow_the_selected_language(self):
         vocal = _ace_song_request_prompt("Write a sysadmin anthem", "Español", False)
-        self.assertIn("visible STYLE prompt and all lyrics in Español", vocal)
+        self.assertIn("STYLE prompt in English and all lyrics in Español", vocal)
+        self.assertIn("TECHNICAL PROMPT LANGUAGE: English", vocal)
         self.assertIn("[Verse]", vocal)
         instrumental = _ace_song_request_prompt("Write an overture", "Français", True)
-        self.assertIn("visible STYLE prompt in Français", instrumental)
+        self.assertIn("visible provider-facing STYLE prompt in English", instrumental)
 
     def test_builds_labelled_reference_style_lyrics_and_story_inputs(self):
         prompt = _minimax_song_request_prompt({
@@ -53,8 +54,9 @@ class TestMiniMaxSongWriterPrompt(unittest.TestCase):
         self.assertIn("DESIRED STYLE", prompt)
         self.assertIn("DESIRED LYRICS OR STRUCTURE", prompt)
         self.assertIn("STORY CONTEXT", prompt)
-        self.assertIn("STYLE AND LYRICS LANGUAGE: Spanish", prompt)
-        self.assertIn("visible STYLE prompt", prompt)
+        self.assertIn("STYLE LANGUAGE: English", prompt)
+        self.assertIn("LYRICS LANGUAGE: Spanish", prompt)
+        self.assertIn("Write STYLE only in English", prompt)
         self.assertIn("TARGET DURATION: approximately 120 seconds", prompt)
         self.assertIn("MiniMax Music has no exact duration API parameter", prompt)
 

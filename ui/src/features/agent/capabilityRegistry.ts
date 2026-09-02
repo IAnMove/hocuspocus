@@ -44,6 +44,18 @@ import { registerStudioCapabilities } from './studioCapabilities'
 import { registerNavigationQueueCapabilities } from './navigationQueueCapabilities'
 import { registerEditorAuxCapabilities } from './editorAuxCapabilities'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
+import {
+  LANGUAGE_INTENT_SCHEMA,
+  compileProviderPrompt,
+  normalizeConversationLanguageTag,
+  normalizeLanguageIntent,
+  type LanguageIntent,
+} from '../../lib/languageIntent'
+import { detectUiLanguage } from '../../i18n/language'
+
+export { LANGUAGE_INTENT_SCHEMA, normalizeConversationLanguageTag }
+export type { LanguageIntent }
+export const currentAgentInterfaceLanguage = detectUiLanguage
 
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
@@ -109,12 +121,37 @@ export interface CapabilityDefinition<TAction extends AgentAction = AgentAction>
 
 const definitions = new Map<string, CapabilityDefinition>()
 
+const LANGUAGE_AWARE_CAPABILITIES = new Set<AgentAction['type']>([
+  'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d',
+  'create_story', 'update_story', 'generate_story_section', 'stage_story_comic',
+  'stage_story_video', 'configure_story_song', 'stage_story_music_video',
+  'create_series_episode', 'update_series_episode', 'generate_series_plan',
+  'create_rhythmic_3d_video', 'create_comic',
+])
+
+function languageAwareSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const properties = schema.properties && typeof schema.properties === 'object'
+    ? schema.properties as Record<string, unknown>
+    : {}
+  return {
+    ...schema,
+    properties: { ...properties, language_intent: LANGUAGE_INTENT_SCHEMA },
+  }
+}
+
 export function defineCapability<TAction extends AgentAction>(
   definition: CapabilityDefinition<TAction>,
 ): CapabilityDefinition<TAction> {
   if (definitions.has(definition.name)) throw new Error(`Duplicate capability: ${definition.name}`)
-  definitions.set(definition.name, definition as CapabilityDefinition)
-  return definition
+  const languageAware = LANGUAGE_AWARE_CAPABILITIES.has(definition.name)
+  const registered = languageAware ? {
+    ...definition,
+    parameters: definition.parameters.includes('language_intent')
+      ? definition.parameters : [...definition.parameters, 'language_intent'],
+    inputSchema: languageAwareSchema(definition.inputSchema),
+  } : definition
+  definitions.set(definition.name, registered as CapabilityDefinition)
+  return registered as CapabilityDefinition<TAction>
 }
 
 function text(value: unknown, maxLength: number): string {
@@ -463,7 +500,11 @@ defineCapability<AgentCreateRhythmic3dVideoAction>({
     if (action.confirm !== true) errors.push('confirmation is required')
     return errors
   },
-  async prepare(action) { return action },
+  async prepare(action) {
+    return action.languageIntent && action.musicPrompt
+      ? { ...action, musicPrompt: compileProviderPrompt(action.musicPrompt, action.languageIntent, { medium: 'music' }) }
+      : action
+  },
   async execute(action, context) {
     const { startRhythmic3dWorkflow } = await import('./rhythmic3dWorkflow')
     const workflow = await startRhythmic3dWorkflow(action, context.adapters)
@@ -1065,7 +1106,11 @@ export function parseRegisteredCapability(
   const definition = definitions.get(name)
   if (!definition) return undefined
   const action = definition.resolve(raw)
-  return action && definition.validate(action).length === 0 ? action : null
+  if (!action || definition.validate(action).length) return null
+  if (!LANGUAGE_AWARE_CAPABILITIES.has(action.type)) return action
+  const rawIntent = raw.language_intent
+  if (!rawIntent || typeof rawIntent !== 'object' || Array.isArray(rawIntent)) return action
+  return { ...action, languageIntent: normalizeLanguageIntent(rawIntent) } as AgentAction
 }
 
 export async function executeRegisteredCapability(
