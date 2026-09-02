@@ -15,16 +15,18 @@ STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
 STORY_PATH = os.path.join(
     ROOT, "ui", "src", "features", "stories", "StoryLabPanel.tsx",
 )
-STORY_UI_PATHS = (
-    STORY_PATH,
-    os.path.join(ROOT, "ui", "src", "features", "stories", "StoryTrailerTab.tsx"),
-    os.path.join(ROOT, "ui", "src", "features", "stories", "StoryProductionsTab.tsx"),
-    os.path.join(ROOT, "ui", "src", "features", "stories", "StoryProductionsMusicPanel.tsx"),
-    os.path.join(ROOT, "ui", "src", "features", "stories", "StoryVideoFormatControls.tsx"),
-    os.path.join(ROOT, "ui", "src", "features", "stories", "storyLabVideoFormat.ts"),
-    os.path.join(ROOT, "ui", "src", "features", "stories", "actions.ts"),
-    os.path.join(ROOT, "ui", "src", "i18n", "locales", "en", "storyLab.json"),
-    os.path.join(ROOT, "ui", "src", "i18n", "locales", "es", "storyLab.json"),
+STORIES_DIR = os.path.join(ROOT, "ui", "src", "features", "stories")
+STORY_UI_PATHS = tuple(
+    [STORY_PATH]
+    + [
+        os.path.join(STORIES_DIR, name)
+        for name in sorted(os.listdir(STORIES_DIR))
+        if name.endswith((".tsx", ".ts"))
+    ]
+    + [
+        os.path.join(ROOT, "ui", "src", "i18n", "locales", "en", "storyLab.json"),
+        os.path.join(ROOT, "ui", "src", "i18n", "locales", "es", "storyLab.json"),
+    ]
 )
 STORY_MODEL_PATH = os.path.join(
     ROOT, "ui", "src", "features", "stories", "model.ts",

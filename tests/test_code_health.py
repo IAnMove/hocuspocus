@@ -39,6 +39,9 @@ def outer(a, b):
         self.assertFalse(code_health._is_product("tests/test_example.py"))
         self.assertFalse(code_health._is_product("app/models/vendor/model.py"))
         self.assertFalse(code_health._is_product("ui/tests/App.test.tsx"))
+        self.assertFalse(code_health._is_product("README.md"))
+        self.assertFalse(code_health._is_product("docs/HOWUSEIT.md"))
+        self.assertFalse(code_health._is_product("docs/character-kits/HOWUSEIT.md"))
 
     def test_ratchet_warns_on_small_growth_and_fails_on_large_growth(self):
         baseline = {
@@ -74,6 +77,25 @@ def outer(a, b):
         }
         _, failures = code_health.compare(large, baseline)
         self.assertGreaterEqual(len(failures), 5)
+
+    def test_markdown_report_is_a_github_table(self):
+        report = {
+            "summary": {
+                "production_lines": 10,
+                "production_files": 2,
+                "test_lines": 4,
+                "functions_measured": 3,
+                "complex_functions": 1,
+                "max_complexity": 20,
+            },
+            "top_complexity": [{
+                "path": "ui/src/App.tsx", "line": 1, "name": "App", "complexity": 20,
+            }],
+        }
+        markdown = code_health._markdown_report(report, report, [], [])
+        self.assertIn("<!-- code-health-report -->", markdown)
+        self.assertIn("| Production LOC |", markdown)
+        self.assertIn("**Ratchet passed.**", markdown)
 
     def test_line_count_reports_physical_and_non_blank_lines(self):
         with tempfile.TemporaryDirectory() as directory:

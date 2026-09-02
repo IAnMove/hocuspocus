@@ -59,7 +59,7 @@ SECRET_PATTERNS = [
      "possible hardcoded credential"),
     (re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----"),
      "private key material"),
-    (re.compile(r"(?i)(sk-|ghp_|gho_|github_pat_|hf_)[A-Za-z0-9_\-]{16,}"),
+    (re.compile(r"(?i)(?:^|[^A-Za-z])(sk-|ghp_|gho_|github_pat_|hf_)[A-Za-z0-9_\-]{16,}"),
      "token-shaped secret"),
 ]
 

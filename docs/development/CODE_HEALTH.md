@@ -1,14 +1,20 @@
 # Code-health ratchet
 
 `scripts/code_health.py` measures only first-party production code. It includes
-the HocusPocus Python runtime, services and routers plus `ui/src`. Vendored
-models are excluded, and test LOC is reported separately because adding tests
-is not a production-code regression.
+the HocusPocus Python runtime, services and routers plus `ui/src` TypeScript
+and JavaScript. Markdown, JSON catalogs, tests and vendored models are
+excluded. Test LOC is reported separately because adding tests is not a
+production-code regression.
+
+CI prints a table in the job summary and upserts the same table as a PR
+comment (`<!-- code-health-report -->`) so every pull request shows the
+current hotspots and the delta versus the committed baseline.
 
 Quick report after installing the normal UI dependencies:
 
 ```bash
 python scripts/code_health.py
+python scripts/code_health.py --markdown
 ```
 
 The report lists physical/non-blank lines, files over 1,000 lines, and the most

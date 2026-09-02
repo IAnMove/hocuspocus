@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import re
 import subprocess
 import sys
@@ -119,6 +120,8 @@ def _tracked_files() -> list[str]:
 
 
 def _is_product(path: str) -> bool:
+    if path.endswith((".md", ".mdx", ".txt", ".json")):
+        return False
     if path in PYTHON_EXACT or (path.endswith(".py") and path.startswith(PYTHON_PREFIXES)):
         return True
     return path.startswith(UI_PREFIX) and Path(path).suffix in UI_SUFFIXES
@@ -296,6 +299,104 @@ def _print_report(report: dict) -> None:
         print(f"  {item['complexity']:>3}  {item['path']}:{item['line']}  {item['name']}")
 
 
+def _markdown_report(
+    report: dict,
+    baseline: dict | None = None,
+    warnings: list[str] | None = None,
+    failures: list[str] | None = None,
+) -> str:
+    summary = report["summary"]
+    lines = [
+        "<!-- code-health-report -->",
+        "## Code health",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+        f"| Production LOC | {summary['production_lines']:,} |",
+        f"| Production files | {summary['production_files']:,} |",
+        f"| Test LOC | {summary['test_lines']:,} |",
+        f"| Functions measured | {summary['functions_measured']:,} |",
+        f"| Functions complexity ≥ {COMPLEXITY_WARNING} | {summary['complex_functions']} |",
+        f"| Maximum complexity | {summary['max_complexity']} |",
+        "",
+        "Markdown, JSON catalogs and tests are out of this table. Only `app/` runtime + `ui/src` TS/JS count.",
+        "",
+        "### Most complex functions",
+        "",
+        "| Complexity | Where |",
+        "|---:|---|",
+    ]
+    for item in report["top_complexity"][:12]:
+        lines.append(f"| {item['complexity']} | `{item['path']}:{item['line']}` `{item['name']}` |")
+    if baseline:
+        now = report["summary"]
+        old = baseline["summary"]
+        lines.extend([
+            "",
+            "### Trend vs baseline",
+            "",
+            "| Metric | Δ |",
+            "|---|---:|",
+        ])
+        for label, key in (
+            ("Production LOC", "production_lines"),
+            ("Test LOC", "test_lines"),
+            (f"Functions ≥ {COMPLEXITY_WARNING}", "complex_functions"),
+            ("Maximum complexity", "max_complexity"),
+        ):
+            lines.append(f"| {label} | {now[key] - old[key]:+,} |")
+    if warnings:
+        lines.extend(["", "### Warnings", ""])
+        lines.extend(f"- {item}" for item in warnings)
+    if failures:
+        lines.extend(["", "### Failures", ""])
+        lines.extend(f"- {item}" for item in failures)
+        lines.append("")
+        lines.append("**Ratchet failed.**")
+    elif warnings is not None:
+        lines.extend(["", "**Ratchet passed.**"])
+    return "\n".join(lines) + "\n"
+
+
+def publish_pr_comment(markdown: str) -> None:
+    repository = os.environ.get("GITHUB_REPOSITORY")
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not repository or not event_path:
+        raise RuntimeError("GITHUB_REPOSITORY and GITHUB_EVENT_PATH are required to comment")
+    event = json.loads(Path(event_path).read_text(encoding="utf-8"))
+    number = (event.get("pull_request") or {}).get("number")
+    if not number:
+        return
+    listed = subprocess.run(
+        ["gh", "api", f"repos/{repository}/issues/{number}/comments", "--paginate"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    comments = json.loads(listed.stdout or "[]")
+    existing = next(
+        (item["id"] for item in comments if "<!-- code-health-report -->" in str(item.get("body") or "")),
+        None,
+    )
+    payload = json.dumps({"body": markdown})
+    if existing:
+        subprocess.run(
+            ["gh", "api", "-X", "PATCH", f"repos/{repository}/issues/comments/{existing}", "--input", "-"],
+            input=payload,
+            text=True,
+            check=True,
+            capture_output=True,
+        )
+        return
+    subprocess.run(
+        ["gh", "api", "-X", "POST", f"repos/{repository}/issues/{number}/comments", "--input", "-"],
+        input=payload,
+        text=True,
+        check=True,
+        capture_output=True,
+    )
+
+
 def _print_trend(current: dict, baseline: dict) -> None:
     now = current["summary"]
     old = baseline["summary"]
@@ -323,6 +424,8 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="compare with the committed baseline")
     parser.add_argument("--write-baseline", action="store_true", help="replace the baseline intentionally")
     parser.add_argument("--json", action="store_true", help="print the complete report as JSON")
+    parser.add_argument("--markdown", action="store_true", help="print a GitHub-flavored table")
+    parser.add_argument("--publish-pr-comment", action="store_true", help="upsert the markdown table on the current PR")
     parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE)
     args = parser.parse_args()
     if args.check and args.write_baseline:
@@ -332,25 +435,38 @@ def main() -> int:
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 2
-    if args.json:
-        print(json.dumps(report, indent=2, ensure_ascii=False))
-    else:
-        _print_report(report)
     if args.write_baseline:
         args.baseline.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"\nWrote baseline: {args.baseline.relative_to(ROOT)}")
         return 0
-    if not args.check:
-        return 0
-    baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
-    _print_trend(report, baseline)
-    warnings, failures = compare(report, baseline)
-    for warning in warnings:
-        print(f"WARN: {warning}")
-    for failure in failures:
-        print(f"FAIL: {failure}")
-    print("PASS: code-health ratchet" if not failures else f"FAIL: {len(failures)} budget regression(s)")
-    return 1 if failures else 0
+    baseline = None
+    warnings: list[str] = []
+    failures: list[str] = []
+    if args.check:
+        baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
+        warnings, failures = compare(report, baseline)
+    if args.json:
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+    elif args.markdown:
+        markdown = _markdown_report(report, baseline, warnings, failures)
+        print(markdown, end="")
+        if args.publish_pr_comment:
+            try:
+                publish_pr_comment(markdown)
+            except (OSError, RuntimeError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+                print(f"WARN: could not comment on the PR: {exc}", file=sys.stderr)
+    else:
+        _print_report(report)
+        if baseline is not None:
+            _print_trend(report, baseline)
+            for warning in warnings:
+                print(f"WARN: {warning}")
+            for failure in failures:
+                print(f"FAIL: {failure}")
+            print("PASS: code-health ratchet" if not failures else f"FAIL: {len(failures)} budget regression(s)")
+    if args.check:
+        return 1 if failures else 0
+    return 0
 
 
 if __name__ == "__main__":

@@ -6,12 +6,19 @@ from tests.api_client_source import api_client_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STORY = ROOT / "ui" / "src" / "features" / "stories" / "StoryLabPanel.tsx"
-STORY_MUSIC = ROOT / "ui" / "src" / "features" / "stories" / "StoryMusicTab.tsx"
-STORY_PRODUCTIONS = ROOT / "ui" / "src" / "features" / "stories" / "StoryProductionsTab.tsx"
-STORY_PRODUCTIONS_MUSIC = ROOT / "ui" / "src" / "features" / "stories" / "StoryProductionsMusicPanel.tsx"
-STORY_TRAILER = ROOT / "ui" / "src" / "features" / "stories" / "StoryTrailerTab.tsx"
-STORY_COMPACT = ROOT / "ui" / "src" / "features" / "stories" / "CompactVideoWorkspace.tsx"
+STORIES = ROOT / "ui" / "src" / "features" / "stories"
+STORY = STORIES / "StoryLabPanel.tsx"
+STORY_MUSIC = STORIES / "StoryMusicTab.tsx"
+STORY_PRODUCTIONS = STORIES / "StoryProductionsTab.tsx"
+STORY_PRODUCTIONS_MUSIC = STORIES / "StoryProductionsMusicPanel.tsx"
+STORY_TRAILER = STORIES / "StoryTrailerTab.tsx"
+STORY_COMPACT = STORIES / "CompactVideoWorkspace.tsx"
+
+
+def stories_ui() -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in sorted(STORIES.glob("*.tsx")))
+
+
 STORY_VIDEO_FORMAT = ROOT / "ui" / "src" / "features" / "stories" / "StoryVideoFormatControls.tsx"
 STORY_VIDEO_FORMAT_HELPERS = ROOT / "ui" / "src" / "features" / "stories" / "storyLabVideoFormat.ts"
 STORY_GALLERY = ROOT / "ui" / "src" / "features" / "stories" / "ReferenceGallery.tsx"
@@ -27,7 +34,7 @@ STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 
 def test_lyria_prompt_does_not_require_an_optional_reference_song():
     source = STORY.read_text(encoding="utf-8")
-    music = STORY_MUSIC.read_text(encoding="utf-8")
+    music = stories_ui()
     function = source.split(
         "const adaptMusicCueWithLlm", 1,
     )[1].split("const uploadLyriaResult", 1)[0]
@@ -42,7 +49,7 @@ def test_lyria_prompt_does_not_require_an_optional_reference_song():
 
 def test_custom_mp3_can_be_imported_and_selected_as_story_music():
     source = STORY.read_text(encoding="utf-8")
-    music = STORY_MUSIC.read_text(encoding="utf-8")
+    music = stories_ui()
 
     assert "const uploadCustomMusic" in source
     assert "custom-audio-upload" in source
@@ -53,7 +60,7 @@ def test_custom_mp3_can_be_imported_and_selected_as_story_music():
 
 def test_chained_music_and_director_workflows_expose_cancel_controls():
     story = STORY.read_text(encoding="utf-8")
-    music = STORY_MUSIC.read_text(encoding="utf-8")
+    music = stories_ui()
     activity = ACTIVITY.read_text(encoding="utf-8")
 
     assert "cancelMusicQueue" in story
@@ -176,7 +183,7 @@ def test_story_library_can_bulk_remove_only_selected_drafts():
 def test_story_reference_images_confirm_removal_and_open_in_a_modal():
     gallery = STORY_GALLERY.read_text(encoding="utf-8")
     panel = STORY.read_text(encoding="utf-8")
-    compact = STORY_COMPACT.read_text(encoding="utf-8")
+    compact = stories_ui()
 
     assert "export function ReferenceGallery" in gallery
     assert "function ReferenceGallery" not in panel
@@ -236,9 +243,9 @@ def test_story_direct_reference_mode_uses_only_approved_visual_assets():
     types = STORY_TYPES.read_text(encoding="utf-8")
     adaptations = STORY_ADAPTATIONS.read_text(encoding="utf-8")
 
-    productions = STORY_PRODUCTIONS.read_text(encoding="utf-8")
-    productions_music = STORY_PRODUCTIONS_MUSIC.read_text(encoding="utf-8")
-    trailer = STORY_TRAILER.read_text(encoding="utf-8")
+    productions = stories_ui()
+    productions_music = productions
+    trailer = productions
 
     assert "'direct_references'" in types
     assert "H3 Ref2VA" in productions or "H3 Ref2VA" in productions_music or "trailer.directReferencesHint" in trailer
