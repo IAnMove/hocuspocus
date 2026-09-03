@@ -402,23 +402,70 @@ Comprobaciones finales:
 - ningún launcher de Pinokio fue modificado;
 - el worktree rastreado queda limpio y se preservan los documentos locales del usuario.
 
-### Actualización posterior — PRs #116–#119
+### Actualización posterior — PRs #116–#120
 
-El estado actual se mantiene en `main` hasta #115 mientras estos PRs siguen
-abiertos. La integración recomendada es **#116 → #117 → #118 → #119**:
+El estado vigente es `main` en el merge de #120 (`658a1c3`, 2026-09-03).
+Los PRs #116–#120 están mezclados y sus comprobaciones requeridas quedaron en
+verde al hacer merge:
 
-- #116 actualiza la cola de slices y este relevo documental.
-- #117, abierto y verde, extrae la configuración de Studio a
-  `studioConfigurationSlice` y deja `startGeneration` en `useStore`.
-- #118, abierto y verde, extrae el handoff de producción Story Lab → Director
-  a `storyProductionController.ts`.
-- #119 sigue abierto y bajo revisión. El E2E crítico simulado pasó. El smoke
-  real opt-in generó correctamente la canción y un vídeo H264/AAC de 19.75 s.
-  El harness dio primero un falso negativo al elegir el proyecto lateral
-  `Untitled story`; ya se corrigió seleccionando por el título exacto pedido.
-  CI y Cursor seguían en curso al redactar y #119 no debe marcarse como
-  terminado.
+- #116 (documentación tras #115) se mezcló como `215ad2a`.
+- #117 (slice de configuración de Studio) se mezcló como `bfd4e9d`; extrae
+  `studioConfigurationSlice` y mantiene `startGeneration` en `useStore`.
+- #118 (controlador de coordinación de Story Lab) se mezcló como `e545836`;
+  extrae el handoff Story Lab → Director a `storyProductionController.ts`.
+- #119 (identidad/procedencia exacta canción de Story → videoclip) se mezcló
+  como `4bc7376`; pasaron el E2E simulado y Cursor. El smoke real opt-in
+  generó canción y vídeo H264/AAC de 19,75 s. El falso negativo inicial se
+  debió a seleccionar un `Untitled story` lateral; la selección por título
+  exacto quedó corregida y cubierta.
+- #120 (tendencia de calidad de código) se mezcló como `658a1c3`. La foto
+  actual es **48,7/100**: complejidad **52,1**, concentración **53,3**,
+  ficheros sobredimensionados **28,5** y modularidad **62,2**; **+2,2** frente
+  al baseline histórico comprometido. Es un diagnóstico, no un bloqueo de CI
+  ni un certificado de calidad; el ratchet existente sigue siendo el guardarraíl.
 
-Riesgos residuales separados: la letra del smoke real fue semánticamente
-genérica, aunque el medio y su cadena de identidad fueron correctos; los `409`
-de conversación por concurrencia requieren una investigación independiente.
+Las notas anteriores de este documento son históricas. La siguiente cola
+operativa, en orden, es:
+
+1. Procedencia exacta Series → Comics.
+2. Recuperación de conflictos `409` de conversaciones del Wizard.
+3. Fidelidad semántica de canción y letras.
+4. Segundo slice de generación de `useStore`.
+5. Extracción del controlador de sesión de Story Lab.
+6. Siguiente router de dominio backend.
+7. `PipelineRuntime` tipado en Director.
+8. Puerta de decisión y, después, magia visual del Wizard.
+9. Validación de release.
+
+### Protocolo canónico de delegación de bajo coste
+
+Cuando el trabajo se orqueste desde Codex/ChatGPT, el agente líder debe
+delegar cada implementación acotada a `luna_worker` (configurado mediante
+`luna-worker.toml`). Es una convención de trabajo de ingeniería, no una
+dependencia del producto. Cada paquete para Luna debe incluir:
+
+- base de la rama;
+- ficheros propios y ficheros prohibidos;
+- contratos e invariantes;
+- pruebas y comandos;
+- PR esperado;
+- condiciones de parada.
+
+Luna hace un único PR acotado y no lo mezcla. El líder revisa el diff, el score
+de calidad y CI antes de que una persona mezcle el PR. Debe haber como máximo
+un PR abierto por fichero caliente (`_launch_runtime.py`, `useStore`,
+`agentActions`). Si Luna no está disponible, el líder ejecuta la tarea o pide
+dirección; no lo sustituye silenciosamente por un agente amplio y sin límites.
+
+Encabezado reutilizable para los siguientes paquetes:
+
+> **Execution context: Codex/ChatGPT — delegate the bounded implementation to
+> `luna_worker`; lead coordinates and reviews.**
+
+No se debe declarar terminado un PR o una CI mientras esté solamente preparado,
+pendiente de revisión o ejecutándose.
+
+Riesgos a resolver en los siguientes bloques: la letra del smoke real fue
+semánticamente genérica, aunque el medio y su cadena de identidad fueron
+correctos; los `409` de conversación por concurrencia son una investigación
+separada y no deben mezclarse con la garantía de procedencia de #119.
