@@ -14,6 +14,7 @@ COMPACT = STORIES / "CompactVideoWorkspace.tsx"
 VIDEO_FORMAT = STORIES / "storyLabVideoFormat.ts"
 VIDEO_CONTROLS = STORIES / "StoryVideoFormatControls.tsx"
 ADAPTATIONS = STORIES / "adaptations.ts"
+PRODUCTION_CONTROLLER = STORIES / "storyProductionController.ts"
 MODEL = STORIES / "model.ts"
 TYPES = STORIES / "types.ts"
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
@@ -155,13 +156,14 @@ def test_direct_trailer_cast_approval_does_not_require_identity_images():
 
 def test_trailer_can_review_generate_reopen_and_reuse_ordered_assembly():
     panel = PANEL.read_text(encoding="utf-8")
+    controller = PRODUCTION_CONTROLLER.read_text(encoding="utf-8")
     trailer = story_lab_trailer_ui()
     stage = panel.split("const stageTrailer", 1)[1].split("const writeStorySong", 1)[0]
     reopen = panel.split("const reopenProduction", 1)[1].split(
         "const restoreProductionSource", 1,
     )[0]
 
-    assert "buildTrailerAdaptation" in panel
+    assert "buildTrailerAdaptation" in controller
     assert "kind: 'trailer'" in stage
     assert "pipelineId: useStore.getState().pipelineId" in stage
     assert "stageTrailer(true)" in trailer
