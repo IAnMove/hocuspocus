@@ -731,7 +731,7 @@ def _publish_generation_sidecar_for_studio_job(
         payload,
         workspace_id=provenance.get("workspace_id"),
         output_folder=job.get("workspace"),
-        tool=tool,
+        tool=provenance.get("tool") or tool,
         actor=provenance.get("actor"),
         capability=provenance.get("capability"),
         **manifest_refs,
@@ -35732,6 +35732,23 @@ def _publish_generation_task(job: dict) -> dict:
     owner_id = str(params.get("_director_pipeline_id") or "")
     provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
     command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    from services.generation_provenance import task_fields_from_provenance
+
+    task_identity = task_fields_from_provenance(
+        provenance,
+        pipeline_id=owner_id if owner_id and not owner_id.startswith("series:") else None,
+    )
+    task_metadata = {
+        "adapter": "generation", "generation_details": details,
+        "owner_pipeline_id": owner_id,
+        "actor": provenance.get("actor") or "unknown",
+        "tool": provenance.get("tool") or "studio",
+        "capability": provenance.get("capability"),
+        "command_id": command.get("command_id"),
+        "workflow_id": command.get("workflow_id"),
+        "run_id": command.get("run_id"),
+    }
+    task_metadata.update(task_identity.pop("metadata", {}))
     if owner_id.startswith("series:"):
         series_job_id = owner_id.split(":", 1)[1]
         parent_task_id = f"task-series-render-{series_job_id}"
@@ -35790,16 +35807,8 @@ def _publish_generation_task(job: dict) -> dict:
         recoverable=_is_durable_generation_job(job),
         error=({"message": str(error), "retryable": True} if error else None),
         result_refs=list(job.get("output_files") or []),
-        metadata={
-            "adapter": "generation", "generation_details": details,
-            "owner_pipeline_id": owner_id,
-            "actor": provenance.get("actor") or "unknown",
-            "tool": provenance.get("tool") or "studio",
-            "capability": provenance.get("capability"),
-            "command_id": command.get("command_id"),
-            "workflow_id": command.get("workflow_id"),
-            "run_id": command.get("run_id"),
-        },
+        **task_identity,
+        metadata=task_metadata,
     )
 
 
@@ -36035,6 +36044,20 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
         return None
     progress = pipeline.get("progress") if isinstance(pipeline.get("progress"), dict) else {}
     details = pipeline.get("generation_details") if isinstance(pipeline.get("generation_details"), dict) else {}
+    snapshot = pipeline.get("_params_snapshot") if isinstance(pipeline.get("_params_snapshot"), dict) else {}
+    params = pipeline.get("params") if isinstance(pipeline.get("params"), dict) else {}
+    provenance = pipeline.get("provenance") if isinstance(pipeline.get("provenance"), dict) else {}
+    if not provenance:
+        provenance = snapshot.get("provenance") if isinstance(snapshot.get("provenance"), dict) else {}
+    if not provenance:
+        provenance = params.get("provenance") if isinstance(params.get("provenance"), dict) else {}
+    from services.generation_provenance import task_fields_from_provenance
+
+    task_identity = task_fields_from_provenance(
+        provenance,
+        pipeline_id=pipeline_id,
+    )
+    canonical_pipeline_id = task_identity.pop("pipeline_id", pipeline_id)
     schedule = pipeline.get("resource_schedule") if isinstance(pipeline.get("resource_schedule"), dict) else {}
     schedule_lanes = schedule.get("lanes") if isinstance(schedule.get("lanes"), dict) else {}
     resource_requirements = list(dict.fromkeys(
@@ -36042,6 +36065,18 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
         for lane in schedule_lanes.values()
         if isinstance(lane, dict) and str(lane.get("key") or "")
     ))
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    task_metadata = {
+        "adapter": "director", "generation_details": details,
+        "resource_schedule": schedule,
+        "actor": provenance.get("actor") or "unknown",
+        "tool": provenance.get("tool") or "director",
+        "capability": provenance.get("capability"),
+        "command_id": command.get("command_id"),
+        "workflow_id": command.get("workflow_id"),
+        "run_id": command.get("run_id"),
+    }
+    task_metadata.update(task_identity.pop("metadata", {}))
     raw_status = str(pipeline.get("status") or "").strip().lower()
     status = {
         "crashed": "interrupted",
@@ -36086,12 +36121,13 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
         model=str(details.get("text_model") or details.get("video_model_name") or ""),
         server_origin=str(details.get("text_server") or ""),
         resource_requirements=resource_requirements,
-        pipeline_id=pipeline_id, backend_job_id=pipeline_id,
+        pipeline_id=canonical_pipeline_id, backend_job_id=pipeline_id,
         cancelable=status in {"created", "queued", "waiting_resource", "running"},
         resumable=True, recoverable=True,
         error=({"message": str(pipeline.get("error")), "retryable": True} if pipeline.get("error") else None),
         result_refs=list(pipeline.get("output_files") or []),
-        metadata={"adapter": "director", "generation_details": details, "resource_schedule": schedule},
+        **task_identity,
+        metadata=task_metadata,
     )
 
 

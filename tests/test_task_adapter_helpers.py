@@ -121,6 +121,55 @@ def test_legacy_adapters_use_the_canonical_progress_helper(adapter):
     assert "_canonical_legacy_progress" in calls
 
 
+def test_generation_adapter_publishes_exact_story_song_identity():
+    captured = {}
+
+    def upsert(workspace, task_id, **fields):
+        captured.update({"workspace": workspace, "id": task_id, **fields})
+        return dict(captured)
+
+    namespace = {
+        "time": __import__("time"),
+        "_public_generation_details": lambda _params: {
+            "generation_mode": "audio",
+            "model_type": "ace_step_v1_5_xl_sft_lm_4b",
+            "model_name": "ACE-Step 1.5 XL",
+        },
+        "_task_status": lambda value: str(value),
+        "_task_timestamp": lambda record, *keys: next(
+            (record.get(key) for key in keys if record.get(key) is not None), None,
+        ),
+        "_canonical_legacy_progress": lambda *_args: 0.0,
+        "_is_durable_generation_job": lambda _job: True,
+        "_local_gpu_lane": SimpleNamespace(key="local_gpu:0"),
+        "_upsert_canonical_task": upsert,
+    }
+    node = _function("_publish_generation_task")
+    exec(compile(ast.Module(body=[node], type_ignores=[]), str(LAUNCH_PATH), "exec"), namespace)
+
+    namespace["_publish_generation_task"]({
+        "id": "song-job",
+        "workspace": "physical-folder",
+        "status": "completed",
+        "params": {"model_type": "ace_step_v1_5_xl_sft_lm_4b"},
+        "output_files": ["song.wav"],
+        "provenance": {
+            "actor": "wizard",
+            "capability": "generate_story_song",
+            "project_id": "story-1",
+            "cue_id": "cue-1",
+            "candidate_id": "candidate-1",
+            "song_version": "1",
+        },
+    })
+
+    assert captured["project_id"] == "story-1"
+    assert captured["entity_type"] == "song_candidate"
+    assert captured["entity_id"] == "candidate-1"
+    assert captured["metadata"]["cue_id"] == "cue-1"
+    assert captured["metadata"]["candidate_id"] == "candidate-1"
+
+
 def test_task_event_cursor_prefers_latest_valid_cursor():
     assert task_event_cursor(3, "8") == 8
     assert task_event_cursor("12", "broken") == 12

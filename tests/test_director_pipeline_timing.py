@@ -52,6 +52,17 @@ def test_final_output_sidecar_persists_total_and_phase_timings(tmp_path: Path):
     (tmp_path / "final.mp4").write_bytes(b"video")
     pipeline = {
         "id": "timed-final",
+        "workspace": "physical-folder",
+        "_params_snapshot": {"provenance": {
+            "actor": "wizard",
+            "capability": "start_director_production",
+            "workspace_id": "collection-1",
+            "project_id": "story-1",
+            "production_id": "production-1",
+            "cue_id": "cue-1",
+            "candidate_id": "candidate-1",
+            "song_version": "1",
+        }},
         "created_at": 100.0,
         "_completed_at": 410.0,
         "_prompt_generation_time_sec": 10.0,
@@ -88,12 +99,18 @@ def test_final_output_sidecar_persists_total_and_phase_timings(tmp_path: Path):
     assert saved["params"]["director_aspect_ratio"] == "16:9"
     assert saved["schema"] == SCHEMA_NAME
     assert saved["origin"]["tool"] == "director"
-    assert saved["origin"]["actor"] == "unknown"
-    assert saved["origin"].get("workspace_id") in (None, "")
+    assert saved["origin"]["actor"] == "wizard"
+    assert saved["origin"]["workspace_id"] == "collection-1"
+    assert saved["origin"]["output_folder"] == "physical-folder"
+    assert saved["origin"]["project"]["id"] == "story-1"
+    assert saved["origin"]["production"]["id"] == "production-1"
     assert saved["pipeline_id"] == "timed-final"
     loaded = read_asset_manifest(tmp_path / "final.mp4")
     assert loaded is not None
     assert loaded["execution"]["pipeline_id"] == "timed-final"
+    assert loaded["execution"]["cue_id"] == "cue-1"
+    assert loaded["execution"]["candidate_id"] == "candidate-1"
+    assert loaded["execution"]["song_version"] == "1"
     assert loaded["origin"]["tool"] == "director"
 
 
@@ -309,3 +326,45 @@ def test_director_assembly_sidecar_publishes_canonical_manifest(tmp_path: Path):
     )
     assert read_asset_manifest(first)["asset"]["id"] == first_id
     assert read_asset_manifest(second)["asset"]["id"] != first_id
+
+
+def test_director_assembly_sidecar_preserves_story_song_provenance(tmp_path: Path):
+    media = tmp_path / "minimax_h3_pipeline-7_multiclip.mp4"
+    media.write_bytes(b"video")
+    provenance = {
+        "actor": "wizard",
+        "capability": "start_director_production",
+        "workspace_id": "collection-1",
+        "project_id": "story-1",
+        "production_id": "production-1",
+        "cue_id": "cue-1",
+        "candidate_id": "candidate-1",
+        "song_version": "1",
+    }
+    director_pipeline._write_director_assembly_sidecar(
+        str(media),
+        {
+            "params": {
+                "model_type": "minimax_h3_legacy",
+                "director_pipeline_id": "pipeline-7",
+            },
+            "provenance": provenance,
+            "generation_mode": "video",
+            "pipeline_id": "pipeline-7",
+        },
+        "physical-folder",
+    )
+
+    loaded = read_asset_manifest(media)
+    assert loaded is not None
+    assert loaded["origin"]["actor"] == "wizard"
+    assert loaded["origin"]["workspace_id"] == "collection-1"
+    assert loaded["origin"]["output_folder"] == "physical-folder"
+    assert loaded["origin"]["project"] == {"kind": "story", "id": "story-1"}
+    assert loaded["origin"]["production"] == {
+        "kind": "director_production", "id": "production-1",
+    }
+    assert loaded["execution"]["pipeline_id"] == "pipeline-7"
+    assert loaded["execution"]["cue_id"] == "cue-1"
+    assert loaded["execution"]["candidate_id"] == "candidate-1"
+    assert loaded["execution"]["song_version"] == "1"

@@ -90,6 +90,33 @@ def test_manifest_keeps_song_cue_and_candidate_correlations(tmp_path: Path):
     assert manifest["execution"]["song_version"] == "2"
 
 
+def test_sidecar_publisher_accepts_runtime_project_and_production_refs(tmp_path: Path):
+    output = tmp_path / "story-song.wav"
+    output.write_bytes(b"audio")
+    published = publish_generation_sidecar(
+        output,
+        {
+            "generation_mode": "audio",
+            "cue_id": "cue-1",
+            "candidate_id": "candidate-1",
+            "song_version": "1",
+        },
+        workspace_id="collection-1",
+        output_folder="physical-folder",
+        project={"kind": "story", "id": "story-1"},
+        production={"kind": "director_production", "id": "production-1"},
+        tool="story_lab",
+        actor="wizard",
+        capability="generate_story_song",
+    )
+    saved = json.loads(published.read_text(encoding="utf-8"))
+    assert saved["origin"]["project"] == {"kind": "story", "id": "story-1"}
+    assert saved["origin"]["production"] == {
+        "kind": "director_production", "id": "production-1",
+    }
+    assert saved["execution"]["candidate_id"] == "candidate-1"
+
+
 def test_manifest_redacts_secrets_recursively_and_never_writes_absolute_path(tmp_path: Path):
     output = tmp_path / "voice.wav"
     output.write_bytes(b"wave")

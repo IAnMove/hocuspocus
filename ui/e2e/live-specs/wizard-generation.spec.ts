@@ -109,14 +109,23 @@ async function storyProjectIds(request: APIRequestContext, workspace: string): P
   )))
 }
 
-async function waitForNewStoryProject(request: APIRequestContext, workspace: string, previous: Set<string>) {
+async function waitForNewStoryProject(
+  request: APIRequestContext,
+  workspace: string,
+  previous: Set<string>,
+  expectedTitle?: string,
+) {
   let projectId = ''
   await expect.poll(async () => {
     const library = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`) as {
-      projects: Record<string, { id?: string }>
+      projects: Record<string, { id?: string; title?: string }>
     }
     projectId = Object.entries(library.projects || {})
-      .find(([id, project]) => !previous.has(id) && !previous.has(String(project.id || '')))?.[0] || ''
+      .find(([id, project]) => (
+        !previous.has(id)
+        && !previous.has(String(project.id || ''))
+        && (!expectedTitle || project.title === expectedTitle)
+      ))?.[0] || ''
     return projectId
   }, { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] }).not.toBe('')
   const library = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`) as {
@@ -319,7 +328,7 @@ test('wizard: one-turn new song request never reuses the selected music-video pr
   const transcript = await ask(page,
     `Hazme un videoclip titulado exactamente "${title}" de una canción de 20 segundos en la que Linus Torvalds sea el protagonista y luche contra el software propietario, siempre en animación dibujada inspirada en la película de animación adulta Heavy Metal de 1981. Escribe la letra vocal, genera la canción con ACE-Step 1.5 XL y ejecuta el videoclip. Invéntalo todo y no reutilices ninguna canción anterior.`,
   )
-  const created = await waitForNewStoryProject(request, workspace, beforeStories)
+  const created = await waitForNewStoryProject(request, workspace, beforeStories, title)
   const projectId = created.id
   await waitForTerminalRoot(request, workspace, beforeTasks, 'completed')
   await waitForCompletedDirectorPipeline(request, beforeDirector)
