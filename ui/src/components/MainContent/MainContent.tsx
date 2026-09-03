@@ -323,20 +323,28 @@ export function MainContent() {
   const maxMediaHeight = mediaFeedMaxPreviewHeight(containerHeight)
   const estimatedItemHeight = estimatedMediaFeedItemHeight(containerWidth, containerHeight)
 
-  // Measure container on mount and resize; clear stale heights on width change
+  // Measure container on mount and resize; clear stale heights whenever either
+  // dimension changes because the viewport cap also makes item height depend
+  // on the available vertical space.
   useEffect(() => {
     const el = feedRef.current
     if (!el) return
     let prevWidth = 0
+    let prevHeight = 0
     const ro = new ResizeObserver((entries) => {
       const rect = entries[0].contentRect
-      setContainerHeight(rect.height)
+      const newHeight = rect.height
+      setContainerHeight(newHeight)
       const newWidth = rect.width
       setContainerWidth(newWidth)
-      if (prevWidth && Math.abs(newWidth - prevWidth) > 2) {
+      if (
+        (prevWidth && Math.abs(newWidth - prevWidth) > 2)
+        || (prevHeight && Math.abs(newHeight - prevHeight) > 2)
+      ) {
         measuredHeights.current.clear()
       }
       prevWidth = newWidth
+      prevHeight = newHeight
     })
     ro.observe(el)
     return () => ro.disconnect()

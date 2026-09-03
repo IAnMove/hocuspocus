@@ -30,5 +30,6 @@ test('the feed applies the same viewport cap to rendered media and virtualizatio
 
   assert.match(feedSource, /estimatedMediaFeedItemHeight\(containerWidth, containerHeight\)/)
   assert.match(feedSource, /maxMediaHeight=\{maxMediaHeight\}/)
+  assert.match(feedSource, /Math\.abs\(newHeight - prevHeight\) > 2/)
   assert.match(itemSource, /style=\{maxMediaHeight == null \? undefined : \{ maxHeight:/)
 })
