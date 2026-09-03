@@ -19,6 +19,7 @@ import { bindSlice } from './storeApi'
 import { createThemeSlice } from './themeSlice'
 import { createGallerySlice } from './gallerySlice'
 import { createLlmSlice, UNLOADED_LLM_STATUS, type LlmSlice } from './llmSlice'
+import { createStudioConfigurationSlice, type StudioConfigurationSlice } from './studioConfigurationSlice'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 import {
   extractSingleClipStudioParams,
@@ -1083,7 +1084,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-interface AppState extends LlmSlice {
+interface AppState extends LlmSlice, StudioConfigurationSlice {
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
   setGenerationMode: (mode: GenerationMode) => void
@@ -1433,72 +1434,6 @@ interface AppState extends LlmSlice {
   openModelVisibility: (mode: GenerationMode) => void
   clearModelVisibilityFocus: () => void
 
-  // Resolution helpers
-  resolutionPreset: ResolutionPreset
-  setResolutionPreset: (preset: ResolutionPreset) => void
-  aspectRatio: AspectRatio
-  setAspectRatio: (ratio: AspectRatio) => void
-
-  // Duration
-  durationSeconds: number
-  setDurationSeconds: (s: number) => void
-
-  // Sliding window
-  slidingWindowSeconds: number
-  setSlidingWindowSeconds: (s: number) => void
-  slidingWindowOverlap: number
-  setSlidingWindowOverlap: (frames: number) => void
-  slidingWindowLocked: boolean
-  setSlidingWindowLocked: (locked: boolean) => void
-
-  // Real frame rate of the uploaded guide/control video (probed server-side
-  // at upload). Used by force_fps="control" models (SCAIL-2 class) to
-  // convert durationSeconds to frames at the rate the output will actually
-  // play at, instead of the model's nominal fps.
-  guideVideoFps: number | null
-  setGuideVideoFps: (fps: number | null) => void
-
-  // Output count
-  outputCount: number
-  setOutputCount: (n: number) => void
-
-  // Image uploads
-  startImage: File | null
-  endImage: File | null
-  setStartImage: (f: File | null) => void
-  setEndImage: (f: File | null) => void
-
-  // Image references (for models with image_ref_choices)
-  imageRefs: File[]
-  imageRefType: string
-  removeBackgroundRefs: boolean
-  addImageRef: (file: File) => void
-  removeImageRef: (index: number) => void
-  reorderImageRefs: (from: number, to: number) => void
-  setImageRefType: (type: string) => void
-  setRemoveBackgroundRefs: (v: boolean) => void
-
-  // Post-processing (shared for Studio mode)
-  spatialUpsampling: string
-  setSpatialUpsampling: (v: string) => void
-  filmGrainIntensity: number
-  setFilmGrainIntensity: (v: number) => void
-  filmGrainSaturation: number
-  setFilmGrainSaturation: (v: number) => void
-
-  // Voice clone postprocessing (SeedVC). Replaces 1 or 2 voices in
-  // a generated video's audio with user-supplied reference voice(s).
-  // Applied after generation as a postprocessing step. See
-  // app/postprocessing/voice_clone.py for backend logic.
-  voiceCloneEnabled: boolean
-  setVoiceCloneEnabled: (v: boolean) => void
-  voiceCloneMode: 'single' | 'two'
-  setVoiceCloneMode: (v: 'single' | 'two') => void
-  // Up to 2 reference voices. Each entry tracks the uploaded filename
-  // (display) + the server-side path the backend uses.
-  voiceCloneRefs: { filename: string; path: string }[]
-  setVoiceCloneRef: (index: number, ref: { filename: string; path: string } | null) => void
-
   // ── Tools area (standalone post-processing on an existing clip) ──────
   // Apply FlashVSR upscale or SeedVC revoice to any gallery output or an
   // uploaded clip, independent of a generation. See ToolsPanel.tsx + the
@@ -1541,43 +1476,9 @@ interface AppState extends LlmSlice {
   directorAudioScale: number
   setDirectorAudioScale: (v: number) => void
 
-  // Audio guide (pre-filled by Director or manual upload)
-  audioGuideFilename: string | null
-  setAudioGuideFilename: (name: string | null) => void
-  audioGuide2Filename: string | null
-  setAudioGuide2Filename: (name: string | null) => void
-  ttsSpeakerName1: string
-  ttsSpeakerName2: string
-  ttsSpeakerNamesManual: boolean
-  setTtsSpeakerName1: (name: string) => void
-  setTtsSpeakerName2: (name: string) => void
-  _autoParseSpkeakerNames: (text: string, force?: boolean) => void
-  // Dynamic multi-speaker (1-6 voices)
-  ttsVoiceCount: number  // 0=text only, 1-6=voice clone count
-  ttsVoices: { name: string; filename: string | null; path: string | null }[]
-  setTtsVoiceCount: (count: number) => void
-  setTtsVoiceName: (index: number, name: string) => void
-  setTtsVoiceFile: (index: number, filename: string | null, path: string | null) => void
-  addTtsVoice: () => void
-  removeTtsVoice: (index: number) => void
-
-  // Multi-clip state
-  clips: MultiClip[]
-  singlePromptMode: boolean
-  studioFocusedClipIndex: number
-  setClipPrompt: (index: number, prompt: string) => void
-  setClipStartImage: (index: number, file: File | null) => void
-  addClipKeyframe: (index: number, file: File) => void
-  removeClipKeyframe: (index: number, keyframeIndex: number) => void
-  setSinglePromptMode: (v: boolean) => void
-  setStudioFocusedClipIndex: (index: number) => void
-  syncClipCount: () => void
-
   // Generation state (queue)
   jobs: GenerationJob[]
   isGenerating: boolean
-  promptSchedulerEnabled: boolean
-  setPromptSchedulerEnabled: (enabled: boolean) => void
   startGeneration: (
     scheduledPrompt?: ScheduledPromptSubmission,
     submissionContext?: GenerationSubmissionContext,
@@ -2253,6 +2154,7 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createRetakeDialogSlice),
   ...bindSlice(set, get, createGallerySlice),
   ...bindSlice(set, get, createLlmSlice),
+  ...bindSlice(set, get, createStudioConfigurationSlice({ alignFrameCount, resolveResolution })),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -3925,153 +3827,6 @@ export const useStore = create<AppState>((set, get) => {
     }
   },
 
-  resolutionPreset: '720p',
-  setResolutionPreset: (preset) => {
-    const ratio = get().aspectRatio
-    const resolution = resolveResolution(get().modelOptions, preset, ratio)
-    set(s => ({
-      resolutionPreset: preset,
-      params: { ...s.params, resolution },
-      h3WindowPlan: null,
-    }))
-  },
-
-  aspectRatio: '16:9',
-  setAspectRatio: (ratio) => {
-    const preset = get().resolutionPreset
-    const resolution = resolveResolution(get().modelOptions, preset, ratio)
-    set(s => ({
-      aspectRatio: ratio,
-      params: { ...s.params, resolution },
-      h3WindowPlan: null,
-    }))
-  },
-
-  durationSeconds: 5,
-  setDurationSeconds: (s) => {
-    const options = get().modelOptions
-    const fps = options?.fps ?? 16
-    const minimum = Math.max(1, (options?.frames_minimum || fps) / fps)
-    const nativeMaximum = options?.frames_maximum
-      ? options.frames_maximum / fps
-      : null
-    const maximum = options?.sliding_window || nativeMaximum == null
-      ? Number.POSITIVE_INFINITY
-      : nativeMaximum
-    let seconds = Math.min(maximum, Math.max(minimum, s))
-    if (
-      options?.sliding_window
-      && nativeMaximum
-      && seconds <= Math.round(nativeMaximum * 10) / 10
-    ) {
-      seconds = Math.min(seconds, nativeMaximum)
-    }
-    const frames = alignFrameCount(Math.round(seconds * fps), options)
-    set(state => ({
-      durationSeconds: seconds,
-      params: { ...state.params, video_length: frames },
-      h3WindowPlan: null,
-    }))
-    get().syncClipCount()
-  },
-
-  guideVideoFps: null,
-  setGuideVideoFps: (fps) => set({ guideVideoFps: fps }),
-
-  slidingWindowSeconds: 5,
-  setSlidingWindowSeconds: (s) => {
-    const options = get().modelOptions
-    const fps = options?.fps ?? 16
-    const swDefaults = options?.sliding_window_defaults
-    let frames = Math.round(s * fps)
-    if (swDefaults) {
-      const minimum = swDefaults.window_min ?? 1
-      const maximum = swDefaults.window_max ?? frames
-      const step = Math.max(1, swDefaults.window_step ?? 1)
-      frames = minimum + Math.round((frames - minimum) / step) * step
-      frames = Math.max(minimum, Math.min(maximum, frames))
-    }
-    const seconds = frames / fps
-    set(state => ({
-      slidingWindowSeconds: seconds,
-      params: { ...state.params, sliding_window_size: frames },
-      h3WindowPlan: null,
-    }))
-    get().syncClipCount()
-  },
-
-  slidingWindowOverlap: 5,
-  setSlidingWindowOverlap: (frames) => {
-    set(state => ({
-      slidingWindowOverlap: frames,
-      params: { ...state.params, sliding_window_overlap: frames },
-      h3WindowPlan: null,
-    }))
-  },
-  slidingWindowLocked: false,
-  setSlidingWindowLocked: (locked) => set({
-    slidingWindowLocked: locked,
-    h3WindowPlan: null,
-  }),
-
-  outputCount: 1,
-  setOutputCount: (n) => set(s => ({
-    outputCount: n,
-    params: { ...s.params, repeat_generation: n },
-  })),
-
-  startImage: null,
-  endImage: null,
-  setStartImage: (f) => set(s => ({
-    startImage: f,
-    params: f === null ? { ...s.params, image_start: undefined } : s.params,
-    h3WindowPlan: null,
-  })),
-  setEndImage: (f) => set(s => ({
-    endImage: f,
-    params: f === null ? { ...s.params, image_end: undefined } : s.params,
-    h3WindowPlan: null,
-  })),
-
-  // Image references
-  imageRefs: [],
-  imageRefType: '',
-  removeBackgroundRefs: false,
-  addImageRef: (file) => set(s => ({ imageRefs: [...s.imageRefs, file] })),
-  removeImageRef: (index) => set(s => {
-    const updated = s.imageRefs.filter((_, i) => i !== index)
-    return {
-      imageRefs: updated,
-      params: updated.length === 0 ? { ...s.params, image_refs: undefined } : s.params,
-    }
-  }),
-  reorderImageRefs: (from, to) => set(s => {
-    const refs = [...s.imageRefs]
-    const [moved] = refs.splice(from, 1)
-    refs.splice(to, 0, moved)
-    return { imageRefs: refs }
-  }),
-  setImageRefType: (type) => set({ imageRefType: type }),
-  setRemoveBackgroundRefs: (v) => set({ removeBackgroundRefs: v }),
-
-  // Voice clone postprocessing state — defaults are off / empty so
-  // existing generations are unaffected.
-  voiceCloneEnabled: false,
-  setVoiceCloneEnabled: (v) => set({ voiceCloneEnabled: v }),
-  voiceCloneMode: 'single',
-  setVoiceCloneMode: (v) => set({ voiceCloneMode: v }),
-  voiceCloneRefs: [],
-  setVoiceCloneRef: (index, ref) => set(s => {
-    const next = [...s.voiceCloneRefs]
-    if (ref === null) {
-      next.splice(index, 1)
-    } else {
-      while (next.length <= index) next.push({ filename: '', path: '' })
-      next[index] = ref
-    }
-    return { voiceCloneRefs: next }
-  }),
-
   // ── Tools area (standalone post-processing on an existing clip) ──────
   toolsTool: 'upscale',
   setToolsTool: (t) => set({ toolsTool: t }),
@@ -4171,47 +3926,6 @@ export const useStore = create<AppState>((set, get) => {
     get().setGenerationMode('tools')
   },
 
-  // Post-processing defaults (shared for Studio)
-  spatialUpsampling: '',
-  setSpatialUpsampling: (v) => set({ spatialUpsampling: v }),
-  filmGrainIntensity: 0,
-  setFilmGrainIntensity: (v) => {
-    set({ filmGrainIntensity: v })
-    // Persist per mode
-    const s = get()
-    const mode = s.generationMode
-    const updatedSavedParams = {
-      ...s.savedParamsPerMode,
-      [mode]: {
-        num_inference_steps: s.params.num_inference_steps,
-        guidance_scale: s.params.guidance_scale,
-        resolution: s.params.resolution,
-        seed: s.params.seed,
-        filmGrainIntensity: v,
-        filmGrainSaturation: s.filmGrainSaturation,
-      },
-    }
-    set({ savedParamsPerMode: updatedSavedParams })
-  },
-  filmGrainSaturation: 0.5,
-  setFilmGrainSaturation: (v) => {
-    set({ filmGrainSaturation: v })
-    const s = get()
-    const mode = s.generationMode
-    const updatedSavedParams = {
-      ...s.savedParamsPerMode,
-      [mode]: {
-        num_inference_steps: s.params.num_inference_steps,
-        guidance_scale: s.params.guidance_scale,
-        resolution: s.params.resolution,
-        seed: s.params.seed,
-        filmGrainIntensity: s.filmGrainIntensity,
-        filmGrainSaturation: v,
-      },
-    }
-    set({ savedParamsPerMode: updatedSavedParams })
-  },
-
   // Director-mode post-processing (separate image/video)
   directorImageSpatialUpsampling: '',
   setDirectorImageSpatialUpsampling: (v) => set({ directorImageSpatialUpsampling: v }),
@@ -4230,220 +3944,8 @@ export const useStore = create<AppState>((set, get) => {
   directorAudioScale: 1.0,
   setDirectorAudioScale: (v) => set({ directorAudioScale: v }),
 
-  audioGuideFilename: null,
-  setAudioGuideFilename: (name) => set({ audioGuideFilename: name }),
-  audioGuide2Filename: null,
-  setAudioGuide2Filename: (name) => set({ audioGuide2Filename: name }),
-  ttsSpeakerName1: '',
-  ttsSpeakerName2: '',
-  ttsSpeakerNamesManual: false,
-  setTtsSpeakerName1: (name) => {
-    set(s => {
-      const voices = [...s.ttsVoices]
-      if (voices.length > 0) voices[0] = { ...voices[0], name }
-      return { ttsSpeakerName1: name, ttsSpeakerNamesManual: true, ttsVoices: voices }
-    })
-  },
-  setTtsSpeakerName2: (name) => {
-    set(s => {
-      const voices = [...s.ttsVoices]
-      if (voices.length > 1) voices[1] = { ...voices[1], name }
-      return { ttsSpeakerName2: name, ttsSpeakerNamesManual: true, ttsVoices: voices }
-    })
-  },
-  _autoParseSpkeakerNames: (text: string, force?: boolean) => {
-    // The manual flag prevents auto-parse from clobbering names the user
-    // explicitly typed. `force=true` overrides it — used by the enhance
-    // button since enhance generates a fresh script whose new names should
-    // replace whatever the user had previously set.
-    if (!force && get().ttsSpeakerNamesManual) return
-    // Match anything before ":" at the start of a line (e.g. "Dr. Mary Jane O'Brien:")
-    const matches = text.match(/^(.+?)\s*:/gm)
-    if (!matches) return
-    const names = [...new Set(matches.map(m => m.replace(/\s*:$/, '').trim()))]
-    const voiceCount = get().ttsVoiceCount
-    const voices = [...get().ttsVoices]
-    // Ensure voices array is big enough
-    while (voices.length < voiceCount) {
-      voices.push({ name: '', filename: null, path: null })
-    }
-    for (let i = 0; i < Math.min(names.length, voiceCount); i++) {
-      voices[i] = { ...voices[i], name: names[i] }
-    }
-    set({
-      ttsVoices: voices,
-      ttsSpeakerName1: names[0] || '',
-      ttsSpeakerName2: names[1] || '',
-      // Force-call (from enhance) resets the manual flag so subsequent
-      // prompt edits can also auto-parse again. Non-force calls preserve
-      // the flag (user manually edited a name; keep their state).
-      ...(force ? { ttsSpeakerNamesManual: false } : {}),
-    })
-  },
-  // Dynamic multi-speaker (1-6 voices)
-  ttsVoiceCount: 0,
-  ttsVoices: [],
-  setTtsVoiceCount: (count) => {
-    const prevCount = get().ttsVoiceCount
-    const current = get().ttsVoices
-    const voices = [...current]
-    while (voices.length < count) {
-      voices.push({ name: '', filename: null, path: null })
-    }
-    // Derive audio_prompt_type from voice count using the model's own selection
-    // list. KugelAudio's selection = ["", "A", "AB"] → 0→"", 1→"A", 2+→"AB".
-    // Scenema's selection = ["", "A2", "AB2"] → 0→"", 1→"A2", 2+→"AB2".
-    // Other (non-Scenema/Kugel) audio-only models keep the legacy ""/A/AB
-    // mapping for backward compat.
-    const selection = (get().modelOptions?.audio_prompt_type_sources?.selection as string[] | undefined) || ['', 'A', 'AB']
-    const audioType = selection[Math.min(count, selection.length - 1)]
-    set(s => ({
-      ttsVoiceCount: count,
-      ttsVoices: voices.slice(0, Math.max(count, voices.length)),
-      params: { ...s.params, audio_prompt_type: audioType + ((s.params.audio_prompt_type as string || '').replace(/[^NV]/g, '')) },
-    }))
-    // If user added voices to an existing prompt (e.g. typed/pasted a
-    // dialogue script first, THEN added voice slots), parse the names
-    // from the prompt and populate the voice fields. setParam's auto-parse
-    // only fires when the prompt CHANGES — without this, growing the slot
-    // count after the prompt is set leaves names un-populated. Use
-    // force=true so the manual flag (which may have been set by an earlier
-    // name edit or by settings restore) doesn't suppress the parse —
-    // adding voices is an explicit mode-change action that should re-derive
-    // names from the current prompt.
-    if (count > prevCount) {
-      const prompt = get().params.prompt
-      if (typeof prompt === 'string' && prompt.trim()) {
-        get()._autoParseSpkeakerNames(prompt, true)
-      }
-    }
-  },
-  setTtsVoiceName: (index, name) => {
-    set(s => {
-      const voices = [...s.ttsVoices]
-      if (index < voices.length) voices[index] = { ...voices[index], name }
-      return {
-        ttsVoices: voices,
-        ttsSpeakerNamesManual: true,
-        // Keep legacy fields in sync
-        ...(index === 0 ? { ttsSpeakerName1: name } : {}),
-        ...(index === 1 ? { ttsSpeakerName2: name } : {}),
-      }
-    })
-  },
-  setTtsVoiceFile: (index, filename, path) => {
-    set(s => {
-      const voices = [...s.ttsVoices]
-      if (index < voices.length) voices[index] = { ...voices[index], filename, path }
-      return {
-        ttsVoices: voices,
-        // Keep legacy fields in sync
-        ...(index === 0 ? { audioGuideFilename: filename } : {}),
-        ...(index === 1 ? { audioGuide2Filename: filename } : {}),
-      }
-    })
-  },
-  addTtsVoice: () => {
-    const count = get().ttsVoiceCount
-    // Respect the model's declared max (e.g. Scenema = 2, Kugel = 6).
-    // Defaults to 6 if the model_def doesn't specify max_voice_count.
-    const maxVoiceCount = ((get().modelOptions as { max_voice_count?: number } | null)?.max_voice_count) ?? 6
-    if (count >= maxVoiceCount) return
-    get().setTtsVoiceCount(count + 1)
-  },
-  removeTtsVoice: (index) => {
-    set(s => {
-      const voices = s.ttsVoices.filter((_, i) => i !== index)
-      const newCount = Math.max(0, s.ttsVoiceCount - 1)
-      // Same model-aware mapping as setTtsVoiceCount above.
-      const selection = (s.modelOptions?.audio_prompt_type_sources?.selection as string[] | undefined) || ['', 'A', 'AB']
-      const audioType = selection[Math.min(newCount, selection.length - 1)]
-      return {
-        ttsVoices: voices,
-        ttsVoiceCount: newCount,
-        ttsSpeakerName1: voices[0]?.name || '',
-        ttsSpeakerName2: voices[1]?.name || '',
-        audioGuideFilename: voices[0]?.filename || null,
-        audioGuide2Filename: voices[1]?.filename || null,
-        params: { ...s.params, audio_prompt_type: audioType + ((s.params.audio_prompt_type as string || '').replace(/[^NV]/g, '')) },
-      }
-    })
-  },
-
-  // Multi-clip state
-  clips: [],
-  singlePromptMode: false,
-  studioFocusedClipIndex: 0,
-  setClipPrompt: (index, prompt) => {
-    const clips = [...get().clips]
-    if (clips[index]) {
-      clips[index] = { ...clips[index], prompt }
-      set({ clips })
-    }
-  },
-  setClipStartImage: (index, file) => {
-    const clips = [...get().clips]
-    if (clips[index]) {
-      clips[index] = { ...clips[index], startImage: file, startImagePath: null }
-      set({ clips })
-    }
-  },
-  addClipKeyframe: (index, file) => {
-    const clips = [...get().clips]
-    if (!clips[index]) return
-    clips[index] = {
-      ...clips[index],
-      keyframes: [...(clips[index].keyframes || []), { file, path: null }],
-    }
-    set({ clips })
-  },
-  removeClipKeyframe: (index, keyframeIndex) => {
-    const clips = [...get().clips]
-    if (!clips[index]) return
-    clips[index] = {
-      ...clips[index],
-      keyframes: (clips[index].keyframes || []).filter((_, i) => i !== keyframeIndex),
-    }
-    set({ clips })
-  },
-  setSinglePromptMode: (v) => set({ singlePromptMode: v }),
-  setStudioFocusedClipIndex: (index) => set({
-    studioFocusedClipIndex: Number.isFinite(index) ? Math.floor(index) : 0,
-  }),
-  syncClipCount: () => {
-    const { params, durationSeconds, slidingWindowSeconds, slidingWindowOverlap, modelOptions } = get()
-    if (params.image_mode !== 2) return
-    const fps = modelOptions?.fps ?? 16
-    const overlapSeconds = slidingWindowOverlap / fps
-    const effectiveWindow = slidingWindowSeconds - overlapSeconds
-    const count = effectiveWindow > 0
-      ? Math.max(1, Math.ceil((durationSeconds - overlapSeconds) / effectiveWindow))
-      : Math.max(1, Math.ceil(durationSeconds / slidingWindowSeconds))
-    const current = get().clips
-    if (count === current.length) return
-    if (count > current.length) {
-      const newClips = [...current]
-      for (let i = current.length; i < count; i++) {
-        newClips.push({
-          prompt: '',
-          startImage: null,
-          startImagePath: null,
-          endImage: null,
-          endImagePath: null,
-          keyframes: [],
-        })
-      }
-      set({ clips: newClips })
-    } else {
-      set({ clips: current.slice(0, count) })
-    }
-  },
-
   jobs: [],
   isGenerating: false,
-  promptSchedulerEnabled: false,
-  setPromptSchedulerEnabled: (enabled) => set({ promptSchedulerEnabled: enabled }),
-
   startGeneration: async (scheduledPrompt, submissionContext) => {
     const initialState = get()
 
