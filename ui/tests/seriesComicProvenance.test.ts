@@ -165,6 +165,21 @@ test('an explicit page count is honored while every source panel is retained', (
   assert.equal(staged.request.pageCount, 2)
 })
 
+test('a page target expands when needed to keep the panels-per-page contract', () => {
+  const source = library(seriesWithBeatCount('series-page-limit', 'episode-page-limit', 30))
+  const staged = buildSeriesComicHandoff(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-page-limit', episodeId: 'episode-page-limit',
+    pageCount: 1, panelsPerPage: 12,
+  })
+  const pages = staged.comic.director?.plan.pages || []
+
+  assert.equal(pages.length, 3)
+  assert.deepEqual(pages.map(page => page.panels.length), [10, 10, 10])
+  assert.ok(pages.every(page => page.panels.length <= 12))
+  assert.equal(pages.flatMap(page => page.panels).length, 30)
+  assert.equal(staged.request.pageCount, 3)
+})
+
 test('Series → Comics provenance records the caller actor', () => {
   const source = library(series('series-actor', 'episode-actor'))
   const userHandoff = buildSeriesComicHandoff(source, {

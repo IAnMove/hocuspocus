@@ -52,10 +52,9 @@ function boundedInteger(value: number | undefined, fallback: number, maximum: nu
 
 /**
  * Keep every source panel while honoring an explicitly requested page count.
- * The requested count wins over the panels-per-page hint; when there are more
- * panels than pages, the panels are balanced across those pages. If a caller
- * asks for more pages than panels, the remaining pages stay intentionally
- * empty so the requested document shape is preserved for user editing.
+ * The request is a target: it is expanded when necessary to keep the
+ * panels-per-page limit, and capped at the number of panels so no empty pages
+ * are introduced. The effective count is persisted in the Director request.
  */
 function distributePanels(panels: ComicPlanPanel[], pageCount: number): ComicPlanPanel[][] {
   const pages = Array.from({ length: pageCount }, () => [] as ComicPlanPanel[])
@@ -277,7 +276,11 @@ export function buildSeriesComicHandoff(
   const panelsPerPage = boundedInteger(input.panelsPerPage, 4, 12)
   const panels = sourcePanels(series, episode)
   const derivedPageCount = Math.max(1, Math.ceil(panels.length / panelsPerPage))
-  const pageCount = boundedInteger(input.pageCount, derivedPageCount, 100)
+  const requestedPageCount = boundedInteger(input.pageCount, derivedPageCount, 100)
+  const pageCount = Math.max(
+    1,
+    Math.min(panels.length, Math.max(derivedPageCount, requestedPageCount)),
+  )
   const panelsByPage = distributePanels(panels, pageCount)
   const languageIntent = series.languageIntent
   const characters = series.characters.map(comicCharacter)
