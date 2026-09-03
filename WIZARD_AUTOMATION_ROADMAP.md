@@ -493,25 +493,55 @@ Agent Mode complete prematurely.
 - Two-level task navigation and the embedded Wizard sidebar: landed in #104;
   keep navigation presentation separate from the factual action runner.
 
-### Post-#115 handoff (#116–#119)
+### Post-#120 handoff (#116–#120)
 
-- #117 (Studio configuration slice) is open and green. It moves typed Studio
-  form/configuration state into `studioConfigurationSlice` while leaving
-  `startGeneration` and Tools execution in `useStore`.
-- #118 (Story Lab production controller) is open and green. It moves the
+PRs #116 through #120 are merged into `main`, with their required CI checks
+green at merge. This is the accepted state, not a prediction about a branch
+whose checks are still running:
+
+- #116 (documentation after #115) merged as `215ad2a`.
+- #117 (Studio configuration slice) merged as `bfd4e9d`. It moves typed
+  Studio form/configuration state into `studioConfigurationSlice` while
+  leaving `startGeneration` and Tools execution in `useStore`.
+- #118 (Story Lab production controller) merged as `e545836`. It moves the
   Story Lab → Director production handoff into
   `storyProductionController.ts` for film/trailer and music-video flows.
-- #119 (exact Story song → music-video identity/provenance) remains open and
-  under review. Its critical simulated E2E passed. The opt-in real smoke
-  generated the song and an H264/AAC video of 19.75 seconds; the harness first
-  gave a false negative after selecting a lateral `Untitled story` project,
-  and selection by exact requested title has since been corrected. CI and
-  Cursor checks for #119 were still in progress at this writing, so this PR
-  must not be called finished.
+- #119 (exact Story song → music-video identity/provenance) merged as
+  `4bc7376`. Its simulated E2E and Cursor checks passed; the opt-in real smoke
+  generated the song and an H264/AAC video of 19.75 seconds. The first smoke
+  false negative selected a lateral `Untitled story` project; exact-title
+  selection is now part of the accepted flow.
+- #120 (code-quality trend score) merged as `658a1c3`. The current score is
+  **48.7/100**: complexity **52.1**, concentration **53.3**, oversized-file
+  health **28.5** and modularity **62.2**, a **+2.2** change against the
+  historical committed baseline. This score is diagnostic, not a CI blocker
+  or quality certificate; the existing ratchet remains the guardrail.
 
-Recommended integration order is **#116 → #117 → #118 → #119**. Residual
-risks are the semantically generic lyrics observed in the real smoke and the
-separate investigation of concurrent conversation `409` conflicts.
+The next queue is deliberately ordered as: Series → Comics exact provenance;
+Wizard conversation `409` recovery; semantic song/lyrics fidelity; a second
+`useStore` generation slice; Story Lab session-controller extraction; the next
+backend domain router; typed Director `PipelineRuntime`; the presentation
+decision gate followed by visible Wizard magic; and release validation. The
+canonical packet details live in
+[`docs/development/SLICE_QUEUE.md`](docs/development/SLICE_QUEUE.md).
+
+### Low-cost delegation protocol
+
+When work is orchestrated from Codex/ChatGPT, the lead agent must delegate
+each bounded implementation packet to `luna_worker`, configured by
+`luna-worker.toml`. This is a workflow convention and is not a dependency of
+the HocusPocus product. Every packet must contain the branch base, owned and
+forbidden files, contracts/invariants, tests/commands, expected PR and stop
+conditions. Luna makes one bounded PR and does not merge it; the lead reviews
+the diff, quality score and CI before human merge. At most one open PR may
+touch each hot file (`_launch_runtime.py`, `useStore`, `agentActions`). If
+Luna is unavailable, the lead executes the packet or asks for direction; it
+must not silently replace Luna with a broad uncontrolled agent.
+
+Reusable header for future packets:
+
+> **Execution context: Codex/ChatGPT — delegate the bounded implementation to
+> `luna_worker`; lead coordinates and reviews.**
 
 ## Continuity note
 
@@ -524,8 +554,8 @@ chain and missing lyrics are composed into the UI in the requested language.
 The UI form, not the chat prose, is authoritative for prompts, lyrics and
 instrumental mode. #119 now binds every step to exact project, cue, candidate,
 production, task and pipeline IDs and fixes the smoke harness to select the
-requested title exactly. Resume the migration from the first remaining
-unmigrated capability after #119's checks complete and the separate
-conversation-concurrency risk is reviewed.
+requested title exactly. Resume the migration at the ordered post-#120 queue
+in `docs/development/SLICE_QUEUE.md`; do not call the quality score a gate and
+do not claim a future PR or CI run is complete until it is actually complete.
 Keep Decision gate A open; visible focus/fill/sparkle choreography remains the
 final presentation phase.

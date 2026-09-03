@@ -15,9 +15,9 @@ Canonical sources in git:
 Working notes under `comunicaciones/` are session handoff only. They are
 gitignored and are not canonical.
 
-## Landed on main (as of #115)
+## Landed on main (as of #120)
 
-`main` points at merge #115 (`69f57fe`, 2026-09-03). The queue below records
+`main` points at merge #120 (`658a1c3`, 2026-09-03). The queue below records
 what is present in that tree; the numbered history is kept so earlier slice
 decisions are not rewritten.
 
@@ -103,34 +103,35 @@ uses `--check --markdown`.
   virtualization share a viewport cap, including vertical-resize invalidation,
   so cards stay usable inside the feed.
 
-## Open integration queue (#116–#119)
+## Integrated slices (#116–#120)
 
-These PRs are open against the #115 `main` baseline; the following status is
-the state at the time of writing, not a claim that any of them has landed.
+All five PRs are merged into `main` and their required CI checks were green at
+merge. The merge commits are recorded here so a handoff never confuses a
+prepared branch or an in-progress check with an accepted change.
 
-- **#116 — this documentation update:** the queue and Wizard roadmap record
-  the state after #115 and the recommended merge order.
-- **#117 — Studio configuration slice:** open and green. The typed
+- **#116 — documentation after #115:** merged as `215ad2a`; refreshed the
+  queue and Wizard roadmap for the post-#115 state.
+- **#117 — Studio configuration slice:** merged as `bfd4e9d`. The typed
   `studioConfigurationSlice` owns Studio form/configuration state while
   `startGeneration` and Tools execution stay in `useStore`; the public facade
-  and architecture coverage remain intact. The PR reduces `useStore.ts` from
-  10,239 to 9,741 lines.
-- **#118 — Story Lab production controller:** open and green. The
+  and architecture coverage remain intact. The extraction reduces
+  `useStore.ts` from 10,239 to 9,741 lines.
+- **#118 — Story Lab production controller:** merged as `e545836`. The
   `storyProductionController.ts` owns Story Lab → Director production handoff
   for film/trailer and music-video flows, including model/reference/audio
-  preparation. The PR reduces `StoryLabPanel.tsx` from 4,688 to 4,395 lines
-  without touching `useStore.ts` or `_launch_runtime.py`.
-- **#119 — exact Story song → music-video identity/provenance:** open and
-  still under review. The critical simulated E2E passed. An opt-in real smoke
-  generated the requested song and an H264/AAC video of 19.75 seconds, but the
-  harness initially reported a false negative after selecting a lateral
-  `Untitled story` project; selection by exact requested title has now been
-  corrected. #119's CI and Cursor checks are still in progress and it must not
-  be described as finished yet.
-
-Recommended integration order: **#116 → #117 → #118 → #119**. Keep #119's
-remaining checks and the corrected exact-title smoke evidence attached to the
-final review.
+  preparation. The extraction reduces `StoryLabPanel.tsx` from 4,688 to 4,395
+  lines without touching `useStore.ts` or `_launch_runtime.py`.
+- **#119 — exact Story song → music-video identity/provenance:** merged as
+  `4bc7376`, with simulated E2E and Cursor checks green. The opt-in real smoke
+  generated the requested song and an H264/AAC video of 19.75 seconds. The
+  harness's initial false negative came from selecting a lateral `Untitled
+  story` project; exact-title selection is now covered by the accepted flow.
+- **#120 — code-quality trend score:** merged as `658a1c3`. The current
+  aggregate is **48.7/100**: complexity **52.1**, concentration **53.3**,
+  oversized-file health **28.5**, and modularity **62.2**; this is **+2.2**
+  against the historical committed baseline. It is a diagnostic trend signal,
+  not a CI blocker or quality certificate; the existing ratchet remains the
+  guardrail. CI publishes the score and comparison in PRs.
 
 ## Queue history (original order, statuses updated)
 
@@ -155,31 +156,42 @@ final review.
     and the final identity checks still remain. 3D+Director already has
     folder-vs-Workspace provenance (#89).
 
-## Next medium PRs after integrating #116–#119
+## Next medium PRs after #120
 
-1. **Series → Comics provenance.** Apply the same exact-ID contract used by
-   #119 to the remaining cross-domain handoff, with persisted project,
-   production, run, task and output references and no title lookup after an ID
-   has been returned.
-2. **Remaining `useStore` generation slice.** #117 moves Studio
-   configuration only. Extract one cohesive remaining generation or
-   Director-orchestration slice behind the public facade, with architecture
-   coverage; do not move all of `startGeneration` in one PR.
-3. **Remaining Story Lab coordination.** #118 moves production handoff into
-   a controller. Continue reducing the residual `StoryLabPanel` hotspot
-   (~4,395 lines on the #118 branch) through hooks/controllers while
-   preserving extracted tabs, language catalogs and canonical IDs. Do not
-   re-extract `StoryAssemblyTab`, `StoryLabLibraryChrome` or Assets.
-4. **Backend domain router.** Choose the next complete domain boundary from
-   the route inventory, extract its router and services in one cohesive PR,
-   preserve route ordinals, and keep at most one pending PR on
-   `_launch_runtime.py`.
-5. **Director Paso 5.** Wait for a human release-order decision. Start with
-   typed `5.0` `PipelineRuntime`, then one complete function/contract per PR;
-   do not begin by splitting the file by line count.
-6. **Visible Wizard magic expansion.** The Studio → Video prototype and
-   semantic anchors already exist. Review its pace, focus, reduced-motion and
-   interruption behavior before extending presentation effects to other Labs.
+Keep these as separate, reviewable slices in this order. Each item has one
+verifiable contract and should be prepared only after the previous item's
+hotspot and CI state are known.
+
+1. **Series → Comics exact provenance.** Apply the #119 exact-ID contract to
+   the remaining cross-domain handoff, preserving project, production, run,
+   task and output references; never fall back to title lookup after an ID is
+   returned.
+2. **Wizard conversation `409` recovery.** Make concurrent conversation
+   writes merge/retry safely, preserve turns across workspace changes and
+   reloads, and add a focused conflict test without hiding a real failure.
+3. **Semantic song/lyrics fidelity.** Keep the selected user language for
+   authored lyrics and preserve quoted-language spans in provider prompts;
+   add semantic assertions to the opt-in music/video smoke rather than
+   treating a valid media file as proof of content quality.
+4. **Second `useStore` generation slice.** Extract one cohesive remaining
+   generation/orchestration boundary behind the public facade, with architecture
+   coverage. Do not move all of `startGeneration` in one PR.
+5. **Story Lab session controller.** Continue extracting session/state
+   coordination from the residual `StoryLabPanel` hotspot through hooks or a
+   controller, without re-extracting existing tabs, chrome or Assets.
+6. **Next backend domain router.** Select one complete domain boundary from
+   the route inventory, move its router and services together, preserve route
+   ordinals and keep at most one pending PR on `_launch_runtime.py`.
+7. **Typed Director `PipelineRuntime`.** After the human release-order check,
+   introduce the typed runtime contract and migrate one complete function or
+   lifecycle at a time; do not split the file by line count.
+8. **Decision gate, then visible Wizard magic.** Review the presentation
+   contract (pace, focus, auto-scroll, reduced motion and interruption) before
+   expanding the Studio → Video prototype's semantic anchors, field replay and
+   sparkles to other Labs.
+9. **Release validation.** Run the safe full suite, browser Wizard flows,
+   quality-score comparison and explicitly opt-in local/provider smoke; record
+   artifact IDs and do not call a branch or CI complete while checks run.
 
 ## Residual risks to track separately
 
@@ -203,3 +215,21 @@ final review.
 - Only one pending PR may touch `_launch_runtime.py`. Only one pending PR may
   touch `useStore.ts`. Independent PRs may proceed in parallel when files do
   not overlap.
+
+## Low-cost delegation protocol
+
+When work is orchestrated from Codex/ChatGPT, the lead agent delegates each
+bounded implementation packet to `luna_worker` (configured by
+`luna-worker.toml`). This is an engineering workflow convention, not a
+product dependency. A packet must name the branch base, owned and forbidden
+files, contracts/invariants, tests/commands, expected PR and stop conditions.
+Luna makes one bounded PR and never merges it; the lead reviews the diff,
+quality score and CI before asking a human to merge. Keep at most one open PR
+per hot file (`_launch_runtime.py`, `useStore`, `agentActions`). If Luna is
+unavailable, the lead executes the packet or asks for direction; it must not
+silently substitute a broad uncontrolled agent.
+
+Reusable packet header:
+
+> **Execution context: Codex/ChatGPT — delegate the bounded implementation to
+> `luna_worker`; lead coordinates and reviews.**
