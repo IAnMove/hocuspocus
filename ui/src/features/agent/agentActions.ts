@@ -57,8 +57,6 @@ import {
   isLanguageAwareCapability,
   LANGUAGE_INTENT_SCHEMA,
   listCapabilities,
-  mergeLanguageIntent,
-  normalizeLanguageIntent,
   normalizeConversationLanguageTag,
   parseRegisteredCapability,
   registeredCapabilitySchemas,
@@ -67,7 +65,13 @@ import {
 } from './capabilityRegistry'
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
-import { inferStoryProjectTypeFromText, isNewMusicVideoSongRequest, newMusicVideoStoryAction } from '../stories/musicVideoLook'
+import {
+  applySongLanguageIntent,
+  extractRequestedSongLanguage,
+  inferStoryProjectTypeFromText,
+  isNewMusicVideoSongRequest,
+  newMusicVideoStoryAction,
+} from '../stories/musicVideoLook'
 
 export { isNewMusicVideoSongRequest } from '../stories/musicVideoLook'
 
@@ -1735,7 +1739,8 @@ export function parseAgentTurn(raw: string): AgentTurn {
 
 export function protectUserVerbatimSegments(request: string, turn: AgentTurn): AgentTurn {
   const verbatimSegments = extractVerbatimSegments(request)
-  if (!verbatimSegments.length) return turn
+  const requestedSongLanguage = extractRequestedSongLanguage(request)
+  if (!verbatimSegments.length && !requestedSongLanguage) return turn
   return {
     ...turn,
     actions: turn.actions.map(action => {
@@ -1744,24 +1749,15 @@ export function protectUserVerbatimSegments(request: string, turn: AgentTurn): A
       const contentLanguage = 'language' in action && typeof action.language === 'string' ? action.language : ''
       const lyricsLanguage = 'lyricsLanguage' in action && typeof action.lyricsLanguage === 'string'
         ? action.lyricsLanguage : ''
-      const explicitSpokenLanguage = verbatimSegments.find(segment => (
-        (segment.kind === 'dialogue' || segment.kind === 'lyrics') && segment.language
-      ))?.language || ''
-      const spokenLanguage = explicitSpokenLanguage || current?.spokenLanguage || lyricsLanguage || contentLanguage
-      const deterministic = normalizeLanguageIntent({
-        conversation_language: current?.conversationLanguage || turn.conversationLanguage,
-        content_language: current?.contentLanguage || contentLanguage,
-        spoken_language: spokenLanguage,
-        technical_prompt_language: current?.technicalPromptLanguage || 'en',
-        verbatim_segments: verbatimSegments.map(segment => ({
-          ...segment,
-          language: segment.language || spokenLanguage,
-        })),
+      return applySongLanguageIntent(action, {
+        current,
+        conversationLanguage: turn.conversationLanguage,
+        contentLanguage,
+        lyricsLanguage,
+        verbatimSegments,
+        requestedSongLanguage,
+        request,
       })
-      return {
-        ...action,
-        languageIntent: mergeLanguageIntent(current, deterministic),
-      } as AgentAction
     }),
   }
 }
@@ -2161,7 +2157,10 @@ export async function reconcileAgentTurnWithRequest(
         style: request.trim().slice(0, 4_000),
         lyrics: '',
         writeLyrics: true,
-        lyricsLanguage: createdMusicVideo.language || 'Español',
+        // Keep the story's legacy ISO value when no explicit song language
+        // was requested; an explicit request is canonicalised by the song
+        // language resolver and takes precedence over the story language.
+        lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
         instrumental: false,
         model: 'ace_step_v1_5_xl_sft_lm_4b',
         durationSeconds: createdMusicVideo.durationSeconds || 90,
@@ -2229,7 +2228,7 @@ export async function reconcileAgentTurnWithRequest(
           style: request.trim().slice(0, 4_000),
           lyrics: '',
           writeLyrics: true,
-          lyricsLanguage: createdMusicVideo.language || 'Español',
+          lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
           instrumental: false,
           model: 'ace_step_v1_5_xl_sft_lm_4b',
           durationSeconds: createdMusicVideo.durationSeconds || 90,

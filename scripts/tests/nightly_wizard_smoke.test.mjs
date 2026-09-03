@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { normalizeSmokeBaseUrl, runMediaSmoke, validateSmokeOptIn } from '../nightly_wizard_smoke.mjs'
+import { evaluateSmokeSongFidelity, normalizeSmokeBaseUrl, runMediaSmoke, validateSmokeOptIn } from '../nightly_wizard_smoke.mjs'
 
 test('media smoke is fail-closed behind four explicit controls', () => {
   assert.equal(normalizeSmokeBaseUrl(' http://127.0.0.1:8000/ '), 'http://127.0.0.1:8000')
@@ -12,6 +12,32 @@ test('media smoke is fail-closed behind four explicit controls', () => {
   assert.equal(validateSmokeOptIn({
     runGpu: true, runExternal: true, baseUrl: 'http://127.0.0.1:8000', confirm: 'GENERATE_REAL_MEDIA',
   }), 'http://127.0.0.1:8000')
+})
+
+test('simulated media smoke rejects a valid-looking song with the wrong language or subject', () => {
+  const failed = evaluateSmokeSongFidelity({
+    lyrics: '[Verse]\nThe server fights through the night.\n[Chorus]\nWe sing for proprietary software.',
+    lyricsLanguage: 'Español', requiredTerms: ['sysadmin', 'red'],
+  })
+  assert.equal(failed.ok, false)
+  assert.equal(failed.languageMismatch, true)
+  assert.deepEqual(failed.missingTerms, ['sysadmin', 'red'])
+
+  const passed = evaluateSmokeSongFidelity({
+    lyrics: '[Verse]\nEn la red despierta el sysadmin.\n[Chorus]\nLa noche y el código cantan.',
+    lyricsLanguage: 'Español', requiredTerms: ['sysadmin', 'red'],
+  })
+  assert.equal(passed.ok, true)
+})
+
+test('simulated media smoke ignores a protected foreign-language refrain when scoring the song language', () => {
+  const report = evaluateSmokeSongFidelity({
+    lyrics: '[Verse]\nEn la red despierta el sysadmin y la noche canta.\n[Chorus]\nThe server fights through the night and we sing for our network.',
+    lyricsLanguage: 'Español',
+    protectedSegments: ['The server fights through the night and we sing for our network.'],
+  })
+  assert.equal(report.ok, true)
+  assert.equal(report.languageMismatch, false)
 })
 
 test('media smoke preserves project cue output task and pipeline identities', async () => {
@@ -60,5 +86,6 @@ test('media smoke preserves project cue output task and pipeline identities', as
   assert.deepEqual(result.identifiers.taskIds, ['task-song'])
   assert.deepEqual(result.identifiers.pipelineIds, ['pipeline-smoke'])
   assert.deepEqual(result.identifiers.outputIds, ['himno.wav', 'videoclip.mp4'])
+  assert.equal(result.semantic.ok, true)
   assert.equal(calls.filter(call => call === 'PUT /api/v1/stories/library').length, 3)
 })
