@@ -11,6 +11,7 @@ const {
 } = await import('../src/api/wizard.ts')
 const {
   isWizardConversationWriteCurrent,
+  hasExclusiveWizardMessages,
   shouldFollowWizardWorkspace,
 } = await import('../src/features/agent/wizardConversationSync.ts')
 
@@ -173,4 +174,15 @@ test('workspace changes never rebind an in-flight conversation write', () => {
   }), true)
   assert.equal(isWizardConversationWriteCurrent('workspace-a', 'workspace-b'), false)
   assert.equal(isWizardConversationWriteCurrent('workspace-a', 'workspace-a'), true)
+})
+
+test('a conflict response cannot suppress persistence of a newer visible turn', () => {
+  const saved = payload(3, ['old-user', 'old-assistant']).messages
+  const withNewTurn = [
+    ...saved,
+    { id: 'new-user', role: 'user', text: 'new request', createdAt: 3 },
+  ]
+
+  assert.equal(hasExclusiveWizardMessages(withNewTurn, saved), true)
+  assert.equal(hasExclusiveWizardMessages(saved, saved), false)
 })

@@ -84,6 +84,15 @@ export function mergeWizardMessages(
   return merged.slice(-40)
 }
 
+/** True when the visible client state still contains a turn absent from a saved snapshot. */
+export function hasExclusiveWizardMessages(
+  visibleMessages: WizardSyncMessage[],
+  savedMessages: WizardSyncMessage[],
+): boolean {
+  const savedIds = new Set(savedMessages.map(message => message.id))
+  return visibleMessages.some(message => Boolean(message.id) && !savedIds.has(message.id))
+}
+
 export function isTransientWizardChat(messages: WizardSyncMessage[]): boolean {
   if (!messages.length) return true
   return !messages.some(message => (

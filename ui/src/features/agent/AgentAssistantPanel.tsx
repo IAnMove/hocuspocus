@@ -17,6 +17,7 @@ import {
 import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
 import {
   applyRemoteWizardConversation,
+  hasExclusiveWizardMessages,
   isWizardConversationWriteCurrent,
   mergeWizardMessages,
   normalizeRemoteWizardMessages,
@@ -183,7 +184,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
     let active = true
     ensureRhythmic3dWorkflowRegistered(defaultApplicationAdapters)
     const unsubscribe = defaultWizardWorkflowRuntime.subscribe(({ workflow, card }) => {
-      if (!active || workflow.workspace !== workspace) return
+      if (!active || !isWizardConversationWriteCurrent(conversationWorkspace, workflow.workspace)) return
       setActiveWorkflow(workflow)
       setPendingInput(workflow.state === 'awaiting_input' ? workflow.pendingInput : null)
       setMessages(current => {
@@ -207,10 +208,10 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         }].slice(-40)
       })
     })
-    void defaultWizardWorkflowRuntime.open(workspace).catch(() => {
+    void defaultWizardWorkflowRuntime.open(conversationWorkspace).catch(() => {
       // Existing immediate actions remain available if workflow storage is offline.
     })
-    const closeEvents = subscribeCanonicalTaskEvents(workspace, event => {
+    const closeEvents = subscribeCanonicalTaskEvents(conversationWorkspace, event => {
       void defaultWizardWorkflowRuntime.handleTaskEvent(event).catch(() => {
         // The checkpoint stays recoverable; a reconnect replays the same event.
       })
@@ -220,12 +221,12 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       unsubscribe()
       closeEvents()
     }
-  }, [workspace])
+  }, [conversationWorkspace])
 
   useEffect(() => {
     setActiveWorkflow(null)
     setPendingInput(null)
-  }, [workspace])
+  }, [conversationWorkspace])
 
   useEffect(() => {
     writeMessages(conversationWorkspace, messages)
@@ -251,8 +252,11 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       conversationRevisionRef.current = saved.conversation.revision
       setConversationSaveError(null)
       if (saved.merged) {
-        skipNextConversationSaveRef.current = true
         const canonicalMessages = normalizeRemoteWizardMessages(saved.conversation.messages, saved.conversation.executions)
+        const hasExclusiveLocal = hasExclusiveWizardMessages(messagesRef.current, canonicalMessages)
+        if (!hasExclusiveLocal) {
+          skipNextConversationSaveRef.current = true
+        }
         setMessages(mergeWizardMessages(messagesRef.current, canonicalMessages) as AgentMessage[])
       }
     }).catch(error => {
@@ -306,6 +310,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   }, [busy, conversationWorkspace, workspace])
 
   useEffect(() => {
+    if (workspace !== conversationWorkspace) return
     setMessages(current => current.map(message => {
       if (!message.cards?.length) return message
       let changed = false
@@ -334,7 +339,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       })
       return changed ? { ...message, cards } : message
     }))
-  }, [tasks])
+  }, [conversationWorkspace, tasks, workspace])
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
