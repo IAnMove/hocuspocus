@@ -2237,12 +2237,12 @@ export async function reconcileAgentTurnWithRequest(
     // guessed names from the LLM.
     const correlatedSongSetup = effectiveSongDraft
       ? completeSongSetup.map(action => {
-          if (action.type === 'configure_story_song') return { ...effectiveSongDraft, targetStoryTitle: songTarget, songTitle }
+          if (action.type === 'configure_story_song') return { ...effectiveSongDraft, targetStoryId: newSongRequest && createdMusicVideo ? undefined : effectiveSongDraft.targetStoryId, targetStoryTitle: songTarget, songTitle }
           if (action.type === 'generate_story_song') {
             return {
               ...action,
-              targetStoryTitle: songTarget,
-              cueTitle: songTitle,
+              targetStoryId: newSongRequest && createdMusicVideo ? undefined : action.targetStoryId,
+              targetStoryTitle: songTarget, cueId: newSongRequest && createdMusicVideo ? undefined : action.cueId, cueTitle: songTitle,
             }
           }
           return action
@@ -2258,8 +2258,8 @@ export async function reconcileAgentTurnWithRequest(
     }
     const stage: AgentStageStoryMusicVideoAction = {
       ...stageSeed,
-      targetStoryTitle: songTarget || createdMusicVideo?.title || stageSeed.targetStoryTitle || '',
-      cueTitle: songTitle || stageSeed.cueTitle || '',
+      targetStoryId: newSongRequest && createdMusicVideo ? undefined : stageSeed.targetStoryId,
+      targetStoryTitle: songTarget || createdMusicVideo?.title || stageSeed.targetStoryTitle || '', cueId: newSongRequest && createdMusicVideo ? undefined : stageSeed.cueId, cueTitle: songTitle || stageSeed.cueTitle || '',
       songName: effectiveSongDraft ? '' : stageSeed.songName,
     }
     if (musicVideoStage && musicVideoStart) {

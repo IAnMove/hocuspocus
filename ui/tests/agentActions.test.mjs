@@ -327,6 +327,7 @@ test('parses a confirmed Story music-video staging and start', async () => {
     conversationLanguage: 'es',
     actions: [{
       type: 'configure_story_song',
+      targetStoryId: 'story-old',
       targetStoryTitle: 'Proyecto anterior',
       songTitle: 'Tema nuevo',
       brief: 'Linus combate el software propietario.',
@@ -338,7 +339,9 @@ test('parses a confirmed Story music-video staging and start', async () => {
       model: 'ace_step_v1_5_xl_sft_lm_4b',
       durationSeconds: 90,
     }, {
-      type: 'stage_story_music_video', targetStoryTitle: '', songName: '', cueTitle: '', pacing: 'balanced', confirm: true,
+      type: 'generate_story_song', targetStoryId: 'story-old', targetStoryTitle: 'Proyecto anterior', cueId: 'cue-old', cueTitle: 'Tema viejo', confirm: true,
+    }, {
+      type: 'stage_story_music_video', targetStoryId: 'story-old', targetStoryTitle: '', songName: 'Tema viejo · Español · v1', cueId: 'cue-old', cueTitle: '', pacing: 'balanced', confirm: true,
     }, {
       type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true,
     }],
@@ -353,6 +356,12 @@ test('parses a confirmed Story music-video staging and start', async () => {
   assert.equal(recoveredWithConfigure.actions[1].songTitle, 'Tema nuevo')
   assert.equal(recoveredWithConfigure.actions[2].cueTitle, 'Tema nuevo')
   assert.equal(recoveredWithConfigure.actions[3].cueTitle, 'Tema nuevo')
+  assert.equal(recoveredWithConfigure.actions[1].targetStoryId, undefined)
+  assert.equal(recoveredWithConfigure.actions[2].targetStoryId, undefined)
+  assert.equal(recoveredWithConfigure.actions[2].cueId, undefined)
+  assert.equal(recoveredWithConfigure.actions[3].targetStoryId, undefined)
+  assert.equal(recoveredWithConfigure.actions[3].cueId, undefined)
+  assert.equal(recoveredWithConfigure.actions[3].songName, '')
 
   const infinitive = await reconcileAgentTurnWithRequest(
     'Genera una versión v2 y úsala para preparar el videoclip y ejecutarlo ahora en Director.',
