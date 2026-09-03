@@ -12,6 +12,13 @@ export interface ConfiguredStorySongIdentity {
   configuration: AgentConfigureStorySongAction
 }
 
+export function bindGeneratedSongCandidate(
+  configured: ConfiguredStorySongIdentity | null,
+  candidateId: string,
+): ConfiguredStorySongIdentity | null {
+  return configured && candidateId ? { ...configured, candidateId } : configured
+}
+
 /** Bind dependent same-turn actions to identities returned by earlier steps. */
 export function bindStoryWorkflowAction(
   action: AgentAction,

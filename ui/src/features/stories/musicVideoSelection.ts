@@ -47,18 +47,20 @@ function resolveCueIdentity(
   project: StoryProject,
   cueTitle: string,
   cueId: string,
+  candidateId = '',
 ): { cue?: StoryMusicCue; scopedCue?: StoryMusicCue; candidateFromTitle?: StoryMusicCandidate } {
   const requested = normalizeName(cueTitle)
+  const requestedCandidateId = candidateId.trim()
   const cueById = cueId ? project.music.cues.find(item => item.id === cueId) : undefined
   if (cueId && !cueById) throw new Error(`No existe el cue con ID “${cueId}” en “${project.title}”.`)
   const candidates = cueById ? cueById.candidates : allCandidates(project)
   const titleMatches = requested
     ? candidates.filter(item => candidateAliases(item).includes(requested))
     : []
-  if (titleMatches.length > 1) {
+  if (titleMatches.length > 1 && !requestedCandidateId) {
     throw new Error(`Hay varias versiones de canción llamadas “${cueTitle}”; usa su candidate_id exacto.`)
   }
-  const candidateFromTitle = titleMatches[0]
+  const candidateFromTitle = titleMatches.length === 1 ? titleMatches[0] : undefined
   const candidateCue = candidateFromTitle
     ? project.music.cues.find(item => item.candidates.some(candidate => candidate.id === candidateFromTitle.id))
     : undefined
@@ -117,7 +119,9 @@ export function resolveStoryMusicSelection(
   cueId = '',
   candidateId = '',
 ): StoryMusicSelection {
-  const { cue, scopedCue, candidateFromTitle } = resolveCueIdentity(project, cueTitle, cueId)
+  const { cue, scopedCue, candidateFromTitle } = resolveCueIdentity(
+    project, cueTitle, cueId, candidateId,
+  )
   const pool = scopedCue ? scopedCue.candidates : allCandidates(project, cue)
   if (!pool.length) {
     throw new Error(`“${project.title}” no tiene ninguna canción candidata. Genera o importa una en Story Lab → Music.`)

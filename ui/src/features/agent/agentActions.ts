@@ -16,7 +16,11 @@ import {
   rememberExecution,
   reuseExecution,
 } from './agentContract'
-import { bindStoryWorkflowAction, type ConfiguredStorySongIdentity } from './storyWorkflowIdentity'
+import {
+  bindGeneratedSongCandidate,
+  bindStoryWorkflowAction,
+  type ConfiguredStorySongIdentity,
+} from './storyWorkflowIdentity'
 import type {
   AgentApplyCharacterKitPresetAction,
   AgentAttachCharacterKitReferencesAction,
@@ -2972,6 +2976,9 @@ export async function executeAgentActions(
           message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`,
           report: reused,
         })
+        if (action.type === 'generate_story_song' && reused.target?.id) {
+          configuredStorySong = bindGeneratedSongCandidate(configuredStorySong, reused.target.id)
+        }
         continue
       }
     }
@@ -3009,8 +3016,8 @@ export async function executeAgentActions(
             configuration: action,
           }
         }
-        if (action.type === 'generate_story_song' && configuredStorySong && registeredResult.report?.target?.id) {
-          configuredStorySong = { ...configuredStorySong, candidateId: registeredResult.report.target.id }
+        if (action.type === 'generate_story_song' && registeredResult.report?.target?.id) {
+          configuredStorySong = bindGeneratedSongCandidate(configuredStorySong, registeredResult.report.target.id)
         }
         if ((action.type === 'stage_story_video' || action.type === 'stage_story_music_video') && registeredResult.report?.target?.id) {
           stagedProductionId = registeredResult.report.target.id

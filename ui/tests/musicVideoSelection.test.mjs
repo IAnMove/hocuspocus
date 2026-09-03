@@ -71,6 +71,31 @@ test('a canonical candidate ID wins over a stale display label', () => {
   assert.equal(selection.candidate.id, candidate.id)
 })
 
+test('a candidate ID disambiguates several versions sharing one cue title', () => {
+  const first = {
+    ...candidate,
+    id: 'song-v1',
+    displayName: 'El Himno del Sysadmin · Español · v1',
+    name: 'sysadmin-v1.wav',
+    source: '/home/user/hocuspocus/outputs/sysadmin-v1.wav',
+  }
+  const twoVersions = {
+    ...project,
+    music: {
+      ...project.music,
+      cues: [{ ...cue, candidates: [first, candidate], selectedCandidateId: first.id }],
+      selectedCandidateId: first.id,
+    },
+  }
+  const selection = resolveStoryMusicSelection(twoVersions, '', cue.title, cue.id, candidate.id)
+  assert.equal(selection.candidate.id, candidate.id)
+  assert.equal(selection.cue.id, cue.id)
+  assert.throws(
+    () => resolveStoryMusicSelection(twoVersions, '', cue.title, cue.id),
+    /usa su candidate_id exacto/,
+  )
+})
+
 test('an explicit cue ID cannot select a candidate from another cue', () => {
   const otherCandidate = {
     ...candidate,
