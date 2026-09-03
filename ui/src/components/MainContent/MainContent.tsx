@@ -16,6 +16,10 @@ import {
   readDirectorClipReplacementTarget,
 } from '../../features/stories/directorClipHandoff'
 import { useUiTranslation } from '../../i18n'
+import {
+  estimatedMediaFeedItemHeight,
+  mediaFeedMaxPreviewHeight,
+} from './mediaFeedSizing'
 
 const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
   .then(module => ({ default: module.SceneAnimatorPanel })))
@@ -56,9 +60,6 @@ function PanelLoadingFallback() {
 // How many items to render beyond the viewport in each direction
 const OVERSCAN = 5
 // Info bar height + border/padding
-const INFO_BAR_HEIGHT = 48
-// aspect-video = 56.25% of width (16:9)
-const ASPECT_RATIO = 0.5625
 // Gap between items (tailwind space-y-3 = 12px)
 const GAP = 12
 
@@ -319,22 +320,31 @@ export function MainContent() {
   const prevOutputNames = useRef<string[]>([])
 
   // Dynamic estimated item height based on actual container width
-  const estimatedItemHeight = Math.round(containerWidth * ASPECT_RATIO) + INFO_BAR_HEIGHT
+  const maxMediaHeight = mediaFeedMaxPreviewHeight(containerHeight)
+  const estimatedItemHeight = estimatedMediaFeedItemHeight(containerWidth, containerHeight)
 
-  // Measure container on mount and resize; clear stale heights on width change
+  // Measure container on mount and resize; clear stale heights whenever either
+  // dimension changes because the viewport cap also makes item height depend
+  // on the available vertical space.
   useEffect(() => {
     const el = feedRef.current
     if (!el) return
     let prevWidth = 0
+    let prevHeight = 0
     const ro = new ResizeObserver((entries) => {
       const rect = entries[0].contentRect
-      setContainerHeight(rect.height)
+      const newHeight = rect.height
+      setContainerHeight(newHeight)
       const newWidth = rect.width
       setContainerWidth(newWidth)
-      if (prevWidth && Math.abs(newWidth - prevWidth) > 2) {
+      if (
+        (prevWidth && Math.abs(newWidth - prevWidth) > 2)
+        || (prevHeight && Math.abs(newHeight - prevHeight) > 2)
+      ) {
         measuredHeights.current.clear()
       }
       prevWidth = newWidth
+      prevHeight = newHeight
     })
     ro.observe(el)
     return () => ro.disconnect()
@@ -557,6 +567,7 @@ export function MainContent() {
           isActive={activeIndex === i}
           onVisible={handleItemVisible}
           onMeasured={handleItemMeasured}
+          maxMediaHeight={maxMediaHeight}
           style={{
             position: 'absolute',
             top: itemOffsets[i],
@@ -567,7 +578,7 @@ export function MainContent() {
       )
     }
     return items
-  }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets])
+  }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets, maxMediaHeight])
   const [replacementTarget, setReplacementTarget] = useState(readVideoEditorReplacementTarget)
   const [directorReplacementTarget, setDirectorReplacementTarget] = useState(readDirectorClipReplacementTarget)
 
