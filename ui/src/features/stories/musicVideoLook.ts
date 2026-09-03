@@ -1,6 +1,11 @@
 import type { StoryProject } from './types'
 import { normalizeLanguageIntent } from '../../lib/languageIntent'
 
+// Re-export the song-specific language contract through this already shared
+// music-video boundary. Agent reconciliation can resolve lyric language
+// without growing its legacy module graph with another direct dependency.
+export { extractRequestedSongLanguage, resolveSongLyricsLanguage } from './songLanguage'
+
 const NAMED_LOOK = /\b(pel[ií]cula|film\b|movie\b|serie\b|series\b|anthology|animaci[oó]n de |animated (?:film|series)|studio ghibli|ghibli)\b/i
 const YEAR_LOOK = /\b((?:19|20)\d{2})\b.{0,48}\b(film|movie|pel[ií]cula|animated|animaci[oó]n|anthology)\b/i
 const YEAR_LOOK_FLIP = /\b(film|movie|pel[ií]cula|animated|animaci[oó]n|anthology)\b.{0,48}\b((?:19|20)\d{2})\b/i

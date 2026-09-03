@@ -3,14 +3,18 @@ import {
   boundedDuration,
   creativeCharacters,
   creativeLocations,
-  explicitMusicLanguage,
   normalizeName,
   outlineBeats,
 } from '../../lib/labHelpers'
 import { useStore } from '../../stores/useStore'
-import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
+import { compileProviderPrompt, mergeLanguageIntent, normalizeLanguageIntent } from '../../lib/languageIntent'
 import { applyLegacyStoryLanguage, applyStoryLanguageIntent, seedStoryLanguageIntent } from './languageIntent'
 import { applyMusicVideoDirectVideoDefaults, resolveMusicVideoVisualStyle } from './musicVideoLook'
+import {
+  evaluateSongSemanticFidelity,
+  extractSongSemanticAnchors,
+  resolveSongLyricsLanguage,
+} from './songLanguage'
 import {
   directorResultDetails,
   directorRunProvenance,
@@ -157,12 +161,21 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
   }))
   const languageIntent = target.languageIntent
   if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
-  const lyricsLanguage = explicitMusicLanguage(
-    action.lyricsLanguage || languageIntent.spokenLanguage || languageIntent.contentLanguage || target.language,
-  )
+  const lyricsLanguage = resolveSongLyricsLanguage({
+    requestedLanguage: action.lyricsLanguage,
+    languageIntent,
+    fallback: target.language,
+  })
+  const protectedLyrics = languageIntent.verbatimSegments.filter(segment => segment.kind === 'lyrics')
   const durationSeconds = boundedDuration(action.durationSeconds, target.music.targetDurationSeconds)
   const model = normalizeStoryMusicModel(action.model)
   const brief = action.brief.trim() || target.music.brief || target.creativeBrief.songStory || target.premise
+  const semanticAnchors = extractSongSemanticAnchors([
+    target.premise,
+    target.theme,
+    target.creativeBrief.songStory,
+    brief,
+  ].filter(Boolean).join('\n'), 4)
   let style = action.style.trim()
   let lyrics = action.instrumental ? '' : action.lyrics.trim()
   let lyriaPrompt = ''
@@ -181,7 +194,11 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
       target: songWriteTarget(model),
       model,
       style_direction: `${style}\nReturn the visible provider-facing music direction in English. Do not translate protected literal text.`,
-      lyrics_direction: `Write completely original vocal lyrics in ${lyricsLanguage}, with [Verse], [Chorus], [Bridge] and [Outro] sections. Preserve protected lyric fragments character-for-character.`,
+      lyrics_direction: [
+        `Write completely original vocal lyrics in ${lyricsLanguage}, with [Verse], [Chorus], [Bridge] and [Outro] sections.`,
+        'Do not translate, paraphrase or omit the following protected lyric fragments; include each one character-for-character:',
+        ...protectedLyrics.map((segment, index) => `Exact lyric ${index + 1} (${segment.language || lyricsLanguage}): ${JSON.stringify(segment.text)}`),
+      ].join('\n'),
       story_context: storyContext,
       language: lyricsLanguage,
       duration_seconds: durationSeconds,
@@ -193,6 +210,20 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
     style = written.style.trim() || style
     lyrics = written.lyrics.trim()
     lyriaPrompt = written.lyria_prompt.trim()
+    const fidelity = evaluateSongSemanticFidelity({
+      lyrics,
+      lyricsLanguage,
+      instrumental: false,
+      // Keep one high-signal subject anchor as a deterministic guard. The
+      // writer may use valid synonyms for the remaining brief terms, so
+      // requiring every extracted word would reject good creative lyrics.
+      requiredTerms: semanticAnchors.slice(0, 1),
+      protectedSegments: protectedLyrics,
+      requireStructuredLyrics: true,
+    })
+    if (!fidelity.ok) {
+      throw new Error(`La letra generada no respeta el idioma o el tema solicitado (${fidelity.score}%): ${fidelity.reasons.join(' ')}`)
+    }
   }
   if (!action.instrumental && !lyrics) throw new Error('El compositor no devolvió una letra vocal completa para la ficha.')
   const existing = target.music.cues.find(item => item.kind === 'story')
@@ -305,8 +336,12 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
     // Allocate the durable candidate identity before submitting the compute
     // job so the WAV sidecar and the Story object can carry the same ID.
     const candidateId = storyId('song')
+    const songLanguageIntent = mergeLanguageIntent(target.languageIntent, normalizeLanguageIntent({
+      spoken_language: cue.lyricsLanguage || target.languageIntent.spokenLanguage || target.spokenLanguage,
+      technical_prompt_language: 'en',
+    }))
     const rendered = await api.generateMusic({
-      style: cue.style.trim(),
+      style: compileProviderPrompt(cue.style.trim(), songLanguageIntent, { medium: 'music' }),
       lyrics: cue.instrumental ? '[Instrumental]' : cue.lyrics,
       instrumental: cue.instrumental,
       duration_seconds: cue.durationSeconds,

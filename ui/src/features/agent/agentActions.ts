@@ -67,7 +67,13 @@ import {
 } from './capabilityRegistry'
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
-import { inferStoryProjectTypeFromText, isNewMusicVideoSongRequest, newMusicVideoStoryAction } from '../stories/musicVideoLook'
+import {
+  extractRequestedSongLanguage,
+  inferStoryProjectTypeFromText,
+  isNewMusicVideoSongRequest,
+  newMusicVideoStoryAction,
+  resolveSongLyricsLanguage,
+} from '../stories/musicVideoLook'
 
 export { isNewMusicVideoSongRequest } from '../stories/musicVideoLook'
 
@@ -1735,7 +1741,8 @@ export function parseAgentTurn(raw: string): AgentTurn {
 
 export function protectUserVerbatimSegments(request: string, turn: AgentTurn): AgentTurn {
   const verbatimSegments = extractVerbatimSegments(request)
-  if (!verbatimSegments.length) return turn
+  const requestedSongLanguage = extractRequestedSongLanguage(request)
+  if (!verbatimSegments.length && !requestedSongLanguage) return turn
   return {
     ...turn,
     actions: turn.actions.map(action => {
@@ -1747,7 +1754,12 @@ export function protectUserVerbatimSegments(request: string, turn: AgentTurn): A
       const explicitSpokenLanguage = verbatimSegments.find(segment => (
         (segment.kind === 'dialogue' || segment.kind === 'lyrics') && segment.language
       ))?.language || ''
-      const spokenLanguage = explicitSpokenLanguage || current?.spokenLanguage || lyricsLanguage || contentLanguage
+      // A song may intentionally contain a quoted refrain in another
+      // language. Its spoken/sung contract is the requested song language;
+      // the segment keeps its own language metadata for exact preservation.
+      const spokenLanguage = action.type === 'configure_story_song'
+        ? requestedSongLanguage || lyricsLanguage || current?.spokenLanguage || explicitSpokenLanguage || contentLanguage
+        : explicitSpokenLanguage || requestedSongLanguage || current?.spokenLanguage || lyricsLanguage || contentLanguage
       const deterministic = normalizeLanguageIntent({
         conversation_language: current?.conversationLanguage || turn.conversationLanguage,
         content_language: current?.contentLanguage || contentLanguage,
@@ -1758,9 +1770,19 @@ export function protectUserVerbatimSegments(request: string, turn: AgentTurn): A
           language: segment.language || spokenLanguage,
         })),
       })
-      return {
+      const protectedAction = {
         ...action,
         languageIntent: mergeLanguageIntent(current, deterministic),
+      } as AgentAction
+      if (action.type !== 'configure_story_song' || !requestedSongLanguage) return protectedAction
+      return {
+        ...protectedAction,
+        lyricsLanguage: resolveSongLyricsLanguage({
+          request,
+          requestedLanguage: lyricsLanguage,
+          languageIntent: deterministic,
+          fallback: contentLanguage,
+        }),
       } as AgentAction
     }),
   }
@@ -2161,7 +2183,10 @@ export async function reconcileAgentTurnWithRequest(
         style: request.trim().slice(0, 4_000),
         lyrics: '',
         writeLyrics: true,
-        lyricsLanguage: createdMusicVideo.language || 'Español',
+        // Keep the story's legacy ISO value when no explicit song language
+        // was requested; an explicit request is canonicalised by the song
+        // language resolver and takes precedence over the story language.
+        lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
         instrumental: false,
         model: 'ace_step_v1_5_xl_sft_lm_4b',
         durationSeconds: createdMusicVideo.durationSeconds || 90,
@@ -2229,7 +2254,7 @@ export async function reconcileAgentTurnWithRequest(
           style: request.trim().slice(0, 4_000),
           lyrics: '',
           writeLyrics: true,
-          lyricsLanguage: createdMusicVideo.language || 'Español',
+          lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
           instrumental: false,
           model: 'ace_step_v1_5_xl_sft_lm_4b',
           durationSeconds: createdMusicVideo.durationSeconds || 90,
