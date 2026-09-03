@@ -5237,9 +5237,20 @@ def init(
 class _DirectorOutputs(list):
     """List-compatible outputs that retain exact Director clip ownership."""
 
-    def __init__(self, values, clip_output_files=None):
+    def __init__(
+        self,
+        values,
+        clip_output_files=None,
+        *,
+        job_id: str | None = None,
+        task_id: str | None = None,
+        root_task_id: str | None = None,
+    ):
         super().__init__(values)
         self.clip_output_files = dict(clip_output_files or {})
+        self.job_id = job_id
+        self.task_id = task_id
+        self.root_task_id = root_task_id
 
 
 class _GenerationTimeoutError(RuntimeError):
@@ -5259,10 +5270,24 @@ class GenerationCancelledError(RuntimeError):
 def _director_job_outputs(job: dict) -> _DirectorOutputs:
     """Collapse multi-window files to the final output for each clip."""
     snapshot = snapshot_job(job)
+    job_id = str(snapshot.get("id") or "").strip() or None
+    params = snapshot.get("params") if isinstance(snapshot.get("params"), dict) else {}
+    task_id = str(snapshot.get("task_id") or "").strip() or (
+        f"task-generation-{job_id}" if job_id else None
+    )
+    owner_id = str(params.get("_director_pipeline_id") or "").strip()
+    root_task_id = str(snapshot.get("root_task_id") or "").strip() or (
+        f"task-director-{owner_id}" if owner_id else task_id
+    )
     output_files = list(snapshot.get("output_files") or [])
     clip_outputs = snapshot.get("clip_output_files") or {}
     if not isinstance(clip_outputs, dict) or not clip_outputs:
-        return _DirectorOutputs(output_files)
+        return _DirectorOutputs(
+            output_files,
+            job_id=job_id,
+            task_id=task_id,
+            root_task_id=root_task_id,
+        )
 
     indexed = []
     for index, filename in clip_outputs.items():
@@ -5278,6 +5303,9 @@ def _director_job_outputs(job: dict) -> _DirectorOutputs:
     return _DirectorOutputs(
         collapsed or output_files,
         {index: filename for index, filename in indexed if filename},
+        job_id=job_id,
+        task_id=task_id,
+        root_task_id=root_task_id,
     )
 
 
@@ -5351,7 +5379,13 @@ def _acknowledge_pipeline_cancel(pid: str, *, force: bool = False) -> bool:
     return True
 
 
-def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None, out_dir: str = None) -> list[str]:
+def _submit_and_wait(
+    params: dict,
+    timeout_s: float = 600,
+    workspace: str = None,
+    out_dir: str = None,
+    provenance: dict | None = None,
+) -> list[str]:
     """Submit a generation job and block until it completes.
 
     ``timeout_s`` is an inactivity timeout, not an absolute wall-clock limit.
@@ -5362,8 +5396,23 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
     """
     _prepare_director_generation_params(params)
     job_id = uuid.uuid4().hex[:8]
+    owner_id = str(params.get("_director_pipeline_id") or "").strip()
+    if provenance is None and owner_id:
+        # Every Director child must inherit the stable Story/production/song
+        # lineage. Centralising that rule here covers normal generation,
+        # retries and detached clip repairs without per-renderer plumbing.
+        # These fields are immutable after pipeline creation, so reading the
+        # already-published owner must not wait on the cancellation lock before
+        # this child has registered itself.
+        owner = _pipelines.get(owner_id) or {}
+        owner_params = owner.get("params") if isinstance(owner.get("params"), dict) else {}
+        provenance = copy.deepcopy(owner_params.get("provenance") or {})
+    task_id = f"task-generation-{job_id}"
+    root_task_id = f"task-director-{owner_id}" if owner_id else task_id
     job = {
         "id": job_id,
+        "task_id": task_id,
+        "root_task_id": root_task_id,
         "status": "queued",
         "progress": 0,
         "step": 0,
@@ -5376,6 +5425,7 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
         "error": None,
         "workspace": workspace,
         "out_dir": out_dir,
+        "provenance": copy.deepcopy(provenance or {}),
         "last_progress_at": time.time(),
     }
     _dir_pid = params.get("_director_pipeline_id")

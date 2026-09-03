@@ -52,6 +52,7 @@ test('song generation rebases its candidate when Story autosave wins the CAS rac
   }
   let savedLibrary = remoteLibrary
   const putRevisions = []
+  let generationRequest
   const originalFetch = globalThis.fetch
   t.after(() => {
     globalThis.fetch = originalFetch
@@ -60,6 +61,7 @@ test('song generation rebases its candidate when Story autosave wins the CAS rac
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
     if (url.endsWith('/api/v1/director/generate-music')) {
+      generationRequest = JSON.parse(String(init.body))
       return new Response(JSON.stringify({
         audio_path: '/tmp/himno.wav',
         filename: 'himno.wav',
@@ -120,4 +122,8 @@ test('song generation rebases its candidate when Story autosave wins the CAS rac
   assert.equal(savedCue.selectedCandidateId, meta.candidateId)
   assert.equal(savedCue.candidates.length, 1)
   assert.equal(savedCue.candidates[0].id, meta.candidateId)
+  assert.equal(generationRequest.provenance.project_id, project.id)
+  assert.equal(generationRequest.provenance.cue_id, cue.id)
+  assert.equal(generationRequest.provenance.candidate_id, meta.candidateId)
+  assert.equal(generationRequest.provenance.workspace_id, undefined)
 })

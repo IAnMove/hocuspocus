@@ -1,6 +1,6 @@
 import type {
   StoryBeat, StoryCharacter, StoryLocation, StoryProject, StoryRelationship,
-  StoryMusicCandidate, StoryMusicCue, StoryVisualAsset,
+  StoryMusicCandidate, StoryMusicCue, StoryProvenance, StoryVisualAsset,
 } from './types'
 import {
   DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
@@ -171,7 +171,27 @@ function normalizeMusicCandidate(value: unknown, now: string): StoryMusicCandida
     createdAt: text(candidate.createdAt, now),
     taskId: text(candidate.taskId) || undefined,
     rootTaskId: text(candidate.rootTaskId) || undefined,
+    provenance: normalizeStoryProvenance(candidate.provenance),
   }
+}
+
+function normalizeStoryProvenance(value: unknown): StoryProvenance | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const raw = value as Partial<StoryProvenance>
+  const result: StoryProvenance = {}
+  const textFields: Array<keyof StoryProvenance> = [
+    'workspaceId', 'outputFolder', 'projectId', 'productionId', 'cueId', 'candidateId',
+    'commandId', 'workflowId', 'runId', 'taskId', 'rootTaskId', 'jobId',
+    'pipelineId', 'tool', 'capability', 'startedAt', 'completedAt', 'songVersion',
+  ]
+  textFields.forEach(field => {
+    const value = text(raw[field])
+    if (value) (result as Record<string, string>)[field] = value
+  })
+  if (raw.actor === 'user' || raw.actor === 'wizard' || raw.actor === 'system' || raw.actor === 'unknown') {
+    result.actor = raw.actor
+  }
+  return Object.keys(result).length ? result : undefined
 }
 
 function normalizeMusicCue(value: unknown, index: number, now: string): StoryMusicCue | null {
@@ -632,6 +652,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
         targetName: text(item.targetName) || undefined,
         targetSnapshot: item.targetSnapshot && typeof item.targetSnapshot === 'object'
           ? item.targetSnapshot : undefined,
+        provenance: normalizeStoryProvenance(item.provenance),
         status: item.status === 'draft' ? 'draft' : 'staged',
       }))
       : [],

@@ -15,6 +15,9 @@ from typing import Any, Mapping, TypedDict
 
 INITIATORS = frozenset({"user", "wizard", "system", "unknown"})
 _SUBMISSION_COMMAND_FIELDS = ("command_id", "workflow_id", "run_id")
+_SUBMISSION_REFERENCE_FIELDS = (
+    "project_id", "production_id", "cue_id", "candidate_id", "song_version",
+)
 
 
 class CommandContext(TypedDict, total=False):
@@ -25,6 +28,9 @@ class CommandContext(TypedDict, total=False):
     root_task_id: str | None
     job_id: str | None
     pipeline_id: str | None
+    cue_id: str | None
+    candidate_id: str | None
+    song_version: str | None
 
 
 class GenerationLocation(TypedDict, total=False):
@@ -40,6 +46,11 @@ class GenerationProvenance(TypedDict, total=False):
     model_id: str | None
     workspace_id: str | None
     output_folder: str | None
+    project_id: str | None
+    production_id: str | None
+    cue_id: str | None
+    candidate_id: str | None
+    song_version: str | None
     command: CommandContext
 
 
@@ -99,6 +110,10 @@ def normalize_submission_provenance(value: Any) -> GenerationProvenance:
         result["capability"] = capability[:200]
     if workspace_id:
         result["workspace_id"] = workspace_id[:200]
+    for key in _SUBMISSION_REFERENCE_FIELDS:
+        value = _clean(raw.get(key))
+        if value:
+            result[key] = value[:200]
     return result
 
 
@@ -116,7 +131,8 @@ def provenance_from_manifest(manifest: Mapping[str, Any] | None) -> GenerationPr
         key: _clean(execution.get(key))
         for key in (
             "command_id", "workflow_id", "run_id", "task_id",
-            "root_task_id", "job_id", "pipeline_id",
+            "root_task_id", "job_id", "pipeline_id", "cue_id",
+            "candidate_id", "song_version",
         )
     }
     return {
@@ -127,6 +143,13 @@ def provenance_from_manifest(manifest: Mapping[str, Any] | None) -> GenerationPr
         "model_id": _clean(model.get("id")),
         "workspace_id": _clean(origin.get("workspace_id")),
         "output_folder": _clean(origin.get("output_folder")),
+        "project_id": _clean((origin.get("project") or {}).get("id"))
+            if isinstance(origin.get("project"), Mapping) else None,
+        "production_id": _clean((origin.get("production") or {}).get("id"))
+            if isinstance(origin.get("production"), Mapping) else None,
+        "cue_id": command.get("cue_id"),
+        "candidate_id": command.get("candidate_id"),
+        "song_version": command.get("song_version"),
         "command": command,
     }
 

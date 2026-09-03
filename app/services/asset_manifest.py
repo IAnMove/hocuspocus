@@ -229,7 +229,7 @@ def build_asset_manifest(
         "mode": execution_mode,
         **{key: _clean_text(correlation.get(key)) for key in (
             "command_id", "workflow_id", "run_id", "task_id", "root_task_id",
-            "job_id", "pipeline_id",
+            "job_id", "pipeline_id", "cue_id", "candidate_id", "song_version",
         )},
         "error": _redact(dict(error)) if isinstance(error, Mapping) else None,
     }
@@ -356,7 +356,10 @@ def adapt_legacy_sidecar(
     )
     correlations = {
         key: legacy.get(key) or params.get(key)
-        for key in ("command_id", "workflow_id", "run_id", "task_id", "root_task_id", "job_id", "pipeline_id")
+        for key in (
+            "command_id", "workflow_id", "run_id", "task_id", "root_task_id",
+            "job_id", "pipeline_id", "cue_id", "candidate_id", "song_version",
+        )
     }
     if not _clean_text(correlations.get("pipeline_id")):
         correlations["pipeline_id"] = (

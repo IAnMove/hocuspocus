@@ -139,6 +139,7 @@ export async function runRegisteredCapability(
     pipelineId: tracked.pipelineId,
     outputNames: tracked.outputNames,
     assetIds: tracked.assetIds,
+    metadata: tracked.metadata,
     recoverable: false,
     executionKey: executionKey({
       workspace: options.workspace || 'default',
@@ -158,7 +159,7 @@ export async function runRegisteredCapability(
       owner: entity,
       taskId: report.taskId,
       uri: name,
-      metadata: {},
+      metadata: { ...(report.metadata || {}) },
     })) : [],
     taskIds: report.taskId ? [report.taskId] : [],
     pipelineIds: report.pipelineId ? [report.pipelineId] : [],

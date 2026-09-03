@@ -710,6 +710,22 @@ def _publish_generation_sidecar_for_studio_job(
     for key in ("command_id", "workflow_id", "run_id"):
         if command.get(key):
             payload.setdefault(key, command[key])
+    for key in ("project_id", "production_id", "cue_id", "candidate_id", "song_version"):
+        if provenance.get(key):
+            payload.setdefault(key, provenance[key])
+    project_ref = (
+        {"kind": "story", "id": str(provenance["project_id"])}
+        if provenance.get("project_id") else None
+    )
+    production_ref = (
+        {"kind": "director_production", "id": str(provenance["production_id"])}
+        if provenance.get("production_id") else None
+    )
+    manifest_refs = {}
+    if project_ref:
+        manifest_refs["project"] = project_ref
+    if production_ref:
+        manifest_refs["production"] = production_ref
     publish_generation_sidecar_best_effort(
         output_path,
         payload,
@@ -718,6 +734,7 @@ def _publish_generation_sidecar_for_studio_job(
         tool=tool,
         actor=provenance.get("actor"),
         capability=provenance.get("capability"),
+        **manifest_refs,
     )
 
 
@@ -8287,7 +8304,9 @@ async def director_generate_music(request: Request):
     {audio_path} so the frontend can feed it straight into /audio/analyze.
     Returns {audio_path, filename, style, lyrics}."""
     import asyncio
+    from services.generation_provenance import normalize_submission_provenance
     body = await request.json()
+    provenance = normalize_submission_provenance(body.pop("provenance", None))
     description = (body.get("description") or "").strip()
     style = (body.get("style") or "").strip()
     lyrics = (body.get("lyrics") or "").strip()
@@ -8295,7 +8314,13 @@ async def director_generate_music(request: Request):
     model_type = body.get("model_type") or "ace_step_v1_5_xl_sft_lm_4b"
     duration_seconds = body.get("duration_seconds")
     seed = body.get("seed")
+    # ``workspace`` is the physical output-folder name. A Workspace
+    # collection is an optional, explicit provenance reference and must never
+    # be inferred from this folder.
     workspace = body.get("workspace") or _get_active_workspace()
+    collection_id = provenance.get("workspace_id")
+    if collection_id and not _workspace_collection_registry.get(collection_id):
+        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
     try:
         execution_mode.validate_generation(workspace)
     except execution_mode.ExecutionModeError as exc:
@@ -8355,7 +8380,12 @@ async def director_generate_music(request: Request):
     from services.director_pipeline import _submit_and_wait
     try:
         output_files = await asyncio.to_thread(
-            _submit_and_wait, gen_params, timeout_s=1800, out_dir=out_dir
+            _submit_and_wait,
+            gen_params,
+            timeout_s=1800,
+            workspace=workspace,
+            out_dir=out_dir,
+            provenance=provenance,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Music generation failed: {e}")
@@ -8364,7 +8394,15 @@ async def director_generate_music(request: Request):
 
     filename = output_files[0]
     audio_path = os.path.join(out_dir, filename)
-    return {"audio_path": audio_path, "filename": filename, "style": style, "lyrics": lyrics}
+    return {
+        "audio_path": audio_path,
+        "filename": filename,
+        "style": style,
+        "lyrics": lyrics,
+        "job_id": getattr(output_files, "job_id", None),
+        "task_id": getattr(output_files, "task_id", None),
+        "root_task_id": getattr(output_files, "root_task_id", None),
+    }
 
 
 async def _enhance_with_wangp(prompt: str, mode: str, enhancer_enabled: int, image_paths: list = None):
@@ -9593,7 +9631,14 @@ async def director_pipeline_start(request: Request):
     """
     _init_pipeline()
     from services.director_pipeline import get_pipeline, start_pipeline
+    from services.generation_provenance import normalize_submission_provenance
     body = await request.json()
+    body["provenance"] = normalize_submission_provenance(
+        body.pop("provenance", None)
+    )
+    collection_id = body["provenance"].get("workspace_id")
+    if collection_id and not _workspace_collection_registry.get(collection_id):
+        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
     workspace = body.get("workspace") or _get_active_workspace()
     try:
         execution_mode.validate_generation(workspace)

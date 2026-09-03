@@ -16,6 +16,7 @@ import {
   rememberExecution,
   reuseExecution,
 } from './agentContract'
+import { bindStoryWorkflowAction, type ConfiguredStorySongIdentity } from './storyWorkflowIdentity'
 import type {
   AgentApplyCharacterKitPresetAction,
   AgentAttachCharacterKitReferencesAction,
@@ -286,6 +287,7 @@ export interface AgentStageStoryMusicVideoAction extends AgentLanguageAwareActio
   songName: string
   cueTitle: string
   cueId?: string
+  candidateId?: string
   pacing: 'cinematic' | 'balanced' | 'rhythmic'
   confirm: true
 }
@@ -1325,9 +1327,11 @@ function parseAction(value: unknown): AgentAction | null {
     const pacing = cleanString(raw.pacing, 20) as AgentStageStoryMusicVideoAction['pacing']
     return {
       type: 'stage_story_music_video',
+      ...(cleanString(raw.target_story_id, 240) ? { targetStoryId: cleanString(raw.target_story_id, 240) } : {}),
       targetStoryTitle: cleanString(raw.target_story_title, 300),
       songName: cleanString(raw.song_name, 300),
       cueTitle: cleanString(raw.cue_title, 300),
+      ...(cleanString(raw.candidate_id, 240) ? { candidateId: cleanString(raw.candidate_id, 240) } : {}),
       pacing: pacing === 'cinematic' || pacing === 'rhythmic' ? pacing : 'balanced',
       confirm: true,
     }
@@ -2228,7 +2232,11 @@ export async function reconcileAgentTurnWithRequest(
         }
       : undefined
     const effectiveSongDraft = songDraft || automaticDraft
-    const songTarget = newSongRequest && createdMusicVideo ? createdMusicVideo.title : effectiveSongDraft?.targetStoryTitle || ''
+    const songTarget = createdMusicVideo?.title && (
+      newSongRequest || !effectiveSongDraft?.targetStoryTitle?.trim()
+    )
+      ? createdMusicVideo.title
+      : effectiveSongDraft?.targetStoryTitle || ''
     const songTitle = effectiveSongDraft?.songTitle || createdMusicVideo?.title || ''
     const completeSongSetup = automaticDraft ? [...storySongSetup, automaticDraft] : storySongSetup
     // A rendered candidate label ("Title · Español · v1") does not exist yet
@@ -2753,45 +2761,17 @@ export async function executeAgentActions(
   let createdStoryId = ''
   let createdStoryTitle = ''
   let stagedProductionId = ''
-  let configuredStorySong: {
-    targetStoryId: string
-    targetStoryTitle: string
-    cueId: string
-    cueTitle: string
-    configuration: AgentConfigureStorySongAction
-  } | null = null
+  let configuredStorySong: ConfiguredStorySongIdentity | null = null
   const orderedActions = orderCompoundActions(actions)
   const failedActionTypes = new Set<string>()
   for (const plannedAction of orderedActions) {
-    let action = plannedAction
+    let action = bindStoryWorkflowAction(plannedAction, {
+      createdStoryId,
+      createdStoryTitle,
+      configuredSong: configuredStorySong,
+      stagedProductionId,
+    })
     let actionExecutionKey = ''
-    // Runtime correlation is the final guard: the configure capability returns
-    // the canonical cue title after persistence, so downstream steps consume
-    // that identity even when the original LLM plan used a future candidate
-    // display label or stale language/version suffix.
-    if (createdStoryId && action.type === 'configure_story_song' && !action.targetStoryId) {
-      action = { ...action, targetStoryId: createdStoryId, targetStoryTitle: createdStoryTitle }
-    }
-    if (configuredStorySong && action.type === 'generate_story_song') {
-      action = {
-        ...action,
-        targetStoryId: configuredStorySong.targetStoryId,
-        targetStoryTitle: configuredStorySong.targetStoryTitle,
-        cueId: configuredStorySong.cueId,
-        cueTitle: configuredStorySong.cueTitle,
-      }
-    } else if (configuredStorySong && action.type === 'stage_story_music_video') {
-      action = {
-        ...action,
-        targetStoryId: configuredStorySong.targetStoryId,
-        targetStoryTitle: configuredStorySong.targetStoryTitle,
-        cueId: configuredStorySong.cueId,
-        cueTitle: configuredStorySong.cueTitle,
-        songName: '',
-      }
-    } else if (stagedProductionId && action.type === 'start_director_production') {
-      action = { ...action, productionId: stagedProductionId }
-    }
     if (action.type === 'start_director_production' && !action.productionId) {
       const handoffProductionId = useStore.getState().directorStoryProductionHandoff?.productionId || ''
       if (handoffProductionId) action = { ...action, productionId: handoffProductionId }
@@ -3028,6 +3008,9 @@ export async function executeAgentActions(
             cueTitle: registeredResult.report.target.title,
             configuration: action,
           }
+        }
+        if (action.type === 'generate_story_song' && configuredStorySong && registeredResult.report?.target?.id) {
+          configuredStorySong = { ...configuredStorySong, candidateId: registeredResult.report.target.id }
         }
         if ((action.type === 'stage_story_video' || action.type === 'stage_story_music_video') && registeredResult.report?.target?.id) {
           stagedProductionId = registeredResult.report.target.id

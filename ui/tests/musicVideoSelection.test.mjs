@@ -46,6 +46,69 @@ test('a resumed pre-render label resolves the only persisted cue and candidate',
   assert.equal(selection.candidate.id, candidate.id)
 })
 
+test('an explicit unknown song never falls back to the only candidate', () => {
+  assert.throws(
+    () => resolveStoryMusicSelection(project, 'Canción que no existe', cue.title),
+    /No existe la canción/,
+  )
+})
+
+test('an explicit unknown cue never falls back to the only cue', () => {
+  assert.throws(
+    () => resolveStoryMusicSelection(project, '', 'Cue antiguo que no existe'),
+    /No existe el cue/,
+  )
+})
+
+test('a canonical candidate ID wins over a stale display label', () => {
+  const selection = resolveStoryMusicSelection(
+    project,
+    'Nombre antiguo',
+    cue.title,
+    cue.id,
+    candidate.id,
+  )
+  assert.equal(selection.candidate.id, candidate.id)
+})
+
+test('an explicit cue ID cannot select a candidate from another cue', () => {
+  const otherCandidate = {
+    ...candidate,
+    id: 'song-other',
+    displayName: 'Otra canción · Español · v1',
+    name: 'other.wav',
+  }
+  const otherCue = {
+    ...cue,
+    id: 'cue-other',
+    title: 'Otra canción',
+    candidates: [otherCandidate],
+    selectedCandidateId: otherCandidate.id,
+  }
+  assert.throws(
+    () => resolveStoryMusicSelection(
+      { ...project, music: { ...project.music, cues: [cue, otherCue] } },
+      '',
+      '',
+      cue.id,
+      otherCandidate.id,
+    ),
+    /No existe la versión de canción con ID/,
+  )
+})
+
+test('an explicit cue ID wins over a title belonging to another cue', () => {
+  const otherCue = { ...cue, id: 'cue-other', title: 'Otra canción' }
+  const selection = resolveStoryMusicSelection(
+    { ...project, music: { ...project.music, cues: [cue, otherCue] } },
+    '',
+    otherCue.title,
+    cue.id,
+  )
+  assert.equal(selection.cue?.id, cue.id)
+  assert.equal(selection.candidate.id, candidate.id)
+})
+
 test('absolute generator paths become playable workspace URLs', () => {
   assert.equal(
     getPlayableFileUrl(candidate.source, candidate.name, 'default'),

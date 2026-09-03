@@ -349,17 +349,33 @@ test('wizard: one-turn new song request never reuses the selected music-video pr
     window as Window & { __HOCUSPOCUS_WIZARD_TRACE__?: Array<Record<string, unknown>> }
   ).__HOCUSPOCUS_WIZARD_TRACE__ || []) as Array<{
     turn?: { actions?: Array<{ type?: string; title?: string; targetStoryTitle?: string; songTitle?: string; cueTitle?: string }> }
+    results?: Array<{
+      action?: { type?: string; title?: string; targetStoryId?: string; targetStoryTitle?: string; songTitle?: string; cueId?: string; cueTitle?: string; candidateId?: string; productionId?: string }
+      report?: { target?: { id?: string; title?: string } }
+    }>
   }>
-  const actions = wizardTrace.at(-1)?.turn?.actions || []
+  const traceEntry = wizardTrace.at(-1)
+  const actions = traceEntry?.turn?.actions || []
   expect(actions.map(action => action.type)).toEqual([
     'create_story', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production',
   ])
   const create = actions[0]
-  expect(actions[1]?.targetStoryTitle).toBe(create?.title)
-  expect(actions[2]?.targetStoryTitle).toBe(create?.title)
-  expect(actions[3]?.targetStoryTitle).toBe(create?.title)
-  expect(actions[2]?.cueTitle).toBe(actions[1]?.songTitle)
-  expect(actions[3]?.cueTitle).toBe(actions[1]?.songTitle)
+  // `turn.actions` is the provider's proposed plan and is allowed to omit
+  // IDs/titles that only exist after create_story executes. The contract to
+  // assert is the hydrated action carried by each result/command, because
+  // that is what the UI adapter really ran and what a resumed workflow uses.
+  const hydrated = (traceEntry?.results || []).map(result => result.action || {})
+  expect(hydrated.map(action => action.type)).toEqual(actions.map(action => action.type))
+  expect(hydrated[1]?.targetStoryTitle).toBe(create?.title)
+  expect(hydrated[2]?.targetStoryTitle).toBe(create?.title)
+  expect(hydrated[3]?.targetStoryTitle).toBe(create?.title)
+  expect(hydrated[1]?.targetStoryId).toBe(traceEntry?.results?.[0]?.report?.target?.id)
+  expect(hydrated[2]?.targetStoryId).toBe(traceEntry?.results?.[0]?.report?.target?.id)
+  expect(hydrated[3]?.targetStoryId).toBe(traceEntry?.results?.[0]?.report?.target?.id)
+  expect(hydrated[2]?.cueId).toBe(traceEntry?.results?.[1]?.report?.target?.id)
+  expect(hydrated[3]?.cueId).toBe(traceEntry?.results?.[1]?.report?.target?.id)
+  expect(hydrated[3]?.candidateId).toBe(traceEntry?.results?.[2]?.report?.target?.id)
+  expect(hydrated[4]?.productionId).toBe(traceEntry?.results?.[3]?.report?.target?.id)
   await expect(page.getByRole('button', { name: 'Director', exact: true })).toHaveClass(/bg-toggle-active/)
   await attachEvidence(page, request, testInfo, transcript)
 })

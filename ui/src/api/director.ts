@@ -28,9 +28,30 @@ export async function generateMusic(params: {
   reference_image_path?: string
   model_type?: string
   seed?: number
+  /** Physical output folder used by the Director run, not a collection ID. */
   workspace?: string
   initiator?: string
-}): Promise<{ audio_path: string; filename: string; style: string; lyrics: string }> {
+  /** Browser-owned attribution; runtime IDs are added by the backend. */
+  provenance?: {
+    actor?: 'user' | 'wizard' | 'system' | 'unknown'
+    capability?: string
+    /** Optional explicit Workspace collection ID; never pass `workspace` here. */
+    workspace_id?: string
+    project_id?: string
+    production_id?: string
+    cue_id?: string
+    candidate_id?: string
+    command?: Record<string, string>
+  }
+}): Promise<{
+  audio_path: string
+  filename: string
+  style: string
+  lyrics: string
+  job_id?: string
+  task_id?: string
+  root_task_id?: string
+}> {
   const res = await fetch(`${BASE}/api/v1/director/generate-music`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -23,6 +23,37 @@ export type StoryTrailerSpoiler = 'mystery' | 'balanced' | 'revealing'
 export type StoryTrailerIntensity = 'rising' | 'relentless' | 'prestige'
 export type StoryAssetKind = 'world' | 'location' | 'character' | 'prop' | 'style' | 'ignore'
 
+/**
+ * Stable lineage for a Story object and the work that produced it.
+ *
+ * Display names are intentionally absent from this contract: they can be
+ * edited or duplicated, while these IDs let a resumed Wizard workflow keep
+ * pointing at the exact project/cue/song/production/run that it opened.
+ */
+export interface StoryProvenance {
+  /** Explicit Workspace collection identity, when the user selected one. */
+  workspaceId?: string
+  /** Physical Story/output folder used for persistence; never a collection ID. */
+  outputFolder?: string
+  projectId?: string
+  productionId?: string
+  cueId?: string
+  candidateId?: string
+  commandId?: string
+  workflowId?: string
+  runId?: string
+  taskId?: string
+  rootTaskId?: string
+  jobId?: string
+  pipelineId?: string
+  actor?: 'user' | 'wizard' | 'system' | 'unknown'
+  tool?: string
+  capability?: string
+  startedAt?: string
+  completedAt?: string
+  songVersion?: string
+}
+
 export interface StoryVisualAsset {
   id: string
   name: string
@@ -124,6 +155,8 @@ export interface StoryProduction {
   targetName?: string
   /** Reopenable staged payload. Kept deliberately generic to avoid coupling story data to an editor schema. */
   targetSnapshot?: Record<string, unknown>
+  /** Explicit links to the Story, cue, song candidate and Director run. */
+  provenance?: StoryProvenance
   status: 'draft' | 'staged'
 }
 
@@ -145,6 +178,8 @@ export interface StoryMusicCandidate {
   /** Canonical backend identity for audit, cancellation and exact output correlation. */
   taskId?: string
   rootTaskId?: string
+  /** Portable lineage retained beside the editable song candidate. */
+  provenance?: StoryProvenance
 }
 
 export interface StoryMusicCue {

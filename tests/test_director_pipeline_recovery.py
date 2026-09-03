@@ -94,6 +94,109 @@ def test_generation_timeout_is_based_on_inactivity_not_total_runtime():
     assert result == ["finished.mp4"]
 
 
+def test_director_audio_outputs_keep_canonical_ids_and_submission_provenance():
+    jobs = {}
+    previous = (
+        director_pipeline._jobs,
+        director_pipeline._run_generation,
+        director_pipeline._wgp,
+    )
+
+    def complete_generation(job_id):
+        job = jobs[job_id]
+        job["status"] = "running"
+        job["output_files"] = ["song.wav"]
+        job["status"] = "completed"
+
+    try:
+        director_pipeline._jobs = jobs
+        director_pipeline._run_generation = complete_generation
+        director_pipeline._wgp = None
+        result = director_pipeline._submit_and_wait(
+            {"generation_mode": "audio"},
+            timeout_s=1,
+            workspace="music-night",
+            out_dir=".",
+            provenance={
+                "actor": "wizard",
+                "capability": "generate_story_song",
+                "workspace_id": "music-night",
+                "project_id": "story-1",
+                "cue_id": "cue-1",
+            },
+        )
+    finally:
+        (
+            director_pipeline._jobs,
+            director_pipeline._run_generation,
+            director_pipeline._wgp,
+        ) = previous
+
+    assert result == ["song.wav"]
+    assert result.job_id
+    assert result.task_id == f"task-generation-{result.job_id}"
+    assert result.root_task_id == result.task_id
+    submitted = jobs[result.job_id]
+    assert submitted["workspace"] == "music-night"
+    assert submitted["provenance"]["project_id"] == "story-1"
+    assert submitted["provenance"]["cue_id"] == "cue-1"
+
+
+def test_director_child_job_inherits_story_music_video_provenance():
+    jobs = {}
+    pipelines = {
+        "pipeline-1": {
+            "params": {
+                "provenance": {
+                    "actor": "wizard",
+                    "capability": "start_director_production",
+                    "project_id": "story-1",
+                    "production_id": "production-1",
+                    "cue_id": "cue-1",
+                    "candidate_id": "candidate-1",
+                },
+            },
+        },
+    }
+    previous = (
+        director_pipeline._jobs,
+        director_pipeline._pipelines,
+        director_pipeline._run_generation,
+        director_pipeline._wgp,
+    )
+
+    def complete_generation(job_id):
+        jobs[job_id]["output_files"] = ["clip.mp4"]
+        jobs[job_id]["status"] = "completed"
+
+    try:
+        director_pipeline._jobs = jobs
+        director_pipeline._pipelines = pipelines
+        director_pipeline._run_generation = complete_generation
+        director_pipeline._wgp = None
+        result = director_pipeline._submit_and_wait(
+            {"_director_pipeline_id": "pipeline-1"},
+            timeout_s=1,
+            workspace="music-night",
+            out_dir=".",
+        )
+    finally:
+        (
+            director_pipeline._jobs,
+            director_pipeline._pipelines,
+            director_pipeline._run_generation,
+            director_pipeline._wgp,
+        ) = previous
+
+    assert result == ["clip.mp4"]
+    submitted = jobs[result.job_id]
+    assert submitted["root_task_id"] == "task-director-pipeline-1"
+    assert submitted["provenance"]["project_id"] == "story-1"
+    assert submitted["provenance"]["production_id"] == "production-1"
+    assert submitted["provenance"]["cue_id"] == "cue-1"
+    assert submitted["provenance"]["candidate_id"] == "candidate-1"
+
+
 def test_preview_checkpoint_recovers_without_starting_video(tmp_path):
     pipeline_id = "preview42"
     state_path = tmp_path / f"_director_pipeline_{pipeline_id}.json"

@@ -65,6 +65,31 @@ def test_manifest_records_identity_provenance_prompts_model_and_timing(tmp_path:
     assert manifest["timing"]["total_ms"] == 8_000
 
 
+def test_manifest_keeps_song_cue_and_candidate_correlations(tmp_path: Path):
+    output = tmp_path / "song.wav"
+    output.write_bytes(b"audio")
+    manifest = build_asset_manifest(
+        output,
+        workspace_id="music-night",
+        project={"kind": "story", "id": "story-1"},
+        production={"kind": "music_video", "id": "production-1"},
+        correlations={
+            "cue_id": "cue-1",
+            "candidate_id": "candidate-1",
+            "song_version": "2",
+            "task_id": "task-1",
+        },
+        tool="story_lab",
+        capability="generate_story_song",
+        actor="wizard",
+    )
+    assert manifest["origin"]["project"] == {"kind": "story", "id": "story-1"}
+    assert manifest["origin"]["production"] == {"kind": "music_video", "id": "production-1"}
+    assert manifest["execution"]["cue_id"] == "cue-1"
+    assert manifest["execution"]["candidate_id"] == "candidate-1"
+    assert manifest["execution"]["song_version"] == "2"
+
+
 def test_manifest_redacts_secrets_recursively_and_never_writes_absolute_path(tmp_path: Path):
     output = tmp_path / "voice.wav"
     output.write_bytes(b"wave")

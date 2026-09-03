@@ -25,6 +25,8 @@ export interface AgentExecutionReport {
   outputNames?: string[]
   /** Exact Story Lab visual assets created by the operation, when applicable. */
   assetIds?: string[]
+  /** Canonical IDs and timing supplied by the command adapter. */
+  metadata?: Record<string, unknown>
   recoverable: boolean
   executionKey?: string
 }
@@ -112,6 +114,7 @@ export function executionReport(input: Partial<AgentExecutionReport> & Pick<Agen
     taskId: input.taskId,
     pipelineId: input.pipelineId,
     outputNames: input.outputNames,
+    metadata: input.metadata,
     recoverable: input.recoverable === true,
     executionKey: input.executionKey,
   }

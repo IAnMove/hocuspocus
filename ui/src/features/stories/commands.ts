@@ -114,6 +114,7 @@ export interface StageStoryMusicVideoCommand {
   songName: string
   cueTitle: string
   cueId?: string
+  candidateId?: string
   pacing: 'cinematic' | 'balanced' | 'rhythmic'
   confirm: true
   languageIntent?: LanguageIntent
