@@ -319,18 +319,24 @@ test('wizard: one-turn new song request never reuses the selected music-video pr
   const transcript = await ask(page,
     `Hazme un videoclip titulado exactamente "${title}" de una canción de 20 segundos en la que Linus Torvalds sea el protagonista y luche contra el software propietario, siempre en animación dibujada inspirada en la película de animación adulta Heavy Metal de 1981. Escribe la letra vocal, genera la canción con ACE-Step 1.5 XL y ejecuta el videoclip. Invéntalo todo y no reutilices ninguna canción anterior.`,
   )
-  const { project } = await waitForNewStoryProject(request, workspace, beforeStories) as {
-    project: {
+  const created = await waitForNewStoryProject(request, workspace, beforeStories)
+  const projectId = created.id
+  await waitForTerminalRoot(request, workspace, beforeTasks, 'completed')
+  await waitForCompletedDirectorPipeline(request, beforeDirector)
+  // Creation is observable before the later song/staging mutations complete.
+  // Assert the final persisted object, not that deliberately early snapshot.
+  const finalLibrary = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`) as {
+    projects: Record<string, {
       title?: string
       projectType?: string
       premise?: string
       synopsis?: string
       creativeBrief?: { generalIdea?: string }
       music?: { cues?: Array<{ lyrics?: string; selectedCandidateId?: string; candidates?: Array<{ id?: string }> }> }
-    }
+    }>
   }
-  await waitForTerminalRoot(request, workspace, beforeTasks, 'completed')
-  await waitForCompletedDirectorPipeline(request, beforeDirector)
+  const project = finalLibrary.projects[projectId]
+  expect(project).toBeTruthy()
   const authoredText = [
     project.title,
     project.premise,
