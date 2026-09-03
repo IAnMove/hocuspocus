@@ -62,7 +62,9 @@ import {
 } from './capabilityRegistry'
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
-import { inferStoryProjectTypeFromText } from '../stories/musicVideoLook'
+import { inferStoryProjectTypeFromText, isNewMusicVideoSongRequest, newMusicVideoStoryAction } from '../stories/musicVideoLook'
+
+export { isNewMusicVideoSongRequest } from '../stories/musicVideoLook'
 
 export type { ExampleConversation }
 export { AGENT_TABS }
@@ -2181,11 +2183,21 @@ export async function reconcileAgentTurnWithRequest(
   const musicVideoStage = isExplicitMusicVideoStageRequest(request)
   const musicVideoStart = isExplicitMusicVideoStartRequest(request, history)
   if (musicVideoStage || musicVideoStart) {
-    const actions = turn.actions.map(action => (
+    const proposedActions = turn.actions.map(action => (
       action.type === 'create_story' && action.projectType !== 'music_video'
         ? { ...action, projectType: 'music_video' as const }
         : action
     ))
+    const newSongRequest = isNewMusicVideoSongRequest(request)
+    const omittedNewSongStory = newSongRequest
+      && !proposedActions.some(action => action.type === 'create_story')
+    // A request for "a song about..." describes a new authored object. Empty
+    // stage fields must never reinterpret that request as "use the currently
+    // selected song", because UI selection is mutable and may belong to an
+    // unrelated project. Recover the omitted plan before resolving any target.
+    const actions: AgentAction[] = omittedNewSongStory
+      ? [newMusicVideoStoryAction(request, turn.conversationLanguage), ...proposedActions]
+      : proposedActions
     const storySongSetup = actions.filter(action => (
       action.type === 'create_story'
       || action.type === 'configure_story_song'
@@ -2216,32 +2228,38 @@ export async function reconcileAgentTurnWithRequest(
         }
       : undefined
     const effectiveSongDraft = songDraft || automaticDraft
+    const songTarget = newSongRequest && createdMusicVideo ? createdMusicVideo.title : effectiveSongDraft?.targetStoryTitle || ''
+    const songTitle = effectiveSongDraft?.songTitle || createdMusicVideo?.title || ''
     const completeSongSetup = automaticDraft ? [...storySongSetup, automaticDraft] : storySongSetup
     // A rendered candidate label ("Title · Español · v1") does not exist yet
     // while the song is only a cue. Correlate every later step with the exact
     // cue that this same plan configures instead of trusting independently
     // guessed names from the LLM.
     const correlatedSongSetup = effectiveSongDraft
-      ? completeSongSetup.map(action => action.type === 'generate_story_song'
-        ? {
-            ...action,
-            targetStoryTitle: effectiveSongDraft.targetStoryTitle,
-            cueTitle: effectiveSongDraft.songTitle,
+      ? completeSongSetup.map(action => {
+          if (action.type === 'configure_story_song') return { ...effectiveSongDraft, targetStoryId: newSongRequest && createdMusicVideo ? undefined : effectiveSongDraft.targetStoryId, targetStoryTitle: songTarget, songTitle }
+          if (action.type === 'generate_story_song') {
+            return {
+              ...action,
+              targetStoryId: newSongRequest && createdMusicVideo ? undefined : action.targetStoryId,
+              targetStoryTitle: songTarget, cueId: newSongRequest && createdMusicVideo ? undefined : action.cueId, cueTitle: songTitle,
+            }
           }
-        : action)
+          return action
+        })
       : completeSongSetup
     const stageSeed: AgentStageStoryMusicVideoAction = existingStage || {
       type: 'stage_story_music_video',
-      targetStoryTitle: effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || '',
+      targetStoryTitle: songTarget || createdMusicVideo?.title || '',
       songName: '',
-      cueTitle: effectiveSongDraft?.songTitle || '',
+      cueTitle: songTitle,
       pacing: 'balanced',
       confirm: true,
     }
     const stage: AgentStageStoryMusicVideoAction = {
       ...stageSeed,
-      targetStoryTitle: stageSeed.targetStoryTitle || effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || '',
-      cueTitle: effectiveSongDraft?.songTitle || stageSeed.cueTitle || '',
+      targetStoryId: newSongRequest && createdMusicVideo ? undefined : stageSeed.targetStoryId,
+      targetStoryTitle: songTarget || createdMusicVideo?.title || stageSeed.targetStoryTitle || '', cueId: newSongRequest && createdMusicVideo ? undefined : stageSeed.cueId, cueTitle: songTitle || stageSeed.cueTitle || '',
       songName: effectiveSongDraft ? '' : stageSeed.songName,
     }
     if (musicVideoStage && musicVideoStart) {

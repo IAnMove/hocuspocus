@@ -90,11 +90,13 @@ test('Series handoff validates all sources before replacing the draft and can re
 
   failSecond = false
   fireEvent.click(screen.getByRole('button', { name: 'Retry hand-off' }))
-  await waitFor(() => assert.match(screen.getByText(/Timeline · 3 clips/).textContent || '', /Timeline · 3 clips/))
-  assert.deepEqual(
-    JSON.parse(dom.window.localStorage.getItem(draftKey) || '{}').clips.map((item: { name: string }) => item.name),
-    ['First', 'Second', 'Third'],
-  )
+  await waitFor(() => {
+    assert.match(screen.getByText(/Timeline · 3 clips/).textContent || '', /Timeline · 3 clips/)
+    assert.deepEqual(
+      JSON.parse(dom.window.localStorage.getItem(draftKey) || '{}').clips.map((item: { name: string }) => item.name),
+      ['First', 'Second', 'Third'],
+    )
+  })
   assert.equal(dom.window.localStorage.getItem('maestro-video-editor-pending-sequence'), null)
   assert.deepEqual(probed, ['first.mp4', 'second.mp4', 'first.mp4', 'second.mp4', 'third.mp4'])
   view.unmount()
