@@ -131,9 +131,10 @@ def _rembg_remove(image: Image.Image) -> Image.Image:
     # adapter. The wrapper remains a named seam for existing tests/callers.
     from services.rembg_adapter import remove_background_image
 
-    # Preserve Face Rig's historical rembg defaults while sharing session and
-    # decoding through the common adapter.
-    return remove_background_image(image, alpha_matting=False)
+    # Historical rembg defaults: no alpha matting and no bgcolor composite.
+    # A white transparent bgcolor mixes edge pixels toward white and leaves
+    # a halo when the overlay is placed over a face.
+    return remove_background_image(image, alpha_matting=False, bgcolor=None)
 
 
 def clean_character_kit_overlay(
