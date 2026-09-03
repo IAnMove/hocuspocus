@@ -28,7 +28,7 @@ import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
-import { enqueueWizardConversationSave, persistQueuedWizardConversation, resolveWizardConversationHydration } from './wizardConversationPersistence'
+import { enqueueWizardConversationSave, persistQueuedWizardConversation, rebaseStaleWizardConversationHydration, resolveWizardConversationHydration } from './wizardConversationPersistence'
 import i18n, { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -283,9 +283,17 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       const hydration = resolveWizardConversationHydration(knownSnapshot, payload)
       conversationSnapshotsRef.current.set(conversationWorkspace, hydration.snapshot)
       if (!hydration.applyToVisibleState) {
-        // The response raced a confirmed save (or contains no newer revision).
-        // Keep visible local edits intact and let the normal persistence effect
-        // write them against the latest known canonical revision.
+        const visibleMessages = messagesRef.current
+        const rebased = rebaseStaleWizardConversationHydration({
+          ...payload,
+          messages: visibleMessages,
+          executions: visibleMessages.flatMap(message => message.cards || []),
+        }, payload, hydration.snapshot)
+        skipNextConversationSaveRef.current = !rebased.needsPersist
+        setMessages(normalizeRemoteWizardMessages(
+          rebased.conversation.messages,
+          rebased.conversation.executions,
+        ) as AgentMessage[])
         setHydratedWorkspace(conversationWorkspace)
         return
       }

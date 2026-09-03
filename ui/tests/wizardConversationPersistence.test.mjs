@@ -7,6 +7,7 @@ const {
   mergeQueuedWizardConversationSnapshots,
   enqueueWizardConversationSave,
   persistQueuedWizardConversation,
+  rebaseStaleWizardConversationHydration,
   resolveWizardConversationHydration,
 } = await import('../src/features/agent/wizardConversationPersistence.ts')
 const {
@@ -375,4 +376,31 @@ test('a late hydration fetch cannot replace a newer confirmed snapshot or visibl
     snapshot: confirmed,
     applyToVisibleState: true,
   })
+})
+
+test('stale hydration rebases visible edits without dropping confirmed turns', () => {
+  const stale = payload(7, ['shared-user'])
+  const confirmed = payload(8, ['shared-user', 'confirmed-assistant'])
+  const visible = clone(stale)
+  visible.messages[0].text = 'edited while hydration was in flight'
+
+  const rebased = rebaseStaleWizardConversationHydration(visible, stale, confirmed)
+
+  assert.equal(rebased.needsPersist, true)
+  assert.equal(rebased.conversation.revision, 8)
+  assert.equal(rebased.conversation.messages[0].text, 'edited while hydration was in flight')
+  assert.deepEqual(rebased.conversation.messages.map(message => message.id), [
+    'shared-user',
+    'confirmed-assistant',
+  ])
+})
+
+test('stale hydration restores confirmed-only turns without scheduling a redundant save', () => {
+  const stale = payload(7, ['shared-user'])
+  const confirmed = payload(8, ['shared-user', 'confirmed-assistant'])
+
+  const rebased = rebaseStaleWizardConversationHydration(clone(stale), stale, confirmed)
+
+  assert.equal(rebased.needsPersist, false)
+  assert.deepEqual(rebased.conversation.messages, confirmed.messages)
 })

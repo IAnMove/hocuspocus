@@ -37,6 +37,31 @@ export function resolveWizardConversationHydration(
   return { snapshot: incoming, applyToVisibleState: true }
 }
 
+/**
+ * Rebase browser-visible edits over a hydration response that lost a race to
+ * a confirmed save. The stale response is the three-way base, so confirmed
+ * turns added after it are retained while actual local edits and clears still
+ * win for values that existed in that base.
+ */
+export function rebaseStaleWizardConversationHydration(
+  visible: WizardConversationPayload,
+  stale: WizardConversationPayload,
+  confirmed: WizardConversationPayload,
+): { conversation: WizardConversationPayload; needsPersist: boolean } {
+  const conversation = mergeQueuedWizardConversationSnapshots(visible, stale, confirmed)
+  const semanticContent = (value: WizardConversationPayload) => ({
+    messages: value.messages,
+    executions: value.executions,
+    requestedActions: value.requestedActions ?? [],
+    executedActions: value.executedActions ?? [],
+    confirmations: value.confirmations ?? [],
+  })
+  return {
+    conversation,
+    needsPersist: stableKey(semanticContent(conversation)) !== stableKey(semanticContent(confirmed)),
+  }
+}
+
 const defaultTransport: WizardConversationTransport = {
   fetch: fetchWizardConversation,
   save: saveWizardConversation,
