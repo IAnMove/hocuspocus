@@ -228,9 +228,18 @@ function configureStoryMusicVideoDirector(
   })
 }
 
-async function startDirectorIfRequested(autoStart: boolean): Promise<void> {
-  if (!autoStart || useStore.getState().directorStep !== 'structure') return
-  useStore.getState().directorConfirmStructure()
+async function startDirectorIfRequested(
+  autoStart: boolean,
+  confirmStructure = false,
+): Promise<void> {
+  if (!autoStart) return
+  // Film/trailer handoffs already finish on the Director style step and used
+  // to start the pipeline directly. Only a music video has an editable
+  // structure review that must be confirmed before starting.
+  if (confirmStructure) {
+    if (useStore.getState().directorStep !== 'structure') return
+    useStore.getState().directorConfirmStructure()
+  }
   await useStore.getState().startDirectorPipeline()
   if (!useStore.getState().pipelineId) {
     throw new Error('Director did not return a pipeline ID; video generation was not started.')
@@ -371,6 +380,6 @@ export async function loadStoryMusicVideoProduction(options: StoryMusicVideoProd
     audioOptions,
     options.onDirectorHandoff,
   )
-  await startDirectorIfRequested(options.autoStart)
+  await startDirectorIfRequested(options.autoStart, true)
   return { adaptation, resolvedCue, pipelineId: useStore.getState().pipelineId, generationSettings }
 }

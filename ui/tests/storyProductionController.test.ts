@@ -1,14 +1,25 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { JSDOM } from 'jsdom'
 
 import { createStoryProject } from '../src/features/stories/model.ts'
 import {
   effectiveMusicCue,
+  loadStoryFilmProduction,
   musicCandidateById,
   musicCueForCandidate,
 } from '../src/features/stories/storyProductionController.ts'
 import type { StoryMusicCandidate } from '../src/features/stories/types.ts'
+import { useStore } from '../src/stores/useStore.ts'
+
+const dom = new JSDOM('<!doctype html><html><body /></html>', { url: 'http://localhost/' })
+Object.assign(globalThis, {
+  window: dom.window,
+  document: dom.window.document,
+  Event: dom.window.Event,
+})
+Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
 
 function candidate(id: string, overrides: Partial<StoryMusicCandidate> = {}): StoryMusicCandidate {
   return {
@@ -72,6 +83,45 @@ test('effective music cue preserves the selected song context for legacy candida
   assert.equal(cue.instrumental, true)
   assert.equal(cue.durationSeconds, 42)
   assert.deepEqual(cue.candidates.map(item => item.id), [selected.id])
+})
+
+test('film auto-start launches from the staged style step without structure confirmation', async () => {
+  const originalState = useStore.getState()
+  let starts = 0
+  let confirmations = 0
+  const project = createStoryProject('full_story')
+  project.title = 'Film handoff'
+  try {
+    useStore.setState({
+      startDirectorPipeline: async () => {
+        starts += 1
+        useStore.setState({ pipelineId: 'film-pipeline-test' })
+      },
+      directorConfirmStructure: () => {
+        confirmations += 1
+        useStore.setState({ directorStep: 'style' })
+      },
+      setMediaFilter: () => {},
+    })
+
+    await loadStoryFilmProduction({
+      source: project,
+      direction: 'Create one short incident.',
+      autoStart: true,
+      targetDuration: 45,
+      preserveVisualStyle: true,
+      videoModel: '',
+      imageModel: '',
+      resolution: '540p',
+      aspectRatio: '16:9',
+    })
+
+    assert.equal(useStore.getState().directorStep, 'style')
+    assert.equal(starts, 1)
+    assert.equal(confirmations, 0)
+  } finally {
+    useStore.setState(originalState)
+  }
 })
 
 test('Story Lab delegates Director handoff orchestration to the production controller', () => {
