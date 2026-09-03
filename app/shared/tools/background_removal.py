@@ -14,13 +14,13 @@ from typing import Any
 
 from PIL import Image
 
-from .character_kit_face_cleanup import (
+from services.character_kit_face_cleanup import (
     CharacterKitFaceCleanupError,
     _contained,
     classify_rgba_bytes,
     resolve_character_kit_image,
 )
-from .rembg_adapter import DEFAULT_MODEL, remove_background_image
+from services.rembg_adapter import DEFAULT_MODEL, remove_background_image
 
 
 class BackgroundRemovalError(ValueError):

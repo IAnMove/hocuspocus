@@ -1458,6 +1458,9 @@ interface AppState extends LlmSlice, StudioConfigurationSlice {
   setToolsRevoiceRef: (index: number, ref: { filename: string; path: string } | null) => void
   toolsRemoveBackgroundInstruction: string
   setToolsRemoveBackgroundInstruction: (instruction: string) => void
+  /** Incremented when a tool publishes an asset so mounted Tools panels can refresh their catalog. */
+  toolsAssetsRevision: number
+  toolsSubmitting: boolean
   runTool: () => Promise<void>
   /** Gallery one-click: upscale a specific clip now, with the configured method. */
   quickUpscaleClip: (name: string, url: string | null) => Promise<void>
@@ -3875,8 +3878,11 @@ export const useStore = create<AppState>((set, get) => {
   }),
   toolsRemoveBackgroundInstruction: '',
   setToolsRemoveBackgroundInstruction: (instruction) => set({ toolsRemoveBackgroundInstruction: instruction }),
+  toolsAssetsRevision: 0,
+  toolsSubmitting: false,
   runTool: async () => {
     const s = get()
+    if (s.toolsSubmitting) return
     const source = s.toolsSourcePath
     if (!source) return
     const tool = s.toolsTool
@@ -3887,6 +3893,7 @@ export const useStore = create<AppState>((set, get) => {
       .map(r => r.path)
     if (tool === 'revoice' && refPaths.length === 0) return
     if (tool === 'remove_background' && s.toolsSourceKind !== 'image') return
+    set({ toolsSubmitting: true })
 
     // Placeholder job tile — mirrors the blend/edit submit pattern so the
     // progress shows in the main feed and the gallery refreshes on completion.
@@ -3943,6 +3950,7 @@ export const useStore = create<AppState>((set, get) => {
           if (status.status === 'running') void get().maybeRefreshGallery()
           if (status.status === 'completed') {
             clearInterval(pollInterval)
+            if (removingBackground) set(st => ({ toolsAssetsRevision: st.toolsAssetsRevision + 1 }))
             set(st => {
               return removeJob(st.jobs, j => j.id === result.job_id)
             })
@@ -3964,6 +3972,8 @@ export const useStore = create<AppState>((set, get) => {
         ...j, id: j.id || `tool-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
       })))
       console.error(`Tool ${tool} failed:`, msg)
+    } finally {
+      set({ toolsSubmitting: false })
     }
   },
   quickUpscaleClip: async (name, url) => {

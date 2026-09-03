@@ -1,6 +1,4 @@
 import { useStore } from '../../stores/useStore'
-import * as api from '../../api/client'
-import i18n from '../../i18n'
 import type { CommandResult } from '../../lib/commandContract'
 import { rememberedCharacterKitLibrary } from '../characters/session'
 import type { SeriesAssemblyJob } from '../series/assemblyContract'
@@ -44,6 +42,7 @@ import type {
 } from './characterKitActions'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
+import { createToolsAdapter } from './toolsAdapter'
 
 export interface AdapterOutcome {
   message: string
@@ -301,49 +300,6 @@ async function editorOutcome(result: CommandResult, message: string, extra: Part
   }
 }
 
-function toolsSourceUrl(source: string, sourceWorkspace: string | undefined, workspace: string): string {
-  const raw = source.trim()
-  if (raw.startsWith('/api/')) return raw
-  const filename = raw.split(/[?#]/, 1)[0].split('/').pop() || raw
-  if (sourceWorkspace === '__uploads__') return `/api/v1/uploads/${encodeURIComponent(filename)}`
-  return `/api/v1/file/${encodeURIComponent(filename)}?workspace=${encodeURIComponent(sourceWorkspace || workspace)}`
-}
-
-async function resolveRemoveBackgroundSource(
-  action: AgentRemoveBackgroundAction,
-  workspace: string,
-): Promise<{ source: string; name: string; url: string; assetId?: string; sourceWorkspace?: string }> {
-  let source = action.source?.trim() || ''
-  const assetId = action.assetId?.trim() || undefined
-  let sourceWorkspace = action.sourceWorkspace?.trim() || undefined
-  let asset: api.AssetCatalogItem | undefined
-  if (assetId) {
-    asset = await api.fetchAsset(assetId)
-    if (asset.kind !== 'image') {
-      throw new Error(i18n.t('removeBackgroundInvalidAsset', { ns: 'wizard' }))
-    }
-    const location = asset.locations.find(item => item.workspace_id === sourceWorkspace)
-      || asset.locations.find(item => item.workspace_id === workspace)
-      || asset.locations[0]
-    if (!location) {
-      throw new Error(i18n.t('removeBackgroundNoLocation', { ns: 'wizard' }))
-    }
-    source = source || location.filename
-    sourceWorkspace = sourceWorkspace || location.workspace_id
-  }
-  if (!source) {
-    throw new Error(i18n.t('removeBackgroundMissingSource', { ns: 'wizard' }))
-  }
-  const name = source.split(/[?#]/, 1)[0].split('/').pop() || source
-  return {
-    source,
-    name: asset?.filename || name,
-    url: toolsSourceUrl(source, sourceWorkspace, workspace),
-    assetId,
-    sourceWorkspace,
-  }
-}
-
 export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   const adapters = {} as WizardApplicationAdapters
   adapters.studio = {
@@ -407,78 +363,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       }), 'Audio → SFX')
     },
   }
-  adapters.tools = {
-    async removeBackground(action, context) {
-      const workspace = useStore.getState().activeWorkspace || 'default'
-      const source = await resolveRemoveBackgroundSource(action, workspace)
-      await navigate('studio')
-      const state = useStore.getState()
-      state.setGenerationMode('tools')
-      state.setToolsTool('remove_background')
-      state.setToolsSource({
-        path: source.source,
-        name: source.name,
-        url: source.url,
-        assetId: source.assetId || null,
-        workspace: source.sourceWorkspace || null,
-        kind: 'image',
-      })
-      const result = await api.submitToolRemoveBackground({
-        asset_id: source.assetId,
-        source: source.source,
-        source_workspace: source.sourceWorkspace,
-        workspace,
-        instruction: action.instruction || '',
-        provenance: {
-          actor: context?.actor || 'wizard',
-          capability: context?.capability || 'remove_background',
-          workspace_id: context?.workspaceCollectionId,
-          command: {
-            ...(context?.commandId ? { command_id: context.commandId } : {}),
-            ...(context?.workflowId ? { workflow_id: context.workflowId } : {}),
-            ...(context?.runId ? { run_id: context.runId } : {}),
-          },
-        },
-      })
-      const taskId = result.task_id || result.job_id
-      const target = {
-        kind: 'tool_job',
-        id: taskId,
-        title: i18n.t('removeBackgroundTitle', { ns: 'wizard' }),
-      }
-      const message = i18n.t('removeBackgroundQueued', {
-        ns: 'wizard',
-        name: source.name,
-      })
-      const report = executionReport({
-        state: 'queued',
-        message,
-        target,
-        taskId,
-        recoverable: true,
-        executionKey: executionKey({
-          workspace,
-          type: action.type,
-          targetId: source.assetId || source.source,
-          params: action,
-        }),
-      })
-      rememberExecution(report)
-      return {
-        message,
-        target,
-        taskId,
-        report,
-        metadata: {
-          tool: 'remove_background',
-          sourceAssetId: source.assetId || null,
-          source: source.source,
-          sourceWorkspace: source.sourceWorkspace || workspace,
-          model: 'rembg-u2net',
-        },
-      }
-    },
-  }
+  adapters.tools = createToolsAdapter(navigate)
   adapters.storyLab = {
     open: () => navigate('story_lab'),
     async create(action) {

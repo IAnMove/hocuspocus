@@ -1,6 +1,16 @@
 /** Capabilities for standalone post-processing tools. */
-import type { AgentRemoveBackgroundAction } from './agentActions'
 import type { CapabilityDefinition, defineCapability } from './capabilityRegistry'
+
+export interface AgentRemoveBackgroundAction {
+  type: 'remove_background'
+  /** Canonical asset identity when the source comes from the library. */
+  assetId?: string
+  /** Exact canonical filename or API/absolute path resolved by the server. */
+  source: string
+  sourceWorkspace?: string
+  instruction?: string
+  confirm: true
+}
 
 const registeredRegistrars = new WeakSet<object>()
 

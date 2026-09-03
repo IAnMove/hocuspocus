@@ -50,6 +50,57 @@ class BackgroundRemovalJobHooks:
         self.simulated_artifact = simulated_artifact
 
 
+def build_background_removal_job(
+    *,
+    job_id: str,
+    workspace: str,
+    output_dir: str,
+    source_path: str,
+    source_filename: str,
+    source_workspace: str,
+    source_asset_id: str,
+    uploads_root: str,
+    source_root: str,
+    provenance: dict[str, Any],
+    instruction: str,
+) -> dict[str, Any]:
+    """Build the shared queue record consumed by the Tools worker."""
+    return {
+        "id": job_id,
+        "status": "queued",
+        "progress": 0,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Queued (background removal)",
+        "created_at": time.time(),
+        "started_at": None,
+        "finished_at": None,
+        "params": {
+            "source": source_filename,
+            "source_asset_id": source_asset_id,
+            "source_filename": source_filename,
+            "source_workspace": source_workspace,
+            "instruction": instruction,
+            "model": "u2net",
+            "model_type": "rembg-u2net",
+            "provider": "local",
+            "generation_mode": "image",
+            "capability": "remove_background",
+            "_non_durable_tool": "remove_background",
+            "_source_path": source_path,
+            "_uploads_root": uploads_root,
+            "_workspace_root": source_root,
+            "_destination_workspace_root": output_dir,
+        },
+        "output_files": [],
+        "error": None,
+        "workspace": workspace,
+        "out_dir": output_dir,
+        "provenance": provenance,
+    }
+
+
 def _public_params(params: MutableMapping[str, Any]) -> dict[str, Any]:
     """Drop private host paths before writing a durable asset sidecar."""
     return {
@@ -116,6 +167,12 @@ def run_remove_background_job(
                 if hooks.acknowledge_cancel is not None:
                     hooks.acknowledge_cancel(job)
                 return False
+
+            # A cancellation may land immediately after the abort state is
+            # registered. Settle it before validating or touching the source
+            # so a cancelled request cannot be reported as an input failure.
+            if hooks.is_cancel_requested(job):
+                return _settle_cancel(job, hooks=hooks)
 
             params = job.get("params") if isinstance(job.get("params"), dict) else {}
             workspace = str(job.get("workspace") or "default")

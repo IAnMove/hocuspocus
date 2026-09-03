@@ -6,8 +6,8 @@ from fastapi.testclient import TestClient as FastApiTestClient
 from PIL import Image
 
 from routers.tools import create_tools_router
-from services.background_removal import remove_background_file
-from services.background_removal_job import BackgroundRemovalJobHooks, run_remove_background_job
+from shared.tools.background_removal import remove_background_file
+from shared.tools.background_removal_job import BackgroundRemovalJobHooks, run_remove_background_job
 from services.asset_manifest import read_asset_manifest
 
 
@@ -319,7 +319,7 @@ def test_background_removal_worker_publishes_lineage_and_finishes(tmp_path):
     )
     # Avoid loading a real rembg model in the contract test while exercising
     # the worker's actual job/sidecar path.
-    import services.background_removal_job as worker_module
+    import shared.tools.background_removal_job as worker_module
     original = worker_module.remove_background_file
     worker_module.remove_background_file = lambda *args, **kwargs: remove_background_file(
         *args, **kwargs, remove_background=_fake_matte,

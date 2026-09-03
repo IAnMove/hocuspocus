@@ -337,6 +337,7 @@
     "removeBackgroundInstruction": "Instrucción opcional",
     "removeBackgroundInstructionPlaceholder": "Por ejemplo: conserva el pelo fino y los bordes transparentes",
     "removeBackgroundHint": "Crea una copia PNG transparente y mantiene intacta la imagen original.",
+    "removeBackgroundNeedsSource": "Elige una imagen de la biblioteca o sube una antes de ejecutar esta herramienta.",
     "removeBackgroundAction": "Quitar fondo",
     "submittingRemoveBackground": "Enviando la eliminación de fondo…",
     "queuedRemoveBackground": "Eliminación de fondo en cola…",

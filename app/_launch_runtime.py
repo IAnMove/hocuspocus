@@ -36281,7 +36281,7 @@ api.include_router(create_assets_router(
 ))
 
 from routers.tools import create_tools_router
-from services.background_removal_job import (
+from shared.tools.background_removal_job import (
     BackgroundRemovalJobHooks,
     run_remove_background_job,
 )

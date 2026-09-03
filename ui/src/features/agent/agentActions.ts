@@ -3,6 +3,7 @@ import { comicArtworkInventory } from '../comics/generateArtwork'
 import { buildWizardContextSnapshot, buildWizardLabSnapshots, comicLabSnapshot, type BuildWizardContextOptions, type WizardContextSnapshot } from './wizardContext'
 import type { AspectRatio, ResolutionPreset } from '../../types'
 import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
+import type { AgentRemoveBackgroundAction } from './toolCapabilities'
 import type { CommandEnvelope, CommandResult } from './commandContract'
 import {
   bindDirectorProductionTarget,
@@ -74,8 +75,8 @@ import {
 } from '../stories/musicVideoLook'
 
 export { isNewMusicVideoSongRequest } from '../stories/musicVideoLook'
-
 export type { ExampleConversation }
+export type { AgentRemoveBackgroundAction } from './toolCapabilities'
 export { AGENT_TABS }
 export type { AgentTab }
 
@@ -523,17 +524,6 @@ export interface AgentConfigureStudioLorasAction {
   type: 'configure_studio_loras'
   loras: AgentStudioLoraSelection[]
   replaceExisting: boolean
-}
-
-export interface AgentRemoveBackgroundAction {
-  type: 'remove_background'
-  /** Canonical asset identity when the source comes from the library. */
-  assetId?: string
-  /** Exact canonical filename or API/absolute path resolved by the server. */
-  source: string
-  sourceWorkspace?: string
-  instruction?: string
-  confirm: true
 }
 
 export interface AgentInspectQueueAction {
@@ -1736,11 +1726,9 @@ export function parseAgentTurn(raw: string): AgentTurn {
   for (const value of proposed) {
     const action = parseAction(value)
     if (!action) continue
-    if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio' || action.type === 'prepare_3d') preparedStudio = true
-    if (action.type === 'start_generation') {
-      if (!preparedStudio || startedGeneration) continue
-      startedGeneration = true
-    }
+    if (isPreparedStudioAction(action)) preparedStudio = true
+    if (!generationStartAllowed(action, preparedStudio, startedGeneration)) continue
+    if (action.type === 'start_generation') startedGeneration = true
     actions.push(action)
   }
   const conversationLanguage = normalizeConversationLanguageTag(object.conversation_language)
@@ -1750,6 +1738,12 @@ export function parseAgentTurn(raw: string): AgentTurn {
     ...(conversationLanguage ? { conversationLanguage } : {}),
   }
 }
+
+function isPreparedStudioAction(action: AgentAction): boolean {
+  return ['prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d'].includes(action.type)
+}
+
+const generationStartAllowed = (action: AgentAction, prepared: boolean, started: boolean) => action.type !== 'start_generation' || (prepared && !started)
 
 export function protectUserVerbatimSegments(request: string, turn: AgentTurn): AgentTurn {
   const verbatimSegments = extractVerbatimSegments(request)
