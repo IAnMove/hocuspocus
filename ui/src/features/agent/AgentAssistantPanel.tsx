@@ -26,7 +26,7 @@ import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
-import { enqueueWizardConversationSave, persistQueuedWizardConversation, rebaseStaleWizardConversationHydration, resolveWizardConversationHydration } from './wizardConversationPersistence'
+import { enqueueWizardConversationSave, persistQueuedWizardConversation, rebaseStaleWizardConversationHydration, rebaseWizardConversationAfterSave, resolveWizardConversationHydration } from './wizardConversationPersistence'
 import i18n, { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -272,12 +272,13 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
           setConversationSaveError(null)
           const visibleMessages = messagesRef.current
-          const rebased = rebaseStaleWizardConversationHydration({
+          const pendingClearBase = conversationClearBasesRef.current.get(conversationWorkspace)
+          const rebased = rebaseWizardConversationAfterSave({
             ...queuedWrite.captured,
             revision: saved.conversation.revision,
             messages: visibleMessages,
             executions: visibleMessages.flatMap(message => message.cards || []),
-          }, queuedWrite.captured, saved.conversation)
+          }, queuedWrite.captured, saved.conversation, pendingClearBase)
           if (saved.merged || rebased.needsPersist) {
             skipNextConversationSaveRef.current = !rebased.needsPersist
             setMessages(normalizeRemoteWizardMessages(

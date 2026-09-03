@@ -90,6 +90,25 @@ export function rebaseStaleWizardConversationHydration(
   }
 }
 
+/**
+ * Reconcile a save result with UI changes made while that save was in flight.
+ * A pending Clear supplies its own visible ancestor and is the only case where
+ * absent values represent intentional deletion.
+ */
+export function rebaseWizardConversationAfterSave(
+  visible: WizardConversationPayload,
+  captured: WizardConversationPayload,
+  confirmed: WizardConversationPayload,
+  pendingClearBase?: WizardConversationPayload,
+): { conversation: WizardConversationPayload; needsPersist: boolean } {
+  return rebaseStaleWizardConversationHydration(
+    visible,
+    pendingClearBase ?? captured,
+    confirmed,
+    { honorLocalDeletes: Boolean(pendingClearBase) },
+  )
+}
+
 const defaultTransport: WizardConversationTransport = {
   fetch: fetchWizardConversation,
   save: saveWizardConversation,

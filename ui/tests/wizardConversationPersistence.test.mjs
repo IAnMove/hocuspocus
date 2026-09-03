@@ -8,6 +8,7 @@ const {
   enqueueWizardConversationSave,
   persistQueuedWizardConversation,
   rebaseStaleWizardConversationHydration,
+  rebaseWizardConversationAfterSave,
   resolveWizardConversationHydration,
 } = await import('../src/features/agent/wizardConversationPersistence.ts')
 const {
@@ -459,6 +460,30 @@ test('a shared message id retains the newer local workflow card', () => {
 
   assert.equal(merged[0].text, 'Completed')
   assert.equal(merged[0].cards[0].state, 'completed')
+})
+
+test('a Clear made while an earlier save is in flight is not undone by that save', () => {
+  const earlierCaptured = payload(5, ['old-user', 'old-assistant'])
+  const confirmedEarlierSave = payload(6, [
+    'old-user',
+    'old-assistant',
+    'concurrent-before-clear',
+  ])
+  const pendingClearBase = payload(5, ['old-user', 'old-assistant'])
+  const visibleAfterClear = payload(5, ['welcome-after-clear'])
+
+  const rebased = rebaseWizardConversationAfterSave(
+    visibleAfterClear,
+    earlierCaptured,
+    confirmedEarlierSave,
+    pendingClearBase,
+  )
+
+  assert.equal(rebased.needsPersist, true)
+  assert.deepEqual(rebased.conversation.messages.map(message => message.id), [
+    'concurrent-before-clear',
+    'welcome-after-clear',
+  ])
 })
 
 test('a late hydration fetch cannot replace a newer confirmed snapshot or visible edits', () => {
