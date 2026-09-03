@@ -710,14 +710,31 @@ def _publish_generation_sidecar_for_studio_job(
     for key in ("command_id", "workflow_id", "run_id"):
         if command.get(key):
             payload.setdefault(key, command[key])
+    for key in ("project_id", "production_id", "cue_id", "candidate_id", "song_version"):
+        if provenance.get(key):
+            payload.setdefault(key, provenance[key])
+    project_ref = (
+        {"kind": "story", "id": str(provenance["project_id"])}
+        if provenance.get("project_id") else None
+    )
+    production_ref = (
+        {"kind": "director_production", "id": str(provenance["production_id"])}
+        if provenance.get("production_id") else None
+    )
+    manifest_refs = {}
+    if project_ref:
+        manifest_refs["project"] = project_ref
+    if production_ref:
+        manifest_refs["production"] = production_ref
     publish_generation_sidecar_best_effort(
         output_path,
         payload,
         workspace_id=provenance.get("workspace_id"),
         output_folder=job.get("workspace"),
-        tool=tool,
+        tool=provenance.get("tool") or tool,
         actor=provenance.get("actor"),
         capability=provenance.get("capability"),
+        **manifest_refs,
     )
 
 
@@ -8287,7 +8304,9 @@ async def director_generate_music(request: Request):
     {audio_path} so the frontend can feed it straight into /audio/analyze.
     Returns {audio_path, filename, style, lyrics}."""
     import asyncio
+    from services.generation_provenance import normalize_submission_provenance
     body = await request.json()
+    provenance = normalize_submission_provenance(body.pop("provenance", None))
     description = (body.get("description") or "").strip()
     style = (body.get("style") or "").strip()
     lyrics = (body.get("lyrics") or "").strip()
@@ -8295,7 +8314,13 @@ async def director_generate_music(request: Request):
     model_type = body.get("model_type") or "ace_step_v1_5_xl_sft_lm_4b"
     duration_seconds = body.get("duration_seconds")
     seed = body.get("seed")
+    # ``workspace`` is the physical output-folder name. A Workspace
+    # collection is an optional, explicit provenance reference and must never
+    # be inferred from this folder.
     workspace = body.get("workspace") or _get_active_workspace()
+    collection_id = provenance.get("workspace_id")
+    if collection_id and not _workspace_collection_registry.get(collection_id):
+        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
     try:
         execution_mode.validate_generation(workspace)
     except execution_mode.ExecutionModeError as exc:
@@ -8355,7 +8380,12 @@ async def director_generate_music(request: Request):
     from services.director_pipeline import _submit_and_wait
     try:
         output_files = await asyncio.to_thread(
-            _submit_and_wait, gen_params, timeout_s=1800, out_dir=out_dir
+            _submit_and_wait,
+            gen_params,
+            timeout_s=1800,
+            workspace=workspace,
+            out_dir=out_dir,
+            provenance=provenance,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Music generation failed: {e}")
@@ -8364,7 +8394,15 @@ async def director_generate_music(request: Request):
 
     filename = output_files[0]
     audio_path = os.path.join(out_dir, filename)
-    return {"audio_path": audio_path, "filename": filename, "style": style, "lyrics": lyrics}
+    return {
+        "audio_path": audio_path,
+        "filename": filename,
+        "style": style,
+        "lyrics": lyrics,
+        "job_id": getattr(output_files, "job_id", None),
+        "task_id": getattr(output_files, "task_id", None),
+        "root_task_id": getattr(output_files, "root_task_id", None),
+    }
 
 
 async def _enhance_with_wangp(prompt: str, mode: str, enhancer_enabled: int, image_paths: list = None):
@@ -9593,7 +9631,14 @@ async def director_pipeline_start(request: Request):
     """
     _init_pipeline()
     from services.director_pipeline import get_pipeline, start_pipeline
+    from services.generation_provenance import normalize_submission_provenance
     body = await request.json()
+    body["provenance"] = normalize_submission_provenance(
+        body.pop("provenance", None)
+    )
+    collection_id = body["provenance"].get("workspace_id")
+    if collection_id and not _workspace_collection_registry.get(collection_id):
+        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
     workspace = body.get("workspace") or _get_active_workspace()
     try:
         execution_mode.validate_generation(workspace)
@@ -35687,6 +35732,23 @@ def _publish_generation_task(job: dict) -> dict:
     owner_id = str(params.get("_director_pipeline_id") or "")
     provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
     command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    from services.generation_provenance import task_fields_from_provenance
+
+    task_identity = task_fields_from_provenance(
+        provenance,
+        pipeline_id=owner_id if owner_id and not owner_id.startswith("series:") else None,
+    )
+    task_metadata = {
+        "adapter": "generation", "generation_details": details,
+        "owner_pipeline_id": owner_id,
+        "actor": provenance.get("actor") or "unknown",
+        "tool": provenance.get("tool") or "studio",
+        "capability": provenance.get("capability"),
+        "command_id": command.get("command_id"),
+        "workflow_id": command.get("workflow_id"),
+        "run_id": command.get("run_id"),
+    }
+    task_metadata.update(task_identity.pop("metadata", {}))
     if owner_id.startswith("series:"):
         series_job_id = owner_id.split(":", 1)[1]
         parent_task_id = f"task-series-render-{series_job_id}"
@@ -35745,16 +35807,8 @@ def _publish_generation_task(job: dict) -> dict:
         recoverable=_is_durable_generation_job(job),
         error=({"message": str(error), "retryable": True} if error else None),
         result_refs=list(job.get("output_files") or []),
-        metadata={
-            "adapter": "generation", "generation_details": details,
-            "owner_pipeline_id": owner_id,
-            "actor": provenance.get("actor") or "unknown",
-            "tool": provenance.get("tool") or "studio",
-            "capability": provenance.get("capability"),
-            "command_id": command.get("command_id"),
-            "workflow_id": command.get("workflow_id"),
-            "run_id": command.get("run_id"),
-        },
+        **task_identity,
+        metadata=task_metadata,
     )
 
 
@@ -35990,6 +36044,20 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
         return None
     progress = pipeline.get("progress") if isinstance(pipeline.get("progress"), dict) else {}
     details = pipeline.get("generation_details") if isinstance(pipeline.get("generation_details"), dict) else {}
+    snapshot = pipeline.get("_params_snapshot") if isinstance(pipeline.get("_params_snapshot"), dict) else {}
+    params = pipeline.get("params") if isinstance(pipeline.get("params"), dict) else {}
+    provenance = pipeline.get("provenance") if isinstance(pipeline.get("provenance"), dict) else {}
+    if not provenance:
+        provenance = snapshot.get("provenance") if isinstance(snapshot.get("provenance"), dict) else {}
+    if not provenance:
+        provenance = params.get("provenance") if isinstance(params.get("provenance"), dict) else {}
+    from services.generation_provenance import task_fields_from_provenance
+
+    task_identity = task_fields_from_provenance(
+        provenance,
+        pipeline_id=pipeline_id,
+    )
+    canonical_pipeline_id = task_identity.pop("pipeline_id", pipeline_id)
     schedule = pipeline.get("resource_schedule") if isinstance(pipeline.get("resource_schedule"), dict) else {}
     schedule_lanes = schedule.get("lanes") if isinstance(schedule.get("lanes"), dict) else {}
     resource_requirements = list(dict.fromkeys(
@@ -35997,6 +36065,18 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
         for lane in schedule_lanes.values()
         if isinstance(lane, dict) and str(lane.get("key") or "")
     ))
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    task_metadata = {
+        "adapter": "director", "generation_details": details,
+        "resource_schedule": schedule,
+        "actor": provenance.get("actor") or "unknown",
+        "tool": provenance.get("tool") or "director",
+        "capability": provenance.get("capability"),
+        "command_id": command.get("command_id"),
+        "workflow_id": command.get("workflow_id"),
+        "run_id": command.get("run_id"),
+    }
+    task_metadata.update(task_identity.pop("metadata", {}))
     raw_status = str(pipeline.get("status") or "").strip().lower()
     status = {
         "crashed": "interrupted",
@@ -36041,12 +36121,13 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
         model=str(details.get("text_model") or details.get("video_model_name") or ""),
         server_origin=str(details.get("text_server") or ""),
         resource_requirements=resource_requirements,
-        pipeline_id=pipeline_id, backend_job_id=pipeline_id,
+        pipeline_id=canonical_pipeline_id, backend_job_id=pipeline_id,
         cancelable=status in {"created", "queued", "waiting_resource", "running"},
         resumable=True, recoverable=True,
         error=({"message": str(pipeline.get("error")), "retryable": True} if pipeline.get("error") else None),
         result_refs=list(pipeline.get("output_files") or []),
-        metadata={"adapter": "director", "generation_details": details, "resource_schedule": schedule},
+        **task_identity,
+        metadata=task_metadata,
     )
 
 

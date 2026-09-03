@@ -1,6 +1,10 @@
 import unittest
 
-from app.services.generation_provenance import normalize_submission_provenance
+from app.services.generation_provenance import (
+    normalize_submission_provenance,
+    resolve_generation_location,
+    task_fields_from_provenance,
+)
 
 
 class GenerationSubmissionProvenanceTests(unittest.TestCase):
@@ -37,6 +41,77 @@ class GenerationSubmissionProvenanceTests(unittest.TestCase):
             normalize_submission_provenance({"actor": "administrator"})["actor"],
             "unknown",
         )
+
+    def test_preserves_story_object_references_but_not_runtime_ids(self):
+        value = normalize_submission_provenance({
+            "actor": "wizard",
+            "capability": "generate_story_song",
+            "workspace_id": "music-night",
+            "project_id": "story-1",
+            "production_id": "production-1",
+            "cue_id": "cue-1",
+            "candidate_id": "candidate-1",
+            "song_version": "2",
+            "command": {"task_id": "spoofed-task", "pipeline_id": "spoofed-pipeline"},
+        })
+        self.assertEqual(value["project_id"], "story-1")
+        self.assertEqual(value["production_id"], "production-1")
+        self.assertEqual(value["cue_id"], "cue-1")
+        self.assertEqual(value["candidate_id"], "candidate-1")
+        self.assertEqual(value["song_version"], "2")
+        self.assertEqual(value["tool"], "story_lab")
+        self.assertNotIn("task_id", value["command"])
+        self.assertNotIn("pipeline_id", value["command"])
+
+    def test_derives_director_tool_from_the_allow_listed_capability(self):
+        value = normalize_submission_provenance({
+            "actor": "wizard",
+            "tool": "spoofed",
+            "capability": "start_director_production",
+        })
+        self.assertEqual(value["tool"], "director")
+
+    def test_physical_output_folder_does_not_invent_workspace_collection(self):
+        """A Story output folder is usable without a collection record."""
+        value = normalize_submission_provenance({
+            "actor": "wizard",
+            "output_folder": "e2e_wizard",
+            "project_id": "story-1",
+        })
+        self.assertNotIn("workspace_id", value)
+        self.assertNotIn("output_folder", value)
+        self.assertEqual(
+            resolve_generation_location(output_folder="e2e_wizard"),
+            {"workspace_id": None, "output_folder": "e2e_wizard"},
+        )
+
+    def test_projects_story_song_identity_into_canonical_task_fields(self):
+        fields = task_fields_from_provenance({
+            "project_id": "story-1",
+            "cue_id": "cue-1",
+            "candidate_id": "candidate-2",
+            "song_version": "2",
+        })
+        self.assertEqual(fields["project_id"], "story-1")
+        self.assertEqual(fields["entity_type"], "song_candidate")
+        self.assertEqual(fields["entity_id"], "candidate-2")
+        self.assertEqual(fields["metadata"], {
+            "cue_id": "cue-1",
+            "candidate_id": "candidate-2",
+            "song_version": "2",
+        })
+
+    def test_director_production_wins_as_task_entity_and_owns_pipeline(self):
+        fields = task_fields_from_provenance({
+            "project_id": "story-1",
+            "production_id": "production-1",
+            "cue_id": "cue-1",
+            "candidate_id": "candidate-2",
+        }, pipeline_id="pipeline-7")
+        self.assertEqual(fields["entity_type"], "production")
+        self.assertEqual(fields["entity_id"], "production-1")
+        self.assertEqual(fields["pipeline_id"], "pipeline-7")
+        self.assertEqual(fields["metadata"]["candidate_id"], "candidate-2")
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ import {
   generationProvenancePayload,
   type GenerationSubmissionContext,
 } from '../features/studio/generationProvenance'
+import { storyDirectorSubmissionProvenance } from '../features/stories/provenance'
 
 const DASHBOARD_PIPELINE_PAGE_SIZE = 8
 const CIVIT_DOWNLOAD_POLL_MS = 2000
@@ -1692,6 +1693,8 @@ interface AppState extends LlmSlice, StudioConfigurationSlice {
     workspace: string
     projectId: string
     productionId: string
+    cueId?: string
+    candidateId?: string
   } | null
   directorResolution: ResolutionPreset
   directorAspectRatio: AspectRatio
@@ -9424,6 +9427,9 @@ export const useStore = create<AppState>((set, get) => {
     if (shortFilmPath === 'story') pipelineType = 'short_film_story'
     else if (shortFilmPath === 'audio') pipelineType = 'short_film_audio'
 
+    const storyProvenance = storyDirectorSubmissionProvenance(
+      state.directorStoryProductionHandoff,
+    )
     const pipelineParams: Record<string, unknown> = {
       pipeline_type: pipelineType,
       production_kind: (
@@ -9433,6 +9439,7 @@ export const useStore = create<AppState>((set, get) => {
       ),
       auto_mode: useCurrentPlans ? true : directorAutoMode,
       workspace: get().activeWorkspace,
+      ...(storyProvenance ? { provenance: storyProvenance } : {}),
       scene_description: directorSceneDescription,
       spoken_language: state.directorSpokenLanguage || undefined,
       audio_path: directorAudioPath,

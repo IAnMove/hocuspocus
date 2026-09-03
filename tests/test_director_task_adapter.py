@@ -99,3 +99,31 @@ def test_director_adapter_uses_concrete_lane_keys_not_phase_names():
     assert captured["resource_requirements"] == [
         "remote:https://api.minimax.io", "local_gpu:0",
     ]
+
+
+def test_director_adapter_exposes_story_song_identity_from_checkpoint_snapshot():
+    publish, captured = _load_adapter()
+
+    publish({
+        "pipeline_id": "pipeline-identity",
+        "status": "running",
+        "_params_snapshot": {"provenance": {
+            "actor": "wizard",
+            "capability": "start_director_production",
+            "project_id": "story-1",
+            "production_id": "production-1",
+            "cue_id": "cue-1",
+            "candidate_id": "candidate-1",
+            "song_version": "1",
+        }},
+    }, "night-shift")
+
+    assert captured["project_id"] == "story-1"
+    assert captured["entity_type"] == "production"
+    assert captured["entity_id"] == "production-1"
+    assert captured["pipeline_id"] == "pipeline-identity"
+    assert captured["metadata"]["actor"] == "wizard"
+    assert captured["metadata"]["tool"] == "director"
+    assert captured["metadata"]["capability"] == "start_director_production"
+    assert captured["metadata"]["cue_id"] == "cue-1"
+    assert captured["metadata"]["candidate_id"] == "candidate-1"

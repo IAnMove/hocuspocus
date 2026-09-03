@@ -1286,16 +1286,28 @@ def persist_pipeline_output_timing(
     if not isinstance(params, dict):
         params = {}
         metadata["params"] = params
+    snapshot = pipeline.get("_params_snapshot") if isinstance(pipeline.get("_params_snapshot"), dict) else {}
+    if not snapshot:
+        snapshot = pipeline.get("params") if isinstance(pipeline.get("params"), dict) else {}
+    provenance = _first_provenance(
+        pipeline.get("provenance"), snapshot.get("provenance"),
+    )
     pipeline_id = pipeline.get("pipeline_id") or pipeline.get("id")
     if pipeline_id:
         params.setdefault("director_pipeline_id", str(pipeline_id))
         metadata.setdefault("director_pipeline_id", str(pipeline_id))
         metadata.setdefault("pipeline_id", str(pipeline_id))
-    for key in ("job_id", "task_id", "root_task_id"):
-        value = pipeline.get(key)
+    correlations, project_ref, production_ref = _director_sidecar_provenance(provenance)
+    for key in (
+        "command_id", "workflow_id", "run_id", "job_id", "task_id",
+        "root_task_id", "cue_id", "candidate_id", "song_version",
+    ):
+        value = pipeline.get(key) or correlations.get(key)
         if value:
             metadata.setdefault(key, str(value))
-    snapshot = pipeline.get("params") if isinstance(pipeline.get("params"), dict) else {}
+    if pipeline_id:
+        metadata.setdefault("task_id", str(pipeline.get("task_id") or correlations.get("task_id") or f"task-director-{pipeline_id}"))
+        metadata.setdefault("root_task_id", str(pipeline.get("root_task_id") or correlations.get("root_task_id") or metadata["task_id"]))
     from services.output_result_kind import result_kind_for_pipeline
     result_kind = result_kind_for_pipeline(snapshot)
     if result_kind:
@@ -1310,8 +1322,13 @@ def persist_pipeline_output_timing(
         publish_generation_sidecar(
             os.path.join(out_dir, filename),
             metadata,
+            workspace_id=provenance.get("workspace_id"),
             output_folder=_physical_output_folder(pipeline.get("workspace")),
             tool="director",
+            actor=provenance.get("actor"),
+            capability=provenance.get("capability"),
+            project=project_ref,
+            production=production_ref,
         )
         return True
     except Exception as error:
@@ -1329,6 +1346,35 @@ def _physical_output_folder(value: Any) -> Optional[str]:
         return None
     name = os.path.basename(text.replace("\\", "/"))
     return name or None
+
+
+def _first_provenance(*values: Any) -> dict:
+    for value in values:
+        if isinstance(value, dict) and value:
+            return value
+    return {}
+
+
+def _director_sidecar_provenance(
+    provenance: Mapping[str, Any],
+) -> tuple[dict[str, str], Optional[dict[str, str]], Optional[dict[str, str]]]:
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    correlations = {}
+    for key in (
+        "command_id", "workflow_id", "run_id", "job_id", "task_id",
+        "root_task_id", "cue_id", "candidate_id", "song_version",
+    ):
+        value = command.get(key) or provenance.get(key)
+        if value:
+            correlations[key] = str(value)
+    project_id = provenance.get("project_id")
+    production_id = provenance.get("production_id")
+    project = {"kind": "story", "id": str(project_id)} if project_id else None
+    production = (
+        {"kind": "director_production", "id": str(production_id)}
+        if production_id else None
+    )
+    return correlations, project, production
 
 
 def _write_director_assembly_sidecar(
@@ -1351,11 +1397,20 @@ def _write_director_assembly_sidecar(
     if pipeline_id:
         payload.setdefault("pipeline_id", str(pipeline_id))
         payload.setdefault("director_pipeline_id", str(pipeline_id))
+    provenance = _first_provenance(payload.get("provenance"), params.get("provenance"))
+    correlations, project_ref, production_ref = _director_sidecar_provenance(provenance)
+    for key, value in correlations.items():
+        payload.setdefault(key, value)
     publish_generation_sidecar(
         final_path,
         payload,
+        workspace_id=provenance.get("workspace_id"),
         output_folder=_physical_output_folder(output_folder),
         tool="director",
+        actor=provenance.get("actor"),
+        capability=provenance.get("capability"),
+        project=project_ref,
+        production=production_ref,
     )
 
 
@@ -5142,6 +5197,12 @@ def _pipeline_observer_snapshot(pipeline: dict) -> dict:
     snapshot["pipeline_type"] = snapshot.get("pipeline_type") or (
         params or {}
     ).get("pipeline_type", "")
+    # ``params`` is intentionally omitted from observer snapshots because it
+    # may contain prompts and provider details. Provenance is the portable,
+    # non-sensitive identity contract needed by the task adapter, so project
+    # and song-to-video references must survive that projection.
+    if isinstance(params, dict) and isinstance(params.get("provenance"), dict):
+        snapshot["provenance"] = copy.deepcopy(params["provenance"])
     details = _public_pipeline_generation_details(
         params,
         len(snapshot.get("clip_plans") or []),
@@ -5237,9 +5298,20 @@ def init(
 class _DirectorOutputs(list):
     """List-compatible outputs that retain exact Director clip ownership."""
 
-    def __init__(self, values, clip_output_files=None):
+    def __init__(
+        self,
+        values,
+        clip_output_files=None,
+        *,
+        job_id: str | None = None,
+        task_id: str | None = None,
+        root_task_id: str | None = None,
+    ):
         super().__init__(values)
         self.clip_output_files = dict(clip_output_files or {})
+        self.job_id = job_id
+        self.task_id = task_id
+        self.root_task_id = root_task_id
 
 
 class _GenerationTimeoutError(RuntimeError):
@@ -5259,10 +5331,24 @@ class GenerationCancelledError(RuntimeError):
 def _director_job_outputs(job: dict) -> _DirectorOutputs:
     """Collapse multi-window files to the final output for each clip."""
     snapshot = snapshot_job(job)
+    job_id = str(snapshot.get("id") or "").strip() or None
+    params = snapshot.get("params") if isinstance(snapshot.get("params"), dict) else {}
+    task_id = str(snapshot.get("task_id") or "").strip() or (
+        f"task-generation-{job_id}" if job_id else None
+    )
+    owner_id = str(params.get("_director_pipeline_id") or "").strip()
+    root_task_id = str(snapshot.get("root_task_id") or "").strip() or (
+        f"task-director-{owner_id}" if owner_id else task_id
+    )
     output_files = list(snapshot.get("output_files") or [])
     clip_outputs = snapshot.get("clip_output_files") or {}
     if not isinstance(clip_outputs, dict) or not clip_outputs:
-        return _DirectorOutputs(output_files)
+        return _DirectorOutputs(
+            output_files,
+            job_id=job_id,
+            task_id=task_id,
+            root_task_id=root_task_id,
+        )
 
     indexed = []
     for index, filename in clip_outputs.items():
@@ -5278,6 +5364,9 @@ def _director_job_outputs(job: dict) -> _DirectorOutputs:
     return _DirectorOutputs(
         collapsed or output_files,
         {index: filename for index, filename in indexed if filename},
+        job_id=job_id,
+        task_id=task_id,
+        root_task_id=root_task_id,
     )
 
 
@@ -5351,7 +5440,13 @@ def _acknowledge_pipeline_cancel(pid: str, *, force: bool = False) -> bool:
     return True
 
 
-def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None, out_dir: str = None) -> list[str]:
+def _submit_and_wait(
+    params: dict,
+    timeout_s: float = 600,
+    workspace: str = None,
+    out_dir: str = None,
+    provenance: dict | None = None,
+) -> list[str]:
     """Submit a generation job and block until it completes.
 
     ``timeout_s`` is an inactivity timeout, not an absolute wall-clock limit.
@@ -5362,8 +5457,23 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
     """
     _prepare_director_generation_params(params)
     job_id = uuid.uuid4().hex[:8]
+    owner_id = str(params.get("_director_pipeline_id") or "").strip()
+    if provenance is None and owner_id:
+        # Every Director child must inherit the stable Story/production/song
+        # lineage. Centralising that rule here covers normal generation,
+        # retries and detached clip repairs without per-renderer plumbing.
+        # These fields are immutable after pipeline creation, so reading the
+        # already-published owner must not wait on the cancellation lock before
+        # this child has registered itself.
+        owner = _pipelines.get(owner_id) or {}
+        owner_params = owner.get("params") if isinstance(owner.get("params"), dict) else {}
+        provenance = copy.deepcopy(owner_params.get("provenance") or {})
+    task_id = f"task-generation-{job_id}"
+    root_task_id = f"task-director-{owner_id}" if owner_id else task_id
     job = {
         "id": job_id,
+        "task_id": task_id,
+        "root_task_id": root_task_id,
         "status": "queued",
         "progress": 0,
         "step": 0,
@@ -5376,6 +5486,7 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
         "error": None,
         "workspace": workspace,
         "out_dir": out_dir,
+        "provenance": copy.deepcopy(provenance or {}),
         "last_progress_at": time.time(),
     }
     _dir_pid = params.get("_director_pipeline_id")
@@ -13542,6 +13653,10 @@ def _run_minimax_h3_story_video(
                 direct_video_master_prompt if direct_video else ""
             ),
         },
+        # The assembly helper is called with this legacy-shaped payload. Keep
+        # the immutable workflow provenance beside it so the final manifest
+        # can be upgraded even after the live pipeline registry is gone.
+        "provenance": copy.deepcopy(params.get("provenance") or {}),
         "generation_mode": "video",
         "result_kind": result_kind,
         "created_at": time.time(),

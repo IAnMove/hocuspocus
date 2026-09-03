@@ -108,6 +108,14 @@ test('quoted user dialogue is protected deterministically while a quoted style i
   assert.equal(action.type === 'prepare_video' && action.languageIntent?.spokenLanguage, 'es')
 })
 
+test('ordinary Spanish articles are not mistaken for ISO language tags', () => {
+  const segments = extractVerbatimSegments(
+    'Hazme un videoclip titulado exactamente "Linus Libre" de una canción en la que Linus lucha.',
+  )
+  assert.equal(segments.length, 1)
+  assert.equal(segments[0].language, '')
+})
+
 test('merge keeps persisted literals when a later action only changes spoken language', () => {
   const merged = mergeLanguageIntent(mixedIntent, normalizeLanguageIntent({ spoken_language: 'Català' }))
   assert.equal(merged.spokenLanguage, 'Català')

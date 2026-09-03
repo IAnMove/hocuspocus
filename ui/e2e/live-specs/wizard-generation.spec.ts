@@ -109,14 +109,23 @@ async function storyProjectIds(request: APIRequestContext, workspace: string): P
   )))
 }
 
-async function waitForNewStoryProject(request: APIRequestContext, workspace: string, previous: Set<string>) {
+async function waitForNewStoryProject(
+  request: APIRequestContext,
+  workspace: string,
+  previous: Set<string>,
+  expectedTitle?: string,
+) {
   let projectId = ''
   await expect.poll(async () => {
     const library = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`) as {
-      projects: Record<string, { id?: string }>
+      projects: Record<string, { id?: string; title?: string }>
     }
     projectId = Object.entries(library.projects || {})
-      .find(([id, project]) => !previous.has(id) && !previous.has(String(project.id || '')))?.[0] || ''
+      .find(([id, project]) => (
+        !previous.has(id)
+        && !previous.has(String(project.id || ''))
+        && (!expectedTitle || project.title === expectedTitle)
+      ))?.[0] || ''
     return projectId
   }, { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] }).not.toBe('')
   const library = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`) as {
@@ -304,7 +313,7 @@ test('wizard: vocal Spanish song → selected version → music-video Director',
   expect(cue?.candidates?.length).toBeGreaterThanOrEqual(2)
   const latest = [...(cue?.candidates || [])].sort((left, right) => Number(right.version || 0) - Number(left.version || 0))[0]
   expect(cue?.selectedCandidateId).toBe(latest?.id)
-  await expect(page.getByRole('button', { name: 'Director', exact: true })).toHaveClass(/bg-toggle-active/)
+  await expect(page.getByRole('tab', { name: 'Director', exact: true })).toHaveAttribute('aria-selected', 'true')
   await attachEvidence(page, request, testInfo, transcript)
 })
 
@@ -319,18 +328,24 @@ test('wizard: one-turn new song request never reuses the selected music-video pr
   const transcript = await ask(page,
     `Hazme un videoclip titulado exactamente "${title}" de una canción de 20 segundos en la que Linus Torvalds sea el protagonista y luche contra el software propietario, siempre en animación dibujada inspirada en la película de animación adulta Heavy Metal de 1981. Escribe la letra vocal, genera la canción con ACE-Step 1.5 XL y ejecuta el videoclip. Invéntalo todo y no reutilices ninguna canción anterior.`,
   )
-  const { project } = await waitForNewStoryProject(request, workspace, beforeStories) as {
-    project: {
+  const created = await waitForNewStoryProject(request, workspace, beforeStories, title)
+  const projectId = created.id
+  await waitForTerminalRoot(request, workspace, beforeTasks, 'completed')
+  await waitForCompletedDirectorPipeline(request, beforeDirector)
+  // Creation is observable before the later song/staging mutations complete.
+  // Assert the final persisted object, not that deliberately early snapshot.
+  const finalLibrary = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`) as {
+    projects: Record<string, {
       title?: string
       projectType?: string
       premise?: string
       synopsis?: string
       creativeBrief?: { generalIdea?: string }
       music?: { cues?: Array<{ lyrics?: string; selectedCandidateId?: string; candidates?: Array<{ id?: string }> }> }
-    }
+    }>
   }
-  await waitForTerminalRoot(request, workspace, beforeTasks, 'completed')
-  await waitForCompletedDirectorPipeline(request, beforeDirector)
+  const project = finalLibrary.projects[projectId]
+  expect(project).toBeTruthy()
   const authoredText = [
     project.title,
     project.premise,
@@ -349,18 +364,34 @@ test('wizard: one-turn new song request never reuses the selected music-video pr
     window as Window & { __HOCUSPOCUS_WIZARD_TRACE__?: Array<Record<string, unknown>> }
   ).__HOCUSPOCUS_WIZARD_TRACE__ || []) as Array<{
     turn?: { actions?: Array<{ type?: string; title?: string; targetStoryTitle?: string; songTitle?: string; cueTitle?: string }> }
+    results?: Array<{
+      action?: { type?: string; title?: string; targetStoryId?: string; targetStoryTitle?: string; songTitle?: string; cueId?: string; cueTitle?: string; candidateId?: string; productionId?: string }
+      report?: { target?: { id?: string; title?: string } }
+    }>
   }>
-  const actions = wizardTrace.at(-1)?.turn?.actions || []
+  const traceEntry = wizardTrace.at(-1)
+  const actions = traceEntry?.turn?.actions || []
   expect(actions.map(action => action.type)).toEqual([
     'create_story', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production',
   ])
   const create = actions[0]
-  expect(actions[1]?.targetStoryTitle).toBe(create?.title)
-  expect(actions[2]?.targetStoryTitle).toBe(create?.title)
-  expect(actions[3]?.targetStoryTitle).toBe(create?.title)
-  expect(actions[2]?.cueTitle).toBe(actions[1]?.songTitle)
-  expect(actions[3]?.cueTitle).toBe(actions[1]?.songTitle)
-  await expect(page.getByRole('button', { name: 'Director', exact: true })).toHaveClass(/bg-toggle-active/)
+  // `turn.actions` is the provider's proposed plan and is allowed to omit
+  // IDs/titles that only exist after create_story executes. The contract to
+  // assert is the hydrated action carried by each result/command, because
+  // that is what the UI adapter really ran and what a resumed workflow uses.
+  const hydrated = (traceEntry?.results || []).map(result => result.action || {})
+  expect(hydrated.map(action => action.type)).toEqual(actions.map(action => action.type))
+  expect(hydrated[1]?.targetStoryTitle).toBe(create?.title)
+  expect(hydrated[2]?.targetStoryTitle).toBe(create?.title)
+  expect(hydrated[3]?.targetStoryTitle).toBe(create?.title)
+  expect(hydrated[1]?.targetStoryId).toBe(traceEntry?.results?.[0]?.report?.target?.id)
+  expect(hydrated[2]?.targetStoryId).toBe(traceEntry?.results?.[0]?.report?.target?.id)
+  expect(hydrated[3]?.targetStoryId).toBe(traceEntry?.results?.[0]?.report?.target?.id)
+  expect(hydrated[2]?.cueId).toBe(traceEntry?.results?.[1]?.report?.target?.id)
+  expect(hydrated[3]?.cueId).toBe(traceEntry?.results?.[1]?.report?.target?.id)
+  expect(hydrated[3]?.candidateId).toBe(traceEntry?.results?.[2]?.report?.target?.id)
+  expect(hydrated[4]?.productionId).toBe(traceEntry?.results?.[3]?.report?.target?.id)
+  await expect(page.getByRole('tab', { name: 'Director', exact: true })).toHaveAttribute('aria-selected', 'true')
   await attachEvidence(page, request, testInfo, transcript)
 })
 

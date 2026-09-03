@@ -473,6 +473,63 @@ test('runtime passes the persisted cue identity to song generation and videoclip
   }
 })
 
+test('reusing generate_story_song still binds its persisted candidate ID to staging', async () => {
+  const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
+  const { defaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const { useStoryStore } = await import('../src/features/stories/store.ts')
+  const original = {
+    configureSong: defaultApplicationAdapters.storyLab.configureSong,
+    generateSong: defaultApplicationAdapters.storyLab.generateSong,
+    stageMusicVideo: defaultApplicationAdapters.storyLab.stageMusicVideo,
+  }
+  const received = []
+  const originalStory = useStoryStore.getState().project
+  useStoryStore.setState({ project: { ...originalStory, id: 'story-real', title: 'El Himno del Sysadmin 3' } })
+  clearExecutionMemory()
+  const configure = {
+    type: 'configure_story_song', targetStoryTitle: 'El Himno del Sysadmin 3', songTitle: 'El Himno del Sysadmin',
+    brief: 'Himno', style: 'metal', lyrics: '[Verse]\nNoche', writeLyrics: false,
+    lyricsLanguage: 'Español', instrumental: false, model: 'ace_step_v1_5_xl_sft_lm_4b', durationSeconds: 75,
+  }
+  const generate = {
+    type: 'generate_story_song', targetStoryTitle: 'El Himno del Sysadmin 3', cueTitle: 'El Himno del Sysadmin', confirm: true,
+  }
+  defaultApplicationAdapters.storyLab.configureSong = async () => ({
+    message: 'Cue saved', target: { kind: 'story_song', id: 'cue-real', title: 'El Himno del Sysadmin' },
+    projectTarget: { kind: 'story', id: 'story-real', title: 'El Himno del Sysadmin 3' },
+  })
+  defaultApplicationAdapters.storyLab.generateSong = async action => {
+    received.push(action)
+    return { message: 'Song generated', target: { kind: 'story_song', id: 'song-real', title: action.cueTitle }, outputNames: ['song.wav'] }
+  }
+  defaultApplicationAdapters.storyLab.stageMusicVideo = async action => {
+    received.push(action)
+    return { message: 'Video staged', target: { kind: 'director_production', id: 'production-real', title: 'Video' } }
+  }
+  try {
+    const first = await executeAgentActions([configure, generate])
+    assert.equal(first.every(result => result.ok), true)
+    const resumed = await executeAgentActions([configure, generate, {
+      type: 'stage_story_music_video', targetStoryTitle: 'El Himno del Sysadmin 3',
+      songName: 'El Himno del Sysadmin · Español', cueTitle: 'El Himno del Sysadmin',
+      pacing: 'rhythmic', confirm: true,
+    }])
+    assert.equal(resumed.every(result => result.ok), true)
+    assert.match(resumed[1].message, /Reutilizo/)
+    assert.equal(received.filter(action => action.type === 'generate_story_song').length, 1)
+    const staged = received.find(action => action.type === 'stage_story_music_video')
+    assert.equal(staged.candidateId, 'song-real')
+    assert.equal(staged.cueId, 'cue-real')
+  } finally {
+    defaultApplicationAdapters.storyLab.configureSong = original.configureSong
+    defaultApplicationAdapters.storyLab.generateSong = original.generateSong
+    defaultApplicationAdapters.storyLab.stageMusicVideo = original.stageMusicVideo
+    useStoryStore.setState({ project: originalStory })
+    clearExecutionMemory()
+  }
+})
+
 test('a Wizard turn stops and asks when its output-folder context changes mid-flight', async () => {
   const { executeAgentActions } = await import('../src/features/agent/agentActions.ts')
   const { defaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')

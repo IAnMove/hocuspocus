@@ -85,6 +85,7 @@ export interface CapabilityPresentation {
 export interface CapabilityExecutionOutcome {
   message: string
   report?: AgentExecutionReport
+  metadata?: Record<string, unknown>
   target?: AgentExecutionTarget
   projectTarget?: AgentExecutionTarget
   taskId?: string
@@ -896,7 +897,7 @@ defineCapability<AgentStartDirectorProductionAction>({
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action },
   async execute(action, context) {
     const outcome = await context.adapters.storyLab.startDirectorProduction(action)
-    return { ...outcome, report: executionReport({ state: 'running', message: outcome.message, target: outcome.target, pipelineId: outcome.pipelineId, recoverable: false, executionKey: executionKey({ workspace: useStore.getState().activeWorkspace || 'default', type: action.type, targetId: outcome.target.id, params: action }) }) }
+    return { ...outcome, report: executionReport({ state: 'running', message: outcome.message, target: outcome.target, pipelineId: outcome.pipelineId, metadata: outcome.metadata, recoverable: false, executionKey: executionKey({ workspace: useStore.getState().activeWorkspace || 'default', type: action.type, targetId: outcome.target.id, params: action }) }) }
   }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'director_production', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: { destination: 'director', anchors: ['production', 'pipeline'], replay: 'atomic' },
@@ -1004,15 +1005,16 @@ defineCapability<AgentStageStoryMusicVideoAction>({
   name: 'stage_story_music_video', title: 'Prepare a Story music video in Director',
   description: 'Resolve the exact Story song and cue, then prepare a verified Music Video Director production without launching it.',
   useWhen: 'The user asks to prepare a Story music video for later launch.',
-  parameters: ['target_story_id', 'target_story_title', 'song_name', 'cue_id', 'cue_title', 'pacing', 'confirm'],
-  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_music_video' }, target_story_id: { type: 'string', maxLength: 240 }, target_story_title: { type: 'string', maxLength: 300 }, song_name: { type: 'string', maxLength: 300 }, cue_id: { type: 'string', maxLength: 240 }, cue_title: { type: 'string', maxLength: 300 }, pacing: { type: 'string', enum: ['cinematic', 'balanced', 'rhythmic'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
+  parameters: ['target_story_id', 'target_story_title', 'song_name', 'cue_id', 'candidate_id', 'cue_title', 'pacing', 'confirm'],
+  inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'stage_story_music_video' }, target_story_id: { type: 'string', maxLength: 240 }, target_story_title: { type: 'string', maxLength: 300 }, song_name: { type: 'string', maxLength: 300 }, cue_id: { type: 'string', maxLength: 240 }, candidate_id: { type: 'string', maxLength: 240 }, cue_title: { type: 'string', maxLength: 300 }, pacing: { type: 'string', enum: ['cinematic', 'balanced', 'rhythmic'] }, confirm: { const: true } }, required: ['type', 'confirm'] },
   risk: 'edit', confirmation: 'required', progress: 'Preparando el videoclip de Story en Director…',
   resolve(raw) {
     if (raw.confirm !== true) return null
     const pacing = text(raw.pacing, 20)
     const targetStoryId = text(raw.target_story_id, 240)
     const cueId = text(raw.cue_id, 240)
-    return { type: 'stage_story_music_video', ...(targetStoryId ? { targetStoryId } : {}), targetStoryTitle: text(raw.target_story_title, 300), songName: text(raw.song_name, 300), ...(cueId ? { cueId } : {}), cueTitle: text(raw.cue_title, 300), pacing: pacing === 'cinematic' || pacing === 'rhythmic' ? pacing : 'balanced', confirm: true }
+    const candidateId = text(raw.candidate_id, 240)
+    return { type: 'stage_story_music_video', ...(targetStoryId ? { targetStoryId } : {}), targetStoryTitle: text(raw.target_story_title, 300), songName: text(raw.song_name, 300), ...(cueId ? { cueId } : {}), ...(candidateId ? { candidateId } : {}), cueTitle: text(raw.cue_title, 300), pacing: pacing === 'cinematic' || pacing === 'rhythmic' ? pacing : 'balanced', confirm: true }
   },
   validate(action) { return action.confirm === true ? [] : ['confirmation is required'] }, async prepare(action) { return action }, async execute(action, context) { return context.adapters.storyLab.stageMusicVideo(action) }, correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'director_production', successState: 'prepared' }, summarize(_action, outcome) { return outcome.message }, presentation: { destination: 'director', anchors: ['production', 'music'], replay: 'atomic' },

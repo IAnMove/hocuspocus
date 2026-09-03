@@ -46,6 +46,7 @@ const AGENT_ACTIONS_IMPORTS = [
   './characterKitActions',
   './commandContract',
   './sfxPack',
+  './storyWorkflowIdentity',
   './videoEditorActions',
   './wizardContext',
 ]

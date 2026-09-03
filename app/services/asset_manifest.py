@@ -229,7 +229,7 @@ def build_asset_manifest(
         "mode": execution_mode,
         **{key: _clean_text(correlation.get(key)) for key in (
             "command_id", "workflow_id", "run_id", "task_id", "root_task_id",
-            "job_id", "pipeline_id",
+            "job_id", "pipeline_id", "cue_id", "candidate_id", "song_version",
         )},
         "error": _redact(dict(error)) if isinstance(error, Mapping) else None,
     }
@@ -331,8 +331,15 @@ def adapt_legacy_sidecar(
     *,
     workspace_id: str | None = None,
     output_folder: str | None = None,
+    project: Mapping[str, Any] | None = None,
+    production: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return a canonical read model for a legacy sidecar without rewriting it."""
+    """Return a canonical read model for a legacy sidecar without rewriting it.
+
+    ``project`` and ``production`` are optional runtime-owned references. They
+    are accepted here so a legacy-shaped sidecar can still be upgraded with
+    the exact Story/Director identity known by its publisher.
+    """
     params = legacy.get("params") if isinstance(legacy.get("params"), Mapping) else {}
     generation_mode = legacy.get("generation_mode") or params.get("generation_mode")
     prompts = {
@@ -356,7 +363,10 @@ def adapt_legacy_sidecar(
     )
     correlations = {
         key: legacy.get(key) or params.get(key)
-        for key in ("command_id", "workflow_id", "run_id", "task_id", "root_task_id", "job_id", "pipeline_id")
+        for key in (
+            "command_id", "workflow_id", "run_id", "task_id", "root_task_id",
+            "job_id", "pipeline_id", "cue_id", "candidate_id", "song_version",
+        )
     }
     if not _clean_text(correlations.get("pipeline_id")):
         correlations["pipeline_id"] = (
@@ -384,6 +394,8 @@ def adapt_legacy_sidecar(
         kind=infer_asset_kind(str(output_path), generation_mode),
         workspace_id=stable_workspace,
         output_folder=stable_folder,
+        project=project,
+        production=production,
         tool=legacy.get("tool") or params.get("source") or "legacy",
         capability=legacy.get("capability"),
         actor=legacy.get("actor") or "unknown",
@@ -464,6 +476,8 @@ def publish_generation_sidecar(
     *,
     workspace_id: str | None = None,
     output_folder: str | None = None,
+    project: Mapping[str, Any] | None = None,
+    production: Mapping[str, Any] | None = None,
     tool: str | None = None,
     actor: str | None = None,
     capability: str | None = None,
@@ -482,6 +496,10 @@ def publish_generation_sidecar(
     ``workspace_id`` is a Workspace collection ID. ``output_folder`` is the
     physical directory name. Legacy callers that only pass ``workspace_id``
     keep that string on both fields.
+
+    ``project`` and ``production`` are canonical object references supplied by
+    the owning workflow. They are preserved in ``origin`` even though the
+    compatibility sidecar remains legacy-shaped at the top level.
     """
     payload = dict(sidecar)
     location = resolve_generation_location(
@@ -497,6 +515,8 @@ def publish_generation_sidecar(
         payload,
         workspace_id=location.get("workspace_id"),
         output_folder=location.get("output_folder"),
+        project=project,
+        production=production,
     )
     manifest["asset"]["id"] = asset_id
     origin = dict(manifest.get("origin") or {})

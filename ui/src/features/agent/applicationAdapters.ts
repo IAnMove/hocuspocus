@@ -55,6 +55,7 @@ export interface AdapterOutcome {
   layerIds?: string[]
   audioTrackId?: string
   analysisId?: string
+  metadata?: Record<string, unknown>
   bpm?: number
   beatCount?: number
   downbeatCount?: number
@@ -440,13 +441,15 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const { stageVideo } = await import('../stories/adapters')
       const result = await stageVideo(action)
       const presented = await presentStorySliceResult(result)
-      return stagedDirectorOutcome(presented.message)
+      const outcome = await stagedDirectorOutcome(presented.message)
+      return { ...outcome, metadata: presented.metadata || outcome.metadata }
     },
     async stageMusicVideo(action) {
       const { stageMusicVideo } = await import('../stories/adapters')
       const result = await stageMusicVideo(action)
       const presented = await presentStorySliceResult(result)
-      return stagedDirectorOutcome(presented.message)
+      const outcome = await stagedDirectorOutcome(presented.message)
+      return { ...outcome, metadata: presented.metadata || outcome.metadata }
     },
     async startDirectorProduction(action, expectedProductionId) {
       const { bindDirectorProductionTarget } = await import('./agentContract')
@@ -466,7 +469,9 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       return {
         ...presented,
         target: { kind: 'director_production', id: productionId, title: productionTitle },
+        taskId: result.taskIds[0],
         pipelineId: result.pipelineIds[0],
+        metadata: result.artifacts[0]?.metadata || presented.metadata,
       }
     },
   }
@@ -873,7 +878,18 @@ async function stagedDirectorOutcome(message: string): Promise<AdapterOutcome> {
   const project = useStoryStore.getState().projects[handoff.projectId] || useStoryStore.getState().project
   const production = project?.productions.find(item => item.id === handoff.productionId)
   if (!production) throw new Error('La producción preparada no está en el estado canónico de Story Lab.')
-  return { message, target: { kind: 'director_production', id: production.id, title: production.title } }
+  const provenance = production.provenance || {}
+  return {
+    message,
+    target: { kind: 'director_production', id: production.id, title: production.title },
+    taskId: provenance.taskId,
+    pipelineId: provenance.pipelineId,
+    metadata: {
+      projectId: handoff.projectId,
+      productionId: production.id,
+      ...provenance,
+    },
+  }
 }
 
 async function storyOutcome(message: string): Promise<AdapterOutcome> {
@@ -912,10 +928,17 @@ async function presentStorySliceResult(result: CommandResult): Promise<AdapterOu
     return {
       message: summary,
       target: { kind: result.entities[0]?.kind || 'story', id: result.entities[0]?.id || title, title },
+      taskId: result.taskIds[0],
       pipelineId: result.pipelineIds[0],
+      metadata: meta,
     }
   }
-  return { ...await storyOutcome(summary), pipelineId: result.pipelineIds[0] }
+  return {
+    ...await storyOutcome(summary),
+    taskId: result.taskIds[0],
+    pipelineId: result.pipelineIds[0],
+    metadata: meta,
+  }
 }
 
 async function seriesEpisodeOutcome(message: string): Promise<AdapterOutcome> {

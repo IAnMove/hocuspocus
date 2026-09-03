@@ -176,7 +176,7 @@ const LITERAL_CUES: Array<[VerbatimContentKind, RegExp]> = [
   ['name', /\b(?:titulado|llamad[oa]|named|titled|nomm[eé]|intitul[eé]|genannt|namens|intitolat[oa])\b/iu],
   ['dialogue', /\b(?:diga|digan|dice|decir|hable|habla|di[aá]logo|say|says|speak|dialogue|dialog|dit|dire|parle|sagt|sprechen|dialog|dice|parla|dialogo)\b/iu],
 ]
-const EXPLICIT_LANGUAGE = /\b(?:en|in|idioma|language|langue|sprache|lingua)\s+(espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic|[a-z]{2,3}(?:-[a-z0-9]{2,8})*)\b/iu
+const EXPLICIT_LANGUAGE = /\b(?:(?:en|in)\s+(espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic)|(?:idioma|language|langue|sprache|lingua)\s+(espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic|[a-z]{2,3}(?:-[a-z0-9]{2,8})*))\b/iu
 
 /**
  * Deterministic safety net for exact user-authored text. The LLM should emit
@@ -193,7 +193,8 @@ export function extractVerbatimSegments(request: string): VerbatimContentSegment
     if (TECHNICAL_QUOTE_PREFIX.test(prefix)) continue
     const kind = LITERAL_CUES.find(([, cue]) => cue.test(context))?.[0]
     if (!kind) continue
-    const explicitLanguage = context.match(EXPLICIT_LANGUAGE)?.[1] || ''
+    const languageMatch = context.match(EXPLICIT_LANGUAGE)
+    const explicitLanguage = languageMatch?.[1] || languageMatch?.[2] || ''
     result.push({
       kind,
       text: literal,

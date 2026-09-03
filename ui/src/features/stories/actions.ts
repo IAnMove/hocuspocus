@@ -11,6 +11,16 @@ import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
 import { applyLegacyStoryLanguage, applyStoryLanguageIntent, seedStoryLanguageIntent } from './languageIntent'
 import { applyMusicVideoDirectVideoDefaults, resolveMusicVideoVisualStyle } from './musicVideoLook'
+import {
+  directorResultDetails,
+  directorRunProvenance,
+  generatedSongProvenance,
+} from './provenance'
+import {
+  buildGeneratedSongCandidate,
+  buildMusicVideoProduction,
+  validateMusicVideoStaging,
+} from './musicWorkflowState'
 import type {
   ApplyStoryProposalCommand,
   ApproveStorySectionCommand,
@@ -37,6 +47,7 @@ function storyResult(
   const entity = { kind: 'story', id: story.id, workspaceId }
   return commandResultFromSlice({
     entity,
+    taskIds: typeof extra.taskId === 'string' && extra.taskId ? [extra.taskId] : undefined,
     pipelineIds: typeof extra.pipelineId === 'string' && extra.pipelineId ? [extra.pipelineId] : undefined,
     navigationTarget: {
       destination: extra.destination === 'director' || extra.destination === 'comics'
@@ -252,7 +263,7 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
     project,
     'music',
     `He rellenado y guardado la canción “${savedCue.title}” en Story Lab → Music con ${project.music.model}, modo ${savedCue.instrumental ? 'instrumental' : 'vocal'} y la letra editable en ${savedCue.lyricsLanguage}.`,
-    { cueId: savedCue.id, cueTitle: savedCue.title },
+    { projectId: project.id, cueId: savedCue.id, cueTitle: savedCue.title },
   )
 }
 
@@ -272,12 +283,15 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
       ? target.music.cues.find(item => normalizeName(item.title) === normalizeName(action.cueTitle))
       : undefined
   if (action.cueId && !exactCue) throw new Error(`No existe el cue con ID “${action.cueId}” en “${target.title}”.`)
-  // A resumed Wizard workflow may retain a guessed future candidate label
-  // such as "Cue · Español". When the persisted project has exactly one cue,
-  // its identity is unambiguous and must win over that stale label.
+  // Once a cue title is supplied it is an explicit identity, not a hint. A
+  // stale title must fail instead of silently selecting the only cue. The
+  // compound Wizard runtime supplies cueId after configure_story_song, while
+  // direct callers can still use the exact persisted title.
   const cue = exactCue
-    || (target.music.cues.length === 1 ? target.music.cues[0] : undefined)
-    || (!action.cueTitle ? target.music.cues.find(item => item.kind === 'story') : undefined)
+    || (!action.cueTitle
+      ? (target.music.cues.length === 1 ? target.music.cues[0] : undefined)
+        || target.music.cues.find(item => item.kind === 'story')
+      : undefined)
   if (!cue) throw new Error(`No existe la canción “${action.cueTitle || 'principal'}” en “${target.title}”.`)
   if (!cue.style.trim()) throw new Error(`“${cue.title}” necesita un estilo musical antes de generarse.`)
   if (!cue.instrumental && !cue.lyrics.trim()) throw new Error(`“${cue.title}” necesita letra antes de generarse.`)
@@ -287,6 +301,10 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
   if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
   useStoryStore.getState().beginProjectOperation(target.id)
   try {
+    const startedAt = new Date().toISOString()
+    // Allocate the durable candidate identity before submitting the compute
+    // job so the WAV sidecar and the Story object can carry the same ID.
+    const candidateId = storyId('song')
     const rendered = await api.generateMusic({
       style: cue.style.trim(),
       lyrics: cue.instrumental ? '[Instrumental]' : cue.lyrics,
@@ -295,9 +313,30 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
       model_type: ACE_STEP_MUSIC_MODEL,
       workspace,
       initiator: `Story Lab · ${target.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
+      provenance: {
+        actor: 'wizard',
+        capability: 'generate_story_song',
+        project_id: target.id,
+        cue_id: cue.id,
+        candidate_id: candidateId,
+      },
     })
     if (!rendered.filename || !rendered.audio_path) throw new Error('ACE-Step terminó sin devolver un archivo de audio verificable.')
-    const candidateId = storyId('song')
+    const completedAt = new Date().toISOString()
+    const taskId = rendered.task_id || undefined
+    const rootTaskId = rendered.root_task_id || taskId
+    const jobId = rendered.job_id || undefined
+    const provenance = generatedSongProvenance({
+      outputFolder: workspace,
+      projectId: target.id,
+      cueId: cue.id,
+      candidateId,
+      taskId,
+      rootTaskId,
+      jobId,
+      startedAt,
+      completedAt,
+    })
     let version = 1
     const project = await saveActiveStoryProjectMutation(
       workspace,
@@ -308,21 +347,11 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
         if (!latestCue) throw new Error(`El cue “${cue.title}” desapareció mientras se generaba el audio.`)
         const existingCandidate = latestCue.candidates.find(item => item.id === candidateId)
         version = existingCandidate?.version || (latestCue.candidates.length + 1)
-        const candidate = existingCandidate || {
-          id: candidateId,
-          displayName: `${latestCue.title} · ${latestCue.lyricsLanguage || source.language} · v${version}`,
-          title: latestCue.title,
-          language: latestCue.lyricsLanguage || source.language,
-          version,
-          name: rendered.filename,
-          source: api.getFileUrl(rendered.filename, workspace),
-          prompt: latestCue.style,
-          lyrics: latestCue.instrumental ? '' : latestCue.lyrics,
-          provider: 'local' as const,
-          model: ACE_STEP_MUSIC_MODEL,
-          durationSeconds: latestCue.durationSeconds,
-          createdAt: new Date().toISOString(),
-        }
+        const candidate = existingCandidate || buildGeneratedSongCandidate({
+          project: source, cue: latestCue, candidateId, version,
+          filename: rendered.filename, source: api.getFileUrl(rendered.filename, workspace),
+          model: ACE_STEP_MUSIC_MODEL, taskId, rootTaskId, provenance,
+        })
         return normalizeStoryProject({
           ...source,
           revision: source.revision + 1,
@@ -340,7 +369,8 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
       },
     )
     const savedCue = project.music.cues.find(item => item.id === cue.id)
-    if (!savedCue?.candidates.some(item => item.id === candidateId)) {
+    const savedCandidate = savedCue?.candidates.find(item => item.id === candidateId)
+    if (!savedCue || !savedCandidate) {
       throw new Error('Story Lab guardó la canción sin devolver el candidato generado.')
     }
     return storyResult(
@@ -348,7 +378,18 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
       project,
       'music',
       `ACE-Step ha generado “${savedCue.title}” y la versión v${version} ha quedado seleccionada en Story Lab → Music.`,
-      { candidateId, cueTitle: savedCue.title, outputName: rendered.filename },
+      {
+        projectId: project.id,
+        cueId: savedCue.id,
+        candidateId,
+        songVersion: version,
+        taskId,
+        rootTaskId,
+        jobId,
+        provenance: savedCandidate.provenance,
+        cueTitle: savedCue.title,
+        outputName: rendered.filename,
+      },
     )
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
@@ -1474,57 +1515,26 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
     ? normalizeStoryProject(applyStoryLanguageIntent(stored, action.languageIntent))
     : stored
   if (current.activeProjectOperations[found.id]) throw new Error(`La historia “${found.title}” tiene una operación activa.`)
-  const { cue, candidate } = selection.resolveStoryMusicSelection(found, action.songName, action.cueTitle, action.cueId)
+  const { cue, candidate } = selection.resolveStoryMusicSelection(
+    found,
+    action.songName,
+    action.cueTitle,
+    action.cueId,
+    action.candidateId,
+  )
   const resolvedCue = selection.effectiveStoryMusicCue(found, cue, candidate)
   const target = applyMusicVideoDirectVideoDefaults(found.projectType === 'music_video'
     ? found
     : { ...found, projectType: 'music_video', musicVideoGenerationMode: 'direct_video' })
-  const directVideo = target.musicVideoGenerationMode === 'direct_video'
-  const directReferences = target.musicVideoGenerationMode === 'direct_references'
-  if (directReferences && !String(target.videoOverride.model || '').startsWith('minimax_h3')) {
-    throw new Error('Las referencias directas de este videoclip requieren un modelo MiniMax H3 con Ref2VA.')
-  }
   const adaptation = adaptations.buildMusicVideoAdaptation(target, resolvedCue, {
     generationMode: target.musicVideoGenerationMode,
   })
-  if (directReferences && !adaptation.characterReferences.length && !adaptation.locationReferences.length) {
-    throw new Error('No hay referencias aprobadas para este cue. Aprueba una imagen de mundo, localización o personaje antes de preparar el videoclip.')
-  }
-  const production = {
-    id: storyId('production'),
-    kind: 'music_video' as const,
-    title: `${adaptation.focusLabel} · music video`,
-    createdAt: new Date().toISOString(),
-    sourceVersion: target.revision,
-    sourceSnapshot: { ...structuredClone(target), productions: [] },
-    targetId: adaptation.focusTargetId,
-    targetName: adaptation.focusLabel,
-    targetSnapshot: {
-      cueId: resolvedCue.id,
-      cueTitle: resolvedCue.title,
-      candidateId: candidate.id,
-      candidateName: candidate.name,
-      candidateSource: candidate.source,
-      provider: candidate.provider,
-      model: candidate.model,
-      lyrics: resolvedCue.lyrics,
-      focusKind: adaptation.focusKind,
-      focusTargetId: adaptation.focusTargetId,
-      sceneDescription: adaptation.sceneDescription,
-      pacing: action.pacing,
-      mode: 'full',
-      imageModel: target.provider.imageModel,
-      videoModel: target.videoOverride.model,
-      resolution: target.videoOverride.resolution,
-      aspectRatio: target.videoOverride.aspectRatio,
-      generationMode: target.musicVideoGenerationMode,
-      directVideoMasterPrompt: target.directVideoMasterPrompt,
-      writingProvider: target.provider.writingProvider,
-      writingModel: target.provider.writingModel,
-      writingBaseUrl: target.provider.writingBaseUrl,
-    },
-    status: 'staged' as const,
-  }
+  const { directVideo, directReferences } = validateMusicVideoStaging(target, adaptation)
+  const productionId = storyId('production')
+  const production = buildMusicVideoProduction({
+    id: productionId, project: target, cue: resolvedCue, candidate, adaptation,
+    pacing: action.pacing, outputFolder: workspace,
+  })
 
   useStoryStore.getState().beginProjectOperation(target.id)
   try {
@@ -1544,25 +1554,11 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
       const latestAdaptation = adaptations.buildMusicVideoAdaptation(latestTarget, latestResolvedCue, {
         generationMode: latestTarget.musicVideoGenerationMode,
       })
-      const reconciledProduction = {
-        ...production,
-        sourceVersion: latestTarget.revision,
-        sourceSnapshot: { ...structuredClone(latestTarget), productions: [] },
-        targetId: latestAdaptation.focusTargetId,
-        targetName: latestAdaptation.focusLabel,
-        targetSnapshot: {
-          ...production.targetSnapshot,
-          cueTitle: latestResolvedCue.title,
-          candidateName: latestCandidate.name,
-          candidateSource: latestCandidate.source,
-          provider: latestCandidate.provider,
-          model: latestCandidate.model,
-          lyrics: latestResolvedCue.lyrics,
-          focusKind: latestAdaptation.focusKind,
-          focusTargetId: latestAdaptation.focusTargetId,
-          sceneDescription: latestAdaptation.sceneDescription,
-        },
-      }
+      const reconciledProduction = buildMusicVideoProduction({
+        id: productionId, createdAt: production.createdAt, project: latestTarget,
+        cue: latestResolvedCue, candidate: latestCandidate, adaptation: latestAdaptation,
+        pacing: action.pacing, outputFolder: workspace,
+      })
       return normalizeStoryProject({
         ...latestTarget,
         revision: latestTarget.revision + 1,
@@ -1658,6 +1654,8 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
         workspace,
         projectId: target.id,
         productionId: production.id,
+        cueId: resolvedCue.id,
+        candidateId: candidate.id,
       },
     })
     director.setSettingsOpen(false)
@@ -1670,7 +1668,17 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
       project,
       'overview',
       `He preparado “${production.title}” en Music Video Director con la canción “${candidate.displayName || candidate.title || candidate.name}” y el cue “${resolvedCue.title}”. Estado: preparado. No lo he encolado ni iniciado.`,
-      { destination: 'director', productionId: production.id },
+      {
+        destination: 'director',
+        projectId: project.id,
+        productionId: production.id,
+        cueId: resolvedCue.id,
+        candidateId: candidate.id,
+        taskId: candidate.taskId || candidate.provenance?.taskId,
+        rootTaskId: candidate.rootTaskId || candidate.provenance?.rootTaskId,
+        jobId: candidate.provenance?.jobId,
+        provenance: { ...production.provenance, projectId: project.id },
+      },
     )
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
@@ -1721,7 +1729,7 @@ export async function startDirectorProduction(
       target,
       'overview',
       `La producción “${production.title}” ya estaba iniciada en Director (pipeline ${existingPipelineId}); no la he duplicado.`,
-      { destination: 'director', pipelineId: existingPipelineId, productionId: production.id, productionTitle: production.title },
+      directorResultDetails(production, workspace, target.id, existingPipelineId),
     )
   }
   if (director.pipelineId) {
@@ -1769,7 +1777,17 @@ export async function startDirectorProduction(
           updatedAt: new Date().toISOString(),
           productions: remoteProject.productions.map(item => item.id === production.id ? {
             ...item,
-            targetSnapshot: { ...(item.targetSnapshot || {}), pipelineId },
+            provenance: directorRunProvenance(
+              item.provenance, workspace, target.id, item.id, pipelineId,
+            ),
+            targetSnapshot: {
+              ...(item.targetSnapshot || {}),
+              pipelineId,
+              provenance: directorRunProvenance(
+                item.targetSnapshot?.provenance as import('./types').StoryProvenance | undefined,
+                workspace, target.id, item.id, pipelineId,
+              ),
+            },
           } : item),
         })
         try {
@@ -1801,7 +1819,7 @@ export async function startDirectorProduction(
       target,
       'overview',
       `He iniciado “${production.title}” en Director con el pipeline real ${pipelineId}. Está en marcha; todavía no está terminado.${linkWarning}`,
-      { destination: 'director', pipelineId, productionId: production.id, productionTitle: production.title },
+      directorResultDetails(production, workspace, target.id, pipelineId),
     )
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
