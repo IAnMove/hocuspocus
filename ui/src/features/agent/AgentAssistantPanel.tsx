@@ -244,12 +244,14 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       messages,
       executions: cards,
     }
+    const queuedClearBase = conversationClearBasesRef.current.get(conversationWorkspace)
     const queuedWrite = {
       workspace: conversationWorkspace,
       captured: capturedConversation,
-      base: conversationSnapshotsRef.current.get(conversationWorkspace),
+      // A clear is a three-way delete relative to the exact conversation the
+      // user saw, even if an earlier queued save advances the canonical state.
+      base: queuedClearBase ?? conversationSnapshotsRef.current.get(conversationWorkspace),
     }
-    const queuedClearBase = conversationClearBasesRef.current.get(conversationWorkspace)
     conversationSaveChainRef.current = enqueueWizardConversationSave(
       conversationSaveChainRef.current,
       async () => {
@@ -394,6 +396,9 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       messages: messagesRef.current,
       executions: messagesRef.current.flatMap(message => message.cards || []),
     })
+    // An explicit user mutation must never consume a skip reserved for an
+    // earlier canonical hydration render.
+    skipNextConversationSaveRef.current = false
     setMessages(next)
     setState('idle')
   }

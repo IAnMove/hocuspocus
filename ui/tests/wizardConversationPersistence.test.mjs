@@ -261,6 +261,33 @@ test('a stale queued snapshot merges the canonical turn saved by its predecessor
   assert.deepEqual(snapshots.get('workspace-a'), canonical)
 })
 
+test('a queued clear uses its recorded ancestor after a predecessor advances the snapshot', async () => {
+  const clearBase = payload(1, ['cleared-user', 'cleared-assistant'])
+  const canonical = payload(2, ['cleared-user', 'cleared-assistant', 'concurrent-user'])
+  const capturedClear = payload(1, ['welcome-after-clear'])
+  const snapshots = new Map([['workspace-a', clone(canonical)]])
+  const transport = {
+    async fetch() { return clone(canonical) },
+    async save(_workspace, conversation) {
+      assert.equal(conversation.revision, 2)
+      assert.deepEqual(conversation.messages.map(message => message.id), [
+        'concurrent-user',
+        'welcome-after-clear',
+      ])
+      return { ...clone(conversation), revision: 3 }
+    },
+  }
+
+  const saved = await persistQueuedWizardConversation({
+    workspace: 'workspace-a',
+    captured: capturedClear,
+    base: clearBase,
+  }, snapshots, transport)
+
+  assert.equal(saved.conversation.revision, 3)
+  assert.deepEqual(snapshots.get('workspace-a'), saved.conversation)
+})
+
 test('a queued write persists to its captured workspace after the visible workspace changes', async () => {
   const snapshots = new Map()
   const savedWorkspaces = []
