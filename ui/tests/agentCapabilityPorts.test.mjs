@@ -47,6 +47,7 @@ const AGENT_ACTIONS_IMPORTS = [
   './commandContract',
   './sfxPack',
   './storyWorkflowIdentity',
+  './toolCapabilities',
   './videoEditorActions',
   './wizardContext',
 ]
@@ -195,7 +196,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 75)
+  assert.equal(registered.length, 76)
   assert.equal(legacy.length, 0)
 })
 

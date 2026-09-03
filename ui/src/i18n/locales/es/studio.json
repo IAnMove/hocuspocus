@@ -307,13 +307,19 @@
     "saved": "Guardado: {{name}}"
   },
   "tools": {
-    "title": "Herramientas — posprocesa cualquier clip",
+    "title": "Herramientas — posprocesa medios",
     "upscale": "Escalar",
     "revoice": "Revoice",
+    "removeBackground": "Quitar fondo",
     "sourceClip": "Clip de origen",
+    "sourceImage": "Imagen de origen",
+    "loadingImages": "Cargando imágenes…",
     "uploadClip": "Sube un clip de vídeo",
+    "uploadImage": "Sube una imagen",
     "useGallery": "Usar el clip seleccionado en la galería",
     "selectGallery": "Selecciona primero un vídeo en la galería",
+    "useGalleryImage": "Usar la imagen seleccionada en la galería",
+    "selectGalleryImage": "Selecciona una imagen de la biblioteca",
     "upscaleMethod": "Método de escalado",
     "flashvsrOff": "FlashVSR está desactivado en Ajustes → Servicios. Actívalo o elige un método Lanczos.",
     "upscaleHint": "FlashVSR es superresolución basada en modelo (más nítida, más lenta; los pesos se descargan en el primer uso). Lanczos es un redimensionado clásico y rápido. Se conserva el audio del clip.",
@@ -327,7 +333,15 @@
     "referenceVoice": "Voz de referencia",
     "uploadSample": "Subir muestra de {{label}}",
     "upscaleClip": "Escalar clip",
-    "replaceVoiceAction": "Sustituir voz"
+    "replaceVoiceAction": "Sustituir voz",
+    "removeBackgroundInstruction": "Instrucción opcional",
+    "removeBackgroundInstructionPlaceholder": "Por ejemplo: conserva el pelo fino y los bordes transparentes",
+    "removeBackgroundHint": "Crea una copia PNG transparente y mantiene intacta la imagen original.",
+    "removeBackgroundNeedsSource": "Elige una imagen de la biblioteca o sube una antes de ejecutar esta herramienta.",
+    "removeBackgroundAction": "Quitar fondo",
+    "submittingRemoveBackground": "Enviando la eliminación de fondo…",
+    "queuedRemoveBackground": "Eliminación de fondo en cola…",
+    "removeBackgroundFailed": "Falló la eliminación de fondo"
   },
   "post": {
     "title": "Posprocesado",

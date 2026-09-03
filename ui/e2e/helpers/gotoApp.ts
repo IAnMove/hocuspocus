@@ -1,10 +1,10 @@
 import { expect, type Page } from '@playwright/test'
-import { formatUnhandled, installApiRoutes, type ApiRouteSession } from './apiRoutes'
+import { formatUnhandled, installApiRoutes, type ApiRouteOptions, type ApiRouteSession } from './apiRoutes'
 import { bootWatchdogPlaceholderPath } from './bootWatchdogPlaceholderPath'
 
-export async function gotoApp(page: Page): Promise<ApiRouteSession> {
+export async function gotoApp(page: Page, options: ApiRouteOptions = {}): Promise<ApiRouteSession> {
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  const session = await installApiRoutes(page)
+  const session = await installApiRoutes(page, options)
   await page.addInitScript(() => {
     window.localStorage.setItem('hocuspocus_welcome_seen_v1', '1')
   })

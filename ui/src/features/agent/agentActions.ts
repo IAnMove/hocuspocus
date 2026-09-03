@@ -3,6 +3,7 @@ import { comicArtworkInventory } from '../comics/generateArtwork'
 import { buildWizardContextSnapshot, buildWizardLabSnapshots, comicLabSnapshot, type BuildWizardContextOptions, type WizardContextSnapshot } from './wizardContext'
 import type { AspectRatio, ResolutionPreset } from '../../types'
 import type { AgentExecutionReport, AgentExecutionTarget } from './agentContract'
+import type { AgentRemoveBackgroundAction } from './toolCapabilities'
 import type { CommandEnvelope, CommandResult } from './commandContract'
 import {
   bindDirectorProductionTarget,
@@ -74,8 +75,8 @@ import {
 } from '../stories/musicVideoLook'
 
 export { isNewMusicVideoSongRequest } from '../stories/musicVideoLook'
-
 export type { ExampleConversation }
+export type { AgentRemoveBackgroundAction } from './toolCapabilities'
 export { AGENT_TABS }
 export type { AgentTab }
 
@@ -619,6 +620,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateComicPanelAction
   | AgentAttachStudioReferencesAction
   | AgentConfigureStudioLorasAction
+  | AgentRemoveBackgroundAction
   | AgentInspectQueueAction
   | AgentCancelTaskAction
   | AgentResumeTaskAction
@@ -853,6 +855,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   mountvideoclipalternativesong: 'mount_videoclip_alternative_song',
   attachstudioreferences: 'attach_studio_references',
   configurestudioloras: 'configure_studio_loras',
+  removebackground: 'remove_background',
   inspectqueue: 'inspect_queue',
   canceltask: 'cancel_task',
   resumetask: 'resume_task',
@@ -982,6 +985,7 @@ const CANONICAL_FIELD_NAMES = [
   'kit_name', 'look_notes', 'preset_id',
   'clip_names', 'clip_name', 'trim_start', 'trim_end', 'project_name',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
+  'asset_id', 'source', 'source_workspace',
   'loras', 'weight',
   'workspace_name', 'workspace_id', 'expected_revision', 'description',
   'project_ids', 'asset_ids', 'production_ids',
@@ -1722,11 +1726,9 @@ export function parseAgentTurn(raw: string): AgentTurn {
   for (const value of proposed) {
     const action = parseAction(value)
     if (!action) continue
-    if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio' || action.type === 'prepare_3d') preparedStudio = true
-    if (action.type === 'start_generation') {
-      if (!preparedStudio || startedGeneration) continue
-      startedGeneration = true
-    }
+    if (isPreparedStudioAction(action)) preparedStudio = true
+    if (!generationStartAllowed(action, preparedStudio, startedGeneration)) continue
+    if (action.type === 'start_generation') startedGeneration = true
     actions.push(action)
   }
   const conversationLanguage = normalizeConversationLanguageTag(object.conversation_language)
@@ -1736,6 +1738,12 @@ export function parseAgentTurn(raw: string): AgentTurn {
     ...(conversationLanguage ? { conversationLanguage } : {}),
   }
 }
+
+function isPreparedStudioAction(action: AgentAction): boolean {
+  return ['prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d'].includes(action.type)
+}
+
+const generationStartAllowed = (action: AgentAction, prepared: boolean, started: boolean) => action.type !== 'start_generation' || (prepared && !started)
 
 export function protectUserVerbatimSegments(request: string, turn: AgentTurn): AgentTurn {
   const verbatimSegments = extractVerbatimSegments(request)
@@ -2531,6 +2539,9 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           reference_role: { type: 'string', enum: ['', 'start_frame', 'subject', 'style'] },
           replace_existing: { type: 'boolean' },
           remove_background: { type: 'boolean' },
+          asset_id: { type: 'string', maxLength: 180 },
+          source: { type: 'string', maxLength: 1_200 },
+          source_workspace: { type: 'string', maxLength: 160 },
           workspace_name: { type: 'string', maxLength: 120 },
           workspace_id: { type: 'string', maxLength: 200 },
           expected_revision: { type: 'integer', minimum: 1 },

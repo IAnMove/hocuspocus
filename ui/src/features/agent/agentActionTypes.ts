@@ -57,6 +57,7 @@ export const AGENT_ACTION_TYPES = [
   'generate_comic_panel',
   'attach_studio_references',
   'configure_studio_loras',
+  'remove_background',
   'inspect_queue',
   'cancel_task',
   'resume_task',

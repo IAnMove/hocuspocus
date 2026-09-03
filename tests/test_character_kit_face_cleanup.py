@@ -5,6 +5,7 @@ from PIL import Image
 
 from services.character_kit_face_cleanup import (
     CharacterKitFaceCleanupError,
+    _rembg_remove,
     clean_character_kit_overlay,
     crop_to_alpha,
     resolve_character_kit_image,
@@ -131,3 +132,24 @@ def test_cleanup_router_returns_pending_png_without_overwriting(tmp_path):
     assert payload["filename"].startswith("luma-mouth-closed.cleanup-")
     assert payload["method"] == "rembg-u2net"
     assert payload["model"] == "u2net"
+
+
+def test_face_rig_rembg_omits_white_bgcolor(monkeypatch):
+    from types import SimpleNamespace
+
+    captured = {}
+
+    def fake_remove(image, **kwargs):
+        captured.update(kwargs)
+        return image
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "rembg",
+        SimpleNamespace(remove=fake_remove, new_session=lambda *_args, **_kwargs: "session"),
+    )
+    image = Image.new("RGBA", (8, 8), (180, 80, 40, 255))
+    result = _rembg_remove(image)
+    assert result.mode == "RGBA"
+    assert captured["alpha_matting"] is False
+    assert "bgcolor" not in captured

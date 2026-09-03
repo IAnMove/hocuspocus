@@ -71,6 +71,21 @@ class GenerationSubmissionProvenanceTests(unittest.TestCase):
         })
         self.assertEqual(value["tool"], "director")
 
+    def test_derives_tools_surface_from_remove_background_capability(self):
+        value = normalize_submission_provenance({
+            "actor": "user",
+            "tool": "spoofed",
+            "capability": "remove_background",
+        })
+        self.assertEqual(value["tool"], "tools")
+        self.assertEqual(value["capability"], "remove_background")
+
+    def test_missing_capability_defaults_tool_to_studio(self):
+        self.assertEqual(
+            normalize_submission_provenance({"actor": "user"})["tool"],
+            "studio",
+        )
+
     def test_physical_output_folder_does_not_invent_workspace_collection(self):
         """A Story output folder is usable without a collection record."""
         value = normalize_submission_provenance({

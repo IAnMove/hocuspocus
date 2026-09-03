@@ -11,6 +11,12 @@ export interface ApiRouteSession {
   unhandled: Array<{ method: string; url: string }>
 }
 
+export type BackgroundRemovalE2EMode = 'complete' | 'cancel' | 'fail'
+
+export interface ApiRouteOptions {
+  backgroundRemovalMode?: BackgroundRemovalE2EMode
+}
+
 const SYSTEM_STATS = {
   cpu: { percent: 1 },
   ram: { percent: 10, used_gb: 4, total_gb: 32 },
@@ -133,6 +139,97 @@ const EMPTY_WIZARD_WORKFLOWS = {
   version: 1,
   revision: 0,
   workflows: [],
+}
+
+const BACKGROUND_SOURCE_ASSET = {
+  id: 'asset-hero',
+  kind: 'image',
+  filename: 'hero.png',
+  size_bytes: 12,
+  created_at: 1,
+  completed_at: 2,
+  metadata_status: 'canonical',
+  workspace_ids: ['default'],
+  locations: [{
+    workspace_id: 'default',
+    filename: 'hero.png',
+    url: '/api/v1/file/hero.png?workspace=default',
+  }],
+  url: '/api/v1/file/hero.png?workspace=default',
+  origin: { tool: 'studio', actor: 'user', workspace_id: 'default' },
+  execution: { status: 'completed' },
+  model: { provider: 'local', id: 'flux' },
+  prompt_preview: 'A hero image used by the Tools E2E flow',
+}
+
+const BACKGROUND_DERIVED_ASSET = {
+  id: 'asset-hero-cutout',
+  kind: 'image',
+  filename: 'hero-no-background.png',
+  size_bytes: 24,
+  created_at: 3,
+  completed_at: 4,
+  metadata_status: 'canonical',
+  workspace_ids: ['default'],
+  locations: [{
+    workspace_id: 'default',
+    filename: 'hero-no-background.png',
+    url: '/api/v1/file/hero-no-background.png?workspace=default',
+  }],
+  url: '/api/v1/file/hero-no-background.png?workspace=default',
+  origin: {
+    tool: 'remove_background',
+    capability: 'remove_background',
+    actor: 'user',
+    workspace_id: 'default',
+  },
+  execution: {
+    status: 'completed',
+    job_id: 'tool-bg-e2e',
+    task_id: 'task-generation-tool-bg-e2e',
+  },
+  model: { provider: 'local', id: 'rembg-u2net' },
+  prompt_preview: 'Preserve the fine hair and transparent edges',
+  manifest: {
+    schema_version: 1,
+    origin: {
+      tool: 'remove_background',
+      capability: 'remove_background',
+      actor: 'user',
+      workspace_id: 'default',
+      source_asset_id: 'asset-hero',
+    },
+    execution: {
+      status: 'completed',
+      job_id: 'tool-bg-e2e',
+      task_id: 'task-generation-tool-bg-e2e',
+    },
+    generation: {
+      model: { provider: 'local', id: 'rembg-u2net' },
+      prompts: { instruction: 'Preserve the fine hair and transparent edges' },
+    },
+    timing: {
+      created_at: '2026-09-03T00:00:00Z',
+      queued_at: '2026-09-03T00:00:00Z',
+      started_at: '2026-09-03T00:00:01Z',
+      completed_at: '2026-09-03T00:00:02Z',
+      total_ms: 1000,
+    },
+    provenance: { source_asset_id: 'asset-hero' },
+  },
+}
+
+const BACKGROUND_DERIVED_OUTPUT = {
+  name: 'hero-no-background.png',
+  type: 'image',
+  mode: 'image',
+  favorite: false,
+  size: 24,
+  created_at: 3,
+  completed_at: 4,
+  completion_time_source: 'metadata',
+  url: '/api/v1/file/hero-no-background.png?workspace=default',
+  thumbnail_url: '/api/v1/file/hero-no-background.png?workspace=default',
 }
 
 function json(body: Json, status = 200) {
@@ -277,19 +374,94 @@ function patternedResponse(method: string, pathname: string): ReturnType<typeof 
   if (method === 'GET' && pathname.startsWith('/api/v1/file/')) {
     return { status: 404, contentType: 'text/plain', body: 'not found' }
   }
+  if (method === 'GET' && /^\/api\/v1\/outputs\/[^/]+\/metadata$/.test(pathname)) {
+    return json({ source: 'none', params: null })
+  }
   return null
 }
 
-export async function installApiRoutes(page: Page): Promise<ApiRouteSession> {
+export async function installApiRoutes(page: Page, options: ApiRouteOptions = {}): Promise<ApiRouteSession> {
   const session: ApiRouteSession = { unhandled: [] }
   const catalog = exactCatalog()
   const discover = process.env.E2E_DISCOVER === '1'
+  const backgroundRemovalMode = options.backgroundRemovalMode || 'complete'
+  let backgroundRemovalSubmitted = false
+  let backgroundRemovalStatusCalls = 0
+  let backgroundRemovalCancelRequested = false
+
+  const backgroundAssets = () => [
+    BACKGROUND_SOURCE_ASSET,
+    ...(backgroundRemovalSubmitted && backgroundRemovalStatusCalls > 1 && !backgroundRemovalCancelRequested && backgroundRemovalMode === 'complete'
+      ? [BACKGROUND_DERIVED_ASSET]
+      : []),
+  ]
+  const backgroundStatus = () => {
+    if (backgroundRemovalCancelRequested) return {
+      status: 'cancelled', progress: 0, step: 0, total_steps: 1,
+      phase: 'cancelled', message: 'Background removal cancelled', output_files: [], error: null,
+    }
+    if (backgroundRemovalMode === 'fail') return {
+      status: 'failed', progress: 30, step: 1, total_steps: 3,
+      phase: 'removing_background', message: 'Background removal failed', output_files: [], error: 'rembg test failure',
+    }
+    if (backgroundRemovalStatusCalls < 2) return {
+      status: 'running', progress: 45, step: 1, total_steps: 2,
+      phase: 'removing_background', message: 'Removing background', output_files: [], error: null,
+    }
+    return {
+      status: 'completed', progress: 100, step: 2, total_steps: 2,
+      phase: 'completed', message: 'Background removed', output_files: ['hero-no-background.png'], error: null,
+    }
+  }
 
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
     const method = request.method().toUpperCase()
     const pathname = url.pathname
+
+    if (method === 'GET' && pathname === '/api/v1/assets') {
+      await route.fulfill(json({ assets: backgroundAssets(), total: backgroundAssets().length }))
+      return
+    }
+    if (method === 'GET' && pathname === '/api/v1/assets/asset-hero-cutout') {
+      await route.fulfill(json(BACKGROUND_DERIVED_ASSET))
+      return
+    }
+    if (method === 'POST' && pathname === '/api/v1/tools/remove-background') {
+      backgroundRemovalSubmitted = true
+      backgroundRemovalStatusCalls = 0
+      backgroundRemovalCancelRequested = false
+      await route.fulfill(json({
+        job_id: 'tool-bg-e2e',
+        task_id: 'task-generation-tool-bg-e2e',
+        root_task_id: 'task-generation-tool-bg-e2e',
+      }))
+      return
+    }
+    if (method === 'GET' && pathname === '/api/v1/status/tool-bg-e2e' && backgroundRemovalSubmitted) {
+      backgroundRemovalStatusCalls += 1
+      await route.fulfill(json({
+        job_id: 'tool-bg-e2e',
+        task_id: 'task-generation-tool-bg-e2e',
+        root_task_id: 'task-generation-tool-bg-e2e',
+        created_at: 1,
+        started_at: 2,
+        finished_at: backgroundRemovalStatusCalls > 1 ? 3 : null,
+        processing_time_sec: backgroundRemovalStatusCalls > 1 ? 1 : null,
+        ...backgroundStatus(),
+      }))
+      return
+    }
+    if (method === 'POST' && pathname === '/api/v1/cancel/tool-bg-e2e') {
+      backgroundRemovalCancelRequested = true
+      await route.fulfill(json({ status: 'cancelling' }))
+      return
+    }
+    if (method === 'GET' && pathname === '/api/v1/outputs' && backgroundRemovalSubmitted && backgroundRemovalStatusCalls > 1 && !backgroundRemovalCancelRequested && backgroundRemovalMode === 'complete') {
+      await route.fulfill(json({ outputs: [BACKGROUND_DERIVED_OUTPUT], total: 1 }))
+      return
+    }
     const exact = catalog[keyFor(method, pathname)]
     if (exact && 'sse' in exact) {
       await route.fulfill({

@@ -286,6 +286,31 @@ export async function submitToolRevoice(params: {
   return res.json()
 }
 
+export async function submitToolRemoveBackground(params: {
+  asset_id?: string
+  source?: string
+  source_workspace?: string
+  workspace?: string
+  instruction?: string
+  provenance?: {
+    actor?: 'user' | 'wizard' | 'system' | 'unknown'
+    capability?: string
+    workspace_id?: string
+    command?: { command_id?: string; workflow_id?: string; run_id?: string }
+  }
+}): Promise<{ job_id: string; task_id?: string | null; root_task_id?: string | null }> {
+  const res = await fetch(`${BASE}/api/v1/tools/remove-background`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Background removal failed' }))
+    throw new Error(err.detail || 'Background removal failed')
+  }
+  return res.json()
+}
+
 // --- Job Management ---
 
 export async function cancelJob(jobId: string): Promise<void> {

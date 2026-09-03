@@ -58,9 +58,10 @@ const EXPENSIVE_ACTIONS = new Set([
   'export_3d_scene',
   'export_video_editor',
   'mount_videoclip_alternative_song',
+  'remove_background',
 ])
 
-const QUEUED_ACTIONS = new Set(['start_generation', 'queue_sfx_pack', 'render_series_shots', 'export_video_editor', 'mount_videoclip_alternative_song'])
+const QUEUED_ACTIONS = new Set(['start_generation', 'queue_sfx_pack', 'render_series_shots', 'export_video_editor', 'mount_videoclip_alternative_song', 'remove_background'])
 const RUNNING_ACTIONS = new Set(['start_director_production', 'export_3d_scene', 'generate_story_visuals', 'mount_videoclip_alternative_song'])
 const REUSABLE_STATES = new Set<AgentExecutionState>(['prepared', 'awaiting_input', 'queued', 'running', 'completed'])
 
