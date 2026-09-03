@@ -306,6 +306,70 @@ def test_tools_route_rejects_unknown_query_workspace_without_creating_it(tmp_pat
     assert not jobs
 
 
+def test_tools_route_accepts_encoded_source_with_matching_asset_id(tmp_path):
+    uploads = tmp_path / "uploads"
+    workspace = tmp_path / "outputs"
+    uploads.mkdir()
+    workspace.mkdir()
+    source = workspace / "my portrait.png"
+    _image(source)
+    jobs = []
+    asset = {
+        "id": "asset_portrait",
+        "kind": "image",
+        "filename": "my portrait.png",
+        "locations": [{
+            "workspace_id": "default",
+            "output_folder": "default",
+            "filename": "my portrait.png",
+        }],
+    }
+    app = FastAPI()
+    app.include_router(create_tools_router(
+        get_active_workspace=lambda: "default",
+        list_workspaces=lambda: [{"name": "default"}],
+        workspace_dir=lambda _name: str(workspace),
+        uploads_dir=lambda: str(uploads),
+        asset_finder=lambda asset_id: asset if asset_id == "asset_portrait" else None,
+        register_job=lambda job: jobs.append(job) or job,
+        start_remove_background=lambda _job: None,
+    ))
+    client = FastApiTestClient(app)
+
+    encoded = client.post("/api/v1/tools/remove-background", json={
+        "asset_id": "asset_portrait",
+        "source": "/api/v1/file/my%20portrait.png",
+        "workspace": "default",
+    })
+    assert encoded.status_code == 200
+    assert jobs[0]["params"]["_source_path"] == str(source.resolve())
+    assert jobs[0]["params"]["source"] == "my portrait.png"
+
+    queried = client.post("/api/v1/tools/remove-background", json={
+        "asset_id": "asset_portrait",
+        "source": "/api/v1/file/my%20portrait.png?workspace=default",
+        "workspace": "default",
+    })
+    assert queried.status_code == 200
+    assert jobs[1]["params"]["source"] == "my portrait.png"
+
+    source_only = client.post("/api/v1/tools/remove-background", json={
+        "source": "/api/v1/file/my%20portrait.png",
+        "workspace": "default",
+    })
+    assert source_only.status_code == 200
+    assert jobs[2]["params"]["source"] == "my portrait.png"
+
+    conflict = client.post("/api/v1/tools/remove-background", json={
+        "asset_id": "asset_portrait",
+        "source": "/api/v1/file/other%20portrait.png",
+        "workspace": "default",
+    })
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"] == "Source does not match asset_id"
+    assert len(jobs) == 3
+
+
 def test_background_removal_worker_publishes_lineage_and_finishes(tmp_path):
     uploads = tmp_path / "uploads"
     workspace = tmp_path / "outputs"

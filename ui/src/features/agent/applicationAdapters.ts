@@ -301,10 +301,20 @@ async function editorOutcome(result: CommandResult, message: string, extra: Part
   }
 }
 
+function sourceBasename(source: string): string {
+  const path = source.trim().split(/[?#]/, 1)[0]
+  const name = path.split(/[/\\]/).pop() || path
+  try {
+    return decodeURIComponent(name)
+  } catch {
+    return name
+  }
+}
+
 function toolsSourceUrl(source: string, sourceWorkspace: string | undefined, workspace: string): string {
   const raw = source.trim()
   if (raw.startsWith('/api/')) return raw
-  const filename = raw.split(/[?#]/, 1)[0].split('/').pop() || raw
+  const filename = sourceBasename(raw)
   if (sourceWorkspace === '__uploads__') return `/api/v1/uploads/${encodeURIComponent(filename)}`
   return `/api/v1/file/${encodeURIComponent(filename)}?workspace=${encodeURIComponent(sourceWorkspace || workspace)}`
 }
@@ -328,13 +338,13 @@ async function resolveRemoveBackgroundSource(
     if (!location) {
       throw new Error(i18n.t('removeBackgroundNoLocation', { ns: 'wizard' }))
     }
-    source = source || location.filename
+    source = source ? sourceBasename(source) : location.filename
     sourceWorkspace = sourceWorkspace || location.workspace_id
   }
   if (!source) {
     throw new Error(i18n.t('removeBackgroundMissingSource', { ns: 'wizard' }))
   }
-  const name = source.split(/[?#]/, 1)[0].split('/').pop() || source
+  const name = sourceBasename(source)
   return {
     source,
     name: asset?.filename || name,

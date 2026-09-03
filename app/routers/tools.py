@@ -40,15 +40,24 @@ def _valid_workspace_name(value: str) -> bool:
     return bool(re.fullmatch(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)", value))
 
 
+def _canonical_source_path(source: str) -> str:
+    """Strip query/fragment and unquote canonical /api/v1/ file URLs."""
+    without_query = source.strip().split("?", 1)[0].split("#", 1)[0]
+    if without_query.startswith("/api/v1/"):
+        without_query = unquote(without_query)
+    return without_query
+
+
+def _requested_source_name(source: str) -> str:
+    return os.path.basename(_canonical_source_path(source))
+
+
 def _file_url_query_workspace(source: str | None) -> str | None:
     """Read ?workspace= from a canonical /api/v1/file/ source URL."""
     raw_source = (source or "").strip()
     if not raw_source:
         return None
-    source_without_query = raw_source.split("?", 1)[0].split("#", 1)[0]
-    if source_without_query.startswith("/api/v1/"):
-        source_without_query = unquote(source_without_query)
-    if not source_without_query.startswith("/api/v1/file/"):
+    if not _canonical_source_path(raw_source).startswith("/api/v1/file/"):
         return None
     query_workspace = parse_qs(urlsplit(raw_source).query).get("workspace", [None])[0]
     if isinstance(query_workspace, str) and query_workspace.strip():
@@ -138,16 +147,14 @@ def _source_from_request(
             raise HTTPException(status_code=404, detail="Source asset location is unavailable")
         path, resolved_scope = location
         filename = os.path.basename(path)
-        if payload.source and os.path.basename(payload.source.split("?", 1)[0]) != filename:
+        if payload.source and _requested_source_name(payload.source) != filename:
             raise HTTPException(status_code=409, detail="Source does not match asset_id")
         return path, filename, resolved_scope
 
     if not payload.source:
         raise HTTPException(status_code=400, detail="asset_id or source is required")
     raw_source = payload.source.strip()
-    source_without_query = raw_source.split("?", 1)[0].split("#", 1)[0]
-    if source_without_query.startswith("/api/v1/"):
-        source_without_query = unquote(source_without_query)
+    source_without_query = _canonical_source_path(raw_source)
     source_name = os.path.basename(source_without_query)
     virtual_candidates = {
         f"/api/v1/file/{source_name}",
