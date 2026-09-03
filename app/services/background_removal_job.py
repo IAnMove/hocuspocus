@@ -67,6 +67,19 @@ def _remove_output(path: str | None) -> None:
             pass
 
 
+def _settle_cancel(
+    job: MutableMapping[str, Any],
+    *,
+    hooks: BackgroundRemovalJobHooks,
+    output_path: str | None = None,
+) -> bool:
+    """Remove partial output and settle a cancellation when the host supports it."""
+    _remove_output(output_path)
+    if hooks.acknowledge_cancel is not None:
+        hooks.acknowledge_cancel(job)
+    return False
+
+
 def run_remove_background_job(
     job: MutableMapping[str, Any],
     *,
@@ -143,7 +156,7 @@ def run_remove_background_job(
                 )
 
             if hooks.is_cancel_requested(job):
-                return False
+                return _settle_cancel(job, hooks=hooks)
             if hooks.simulated_artifact is not None and str(
                 params.get("_execution_mode") or "real"
             ) == "simulate":
@@ -183,8 +196,7 @@ def run_remove_background_job(
                 output_path = str(result.get("path") or "")
 
             if hooks.is_cancel_requested(job):
-                _remove_output(output_path)
-                return False
+                return _settle_cancel(job, hooks=hooks, output_path=output_path)
             filename = str(result.get("filename") or "")
             if not output_path or not filename:
                 raise RuntimeError("Background removal did not produce an output")
@@ -260,8 +272,7 @@ def run_remove_background_job(
                 message="Done · background removed",
             )
         except InterruptedError:
-            _remove_output(output_path)
-            return False
+            return _settle_cancel(job, hooks=hooks, output_path=output_path)
         except Exception as exc:
             _remove_output(output_path)
             hooks.finish_job(job, "failed", error=str(exc), message=f"Error: {exc}")

@@ -405,3 +405,88 @@ def test_background_removal_worker_acknowledges_registration_cancel_race(tmp_pat
 
     assert run_remove_background_job(job, hooks=hooks) is False
     assert acknowledgements == ["job-bg-race"]
+
+
+def test_background_removal_worker_settles_cancel_after_registration(tmp_path):
+    job = {
+        "id": "job-bg-cancelled",
+        "status": "queued",
+        "params": {"_execution_mode": "real"},
+        "workspace": "default",
+        "out_dir": str(tmp_path),
+    }
+    acknowledgements = []
+
+    @contextmanager
+    def slot(_job):
+        yield True
+
+    def try_start(current, **updates):
+        current.update(updates)
+        current["status"] = "running"
+        current["cancel_requested"] = True
+        return True
+
+    hooks = BackgroundRemovalJobHooks(
+        generation_slot=slot,
+        try_start=try_start,
+        update_job=lambda *_args, **_kwargs: True,
+        finish_job=lambda *_args, **_kwargs: False,
+        is_cancel_requested=lambda current: bool(current.get("cancel_requested")),
+        record_job_outputs=lambda *_args, **_kwargs: None,
+        register_abort_state=lambda *_args, **_kwargs: True,
+        unregister_abort_state=lambda *_args, **_kwargs: None,
+        acknowledge_cancel=lambda current: acknowledgements.append(current["id"]) or True,
+        active_states={},
+        publish_sidecar=lambda *_args, **_kwargs: None,
+    )
+
+    assert run_remove_background_job(job, hooks=hooks) is False
+    assert acknowledgements == ["job-bg-cancelled"]
+
+
+def test_background_removal_worker_settles_interrupted_simulation(tmp_path):
+    source = tmp_path / "source.png"
+    _image(source)
+    job = {
+        "id": "job-bg-sim-cancelled",
+        "status": "queued",
+        "params": {
+            "_execution_mode": "simulate",
+            "_source_path": str(source),
+            "source": source.name,
+        },
+        "workspace": "default",
+        "out_dir": str(tmp_path),
+    }
+    acknowledgements = []
+
+    @contextmanager
+    def slot(_job):
+        yield True
+
+    def try_start(current, **updates):
+        current.update(updates)
+        current["status"] = "running"
+        return True
+
+    def interrupted_artifact(*_args, **_kwargs):
+        raise InterruptedError("cancelled")
+
+    hooks = BackgroundRemovalJobHooks(
+        generation_slot=slot,
+        try_start=try_start,
+        update_job=lambda *_args, **_kwargs: True,
+        finish_job=lambda *_args, **_kwargs: False,
+        is_cancel_requested=lambda current: bool(current.get("cancel_requested")),
+        record_job_outputs=lambda *_args, **_kwargs: None,
+        register_abort_state=lambda *_args, **_kwargs: True,
+        unregister_abort_state=lambda *_args, **_kwargs: None,
+        acknowledge_cancel=lambda current: acknowledgements.append(current["id"]) or True,
+        active_states={},
+        publish_sidecar=lambda *_args, **_kwargs: None,
+        simulated_artifact=interrupted_artifact,
+    )
+
+    assert run_remove_background_job(job, hooks=hooks) is False
+    assert acknowledgements == ["job-bg-sim-cancelled"]
