@@ -404,3 +404,30 @@ test('stale hydration restores confirmed-only turns without scheduling a redunda
   assert.equal(rebased.needsPersist, false)
   assert.deepEqual(rebased.conversation.messages, confirmed.messages)
 })
+
+test('stale browser cache omissions do not delete newer canonical turns during hydration', () => {
+  const stale = payload(7, ['shared-user', 'stale-assistant'])
+  const confirmed = payload(8, ['shared-user', 'stale-assistant', 'confirmed-user'])
+  const olderVisibleCache = payload(5, ['shared-user'])
+
+  const rebased = rebaseStaleWizardConversationHydration(olderVisibleCache, stale, confirmed)
+
+  assert.equal(rebased.needsPersist, false)
+  assert.deepEqual(rebased.conversation.messages, confirmed.messages)
+})
+
+test('explicit clear deletes base turns while retaining concurrent canonical additions', () => {
+  const stale = payload(7, ['old-user', 'old-assistant'])
+  const confirmed = payload(8, ['old-user', 'old-assistant', 'concurrent-user'])
+  const cleared = payload(7, ['welcome-after-clear'])
+
+  const rebased = rebaseStaleWizardConversationHydration(cleared, stale, confirmed, {
+    honorLocalDeletes: true,
+  })
+
+  assert.equal(rebased.needsPersist, true)
+  assert.deepEqual(rebased.conversation.messages.map(message => message.id), [
+    'concurrent-user',
+    'welcome-after-clear',
+  ])
+})

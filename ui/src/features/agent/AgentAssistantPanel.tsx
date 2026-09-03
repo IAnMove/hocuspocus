@@ -167,6 +167,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   const conversationSnapshotsRef = useRef<Map<string, WizardConversationPayload>>(new Map())
   const conversationSaveChainRef = useRef<Promise<void>>(Promise.resolve())
   const skipNextConversationSaveRef = useRef(false)
+  const explicitConversationClearRef = useRef(false)
   const conversationWorkspaceRef = useRef(conversationWorkspace)
   conversationWorkspaceRef.current = conversationWorkspace
   const messagesRef = useRef(messages)
@@ -282,13 +283,16 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       const knownSnapshot = conversationSnapshotsRef.current.get(conversationWorkspace)
       const hydration = resolveWizardConversationHydration(knownSnapshot, payload)
       conversationSnapshotsRef.current.set(conversationWorkspace, hydration.snapshot)
-      if (!hydration.applyToVisibleState) {
+      if (!hydration.applyToVisibleState || explicitConversationClearRef.current) {
         const visibleMessages = messagesRef.current
         const rebased = rebaseStaleWizardConversationHydration({
           ...payload,
           messages: visibleMessages,
           executions: visibleMessages.flatMap(message => message.cards || []),
-        }, payload, hydration.snapshot)
+        }, payload, hydration.snapshot, {
+          honorLocalDeletes: explicitConversationClearRef.current,
+        })
+        explicitConversationClearRef.current = false
         skipNextConversationSaveRef.current = !rebased.needsPersist
         setMessages(normalizeRemoteWizardMessages(
           rebased.conversation.messages,
@@ -323,6 +327,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   useEffect(() => {
     if (!shouldFollowWizardWorkspace({ activeWorkspace: workspace, conversationWorkspace, busy })) return
     skipNextConversationSaveRef.current = false
+    explicitConversationClearRef.current = false
     setConversationSaveError(null)
     setHydratedWorkspace(null)
     setMessages(readMessages(workspace))
@@ -378,6 +383,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
 
   const clearConversation = () => {
     const next = [welcomeMessage()]
+    explicitConversationClearRef.current = true
     setMessages(next)
     setState('idle')
   }

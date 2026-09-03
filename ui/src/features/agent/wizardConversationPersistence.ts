@@ -40,15 +40,41 @@ export function resolveWizardConversationHydration(
 /**
  * Rebase browser-visible edits over a hydration response that lost a race to
  * a confirmed save. The stale response is the three-way base, so confirmed
- * turns added after it are retained while actual local edits and clears still
- * win for values that existed in that base.
+ * turns added after it are retained while local edits still win. Missing
+ * browser-cache values are not treated as deletes unless the caller records
+ * an explicit user clear.
  */
 export function rebaseStaleWizardConversationHydration(
   visible: WizardConversationPayload,
   stale: WizardConversationPayload,
   confirmed: WizardConversationPayload,
+  options: { honorLocalDeletes?: boolean } = {},
 ): { conversation: WizardConversationPayload; needsPersist: boolean } {
-  const conversation = mergeQueuedWizardConversationSnapshots(visible, stale, confirmed)
+  const honorLocalDeletes = options.honorLocalDeletes ?? false
+  const conversation: WizardConversationPayload = {
+    version: 1,
+    revision: confirmed.revision,
+    messages: mergeQueuedValues(visible.messages, stale.messages, confirmed.messages, honorLocalDeletes),
+    executions: mergeQueuedValues(visible.executions, stale.executions, confirmed.executions, honorLocalDeletes),
+    requestedActions: mergeQueuedValues(
+      visible.requestedActions,
+      stale.requestedActions,
+      confirmed.requestedActions,
+      honorLocalDeletes,
+    ),
+    executedActions: mergeQueuedValues(
+      visible.executedActions,
+      stale.executedActions,
+      confirmed.executedActions,
+      honorLocalDeletes,
+    ),
+    confirmations: mergeQueuedValues(
+      visible.confirmations,
+      stale.confirmations,
+      confirmed.confirmations,
+      honorLocalDeletes,
+    ),
+  }
   const semanticContent = (value: WizardConversationPayload) => ({
     messages: value.messages,
     executions: value.executions,
@@ -99,7 +125,12 @@ function valueIdentity(value: unknown): string {
 }
 
 /** Apply local edits/deletes since base without discarding concurrent values. */
-function mergeQueuedValues(local: unknown, base: unknown, canonical: unknown): unknown[] {
+function mergeQueuedValues(
+  local: unknown,
+  base: unknown,
+  canonical: unknown,
+  honorLocalDeletes = true,
+): unknown[] {
   const localValues = Array.isArray(local) ? local : []
   const baseValues = Array.isArray(base) ? base : []
   const canonicalValues = Array.isArray(canonical) ? canonical : []
@@ -112,7 +143,7 @@ function mergeQueuedValues(local: unknown, base: unknown, canonical: unknown): u
     const id = valueIdentity(value)
     const baseValue = baseById.get(id)
     const localValue = localById.get(id)
-    if (baseById.has(id) && !localById.has(id)) return
+    if (honorLocalDeletes && baseById.has(id) && !localById.has(id)) return
     if (localById.has(id) && (!baseById.has(id) || stableKey(localValue) !== stableKey(baseValue))) {
       merged.push(localValue)
     } else {
