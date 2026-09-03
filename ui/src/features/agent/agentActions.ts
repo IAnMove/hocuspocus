@@ -62,7 +62,9 @@ import {
 } from './capabilityRegistry'
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
-import { inferStoryProjectTypeFromText } from '../stories/musicVideoLook'
+import { inferStoryProjectTypeFromText, isNewMusicVideoSongRequest, newMusicVideoStoryAction } from '../stories/musicVideoLook'
+
+export { isNewMusicVideoSongRequest } from '../stories/musicVideoLook'
 
 export type { ExampleConversation }
 export { AGENT_TABS }
@@ -2181,11 +2183,21 @@ export async function reconcileAgentTurnWithRequest(
   const musicVideoStage = isExplicitMusicVideoStageRequest(request)
   const musicVideoStart = isExplicitMusicVideoStartRequest(request, history)
   if (musicVideoStage || musicVideoStart) {
-    const actions = turn.actions.map(action => (
+    const proposedActions = turn.actions.map(action => (
       action.type === 'create_story' && action.projectType !== 'music_video'
         ? { ...action, projectType: 'music_video' as const }
         : action
     ))
+    const omittedNewSongSetup = isNewMusicVideoSongRequest(request)
+      && !proposedActions.some(action => action.type === 'create_story')
+      && !proposedActions.some(action => action.type === 'configure_story_song')
+    // A request for "a song about..." describes a new authored object. Empty
+    // stage fields must never reinterpret that request as "use the currently
+    // selected song", because UI selection is mutable and may belong to an
+    // unrelated project. Recover the omitted plan before resolving any target.
+    const actions: AgentAction[] = omittedNewSongSetup
+      ? [newMusicVideoStoryAction(request, turn.conversationLanguage), ...proposedActions]
+      : proposedActions
     const storySongSetup = actions.filter(action => (
       action.type === 'create_story'
       || action.type === 'configure_story_song'
@@ -2240,7 +2252,7 @@ export async function reconcileAgentTurnWithRequest(
     }
     const stage: AgentStageStoryMusicVideoAction = {
       ...stageSeed,
-      targetStoryTitle: stageSeed.targetStoryTitle || effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || '',
+      targetStoryTitle: effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || stageSeed.targetStoryTitle || '',
       cueTitle: effectiveSongDraft?.songTitle || stageSeed.cueTitle || '',
       songName: effectiveSongDraft ? '' : stageSeed.songName,
     }

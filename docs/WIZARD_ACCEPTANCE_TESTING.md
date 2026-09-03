@@ -87,9 +87,13 @@ Replace `42001` with the port shown by Pinokio. The launcher chooses a free
 port, so `--base-url` is required unless
 `HOCUSPOCUS_BASE_URL` already contains the exact URL shown by Pinokio.
 
-Available scenarios are `smoke`, `full`, `studio`, `language`, `music-video`, `comic`,
-`series`, `failure`, `cancel` and `workspace`. `language` verifies a live mixed-language
-turn (conversation, content, speech, exact quote and technical provider prompt).
+Available scenarios are `smoke`, `full`, `studio`, `language`, `music-video`,
+`music-video-new`, `comic`, `series`, `failure`, `cancel` and `workspace`. `language`
+verifies a live mixed-language turn (conversation, content, speech, exact quote and
+technical provider prompt). `music-video-new` is the one-turn regression for a newly
+authored song and videoclip: it proves that the Wizard creates a fresh Story project,
+fills and generates its vocal ACE-Step song, carries the exact cue identity into
+Director and never falls back to an unrelated selected song.
 `full` runs the principal successful flows serially.
 Use `--headed` to watch the Wizard navigate and fill the application. Use
 `--resume` to ask Playwright to run only failures from its previous run.
@@ -104,6 +108,23 @@ python3 scripts/run_wizard_acceptance.py \
 The runner refuses a mismatch between the requested profile and the backend's
 boot mode. This prevents a command intended for simulation from silently
 spending GPU time or provider credit.
+
+For an occasional release-candidate check of the complete Ask to the Wizard path,
+including the configured live LLM, local ACE-Step inference and the final Director
+MP4, boot in `real` and opt in explicitly:
+
+```bash
+python3 scripts/run_wizard_acceptance.py \
+  --base-url http://127.0.0.1:<port> \
+  --profile real \
+  --scenario music-video-new \
+  --confirm-real \
+  --headed
+```
+
+This scenario is deliberately absent from CI and from `full`: it can spend LLM
+tokens and substantial local GPU time. Run the same scenario with `simulate` first
+to validate the complete orchestration cheaply while still consulting the real LLM.
 
 ## Evidence and assertions
 

@@ -100,6 +100,31 @@ async function waitForStorySongVersion(request: APIRequestContext, workspace: st
   }, { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] }).toBeGreaterThanOrEqual(minimumVersions)
 }
 
+async function storyProjectIds(request: APIRequestContext, workspace: string): Promise<Set<string>> {
+  const library = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`) as {
+    projects: Record<string, { id?: string }>
+  }
+  return new Set(Object.entries(library.projects || {}).flatMap(([key, project]) => (
+    project.id && project.id !== key ? [key, project.id] : [key]
+  )))
+}
+
+async function waitForNewStoryProject(request: APIRequestContext, workspace: string, previous: Set<string>) {
+  let projectId = ''
+  await expect.poll(async () => {
+    const library = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`) as {
+      projects: Record<string, { id?: string }>
+    }
+    projectId = Object.entries(library.projects || {})
+      .find(([id, project]) => !previous.has(id) && !previous.has(String(project.id || '')))?.[0] || ''
+    return projectId
+  }, { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] }).not.toBe('')
+  const library = await json(request, `/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`) as {
+    projects: Record<string, Record<string, unknown>>
+  }
+  return { id: projectId, project: library.projects[projectId] }
+}
+
 async function directorPipelineIds(request: APIRequestContext): Promise<Set<string>> {
   const payload = await json(request, '/api/v1/director/pipelines?limit=100') as {
     pipelines: Array<{ id: string }>
@@ -279,6 +304,62 @@ test('wizard: vocal Spanish song → selected version → music-video Director',
   expect(cue?.candidates?.length).toBeGreaterThanOrEqual(2)
   const latest = [...(cue?.candidates || [])].sort((left, right) => Number(right.version || 0) - Number(left.version || 0))[0]
   expect(cue?.selectedCandidateId).toBe(latest?.id)
+  await expect(page.getByRole('button', { name: 'Director', exact: true })).toHaveClass(/bg-toggle-active/)
+  await attachEvidence(page, request, testInfo, transcript)
+})
+
+test('wizard: one-turn new song request never reuses the selected music-video project', async ({ page, request }, testInfo) => {
+  test.skip(scenario !== 'music-video-new', `scenario=${scenario}`)
+  const title = `E2E Linus Libre ${Date.now()}`
+  const config = await json(request, '/api/v1/system-config') as SystemConfig
+  const workspace = String(config.execution_workspace)
+  const beforeStories = await storyProjectIds(request, workspace)
+  const beforeTasks = await rootTaskIds(request, workspace)
+  const beforeDirector = await directorPipelineIds(request)
+  const transcript = await ask(page,
+    `Hazme un videoclip titulado exactamente "${title}" de una canción de 20 segundos en la que Linus Torvalds sea el protagonista y luche contra el software propietario, siempre en animación dibujada inspirada en la película de animación adulta Heavy Metal de 1981. Escribe la letra vocal, genera la canción con ACE-Step 1.5 XL y ejecuta el videoclip. Invéntalo todo y no reutilices ninguna canción anterior.`,
+  )
+  const { project } = await waitForNewStoryProject(request, workspace, beforeStories) as {
+    project: {
+      title?: string
+      projectType?: string
+      premise?: string
+      synopsis?: string
+      creativeBrief?: { generalIdea?: string }
+      music?: { cues?: Array<{ lyrics?: string; selectedCandidateId?: string; candidates?: Array<{ id?: string }> }> }
+    }
+  }
+  await waitForTerminalRoot(request, workspace, beforeTasks, 'completed')
+  await waitForCompletedDirectorPipeline(request, beforeDirector)
+  const authoredText = [
+    project.title,
+    project.premise,
+    project.synopsis,
+    project.creativeBrief?.generalIdea,
+  ].filter(Boolean).join(' ')
+  expect(project.projectType).toBe('music_video')
+  expect(project.title).toBe(title)
+  expect(authoredText).toMatch(/Linus Torvalds/i)
+  expect(authoredText).not.toMatch(/Quemar Tokens/i)
+  const cue = project.music?.cues?.find(candidate => Boolean(candidate.selectedCandidateId))
+  expect(cue?.lyrics?.trim()).toMatch(/\S/)
+  expect(cue?.selectedCandidateId).toBeTruthy()
+  expect(cue?.candidates?.some(candidate => candidate.id === cue.selectedCandidateId)).toBeTruthy()
+  const wizardTrace = await page.evaluate(() => (
+    window as Window & { __HOCUSPOCUS_WIZARD_TRACE__?: Array<Record<string, unknown>> }
+  ).__HOCUSPOCUS_WIZARD_TRACE__ || []) as Array<{
+    turn?: { actions?: Array<{ type?: string; title?: string; targetStoryTitle?: string; songTitle?: string; cueTitle?: string }> }
+  }>
+  const actions = wizardTrace.at(-1)?.turn?.actions || []
+  expect(actions.map(action => action.type)).toEqual([
+    'create_story', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production',
+  ])
+  const create = actions[0]
+  expect(actions[1]?.targetStoryTitle).toBe(create?.title)
+  expect(actions[2]?.targetStoryTitle).toBe(create?.title)
+  expect(actions[3]?.targetStoryTitle).toBe(create?.title)
+  expect(actions[2]?.cueTitle).toBe(actions[1]?.songTitle)
+  expect(actions[3]?.cueTitle).toBe(actions[1]?.songTitle)
   await expect(page.getByRole('button', { name: 'Director', exact: true })).toHaveClass(/bg-toggle-active/)
   await attachEvidence(page, request, testInfo, transcript)
 })

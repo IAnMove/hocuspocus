@@ -245,7 +245,7 @@ test('parses only a confirmed Director production start', async () => {
 })
 
 test('parses a confirmed Story music-video staging and start', async () => {
-  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const { isNewMusicVideoSongRequest, parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
   const unsigned = parseAgentTurn(JSON.stringify({
     reply: 'Preparo el clip.',
     actions: [{ type: 'stage_story_music_video', song_name: 'Marea', confirm: false }],
@@ -287,6 +287,34 @@ test('parses a confirmed Story music-video staging and start', async () => {
 
   const created = await reconcileAgentTurnWithRequest('crea el videoclip con la canción seleccionada', { reply: 'Lo preparo.', actions: [] })
   assert.deepEqual(created.actions.map(action => action.type), ['stage_story_music_video', 'start_director_production'])
+  assert.equal(isNewMusicVideoSongRequest('crea el videoclip con la canción seleccionada'), false)
+
+  const linusRequest = 'hazme un videoclip de una cancion en la que linus torvalds sea el protagonista y luche contra el software propietario en un estilo visual tipo siempre animacion (dibujos) inspirados en heavy metal 1981 la pelicula de animacion'
+  assert.equal(isNewMusicVideoSongRequest(linusRequest), true)
+  const recoveredNewSong = await reconcileAgentTurnWithRequest(linusRequest, {
+    reply: 'Preparo el videoclip seleccionado.',
+    conversationLanguage: 'es',
+    actions: [{
+      type: 'stage_story_music_video', targetStoryTitle: '', songName: '', cueTitle: '', pacing: 'balanced', confirm: true,
+    }, {
+      type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true,
+    }],
+  })
+  assert.deepEqual(recoveredNewSong.actions.map(action => action.type), [
+    'create_story', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production',
+  ])
+  assert.match(recoveredNewSong.actions[0].title, /linus torvalds/i)
+  assert.equal(recoveredNewSong.actions[0].projectType, 'music_video')
+  assert.equal(recoveredNewSong.actions[0].language, 'es')
+  assert.equal(recoveredNewSong.actions[1].targetStoryTitle, recoveredNewSong.actions[0].title)
+  assert.equal(recoveredNewSong.actions[1].songTitle, recoveredNewSong.actions[0].title)
+  assert.equal(recoveredNewSong.actions[1].writeLyrics, true)
+  assert.equal(recoveredNewSong.actions[1].instrumental, false)
+  assert.equal(recoveredNewSong.actions[1].lyricsLanguage, 'es')
+  assert.match(recoveredNewSong.actions[1].style, /heavy metal 1981/i)
+  assert.equal(recoveredNewSong.actions[3].targetStoryTitle, recoveredNewSong.actions[0].title)
+  assert.equal(recoveredNewSong.actions[3].cueTitle, recoveredNewSong.actions[1].songTitle)
+  assert.equal(recoveredNewSong.actions[3].songName, '')
 
   const infinitive = await reconcileAgentTurnWithRequest(
     'Genera una versión v2 y úsala para preparar el videoclip y ejecutarlo ahora en Director.',
