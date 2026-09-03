@@ -61,20 +61,22 @@ export function normalizeRemoteWizardMessages(
 /**
  * Merge two snapshots without duplicating a message id.
  *
- * The remote snapshot is canonical and therefore wins for an id already
- * persisted there. Local-only messages are appended in their existing order;
- * this makes retries idempotent while keeping a user's turn together.
+ * Remote order is canonical, but a local value wins for a shared id. Callers
+ * use this fallback only when no common ancestor is available, so preserving
+ * an in-browser card/workflow update is safer than silently reverting it.
+ * Local-only messages are appended in their existing order.
  */
 export function mergeWizardMessages(
   localMessages: WizardSyncMessage[],
   remoteMessages: WizardSyncMessage[],
 ): WizardSyncMessage[] {
+  const localById = new Map(localMessages.map(message => [message.id, message]))
   const merged: WizardSyncMessage[] = []
   const seen = new Set<string>()
   for (const message of remoteMessages) {
     if (!message.id || seen.has(message.id)) continue
     seen.add(message.id)
-    merged.push(message)
+    merged.push(localById.get(message.id) ?? message)
   }
   for (const message of localMessages) {
     if (!message.id || seen.has(message.id)) continue

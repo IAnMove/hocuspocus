@@ -25,6 +25,8 @@ export interface QueuedWizardConversationWrite {
   workspace: string
   captured: WizardConversationPayload
   base?: WizardConversationPayload
+  /** Only explicit user mutations such as Clear may delete values absent locally. */
+  honorLocalDeletes?: boolean
 }
 
 export function resolveWizardConversationHydration(
@@ -172,21 +174,23 @@ export function mergeQueuedWizardConversationSnapshots(
   local: WizardConversationPayload,
   base: WizardConversationPayload | undefined,
   canonical: WizardConversationPayload,
+  options: { honorLocalDeletes?: boolean } = {},
 ): WizardConversationPayload {
+  const honorLocalDeletes = options.honorLocalDeletes ?? true
   return {
     version: 1,
     revision: canonical.revision,
-    messages: mergeQueuedValues(local.messages, base?.messages, canonical.messages),
-    executions: mergeQueuedValues(local.executions, base?.executions, canonical.executions),
+    messages: mergeQueuedValues(local.messages, base?.messages, canonical.messages, honorLocalDeletes),
+    executions: mergeQueuedValues(local.executions, base?.executions, canonical.executions, honorLocalDeletes),
     requestedActions: local.requestedActions === undefined
       ? canonical.requestedActions
-      : mergeQueuedValues(local.requestedActions, base?.requestedActions, canonical.requestedActions),
+      : mergeQueuedValues(local.requestedActions, base?.requestedActions, canonical.requestedActions, honorLocalDeletes),
     executedActions: local.executedActions === undefined
       ? canonical.executedActions
-      : mergeQueuedValues(local.executedActions, base?.executedActions, canonical.executedActions),
+      : mergeQueuedValues(local.executedActions, base?.executedActions, canonical.executedActions, honorLocalDeletes),
     confirmations: local.confirmations === undefined
       ? canonical.confirmations
-      : mergeQueuedValues(local.confirmations, base?.confirmations, canonical.confirmations),
+      : mergeQueuedValues(local.confirmations, base?.confirmations, canonical.confirmations, honorLocalDeletes),
   }
 }
 
@@ -234,6 +238,7 @@ export async function saveWizardConversationWithRecovery(
   conversation: WizardConversationPayload,
   transport: WizardConversationTransport = defaultTransport,
   base?: WizardConversationPayload,
+  options: { honorLocalDeletes?: boolean } = {},
 ): Promise<WizardConversationSaveResult> {
   try {
     return {
@@ -244,7 +249,7 @@ export async function saveWizardConversationWithRecovery(
     if (!isWizardConversationConflict(error)) throw error
     const remote = await transport.fetch(workspace)
     const merged = base
-      ? mergeQueuedWizardConversationSnapshots(conversation, base, remote)
+      ? mergeQueuedWizardConversationSnapshots(conversation, base, remote, options)
       : mergeWizardConversationSnapshots(conversation, remote)
     return {
       conversation: await transport.save(workspace, merged),
@@ -269,9 +274,13 @@ export async function persistQueuedWizardConversation(
 ): Promise<WizardConversationSaveResult> {
   const canonical = snapshots.get(write.workspace)
   const outgoing = canonical
-    ? mergeQueuedWizardConversationSnapshots(write.captured, write.base, canonical)
+    ? mergeQueuedWizardConversationSnapshots(write.captured, write.base, canonical, {
+      honorLocalDeletes: write.honorLocalDeletes ?? false,
+    })
     : write.captured
-  const saved = await saveWizardConversationWithRecovery(write.workspace, outgoing, transport, canonical)
+  const saved = await saveWizardConversationWithRecovery(write.workspace, outgoing, transport, write.base, {
+    honorLocalDeletes: write.honorLocalDeletes ?? false,
+  })
   snapshots.set(write.workspace, saved.conversation)
   return saved
 }

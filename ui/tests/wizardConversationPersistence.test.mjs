@@ -17,6 +17,7 @@ const {
 const {
   isWizardConversationWriteCurrent,
   hasExclusiveWizardMessages,
+  mergeWizardMessages,
   shouldFollowWizardWorkspace,
 } = await import('../src/features/agent/wizardConversationSync.ts')
 
@@ -282,6 +283,7 @@ test('a queued clear uses its recorded ancestor after a predecessor advances the
     workspace: 'workspace-a',
     captured: capturedClear,
     base: clearBase,
+    honorLocalDeletes: true,
   }, snapshots, transport)
 
   assert.equal(saved.conversation.revision, 3)
@@ -381,6 +383,82 @@ test('a CAS conflict during a queued edit keeps the edit and the concurrent turn
   assert.equal(saved.merged, true)
   assert.equal(saved.conversation.messages.find(message => message.id === 'shared-user').text, 'edited after hydration')
   assert.deepEqual(saved.conversation.messages.map(message => message.id), ['shared-user', 'remote-assistant'])
+})
+
+test('a normal queued save cannot delete canonical turns outside the 40-message UI window', async () => {
+  const ids = Array.from({ length: 50 }, (_value, index) => `message-${index + 1}`)
+  const canonical = payload(7, ids)
+  const visibleWindow = payload(7, [...ids.slice(-40), 'new-local-message'])
+  const snapshots = new Map([['workspace-a', clone(canonical)]])
+  const transport = {
+    async fetch() { return clone(canonical) },
+    async save(_workspace, conversation) {
+      assert.equal(conversation.revision, 7)
+      assert.deepEqual(conversation.messages.map(message => message.id), [...ids, 'new-local-message'])
+      return { ...clone(conversation), revision: 8 }
+    },
+  }
+
+  await persistQueuedWizardConversation({
+    workspace: 'workspace-a',
+    captured: visibleWindow,
+    base: canonical,
+  }, snapshots, transport)
+})
+
+test('a conflict retry keeps using the recorded clear ancestor', async () => {
+  const clearBase = payload(1, ['cleared-user', 'cleared-assistant'])
+  const capturedClear = payload(1, ['welcome-after-clear'])
+  const snapshotAfterEarlierWrite = payload(2, ['concurrent-before-conflict'])
+  const remoteAfterConflict = payload(3, [
+    'cleared-user',
+    'cleared-assistant',
+    'concurrent-before-conflict',
+    'concurrent-during-conflict',
+  ])
+  const snapshots = new Map([['workspace-a', clone(snapshotAfterEarlierWrite)]])
+  let saves = 0
+  const transport = {
+    async fetch() { return clone(remoteAfterConflict) },
+    async save(_workspace, conversation) {
+      saves += 1
+      if (saves === 1) throw revisionConflict(conversation.revision, remoteAfterConflict.revision)
+      assert.equal(conversation.revision, 3)
+      assert.deepEqual(conversation.messages.map(message => message.id), [
+        'concurrent-before-conflict',
+        'concurrent-during-conflict',
+        'welcome-after-clear',
+      ])
+      return { ...clone(conversation), revision: 4 }
+    },
+  }
+
+  const saved = await persistQueuedWizardConversation({
+    workspace: 'workspace-a',
+    captured: capturedClear,
+    base: clearBase,
+    honorLocalDeletes: true,
+  }, snapshots, transport)
+
+  assert.equal(saved.merged, true)
+  assert.equal(saved.conversation.revision, 4)
+})
+
+test('a shared message id retains the newer local workflow card', () => {
+  const remote = [{
+    id: 'assistant-workflow', role: 'assistant', text: 'Generating', createdAt: 1,
+    cards: [{ id: 'card-1', state: 'running' }],
+  }]
+  const local = [{
+    ...remote[0],
+    text: 'Completed',
+    cards: [{ id: 'card-1', state: 'completed' }],
+  }]
+
+  const merged = mergeWizardMessages(local, remote)
+
+  assert.equal(merged[0].text, 'Completed')
+  assert.equal(merged[0].cards[0].state, 'completed')
 })
 
 test('a late hydration fetch cannot replace a newer confirmed snapshot or visible edits', () => {

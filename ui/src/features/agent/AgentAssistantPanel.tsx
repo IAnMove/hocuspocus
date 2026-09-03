@@ -17,9 +17,7 @@ import {
 import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
 import {
   applyRemoteWizardConversation,
-  hasExclusiveWizardMessages,
   isWizardConversationWriteCurrent,
-  mergeWizardMessages,
   normalizeRemoteWizardMessages,
   shouldFollowWizardWorkspace,
   WIZARD_WELCOME_TEXT,
@@ -258,6 +256,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       // A clear is a three-way delete relative to the exact conversation the
       // user saw, even if an earlier queued save advances the canonical state.
       base: queuedClearBase ?? conversationSnapshotsRef.current.get(conversationWorkspace),
+      honorLocalDeletes: Boolean(queuedClearBase),
     }
     conversationSaveChainRef.current = enqueueWizardConversationSave(
       conversationSaveChainRef.current,
@@ -272,13 +271,19 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           }
           if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
           setConversationSaveError(null)
-          if (saved.merged) {
-            const canonicalMessages = normalizeRemoteWizardMessages(saved.conversation.messages, saved.conversation.executions)
-            const hasExclusiveLocal = hasExclusiveWizardMessages(messagesRef.current, canonicalMessages)
-            if (!hasExclusiveLocal) {
-              skipNextConversationSaveRef.current = true
-            }
-            setMessages(mergeWizardMessages(messagesRef.current, canonicalMessages) as AgentMessage[])
+          const visibleMessages = messagesRef.current
+          const rebased = rebaseStaleWizardConversationHydration({
+            ...queuedWrite.captured,
+            revision: saved.conversation.revision,
+            messages: visibleMessages,
+            executions: visibleMessages.flatMap(message => message.cards || []),
+          }, queuedWrite.captured, saved.conversation)
+          if (saved.merged || rebased.needsPersist) {
+            skipNextConversationSaveRef.current = !rebased.needsPersist
+            setMessages(normalizeRemoteWizardMessages(
+              rebased.conversation.messages,
+              rebased.conversation.executions,
+            ) as AgentMessage[])
           }
         } catch (error) {
           if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
@@ -297,13 +302,13 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       const hydration = resolveWizardConversationHydration(knownSnapshot, payload)
       conversationSnapshotsRef.current.set(conversationWorkspace, hydration.snapshot)
       const clearBase = conversationClearBasesRef.current.get(conversationWorkspace)
-      if (!hydration.applyToVisibleState || clearBase) {
+      if (!hydration.applyToVisibleState || clearBase || knownSnapshot) {
         const visibleMessages = messagesRef.current
         const rebased = rebaseStaleWizardConversationHydration({
           ...payload,
           messages: visibleMessages,
           executions: visibleMessages.flatMap(message => message.cards || []),
-        }, clearBase ?? payload, hydration.snapshot, {
+        }, clearBase ?? knownSnapshot ?? payload, hydration.snapshot, {
           honorLocalDeletes: Boolean(clearBase),
         })
         skipNextConversationSaveRef.current = !rebased.needsPersist
@@ -317,7 +322,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       const canonicalSnapshot = hydration.snapshot
       const choice = applyRemoteWizardConversation({
         localMessages: messagesRef.current,
-        localRevision: knownSnapshot?.revision || 0,
+        // A known snapshot is handled by the three-way branch above.
+        localRevision: 0,
         remoteMessages: canonicalSnapshot.messages,
         remoteRevision: canonicalSnapshot.revision || 0,
         remoteExecutions: canonicalSnapshot.executions,
