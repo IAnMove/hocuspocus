@@ -405,6 +405,51 @@ test('stale hydration restores confirmed-only turns without scheduling a redunda
   assert.deepEqual(rebased.conversation.messages, confirmed.messages)
 })
 
+test('UI and server message shape differences are not treated as local edits', () => {
+  const serverMessage = (id, role, text, createdAt, extra = {}) => ({
+    id,
+    role,
+    text,
+    createdAt,
+    cards: [],
+    executionKey: '',
+    jobLinks: [],
+    lastState: '',
+    error: '',
+    ...extra,
+  })
+  const stale = {
+    version: 1,
+    revision: 7,
+    messages: [serverMessage('shared-user', 'user', 'hello', 1)],
+    executions: [],
+  }
+  const confirmed = {
+    version: 1,
+    revision: 8,
+    messages: [
+      serverMessage('shared-user', 'user', 'hello', 1, { executionKey: 'server-key' }),
+      serverMessage('confirmed-assistant', 'assistant', 'reply', 2),
+    ],
+    executions: [],
+  }
+  const visible = {
+    version: 1,
+    revision: 7,
+    messages: [{ id: 'shared-user', role: 'user', text: 'hello', createdAt: 1 }],
+    executions: [],
+  }
+
+  const rebased = rebaseStaleWizardConversationHydration(visible, stale, confirmed)
+
+  assert.equal(rebased.needsPersist, false)
+  assert.equal(rebased.conversation.messages[0].executionKey, 'server-key')
+  assert.deepEqual(rebased.conversation.messages.map(message => message.id), [
+    'shared-user',
+    'confirmed-assistant',
+  ])
+})
+
 test('stale browser cache omissions do not delete newer canonical turns during hydration', () => {
   const stale = payload(7, ['shared-user', 'stale-assistant'])
   const confirmed = payload(8, ['shared-user', 'stale-assistant', 'confirmed-user'])

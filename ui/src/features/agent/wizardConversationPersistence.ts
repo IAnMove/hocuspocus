@@ -93,11 +93,19 @@ const defaultTransport: WizardConversationTransport = {
   save: saveWizardConversation,
 }
 
+function isEmptyStableValue(value: unknown): boolean {
+  return value == null || value === '' || (Array.isArray(value) && value.length === 0)
+}
+
 function stableKey(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? String(value)
   if (Array.isArray(value)) return `[${value.map(stableKey).join(',')}]`
   const record = value as Record<string, unknown>
-  return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${stableKey(record[key])}`).join(',')}}`
+  return `{${Object.keys(record)
+    .sort()
+    .filter(key => !isEmptyStableValue(record[key]))
+    .map(key => `${JSON.stringify(key)}:${stableKey(record[key])}`)
+    .join(',')}}`
 }
 
 function mergeUniqueValues(remote: unknown, local: unknown): unknown[] {
