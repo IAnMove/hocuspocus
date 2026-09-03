@@ -323,3 +323,33 @@ test('three-way queued merge persists an updated execution card by stable id', (
 
   assert.deepEqual(merged.executions, [{ id: 'card-1', state: 'completed' }])
 })
+
+test('a CAS conflict during a queued edit keeps the edit and the concurrent turn', async () => {
+  const base = payload(4, ['shared-user'])
+  const snapshots = new Map([['workspace-a', clone(base)]])
+  const local = clone(base)
+  local.messages[0].text = 'edited after hydration'
+  let canonical = payload(5, ['shared-user', 'remote-assistant'])
+  canonical.messages[0].text = base.messages[0].text
+  let saves = 0
+  const transport = {
+    async fetch() { return clone(canonical) },
+    async save(_workspace, conversation) {
+      saves += 1
+      if (saves === 1) throw revisionConflict(conversation.revision, canonical.revision)
+      assert.equal(conversation.revision, 5)
+      canonical = { ...clone(conversation), revision: 6 }
+      return clone(canonical)
+    },
+  }
+
+  const saved = await persistQueuedWizardConversation({
+    workspace: 'workspace-a',
+    captured: local,
+    base,
+  }, snapshots, transport)
+
+  assert.equal(saved.merged, true)
+  assert.equal(saved.conversation.messages.find(message => message.id === 'shared-user').text, 'edited after hydration')
+  assert.deepEqual(saved.conversation.messages.map(message => message.id), ['shared-user', 'remote-assistant'])
+})

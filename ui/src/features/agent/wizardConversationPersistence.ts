@@ -159,6 +159,7 @@ export async function saveWizardConversationWithRecovery(
   workspace: string,
   conversation: WizardConversationPayload,
   transport: WizardConversationTransport = defaultTransport,
+  base?: WizardConversationPayload,
 ): Promise<WizardConversationSaveResult> {
   try {
     return {
@@ -168,7 +169,9 @@ export async function saveWizardConversationWithRecovery(
   } catch (error) {
     if (!isWizardConversationConflict(error)) throw error
     const remote = await transport.fetch(workspace)
-    const merged = mergeWizardConversationSnapshots(conversation, remote)
+    const merged = base
+      ? mergeQueuedWizardConversationSnapshots(conversation, base, remote)
+      : mergeWizardConversationSnapshots(conversation, remote)
     return {
       conversation: await transport.save(workspace, merged),
       merged: true,
@@ -194,7 +197,7 @@ export async function persistQueuedWizardConversation(
   const outgoing = canonical
     ? mergeQueuedWizardConversationSnapshots(write.captured, write.base, canonical)
     : write.captured
-  const saved = await saveWizardConversationWithRecovery(write.workspace, outgoing, transport)
+  const saved = await saveWizardConversationWithRecovery(write.workspace, outgoing, transport, canonical)
   snapshots.set(write.workspace, saved.conversation)
   return saved
 }
