@@ -477,16 +477,25 @@ def _prepare_local_gpu_owner(
     description: str,
 ) -> None:
     """Hand GPU 0 to one engine without retaining incompatible runtimes."""
-    owner = str(description or "").strip().lower()
-    is_legacy_h3 = owner.startswith("maestro h3 legacy")
-    is_wgp_generation = owner.startswith("maestro wgp")
-    is_local_llm = owner.startswith("local llm")
+    owner_kind = resource_scheduler.gpu_engine_kind(description)
+    is_legacy_h3 = owner_kind == resource_scheduler.GPU_ENGINE_H3_LEGACY
+    is_wgp_generation = owner_kind == resource_scheduler.GPU_ENGINE_WGP
+    is_local_llm = owner_kind == resource_scheduler.GPU_ENGINE_LOCAL_LLM
 
     if not is_legacy_h3:
         minimax_h3_service.cancel_idle_shutdown()
         minimax_h3_service.stop_runtime()
-    if not is_wgp_generation and getattr(wgp, "wan_model", None) is not None:
+    released_wgp = False
+    if not is_wgp_generation and (
+        getattr(wgp, "wan_model", None) is not None
+        or getattr(wgp, "offloadobj", None) is not None
+    ):
+        print(
+            f"[Resources] Releasing WGP runtime before "
+            f"{description or 'the next local GPU owner'}"
+        )
         wgp.release_model()
+        released_wgp = True
     if not is_local_llm:
         try:
             from services import llm_service
@@ -498,9 +507,14 @@ def _prepare_local_gpu_owner(
                 llm_service.unload_model()
         except Exception as exc:
             print(f"[Resources] Local CUDA LLM cleanup skipped: {exc}")
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    # release_model() already flushes Torch caches and performs collection.
+    # Repeating that native teardown immediately was both redundant and, when
+    # handing ACE-Step to isolated H3 ConvRot, could finalize extension-owned
+    # objects twice at the exact boundary where the process previously died.
+    if not released_wgp:
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 resource_scheduler.coordinator.set_prepare_hook(
@@ -519,9 +533,15 @@ def _coordinated_generation_slot(
     model_type = str(params.get("model_type") or "").strip()
     if not description:
         if _is_legacy_h3_model(model_type):
-            description = "HocusPocus Lab H3 Legacy generation"
+            description = resource_scheduler.gpu_engine_description(
+                resource_scheduler.GPU_ENGINE_H3_LEGACY,
+                "HocusPocus Lab H3 Legacy generation",
+            )
         elif model_type:
-            description = f"HocusPocus Lab WGP generation · {model_type}"
+            description = resource_scheduler.gpu_engine_description(
+                resource_scheduler.GPU_ENGINE_WGP,
+                f"HocusPocus Lab WGP generation · {model_type}",
+            )
         else:
             description = "HocusPocus Lab GPU generation"
     with generation_slot(_gen_lock, job) as acquired:
@@ -23272,11 +23292,11 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                         f"({anchor['path']}){ignored_note}."
                     )
 
+                # The coordinator hand-off already released any WGP-owned
+                # runtime before entering this branch. Do not repeat native
+                # model/cache teardown here: H3 itself runs in an isolated
+                # sidecar and only needs the now-exclusive GPU lease.
                 minimax_h3_service.cancel_idle_shutdown()
-                wgp.release_model()
-                gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
 
                 def _legacy_h3_progress(
                     message: str,
