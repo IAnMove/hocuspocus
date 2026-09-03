@@ -50,6 +50,23 @@ function boundedInteger(value: number | undefined, fallback: number, maximum: nu
   return Math.max(1, Math.min(maximum, Math.round(value as number)))
 }
 
+/**
+ * Keep every source panel while honoring an explicitly requested page count.
+ * The requested count wins over the panels-per-page hint; when there are more
+ * panels than pages, the panels are balanced across those pages. If a caller
+ * asks for more pages than panels, the remaining pages stay intentionally
+ * empty so the requested document shape is preserved for user editing.
+ */
+function distributePanels(panels: ComicPlanPanel[], pageCount: number): ComicPlanPanel[][] {
+  const pages = Array.from({ length: pageCount }, () => [] as ComicPlanPanel[])
+  if (!panels.length) return pages
+  panels.forEach((panel, index) => {
+    const pageIndex = Math.min(pageCount - 1, Math.floor(index * pageCount / panels.length))
+    pages[pageIndex].push(panel)
+  })
+  return pages
+}
+
 function comicCharacter(character: SeriesCharacter): ComicCharacter {
   return {
     id: character.id,
@@ -259,7 +276,9 @@ export function buildSeriesComicHandoff(
   const { series, episode } = resolveSeriesEpisodeById(library, source)
   const panelsPerPage = boundedInteger(input.panelsPerPage, 4, 12)
   const panels = sourcePanels(series, episode)
-  const pageCount = Math.max(1, Math.min(100, Math.ceil(panels.length / panelsPerPage)))
+  const derivedPageCount = Math.max(1, Math.ceil(panels.length / panelsPerPage))
+  const pageCount = boundedInteger(input.pageCount, derivedPageCount, 100)
+  const panelsByPage = distributePanels(panels, pageCount)
   const languageIntent = series.languageIntent
   const characters = series.characters.map(comicCharacter)
   const title = clean(input.title) || `${series.title} · ${episode.title}`
@@ -302,11 +321,11 @@ export function buildSeriesComicHandoff(
     language: languageIntent.contentLanguage || series.language,
     styleBible: series.visualStyle,
     characters,
-    pages: Array.from({ length: pageCount }, (_, pageIndex) => ({
+    pages: panelsByPage.map((pagePanels, pageIndex) => ({
       pageNumber: pageIndex + 1,
       layoutHint: 'grid' as const,
-      panels: panels.slice(pageIndex * panelsPerPage, (pageIndex + 1) * panelsPerPage),
-    })).filter(page => page.panels.length),
+      panels: pagePanels,
+    })),
   }
   const prepared = projectFromPlan(plan, {
     ...comic,

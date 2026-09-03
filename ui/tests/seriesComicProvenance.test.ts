@@ -26,7 +26,7 @@ Object.defineProperty(globalThis, 'navigator', {
   value: dom.window.navigator,
 })
 
-function episode(id: string, title: string): SeriesEpisode {
+function episode(id: string, title: string, beatCount = 1): SeriesEpisode {
   return {
     id,
     seasonId: 'season-1',
@@ -38,7 +38,7 @@ function episode(id: string, title: string): SeriesEpisode {
     status: 'outline',
     canonRevisionAtCreation: 2,
     canonSnapshot: { revision: 2 },
-    outline: { beats: [`${title} beat`] },
+    outline: { beats: Array.from({ length: beatCount }, (_, index) => `${title} beat ${index + 1}`) },
     script: [],
     shots: [],
     proposedCanonDelta: { baseRevision: 2, sourceEpisodeId: id, add: [], change: [], retire: [] },
@@ -100,6 +100,12 @@ function series(id: string, episodeId: string, title = 'Same title'): SeriesProj
   }
 }
 
+function seriesWithBeatCount(id: string, episodeId: string, beatCount: number): SeriesProject {
+  const value = series(id, episodeId)
+  value.episodesById[episodeId] = episode(episodeId, value.title, beatCount)
+  return value
+}
+
 function library(...projects: SeriesProject[]): SeriesLibrary {
   return {
     schema: 'series-library',
@@ -143,6 +149,33 @@ test('Series → Comics provenance survives JSON reload and restores by ID', () 
   const resolved = resolveComicSource(restored, source)
   assert.equal(resolved?.series.id, 'series-a')
   assert.equal(resolved?.episode.id, 'episode-a')
+})
+
+test('an explicit page count is honored while every source panel is retained', () => {
+  const source = library(seriesWithBeatCount('series-pages', 'episode-pages', 5))
+  const staged = buildSeriesComicHandoff(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-pages', episodeId: 'episode-pages',
+    pageCount: 2, panelsPerPage: 4,
+  })
+  const pages = staged.comic.director?.plan.pages || []
+
+  assert.equal(pages.length, 2)
+  assert.deepEqual(pages.map(page => page.panels.length), [3, 2])
+  assert.equal(pages.flatMap(page => page.panels).length, 5)
+  assert.equal(staged.request.pageCount, 2)
+})
+
+test('Series → Comics provenance records the caller actor', () => {
+  const source = library(series('series-actor', 'episode-actor'))
+  const userHandoff = buildSeriesComicHandoff(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-actor', episodeId: 'episode-actor', actor: 'user',
+  })
+  const wizardHandoff = buildSeriesComicHandoff(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-actor', episodeId: 'episode-actor', actor: 'wizard',
+  })
+
+  assert.equal(userHandoff.provenance.actor, 'user')
+  assert.equal(wizardHandoff.provenance.actor, 'wizard')
 })
 
 test('a lost Series ID fails explicitly instead of falling back to a same-title entity', () => {

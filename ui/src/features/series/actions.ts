@@ -248,7 +248,7 @@ export async function stageSeriesComic(action: StageSeriesComicCommand): Promise
     title: action.title,
     pageCount: action.pageCount,
     panelsPerPage: action.panelsPerPage,
-    actor: 'wizard',
+    actor: action.actor || 'user',
   })
   useComicStore.getState().setProject(handoff.comic)
   useComicStore.setState({ dirty: true })

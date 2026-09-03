@@ -91,5 +91,7 @@ export interface StageSeriesComicCommand {
   title?: string
   pageCount?: number
   panelsPerPage?: number
+  /** The caller is explicit so a human UI handoff is not reported as Wizard work. */
+  actor?: 'user' | 'wizard' | 'system'
   confirm: true
 }

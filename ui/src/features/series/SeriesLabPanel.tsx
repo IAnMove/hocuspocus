@@ -157,7 +157,7 @@ export function SeriesLabPanel() {
     const { useComicStore } = await import('../comics/store')
     if (useComicStore.getState().dirty && !window.confirm(t('episode.adaptToComicConfirm'))) return
     await runAction(async () => {
-      await stageSeriesComic({ seriesId: series.id, episodeId: episode.id, confirm: true })
+      await stageSeriesComic({ seriesId: series.id, episodeId: episode.id, actor: 'user', confirm: true })
     })
   }
   const startRender = useCallback(async (
