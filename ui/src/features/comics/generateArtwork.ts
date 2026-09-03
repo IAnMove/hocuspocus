@@ -17,8 +17,10 @@ export function panelIdentityReference(
       character.referenceAssetId,
       ...(character.referenceAssetIds || []),
     ].filter((value): value is string => Boolean(value))))
-    const asset = referenceIds.map(id => assets[id]).find(Boolean)
-    if (asset?.source) return { source: asset.source, characterId }
+    const asset = referenceIds
+      .map(id => assets[id])
+      .find(candidate => Boolean(candidate?.source) && !candidate?.missing)
+    if (asset) return { source: asset.source, characterId }
   }
   return {}
 }
@@ -178,11 +180,24 @@ export function requestComicArtworkCancel(): boolean {
 
 export function comicArtworkInventory(project = useComicStore.getState().project): ComicArtworkInventory {
   const director = project.director
-  const pages = director?.plan.pages.length || project.pages.length
-  const panels = director?.plan.pages.reduce((sum, page) => sum + page.panels.length, 0) || 0
-  const completed = director?.completedPanelIds.length || 0
-  const failed = director?.failedPanelIds?.length || 0
-  const firstPendingPage = director?.plan.pages.findIndex((page, pageIndex) =>
+  if (!director) {
+    return {
+      projectId: project.id,
+      title: project.title,
+      pages: project.pages.length,
+      panels: 0,
+      completed: 0,
+      failed: 0,
+      pending: 0,
+      provider: '',
+      activePage: 1,
+    }
+  }
+  const pages = director.plan.pages.length
+  const panels = director.plan.pages.reduce((sum, page) => sum + page.panels.length, 0)
+  const completed = director.completedPanelIds.length
+  const failed = director.failedPanelIds?.length || 0
+  const firstPendingPage = director.plan.pages.findIndex((page, pageIndex) =>
     page.panels.some(panel => !director.completedPanelIds.includes(panel.id)
       && (project.pages[pageIndex]?.elements.some(element => element.type === 'panel') ?? false)))
   return {
@@ -193,7 +208,7 @@ export function comicArtworkInventory(project = useComicStore.getState().project
     completed,
     failed,
     pending: Math.max(0, panels - completed),
-    provider: director?.provider || '',
+    provider: director.provider || '',
     activePage: (firstPendingPage ?? 0) + 1,
   }
 }
@@ -372,7 +387,19 @@ export async function generateDirectorArtwork(options: {
           rotation: 0, zIndex: 2, objectFit: 'cover', filter: 'none', opacity: 1, visible: true,
         })
         const after = useComicStore.getState().project.director!
+        const lineage = useComicStore.getState().project.provenance
         latest.patchProject({
+          ...(lineage ? {
+            provenance: {
+              ...lineage,
+              destination: {
+                ...lineage.destination,
+                outputAssetIds: Array.from(new Set([
+                  ...(lineage.destination.outputAssetIds || []), asset.id,
+                ])),
+              },
+            },
+          } : {}),
           director: {
             ...after,
             completedPanelIds: Array.from(new Set([...after.completedPanelIds, task.plan.id])),

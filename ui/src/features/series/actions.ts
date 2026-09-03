@@ -8,6 +8,8 @@ import {
 } from '../../lib/labHelpers'
 import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
+import { clearStagedComicHandoffs, COMIC_HANDOFF_STORAGE_KEY } from '../comics/provenance'
+import { buildSeriesComicHandoff } from './comicHandoff'
 import { resolveSeriesLanguageIntent, seriesLanguageIntentAffectsCanon } from './languageIntent'
 import type {
   ApplySeriesPlanCommand,
@@ -17,6 +19,7 @@ import type {
   GenerateSeriesPlanCommand,
   RenderSeriesShotsCommand,
   ReviewSeriesAttemptsCommand,
+  StageSeriesComicCommand,
   UpdateSeriesEpisodeCommand,
 } from './commands'
 
@@ -51,6 +54,29 @@ function seriesEpisodeResult(
         summary: message,
         ...(extra.channel ? { channel: extra.channel } : {}),
         ...(extra.job ? { job: extra.job } : {}),
+      },
+    }],
+  })
+}
+
+function seriesComicResult(
+  workspaceId: string,
+  comic: { id: string; title: string },
+  provenance: Record<string, unknown>,
+  message: string,
+): CommandResult {
+  const entity = { kind: 'comic', id: comic.id, workspaceId }
+  return commandResultFromSlice({
+    entity,
+    navigationTarget: { destination: 'comics', entity },
+    artifacts: [{
+      id: 'reply',
+      kind: 'document',
+      owner: entity,
+      uri: `comic:${comic.id}`,
+      metadata: {
+        summary: message,
+        provenance,
       },
     }],
   })
@@ -194,6 +220,62 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
     createdEpisode,
     'episode',
     `He ${createdSeries ? 'creado la serie, ' : ''}${canonResult}guardado el episodio “${createdEpisode.title}” con ${beats.length} beats; está abierto en Series Lab → Episode room.`,
+  )
+}
+
+/**
+ * Stage an exact Series episode as an editable Comic project. This is a
+ * preparation step only: no image provider or render job is started.
+ */
+export async function stageSeriesComic(action: StageSeriesComicCommand): Promise<CommandResult> {
+  if (!action.confirm) throw new Error('Preparar un cómic desde Series Lab requiere confirm=true porque sustituye el borrador actual de Comics.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useSeriesStore }, { useComicStore }, api, seriesModel] = await Promise.all([
+    import('./store'), import('../comics/store'), import('../../api/client'), import('./model'),
+  ])
+  await useSeriesStore.getState().loadWorkspace(workspace)
+  await useSeriesStore.getState().saveNow()
+  // The backend library is authoritative at the moment of staging. The
+  // adapter receives both IDs explicitly and never reconstructs them from a
+  // title or from whichever project happens to be active in another tab.
+  const library = seriesModel.normalizeSeriesLibrary(
+    await api.fetchSeriesLibrary(workspace), workspace,
+  )
+  const handoff = buildSeriesComicHandoff(library, {
+    workspaceId: workspace,
+    seriesId: action.seriesId,
+    episodeId: action.episodeId,
+    title: action.title,
+    pageCount: action.pageCount,
+    panelsPerPage: action.panelsPerPage,
+    actor: action.actor || 'user',
+  })
+  useComicStore.getState().setProject(handoff.comic)
+  useComicStore.setState({ dirty: true })
+  try {
+    clearStagedComicHandoffs(true)
+    window.localStorage.setItem(COMIC_HANDOFF_STORAGE_KEY, JSON.stringify({
+      projectId: handoff.comic.id,
+      request: handoff.request,
+    }))
+    window.dispatchEvent(new CustomEvent('maestro:comic-staged', { detail: handoff.request }))
+  } catch {
+    // Browser storage is only a reload aid; the in-memory project remains
+    // available even when a privacy policy blocks localStorage.
+  }
+  const app = useStore.getState()
+  app.setSettingsOpen(false)
+  app.setDashboardOpen(false)
+  app.setMediaFilter('comics')
+  app.setSidebarMode('director')
+  app.setDirectorSkill('comic')
+  app.setSidebarOpen(true)
+  window.dispatchEvent(new Event('maestro:director-open'))
+  return seriesComicResult(
+    workspace,
+    handoff.comic,
+    handoff.provenance as unknown as Record<string, unknown>,
+    `He preparado “${handoff.comic.title}” desde el episodio exacto “${handoff.episode.title}” en Comic Director. El borrador queda editable y no he generado imágenes.`,
   )
 }
 

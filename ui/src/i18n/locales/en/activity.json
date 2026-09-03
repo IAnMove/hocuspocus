@@ -92,6 +92,7 @@
     "queued": "Retake queued: {{frames}}",
     "submitting": "Submitting…"
   },
+  "comicOpenFailed": "Could not open this comic: {{error}}",
   "recipes": {
     "saveTitle": "Save as Recipe",
     "saveBody": "Captures this generation's model, LoRAs, and settings as a one-click preset. Its thumbnail comes from this output. Applying a recipe later prepopulates the prompt so you just edit the subject.",

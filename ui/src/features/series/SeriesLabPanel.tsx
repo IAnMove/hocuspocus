@@ -10,6 +10,7 @@ import { SeriesShotsPanel } from './SeriesShotsPanel'
 import { SeriesReviewPanel } from './SeriesReviewPanel'
 import { Pill, seriesFormatLabel } from './components'
 import { primaryButton, secondaryButton } from './styles'
+import { stageSeriesComic } from './adapters'
 import type { SeriesJobStatus, SeriesProject } from './types'
 import { listenForAgentSeriesRenderJob, listenForAgentSeriesSection } from '../../lib/uiBus'
 import { useUiTranslation } from '../../i18n'
@@ -151,6 +152,14 @@ export function SeriesLabPanel() {
     try { await action() } catch (reason) { setActionError((reason as Error).message) }
     finally { setActionBusy(false) }
   }
+  const adaptEpisodeToComic = async () => {
+    if (!series || !episode || actionBusy) return
+    const { useComicStore } = await import('../comics/store')
+    if (useComicStore.getState().dirty && !window.confirm(t('episode.adaptToComicConfirm'))) return
+    await runAction(async () => {
+      await stageSeriesComic({ seriesId: series.id, episodeId: episode.id, actor: 'user', confirm: true })
+    })
+  }
   const startRender = useCallback(async (
     mode: 'selected' | 'missing' | 'failed' | 'all', shotIds?: string[], seed?: number,
   ) => {
@@ -211,7 +220,7 @@ export function SeriesLabPanel() {
         {!series ? <div className="mx-auto mt-20 max-w-lg rounded-2xl border border-violet-500/30 bg-violet-500/10 p-8 text-center"><BookOpen size={28} className="mx-auto text-violet-300" /><h3 className="mt-3 text-base font-semibold text-text-primary">{t('library.emptyTitle')}</h3><p className="mt-2 text-xs leading-relaxed text-text-muted">{t('library.emptyBody')}</p><button className={`mt-4 ${primaryButton}`} onClick={() => void runAction(newSeries)}><Plus size={13} />{t('library.createOriginal')}</button></div> : <>
           {tab === 'setup' && <SeriesSetupPanel workspace={workspace} series={series} update={updateSeries} saveNow={saveNow} replaceSeries={adoptRemoteSeries} job={canonJob} setJob={setCanonJob} />}
           {tab === 'canon' && <SeriesCanonPanel series={series} workspace={workspace} update={updateSeries} replaceSeries={adoptRemoteSeries} saveNow={saveNow} />}
-          {tab === 'episode' && (episode ? <SeriesEpisodePanel workspace={workspace} series={series} episode={episode} updateEpisode={updater => updateEpisode(episode.id, updater)} saveNow={saveNow} reload={reload} /> : <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-6 text-center text-xs text-violet-200"><button className={primaryButton} onClick={createEpisodeAction}><Plus size={13} />{t('library.createFirstEpisode')}</button></div>)}
+          {tab === 'episode' && (episode ? <SeriesEpisodePanel workspace={workspace} series={series} episode={episode} updateEpisode={updater => updateEpisode(episode.id, updater)} saveNow={saveNow} reload={reload} onAdaptToComic={adaptEpisodeToComic} /> : <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-6 text-center text-xs text-violet-200"><button className={primaryButton} onClick={createEpisodeAction}><Plus size={13} />{t('library.createFirstEpisode')}</button></div>)}
           {tab === 'shots' && (episode ? <SeriesShotsPanel workspace={workspace} series={series} episode={episode} updateEpisode={updater => updateEpisode(episode.id, updater)} replaceSeries={adoptRemoteSeries} saveNow={saveNow} onAcknowledgeLipSync={async () => { updateSeries(current => ({ ...current, bestEffortLipSyncAcknowledged: true })); await saveNow() }} onRender={(mode, ids) => void startRender(mode, ids)} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
           {tab === 'review' && (episode ? <SeriesReviewPanel workspace={workspace} series={series} episode={episode} job={renderJob} setJob={setRenderJob} reload={reload} startRender={startRender} updateEpisode={updater => updateEpisode(episode.id, updater)} saveNow={saveNow} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
         </>}

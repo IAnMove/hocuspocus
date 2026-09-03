@@ -6,6 +6,7 @@ import {
   generateSeriesPlan,
   renderSeriesShots,
   reviewSeriesAttempts,
+  stageSeriesComic as stageSeriesComicAction,
   updateSeriesEpisode,
 } from './actions'
 import type {
@@ -16,6 +17,7 @@ import type {
   GenerateSeriesPlanCommand,
   RenderSeriesShotsCommand,
   ReviewSeriesAttemptsCommand,
+  StageSeriesComicCommand,
   UpdateSeriesEpisodeCommand,
 } from './commands'
 
@@ -45,6 +47,10 @@ export async function reviewAttempts(command: ReviewSeriesAttemptsCommand) {
 
 export async function assembleEpisode(command: AssembleSeriesEpisodeCommand) {
   return assembleSeriesEpisode(command)
+}
+
+export async function stageSeriesComic(command: StageSeriesComicCommand) {
+  return stageSeriesComicAction(command)
 }
 
 export async function commitCanon(command: CommitSeriesCanonCommand) {
