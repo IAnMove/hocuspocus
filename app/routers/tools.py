@@ -78,8 +78,12 @@ def create_tools_router(
                 f"hocuspocus:unmanaged:{source_workspace}:{source_filename}",
             ).hex
         )
-        provenance = normalize_submission_provenance(payload.provenance)
-        provenance["capability"] = "remove_background"
+        # Capability must be present before normalize: the Tools panel only
+        # sends `{actor: user}`, and a later stamp would leave tool=studio.
+        provenance = normalize_submission_provenance({
+            **payload.provenance,
+            "capability": "remove_background",
+        })
         job_id = uuid.uuid4().hex[:8]
         source_root = output_dir if source_workspace == "__uploads__" else workspace_dir(source_workspace)
         job = build_background_removal_job(

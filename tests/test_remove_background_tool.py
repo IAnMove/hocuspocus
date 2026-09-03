@@ -128,7 +128,39 @@ def test_tools_route_resolves_exact_asset_id_and_enqueues_one_job(tmp_path):
     assert jobs[0]["params"]["_non_durable_tool"] == "remove_background"
     assert jobs[0]["provenance"]["actor"] == "wizard"
     assert jobs[0]["provenance"]["capability"] == "remove_background"
+    assert jobs[0]["provenance"]["tool"] == "tools"
     assert started == jobs
+
+
+def test_tools_route_records_user_panel_cutouts_as_tools_not_studio(tmp_path):
+    """The Tools panel submits only `{actor: user}`; tool must still be Tools."""
+    uploads = tmp_path / "uploads"
+    workspace = tmp_path / "outputs"
+    uploads.mkdir()
+    workspace.mkdir()
+    source = workspace / "source.png"
+    _image(source)
+    jobs = []
+    app = FastAPI()
+    app.include_router(create_tools_router(
+        get_active_workspace=lambda: "default",
+        list_workspaces=lambda: [{"name": "default"}],
+        workspace_dir=lambda _name: str(workspace),
+        uploads_dir=lambda: str(uploads),
+        register_job=lambda job: jobs.append(job) or job,
+        start_remove_background=lambda _job: None,
+    ))
+
+    response = FastApiTestClient(app).post("/api/v1/tools/remove-background", json={
+        "source": "source.png",
+        "workspace": "default",
+        "provenance": {"actor": "user", "tool": "spoofed", "capability": "generate_story_song"},
+    })
+
+    assert response.status_code == 200
+    assert jobs[0]["provenance"]["actor"] == "user"
+    assert jobs[0]["provenance"]["capability"] == "remove_background"
+    assert jobs[0]["provenance"]["tool"] == "tools"
 
 
 def test_tools_route_rejects_non_image_asset_and_traversal(tmp_path):
@@ -346,18 +378,25 @@ def test_background_removal_worker_publishes_lineage_and_finishes(tmp_path):
 
     # Run the same publisher contract used by launch.py and inspect the
     # canonical read model rather than relying on legacy top-level keys.
+    # Sidecar publish prefers provenance `tool`; the launch fallback is
+    # the Tools surface, not the capability name.
     from services.asset_manifest import publish_generation_sidecar
+    from services.generation_provenance import normalize_submission_provenance
+    provenance = normalize_submission_provenance({
+        **job["provenance"],
+        "capability": "remove_background",
+    })
     publish_generation_sidecar(
         output_path,
         sidecar,
         output_folder="default",
-        tool="remove_background",
-        actor="wizard",
-        capability="remove_background",
+        tool=provenance.get("tool") or "tools",
+        actor=provenance.get("actor"),
+        capability=provenance.get("capability"),
     )
     manifest = read_asset_manifest(output_path)
     assert manifest is not None
-    assert manifest["origin"]["tool"] == "remove_background"
+    assert manifest["origin"]["tool"] == "tools"
     assert manifest["origin"]["actor"] == "wizard"
     assert manifest["generation"]["prompts"]["instruction"] == "transparent cutout"
     assert manifest["lineage"]["parents"][0]["id"] == "asset_source"

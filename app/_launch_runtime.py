@@ -36308,7 +36308,7 @@ def _start_remove_background_job(job: dict) -> None:
                 current,
                 path,
                 sidecar,
-                tool="remove_background",
+                tool="tools",
             ),
             simulated_artifact=execution_mode.create_artifact,
         )
