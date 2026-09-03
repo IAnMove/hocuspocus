@@ -15,7 +15,12 @@ const NEW_SONG_REQUESTS = [
 ]
 const EXISTING_SONG_REQUESTS = [
   /\b(?:esta|esa|la)\s+canci[oó]n\s+(?:seleccionada|actual|abierta|existente)\b/i,
-  /\bcanci[oó]n\s+(?:que\s+)?(?:ya\s+)?(?:est[aá]|tengo|tenemos|creamos|generamos)\b/i,
+  // Reuse needs an explicit possession/selection signal. A relative clause
+  // such as "una canción que está inspirada en…" still describes a new song.
+  /\bcanci[oó]n\s+(?:que\s+)?ya\s+(?:est[aá]|tengo|tenemos|creamos|generamos)\b/i,
+  /\bcanci[oó]n\s+que\s+est[aá]\s+(?:seleccionada|actual|abierta|existente|creada|generada|lista)\b/i,
+  // "tenemos que crear" is an obligation, not possession of an existing cue.
+  /\bcanci[oó]n\s+(?:que\s+)?(?:tengo|tenemos|creamos|generamos)\b(?!\s+que\b)/i,
   /\b(?:selected|current|open|existing|this|that)\s+song\b/i,
   /\b(?:use|usa|utiliza|emplea)\b[^.!?\n]{0,80}\b(?:esa|esta|la|that|this)\s+(?:versi[oó]n|version|canci[oó]n|song)\b/i,
 ]

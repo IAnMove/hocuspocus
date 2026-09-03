@@ -2188,14 +2188,14 @@ export async function reconcileAgentTurnWithRequest(
         ? { ...action, projectType: 'music_video' as const }
         : action
     ))
-    const omittedNewSongSetup = isNewMusicVideoSongRequest(request)
+    const newSongRequest = isNewMusicVideoSongRequest(request)
+    const omittedNewSongStory = newSongRequest
       && !proposedActions.some(action => action.type === 'create_story')
-      && !proposedActions.some(action => action.type === 'configure_story_song')
     // A request for "a song about..." describes a new authored object. Empty
     // stage fields must never reinterpret that request as "use the currently
     // selected song", because UI selection is mutable and may belong to an
     // unrelated project. Recover the omitted plan before resolving any target.
-    const actions: AgentAction[] = omittedNewSongSetup
+    const actions: AgentAction[] = omittedNewSongStory
       ? [newMusicVideoStoryAction(request, turn.conversationLanguage), ...proposedActions]
       : proposedActions
     const storySongSetup = actions.filter(action => (
@@ -2228,32 +2228,38 @@ export async function reconcileAgentTurnWithRequest(
         }
       : undefined
     const effectiveSongDraft = songDraft || automaticDraft
+    const songTarget = newSongRequest && createdMusicVideo ? createdMusicVideo.title : effectiveSongDraft?.targetStoryTitle || ''
+    const songTitle = effectiveSongDraft?.songTitle || createdMusicVideo?.title || ''
     const completeSongSetup = automaticDraft ? [...storySongSetup, automaticDraft] : storySongSetup
     // A rendered candidate label ("Title · Español · v1") does not exist yet
     // while the song is only a cue. Correlate every later step with the exact
     // cue that this same plan configures instead of trusting independently
     // guessed names from the LLM.
     const correlatedSongSetup = effectiveSongDraft
-      ? completeSongSetup.map(action => action.type === 'generate_story_song'
-        ? {
-            ...action,
-            targetStoryTitle: effectiveSongDraft.targetStoryTitle,
-            cueTitle: effectiveSongDraft.songTitle,
+      ? completeSongSetup.map(action => {
+          if (action.type === 'configure_story_song') return { ...effectiveSongDraft, targetStoryTitle: songTarget, songTitle }
+          if (action.type === 'generate_story_song') {
+            return {
+              ...action,
+              targetStoryTitle: songTarget,
+              cueTitle: songTitle,
+            }
           }
-        : action)
+          return action
+        })
       : completeSongSetup
     const stageSeed: AgentStageStoryMusicVideoAction = existingStage || {
       type: 'stage_story_music_video',
-      targetStoryTitle: effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || '',
+      targetStoryTitle: songTarget || createdMusicVideo?.title || '',
       songName: '',
-      cueTitle: effectiveSongDraft?.songTitle || '',
+      cueTitle: songTitle,
       pacing: 'balanced',
       confirm: true,
     }
     const stage: AgentStageStoryMusicVideoAction = {
       ...stageSeed,
-      targetStoryTitle: effectiveSongDraft?.targetStoryTitle || createdMusicVideo?.title || stageSeed.targetStoryTitle || '',
-      cueTitle: effectiveSongDraft?.songTitle || stageSeed.cueTitle || '',
+      targetStoryTitle: songTarget || createdMusicVideo?.title || stageSeed.targetStoryTitle || '',
+      cueTitle: songTitle || stageSeed.cueTitle || '',
       songName: effectiveSongDraft ? '' : stageSeed.songName,
     }
     if (musicVideoStage && musicVideoStart) {

@@ -291,6 +291,12 @@ test('parses a confirmed Story music-video staging and start', async () => {
 
   const linusRequest = 'hazme un videoclip de una cancion en la que linus torvalds sea el protagonista y luche contra el software propietario en un estilo visual tipo siempre animacion (dibujos) inspirados en heavy metal 1981 la pelicula de animacion'
   assert.equal(isNewMusicVideoSongRequest(linusRequest), true)
+  assert.equal(isNewMusicVideoSongRequest('hazme un videoclip de una canción que está inspirada en heavy metal 1981'), true)
+  assert.equal(isNewMusicVideoSongRequest('hazme un videoclip de una canción que está ambientada en una ciudad nocturna'), true)
+  assert.equal(isNewMusicVideoSongRequest('hazme un videoclip de una canción que tenemos que inventar sobre linus'), true)
+  assert.equal(isNewMusicVideoSongRequest('crea el videoclip con la canción que ya está'), false)
+  assert.equal(isNewMusicVideoSongRequest('crea el videoclip con la canción que tengo'), false)
+  assert.equal(isNewMusicVideoSongRequest('crea el videoclip con la canción que está seleccionada'), false)
   const recoveredNewSong = await reconcileAgentTurnWithRequest(linusRequest, {
     reply: 'Preparo el videoclip seleccionado.',
     conversationLanguage: 'es',
@@ -315,6 +321,38 @@ test('parses a confirmed Story music-video staging and start', async () => {
   assert.equal(recoveredNewSong.actions[3].targetStoryTitle, recoveredNewSong.actions[0].title)
   assert.equal(recoveredNewSong.actions[3].cueTitle, recoveredNewSong.actions[1].songTitle)
   assert.equal(recoveredNewSong.actions[3].songName, '')
+
+  const recoveredWithConfigure = await reconcileAgentTurnWithRequest(linusRequest, {
+    reply: 'Configuro la canción abierta.',
+    conversationLanguage: 'es',
+    actions: [{
+      type: 'configure_story_song',
+      targetStoryTitle: 'Proyecto anterior',
+      songTitle: 'Tema nuevo',
+      brief: 'Linus combate el software propietario.',
+      style: 'heavy metal 1981',
+      lyrics: '',
+      writeLyrics: true,
+      lyricsLanguage: 'Español',
+      instrumental: false,
+      model: 'ace_step_v1_5_xl_sft_lm_4b',
+      durationSeconds: 90,
+    }, {
+      type: 'stage_story_music_video', targetStoryTitle: '', songName: '', cueTitle: '', pacing: 'balanced', confirm: true,
+    }, {
+      type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true,
+    }],
+  })
+  assert.deepEqual(recoveredWithConfigure.actions.map(action => action.type), [
+    'create_story', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production',
+  ])
+  const recoveredProjectTitle = recoveredWithConfigure.actions[0].title
+  assert.equal(recoveredWithConfigure.actions[1].targetStoryTitle, recoveredProjectTitle)
+  assert.equal(recoveredWithConfigure.actions[2].targetStoryTitle, recoveredProjectTitle)
+  assert.equal(recoveredWithConfigure.actions[3].targetStoryTitle, recoveredProjectTitle)
+  assert.equal(recoveredWithConfigure.actions[1].songTitle, 'Tema nuevo')
+  assert.equal(recoveredWithConfigure.actions[2].cueTitle, 'Tema nuevo')
+  assert.equal(recoveredWithConfigure.actions[3].cueTitle, 'Tema nuevo')
 
   const infinitive = await reconcileAgentTurnWithRequest(
     'Genera una versión v2 y úsala para preparar el videoclip y ejecutarlo ahora en Director.',
