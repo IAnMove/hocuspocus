@@ -368,8 +368,8 @@ HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA
 ```
 
 Ese smoke conserva en el informe `projectIds`, `cueIds`, `outputIds`, `taskIds`
-y `pipelineIds`. No se ejecutó durante el desarrollo; sus llamadas se validaron
-con una red simulada.
+y `pipelineIds`. Durante el desarrollo inicial no se ejecutó con medios reales;
+la ejecución opt-in posterior de #119 se registra al final de este documento.
 
 ### Nota de relevo — Bloque H cerrado
 
@@ -397,6 +397,28 @@ Comprobaciones finales:
 - pruebas focalizadas del Wizard, DOM, presentación y contratos en verde;
 - niveles nocturnos 3 y 7 en `PASS`, sin GPU ni proveedor;
 - build de producción correcto;
-- smoke canción → videoclip implementado pero no ejecutado sin opt-in;
+- en aquella auditoría, el smoke canción → videoclip estaba implementado pero
+  todavía no se había ejecutado sin opt-in;
 - ningún launcher de Pinokio fue modificado;
 - el worktree rastreado queda limpio y se preservan los documentos locales del usuario.
+
+### Actualización posterior — PRs #116–#119
+
+El estado actual se mantiene en `main` hasta #115 mientras estos PRs siguen
+abiertos. La integración recomendada es **#116 → #117 → #118 → #119**:
+
+- #116 actualiza la cola de slices y este relevo documental.
+- #117, abierto y verde, extrae la configuración de Studio a
+  `studioConfigurationSlice` y deja `startGeneration` en `useStore`.
+- #118, abierto y verde, extrae el handoff de producción Story Lab → Director
+  a `storyProductionController.ts`.
+- #119 sigue abierto y bajo revisión. El E2E crítico simulado pasó. El smoke
+  real opt-in generó correctamente la canción y un vídeo H264/AAC de 19.75 s.
+  El harness dio primero un falso negativo al elegir el proyecto lateral
+  `Untitled story`; ya se corrigió seleccionando por el título exacto pedido.
+  CI y Cursor seguían en curso al redactar y #119 no debe marcarse como
+  terminado.
+
+Riesgos residuales separados: la letra del smoke real fue semánticamente
+genérica, aunque el medio y su cadena de identidad fueron correctos; los `409`
+de conversación por concurrencia requieren una investigación independiente.

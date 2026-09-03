@@ -103,6 +103,35 @@ uses `--check --markdown`.
   virtualization share a viewport cap, including vertical-resize invalidation,
   so cards stay usable inside the feed.
 
+## Open integration queue (#116–#119)
+
+These PRs are open against the #115 `main` baseline; the following status is
+the state at the time of writing, not a claim that any of them has landed.
+
+- **#116 — this documentation update:** the queue and Wizard roadmap record
+  the state after #115 and the recommended merge order.
+- **#117 — Studio configuration slice:** open and green. The typed
+  `studioConfigurationSlice` owns Studio form/configuration state while
+  `startGeneration` and Tools execution stay in `useStore`; the public facade
+  and architecture coverage remain intact. The PR reduces `useStore.ts` from
+  10,239 to 9,741 lines.
+- **#118 — Story Lab production controller:** open and green. The
+  `storyProductionController.ts` owns Story Lab → Director production handoff
+  for film/trailer and music-video flows, including model/reference/audio
+  preparation. The PR reduces `StoryLabPanel.tsx` from 4,688 to 4,395 lines
+  without touching `useStore.ts` or `_launch_runtime.py`.
+- **#119 — exact Story song → music-video identity/provenance:** open and
+  still under review. The critical simulated E2E passed. An opt-in real smoke
+  generated the requested song and an H264/AAC video of 19.75 seconds, but the
+  harness initially reported a false negative after selecting a lateral
+  `Untitled story` project; selection by exact requested title has now been
+  corrected. #119's CI and Cursor checks are still in progress and it must not
+  be described as finished yet.
+
+Recommended integration order: **#116 → #117 → #118 → #119**. Keep #119's
+remaining checks and the corrected exact-title smoke evidence attached to the
+final review.
+
 ## Queue history (original order, statuses updated)
 
 1. **Domain provenance contract** — landed (#86).
@@ -126,37 +155,40 @@ uses `--check --markdown`.
     and the final identity checks still remain. 3D+Director already has
     folder-vs-Workspace provenance (#89).
 
-## Current next medium PRs (after #115)
+## Next medium PRs after integrating #116–#119
 
-1. **Close Story song → videoclip identity and provenance.** Keep the fixes
-   from #112–#114 and add/verify one end-to-end contract that carries the
-   exact `workspace_id`, `output_folder`, `project_id`, `cue_id`,
-   `production_id`, `run_id`, `task_id` and `pipeline_id` through the new-song
-   path. After an ID is returned, no step may resolve that object by title.
-   Cover the Story → Director path and then the remaining Series → Comics
-   handoffs separately.
-2. **Wizard acceptance and real smoke.** Run the simulated
-   `music-video-new` scenario first. Then run one uniquely named, explicitly
-   opted-in real smoke, preserving the evidence and IDs; it must not enter
-   nightly defaults or silently spend provider/GPU resources.
-3. **`useStore` generation slice.** Extract one cohesive remaining generation
-   or Director-orchestration slice behind the public facade, with architecture
-   coverage. Keep `_launch_runtime.py` and `StoryLabPanel.tsx` out of this PR
-   unless the contract requires a narrowly scoped adapter change.
-4. **Story Lab coordination.** Reduce the remaining `StoryLabPanel` hotspot
-   (~4,688 lines at #115) by moving coordination into hooks/controllers while
-   preserving the extracted tabs, language catalogs and canonical IDs. Do not
+1. **Series → Comics provenance.** Apply the same exact-ID contract used by
+   #119 to the remaining cross-domain handoff, with persisted project,
+   production, run, task and output references and no title lookup after an ID
+   has been returned.
+2. **Remaining `useStore` generation slice.** #117 moves Studio
+   configuration only. Extract one cohesive remaining generation or
+   Director-orchestration slice behind the public facade, with architecture
+   coverage; do not move all of `startGeneration` in one PR.
+3. **Remaining Story Lab coordination.** #118 moves production handoff into
+   a controller. Continue reducing the residual `StoryLabPanel` hotspot
+   (~4,395 lines on the #118 branch) through hooks/controllers while
+   preserving extracted tabs, language catalogs and canonical IDs. Do not
    re-extract `StoryAssemblyTab`, `StoryLabLibraryChrome` or Assets.
-5. **Backend domain router.** Choose the next complete domain boundary from
+4. **Backend domain router.** Choose the next complete domain boundary from
    the route inventory, extract its router and services in one cohesive PR,
    preserve route ordinals, and keep at most one pending PR on
    `_launch_runtime.py`.
-6. **Director Paso 5.** Wait for a human release-order decision. Start with
+5. **Director Paso 5.** Wait for a human release-order decision. Start with
    typed `5.0` `PipelineRuntime`, then one complete function/contract per PR;
    do not begin by splitting the file by line count.
-7. **Visible Wizard magic expansion.** The Studio → Video prototype and
+6. **Visible Wizard magic expansion.** The Studio → Video prototype and
    semantic anchors already exist. Review its pace, focus, reduced-motion and
    interruption behavior before extending presentation effects to other Labs.
+
+## Residual risks to track separately
+
+- The real smoke produced valid H264/AAC media, but its lyrical content was
+  semantically generic. Treat that as a content-quality follow-up, not as
+  evidence that the identity/provenance chain failed.
+- Conversation `409` revision conflicts under concurrent writes remain a
+  separate concurrency investigation; do not fold them into the #119 media
+  identity acceptance claim.
 
 ## Standing rules
 
