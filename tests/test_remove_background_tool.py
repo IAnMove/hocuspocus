@@ -1,11 +1,12 @@
 from contextlib import contextmanager
 from pathlib import Path
+import uuid
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient as FastApiTestClient
 from PIL import Image
 
-from routers.tools import create_tools_router
+from routers.tools import _child_workspace_name, create_tools_router
 from services.background_removal import remove_background_file
 from services.background_removal_job import BackgroundRemovalJobHooks, run_remove_background_job
 from services.asset_manifest import read_asset_manifest
@@ -368,6 +369,76 @@ def test_tools_route_accepts_encoded_source_with_matching_asset_id(tmp_path):
     assert conflict.status_code == 409
     assert conflict.json()["detail"] == "Source does not match asset_id"
     assert len(jobs) == 3
+
+
+def test_child_workspace_name_distinguishes_default_from_nested_folders(tmp_path):
+    default_root = str((tmp_path / "outputs").resolve())
+    assert _child_workspace_name(f"{default_root}/hero.png", default_root) is None
+    assert _child_workspace_name(f"{default_root}/film/portrait.png", default_root) == "film"
+    assert _child_workspace_name(f"{default_root}/_hocuspocus/hidden.png", default_root) is None
+    assert _child_workspace_name(f"{default_root}/.cache/hidden.png", default_root) is None
+    assert _child_workspace_name(str((tmp_path / "elsewhere" / "x.png").resolve()), default_root) is None
+
+
+def test_tools_route_does_not_attribute_nested_workspace_file_to_default(tmp_path):
+    uploads = tmp_path / "uploads"
+    default_workspace = tmp_path / "outputs"
+    film_workspace = default_workspace / "film"
+    uploads.mkdir()
+    default_workspace.mkdir()
+    film_workspace.mkdir()
+    nested = film_workspace / "portrait.png"
+    owned = default_workspace / "hero.png"
+    _image(nested)
+    _image(owned)
+    jobs = []
+
+    def workspace_dir(name: str) -> str:
+        return str(default_workspace if name == "default" else default_workspace / name)
+
+    app = FastAPI()
+    app.include_router(create_tools_router(
+        get_active_workspace=lambda: "default",
+        list_workspaces=lambda: [{"name": "default"}, {"name": "film"}],
+        workspace_dir=workspace_dir,
+        uploads_dir=lambda: str(uploads),
+        register_job=lambda job: jobs.append(job) or job,
+        start_remove_background=lambda _job: None,
+    ))
+    client = FastApiTestClient(app)
+
+    nested_response = client.post("/api/v1/tools/remove-background", json={
+        "source": str(nested),
+        "workspace": "default",
+    })
+    assert nested_response.status_code == 200
+    assert jobs[0]["params"]["source_workspace"] == "film"
+    assert jobs[0]["params"]["_source_path"] == str(nested.resolve())
+    assert jobs[0]["params"]["_workspace_root"] == str(film_workspace)
+    assert jobs[0]["params"]["source_asset_id"] == (
+        "asset_unmanaged_"
+        + uuid.uuid5(uuid.NAMESPACE_URL, "hocuspocus:unmanaged:film:portrait.png").hex
+    )
+
+    owned_response = client.post("/api/v1/tools/remove-background", json={
+        "source": str(owned),
+        "workspace": "default",
+    })
+    assert owned_response.status_code == 200
+    assert jobs[1]["params"]["source_workspace"] == "default"
+    assert jobs[1]["params"]["_source_path"] == str(owned.resolve())
+    assert jobs[1]["params"]["_workspace_root"] == str(default_workspace)
+    assert jobs[1]["params"]["source_asset_id"] == (
+        "asset_unmanaged_"
+        + uuid.uuid5(uuid.NAMESPACE_URL, "hocuspocus:unmanaged:default:hero.png").hex
+    )
+
+    foreign = client.post("/api/v1/tools/remove-background", json={
+        "source": str(owned),
+        "workspace": "film",
+    })
+    assert foreign.status_code == 400
+    assert len(jobs) == 2
 
 
 def test_background_removal_worker_publishes_lineage_and_finishes(tmp_path):

@@ -72,6 +72,28 @@ def _explicit_source_workspace(payload: RemoveBackgroundRequest) -> str | None:
     return _file_url_query_workspace(payload.source)
 
 
+def _child_workspace_name(path: str, default_root: str) -> str | None:
+    """Return the named workspace if ``path`` lives under a child of ``default``.
+
+    ``default`` is the outputs folder itself, so every other workspace is a
+    direct subdirectory. Prefix containment alone cannot distinguish
+    ``outputs/hero.png`` from ``outputs/film/hero.png``.
+    """
+    try:
+        relative = os.path.relpath(path, default_root)
+    except ValueError:
+        return None
+    if relative in {os.curdir, os.pardir} or relative.startswith(".." + os.sep):
+        return None
+    if os.path.isabs(relative):
+        return None
+    first = relative.split(os.sep, 1)[0]
+    if first.startswith((".", "_")):
+        return None
+    if _valid_workspace_name(first) and first != "default":
+        return first
+    return None
+
 def _safe_image_in_root(filename: str, root: str) -> str | None:
     if not isinstance(filename, str) or not filename or os.path.basename(filename) != filename:
         return None
@@ -193,8 +215,26 @@ def _source_from_request(
                 scope = "__uploads__"
                 root = uploads_root
             elif _contained(absolute_source, destination_root):
-                scope = destination_workspace
-                root = destination_root
+                # ``default`` is the parent of every named workspace. A file
+                # under ``outputs/<other>/`` is owned by that folder, not by
+                # default — otherwise unmanaged lineage is minted for the
+                # wrong workspace.
+                child = (
+                    _child_workspace_name(absolute_source, destination_root)
+                    if destination_workspace == "default"
+                    else None
+                )
+                if child:
+                    try:
+                        root = os.path.realpath(os.path.abspath(workspace_dir(child)))
+                    except Exception as exc:
+                        raise HTTPException(
+                            status_code=400, detail="Source image path is not allowed"
+                        ) from exc
+                    scope = child
+                else:
+                    scope = destination_workspace
+                    root = destination_root
             else:
                 raise HTTPException(status_code=400, detail="Source image path is not allowed")
         if not _contained(absolute_source, root) or absolute_source == root:
