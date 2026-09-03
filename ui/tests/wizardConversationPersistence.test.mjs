@@ -4,6 +4,7 @@ import test from 'node:test'
 const {
   saveWizardConversationWithRecovery,
   mergeWizardConversationSnapshots,
+  mergeQueuedWizardConversationSnapshots,
   enqueueWizardConversationSave,
   persistQueuedWizardConversation,
 } = await import('../src/features/agent/wizardConversationPersistence.ts')
@@ -244,10 +245,10 @@ test('a stale queued snapshot merges the canonical turn saved by its predecessor
   const staleSecondEffect = payload(0, ['second-user', 'second-assistant'])
   let chain = Promise.resolve()
   chain = enqueueWizardConversationSave(chain, () => (
-    persistQueuedWizardConversation('workspace-a', firstVisible, snapshots, transport).then(() => undefined)
+    persistQueuedWizardConversation({ workspace: 'workspace-a', captured: firstVisible }, snapshots, transport).then(() => undefined)
   ))
   chain = enqueueWizardConversationSave(chain, () => (
-    persistQueuedWizardConversation('workspace-a', staleSecondEffect, snapshots, transport).then(() => undefined)
+    persistQueuedWizardConversation({ workspace: 'workspace-a', captured: staleSecondEffect }, snapshots, transport).then(() => undefined)
   ))
   await chain
 
@@ -275,7 +276,7 @@ test('a queued write persists to its captured workspace after the visible worksp
 
   let chain = Promise.resolve()
   chain = enqueueWizardConversationSave(chain, () => (
-    persistQueuedWizardConversation('workspace-a', payload(0, ['a-user']), snapshots, transport).then(() => undefined)
+    persistQueuedWizardConversation({ workspace: 'workspace-a', captured: payload(0, ['a-user']) }, snapshots, transport).then(() => undefined)
   ))
   visibleWorkspace = 'workspace-b'
   releaseWrite()
@@ -284,4 +285,41 @@ test('a queued write persists to its captured workspace after the visible worksp
   assert.equal(visibleWorkspace, 'workspace-b')
   assert.deepEqual(savedWorkspaces, ['workspace-a'])
   assert.equal(snapshots.get('workspace-a').revision, 1)
+})
+
+test('three-way queued merge applies local edits while retaining concurrent turns', () => {
+  const base = payload(3, ['shared-user'])
+  const local = clone(base)
+  local.messages[0].text = 'locally edited'
+  const canonical = payload(4, ['shared-user', 'remote-assistant'])
+  canonical.messages[0].text = 'old canonical text'
+
+  const merged = mergeQueuedWizardConversationSnapshots(local, base, canonical)
+
+  assert.equal(merged.revision, 4)
+  assert.equal(merged.messages.find(message => message.id === 'shared-user').text, 'locally edited')
+  assert.deepEqual(merged.messages.map(message => message.id), ['shared-user', 'remote-assistant'])
+})
+
+test('three-way queued merge keeps concurrent additions but honors a local clear', () => {
+  const base = payload(2, ['old-user', 'old-assistant'])
+  const local = payload(2, [])
+  const canonical = payload(3, ['old-user', 'old-assistant', 'concurrent-user'])
+
+  const merged = mergeQueuedWizardConversationSnapshots(local, base, canonical)
+
+  assert.deepEqual(merged.messages.map(message => message.id), ['concurrent-user'])
+})
+
+test('three-way queued merge persists an updated execution card by stable id', () => {
+  const base = payload(1, ['user'])
+  base.executions = [{ id: 'card-1', state: 'running' }]
+  const local = clone(base)
+  local.executions = [{ id: 'card-1', state: 'completed' }]
+  const canonical = clone(base)
+  canonical.revision = 2
+
+  const merged = mergeQueuedWizardConversationSnapshots(local, base, canonical)
+
+  assert.deepEqual(merged.executions, [{ id: 'card-1', state: 'completed' }])
 })

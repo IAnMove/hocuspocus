@@ -21,6 +21,12 @@ export interface WizardConversationSaveResult {
 
 export type WizardConversationSnapshotStore = Map<string, WizardConversationPayload>
 
+export interface QueuedWizardConversationWrite {
+  workspace: string
+  captured: WizardConversationPayload
+  base?: WizardConversationPayload
+}
+
 const defaultTransport: WizardConversationTransport = {
   fetch: fetchWizardConversation,
   save: saveWizardConversation,
@@ -46,6 +52,68 @@ function mergeUniqueValues(remote: unknown, local: unknown): unknown[] {
     merged.push(value)
   }
   return merged.slice(-80)
+}
+
+function valueIdentity(value: unknown): string {
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    if (typeof record.id === 'string' && record.id) return `id:${record.id}`
+    if (typeof record.executionKey === 'string' && record.executionKey) return `execution:${record.executionKey}`
+  }
+  return `value:${stableKey(value)}`
+}
+
+/** Apply local edits/deletes since base without discarding concurrent values. */
+function mergeQueuedValues(local: unknown, base: unknown, canonical: unknown): unknown[] {
+  const localValues = Array.isArray(local) ? local : []
+  const baseValues = Array.isArray(base) ? base : []
+  const canonicalValues = Array.isArray(canonical) ? canonical : []
+  const localById = new Map(localValues.map(value => [valueIdentity(value), value]))
+  const baseById = new Map(baseValues.map(value => [valueIdentity(value), value]))
+  const merged: unknown[] = []
+  const seen = new Set<string>()
+
+  canonicalValues.forEach(value => {
+    const id = valueIdentity(value)
+    const baseValue = baseById.get(id)
+    const localValue = localById.get(id)
+    if (baseById.has(id) && !localById.has(id)) return
+    if (localById.has(id) && (!baseById.has(id) || stableKey(localValue) !== stableKey(baseValue))) {
+      merged.push(localValue)
+    } else {
+      merged.push(value)
+    }
+    seen.add(id)
+  })
+  localValues.forEach(value => {
+    const id = valueIdentity(value)
+    if (seen.has(id)) return
+    merged.push(value)
+    seen.add(id)
+  })
+  return merged.slice(-80)
+}
+
+export function mergeQueuedWizardConversationSnapshots(
+  local: WizardConversationPayload,
+  base: WizardConversationPayload | undefined,
+  canonical: WizardConversationPayload,
+): WizardConversationPayload {
+  return {
+    version: 1,
+    revision: canonical.revision,
+    messages: mergeQueuedValues(local.messages, base?.messages, canonical.messages),
+    executions: mergeQueuedValues(local.executions, base?.executions, canonical.executions),
+    requestedActions: local.requestedActions === undefined
+      ? canonical.requestedActions
+      : mergeQueuedValues(local.requestedActions, base?.requestedActions, canonical.requestedActions),
+    executedActions: local.executedActions === undefined
+      ? canonical.executedActions
+      : mergeQueuedValues(local.executedActions, base?.executedActions, canonical.executedActions),
+    confirmations: local.confirmations === undefined
+      ? canonical.confirmations
+      : mergeQueuedValues(local.confirmations, base?.confirmations, canonical.confirmations),
+  }
 }
 
 /**
@@ -118,17 +186,16 @@ export async function saveWizardConversationWithRecovery(
  * rebinds or drops a write that was already accepted into the queue.
  */
 export async function persistQueuedWizardConversation(
-  workspace: string,
-  captured: WizardConversationPayload,
+  write: QueuedWizardConversationWrite,
   snapshots: WizardConversationSnapshotStore,
   transport: WizardConversationTransport = defaultTransport,
 ): Promise<WizardConversationSaveResult> {
-  const canonical = snapshots.get(workspace)
+  const canonical = snapshots.get(write.workspace)
   const outgoing = canonical
-    ? mergeWizardConversationSnapshots(captured, canonical)
-    : captured
-  const saved = await saveWizardConversationWithRecovery(workspace, outgoing, transport)
-  snapshots.set(workspace, saved.conversation)
+    ? mergeQueuedWizardConversationSnapshots(write.captured, write.base, canonical)
+    : write.captured
+  const saved = await saveWizardConversationWithRecovery(write.workspace, outgoing, transport)
+  snapshots.set(write.workspace, saved.conversation)
   return saved
 }
 

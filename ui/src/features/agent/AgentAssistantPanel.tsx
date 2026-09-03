@@ -243,13 +243,17 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       messages,
       executions: cards,
     }
+    const queuedWrite = {
+      workspace: conversationWorkspace,
+      captured: capturedConversation,
+      base: conversationSnapshotsRef.current.get(conversationWorkspace),
+    }
     conversationSaveChainRef.current = enqueueWizardConversationSave(
       conversationSaveChainRef.current,
       async () => {
         try {
           const saved = await persistQueuedWizardConversation(
-            conversationWorkspace,
-            capturedConversation,
+            queuedWrite,
             conversationSnapshotsRef.current,
           )
           if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
