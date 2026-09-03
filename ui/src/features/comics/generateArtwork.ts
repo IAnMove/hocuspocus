@@ -372,7 +372,19 @@ export async function generateDirectorArtwork(options: {
           rotation: 0, zIndex: 2, objectFit: 'cover', filter: 'none', opacity: 1, visible: true,
         })
         const after = useComicStore.getState().project.director!
+        const lineage = useComicStore.getState().project.provenance
         latest.patchProject({
+          ...(lineage ? {
+            provenance: {
+              ...lineage,
+              destination: {
+                ...lineage.destination,
+                outputAssetIds: Array.from(new Set([
+                  ...(lineage.destination.outputAssetIds || []), asset.id,
+                ])),
+              },
+            },
+          } : {}),
           director: {
             ...after,
             completedPanelIds: Array.from(new Set([...after.completedPanelIds, task.plan.id])),

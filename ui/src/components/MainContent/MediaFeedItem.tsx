@@ -4,7 +4,7 @@ import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
-import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject, selectPipelineClipVideo } from '../../api/client'
+import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject, fetchSeriesLibrary, selectPipelineClipVideo } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
 import { modelDisplayName } from '../../lib/modelDisplay'
 import { getOutputReference } from '../../lib/outputReference'
@@ -12,6 +12,8 @@ import { stageSceneForEditor } from '../../lib/sceneOutput'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
 import { formatAppAction, formatAppTimestamp } from '../../lib/locale'
 import { useComicStore } from '../../features/comics/store'
+import { normalizeComicProject } from '../../features/comics/model'
+import { resolveComicSource } from '../../features/comics/provenance'
 import {
   readVideoEditorReplacementTarget,
   writeVideoEditorReplacementResult,
@@ -276,6 +278,15 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
     }
     if (isComic) {
       void loadComicProject(file.name)
+        .then(rawProject => {
+          const project = normalizeComicProject(rawProject)
+          if (!project.provenance) return project
+          return fetchSeriesLibrary(project.provenance.workspaceId)
+            .then(library => {
+              resolveComicSource(project, library, project.provenance!.workspaceId)
+              return project
+            })
+        })
         .then(project => {
           useComicStore.getState().setProject(project, file.name)
           setMediaFilter('comics')

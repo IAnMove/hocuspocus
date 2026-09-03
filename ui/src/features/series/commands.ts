@@ -83,3 +83,13 @@ export interface CommitSeriesCanonCommand {
   itemIds: string[]
   confirm: true
 }
+
+/** Stage the exact Series episode as an editable Comics project. */
+export interface StageSeriesComicCommand {
+  seriesId: string
+  episodeId: string
+  title?: string
+  pageCount?: number
+  panelsPerPage?: number
+  confirm: true
+}

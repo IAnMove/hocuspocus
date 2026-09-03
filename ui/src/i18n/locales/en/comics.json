@@ -285,6 +285,7 @@
     "premise": "Story premise",
     "premisePlaceholder": "What happens in the comic?",
     "fromStory": "Loaded from Story Lab: {{title}} · revision {{revision}}. The complete adaptation brief below is editable before planning.",
+    "fromSeries": "Loaded from Series Lab: {{series}} → {{episode}} · source IDs {{seriesId}} / {{episodeId}}. The brief remains editable; reload will use these IDs.",
     "brief": "Story bible / adaptation brief (optional, editable)",
     "briefPlaceholder": "Characters, relationships, dramatic beats, theme and adaptation constraints. Story Lab fills this automatically.",
     "pages": "Pages",

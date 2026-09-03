@@ -1,0 +1,224 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import React from 'react'
+import { JSDOM } from 'jsdom'
+
+import { normalizeComicProject } from '../src/features/comics/model.ts'
+import { resolveComicSource, resolveSeriesEpisodeById } from '../src/features/comics/provenance.ts'
+import { buildSeriesComicHandoff } from '../src/features/series/comicHandoff.ts'
+import type { SeriesEpisode, SeriesLibrary, SeriesProject } from '../src/features/series/types.ts'
+
+const dom = new JSDOM('<!doctype html><html><body></body></html>', {
+  url: 'http://localhost/',
+})
+Object.assign(globalThis, {
+  window: dom.window,
+  document: dom.window.document,
+  HTMLElement: dom.window.HTMLElement,
+  HTMLButtonElement: dom.window.HTMLButtonElement,
+  HTMLInputElement: dom.window.HTMLInputElement,
+  HTMLTextAreaElement: dom.window.HTMLTextAreaElement,
+  Event: dom.window.Event,
+  MutationObserver: dom.window.MutationObserver,
+})
+Object.defineProperty(globalThis, 'navigator', {
+  configurable: true,
+  value: dom.window.navigator,
+})
+
+function episode(id: string, title: string): SeriesEpisode {
+  return {
+    id,
+    seasonId: 'season-1',
+    number: 1,
+    title,
+    premise: `${title} premise`,
+    logline: `${title} logline`,
+    targetDurationSeconds: 30,
+    status: 'outline',
+    canonRevisionAtCreation: 2,
+    canonSnapshot: { revision: 2 },
+    outline: { beats: [`${title} beat`] },
+    script: [],
+    shots: [],
+    proposedCanonDelta: { baseRevision: 2, sourceEpisodeId: id, add: [], change: [], retire: [] },
+    productionIds: ['production-source-1'],
+    createdAt: '2026-09-03T10:00:00.000Z',
+    updatedAt: '2026-09-03T10:05:00.000Z',
+  }
+}
+
+function series(id: string, episodeId: string, title = 'Same title'): SeriesProject {
+  return {
+    id,
+    version: 1,
+    revision: 7,
+    title,
+    logline: '',
+    premise: `${title} premise`,
+    format: 'episodic',
+    defaultEpisodeDurationSeconds: 30,
+    language: 'Español',
+    spokenLanguage: 'Español',
+    languageIntent: {
+      contentLanguage: 'Español',
+      spokenLanguage: 'Español',
+      technicalPromptLanguage: 'en',
+      verbatimSegments: [],
+    },
+    protagonistConsistency: true,
+    protagonistCharacterId: '',
+    genre: 'Drama',
+    tone: 'Cinematic',
+    audience: 'General',
+    visualStyle: 'Editorial ink and muted colour',
+    characterVisualStyle: '',
+    cameraLanguage: '',
+    allowClipText: false,
+    sourceMode: 'original',
+    masterUniversePrompt: '',
+    rightsNote: '',
+    bestEffortLipSyncAcknowledged: false,
+    importSource: {
+      kind: 'original', sourceWorkspaceId: null, sourceStoryId: null,
+      importedAt: '2026-09-03T10:00:00.000Z', historicalProductionIds: [], migrationNotes: '',
+    },
+    canon: {
+      worldSummary: 'A persistent fictional world', immutableRules: [], currentFacts: [],
+      forbiddenChanges: [], themes: [], longArcs: [], timeline: [], revision: 7, approval: 'approved',
+    },
+    characters: [], relationships: [], locations: [], props: [], seasons: [],
+    episodesById: { [episodeId]: episode(episodeId, title) },
+    assets: {},
+    provider: {
+      useGlobalProfile: true, writingProvider: 'maestro', writingModel: 'writer',
+      imageProvider: 'maestro', imageModel: 'image', videoModel: 'video',
+      videoSettings: { resolution: '480p', orientation: 'landscape' },
+    },
+    createdAt: '2026-09-03T10:00:00.000Z',
+    updatedAt: '2026-09-03T10:05:00.000Z',
+  }
+}
+
+function library(...projects: SeriesProject[]): SeriesLibrary {
+  return {
+    schema: 'series-library',
+    version: 1,
+    workspaceId: 'workspace-1',
+    seriesOrder: projects.map(project => project.id),
+    seriesById: Object.fromEntries(projects.map(project => [project.id, project])),
+  }
+}
+
+test('Series → Comics resolves the exact IDs when titles are duplicated', () => {
+  const source = library(
+    series('series-a', 'episode-a'),
+    series('series-b', 'episode-b'),
+  )
+
+  const resolved = resolveSeriesEpisodeById(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-b', episodeId: 'episode-b',
+  })
+
+  assert.equal(resolved.series.id, 'series-b')
+  assert.equal(resolved.episode.id, 'episode-b')
+  assert.equal(resolved.series.title, 'Same title')
+  assert.equal(resolved.episode.title, 'Same title')
+})
+
+test('Series → Comics provenance survives JSON reload and restores by ID', () => {
+  const source = library(series('series-a', 'episode-a'))
+  const staged = buildSeriesComicHandoff(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-a', episodeId: 'episode-a',
+  })
+  const restored = normalizeComicProject(JSON.parse(JSON.stringify(staged.comic)))
+
+  assert.equal(restored.provenance?.workspaceId, 'workspace-1')
+  assert.equal(restored.provenance?.source.seriesId, 'series-a')
+  assert.equal(restored.provenance?.source.episodeId, 'episode-a')
+  assert.equal(restored.provenance?.destination.comicId, restored.id)
+  assert.equal(restored.director?.input.sourceSeries?.id, 'series-a')
+  assert.equal(restored.director?.input.sourceEpisode?.id, 'episode-a')
+  assert.deepEqual(restored.provenance?.source.productionIds, ['production-source-1'])
+  const resolved = resolveComicSource(restored, source)
+  assert.equal(resolved?.series.id, 'series-a')
+  assert.equal(resolved?.episode.id, 'episode-a')
+})
+
+test('a lost Series ID fails explicitly instead of falling back to a same-title entity', () => {
+  const source = library(
+    series('series-a', 'episode-a'),
+    series('series-b', 'episode-b'),
+  )
+  const staged = buildSeriesComicHandoff(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-a', episodeId: 'episode-a',
+  })
+  const lost = structuredClone(staged.comic)
+  lost.provenance!.source.episodeId = 'episode-gone'
+
+  assert.throws(
+    () => resolveComicSource(lost, source),
+    error => error instanceof Error
+      && error.message.includes('Episode source ID “episode-gone”')
+      && (error as { code?: string }).code === 'episode_not_found',
+  )
+})
+
+test('a workspace change fails before restoring a Series-derived Comic', () => {
+  const source = library(series('series-a', 'episode-a'))
+  const staged = buildSeriesComicHandoff(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-a', episodeId: 'episode-a',
+  })
+
+  assert.throws(
+    () => resolveComicSource(staged.comic, source, 'workspace-2'),
+    error => error instanceof Error && (error as { code?: string }).code === 'workspace_mismatch',
+  )
+})
+
+test('Comic artwork appends generated output IDs to the destination lineage', async () => {
+  const source = library(series('series-art', 'episode-art'))
+  const staged = buildSeriesComicHandoff(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-art', episodeId: 'episode-art',
+  })
+  const { useComicStore } = await import('../src/features/comics/store.ts')
+  const { generateDirectorArtwork } = await import('../src/features/comics/generateArtwork.ts')
+  useComicStore.getState().setProject(staged.comic)
+  const result = await generateDirectorArtwork({
+    drawPanel: async () => ({
+      id: 'generated-output-1', name: 'generated-output-1', kind: 'local' as const,
+      source: 'outputs/generated-output-1.png', createdAt: '2026-09-03T10:06:00.000Z',
+    }),
+  })
+
+  assert.equal(result.generated, 1)
+  assert.deepEqual(useComicStore.getState().project.provenance?.destination.outputAssetIds, ['generated-output-1'])
+})
+
+test('the Series episode room exposes the Comics handoff without changing the selected IDs', async () => {
+  const { render, screen, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n } = await import('../src/i18n/index.ts')
+  const { SeriesEpisodePanel } = await import('../src/features/series/SeriesEpisodePanel.tsx')
+  const currentSeries = series('series-ui', 'episode-ui')
+  const currentEpisode = currentSeries.episodesById['episode-ui']
+  const t = ensureUiI18n().getFixedT('en', 'seriesLab')
+  let calls = 0
+
+  try {
+    render(React.createElement(SeriesEpisodePanel, {
+      workspace: 'workspace-1',
+      series: currentSeries,
+      episode: currentEpisode,
+      updateEpisode: () => {},
+      saveNow: async () => {},
+      reload: async () => {},
+      onAdaptToComic: async () => { calls += 1 },
+    }))
+    fireEvent.click(screen.getByRole('button', { name: t('episode.adaptToComic') }))
+    await waitFor(() => assert.equal(calls, 1))
+    assert.equal(currentSeries.id, 'series-ui')
+    assert.equal(currentEpisode.id, 'episode-ui')
+  } finally {
+    cleanup()
+  }
+})

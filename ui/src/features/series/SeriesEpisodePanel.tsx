@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, FileText, Loader2, Play, Square } from 'lucide-react'
+import { ArrowDown, ArrowUp, BookOpen, FileText, Loader2, Play, Square } from 'lucide-react'
 import * as api from '../../api/client'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { Pill, SectionCard, SeriesField, seriesStatusLabel } from './components'
@@ -10,7 +10,7 @@ import { listenForAgentSeriesPlanJob } from '../../lib/uiBus'
 import { useUiTranslation } from '../../i18n'
 
 export function SeriesEpisodePanel({
-  workspace, series, episode, updateEpisode, saveNow, reload,
+  workspace, series, episode, updateEpisode, saveNow, reload, onAdaptToComic,
 }: {
   workspace: string
   series: SeriesProject
@@ -18,6 +18,7 @@ export function SeriesEpisodePanel({
   updateEpisode: (updater: (episode: SeriesEpisode) => SeriesEpisode) => void
   saveNow: () => Promise<unknown>
   reload: () => Promise<void>
+  onAdaptToComic?: () => Promise<void>
 }) {
   const { t } = useUiTranslation('seriesLab')
   const [instruction, setInstruction] = useState('')
@@ -113,6 +114,7 @@ export function SeriesEpisodePanel({
         <button className={secondaryButton} disabled={busy || jobBusy} onClick={() => void start('outline')}><FileText size={13} />{t('episode.generateOutline')}</button>
         <button className={primaryButton} disabled={busy || jobBusy} onClick={() => void start('complete')}><Play size={13} />{t('episode.generateComplete')}</button>
         <button className={secondaryButton} disabled={busy || !episode.script.length || jobBusy} onClick={() => void start('shots')}><Play size={13} />{t('episode.regenerateShots')}</button>
+        {onAdaptToComic && <button className={secondaryButton} disabled={busy || jobBusy} onClick={() => void onAdaptToComic()}><BookOpen size={13} />{t('episode.adaptToComic')}</button>}
         {job && job.episodeId === episode.id && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesPlanJob(job.jobId).then(value => {
           if (episodeIdRef.current === episode.id && value.episodeId === episode.id) setJob(value)
         })}><Square size={13} />{t('episode.cancelJob')}</button>}

@@ -30,6 +30,7 @@ import {
 } from './model'
 import { COMIC_EFFECTS, COMIC_LAYOUTS, createEffect } from './presets'
 import { useComicStore } from './store'
+import { COMIC_HANDOFF_STORAGE_KEY, resolveComicSource } from './provenance'
 import { captureComicPage, exportComicCbz, exportComicJson, exportComicPagePng, exportComicPdf } from './export'
 import type {
   ComicAsset, ComicCharacter, ComicDirectorRequest, ComicElement, ComicImageElement,
@@ -725,8 +726,14 @@ const initialDirector = (): ComicDirectorRequest => ({
   characters: [],
 })
 
-function stagedStoryDirectorRequest(): ComicDirectorRequest | null {
+function stagedStoryDirectorRequest(projectId?: string): ComicDirectorRequest | null {
   try {
+    const handoff = JSON.parse(window.localStorage.getItem(COMIC_HANDOFF_STORAGE_KEY) || 'null')
+    if (
+      handoff && typeof handoff === 'object'
+      && (!projectId || handoff.projectId === projectId)
+      && handoff.request && typeof handoff.request === 'object'
+    ) return { ...initialDirector(), ...handoff.request }
     const staged = JSON.parse(window.localStorage.getItem('maestro-story-comic-draft') || 'null')
     if (!staged || typeof staged !== 'object') return null
     return { ...initialDirector(), ...staged }
@@ -796,7 +803,7 @@ export function ComicDirectorPanel({
   const project = useComicStore(state => state.project)
   const [request, setRequest] = useState<ComicDirectorRequest>(() =>
     project.director?.input
-      ?? stagedStoryDirectorRequest()
+      ?? stagedStoryDirectorRequest(project.id)
       ?? { ...initialDirector(), characters: project.characters })
   const [busy, setBusy] = useState<'plan' | 'images' | 'text' | 'translation' | null>(null)
   const [progress, setProgress] = useState('')
@@ -903,7 +910,7 @@ export function ComicDirectorPanel({
       setPendingPlan(null)
       setRecoveryJobId('')
     }
-    const staged = stagedStoryDirectorRequest()
+    const staged = stagedStoryDirectorRequest(project.id)
     if (project.director?.input) {
       setRequest(project.director.input)
     } else if (staged) {
@@ -1236,6 +1243,13 @@ export function ComicDirectorPanel({
         : t('planning.planPages', { pages: plan.pages.length, panels: plannedImageCount }))
       const currentProject = useComicStore.getState().project
       const freshProject = createComicProject()
+      if (currentProject.provenance) {
+        // A re-plan is still the same cross-domain destination. Reuse its
+        // immutable Comic ID instead of creating a second destination whose
+        // lineage would need title-based reconciliation.
+        freshProject.id = currentProject.id
+        freshProject.createdAt = currentProject.createdAt
+      }
       const preservedReferenceIds = new Set(
         [...placementRequest.characters, ...plan.characters].flatMap(character => [
           character.referenceAssetId,
@@ -1249,6 +1263,12 @@ export function ComicDirectorPanel({
           .filter((asset): asset is ComicAsset => Boolean(asset))
           .map(asset => [asset.id, asset]),
       )
+      // Planning replaces the editable pages, not the source identity. Keep
+      // the exact Series → Comics lineage attached to the new plan so a
+      // generated/reloaded project cannot silently become standalone.
+      if (currentProject.provenance) {
+        freshProject.provenance = structuredClone(currentProject.provenance)
+      }
       freshProject.style = structuredClone(currentProject.style)
       const storyboard = placementRequest.productionMode === 'storyboard'
       freshProject.pageNumbering = storyboard
@@ -1586,6 +1606,16 @@ export function ComicDirectorPanel({
       {request.sourceStory && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-[10px] text-emerald-200">
           {t('planning.fromStory', { title: request.sourceStory.title, revision: request.sourceStory.revision })}
+        </div>
+      )}
+      {request.sourceSeries && request.sourceEpisode && (
+        <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-2.5 text-[10px] text-violet-200">
+          {t('planning.fromSeries', {
+            series: request.sourceSeries.title,
+            episode: request.sourceEpisode.title,
+            seriesId: request.sourceSeries.id,
+            episodeId: request.sourceEpisode.id,
+          })}
         </div>
       )}
       <Field label={t('planning.brief')}>
@@ -2103,6 +2133,27 @@ export function ComicEditorPanel() {
     if (value) setTimeout(() => setNotice(null), 5000)
   }
   const notifyWorkflow = (kind: 'ok' | 'error', text: string) => notify({ kind, text })
+  const validateLineage = async (candidate: ComicProject): Promise<void> => {
+    if (!candidate.provenance) return
+    const sourceWorkspace = candidate.provenance.workspaceId
+    const library = await api.fetchSeriesLibrary(sourceWorkspace)
+    resolveComicSource(candidate, library, sourceWorkspace)
+  }
+  useEffect(() => {
+    if (!project.provenance) return
+    let cancelled = false
+    void validateLineage(project).catch(error => {
+      if (!cancelled) notify({ kind: 'error', text: (error as Error).message })
+    })
+    return () => { cancelled = true }
+    // Source IDs are the only dependencies that can change the resolution.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    project.id,
+    project.provenance?.workspaceId,
+    project.provenance?.source.seriesId,
+    project.provenance?.source.episodeId,
+  ])
   const selectSideTab = (nextTab: SideTab) => {
     if (sideTab === 'pre' && nextTab !== 'pre' && preDirty
       && !window.confirm(
@@ -2194,8 +2245,10 @@ export function ComicEditorPanel() {
     try {
       await checkpointCurrent('Before history restore')
       const restored = await api.loadComicHistory(entry.id)
+      const restoredProject = normalizeComicProject(restored.project)
+      await validateLineage(restoredProject)
       const state = useComicStore.getState()
-      state.setProject(restored.project, null)
+      state.setProject(restoredProject, null)
       useComicStore.getState().patchProject({})
       setHistoryOpen(false)
       notify({ kind: 'ok', text: t('notices.restored', { title: entry.title }) })
@@ -2389,6 +2442,7 @@ export function ComicEditorPanel() {
     try {
       await checkpointCurrent('Before comic import')
       const parsed = normalizeComicProject(JSON.parse(await file.text()))
+      await validateLineage(parsed)
       // Legacy comic-generator projects embedded every library image as a
       // data URL. Persist each one through Maestro before accepting the
       // project so the migrated JSON remains small and reloadable.
@@ -2416,7 +2470,9 @@ export function ComicEditorPanel() {
     if (dirty && !confirm(t('dialogs.openDiscard'))) return
     try {
       await checkpointCurrent('Before opening saved comic')
-      useComicStore.getState().setProject(await api.loadComicProject(name), name)
+      const loaded = normalizeComicProject(await api.loadComicProject(name))
+      await validateLineage(loaded)
+      useComicStore.getState().setProject(loaded, name)
       notify({ kind: 'ok', text: t('notices.opened') })
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
@@ -2441,6 +2497,7 @@ export function ComicEditorPanel() {
     await checkpointCurrent('Before creating a new comic')
     window.localStorage.removeItem('maestro-story-comic-draft')
     window.localStorage.removeItem('maestro-story-comic-auto-start')
+    window.localStorage.removeItem(COMIC_HANDOFF_STORAGE_KEY)
     useComicStore.getState().setProject(createComicProject())
   }
 
