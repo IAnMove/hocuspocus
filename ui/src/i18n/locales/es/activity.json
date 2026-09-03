@@ -92,6 +92,7 @@
     "queued": "Retake en cola: {{frames}}",
     "submitting": "Enviando…"
   },
+  "comicOpenFailed": "No se pudo abrir este cómic: {{error}}",
   "recipes": {
     "saveTitle": "Guardar como receta",
     "saveBody": "Captura el modelo, las LoRAs y los ajustes de esta generación como un preset de un clic. La miniatura sale de este resultado. Al aplicar la receta más tarde se rellena el prompt para que solo edites el sujeto.",

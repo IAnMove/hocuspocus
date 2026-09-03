@@ -8,7 +8,7 @@ import {
 } from '../../lib/labHelpers'
 import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
-import { COMIC_HANDOFF_STORAGE_KEY } from '../comics/provenance'
+import { clearStagedComicHandoffs, COMIC_HANDOFF_STORAGE_KEY } from '../comics/provenance'
 import { buildSeriesComicHandoff } from './comicHandoff'
 import { resolveSeriesLanguageIntent, seriesLanguageIntentAffectsCanon } from './languageIntent'
 import type {
@@ -253,8 +253,7 @@ export async function stageSeriesComic(action: StageSeriesComicCommand): Promise
   useComicStore.getState().setProject(handoff.comic)
   useComicStore.setState({ dirty: true })
   try {
-    window.localStorage.removeItem('maestro-story-comic-draft')
-    window.localStorage.removeItem('maestro-story-comic-auto-start')
+    clearStagedComicHandoffs(true)
     window.localStorage.setItem(COMIC_HANDOFF_STORAGE_KEY, JSON.stringify({
       projectId: handoff.comic.id,
       request: handoff.request,

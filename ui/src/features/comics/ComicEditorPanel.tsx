@@ -30,7 +30,7 @@ import {
 } from './model'
 import { COMIC_EFFECTS, COMIC_LAYOUTS, createEffect } from './presets'
 import { useComicStore } from './store'
-import { clearStagedComicHandoffs, readStagedComicDirectorRequest } from './provenance'
+import { clearStagedComicHandoffs, comicProvenanceAfterReplan, readStagedComicDirectorRequest } from './provenance'
 import { useComicLineageValidation, validateComicLineage } from './useComicLineageValidation'
 import { captureComicPage, exportComicCbz, exportComicJson, exportComicPagePng, exportComicPdf } from './export'
 import type {
@@ -1252,7 +1252,7 @@ export function ComicDirectorPanel({
       // the exact Series → Comics lineage attached to the new plan so a
       // generated/reloaded project cannot silently become standalone.
       if (currentProject.provenance) {
-        freshProject.provenance = structuredClone(currentProject.provenance)
+        freshProject.provenance = comicProvenanceAfterReplan(currentProject.provenance)
       }
       freshProject.style = structuredClone(currentProject.style)
       const storyboard = placementRequest.productionMode === 'storyboard'

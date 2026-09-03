@@ -8,12 +8,26 @@ export const COMIC_HANDOFF_STORAGE_KEY = 'hocuspocus-comic-handoff-v1'
 export function clearStagedComicHandoffs(clearPlanResult = false): void {
   if (typeof window === 'undefined') return
   try {
-    if (clearPlanResult) window.localStorage.removeItem('maestro-last-comic-plan-result')
+    if (clearPlanResult) {
+      window.localStorage.removeItem('maestro-last-comic-plan-result')
+      window.localStorage.removeItem('maestro-last-comic-plan-job')
+    }
     window.localStorage.removeItem('maestro-story-comic-draft')
     window.localStorage.removeItem('maestro-story-comic-auto-start')
     window.localStorage.removeItem(COMIC_HANDOFF_STORAGE_KEY)
   } catch {
     // Private browsing may block storage; the in-memory project remains valid.
+  }
+}
+
+/** Keep exact source lineage while discarding artwork owned by an old plan. */
+export function comicProvenanceAfterReplan(provenance: ComicProvenance): ComicProvenance {
+  return {
+    ...structuredClone(provenance),
+    destination: {
+      ...structuredClone(provenance.destination),
+      outputAssetIds: [],
+    },
   }
 }
 

@@ -134,6 +134,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const [moving, setMoving] = useState(false)
   const [selectingForMontage, setSelectingForMontage] = useState(false)
   const [montageSelectionError, setMontageSelectionError] = useState('')
+  const [comicOpenError, setComicOpenError] = useState('')
   const moveRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -277,6 +278,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       return
     }
     if (isComic) {
+      setComicOpenError('')
       void loadComicProject(file.name)
         .then(rawProject => {
           const project = normalizeComicProject(rawProject)
@@ -291,7 +293,10 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           useComicStore.getState().setProject(project, file.name)
           setMediaFilter('comics')
         })
-        .catch(error => console.error('Failed to open comic:', error))
+        .catch(error => {
+          console.error('Failed to open comic:', error)
+          setComicOpenError(error instanceof Error ? error.message : String(error))
+        })
       return
     }
     setSelectedOutput(index)
@@ -692,6 +697,12 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           />
         )}
       </div>
+
+      {comicOpenError && (
+        <div role="alert" className="border-t border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          {t('comicOpenFailed', { error: comicOpenError })}
+        </div>
+      )}
 
       {/* Inline info bar */}
       <div className="px-3 py-2 flex items-center gap-2 min-h-[40px]">

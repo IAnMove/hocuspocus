@@ -4,7 +4,12 @@ import React from 'react'
 import { JSDOM } from 'jsdom'
 
 import { normalizeComicProject } from '../src/features/comics/model.ts'
-import { resolveComicSource, resolveSeriesEpisodeById } from '../src/features/comics/provenance.ts'
+import {
+  clearStagedComicHandoffs,
+  comicProvenanceAfterReplan,
+  resolveComicSource,
+  resolveSeriesEpisodeById,
+} from '../src/features/comics/provenance.ts'
 import { panelIdentityReference } from '../src/features/comics/generateArtwork.ts'
 import { buildSeriesComicHandoff } from '../src/features/series/comicHandoff.ts'
 import type { SeriesAsset, SeriesCharacter, SeriesEpisode, SeriesLibrary, SeriesProject } from '../src/features/series/types.ts'
@@ -325,6 +330,33 @@ test('Comic artwork appends generated output IDs to the destination lineage', as
 
   assert.equal(result.generated, 1)
   assert.deepEqual(useComicStore.getState().project.provenance?.destination.outputAssetIds, ['generated-output-1'])
+})
+
+test('Series staging clears every stale Comic planner recovery key', () => {
+  window.localStorage.setItem('maestro-last-comic-plan-result', '{"old":true}')
+  window.localStorage.setItem('maestro-last-comic-plan-job', 'old-job')
+  window.localStorage.setItem('maestro-story-comic-draft', '{"old":true}')
+
+  clearStagedComicHandoffs(true)
+
+  assert.equal(window.localStorage.getItem('maestro-last-comic-plan-result'), null)
+  assert.equal(window.localStorage.getItem('maestro-last-comic-plan-job'), null)
+  assert.equal(window.localStorage.getItem('maestro-story-comic-draft'), null)
+})
+
+test('replanning keeps Series source lineage but clears discarded artwork IDs', () => {
+  const staged = buildSeriesComicHandoff(library(series('series-replan', 'episode-replan')), {
+    workspaceId: 'workspace-1', seriesId: 'series-replan', episodeId: 'episode-replan',
+  })
+  const provenance = structuredClone(staged.provenance)
+  provenance.destination.outputAssetIds = ['discarded-output']
+
+  const replanned = comicProvenanceAfterReplan(provenance)
+
+  assert.equal(replanned.source.seriesId, 'series-replan')
+  assert.equal(replanned.source.episodeId, 'episode-replan')
+  assert.deepEqual(replanned.destination.outputAssetIds, [])
+  assert.deepEqual(provenance.destination.outputAssetIds, ['discarded-output'])
 })
 
 test('the Series episode room exposes the Comics handoff without changing the selected IDs', async () => {
