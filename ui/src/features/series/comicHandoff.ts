@@ -1,4 +1,5 @@
 import { compileProviderPrompt } from '../../lib/languageIntent'
+import * as api from '../../api/client'
 import {
   comicId,
   createComicProject,
@@ -113,6 +114,14 @@ function sourceCharacterReferenceAssetOwners(series: SeriesProject): Map<string,
   return new Map([...owners].map(([assetId, characterIds]) => [assetId, [...characterIds]]))
 }
 
+function playableSeriesAssetSource(asset: SeriesProject['assets'][string]): string {
+  const source = asset.uri.trim()
+  if (/^(?:https?:|blob:|data:)/i.test(source) || source.startsWith('/api/')) return source
+  const normalized = source.replace(/\\/g, '/')
+  if (normalized.startsWith('uploads/')) return api.getUploadUrl(normalized.slice('uploads/'.length))
+  return api.getFileUrl(normalized.replace(/^outputs\//, ''), asset.workspaceId)
+}
+
 function comicAssets(series: SeriesProject, episode: SeriesEpisode): Record<string, ComicAsset> {
   const characterReferenceOwners = sourceCharacterReferenceAssetOwners(series)
   const ids = Array.from(new Set([
@@ -146,7 +155,7 @@ function comicAssets(series: SeriesProject, episode: SeriesEpisode): Record<stri
       id: source.id,
       name: source.metadata.name && typeof source.metadata.name === 'string' ? source.metadata.name : source.id,
       kind: 'local' as const,
-      source: source.uri,
+      source: playableSeriesAssetSource(source),
       createdAt: typeof source.metadata.createdAt === 'string' ? source.metadata.createdAt : new Date().toISOString(),
       metadata: {
         ...source.metadata,

@@ -17,8 +17,10 @@ export function panelIdentityReference(
       character.referenceAssetId,
       ...(character.referenceAssetIds || []),
     ].filter((value): value is string => Boolean(value))))
-    const asset = referenceIds.map(id => assets[id]).find(Boolean)
-    if (asset?.source) return { source: asset.source, characterId }
+    const asset = referenceIds
+      .map(id => assets[id])
+      .find(candidate => Boolean(candidate?.source) && !candidate?.missing)
+    if (asset) return { source: asset.source, characterId }
   }
   return {}
 }

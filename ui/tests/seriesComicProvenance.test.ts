@@ -241,17 +241,26 @@ test('character reference assets stay available to Director, with missing refere
   assert.ok(panel)
   assert.equal(character.referenceAssetId, 'character-ref-primary')
   assert.deepEqual(character.referenceAssetIds, ['character-ref-additional', 'character-ref-missing'])
-  assert.equal(staged.comic.assets['character-ref-primary']?.source, 'outputs/character-ref-primary.png')
-  assert.equal(staged.comic.assets['character-ref-additional']?.source, 'outputs/character-ref-additional.png')
+  assert.equal(staged.comic.assets['character-ref-primary']?.source, '/api/v1/file/character-ref-primary.png?workspace=workspace-1')
+  assert.equal(staged.comic.assets['character-ref-additional']?.source, '/api/v1/file/character-ref-additional.png?workspace=workspace-1')
   assert.deepEqual(staged.comic.assets['character-ref-primary']?.metadata?.sourceCharacterIds, ['character-hero'])
   assert.deepEqual(
     panelIdentityReference(director, panel, staged.comic.assets),
-    { source: 'outputs/character-ref-primary.png', characterId: 'character-hero' },
+    { source: '/api/v1/file/character-ref-primary.png?workspace=workspace-1', characterId: 'character-hero' },
   )
   assert.equal(staged.comic.assets['character-ref-missing']?.missing, true)
   assert.equal(
     staged.comic.assets['character-ref-missing']?.metadata?.missingReason,
     'series_reference_asset_unavailable',
+  )
+
+  const fallbackDirector = structuredClone(director)
+  const fallbackCharacter = fallbackDirector.plan.characters.find(item => item.id === 'character-hero')!
+  fallbackCharacter.referenceAssetId = 'character-ref-missing'
+  fallbackCharacter.referenceAssetIds = ['character-ref-additional']
+  assert.deepEqual(
+    panelIdentityReference(fallbackDirector, panel, staged.comic.assets),
+    { source: '/api/v1/file/character-ref-additional.png?workspace=workspace-1', characterId: 'character-hero' },
   )
 })
 
