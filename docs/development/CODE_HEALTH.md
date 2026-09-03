@@ -10,6 +10,26 @@ CI prints a table in the job summary and upserts the same table as a PR
 comment (`<!-- code-health-report -->`) so every pull request shows the
 current hotspots and the delta versus the committed baseline.
 
+The PR table starts with a transparent quality score from 0 to 100 and its
+change against the PR's exact base commit. Higher is better. The score combines
+cyclomatic health (45%), concentration in the largest files (25%), oversized
+file debt (20%) and modularity (10%). Component scores and their individual
+deltas are shown so the total is explainable.
+
+Each signal is linearly mapped between a healthy bound (100) and a severe
+bound (0), then clamped. The current bounds are deliberately broad:
+
+| Component | Signals (100 → 0) |
+|---|---|
+| Cyclomatic health | functions at complexity 15+: 2% → 12%; maximum complexity: 25 → 700 |
+| File concentration | largest-file share: 5% → 25%; top-five share: 20% → 55% |
+| Oversized-file debt | lines above 1,000 per hotspot: 5% → 50% of production; files at 5,000+ lines: 0.5% → 5% |
+| Modularity | average file size: 250 → 800 lines; 1,000-line hotspot share: 2% → 15% of files |
+
+Inside the components, cyclomatic ratio has 75% of its component weight and
+maximum complexity 25%; the oversized-line debt has 75% and giant-file ratio
+25%. The other paired signals are weighted equally.
+
 Quick report after installing the normal UI dependencies:
 
 ```bash
@@ -54,3 +74,7 @@ git diff -- scripts/code_health_baseline.json
 The baseline is a ratchet, not a quality certificate. Decreasing a giant file
 or a complex function is progress; moving the same code under a different name
 should be reviewed rather than used to reset the baseline casually.
+
+The aggregate score is also not a quality certificate and never replaces the
+ratchet. It deliberately excludes test volume and coverage, which need their
+own evidence and are too easy to game as a maintainability score.

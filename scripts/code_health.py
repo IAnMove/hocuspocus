@@ -18,6 +18,12 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from code_quality_score import COMPONENT_WEIGHTS, quality_score, score_delta  # noqa: E402
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASELINE = ROOT / "scripts" / "code_health_baseline.json"
@@ -207,7 +213,7 @@ def collect(*, require_ui: bool) -> dict:
         ((path, lines) for path, lines in file_lines.items() if lines >= HOTSPOT_LINES),
         key=lambda item: (-item[1], item[0]),
     ))
-    return {
+    report = {
         "version": 1,
         "summary": {
             "production_files": len(product),
@@ -226,6 +232,8 @@ def collect(*, require_ui: bool) -> dict:
         )),
         "top_complexity": [asdict(item) for item in ranked[:30]],
     }
+    report["quality"] = quality_score(report)
+    return report
 
 
 def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
@@ -279,7 +287,9 @@ def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
 
 def _print_report(report: dict) -> None:
     summary = report["summary"]
+    quality = report.get("quality") or quality_score(report)
     print("HocusPocus code health")
+    print(f"Quality:    {quality['score']:.1f}/100 (higher is better)")
     print(
         f"Production: {summary['production_lines']:,} lines / "
         f"{summary['production_files']:,} files "
@@ -304,11 +314,42 @@ def _markdown_report(
     baseline: dict | None = None,
     warnings: list[str] | None = None,
     failures: list[str] | None = None,
+    score_baseline: dict | None = None,
+    score_baseline_label: str = "comparison base",
 ) -> str:
     summary = report["summary"]
+    quality = report.get("quality") or quality_score(report)
+    comparison_report = score_baseline or baseline
+    previous_quality = quality_score(comparison_report) if comparison_report else None
     lines = [
         "<!-- code-health-report -->",
         "## Code health",
+        "",
+        f"### Quality score: {quality['score']:.1f}/100",
+        "",
+        "Higher is better. The score is a trend dashboard; the independent ratchet below remains the CI gate.",
+        "",
+        "| Component | Weight | Current | Change |",
+        "|---|---:|---:|---:|",
+    ]
+    component_labels = {
+        "cyclomatic": "Cyclomatic health",
+        "concentration": "File concentration",
+        "oversized_files": "Oversized-file debt",
+        "modularity": "Modularity",
+    }
+    for key, weight in COMPONENT_WEIGHTS.items():
+        current_value = quality["components"][key]
+        change = "—"
+        if previous_quality:
+            change = f"{current_value - previous_quality['components'][key]:+.1f}"
+        lines.append(f"| {component_labels[key]} | {weight:.0%} | {current_value:.1f} | {change} |")
+    if previous_quality:
+        lines.extend([
+            "",
+            f"**Change vs {score_baseline_label}: {score_delta(quality, previous_quality):+.1f} points.**",
+        ])
+    lines.extend([
         "",
         "| Metric | Value |",
         "|---|---:|",
@@ -325,7 +366,7 @@ def _markdown_report(
         "",
         "| Complexity | Where |",
         "|---:|---|",
-    ]
+    ])
     for item in report["top_complexity"][:12]:
         lines.append(f"| {item['complexity']} | `{item['path']}:{item['line']}` `{item['name']}` |")
     if baseline:
@@ -428,6 +469,8 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="print the complete report as JSON")
     parser.add_argument("--markdown", action="store_true", help="print a GitHub-flavored table")
     parser.add_argument("--publish-pr-comment", action="store_true", help="upsert the markdown table on the current PR")
+    parser.add_argument("--score-baseline", type=Path, help="code-health JSON for an exact score comparison")
+    parser.add_argument("--score-baseline-label", default="comparison base")
     parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE)
     args = parser.parse_args()
     if args.check and args.write_baseline:
@@ -442,15 +485,24 @@ def main() -> int:
         print(f"\nWrote baseline: {args.baseline.relative_to(ROOT)}")
         return 0
     baseline = None
+    score_baseline = None
     warnings: list[str] = []
     failures: list[str] = []
     if args.check:
         baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
         warnings, failures = compare(report, baseline)
+    if args.score_baseline:
+        score_baseline = json.loads(args.score_baseline.read_text(encoding="utf-8"))
+    elif baseline is not None:
+        score_baseline = baseline
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     elif args.markdown:
-        markdown = _markdown_report(report, baseline, warnings, failures)
+        markdown = _markdown_report(
+            report, baseline, warnings, failures,
+            score_baseline=score_baseline,
+            score_baseline_label=args.score_baseline_label,
+        )
         print(markdown, end="")
         if args.publish_pr_comment:
             try:
