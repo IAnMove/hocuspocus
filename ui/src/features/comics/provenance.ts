@@ -1,8 +1,46 @@
 import type { SeriesEpisode, SeriesLibrary, SeriesProject } from '../series/types'
-import type { ComicProject, ComicProvenance } from './types'
+import type { ComicDirectorRequest, ComicProject, ComicProvenance } from './types'
 
 /** Browser-only handoff envelope used to restore the exact staged Comic. */
 export const COMIC_HANDOFF_STORAGE_KEY = 'hocuspocus-comic-handoff-v1'
+
+/** Remove one-shot handoffs after a project has consumed them. */
+export function clearStagedComicHandoffs(clearPlanResult = false): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (clearPlanResult) window.localStorage.removeItem('maestro-last-comic-plan-result')
+    window.localStorage.removeItem('maestro-story-comic-draft')
+    window.localStorage.removeItem('maestro-story-comic-auto-start')
+    window.localStorage.removeItem(COMIC_HANDOFF_STORAGE_KEY)
+  } catch {
+    // Private browsing may block storage; the in-memory project remains valid.
+  }
+}
+
+/**
+ * Read the browser handoff without guessing which Comic is current. The
+ * caller supplies the current project ID; a mismatched handoff falls through
+ * to the legacy Story key for backwards compatibility.
+ */
+export function readStagedComicDirectorRequest(
+  projectId: string | undefined,
+  defaults: ComicDirectorRequest,
+): ComicDirectorRequest | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const handoff = JSON.parse(window.localStorage.getItem(COMIC_HANDOFF_STORAGE_KEY) || 'null')
+    if (
+      handoff && typeof handoff === 'object'
+      && (!projectId || handoff.projectId === projectId)
+      && handoff.request && typeof handoff.request === 'object'
+    ) return { ...defaults, ...handoff.request }
+    const staged = JSON.parse(window.localStorage.getItem('maestro-story-comic-draft') || 'null')
+    if (!staged || typeof staged !== 'object') return null
+    return { ...defaults, ...staged }
+  } catch {
+    return null
+  }
+}
 
 export interface SeriesComicSourceIdentity {
   workspaceId: string

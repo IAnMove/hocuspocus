@@ -30,7 +30,8 @@ import {
 } from './model'
 import { COMIC_EFFECTS, COMIC_LAYOUTS, createEffect } from './presets'
 import { useComicStore } from './store'
-import { COMIC_HANDOFF_STORAGE_KEY, resolveComicSource } from './provenance'
+import { clearStagedComicHandoffs, readStagedComicDirectorRequest } from './provenance'
+import { useComicLineageValidation, validateComicLineage } from './useComicLineageValidation'
 import { captureComicPage, exportComicCbz, exportComicJson, exportComicPagePng, exportComicPdf } from './export'
 import type {
   ComicAsset, ComicCharacter, ComicDirectorRequest, ComicElement, ComicImageElement,
@@ -726,22 +727,6 @@ const initialDirector = (): ComicDirectorRequest => ({
   characters: [],
 })
 
-function stagedStoryDirectorRequest(projectId?: string): ComicDirectorRequest | null {
-  try {
-    const handoff = JSON.parse(window.localStorage.getItem(COMIC_HANDOFF_STORAGE_KEY) || 'null')
-    if (
-      handoff && typeof handoff === 'object'
-      && (!projectId || handoff.projectId === projectId)
-      && handoff.request && typeof handoff.request === 'object'
-    ) return { ...initialDirector(), ...handoff.request }
-    const staged = JSON.parse(window.localStorage.getItem('maestro-story-comic-draft') || 'null')
-    if (!staged || typeof staged !== 'object') return null
-    return { ...initialDirector(), ...staged }
-  } catch {
-    return null
-  }
-}
-
 const COMIC_GENRES = [
   'Adventure', 'Action', 'Comedy', 'Drama', 'Fantasy', 'Science fiction',
   'Horror', 'Mystery', 'Thriller', 'Romance', 'Superhero', 'Historical',
@@ -803,7 +788,7 @@ export function ComicDirectorPanel({
   const project = useComicStore(state => state.project)
   const [request, setRequest] = useState<ComicDirectorRequest>(() =>
     project.director?.input
-      ?? stagedStoryDirectorRequest(project.id)
+      ?? readStagedComicDirectorRequest(project.id, initialDirector())
       ?? { ...initialDirector(), characters: project.characters })
   const [busy, setBusy] = useState<'plan' | 'images' | 'text' | 'translation' | null>(null)
   const [progress, setProgress] = useState('')
@@ -910,7 +895,7 @@ export function ComicDirectorPanel({
       setPendingPlan(null)
       setRecoveryJobId('')
     }
-    const staged = stagedStoryDirectorRequest(project.id)
+    const staged = readStagedComicDirectorRequest(project.id, initialDirector())
     if (project.director?.input) {
       setRequest(project.director.input)
     } else if (staged) {
@@ -927,7 +912,7 @@ export function ComicDirectorPanel({
       const detail = (event as CustomEvent<ComicDirectorRequest>).detail
       const staged = detail && typeof detail === 'object'
         ? { ...initialDirector(), ...detail }
-        : stagedStoryDirectorRequest()
+        : readStagedComicDirectorRequest(undefined, initialDirector())
       if (!staged) return
       setRequest(staged)
     }
@@ -1315,13 +1300,7 @@ export function ComicDirectorPanel({
       if (next.pages[0]) comicStore.setCurrentPage(next.pages[0].id)
       useStore.getState().setMediaFilter('comics')
       setPendingPlan(null)
-      try {
-        window.localStorage.removeItem('maestro-last-comic-plan-result')
-        window.localStorage.removeItem('maestro-story-comic-draft')
-        window.localStorage.removeItem('maestro-story-comic-auto-start')
-      } catch {
-        // Private browsing may block storage; the in-memory state is enough.
-      }
+      clearStagedComicHandoffs(true)
       report(storyboard
         ? t('planning.placedStoryboard')
         : t('planning.placedComic'))
@@ -2133,27 +2112,7 @@ export function ComicEditorPanel() {
     if (value) setTimeout(() => setNotice(null), 5000)
   }
   const notifyWorkflow = (kind: 'ok' | 'error', text: string) => notify({ kind, text })
-  const validateLineage = async (candidate: ComicProject): Promise<void> => {
-    if (!candidate.provenance) return
-    const sourceWorkspace = candidate.provenance.workspaceId
-    const library = await api.fetchSeriesLibrary(sourceWorkspace)
-    resolveComicSource(candidate, library, sourceWorkspace)
-  }
-  useEffect(() => {
-    if (!project.provenance) return
-    let cancelled = false
-    void validateLineage(project).catch(error => {
-      if (!cancelled) notify({ kind: 'error', text: (error as Error).message })
-    })
-    return () => { cancelled = true }
-    // Source IDs are the only dependencies that can change the resolution.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    project.id,
-    project.provenance?.workspaceId,
-    project.provenance?.source.seriesId,
-    project.provenance?.source.episodeId,
-  ])
+  useComicLineageValidation(project, message => notify({ kind: 'error', text: message }))
   const selectSideTab = (nextTab: SideTab) => {
     if (sideTab === 'pre' && nextTab !== 'pre' && preDirty
       && !window.confirm(
@@ -2246,7 +2205,7 @@ export function ComicEditorPanel() {
       await checkpointCurrent('Before history restore')
       const restored = await api.loadComicHistory(entry.id)
       const restoredProject = normalizeComicProject(restored.project)
-      await validateLineage(restoredProject)
+      await validateComicLineage(restoredProject)
       const state = useComicStore.getState()
       state.setProject(restoredProject, null)
       useComicStore.getState().patchProject({})
@@ -2442,7 +2401,7 @@ export function ComicEditorPanel() {
     try {
       await checkpointCurrent('Before comic import')
       const parsed = normalizeComicProject(JSON.parse(await file.text()))
-      await validateLineage(parsed)
+      await validateComicLineage(parsed)
       // Legacy comic-generator projects embedded every library image as a
       // data URL. Persist each one through Maestro before accepting the
       // project so the migrated JSON remains small and reloadable.
@@ -2471,7 +2430,7 @@ export function ComicEditorPanel() {
     try {
       await checkpointCurrent('Before opening saved comic')
       const loaded = normalizeComicProject(await api.loadComicProject(name))
-      await validateLineage(loaded)
+      await validateComicLineage(loaded)
       useComicStore.getState().setProject(loaded, name)
       notify({ kind: 'ok', text: t('notices.opened') })
     } catch (error) {
@@ -2495,9 +2454,7 @@ export function ComicEditorPanel() {
   const newProject = async () => {
     if (dirty && !confirm(t('dialogs.newDiscard'))) return
     await checkpointCurrent('Before creating a new comic')
-    window.localStorage.removeItem('maestro-story-comic-draft')
-    window.localStorage.removeItem('maestro-story-comic-auto-start')
-    window.localStorage.removeItem(COMIC_HANDOFF_STORAGE_KEY)
+    clearStagedComicHandoffs()
     useComicStore.getState().setProject(createComicProject())
   }
 
