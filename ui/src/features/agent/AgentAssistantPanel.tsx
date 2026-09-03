@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowUp, Loader2, Maximize2, Minimize2, PanelLeftClose, Sparkles, Trash2 } from 'lucide-react'
-import { fetchWizardConversation, generateLlmText, subscribeCanonicalTaskEvents, type CanonicalTask } from '../../api/client'
+import { fetchWizardConversation, generateLlmText, subscribeCanonicalTaskEvents, type CanonicalTask, type WizardConversationPayload } from '../../api/client'
 import { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 import { buildAgentTurnPrompt, HOCUSPOCUS_AGENT_SYSTEM_PROMPT, type AgentConversationEntry } from './agentKnowledge'
 import {
@@ -28,7 +28,7 @@ import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
-import { enqueueWizardConversationSave, saveWizardConversationWithRecovery } from './wizardConversationPersistence'
+import { enqueueWizardConversationSave, persistQueuedWizardConversation } from './wizardConversationPersistence'
 import i18n, { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -164,7 +164,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   const [pendingInput, setPendingInput] = useState<WizardWorkflowPendingInput | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
-  const conversationRevisionRef = useRef(0)
+  const conversationSnapshotsRef = useRef<Map<string, WizardConversationPayload>>(new Map())
   const conversationSaveChainRef = useRef<Promise<void>>(Promise.resolve())
   const skipNextConversationSaveRef = useRef(false)
   const conversationWorkspaceRef = useRef(conversationWorkspace)
@@ -237,19 +237,22 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       return
     }
     const cards = messages.flatMap(message => message.cards || [])
+    const capturedConversation: WizardConversationPayload = {
+      version: 1,
+      revision: conversationSnapshotsRef.current.get(conversationWorkspace)?.revision || 0,
+      messages,
+      executions: cards,
+    }
     conversationSaveChainRef.current = enqueueWizardConversationSave(
       conversationSaveChainRef.current,
       async () => {
-        if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
         try {
-          const saved = await saveWizardConversationWithRecovery(conversationWorkspace, {
-            version: 1,
-            revision: conversationRevisionRef.current,
-            messages,
-            executions: cards,
-          })
+          const saved = await persistQueuedWizardConversation(
+            conversationWorkspace,
+            capturedConversation,
+            conversationSnapshotsRef.current,
+          )
           if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
-          conversationRevisionRef.current = saved.conversation.revision
           setConversationSaveError(null)
           if (saved.merged) {
             const canonicalMessages = normalizeRemoteWizardMessages(saved.conversation.messages, saved.conversation.executions)
@@ -272,14 +275,15 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
     let cancelled = false
     void fetchWizardConversation(conversationWorkspace).then(payload => {
       if (cancelled || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
+      const knownSnapshot = conversationSnapshotsRef.current.get(conversationWorkspace)
       const choice = applyRemoteWizardConversation({
         localMessages: messagesRef.current,
-        localRevision: conversationRevisionRef.current,
+        localRevision: knownSnapshot?.revision || 0,
         remoteMessages: payload.messages,
         remoteRevision: payload.revision || 0,
         remoteExecutions: payload.executions,
       })
-      conversationRevisionRef.current = choice.revision
+      conversationSnapshotsRef.current.set(conversationWorkspace, payload)
       skipNextConversationSaveRef.current = choice.source === 'remote'
       // A local choice may still adopt the backend's newer CAS revision and
       // merge remote-only messages. Use a fresh array so the persistence
@@ -297,7 +301,6 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
 
   useEffect(() => {
     if (!shouldFollowWizardWorkspace({ activeWorkspace: workspace, conversationWorkspace, busy })) return
-    conversationRevisionRef.current = 0
     skipNextConversationSaveRef.current = false
     setConversationSaveError(null)
     setHydratedWorkspace(null)

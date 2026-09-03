@@ -5,6 +5,7 @@ const {
   saveWizardConversationWithRecovery,
   mergeWizardConversationSnapshots,
   enqueueWizardConversationSave,
+  persistQueuedWizardConversation,
 } = await import('../src/features/agent/wizardConversationPersistence.ts')
 const {
   WizardConversationRequestError,
@@ -223,4 +224,64 @@ test('conversation writes are serialized and a later write sees the confirmed re
   assert.deepEqual(observed, [0, 1])
   assert.equal(maximumActive, 1)
   assert.equal(revision, 2)
+})
+
+test('a stale queued snapshot merges the canonical turn saved by its predecessor', async () => {
+  let canonical = payload(0, [])
+  const snapshots = new Map()
+  const savedPayloads = []
+  const transport = {
+    async fetch() { return clone(canonical) },
+    async save(_workspace, conversation) {
+      assert.equal(conversation.revision, canonical.revision)
+      savedPayloads.push(clone(conversation))
+      canonical = { ...clone(conversation), revision: canonical.revision + 1 }
+      return clone(canonical)
+    },
+  }
+
+  const firstVisible = payload(0, ['first-user', 'first-assistant'])
+  const staleSecondEffect = payload(0, ['second-user', 'second-assistant'])
+  let chain = Promise.resolve()
+  chain = enqueueWizardConversationSave(chain, () => (
+    persistQueuedWizardConversation('workspace-a', firstVisible, snapshots, transport).then(() => undefined)
+  ))
+  chain = enqueueWizardConversationSave(chain, () => (
+    persistQueuedWizardConversation('workspace-a', staleSecondEffect, snapshots, transport).then(() => undefined)
+  ))
+  await chain
+
+  assert.deepEqual(savedPayloads[1].messages.map(message => message.id), [
+    'first-user', 'first-assistant', 'second-user', 'second-assistant',
+  ])
+  assert.equal(savedPayloads[1].revision, 1)
+  assert.deepEqual(snapshots.get('workspace-a'), canonical)
+})
+
+test('a queued write persists to its captured workspace after the visible workspace changes', async () => {
+  const snapshots = new Map()
+  const savedWorkspaces = []
+  let visibleWorkspace = 'workspace-a'
+  let releaseWrite
+  const gate = new Promise(resolve => { releaseWrite = resolve })
+  const transport = {
+    async fetch() { return payload(0, []) },
+    async save(workspace, conversation) {
+      await gate
+      savedWorkspaces.push(workspace)
+      return { ...clone(conversation), revision: 1 }
+    },
+  }
+
+  let chain = Promise.resolve()
+  chain = enqueueWizardConversationSave(chain, () => (
+    persistQueuedWizardConversation('workspace-a', payload(0, ['a-user']), snapshots, transport).then(() => undefined)
+  ))
+  visibleWorkspace = 'workspace-b'
+  releaseWrite()
+  await chain
+
+  assert.equal(visibleWorkspace, 'workspace-b')
+  assert.deepEqual(savedWorkspaces, ['workspace-a'])
+  assert.equal(snapshots.get('workspace-a').revision, 1)
 })

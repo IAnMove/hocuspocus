@@ -19,6 +19,8 @@ export interface WizardConversationSaveResult {
   merged: boolean
 }
 
+export type WizardConversationSnapshotStore = Map<string, WizardConversationPayload>
+
 const defaultTransport: WizardConversationTransport = {
   fetch: fetchWizardConversation,
   save: saveWizardConversation,
@@ -104,6 +106,30 @@ export async function saveWizardConversationWithRecovery(
       merged: true,
     }
   }
+}
+
+/**
+ * Persist one queued snapshot against the latest canonical state known for its
+ * workspace. Queued React effects intentionally capture their visible turn,
+ * but must not capture the revision/canonical payload: an earlier queued save
+ * may advance both before this write starts.
+ *
+ * The store is keyed by workspace so changing the visible workspace never
+ * rebinds or drops a write that was already accepted into the queue.
+ */
+export async function persistQueuedWizardConversation(
+  workspace: string,
+  captured: WizardConversationPayload,
+  snapshots: WizardConversationSnapshotStore,
+  transport: WizardConversationTransport = defaultTransport,
+): Promise<WizardConversationSaveResult> {
+  const canonical = snapshots.get(workspace)
+  const outgoing = canonical
+    ? mergeWizardConversationSnapshots(captured, canonical)
+    : captured
+  const saved = await saveWizardConversationWithRecovery(workspace, outgoing, transport)
+  snapshots.set(workspace, saved.conversation)
+  return saved
 }
 
 /**
