@@ -304,7 +304,7 @@ test('wizard: vocal Spanish song → selected version → music-video Director',
   expect(cue?.candidates?.length).toBeGreaterThanOrEqual(2)
   const latest = [...(cue?.candidates || [])].sort((left, right) => Number(right.version || 0) - Number(left.version || 0))[0]
   expect(cue?.selectedCandidateId).toBe(latest?.id)
-  await expect(page.getByRole('button', { name: 'Director', exact: true })).toHaveClass(/bg-toggle-active/)
+  await expect(page.getByRole('tab', { name: 'Director', exact: true })).toHaveAttribute('aria-selected', 'true')
   await attachEvidence(page, request, testInfo, transcript)
 })
 
@@ -382,7 +382,7 @@ test('wizard: one-turn new song request never reuses the selected music-video pr
   expect(hydrated[3]?.cueId).toBe(traceEntry?.results?.[1]?.report?.target?.id)
   expect(hydrated[3]?.candidateId).toBe(traceEntry?.results?.[2]?.report?.target?.id)
   expect(hydrated[4]?.productionId).toBe(traceEntry?.results?.[3]?.report?.target?.id)
-  await expect(page.getByRole('button', { name: 'Director', exact: true })).toHaveClass(/bg-toggle-active/)
+  await expect(page.getByRole('tab', { name: 'Director', exact: true })).toHaveAttribute('aria-selected', 'true')
   await attachEvidence(page, request, testInfo, transcript)
 })
 
