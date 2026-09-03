@@ -405,7 +405,7 @@ export function DirectorChat() {
   const sceneDescription = useStore(s => s.directorSceneDescription)
   const spokenLanguage = useStore(s => s.directorSpokenLanguage)
   const setSpokenLanguage = useStore(s => s.setDirectorSpokenLanguage)
-  const audioFile = useStore(s => s.directorAudioFile)
+  const audioName = useStore(s => s.directorAudioName)
   const referenceImage = useStore(s => s.directorReferenceImage)
   const clipImages = useStore(s => s.directorClipImages)
   const imageGenProgress = useStore(s => s.directorImageGenProgress)
@@ -730,7 +730,7 @@ export function DirectorChat() {
         {/* Upload step — hidden for story path and before short film path is chosen */}
         {skill && (!isShortFilm || shortFilmPath === 'audio') && (atStep('upload') || atStep('analyze') || pastStep('analyze')) && (
           <>
-            {!audioFile && !pastStep('analyze') ? (
+            {!audioName && !pastStep('analyze') ? (
               <SystemBubble>
                 <p className="text-xs text-text-secondary mb-2">
                   {isShortFilm
@@ -779,7 +779,7 @@ export function DirectorChat() {
                       handleFile={handleFile}
                       loading={loading && atStep('analyze')}
                       loadingMessage={loadingMessage}
-                      audioFile={audioFile}
+                      audioName={audioName}
                       isShortFilm={isShortFilm}
                     />
                   )}
@@ -803,7 +803,7 @@ export function DirectorChat() {
                   )}
                 </div>
               </SystemBubble>
-            ) : audioFile && (atStep('analyze') || atStep('upload')) ? (
+            ) : audioName && (atStep('analyze') || atStep('upload')) ? (
               <SystemBubble>
                 <div className="space-y-3">
                   {/* Keep the reference selections VISIBLE during analysis —
@@ -825,16 +825,16 @@ export function DirectorChat() {
                     handleFile={handleFile}
                     loading={loading}
                     loadingMessage={loadingMessage}
-                    audioFile={audioFile}
+                    audioName={audioName}
                     isShortFilm={isShortFilm}
                   />
                 </div>
               </SystemBubble>
-            ) : audioFile && pastStep('analyze') ? (
+            ) : audioName && pastStep('analyze') ? (
               <UserBubble>
                 <div className="flex items-center gap-2 text-xs text-text-primary">
                   {isShortFilm ? <Film size={12} className="text-text-muted" /> : <Music size={12} className="text-text-muted" />}
-                  <span className="truncate">{audioFile.name}</span>
+                  <span className="truncate">{audioName}</span>
                   {referenceImage && refImagePreview && (
                     <img src={refImagePreview} alt="Ref" className="w-8 h-8 object-cover rounded border border-border ml-auto" />
                   )}
@@ -1216,7 +1216,7 @@ export function DirectorChat() {
                 <span className={`text-[10px] ${autoMode ? 'text-red-400' : 'text-text-secondary'}`}>Auto</span>
               </label>
             </div>
-            {audioFile && (
+            {audioName && (
               <div className="flex items-center gap-2">
                 <AudioScaleSlider />
                 <div className="flex gap-2 text-[8px] text-text-muted">
@@ -1624,7 +1624,7 @@ function PathChooser({ onSelect }: { onSelect: (path: ShortFilmPath) => void }) 
 }
 
 function UploadZone({
-  dragOver, setDragOver, handleDrop, handleFile, loading, loadingMessage, audioFile, isShortFilm,
+  dragOver, setDragOver, handleDrop, handleFile, loading, loadingMessage, audioName, isShortFilm,
 }: {
   dragOver: boolean
   setDragOver: (v: boolean) => void
@@ -1635,7 +1635,7 @@ function UploadZone({
    *  to the default ("Analyzing audio..." / "Transcribing dialogue...")
    *  when null. */
   loadingMessage: string | null
-  audioFile: File | null
+  audioName: string | null
   isShortFilm?: boolean
 }) {
   return (
@@ -1657,10 +1657,10 @@ function UploadZone({
             {loadingMessage || (isShortFilm ? 'Transcribing dialogue...' : 'Analyzing audio...')}
           </span>
         </div>
-      ) : audioFile ? (
+      ) : audioName ? (
         <div className="flex flex-col items-center gap-1">
           <Music size={16} className="text-text-muted" />
-          <span className="text-xs text-text-secondary truncate max-w-full">{audioFile.name}</span>
+          <span className="text-xs text-text-secondary truncate max-w-full">{audioName}</span>
         </div>
       ) : (
         <label className="cursor-pointer flex flex-col items-center gap-1.5">

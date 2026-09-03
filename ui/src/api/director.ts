@@ -615,7 +615,32 @@ export async function uploadAudio(file: File): Promise<{
   return res.json()
 }
 
-export async function trimAudio(params: { audio_path: string; start: number; end: number }): Promise<{
+/** Adopt audio the server already holds — a workspace output or an earlier
+ *  upload — as the current audio source, by name. The counterpart to
+ *  uploadAudio for a file that never left the machine: same response, without
+ *  pulling the track through the browser and posting it straight back. */
+export async function adoptAudio(params: { audio_path: string; workspace?: string }): Promise<{
+  filename: string
+  path: string
+  url: string
+  duration_seconds?: number | null
+}> {
+  const res = await fetch(`${BASE}/api/v1/audio/adopt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Could not load the audio' }))
+    throw new Error(err.detail || 'Could not load the audio')
+  }
+  return res.json()
+}
+
+// The workspace travels with the path: an adopted song lives in its workspace
+// folder, and the server confines every media path to uploads plus one
+// workspace root, so trimming it without saying which one would be rejected.
+export async function trimAudio(params: { audio_path: string; start: number; end: number; workspace?: string }): Promise<{
   filename: string; path: string; url: string; start: number; end: number; duration: number
 }> {
   const res = await fetch(`${BASE}/api/v1/audio/trim`, {

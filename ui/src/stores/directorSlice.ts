@@ -18,7 +18,12 @@ import type { SliceCreator } from './storeApi'
 
 export type DirectorSlice = {
   directorStep: 'upload' | 'analyze' | 'structure' | 'style' | 'plan' | 'review' | 'generate_images' | 'plan_video' | 'review_video'
-  directorAudioFile: File | null
+  /** The loaded track's identity, for the UI and for the generation
+   *  payload. A name rather than the File: audio reaches Director either
+   *  as an upload or adopted by name from the server, and nothing here
+   *  ever reads the bytes back — the server works from
+   *  directorAudioPath. */
+  directorAudioName: string | null
   directorAudioPath: string | null
   directorAnalysis: AudioAnalysisResult | null
   directorPlannedClips: PlannedClip[]
@@ -121,7 +126,7 @@ const defaultTreatment = (): MusicVideoTreatment => ({
 export const createDirectorSlice: SliceCreator<DirectorSlice> = set => {
   return {
     directorStep: 'upload',
-    directorAudioFile: null,
+    directorAudioName: null,
     directorAudioPath: null,
     directorAnalysis: null,
     directorPlannedClips: [],

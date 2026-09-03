@@ -75,7 +75,7 @@ export function DirectorPanel() {
   const sceneDescription = useStore(s => s.directorSceneDescription)
   const spokenLanguage = useStore(s => s.directorSpokenLanguage)
   const setSpokenLanguage = useStore(s => s.setDirectorSpokenLanguage)
-  const audioFile = useStore(s => s.directorAudioFile)
+  const audioName = useStore(s => s.directorAudioName)
   const referenceImage = useStore(s => s.directorReferenceImage)
   const clipImages = useStore(s => s.directorClipImages)
   const imageGenProgress = useStore(s => s.directorImageGenProgress)
@@ -201,10 +201,10 @@ export function DirectorPanel() {
                 {loadingMessage || t('panel.analyzing')}
               </span>
             </div>
-          ) : audioFile ? (
+          ) : audioName ? (
             <div className="flex flex-col items-center gap-1">
               <Music size={16} className="text-text-muted" />
-              <span className="text-xs text-text-secondary truncate max-w-full">{audioFile.name}</span>
+              <span className="text-xs text-text-secondary truncate max-w-full">{audioName}</span>
             </div>
           ) : (
             <label className="cursor-pointer flex flex-col items-center gap-1.5">

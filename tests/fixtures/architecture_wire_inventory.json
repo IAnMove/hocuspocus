@@ -386,6 +386,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/directorAudioWorkspace.test.ts",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/directorDashboardLazy.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",

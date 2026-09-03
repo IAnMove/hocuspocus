@@ -1055,6 +1055,28 @@ export interface ForegroundActivity {
   updatedAt?: number
 }
 
+/** Trailer excerpt and transcription hints, shared by every way audio can
+ *  reach Director. */
+type DirectorAudioOptions = {
+  lyricsHint?: string
+  trimStart?: number
+  trimEnd?: number
+  totalDuration?: number
+}
+
+/** How one track reaches Director. Only the delivery differs — posting the
+ *  bytes, or naming a file the server already has — and it answers with the
+ *  server-side path the rest of the flow works from. Adopted songs stay in
+ *  their workspace folder, so that workspace has to travel with the path. */
+type DirectorAudioSource = {
+  name: string
+  phase: 'uploading_audio' | 'adopting_audio'
+  activityMessage: string
+  loadingMessage: string
+  workspace?: string
+  deliver: () => Promise<{ path: string }>
+}
+
 interface ScheduledPromptSubmission {
   prompt: string
   position: number
@@ -1699,7 +1721,11 @@ interface AppState extends LlmSlice {
   // Director (Music Video Director)
   sidebarMode: 'director' | 'studio'
   directorStep: 'upload' | 'analyze' | 'structure' | 'style' | 'plan' | 'review' | 'generate_images' | 'plan_video' | 'review_video'
-  directorAudioFile: File | null
+  /** The loaded track's identity, for the UI and for the generation payload.
+   *  A name rather than the File: audio reaches Director either as an upload
+   *  or adopted by name from the server, and nothing reads the bytes back —
+   *  the server works from directorAudioPath. */
+  directorAudioName: string | null
   directorAudioPath: string | null
   directorAnalysis: AudioAnalysisResult | null
   directorPlannedClips: PlannedClip[]
@@ -1793,7 +1819,16 @@ interface AppState extends LlmSlice {
   setSidebarMode: (mode: 'director' | 'studio') => void
   directorSetSpeakerMapping: (speakerId: string, name: string, role: SpeakerMapping['role']) => void
   directorInsertSpeakerMention: (speakerId: string) => void
-  directorUploadAndAnalyze: (file: File, opts?: { lyricsHint?: string; trimStart?: number; trimEnd?: number; totalDuration?: number }) => Promise<void>
+  directorUploadAndAnalyze: (file: File, opts?: DirectorAudioOptions) => Promise<void>
+  /** Bring in a track the server already holds — a workspace output, an
+   *  earlier upload — by name. Story Lab's generated songs come this way:
+   *  pulling the file into the browser only to post the same bytes back is a
+   *  round trip over the network for a file already on that disk, and it is
+   *  what broke when the UI is driven from another machine. */
+  directorAdoptAndAnalyze: (reference: { audio_path: string; workspace?: string }, name: string, opts?: DirectorAudioOptions) => Promise<void>
+  /** The hand-off both of the above share: deliver the audio, optionally cut
+   *  the trailer excerpt, then analyze and plan. */
+  directorLoadAudioSource: (source: DirectorAudioSource, opts?: DirectorAudioOptions) => Promise<void>
   // Music Video: generate-the-track source + song setup
   directorMusicSource: 'upload' | 'generate' | null
   directorSongDescription: string
@@ -1810,7 +1845,7 @@ interface AppState extends LlmSlice {
   setDirectorSongDuration: (v: number) => void
   directorWriteSong: () => Promise<void>
   directorGenerateTrack: () => Promise<void>
-  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string; totalDuration?: number }) => Promise<void>
+  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string; totalDuration?: number; workspace?: string }) => Promise<void>
   directorSetEnergyBias: (bias: number) => Promise<void>
   directorSetPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
   directorConfirmStructure: () => void
@@ -7145,9 +7180,9 @@ export const useStore = create<AppState>((set, get) => {
 
   setSidebarMode: (mode) => {
     if (mode === 'director') {
-      const { sidebarMode, directorAudioFile } = get()
+      const { sidebarMode, directorAudioName } = get()
       if (sidebarMode !== 'director') {
-        if (!directorAudioFile) {
+        if (!directorAudioName) {
           set({ sidebarMode: 'director', directorStep: 'upload', directorError: null })
         } else {
           set({ sidebarMode: 'director' })
@@ -7158,28 +7193,45 @@ export const useStore = create<AppState>((set, get) => {
     }
   },
 
-  directorUploadAndAnalyze: async (file, opts) => {
+  directorUploadAndAnalyze: (file, opts) => get().directorLoadAudioSource({
+    name: file.name,
+    phase: 'uploading_audio',
+    activityMessage: `Uploading “${file.name}”…`,
+    loadingMessage: 'Uploading audio...',
+    deliver: () => api.uploadAudio(file),
+  }, opts),
+
+  directorAdoptAndAnalyze: (reference, name, opts) => get().directorLoadAudioSource({
+    name,
+    phase: 'adopting_audio',
+    activityMessage: `Loading “${name}”…`,
+    loadingMessage: 'Loading audio...',
+    workspace: reference.workspace,
+    deliver: () => api.adoptAudio(reference),
+  }, opts),
+
+  directorLoadAudioSource: async (source, opts) => {
     const activityId = `director-audio:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
     get().upsertActivity({
       id: activityId,
       kind: 'audio_analysis',
       title: 'Prepare music video',
       status: 'running',
-      phase: 'uploading_audio',
-      message: `Uploading “${file.name}”…`,
+      phase: source.phase,
+      message: source.activityMessage,
       current: 1,
       total: 10,
     })
     set({
       directorLoading: true,
-      directorLoadingMessage: 'Uploading audio...',
+      directorLoadingMessage: source.loadingMessage,
       directorError: null,
-      directorAudioFile: file,
+      directorAudioName: source.name,
       directorStep: 'analyze',
     })
     let analysisStarted = false
     try {
-      const uploaded = await api.uploadAudio(file)
+      const delivered = await source.deliver()
       const shouldTrim = Number.isFinite(opts?.trimStart)
         && Number.isFinite(opts?.trimEnd)
         && Number(opts?.trimEnd) > Number(opts?.trimStart) + 0.99
@@ -7195,13 +7247,15 @@ export const useStore = create<AppState>((set, get) => {
           total: 10,
         })
       }
+      const workspace = source.workspace ?? get().activeWorkspace
       const prepared = shouldTrim
         ? await api.trimAudio({
-            audio_path: uploaded.path,
+            audio_path: delivered.path,
             start: Number(opts?.trimStart),
             end: Number(opts?.trimEnd),
+            workspace,
           })
-        : uploaded
+        : delivered
       analysisStarted = true
       await get().directorAnalyzeAndPlan(prepared.path, {
         transcribe: true,
@@ -7209,11 +7263,12 @@ export const useStore = create<AppState>((set, get) => {
         classifyLyricsHint: shouldTrim ? '' : opts?.lyricsHint,
         activityId,
         totalDuration: opts?.totalDuration,
+        workspace,
       })
     } catch (e: unknown) {
       if (analysisStarted) return
-      const msg = e instanceof Error ? e.message : 'Upload failed'
-      console.error('Director upload failed:', e)
+      const msg = e instanceof Error ? e.message : 'The audio could not be loaded'
+      console.error('Director audio hand-off failed:', e)
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
       if (get().activities[activityId]?.status !== 'failed') {
         get().upsertActivity({
@@ -7221,7 +7276,7 @@ export const useStore = create<AppState>((set, get) => {
           kind: 'audio_analysis',
           title: 'Prepare music video',
           status: 'failed',
-          phase: 'uploading_audio',
+          phase: source.phase,
           message: msg,
           error: msg,
         })
@@ -7279,7 +7334,7 @@ export const useStore = create<AppState>((set, get) => {
         transcribe,
         extract_vocals: transcribe,
         lyrics_hint: opts?.lyricsHint || undefined,
-        workspace: get().activeWorkspace,
+        workspace: opts?.workspace ?? get().activeWorkspace,
       })
       backendAccepted = true
       get().upsertActivity({
@@ -8217,7 +8272,7 @@ export const useStore = create<AppState>((set, get) => {
 
   directorApplyToClips: () => {
     const { directorClipPlans, directorPlannedClips, directorAnalysis, directorClipImages,
-            directorAudioPath, directorAudioFile, directorSeamless,
+            directorAudioPath, directorAudioName, directorSeamless,
             selectedModelPerMode, savedParamsPerMode, savedLoraPerMode } = get()
     if (!directorClipPlans.length) return
     const directVideo = get().directorMusicVideoTreatment.generation_mode === 'direct_video'
@@ -8286,14 +8341,14 @@ export const useStore = create<AppState>((set, get) => {
       singlePromptMode: false,
       durationSeconds: totalDurationCapped,
       slidingWindowSeconds: maxClipFrames / fps,
-      audioGuideFilename: directorAudioFile?.name ?? null,
+      audioGuideFilename: directorAudioName,
       sidebarMode: 'studio' as const,
     }))
   },
 
   directorGenerate: () => {
     const { directorClipPlans, directorPlannedClips, directorAnalysis,
-            directorClipImages, directorAudioPath, directorAudioFile,
+            directorClipImages, directorAudioPath, directorAudioName,
             directorSeamless, directorResolution, directorAspectRatio,
             selectedModelPerMode, savedParamsPerMode, savedLoraPerMode } = get()
     if (!directorClipPlans.length) return
@@ -8380,7 +8435,7 @@ export const useStore = create<AppState>((set, get) => {
       singlePromptMode: false,
       durationSeconds: totalDurationCapped,
       slidingWindowSeconds: maxClipFrames / fps,
-      audioGuideFilename: directorAudioFile?.name ?? null,
+      audioGuideFilename: directorAudioName,
       // Apply director video post-processing to shared state
       spatialUpsampling: get().directorVideoSpatialUpsampling,
       filmGrainIntensity: get().directorVideoFilmGrainIntensity,
@@ -8394,7 +8449,7 @@ export const useStore = create<AppState>((set, get) => {
     set({
       sidebarMode: 'studio' as const,
       directorStep: 'upload',
-      directorAudioFile: null,
+      directorAudioName: null,
       directorAudioPath: null,
       directorAnalysis: null,
       directorPlannedClips: [],
@@ -8496,7 +8551,7 @@ export const useStore = create<AppState>((set, get) => {
       directorLoading: true,
       directorLoadingMessage: 'Uploading audio...',
       directorError: null,
-      directorAudioFile: file,
+      directorAudioName: file.name,
       directorStep: 'analyze',
     })
     try {

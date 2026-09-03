@@ -97,6 +97,42 @@ export function getPlayableFileUrl(source: string, filename: string, workspace?:
   return value
 }
 
+/** The name the backend can resolve on its own for media it already holds,
+ *  or null when the media exists only in the browser (blob:/data:) or on
+ *  another host. The mirror of getPlayableFileUrl: that one answers "how does
+ *  this play in the page", this one answers "can the server open it itself",
+ *  so a caller can hand over a name instead of shipping the bytes to the
+ *  browser and straight back. The workspace goes with it, because the server
+ *  confines every media path to uploads plus one workspace root.
+ */
+export function getServerMediaReference(
+  source: string,
+  filename: string,
+  workspace?: string,
+): { audio_path: string; workspace?: string } | null {
+  const value = String(source || '').trim()
+  if (/^(?:https?:|blob:|data:)/i.test(value)) return null
+  if (value.startsWith('/api/')) {
+    // The two roots the backend resolves a relative name against. An upload
+    // keeps its subfolder ("audio/x.wav") because the root is uploads/, not
+    // uploads/audio/; a workspace file is a flat name in its folder.
+    const upload = /^\/api\/v1\/uploads\/([^?#]+)/.exec(value)
+    if (upload) return { audio_path: upload[1].split('/').map(decodeURIComponent).join('/') }
+    const stored = /^\/api\/v1\/file\/([^/?#]+)/.exec(value)
+    if (!stored) return null
+    const query = new URLSearchParams(value.slice(value.indexOf('?') + 1))
+    const named = (value.includes('?') && query.get('workspace')) || workspace
+    return { audio_path: decodeURIComponent(stored[1]), ...(named ? { workspace: named } : {}) }
+  }
+  // Empty, absolute POSIX or Windows paths: persisted filesystem locations
+  // whose canonical HTTP form is the workspace file endpoint for `filename`.
+  if (!value || value.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(value)) {
+    if (!filename) return null
+    return { audio_path: filename, ...(workspace ? { workspace } : {}) }
+  }
+  return null
+}
+
 export function getOutputThumbnailUrl(filename: string, workspace?: string): string {
   const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
   return `${BASE}/api/v1/outputs/thumbnail/${encodeURIComponent(filename)}${query}`
