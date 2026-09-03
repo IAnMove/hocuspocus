@@ -273,6 +273,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           setConversationSaveError(null)
           const visibleMessages = messagesRef.current
           const pendingClearBase = conversationClearBasesRef.current.get(conversationWorkspace)
+            ?? (queuedWrite.honorLocalDeletes ? queuedWrite.base : undefined)
           const rebased = rebaseWizardConversationAfterSave({
             ...queuedWrite.captured,
             revision: saved.conversation.revision,
