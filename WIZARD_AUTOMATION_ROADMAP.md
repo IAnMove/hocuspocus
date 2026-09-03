@@ -487,18 +487,45 @@ Agent Mode complete prematurely.
 - CharacterKit base pose and Face Rig opening: migrated to the common contract.
 - CharacterKit presets and job tracking: migrated to the common contract.
 - Video Editor creation and opening: migrated to the common contract.
-- Visible focus/fill/sparkle presentation: designed here, implementation pending.
+- Visible focus/fill/sparkle presentation: implemented as the Studio → Video
+  prototype with semantic anchors and a reduced-motion escape hatch; expansion
+  to other Labs remains pending review.
+- Two-level task navigation and the embedded Wizard sidebar: landed in #104;
+  keep navigation presentation separate from the factual action runner.
+
+### Post-#115 handoff (#116–#119)
+
+- #117 (Studio configuration slice) is open and green. It moves typed Studio
+  form/configuration state into `studioConfigurationSlice` while leaving
+  `startGeneration` and Tools execution in `useStore`.
+- #118 (Story Lab production controller) is open and green. It moves the
+  Story Lab → Director production handoff into
+  `storyProductionController.ts` for film/trailer and music-video flows.
+- #119 (exact Story song → music-video identity/provenance) remains open and
+  under review. Its critical simulated E2E passed. The opt-in real smoke
+  generated the song and an H264/AAC video of 19.75 seconds; the harness first
+  gave a false negative after selecting a lateral `Untitled story` project,
+  and selection by exact requested title has since been corrected. CI and
+  Cursor checks for #119 were still in progress at this writing, so this PR
+  must not be called finished.
+
+Recommended integration order is **#116 → #117 → #118 → #119**. Residual
+risks are the semantically generic lyrics observed in the real smoke and the
+separate investigation of concurrent conversation `409` conflicts.
 
 ## Continuity note
 
-Paused the general migration to repair the real **Story Lab song → videoclip**
-flow reported from the Wizard. The missing bridge is now implemented as
+Paused the general migration to harden the real **Story Lab song → videoclip**
+flow reported from the Wizard. The bridge is implemented as
 `configure_story_song → generate_story_song → stage_story_music_video →
 start_director_production`, with `create_story(project_type=music_video)` in
 front when the project is new. Incomplete model plans are repaired into this
 chain and missing lyrics are composed into the UI in the requested language.
 The UI form, not the chat prose, is authoritative for prompts, lyrics and
-instrumental mode. Resume the migration from the first remaining
-unmigrated capability after reviewing the uncommitted alternative-song block.
+instrumental mode. #119 now binds every step to exact project, cue, candidate,
+production, task and pipeline IDs and fixes the smoke harness to select the
+requested title exactly. Resume the migration from the first remaining
+unmigrated capability after #119's checks complete and the separate
+conversation-concurrency risk is reviewed.
 Keep Decision gate A open; visible focus/fill/sparkle choreography remains the
 final presentation phase.
