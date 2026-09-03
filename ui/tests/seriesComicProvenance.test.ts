@@ -5,8 +5,9 @@ import { JSDOM } from 'jsdom'
 
 import { normalizeComicProject } from '../src/features/comics/model.ts'
 import { resolveComicSource, resolveSeriesEpisodeById } from '../src/features/comics/provenance.ts'
+import { panelIdentityReference } from '../src/features/comics/generateArtwork.ts'
 import { buildSeriesComicHandoff } from '../src/features/series/comicHandoff.ts'
-import type { SeriesEpisode, SeriesLibrary, SeriesProject } from '../src/features/series/types.ts'
+import type { SeriesAsset, SeriesCharacter, SeriesEpisode, SeriesLibrary, SeriesProject } from '../src/features/series/types.ts'
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   url: 'http://localhost/',
@@ -106,6 +107,52 @@ function seriesWithBeatCount(id: string, episodeId: string, beatCount: number): 
   return value
 }
 
+function seriesWithCharacterReferences(id: string, episodeId: string): SeriesProject {
+  const value = series(id, episodeId)
+  const character: SeriesCharacter = {
+    id: 'character-hero',
+    name: 'Hero',
+    aliases: [],
+    role: 'protagonist',
+    personality: 'Brave',
+    desire: 'Protect the team',
+    need: 'Trust others',
+    flaw: 'Impatient',
+    longArc: 'Learns to collaborate',
+    voiceAndDialogue: 'Direct and warm',
+    appearance: 'Blue jacket',
+    identityLock: 'Keep the same face and jacket',
+    wardrobeVariants: [],
+    referenceAssetIds: ['character-ref-additional', 'character-ref-missing'],
+    primaryReferenceAssetId: 'character-ref-primary',
+    currentState: {},
+    approval: 'approved',
+  }
+  const primaryReference: SeriesAsset = {
+    id: 'character-ref-primary',
+    workspaceId: 'workspace-1',
+    kind: 'character',
+    uri: 'outputs/character-ref-primary.png',
+    ownerType: 'character',
+    ownerId: character.id,
+    isDerivedThumbnail: false,
+    metadata: { name: 'Hero primary reference', createdAt: '2026-09-03T10:01:00.000Z' },
+  }
+  const additionalReference: SeriesAsset = {
+    ...primaryReference,
+    id: 'character-ref-additional',
+    uri: 'outputs/character-ref-additional.png',
+    metadata: { name: 'Hero additional reference', createdAt: '2026-09-03T10:02:00.000Z' },
+  }
+  value.characters = [character]
+  value.protagonistCharacterId = character.id
+  value.assets = {
+    [primaryReference.id]: primaryReference,
+    [additionalReference.id]: additionalReference,
+  }
+  return value
+}
+
 function library(...projects: SeriesProject[]): SeriesLibrary {
   return {
     schema: 'series-library',
@@ -178,6 +225,34 @@ test('a page target expands when needed to keep the panels-per-page contract', (
   assert.ok(pages.every(page => page.panels.length <= 12))
   assert.equal(pages.flatMap(page => page.panels).length, 30)
   assert.equal(staged.request.pageCount, 3)
+})
+
+test('character reference assets stay available to Director, with missing references diagnosed', () => {
+  const source = library(seriesWithCharacterReferences('series-character-refs', 'episode-character-refs'))
+  const staged = buildSeriesComicHandoff(source, {
+    workspaceId: 'workspace-1', seriesId: 'series-character-refs', episodeId: 'episode-character-refs',
+  })
+  const director = staged.comic.director
+  const character = director?.plan.characters.find(item => item.id === 'character-hero')
+  const panel = director?.plan.pages[0]?.panels[0]
+
+  assert.ok(director)
+  assert.ok(character)
+  assert.ok(panel)
+  assert.equal(character.referenceAssetId, 'character-ref-primary')
+  assert.deepEqual(character.referenceAssetIds, ['character-ref-additional', 'character-ref-missing'])
+  assert.equal(staged.comic.assets['character-ref-primary']?.source, 'outputs/character-ref-primary.png')
+  assert.equal(staged.comic.assets['character-ref-additional']?.source, 'outputs/character-ref-additional.png')
+  assert.deepEqual(staged.comic.assets['character-ref-primary']?.metadata?.sourceCharacterIds, ['character-hero'])
+  assert.deepEqual(
+    panelIdentityReference(director, panel, staged.comic.assets),
+    { source: 'outputs/character-ref-primary.png', characterId: 'character-hero' },
+  )
+  assert.equal(staged.comic.assets['character-ref-missing']?.missing, true)
+  assert.equal(
+    staged.comic.assets['character-ref-missing']?.metadata?.missingReason,
+    'series_reference_asset_unavailable',
+  )
 })
 
 test('Series → Comics provenance records the caller actor', () => {

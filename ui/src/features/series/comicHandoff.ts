@@ -97,10 +97,39 @@ function sourceOutputAssetIds(series: SeriesProject, episode: SeriesEpisode): st
   return [...ids]
 }
 
+function sourceCharacterReferenceAssetOwners(series: SeriesProject): Map<string, string[]> {
+  const owners = new Map<string, Set<string>>()
+  series.characters.forEach(character => {
+    const referenceIds = [
+      character.primaryReferenceAssetId,
+      ...(Array.isArray(character.referenceAssetIds) ? character.referenceAssetIds : []),
+    ].filter((id): id is string => Boolean(id && id.trim()))
+    referenceIds.forEach(assetId => {
+      const characterIds = owners.get(assetId) || new Set<string>()
+      characterIds.add(character.id)
+      owners.set(assetId, characterIds)
+    })
+  })
+  return new Map([...owners].map(([assetId, characterIds]) => [assetId, [...characterIds]]))
+}
+
 function comicAssets(series: SeriesProject, episode: SeriesEpisode): Record<string, ComicAsset> {
-  const ids = sourceOutputAssetIds(series, episode)
+  const characterReferenceOwners = sourceCharacterReferenceAssetOwners(series)
+  const ids = Array.from(new Set([
+    ...sourceOutputAssetIds(series, episode),
+    ...characterReferenceOwners.keys(),
+  ]))
   return Object.fromEntries(ids.map(id => {
     const source = series.assets[id]
+    const sourceCharacterIds = characterReferenceOwners.get(id) || []
+    const lineageMetadata = {
+      sourceSeriesId: series.id,
+      sourceEpisodeId: episode.id,
+      ...(sourceCharacterIds.length ? {
+        sourceReferenceKind: 'character',
+        sourceCharacterIds,
+      } : {}),
+    }
     if (!source) return [id, {
       id,
       name: id,
@@ -108,7 +137,10 @@ function comicAssets(series: SeriesProject, episode: SeriesEpisode): Record<stri
       source: '',
       missing: true,
       createdAt: new Date().toISOString(),
-      metadata: { sourceSeriesId: series.id, sourceEpisodeId: episode.id },
+      metadata: {
+        ...lineageMetadata,
+        missingReason: 'series_reference_asset_unavailable',
+      },
     } satisfies ComicAsset]
     return [id, {
       id: source.id,
@@ -118,8 +150,7 @@ function comicAssets(series: SeriesProject, episode: SeriesEpisode): Record<stri
       createdAt: typeof source.metadata.createdAt === 'string' ? source.metadata.createdAt : new Date().toISOString(),
       metadata: {
         ...source.metadata,
-        sourceSeriesId: series.id,
-        sourceEpisodeId: episode.id,
+        ...lineageMetadata,
         sourceOwnerType: source.ownerType,
         sourceOwnerId: source.ownerId,
       },
