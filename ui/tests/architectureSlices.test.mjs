@@ -339,6 +339,60 @@ test('LLM slice keeps status, models and enhance through the public facade', asy
   assert.equal(useStore.getState().h3WindowPlan, null)
 })
 
+test('Studio configuration slice owns form state without owning generation execution', async () => {
+  const { createStudioConfigurationSlice } = await import('../src/stores/studioConfigurationSlice.ts')
+  let state = {
+    params: { prompt: 'Narrator: hello', image_mode: 2 },
+    modelOptions: {
+      fps: 24,
+      frames_minimum: 24,
+      frames_maximum: 120,
+      sliding_window: true,
+      sliding_window_defaults: { window_min: 24, window_max: 120, window_step: 8 },
+      audio_prompt_type_sources: { selection: ['', 'A', 'AB'] },
+      max_voice_count: 2,
+    },
+    h3WindowPlan: { signature: 'stale' },
+    generationMode: 'video',
+    savedParamsPerMode: {},
+  }
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  const studio = createStudioConfigurationSlice({
+    alignFrameCount: frames => frames,
+    resolveResolution: (_options, preset, ratio) => `${preset}:${ratio}`,
+  })(set, () => state)
+  state = { ...state, ...studio }
+
+  state.setAspectRatio('9:16')
+  assert.equal(state.params.resolution, '720p:9:16')
+  assert.equal(state.h3WindowPlan, null)
+  state.setDurationSeconds(7)
+  assert.equal(state.durationSeconds, 7)
+  assert.equal(state.params.video_length, 168)
+  assert.equal(state.clips.length, 2)
+
+  const first = new File(['a'], 'first.png')
+  const second = new File(['b'], 'second.png')
+  state.addImageRef(first)
+  state.addImageRef(second)
+  state.reorderImageRefs(1, 0)
+  assert.deepEqual(state.imageRefs.map(file => file.name), ['second.png', 'first.png'])
+
+  state.setTtsVoiceCount(1)
+  assert.equal(state.params.audio_prompt_type, 'A')
+  assert.equal(state.ttsVoices[0].name, 'Narrator')
+  state.addTtsVoice()
+  state.addTtsVoice()
+  assert.equal(state.ttsVoiceCount, 2)
+
+  assert.equal('startGeneration' in studio, false)
+  assert.equal('jobs' in studio, false)
+  assert.equal('runTool' in studio, false)
+})
+
 test('composed slices bind without as-never casts at the useStore call site', async () => {
   const fs = await import('node:fs/promises')
   const source = await fs.readFile(new URL('../src/stores/useStore.ts', import.meta.url), 'utf8')
@@ -347,6 +401,7 @@ test('composed slices bind without as-never casts at the useStore call site', as
   assert.match(composition, /bindSlice\(set, get, createThemeSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createGallerySlice\)/)
   assert.match(composition, /bindSlice\(set, get, createLlmSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createStudioConfigurationSlice/)
   assert.doesNotMatch(composition, /as never/)
 })
 

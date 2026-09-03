@@ -37,6 +37,9 @@ _REF2VA_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va.json"
 _FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_full.json"
 _REF2VA_FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va_full.json"
 _STORE_PATH = _ROOT / "ui" / "src" / "stores" / "useStore.ts"
+_STUDIO_CONFIGURATION_SLICE_PATH = (
+    _ROOT / "ui" / "src" / "stores" / "studioConfigurationSlice.ts"
+)
 _LLM_SLICE_PATH = _ROOT / "ui" / "src" / "stores" / "llmSlice.ts"
 _PROMPT_INPUT_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "PromptInput.tsx"
 _DURATION_SLIDER_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "DurationSlider.tsx"
@@ -733,6 +736,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         wgp = _read(_WGP_PATH)
         store = _read(_STORE_PATH)
+        studio_configuration = _read(_STUDIO_CONFIGURATION_SLICE_PATH)
         presets = _read(_RESOLUTION_PRESETS_PATH)
         aspects = _read(_ASPECT_RATIO_GRID_PATH)
         self.assertIn("_recommended_minimax_h3_encoder", launch)
@@ -741,8 +745,18 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("elif minimax_h3_references:", wgp)
         self.assertIn("_h3_auto_budgets", wgp)
         self.assertIn("_h3_auto_fallbacks", wgp)
-        self.assertIn("resolveResolution(get().modelOptions, preset, ratio)", store)
-        self.assertIn("findResolutionSelection(res, get().modelOptions)", store)
+        self.assertIn(
+            "bindSlice(set, get, createStudioConfigurationSlice",
+            store,
+        )
+        self.assertIn(
+            "dependencies.resolveResolution(get().modelOptions, preset, get().aspectRatio)",
+            studio_configuration,
+        )
+        self.assertIn(
+            "findResolutionSelection(res, get().modelOptions)",
+            store,
+        )
         self.assertIn("modelOptions?.resolution_preset_order", presets)
         self.assertIn("modelOptions?.supports_auto_aspect", aspects)
 
