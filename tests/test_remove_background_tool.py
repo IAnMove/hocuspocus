@@ -242,6 +242,70 @@ def test_tools_route_preserves_workspace_from_canonical_file_url(tmp_path):
     assert len(jobs) == 2
 
 
+def test_tools_route_rejects_unknown_query_workspace_without_creating_it(tmp_path):
+    uploads = tmp_path / "uploads"
+    default_workspace = tmp_path / "default"
+    uploads.mkdir()
+    default_workspace.mkdir()
+    created = []
+
+    def workspace_dir(name):
+        path = tmp_path / name
+        if name != "default":
+            path.mkdir(exist_ok=True)
+        created.append(name)
+        return str(path)
+
+    jobs = []
+    app = FastAPI()
+    app.include_router(create_tools_router(
+        get_active_workspace=lambda: "default",
+        list_workspaces=lambda: [{"name": "default"}],
+        workspace_dir=workspace_dir,
+        uploads_dir=lambda: str(uploads),
+        register_job=lambda job: jobs.append(job) or job,
+        start_remove_background=lambda _job: None,
+    ))
+    client = FastApiTestClient(app)
+
+    body = client.post("/api/v1/tools/remove-background", json={
+        "source": "missing.png",
+        "source_workspace": "ghost",
+        "workspace": "default",
+    })
+    assert body.status_code == 404
+    assert body.json()["detail"] == "Source workspace not found"
+    assert "ghost" not in created
+    assert not (tmp_path / "ghost").exists()
+
+    query = client.post("/api/v1/tools/remove-background", json={
+        "source": "/api/v1/file/missing.png?workspace=ghost",
+        "workspace": "default",
+    })
+    assert query.status_code == 404
+    assert query.json()["detail"] == "Source workspace not found"
+    assert "ghost" not in created
+    assert not (tmp_path / "ghost").exists()
+
+    encoded = client.post("/api/v1/tools/remove-background", json={
+        "source": "/api/v1/file/my%20portrait.png?workspace=ghost",
+        "workspace": "default",
+    })
+    assert encoded.status_code == 404
+    assert encoded.json()["detail"] == "Source workspace not found"
+    assert "ghost" not in created
+    assert not (tmp_path / "ghost").exists()
+
+    invalid = client.post("/api/v1/tools/remove-background", json={
+        "source": "/api/v1/file/missing.png?workspace=bad name",
+        "workspace": "default",
+    })
+    assert invalid.status_code == 400
+    assert invalid.json()["detail"] == "Invalid source workspace"
+    assert not (tmp_path / "bad name").exists()
+    assert not jobs
+
+
 def test_background_removal_worker_publishes_lineage_and_finishes(tmp_path):
     uploads = tmp_path / "uploads"
     workspace = tmp_path / "outputs"

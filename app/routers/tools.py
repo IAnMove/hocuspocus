@@ -40,6 +40,29 @@ def _valid_workspace_name(value: str) -> bool:
     return bool(re.fullmatch(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)", value))
 
 
+def _file_url_query_workspace(source: str | None) -> str | None:
+    """Read ?workspace= from a canonical /api/v1/file/ source URL."""
+    raw_source = (source or "").strip()
+    if not raw_source:
+        return None
+    source_without_query = raw_source.split("?", 1)[0].split("#", 1)[0]
+    if source_without_query.startswith("/api/v1/"):
+        source_without_query = unquote(source_without_query)
+    if not source_without_query.startswith("/api/v1/file/"):
+        return None
+    query_workspace = parse_qs(urlsplit(raw_source).query).get("workspace", [None])[0]
+    if isinstance(query_workspace, str) and query_workspace.strip():
+        return query_workspace.strip()
+    return None
+
+
+def _explicit_source_workspace(payload: RemoveBackgroundRequest) -> str | None:
+    """Body source_workspace, else ?workspace= on a /api/v1/file/ source."""
+    if payload.source_workspace and payload.source_workspace.strip():
+        return payload.source_workspace.strip()
+    return _file_url_query_workspace(payload.source)
+
+
 def _safe_image_in_root(filename: str, root: str) -> str | None:
     if not isinstance(filename, str) or not filename or os.path.basename(filename) != filename:
         return None
@@ -140,14 +163,11 @@ def _source_from_request(
             and not os.path.isabs(source_without_query))
     ):
         raise HTTPException(status_code=400, detail="Source image path is not allowed")
-    scope = payload.source_workspace.strip() if payload.source_workspace else None
-    # A canonical file URL may carry the physical workspace in its query.
-    # Preserve that identity when the caller did not send the typed field;
-    # otherwise a duplicate filename in the active workspace could be used.
-    if scope is None and source_without_query.startswith("/api/v1/file/"):
-        query_workspace = parse_qs(urlsplit(raw_source).query).get("workspace", [None])[0]
-        if isinstance(query_workspace, str) and query_workspace.strip():
-            scope = query_workspace.strip()
+    # Prefer the typed field; otherwise keep the workspace identity from a
+    # canonical file URL so a duplicate filename in the active workspace is
+    # not used by accident. The HTTP handler already refused unknown names
+    # against list_workspaces() so this cannot create a switcher entry.
+    scope = _explicit_source_workspace(payload)
     if os.path.isabs(source_without_query) and not is_virtual_api_path:
         # Preserve the exact absolute source selected by the caller.  Falling
         # back to ``root / basename`` here could silently process a different
@@ -238,7 +258,7 @@ def create_tools_router(
         destination_workspace = str(payload.workspace or get_active_workspace() or "default").strip()
         if not _valid_workspace_name(destination_workspace):
             raise HTTPException(status_code=400, detail="Invalid workspace")
-        requested_source_workspace = payload.source_workspace.strip() if payload.source_workspace else None
+        requested_source_workspace = _explicit_source_workspace(payload)
         if requested_source_workspace and requested_source_workspace != "__uploads__" and not _valid_workspace_name(requested_source_workspace):
             raise HTTPException(status_code=400, detail="Invalid source workspace")
         if requested_source_workspace and requested_source_workspace != "__uploads__":
