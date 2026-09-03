@@ -487,7 +487,11 @@ Agent Mode complete prematurely.
 - CharacterKit base pose and Face Rig opening: migrated to the common contract.
 - CharacterKit presets and job tracking: migrated to the common contract.
 - Video Editor creation and opening: migrated to the common contract.
-- Visible focus/fill/sparkle presentation: designed here, implementation pending.
+- Visible focus/fill/sparkle presentation: implemented as the Studio → Video
+  prototype with semantic anchors and a reduced-motion escape hatch; expansion
+  to other Labs remains pending review.
+- Two-level task navigation and the embedded Wizard sidebar: landed in #104;
+  keep navigation presentation separate from the factual action runner.
 
 ## Continuity note
 
