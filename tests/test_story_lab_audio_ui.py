@@ -15,6 +15,7 @@ STORY_PRODUCTIONS = STORIES / "StoryProductionsTab.tsx"
 STORY_PRODUCTIONS_MUSIC = STORIES / "StoryProductionsMusicPanel.tsx"
 STORY_TRAILER = STORIES / "StoryTrailerTab.tsx"
 STORY_COMPACT = STORIES / "CompactVideoWorkspace.tsx"
+STORY_PRODUCTION_CONTROLLER = STORIES / "storyProductionController.ts"
 
 
 def stories_ui() -> str:
@@ -131,7 +132,10 @@ def test_story_lab_status_polling_survives_transient_mobile_disconnects():
 
 
 def test_music_video_confirmation_names_the_frozen_video_model():
-    source = STORY.read_text(encoding="utf-8")
+    source = "\n".join((
+        STORY.read_text(encoding="utf-8"),
+        STORY_PRODUCTION_CONTROLLER.read_text(encoding="utf-8"),
+    ))
     catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
 
     assert "t('notice.generateMusicVideoConfirm'" in source
@@ -254,6 +258,7 @@ def test_story_style_conversion_uses_flux_klein_as_a_true_four_step_image_editor
 
 def test_story_direct_reference_mode_uses_only_approved_visual_assets():
     panel = STORY.read_text(encoding="utf-8")
+    controller = STORY_PRODUCTION_CONTROLLER.read_text(encoding="utf-8")
     types = STORY_TYPES.read_text(encoding="utf-8")
     adaptations = STORY_ADAPTATIONS.read_text(encoding="utf-8")
 
@@ -264,8 +269,8 @@ def test_story_direct_reference_mode_uses_only_approved_visual_assets():
     assert "'direct_references'" in types
     assert "H3 Ref2VA" in productions or "H3 Ref2VA" in productions_music or "trailer.directReferencesHint" in trailer
     assert "productions.h3NoStart" in productions
-    assert "setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')" in panel
-    assert "setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')" in panel
+    assert "setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')" in controller
+    assert "setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')" in controller
     assert "approvedReferenceIds" in adaptations
     assert "project.assets[id]?.approval === 'approved'" in adaptations
     assert "maximum = 3" in adaptations
