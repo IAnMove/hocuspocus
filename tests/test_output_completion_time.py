@@ -75,6 +75,21 @@ def test_output_list_marks_file_timestamp_as_approximate_fallback(tmp_path):
     assert output["completion_time_source"] == "file"
 
 
+def test_output_list_hides_director_audio_scratch_files(tmp_path):
+    real_song = tmp_path / "song.wav"
+    real_song.write_bytes(b"full song")
+    (tmp_path / "_director_h3_audio_deadbeef_s0_0_abcd1234.wav").write_bytes(
+        b"temporary shot slice"
+    )
+    (tmp_path / "_rerun_audio_deadbeef_c0_abcd1234.wav").write_bytes(
+        b"temporary rerun slice"
+    )
+
+    names = {item["name"] for item in list_test_outputs(tmp_path)}
+
+    assert names == {"song.wav"}
+
+
 def test_output_list_edits_only_keeps_tagged_and_legacy_avatar_files(tmp_path):
     recent = tmp_path / "studio.mp4"
     recent.write_bytes(b"video")

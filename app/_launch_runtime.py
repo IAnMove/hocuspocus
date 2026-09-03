@@ -33061,7 +33061,17 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
     else:
         raw_entries = []
         for name in os.listdir(out_dir):
-            if name.startswith(".trash_") or name.startswith("."):
+            # Director's historical H3 builds wrote soundtrack slices beside
+            # user assets. They are private model inputs, not generated songs.
+            # New runs use the hidden .director-tmp directory; retain these
+            # prefix guards so scratch files left by an interrupted old run do
+            # not displace the real soundtrack in the media library.
+            if name.startswith((
+                ".trash_",
+                ".",
+                "_director_h3_audio_",
+                "_rerun_audio_",
+            )):
                 continue
             # 3D preview sidecars are served as card thumbnails, not gallery items.
             if name.endswith(".preview.png"):
