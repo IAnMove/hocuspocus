@@ -147,6 +147,13 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
   }
 }
 
+function taskExecutionState(status: CanonicalTask['status']): 'completed' | 'failed' | 'queued' | 'running' {
+  if (status === 'completed') return 'completed'
+  if (status === 'failed' || status === 'cancelled') return 'failed'
+  if (status === 'queued' || status === 'waiting_resource') return 'queued'
+  return 'running'
+}
+
 export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = false }: AgentAssistantPanelProps) {
   const { t } = useUiTranslation('wizard')
   const { t: tCommon } = useUiTranslation('common')
@@ -351,10 +358,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           || (card.pipelineId && item.pipeline_id === card.pipelineId)
         ))
         if (!task) return card
-        const state = task.status === 'completed' ? 'completed'
-          : task.status === 'failed' || task.status === 'cancelled' ? 'failed'
-            : task.status === 'queued' || task.status === 'waiting_resource' ? 'queued'
-              : 'running'
+        const state = taskExecutionState(task.status)
         const outputNames = task.result_refs?.length ? task.result_refs : card.outputNames
         if (state === card.state && (task.message || card.message) === card.message && outputNames === card.outputNames) {
           return card
