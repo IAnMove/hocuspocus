@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowUp, Loader2, Maximize2, Minimize2, PanelLeftClose, Sparkles, Trash2 } from 'lucide-react'
-import { fetchWizardConversation, generateLlmText, saveWizardConversation, subscribeCanonicalTaskEvents, type CanonicalTask } from '../../api/client'
+import { fetchWizardConversation, generateLlmText, subscribeCanonicalTaskEvents, type CanonicalTask, type WizardConversationPayload } from '../../api/client'
 import { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 import { buildAgentTurnPrompt, HOCUSPOCUS_AGENT_SYSTEM_PROMPT, type AgentConversationEntry } from './agentKnowledge'
 import {
@@ -15,11 +15,18 @@ import {
   type AgentActionResult,
 } from './agentActions'
 import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
-import { applyRemoteWizardConversation, WIZARD_WELCOME_TEXT } from './wizardConversationSync'
+import {
+  applyRemoteWizardConversation,
+  isWizardConversationWriteCurrent,
+  normalizeRemoteWizardMessages,
+  shouldFollowWizardWorkspace,
+  WIZARD_WELCOME_TEXT,
+} from './wizardConversationSync'
 import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
+import { enqueueWizardConversationSave, persistQueuedWizardConversation, rebaseStaleWizardConversationHydration, rebaseWizardConversationAfterSave, resolveWizardConversationHydration } from './wizardConversationPersistence'
 import i18n, { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -138,6 +145,13 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
   }
 }
 
+function taskExecutionState(status: CanonicalTask['status']): 'completed' | 'failed' | 'queued' | 'running' {
+  if (status === 'completed') return 'completed'
+  if (status === 'failed' || status === 'cancelled') return 'failed'
+  if (status === 'queued' || status === 'waiting_resource') return 'queued'
+  return 'running'
+}
+
 export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = false }: AgentAssistantPanelProps) {
   const { t } = useUiTranslation('wizard')
   const { t: tCommon } = useUiTranslation('common')
@@ -150,12 +164,15 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   const [busyMessage, setBusyMessage] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [errorCardId, setErrorCardId] = useState<string | null>(null)
+  const [conversationSaveError, setConversationSaveError] = useState<string | null>(null)
   const [activeWorkflow, setActiveWorkflow] = useState<WizardWorkflowRecord | null>(null)
   const [pendingInput, setPendingInput] = useState<WizardWorkflowPendingInput | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
-  const conversationRevisionRef = useRef(0)
+  const conversationSnapshotsRef = useRef<Map<string, WizardConversationPayload>>(new Map())
+  const conversationSaveChainRef = useRef<Promise<void>>(Promise.resolve())
   const skipNextConversationSaveRef = useRef(false)
+  const conversationClearBasesRef = useRef<Map<string, WizardConversationPayload>>(new Map())
   const conversationWorkspaceRef = useRef(conversationWorkspace)
   conversationWorkspaceRef.current = conversationWorkspace
   const messagesRef = useRef(messages)
@@ -173,7 +190,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
     let active = true
     ensureRhythmic3dWorkflowRegistered(defaultApplicationAdapters)
     const unsubscribe = defaultWizardWorkflowRuntime.subscribe(({ workflow, card }) => {
-      if (!active || workflow.workspace !== workspace) return
+      if (!active || !isWizardConversationWriteCurrent(conversationWorkspace, workflow.workspace)) return
       setActiveWorkflow(workflow)
       setPendingInput(workflow.state === 'awaiting_input' ? workflow.pendingInput : null)
       setMessages(current => {
@@ -197,10 +214,10 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         }].slice(-40)
       })
     })
-    void defaultWizardWorkflowRuntime.open(workspace).catch(() => {
+    void defaultWizardWorkflowRuntime.open(conversationWorkspace).catch(() => {
       // Existing immediate actions remain available if workflow storage is offline.
     })
-    const closeEvents = subscribeCanonicalTaskEvents(workspace, event => {
+    const closeEvents = subscribeCanonicalTaskEvents(conversationWorkspace, event => {
       void defaultWizardWorkflowRuntime.handleTaskEvent(event).catch(() => {
         // The checkpoint stays recoverable; a reconnect replays the same event.
       })
@@ -210,12 +227,12 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       unsubscribe()
       closeEvents()
     }
-  }, [workspace])
+  }, [conversationWorkspace])
 
   useEffect(() => {
     setActiveWorkflow(null)
     setPendingInput(null)
-  }, [workspace])
+  }, [conversationWorkspace])
 
   useEffect(() => {
     writeMessages(conversationWorkspace, messages)
@@ -226,79 +243,120 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       return
     }
     const cards = messages.flatMap(message => message.cards || [])
-    void saveWizardConversation(conversationWorkspace, {
+    const capturedConversation: WizardConversationPayload = {
       version: 1,
-      revision: conversationRevisionRef.current,
+      revision: conversationSnapshotsRef.current.get(conversationWorkspace)?.revision || 0,
       messages,
       executions: cards,
-    }).then(saved => {
-      conversationRevisionRef.current = saved.revision
-    }).catch(async () => {
-      // A second tab may have advanced the CAS revision. Re-read and merge by
-      // message id; the resulting state triggers one save against the current
-      // backend revision. Local storage remains the fallback if this fails.
-      try {
-        const current = await fetchWizardConversation(conversationWorkspace)
-        if (!mountedRef.current || conversationWorkspaceRef.current !== conversationWorkspace) return
-        const choice = applyRemoteWizardConversation({
-          localMessages: messagesRef.current,
-          localRevision: conversationRevisionRef.current,
-          remoteMessages: current.messages,
-          remoteRevision: current.revision || 0,
-          remoteExecutions: current.executions,
-        })
-        conversationRevisionRef.current = choice.revision
-        skipNextConversationSaveRef.current = choice.source === 'remote'
-        setMessages([...choice.messages] as AgentMessage[])
-      } catch {
-        // Local storage still holds the turn while the backend is unavailable.
-      }
-    })
+    }
+    const queuedClearBase = conversationClearBasesRef.current.get(conversationWorkspace)
+    const queuedWrite = {
+      workspace: conversationWorkspace,
+      captured: capturedConversation,
+      // A clear is a three-way delete relative to the exact conversation the
+      // user saw, even if an earlier queued save advances the canonical state.
+      base: queuedClearBase ?? conversationSnapshotsRef.current.get(conversationWorkspace),
+      honorLocalDeletes: Boolean(queuedClearBase),
+    }
+    conversationSaveChainRef.current = enqueueWizardConversationSave(
+      conversationSaveChainRef.current,
+      async () => {
+        try {
+          const saved = await persistQueuedWizardConversation(
+            queuedWrite,
+            conversationSnapshotsRef.current,
+          )
+          if (queuedClearBase && conversationClearBasesRef.current.get(conversationWorkspace) === queuedClearBase) {
+            conversationClearBasesRef.current.delete(conversationWorkspace)
+          }
+          if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
+          setConversationSaveError(null)
+          const visibleMessages = messagesRef.current
+          const pendingClearBase = conversationClearBasesRef.current.get(conversationWorkspace)
+            ?? (queuedWrite.honorLocalDeletes ? queuedWrite.base : undefined)
+          const rebased = rebaseWizardConversationAfterSave({
+            ...queuedWrite.captured,
+            revision: saved.conversation.revision,
+            messages: visibleMessages,
+            executions: visibleMessages.flatMap(message => message.cards || []),
+          }, queuedWrite.captured, saved.conversation, pendingClearBase)
+          if (saved.merged || rebased.needsPersist) {
+            skipNextConversationSaveRef.current = !rebased.needsPersist
+            setMessages(normalizeRemoteWizardMessages(
+              rebased.conversation.messages,
+              rebased.conversation.executions,
+            ) as AgentMessage[])
+          }
+        } catch (error) {
+          if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
+          setConversationSaveError(error instanceof Error ? error.message : String(error))
+        }
+      },
+    )
   }, [conversationWorkspace, hydratedWorkspace, messages])
 
   useEffect(() => {
+    if (workspace !== conversationWorkspace) return
     let cancelled = false
-    void fetchWizardConversation(workspace).then(payload => {
-      if (cancelled) return
+    void fetchWizardConversation(conversationWorkspace).then(payload => {
+      if (cancelled || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
+      const knownSnapshot = conversationSnapshotsRef.current.get(conversationWorkspace)
+      const hydration = resolveWizardConversationHydration(knownSnapshot, payload)
+      conversationSnapshotsRef.current.set(conversationWorkspace, hydration.snapshot)
+      const clearBase = conversationClearBasesRef.current.get(conversationWorkspace)
+      if (!hydration.applyToVisibleState || clearBase || knownSnapshot) {
+        const visibleMessages = messagesRef.current
+        const rebased = rebaseStaleWizardConversationHydration({
+          ...payload,
+          messages: visibleMessages,
+          executions: visibleMessages.flatMap(message => message.cards || []),
+        }, clearBase ?? knownSnapshot ?? payload, hydration.snapshot, {
+          honorLocalDeletes: Boolean(clearBase),
+        })
+        skipNextConversationSaveRef.current = !rebased.needsPersist
+        setMessages(normalizeRemoteWizardMessages(
+          rebased.conversation.messages,
+          rebased.conversation.executions,
+        ) as AgentMessage[])
+        setHydratedWorkspace(conversationWorkspace)
+        return
+      }
+      const canonicalSnapshot = hydration.snapshot
       const choice = applyRemoteWizardConversation({
         localMessages: messagesRef.current,
-        localRevision: conversationRevisionRef.current,
-        remoteMessages: payload.messages,
-        remoteRevision: payload.revision || 0,
-        remoteExecutions: payload.executions,
+        // A known snapshot is handled by the three-way branch above.
+        localRevision: 0,
+        remoteMessages: canonicalSnapshot.messages,
+        remoteRevision: canonicalSnapshot.revision || 0,
+        remoteExecutions: canonicalSnapshot.executions,
       })
-      conversationRevisionRef.current = choice.revision
       skipNextConversationSaveRef.current = choice.source === 'remote'
       // A local choice may still adopt the backend's newer CAS revision and
       // merge remote-only messages. Use a fresh array so the persistence
       // effect retries the canonical save with that revision.
       setMessages([...choice.messages] as AgentMessage[])
-      setHydratedWorkspace(workspace)
+      setHydratedWorkspace(conversationWorkspace)
     }).catch(() => {
       // Fall back to the local cache already loaded for this workspace.
-      if (!cancelled) setHydratedWorkspace(workspace)
+      if (!cancelled && isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) {
+        setHydratedWorkspace(conversationWorkspace)
+      }
     })
     return () => { cancelled = true }
-  }, [workspace])
+  }, [conversationWorkspace, workspace])
 
   useEffect(() => {
-    if (workspace === conversationWorkspace) return
-    conversationRevisionRef.current = 0
+    if (!shouldFollowWizardWorkspace({ activeWorkspace: workspace, conversationWorkspace, busy })) return
     skipNextConversationSaveRef.current = false
+    setConversationSaveError(null)
     setHydratedWorkspace(null)
-    if (busy) {
-      // A Wizard action changed workspace while this turn was executing.
-      // Keep the visible turn alive and persist it in the destination so its
-      // real action result is not lost when the footer updates.
-      setConversationWorkspace(workspace)
-      return
-    }
     setMessages(readMessages(workspace))
     setConversationWorkspace(workspace)
     setState('idle')
   }, [busy, conversationWorkspace, workspace])
 
   useEffect(() => {
+    if (workspace !== conversationWorkspace) return
     setMessages(current => current.map(message => {
       if (!message.cards?.length) return message
       let changed = false
@@ -308,10 +366,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           || (card.pipelineId && item.pipeline_id === card.pipelineId)
         ))
         if (!task) return card
-        const state = task.status === 'completed' ? 'completed'
-          : task.status === 'failed' || task.status === 'cancelled' ? 'failed'
-            : task.status === 'queued' || task.status === 'waiting_resource' ? 'queued'
-              : 'running'
+        const state = taskExecutionState(task.status)
         const outputNames = task.result_refs?.length ? task.result_refs : card.outputNames
         if (state === card.state && (task.message || card.message) === card.message && outputNames === card.outputNames) {
           return card
@@ -327,7 +382,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       })
       return changed ? { ...message, cards } : message
     }))
-  }, [tasks])
+  }, [conversationWorkspace, tasks, workspace])
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -345,6 +400,17 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
 
   const clearConversation = () => {
     const next = [welcomeMessage()]
+    const snapshot = conversationSnapshotsRef.current.get(conversationWorkspace)
+    conversationClearBasesRef.current.set(conversationWorkspace, {
+      ...snapshot,
+      version: 1,
+      revision: snapshot?.revision || 0,
+      messages: messagesRef.current,
+      executions: messagesRef.current.flatMap(message => message.cards || []),
+    })
+    // An explicit user mutation must never consume a skip reserved for an
+    // earlier canonical hydration render.
+    skipNextConversationSaveRef.current = false
     setMessages(next)
     setState('idle')
   }
@@ -552,6 +618,11 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
             </div>
           </div>
         ))}
+        {conversationSaveError && (
+          <p role="alert" className="rounded-lg border border-rose-200/20 bg-rose-300/[.06] px-2 py-1.5 text-[10px] leading-relaxed text-rose-100">
+            {t('conversationSaveError', { message: conversationSaveError })}
+          </p>
+        )}
         {busy && (
           <div className="flex items-center gap-2 text-[10px] text-amber-100/60">
             <AgentAvatar state={state === 'acting' ? 'acting' : 'thinking'} size={24} />

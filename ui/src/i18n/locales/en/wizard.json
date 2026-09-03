@@ -21,6 +21,7 @@
   "emptyReply": "My crystal ball did not return a usable answer.",
   "pendingError": "I cannot apply that answer to the blocked step yet: {{message}}",
   "llmError": "I could not query the LLM: {{message}}. Check Settings → Services and try again.",
+  "conversationSaveError": "I could not save this Wizard conversation: {{message}}. Your local copy is still available; retry after reloading.",
   "pendingChoice": "Choose one of these options to continue the spell: {{choices}}.",
   "pendingFields": "Answer the fields {{fields}}.",
   "needDecisionBody": "🪄 **I need a decision to continue the same spell.**\n\n{{reason}}",

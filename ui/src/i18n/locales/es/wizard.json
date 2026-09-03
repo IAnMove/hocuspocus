@@ -21,6 +21,7 @@
   "emptyReply": "Mi bola de cristal no ha devuelto una respuesta utilizable.",
   "pendingError": "No puedo aplicar todavía esa respuesta al paso bloqueado: {{message}}",
   "llmError": "No he podido consultar el LLM: {{message}}. Comprueba Ajustes → Servicios y vuelve a intentarlo.",
+  "conversationSaveError": "No he podido guardar esta conversación del mago: {{message}}. Tu copia local sigue disponible; vuelve a cargar para reintentarlo.",
   "pendingChoice": "Elige una de estas opciones para continuar el hechizo: {{choices}}.",
   "pendingFields": "Responde los campos {{fields}}.",
   "needDecisionBody": "🪄 **Necesito una decisión para continuar el mismo hechizo.**\n\n{{reason}}",
