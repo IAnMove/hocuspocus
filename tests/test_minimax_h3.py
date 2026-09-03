@@ -281,6 +281,11 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("minimax_h3_service.generate(", launch)
         self.assertIn("def _is_legacy_h3_model", launch)
         self.assertIn("_release_legacy_h3_when_queue_allows", launch)
+        legacy_branch = launch.split(
+            "if legacy_h3_job:", 2,
+        )[2].split("def _legacy_h3_progress", 1)[0]
+        self.assertNotIn("wgp.release_model()", legacy_branch)
+        self.assertIn("coordinator hand-off already released", legacy_branch)
 
     def test_series_and_manual_release_drop_the_isolated_h3_runtime(self):
         launch = _read(_LAUNCH_PATH)

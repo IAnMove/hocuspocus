@@ -21,6 +21,48 @@ REMOTE_PROVIDERS = frozenset({
     "anthropic", "deepseek", "minimax", "openai", "openai-compatible", "remote",
 })
 
+# Machine-readable owner tags for the local GPU hand-off hook. The human label
+# is deliberately separate: matching strings such as ``"Maestro WGP ..."``
+# made runtime ownership depend on product branding and silently broke when
+# the UI was renamed to HocusPocus.
+GPU_ENGINE_H3_LEGACY = "h3-legacy"
+GPU_ENGINE_LOCAL_LLM = "local-llm"
+GPU_ENGINE_WGP = "wgp"
+_GPU_ENGINE_TAG = "[gpu-engine:"
+
+
+def gpu_engine_description(engine: str, label: str) -> str:
+    """Attach a stable engine identity to an observable task description."""
+    normalized = str(engine or "").strip().lower()
+    if normalized not in {
+        GPU_ENGINE_H3_LEGACY,
+        GPU_ENGINE_LOCAL_LLM,
+        GPU_ENGINE_WGP,
+    }:
+        raise ValueError(f"Unknown GPU engine: {engine}")
+    return f"{_GPU_ENGINE_TAG}{normalized}] {str(label or '').strip()}".strip()
+
+
+def gpu_engine_kind(description: str) -> str:
+    """Return the stable engine kind encoded in a scheduler description.
+
+    Narrow legacy aliases keep callers from older builds safe during a rolling
+    restart. New callers use :func:`gpu_engine_description` and therefore stay
+    independent of visible product copy.
+    """
+    owner = str(description or "").strip().lower()
+    if owner.startswith(_GPU_ENGINE_TAG):
+        closing = owner.find("]", len(_GPU_ENGINE_TAG))
+        if closing > 0:
+            return owner[len(_GPU_ENGINE_TAG):closing]
+    if owner.startswith(("maestro h3 legacy", "hocuspocus lab h3 legacy")):
+        return GPU_ENGINE_H3_LEGACY
+    if owner.startswith(("maestro wgp", "hocuspocus lab wgp")):
+        return GPU_ENGINE_WGP
+    if owner.startswith("local llm"):
+        return GPU_ENGINE_LOCAL_LLM
+    return ""
+
 
 def _server_origin(url: str, fallback: str) -> str:
     raw = str(url or "").strip()

@@ -2,13 +2,36 @@ import threading
 import time
 
 from app.services.resource_scheduler import (
+    GPU_ENGINE_H3_LEGACY,
+    GPU_ENGINE_LOCAL_LLM,
+    GPU_ENGINE_WGP,
     ResourceCoordinator,
     ResourceAcquireCancelled,
+    gpu_engine_description,
+    gpu_engine_kind,
     image_lane,
     llm_lane,
     may_overlap,
     video_lane,
 )
+
+
+def test_gpu_owner_identity_is_stable_across_visible_product_branding():
+    assert gpu_engine_kind(gpu_engine_description(
+        GPU_ENGINE_H3_LEGACY, "HocusPocus Lab H3 Legacy generation",
+    )) == GPU_ENGINE_H3_LEGACY
+    assert gpu_engine_kind(gpu_engine_description(
+        GPU_ENGINE_WGP, "Any future product name",
+    )) == GPU_ENGINE_WGP
+    assert gpu_engine_kind("Local LLM Director planning") == GPU_ENGINE_LOCAL_LLM
+
+
+def test_gpu_owner_identity_keeps_narrow_pre_tag_compatibility():
+    assert gpu_engine_kind("Maestro H3 Legacy generation") == GPU_ENGINE_H3_LEGACY
+    assert gpu_engine_kind("HocusPocus Lab H3 Legacy generation") == GPU_ENGINE_H3_LEGACY
+    assert gpu_engine_kind("Maestro WGP generation") == GPU_ENGINE_WGP
+    assert gpu_engine_kind("HocusPocus Lab WGP generation") == GPU_ENGINE_WGP
+    assert gpu_engine_kind("HocusPocus Lab GPU tool · upscale") == ""
 
 
 def test_local_image_and_video_share_one_gpu_lane():
