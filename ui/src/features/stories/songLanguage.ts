@@ -1,5 +1,11 @@
 import { explicitMusicLanguage } from '../../lib/labHelpers'
-import type { LanguageIntent, VerbatimContentSegment } from '../../lib/languageIntent'
+import {
+  mergeLanguageIntent,
+  normalizeLanguageIntent,
+  type LanguageIntent,
+  type VerbatimContentSegment,
+} from '../../lib/languageIntent'
+import type { StoryMusicDraft, StoryProject, StoryWritingProvider } from './types'
 
 /**
  * A song has two different language decisions: the language used to talk to
@@ -22,13 +28,14 @@ const LANGUAGE_ALIASES: Record<string, string> = {
   zh: '中文', chinese: '中文', chino: '中文',
 }
 
-const LANGUAGE_NAME_PATTERN = '(?:espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic|arabe|russian|ruso|dutch|neerland[eé]s|(?:es|en|fr|de|it|pt|ja|ko|zh|ar|nl|ru)(?:-[a-z0-9]{2,8})?)'
+const LANGUAGE_NAME_PATTERN = '(?:espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic|arabe|russian|ruso|dutch|neerland[eé]s)'
+const LANGUAGE_CODE_PATTERN = '(?:es|en|fr|de|it|pt|ja|ko|zh|ar|nl|ru)(?:-[a-z0-9]{2,8})?'
 
 const REQUESTED_LANGUAGE_PATTERNS = [
   new RegExp(`\\b(?:lyrics?|letra(?:s)?|cancion(?:es)?|canci[oó]n(?:es)?|song|vocal|voz)\\b[^.!?\\n]{0,120}?\\b(?:en|in)\\s+(${LANGUAGE_NAME_PATTERN})\\b`, 'iu'),
   new RegExp(`\\b(?:en|in)\\s+(${LANGUAGE_NAME_PATTERN})\\b[^.!?\\n]{0,120}?\\b(?:lyrics?|letra(?:s)?|cancion(?:es)?|canci[oó]n(?:es)?|song|vocal|voz)\\b`, 'iu'),
   new RegExp(`\\b(${LANGUAGE_NAME_PATTERN})\\s+(?:lyrics?|letra(?:s)?|cancion(?:es)?|canci[oó]n(?:es)?|song|vocal)\\b`, 'iu'),
-  new RegExp(`\\b(?:idioma|language|langue|sprache|lingua)\\s*(?:de|del|of|:)?\\s*(${LANGUAGE_NAME_PATTERN})\\b`, 'iu'),
+  new RegExp(`\\b(?:idioma|language|langue|sprache|lingua)\\s*(?:de|del|of|en|in|:)?\\s*(${LANGUAGE_NAME_PATTERN}|${LANGUAGE_CODE_PATTERN})\\b`, 'iu'),
 ] as const
 
 function folded(value: string): string {
@@ -85,6 +92,184 @@ export function resolveSongLyricsLanguage({
       || languageIntent?.contentLanguage
       || fallback,
   ) || 'Español'
+}
+
+export function resolveStorySongLanguage(
+  requestedLanguage: string,
+  languageIntent: LanguageIntent | undefined,
+  fallback: string,
+): string {
+  return resolveSongLyricsLanguage({ requestedLanguage, languageIntent, fallback })
+}
+
+export function protectedSongLyrics(intent: LanguageIntent): VerbatimContentSegment[] {
+  return intent.verbatimSegments.filter(segment => segment.kind === 'lyrics')
+}
+
+export function buildSongLyricsDirection(
+  lyricsLanguage: string,
+  protectedLyrics: readonly VerbatimContentSegment[],
+): string {
+  return [
+    `Write completely original vocal lyrics in ${lyricsLanguage}, with [Verse], [Chorus], [Bridge] and [Outro] sections.`,
+    'Do not translate, paraphrase or omit the following protected lyric fragments; include each one character-for-character:',
+    ...protectedLyrics.map((segment, index) => `Exact lyric ${index + 1} (${segment.language || lyricsLanguage}): ${JSON.stringify(segment.text)}`),
+  ].join('\n')
+}
+
+export function storySongSemanticAnchors(input: {
+  brief?: string
+  premise?: string
+  theme?: string
+  songStory?: string
+}): string[] {
+  return extractSongSemanticAnchors([
+    input.premise,
+    input.theme,
+    input.songStory,
+    input.brief,
+  ].filter(Boolean).join('\n'), 4)
+}
+
+export function songProviderLanguageIntent(
+  intent: LanguageIntent,
+  lyricsLanguage: string,
+): LanguageIntent {
+  return mergeLanguageIntent(intent, normalizeLanguageIntent({
+    spoken_language: lyricsLanguage,
+    technical_prompt_language: 'en',
+  }))
+}
+
+export interface SongLanguageActionOptions {
+  current?: LanguageIntent
+  conversationLanguage?: string
+  contentLanguage?: string
+  lyricsLanguage?: string
+  verbatimSegments: readonly VerbatimContentSegment[]
+  requestedSongLanguage?: string
+  request?: string
+}
+
+function resolveSongSpokenLanguage(
+  actionType: string,
+  requestedSongLanguage: string,
+  lyricsLanguage: string,
+  current: LanguageIntent | undefined,
+  explicitSpokenLanguage: string,
+  contentLanguage: string,
+): string {
+  const songLanguage = requestedSongLanguage || lyricsLanguage || current?.spokenLanguage || explicitSpokenLanguage || contentLanguage
+  if (actionType === 'configure_story_song') return songLanguage
+  return explicitSpokenLanguage || requestedSongLanguage || current?.spokenLanguage || lyricsLanguage || contentLanguage
+}
+
+/** Apply the language contract to a parsed Wizard action without coupling the
+ * agent parser to Story Lab's song-specific implementation details. */
+export function applySongLanguageIntent<T extends {
+  type: string
+  languageIntent?: LanguageIntent
+  language?: string
+  lyricsLanguage?: string
+}>(action: T, options: SongLanguageActionOptions): T {
+  const {
+    current,
+    conversationLanguage,
+    contentLanguage = '',
+    lyricsLanguage = '',
+    verbatimSegments,
+    requestedSongLanguage = '',
+    request = '',
+  } = options
+  const explicitSpokenLanguage = verbatimSegments.find(segment => (
+    (segment.kind === 'dialogue' || segment.kind === 'lyrics') && segment.language
+  ))?.language || ''
+  // A song may intentionally contain a quoted refrain in another language.
+  // Its spoken/sung contract is the requested song language; the segment
+  // keeps its own language metadata for exact preservation.
+  const spokenLanguage = resolveSongSpokenLanguage(
+    action.type, requestedSongLanguage, lyricsLanguage, current, explicitSpokenLanguage, contentLanguage,
+  )
+  const deterministic = normalizeLanguageIntent({
+    conversation_language: current?.conversationLanguage || conversationLanguage,
+    content_language: current?.contentLanguage || contentLanguage,
+    spoken_language: spokenLanguage,
+    technical_prompt_language: current?.technicalPromptLanguage || 'en',
+    verbatim_segments: verbatimSegments.map(segment => ({
+      ...segment,
+      language: segment.language || spokenLanguage,
+    })),
+  })
+  const protectedAction = {
+    ...action,
+    languageIntent: mergeLanguageIntent(current, deterministic),
+  } as T
+  if (action.type !== 'configure_story_song' || !requestedSongLanguage) return protectedAction
+  return {
+    ...protectedAction,
+    lyricsLanguage: resolveSongLyricsLanguage({
+      request,
+      requestedLanguage: lyricsLanguage,
+      languageIntent: deterministic,
+      fallback: contentLanguage,
+    }),
+  } as T
+}
+
+export interface StorySongWritingRequestInput {
+  target: Pick<StoryProject, 'title' | 'premise' | 'synopsis' | 'theme' | 'beats'>
+  brief: string
+  style: string
+  lyricsLanguage: string
+  protectedLyrics: readonly VerbatimContentSegment[]
+  model: StoryMusicDraft['model']
+  targetProvider: 'ace-step' | 'minimax'
+  durationSeconds: number
+  writingProvider: StoryWritingProvider
+  writingModel: string
+  writingBaseUrl: string
+}
+
+export function buildStorySongWritingRequest(input: StorySongWritingRequestInput) {
+  const { target, brief, style, lyricsLanguage, protectedLyrics } = input
+  const storyContext = [
+    `Título: ${target.title}`,
+    `Premisa: ${target.premise}`,
+    target.synopsis ? `Sinopsis: ${target.synopsis}` : '',
+    target.theme ? `Tema: ${target.theme}` : '',
+    target.beats.length ? `Progresión: ${target.beats.map(item => item.summary).join(' → ')}` : '',
+  ].filter(Boolean).join('\n')
+  return {
+    description: `${brief}\nWrite the provider-facing music direction in English and the complete lyrics in ${lyricsLanguage}.`,
+    instrumental: false as const,
+    target: input.targetProvider,
+    model: input.model,
+    style_direction: `${style}\nReturn the visible provider-facing music direction in English. Do not translate protected literal text.`,
+    lyrics_direction: buildSongLyricsDirection(lyricsLanguage, protectedLyrics),
+    story_context: storyContext,
+    language: lyricsLanguage,
+    duration_seconds: input.durationSeconds,
+    max_new_tokens: 2200,
+    writingProvider: input.writingProvider,
+    writingModel: input.writingModel,
+    writingBaseUrl: input.writingBaseUrl,
+  }
+}
+
+export function assertStorySongFidelity(
+  lyrics: string,
+  lyricsLanguage: string,
+  requiredTerms: readonly string[],
+  protectedSegments: readonly VerbatimContentSegment[],
+): SongSemanticFidelityReport {
+  return assertGeneratedSongFidelity({
+    lyrics,
+    lyricsLanguage,
+    instrumental: false,
+    requiredTerms,
+    protectedSegments,
+    requireStructuredLyrics: true,
+  })
 }
 
 const SEMANTIC_STOP_WORDS = new Set([
@@ -144,9 +329,20 @@ function languageCode(value: string): string {
   return ''
 }
 
-function languageMismatch(lyrics: string, requestedLanguage: string): boolean {
+function languageMismatch(
+  lyrics: string,
+  requestedLanguage: string,
+  protectedSegments: readonly VerbatimContentSegment[] = [],
+): boolean {
   const code = languageCode(requestedLanguage)
-  const words = lyrics.toLocaleLowerCase().match(/[\p{L}]+/gu) || []
+  // A literal refrain may intentionally be in another language. It is
+  // checked separately for exact preservation and must not skew the language
+  // score for the authored song around it.
+  const languageSample = protectedSegments.reduce(
+    (source, segment) => source.split(segment.text).join(' '),
+    lyrics,
+  )
+  const words = languageSample.toLocaleLowerCase().match(/[\p{L}]+/gu) || []
   // Very short authored fragments are not reliable language evidence. Exact
   // protected fragments and the requested language metadata still survive.
   if (!code || words.length < 8) return false
@@ -225,7 +421,7 @@ export function evaluateSongSemanticFidelity(input: SongSemanticFidelityInput): 
   }
   if (missingProtectedSegments.length) reasons.push('A protected lyric quotation was changed or translated.')
 
-  const mismatched = !input.instrumental && languageMismatch(lyrics, input.lyricsLanguage)
+  const mismatched = !input.instrumental && languageMismatch(lyrics, input.lyricsLanguage, protectedLyrics)
   checks.push(!mismatched)
   if (mismatched) reasons.push(`The lyric does not show evidence of the requested language (${input.lyricsLanguage}).`)
 
@@ -240,4 +436,14 @@ export function evaluateSongSemanticFidelity(input: SongSemanticFidelityInput): 
     missingProtectedSegments,
     languageMismatch: mismatched,
   }
+}
+
+export function assertGeneratedSongFidelity(
+  input: SongSemanticFidelityInput,
+): SongSemanticFidelityReport {
+  const fidelity = evaluateSongSemanticFidelity(input)
+  if (!fidelity.ok) {
+    throw new Error(`La letra generada no respeta el idioma o el tema solicitado (${fidelity.score}%): ${fidelity.reasons.join(' ')}`)
+  }
+  return fidelity
 }

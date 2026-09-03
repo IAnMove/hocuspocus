@@ -57,8 +57,6 @@ import {
   isLanguageAwareCapability,
   LANGUAGE_INTENT_SCHEMA,
   listCapabilities,
-  mergeLanguageIntent,
-  normalizeLanguageIntent,
   normalizeConversationLanguageTag,
   parseRegisteredCapability,
   registeredCapabilitySchemas,
@@ -68,11 +66,11 @@ import {
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
 import {
+  applySongLanguageIntent,
   extractRequestedSongLanguage,
   inferStoryProjectTypeFromText,
   isNewMusicVideoSongRequest,
   newMusicVideoStoryAction,
-  resolveSongLyricsLanguage,
 } from '../stories/musicVideoLook'
 
 export { isNewMusicVideoSongRequest } from '../stories/musicVideoLook'
@@ -1751,39 +1749,15 @@ export function protectUserVerbatimSegments(request: string, turn: AgentTurn): A
       const contentLanguage = 'language' in action && typeof action.language === 'string' ? action.language : ''
       const lyricsLanguage = 'lyricsLanguage' in action && typeof action.lyricsLanguage === 'string'
         ? action.lyricsLanguage : ''
-      const explicitSpokenLanguage = verbatimSegments.find(segment => (
-        (segment.kind === 'dialogue' || segment.kind === 'lyrics') && segment.language
-      ))?.language || ''
-      // A song may intentionally contain a quoted refrain in another
-      // language. Its spoken/sung contract is the requested song language;
-      // the segment keeps its own language metadata for exact preservation.
-      const spokenLanguage = action.type === 'configure_story_song'
-        ? requestedSongLanguage || lyricsLanguage || current?.spokenLanguage || explicitSpokenLanguage || contentLanguage
-        : explicitSpokenLanguage || requestedSongLanguage || current?.spokenLanguage || lyricsLanguage || contentLanguage
-      const deterministic = normalizeLanguageIntent({
-        conversation_language: current?.conversationLanguage || turn.conversationLanguage,
-        content_language: current?.contentLanguage || contentLanguage,
-        spoken_language: spokenLanguage,
-        technical_prompt_language: current?.technicalPromptLanguage || 'en',
-        verbatim_segments: verbatimSegments.map(segment => ({
-          ...segment,
-          language: segment.language || spokenLanguage,
-        })),
+      return applySongLanguageIntent(action, {
+        current,
+        conversationLanguage: turn.conversationLanguage,
+        contentLanguage,
+        lyricsLanguage,
+        verbatimSegments,
+        requestedSongLanguage,
+        request,
       })
-      const protectedAction = {
-        ...action,
-        languageIntent: mergeLanguageIntent(current, deterministic),
-      } as AgentAction
-      if (action.type !== 'configure_story_song' || !requestedSongLanguage) return protectedAction
-      return {
-        ...protectedAction,
-        lyricsLanguage: resolveSongLyricsLanguage({
-          request,
-          requestedLanguage: lyricsLanguage,
-          languageIntent: deterministic,
-          fallback: contentLanguage,
-        }),
-      } as AgentAction
     }),
   }
 }

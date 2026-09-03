@@ -30,6 +30,16 @@ test('simulated media smoke rejects a valid-looking song with the wrong language
   assert.equal(passed.ok, true)
 })
 
+test('simulated media smoke ignores a protected foreign-language refrain when scoring the song language', () => {
+  const report = evaluateSmokeSongFidelity({
+    lyrics: '[Verse]\nEn la red despierta el sysadmin y la noche canta.\n[Chorus]\nThe server fights through the night and we sing for our network.',
+    lyricsLanguage: 'Español',
+    protectedSegments: ['The server fights through the night and we sing for our network.'],
+  })
+  assert.equal(report.ok, true)
+  assert.equal(report.languageMismatch, false)
+})
+
 test('media smoke preserves project cue output task and pipeline identities', async () => {
   let revision = 0
   const calls = []

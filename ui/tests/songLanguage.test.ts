@@ -19,6 +19,9 @@ test('lyrics language follows the user request, not the UI or conversation langu
 
   assert.equal(extractRequestedSongLanguage('Write a vocal song with lyrics in Spanish.'), 'Español')
   assert.equal(extractRequestedSongLanguage('Escribe una canción vocal en español.'), 'Español')
+  assert.equal(extractRequestedSongLanguage('Escribe una canción en de madrugada con un estribillo heroico.'), '')
+  assert.equal(extractRequestedSongLanguage('Escribe una canción; idioma: de.'), 'Deutsch')
+  assert.equal(extractRequestedSongLanguage('Escribe una canción; idioma en de.'), 'Deutsch')
   assert.equal(resolveSongLyricsLanguage({
     request: 'Écris une chanson avec la letra en español.',
     languageIntent: intent,
@@ -78,6 +81,18 @@ test('quoted lyric text remains literal even when it is in a different language'
     requireStructuredLyrics: true,
   })
   assert.equal(preserved.ok, true)
+  const foreignRefrain = evaluateSongSemanticFidelity({
+    lyrics: '[Verse]\nEn la red despierta el sysadmin y la noche canta.\n[Chorus]\nThe server fights through the night and we sing for our network.',
+    lyricsLanguage: 'Español',
+    protectedSegments: [{
+      kind: 'lyrics',
+      text: 'The server fights through the night and we sing for our network.',
+      language: 'en',
+    }],
+    requireStructuredLyrics: true,
+  })
+  assert.equal(foreignRefrain.ok, true)
+  assert.equal(foreignRefrain.languageMismatch, false)
   const translated = evaluateSongSemanticFidelity({
     lyrics: '[Chorus]\nHola, mundo\nLa noche nos verá.',
     lyricsLanguage: 'Español',

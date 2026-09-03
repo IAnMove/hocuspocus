@@ -30,7 +30,13 @@ export function evaluateSmokeSongFidelity({
   const missingTerms = requiredTerms.filter(term => !folded.includes(foldSmokeText(term)))
   const missingProtectedSegments = protectedSegments
     .filter(segment => !source.includes(segment))
-  const words = source.toLocaleLowerCase().match(/[\p{L}]+/gu) || []
+  // Quoted lyrics can intentionally use another language. Check those
+  // literals separately, but exclude them from the authored-language score.
+  const languageSample = protectedSegments.reduce(
+    (value, segment) => value.split(segment).join(' '),
+    source,
+  )
+  const words = languageSample.toLocaleLowerCase().match(/[\p{L}]+/gu) || []
   const language = foldSmokeText(lyricsLanguage)
   const target = language.startsWith('es') || language.includes('spanish') || language.includes('espanol') ? 'es'
     : language.startsWith('en') || language.includes('english') || language.includes('ingles') ? 'en' : ''
