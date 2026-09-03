@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowUp, Loader2, Maximize2, Minimize2, PanelLeftClose, Sparkles, Trash2 } from 'lucide-react'
-import { fetchWizardConversation, generateLlmText, saveWizardConversation, subscribeCanonicalTaskEvents, type CanonicalTask } from '../../api/client'
+import { fetchWizardConversation, generateLlmText, subscribeCanonicalTaskEvents, type CanonicalTask } from '../../api/client'
 import { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 import { buildAgentTurnPrompt, HOCUSPOCUS_AGENT_SYSTEM_PROMPT, type AgentConversationEntry } from './agentKnowledge'
 import {
@@ -15,11 +15,17 @@ import {
   type AgentActionResult,
 } from './agentActions'
 import { applyPollToCard, cardsFromResults, tabForExecutionTarget, type WizardExecutionCard } from './executionCards'
-import { applyRemoteWizardConversation, WIZARD_WELCOME_TEXT } from './wizardConversationSync'
+import {
+  applyRemoteWizardConversation,
+  isWizardConversationWriteCurrent,
+  shouldFollowWizardWorkspace,
+  WIZARD_WELCOME_TEXT,
+} from './wizardConversationSync'
 import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
+import { saveWizardConversationWithRecovery } from './wizardConversationPersistence'
 import i18n, { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -150,6 +156,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   const [busyMessage, setBusyMessage] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [errorCardId, setErrorCardId] = useState<string | null>(null)
+  const [conversationSaveError, setConversationSaveError] = useState<string | null>(null)
   const [activeWorkflow, setActiveWorkflow] = useState<WizardWorkflowRecord | null>(null)
   const [pendingInput, setPendingInput] = useState<WizardWorkflowPendingInput | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
@@ -226,40 +233,30 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       return
     }
     const cards = messages.flatMap(message => message.cards || [])
-    void saveWizardConversation(conversationWorkspace, {
+    void saveWizardConversationWithRecovery(conversationWorkspace, {
       version: 1,
       revision: conversationRevisionRef.current,
       messages,
       executions: cards,
     }).then(saved => {
-      conversationRevisionRef.current = saved.revision
-    }).catch(async () => {
-      // A second tab may have advanced the CAS revision. Re-read and merge by
-      // message id; the resulting state triggers one save against the current
-      // backend revision. Local storage remains the fallback if this fails.
-      try {
-        const current = await fetchWizardConversation(conversationWorkspace)
-        if (!mountedRef.current || conversationWorkspaceRef.current !== conversationWorkspace) return
-        const choice = applyRemoteWizardConversation({
-          localMessages: messagesRef.current,
-          localRevision: conversationRevisionRef.current,
-          remoteMessages: current.messages,
-          remoteRevision: current.revision || 0,
-          remoteExecutions: current.executions,
-        })
-        conversationRevisionRef.current = choice.revision
-        skipNextConversationSaveRef.current = choice.source === 'remote'
-        setMessages([...choice.messages] as AgentMessage[])
-      } catch {
-        // Local storage still holds the turn while the backend is unavailable.
+      if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
+      conversationRevisionRef.current = saved.conversation.revision
+      setConversationSaveError(null)
+      if (saved.merged) {
+        skipNextConversationSaveRef.current = true
+        setMessages(saved.conversation.messages as AgentMessage[])
       }
+    }).catch(error => {
+      if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
+      setConversationSaveError(error instanceof Error ? error.message : String(error))
     })
   }, [conversationWorkspace, hydratedWorkspace, messages])
 
   useEffect(() => {
+    if (workspace !== conversationWorkspace) return
     let cancelled = false
-    void fetchWizardConversation(workspace).then(payload => {
-      if (cancelled) return
+    void fetchWizardConversation(conversationWorkspace).then(payload => {
+      if (cancelled || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
       const choice = applyRemoteWizardConversation({
         localMessages: messagesRef.current,
         localRevision: conversationRevisionRef.current,
@@ -273,26 +270,22 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       // merge remote-only messages. Use a fresh array so the persistence
       // effect retries the canonical save with that revision.
       setMessages([...choice.messages] as AgentMessage[])
-      setHydratedWorkspace(workspace)
+      setHydratedWorkspace(conversationWorkspace)
     }).catch(() => {
       // Fall back to the local cache already loaded for this workspace.
-      if (!cancelled) setHydratedWorkspace(workspace)
+      if (!cancelled && isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) {
+        setHydratedWorkspace(conversationWorkspace)
+      }
     })
     return () => { cancelled = true }
-  }, [workspace])
+  }, [conversationWorkspace, workspace])
 
   useEffect(() => {
-    if (workspace === conversationWorkspace) return
+    if (!shouldFollowWizardWorkspace({ activeWorkspace: workspace, conversationWorkspace, busy })) return
     conversationRevisionRef.current = 0
     skipNextConversationSaveRef.current = false
+    setConversationSaveError(null)
     setHydratedWorkspace(null)
-    if (busy) {
-      // A Wizard action changed workspace while this turn was executing.
-      // Keep the visible turn alive and persist it in the destination so its
-      // real action result is not lost when the footer updates.
-      setConversationWorkspace(workspace)
-      return
-    }
     setMessages(readMessages(workspace))
     setConversationWorkspace(workspace)
     setState('idle')
@@ -552,6 +545,11 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
             </div>
           </div>
         ))}
+        {conversationSaveError && (
+          <p role="alert" className="rounded-lg border border-rose-200/20 bg-rose-300/[.06] px-2 py-1.5 text-[10px] leading-relaxed text-rose-100">
+            {t('conversationSaveError', { message: conversationSaveError })}
+          </p>
+        )}
         {busy && (
           <div className="flex items-center gap-2 text-[10px] text-amber-100/60">
             <AgentAvatar state={state === 'acting' ? 'acting' : 'thinking'} size={24} />
