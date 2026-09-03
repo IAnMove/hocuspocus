@@ -122,6 +122,90 @@ _CANCELLED_ARTIFACT_FIELDS = {
     "_clip_timings",
 }
 
+_DIRECTOR_TEMP_DIRNAME = ".director-tmp"
+
+
+def _director_temporary_path(out_dir: str, pid: str, filename: str) -> str:
+    """Return a pipeline-scoped path that never appears in the media library."""
+    pid_token = re.sub(r"[^A-Za-z0-9_-]", "_", str(pid or "pipeline"))[:32]
+    temp_dir = os.path.join(out_dir, _DIRECTOR_TEMP_DIRNAME, pid_token)
+    os.makedirs(temp_dir, exist_ok=True)
+    return os.path.join(temp_dir, os.path.basename(filename))
+
+
+def _cleanup_director_temporary_files(paths: list[str]) -> None:
+    """Remove Director scratch files and their now-empty private directories."""
+    parents: set[str] = set()
+    for path in paths:
+        if not path:
+            continue
+        parents.add(os.path.dirname(path))
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except OSError:
+            pass
+    for parent in parents:
+        try:
+            os.rmdir(parent)
+        except OSError:
+            continue
+        root = os.path.dirname(parent)
+        if os.path.basename(root) == _DIRECTOR_TEMP_DIRNAME:
+            try:
+                os.rmdir(root)
+            except OSError:
+                pass
+
+
+def _cleanup_stale_director_temporary_outputs(output_root: str) -> None:
+    """Remove scratch audio left behind by an unclean previous shutdown."""
+    root = os.path.realpath(os.path.abspath(output_root))
+    if not os.path.isdir(root):
+        return
+    scan_dirs = [root]
+    try:
+        scan_dirs.extend(
+            os.path.join(root, name)
+            for name in os.listdir(root)
+            if not name.startswith(".")
+            and os.path.isdir(os.path.join(root, name))
+        )
+    except OSError:
+        pass
+
+    legacy_prefixes = ("_director_h3_audio_", "_rerun_audio_")
+    for scan_dir in scan_dirs:
+        try:
+            for name in os.listdir(scan_dir):
+                path = os.path.join(scan_dir, name)
+                if os.path.isfile(path) and name.startswith(legacy_prefixes):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+        except OSError:
+            continue
+
+        temp_root = os.path.join(scan_dir, _DIRECTOR_TEMP_DIRNAME)
+        if not os.path.isdir(temp_root):
+            continue
+        for current, dirs, files in os.walk(temp_root, topdown=False):
+            for name in files:
+                try:
+                    os.remove(os.path.join(current, name))
+                except OSError:
+                    pass
+            for name in dirs:
+                try:
+                    os.rmdir(os.path.join(current, name))
+                except OSError:
+                    pass
+        try:
+            os.rmdir(temp_root)
+        except OSError:
+            pass
+
 
 class PipelineBusyError(RuntimeError):
     """Raised when a Dashboard mutation conflicts with active pipeline work."""
@@ -3943,10 +4027,10 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
             "dialogue audio. Restore that file before rerunning the clip."
         )
     if wants_drive and audio_path and os.path.isfile(audio_path):
-        pid_token = re.sub(r"[^A-Za-z0-9_-]", "_", pid)[:32]
-        slice_path = os.path.join(
+        slice_path = _director_temporary_path(
             clip_out_dir,
-            f"_rerun_audio_{pid_token}_c{clip_index}_{uuid.uuid4().hex[:8]}.wav",
+            pid,
+            f"rerun_audio_c{clip_index}_{uuid.uuid4().hex[:8]}.wav",
         )
         try:
             _slice_audio_segment(
@@ -4026,11 +4110,7 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
             gen_params, timeout_s=3600, out_dir=clip_out_dir,
         )
     finally:
-        if slice_path and os.path.isfile(slice_path):
-            try:
-                os.remove(slice_path)
-            except OSError:
-                pass
+        _cleanup_director_temporary_files([slice_path] if slice_path else [])
         if continuation_path and os.path.isfile(continuation_path):
             try:
                 os.remove(continuation_path)
@@ -5146,6 +5226,12 @@ def init(
     _gen_lock = gen_lock
     _active_gen_states = active_gen_states
     _pipeline_state_observer = state_observer
+    try:
+        _cleanup_stale_director_temporary_outputs(
+            _wgp.server_config.get("save_path", "outputs")
+        )
+    except Exception as exc:
+        print(f"[Director] Temporary-file cleanup warning (non-fatal): {exc}")
 
 
 class _DirectorOutputs(list):
@@ -13301,10 +13387,10 @@ def _run_minimax_h3_story_video(
             )
             slice_path = None
             if wants_drive:
-                pid_token = re.sub(r"[^A-Za-z0-9_-]", "_", pid)[:32]
-                slice_path = os.path.join(
+                slice_path = _director_temporary_path(
                     out_dir,
-                    f"_director_h3_audio_{pid_token}_s{shot_index}_{segment_index}_"
+                    pid,
+                    f"h3_audio_s{shot_index}_{segment_index}_"
                     f"{uuid.uuid4().hex[:8]}.wav",
                 )
                 clip_start = (
@@ -13411,12 +13497,7 @@ def _run_minimax_h3_story_video(
                     os.remove(path)
             except OSError:
                 pass
-        for path in temporary_h3_audio:
-            try:
-                if os.path.isfile(path):
-                    os.remove(path)
-            except OSError:
-                pass
+        _cleanup_director_temporary_files(temporary_h3_audio)
 
     # Audio-driven productions use H3's native sound while rendering, but the
     # selected source track is authoritative in the finished timeline. This
@@ -14061,7 +14142,6 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 "MiniMax H3 Omni Director needs the uploaded soundtrack or "
                 "dialogue audio for this workflow."
             )
-        pid_token = re.sub(r"[^A-Za-z0-9_-]", "_", pid)[:32]
         cumulative_frames = 0
         try:
             for index, (clip_image, clip_frames) in enumerate(
@@ -14077,9 +14157,10 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                     )
                 )
                 if wants_drive:
-                    drive_slice = os.path.join(
+                    drive_slice = _director_temporary_path(
                         out_dir,
-                        f"_director_h3_audio_{pid_token}_c{index}_{uuid.uuid4().hex[:8]}.wav",
+                        pid,
+                        f"h3_audio_c{index}_{uuid.uuid4().hex[:8]}.wav",
                     )
                     clip_start = audio_start_sec + cumulative_frames / fps
                     _slice_audio_segment(
@@ -14107,12 +14188,7 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 per_clip_h3_references.append(manifest)
                 cumulative_frames += clip_frames
         except Exception:
-            for temporary_path in temporary_h3_audio:
-                if os.path.isfile(temporary_path):
-                    try:
-                        os.remove(temporary_path)
-                    except OSError:
-                        pass
+            _cleanup_director_temporary_files(temporary_h3_audio)
             raise
         print(
             f"[Pipeline {pid}] Built {len(per_clip_h3_references)} H3 Omni "
@@ -14432,10 +14508,5 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
             out_dir=out_dir,
         )  # 2hr timeout for long videos
     finally:
-        for temporary_path in temporary_h3_audio:
-            if os.path.isfile(temporary_path):
-                try:
-                    os.remove(temporary_path)
-                except OSError:
-                    pass
+        _cleanup_director_temporary_files(temporary_h3_audio)
     return output_files

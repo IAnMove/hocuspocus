@@ -18,6 +18,25 @@ def test_h3_duration_segments_stay_on_the_supported_lattice():
     assert abs(sum(segments) - 45 * 24) <= 17 / 2
 
 
+def test_director_startup_removes_only_private_audio_scratch(tmp_path: Path):
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    song = workspace / "song.wav"
+    song.write_bytes(b"keep")
+    legacy = workspace / "_director_h3_audio_deadbeef_s0_0_abcd1234.wav"
+    legacy.write_bytes(b"remove")
+    hidden = workspace / ".director-tmp" / "deadbeef" / "slice.wav"
+    hidden.parent.mkdir(parents=True)
+    hidden.write_bytes(b"remove")
+
+    director_pipeline._cleanup_stale_director_temporary_outputs(str(tmp_path))
+
+    assert song.exists()
+    assert not legacy.exists()
+    assert not hidden.exists()
+    assert not (workspace / ".director-tmp").exists()
+
+
 def test_h3_long_shot_is_split_without_losing_its_duration():
     segments = director_pipeline._minimax_h3_frame_segments(20.0)
 
@@ -670,6 +689,11 @@ def test_h3_legacy_music_video_slices_each_shot_from_its_timeline_offset(tmp_pat
     assert submitted[1]["audio_guide"] == slices[1][3]
     assert submitted[0]["audio_prompt_type"] == "A"
     assert submitted[1]["audio_prompt_type"] == "A"
+    assert all(
+        Path(item[3]).parent.parent.name == ".director-tmp"
+        for item in slices
+    )
+    assert not (tmp_path / ".director-tmp").exists()
 
 
 def test_h3_legacy_resume_advances_audio_offset_past_reused_segments(tmp_path: Path):
