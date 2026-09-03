@@ -94,6 +94,8 @@ def outer(a, b):
         }
         markdown = code_health._markdown_report(report, report, [], [])
         self.assertIn("<!-- code-health-report -->", markdown)
+        self.assertIn("Quality score:", markdown)
+        self.assertIn("Change vs comparison base:", markdown)
         self.assertIn("| Production LOC |", markdown)
         self.assertIn("**Ratchet passed.**", markdown)
         self.assertNotIn("**Ratchet not evaluated.**", markdown)

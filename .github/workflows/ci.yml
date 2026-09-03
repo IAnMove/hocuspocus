@@ -98,9 +98,23 @@ jobs:
       - name: First-party LOC and complexity ratchet
         env:
           GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          set -euo pipefail
+          SCORE_ARGS=()
+          if [ -n "${BASE_SHA:-}" ]; then
+            if ! git cat-file -e "${BASE_SHA}^{commit}"; then
+              git fetch --no-tags --depth=1 origin "${BASE_SHA}"
+            fi
+            BASE_PARENT="$(mktemp -d)"
+            BASE_DIR="${BASE_PARENT}/repo"
+            git worktree add --detach "${BASE_DIR}" "${BASE_SHA}"
+            ln -s "${GITHUB_WORKSPACE}/ui/node_modules" "${BASE_DIR}/ui/node_modules"
+            (cd "${BASE_DIR}" && python scripts/code_health.py --json) > /tmp/code-health-pr-base.json
+            SCORE_ARGS=(--score-baseline /tmp/code-health-pr-base.json --score-baseline-label "PR base")
+          fi
           set +e
-          python scripts/code_health.py --check --markdown --publish-pr-comment | tee code-health.md
+          python scripts/code_health.py --check --markdown --publish-pr-comment "${SCORE_ARGS[@]}" | tee code-health.md
           STATUS=${PIPESTATUS[0]}
           set -e
           if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
