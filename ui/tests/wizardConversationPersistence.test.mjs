@@ -4,6 +4,7 @@ import test from 'node:test'
 const {
   saveWizardConversationWithRecovery,
   mergeWizardConversationSnapshots,
+  enqueueWizardConversationSave,
 } = await import('../src/features/agent/wizardConversationPersistence.ts')
 const {
   WizardConversationRequestError,
@@ -185,4 +186,41 @@ test('a conflict response cannot suppress persistence of a newer visible turn', 
 
   assert.equal(hasExclusiveWizardMessages(withNewTurn, saved), true)
   assert.equal(hasExclusiveWizardMessages(saved, saved), false)
+})
+
+test('conversation writes are serialized and a later write sees the confirmed revision', async () => {
+  let revision = 0
+  let active = 0
+  let maximumActive = 0
+  const observed = []
+  let releaseFirst
+  let markFirstStarted
+  const firstGate = new Promise(resolve => { releaseFirst = resolve })
+  const firstStarted = new Promise(resolve => { markFirstStarted = resolve })
+
+  let chain = Promise.resolve()
+  chain = enqueueWizardConversationSave(chain, async () => {
+    active += 1
+    maximumActive = Math.max(maximumActive, active)
+    observed.push(revision)
+    markFirstStarted()
+    await firstGate
+    revision = 1
+    active -= 1
+  })
+  chain = enqueueWizardConversationSave(chain, async () => {
+    active += 1
+    maximumActive = Math.max(maximumActive, active)
+    observed.push(revision)
+    revision = 2
+    active -= 1
+  })
+
+  await firstStarted
+  assert.deepEqual(observed, [0])
+  releaseFirst()
+  await chain
+  assert.deepEqual(observed, [0, 1])
+  assert.equal(maximumActive, 1)
+  assert.equal(revision, 2)
 })

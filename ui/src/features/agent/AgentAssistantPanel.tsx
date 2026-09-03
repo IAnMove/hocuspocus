@@ -28,7 +28,7 @@ import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
-import { saveWizardConversationWithRecovery } from './wizardConversationPersistence'
+import { enqueueWizardConversationSave, saveWizardConversationWithRecovery } from './wizardConversationPersistence'
 import i18n, { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -165,7 +165,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
   const endRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
   const conversationRevisionRef = useRef(0)
-  const conversationWriteTokenRef = useRef(0)
+  const conversationSaveChainRef = useRef<Promise<void>>(Promise.resolve())
   const skipNextConversationSaveRef = useRef(false)
   const conversationWorkspaceRef = useRef(conversationWorkspace)
   conversationWorkspaceRef.current = conversationWorkspace
@@ -237,36 +237,34 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       return
     }
     const cards = messages.flatMap(message => message.cards || [])
-    const writeToken = ++conversationWriteTokenRef.current
-    void saveWizardConversationWithRecovery(conversationWorkspace, {
-      version: 1,
-      revision: conversationRevisionRef.current,
-      messages,
-      executions: cards,
-    }).then(saved => {
-      if (
-        !mountedRef.current
-        || writeToken !== conversationWriteTokenRef.current
-        || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)
-      ) return
-      conversationRevisionRef.current = saved.conversation.revision
-      setConversationSaveError(null)
-      if (saved.merged) {
-        const canonicalMessages = normalizeRemoteWizardMessages(saved.conversation.messages, saved.conversation.executions)
-        const hasExclusiveLocal = hasExclusiveWizardMessages(messagesRef.current, canonicalMessages)
-        if (!hasExclusiveLocal) {
-          skipNextConversationSaveRef.current = true
+    conversationSaveChainRef.current = enqueueWizardConversationSave(
+      conversationSaveChainRef.current,
+      async () => {
+        if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
+        try {
+          const saved = await saveWizardConversationWithRecovery(conversationWorkspace, {
+            version: 1,
+            revision: conversationRevisionRef.current,
+            messages,
+            executions: cards,
+          })
+          if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
+          conversationRevisionRef.current = saved.conversation.revision
+          setConversationSaveError(null)
+          if (saved.merged) {
+            const canonicalMessages = normalizeRemoteWizardMessages(saved.conversation.messages, saved.conversation.executions)
+            const hasExclusiveLocal = hasExclusiveWizardMessages(messagesRef.current, canonicalMessages)
+            if (!hasExclusiveLocal) {
+              skipNextConversationSaveRef.current = true
+            }
+            setMessages(mergeWizardMessages(messagesRef.current, canonicalMessages) as AgentMessage[])
+          }
+        } catch (error) {
+          if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
+          setConversationSaveError(error instanceof Error ? error.message : String(error))
         }
-        setMessages(mergeWizardMessages(messagesRef.current, canonicalMessages) as AgentMessage[])
-      }
-    }).catch(error => {
-      if (
-        !mountedRef.current
-        || writeToken !== conversationWriteTokenRef.current
-        || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)
-      ) return
-      setConversationSaveError(error instanceof Error ? error.message : String(error))
-    })
+      },
+    )
   }, [conversationWorkspace, hydratedWorkspace, messages])
 
   useEffect(() => {
@@ -299,7 +297,6 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
 
   useEffect(() => {
     if (!shouldFollowWizardWorkspace({ activeWorkspace: workspace, conversationWorkspace, busy })) return
-    conversationWriteTokenRef.current += 1
     conversationRevisionRef.current = 0
     skipNextConversationSaveRef.current = false
     setConversationSaveError(null)

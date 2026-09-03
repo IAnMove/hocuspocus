@@ -105,3 +105,14 @@ export async function saveWizardConversationWithRecovery(
     }
   }
 }
+
+/**
+ * Serialize browser conversation writes so every save reads the revision
+ * confirmed by its predecessor. A rejected write does not poison the queue.
+ */
+export function enqueueWizardConversationSave(
+  previous: Promise<void>,
+  write: () => Promise<void>,
+): Promise<void> {
+  return previous.catch(() => undefined).then(write)
+}
