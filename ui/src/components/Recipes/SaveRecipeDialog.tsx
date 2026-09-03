@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BookMarked, Loader2 } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 
 /**
  * SaveRecipeDialog — turns the current gallery output into a reusable
@@ -14,6 +15,8 @@ export function SaveRecipeDialog({ defaultNsfw, onSave, onCancel }: {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [nsfw, setNsfw] = useState(defaultNsfw)
+  const { t } = useUiTranslation('activity')
+  const { t: tCommon } = useUiTranslation('common')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -23,7 +26,7 @@ export function SaveRecipeDialog({ defaultNsfw, onSave, onCancel }: {
     try {
       await onSave(name.trim(), description.trim(), nsfw)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
+      setError(e instanceof Error ? e.message : t('recipes.saveFailed'))
       setSaving(false)
     }
   }
@@ -34,36 +37,34 @@ export function SaveRecipeDialog({ defaultNsfw, onSave, onCancel }: {
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-3">
           <BookMarked size={16} className="text-accent-blue" />
-          <h2 className="text-sm font-semibold text-text-primary">Save as Recipe</h2>
+          <h2 className="text-sm font-semibold text-text-primary">{t('recipes.saveTitle')}</h2>
         </div>
         <p className="text-[11px] text-text-muted mb-3 leading-snug">
-          Captures this generation's model, LoRAs, and settings as a one-click
-          preset. Its thumbnail comes from this output. Applying a recipe later
-          prepopulates the prompt so you just edit the subject.
+          {t('recipes.saveBody')}
         </p>
 
-        <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Name</label>
+        <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{tCommon('fields.name')}</label>
         <input
           autoFocus
           value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') submit() }}
-          placeholder="e.g. Cinematic Film Look"
+          placeholder={t('recipes.namePlaceholder')}
           className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue mb-3"
         />
 
-        <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Description (optional)</label>
+        <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{t('recipes.descriptionOptional')}</label>
         <textarea
           value={description}
           onChange={e => setDescription(e.target.value)}
-          placeholder="When to use it, what it's good for…"
+          placeholder={t('recipes.descriptionPlaceholder')}
           rows={2}
           className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue resize-none mb-3"
         />
 
         <label className="flex items-center gap-2 cursor-pointer mb-4">
           <input type="checkbox" checked={nsfw} onChange={e => setNsfw(e.target.checked)} className="accent-accent-blue" />
-          <span className="text-[11px] text-text-secondary">Mature recipe (hidden unless mature mode is on)</span>
+          <span className="text-[11px] text-text-secondary">{t('recipes.mature')}</span>
         </label>
 
         {error && <div className="text-[11px] text-red-400 mb-3">{error}</div>}
@@ -71,11 +72,11 @@ export function SaveRecipeDialog({ defaultNsfw, onSave, onCancel }: {
         <div className="flex items-center justify-end gap-2">
           <button onClick={onCancel} disabled={saving}
             className="px-4 py-2 text-xs text-text-secondary hover:text-text-primary border border-border rounded-lg hover:border-border-light transition-colors disabled:opacity-40">
-            Cancel
+            {tCommon('actions.cancel')}
           </button>
           <button onClick={submit} disabled={!name.trim() || saving}
             className="px-4 py-2 text-xs bg-accent-blue text-white rounded-lg hover:bg-accent-blue-hover transition-colors disabled:opacity-40 flex items-center gap-1.5">
-            {saving ? <><Loader2 size={12} className="animate-spin" /> Saving…</> : 'Save Recipe'}
+            {saving ? <><Loader2 size={12} className="animate-spin" /> {t('recipes.saving')}</> : t('recipes.saveAction')}
           </button>
         </div>
       </div>

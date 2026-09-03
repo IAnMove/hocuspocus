@@ -39,7 +39,18 @@
     "removeTitle": "Quitar este vídeo de la línea de tiempo",
     "redoInVideoCreation": "Rehacer en Creación de vídeo",
     "redoInVideoCreationTitle": "Carga el prompt, modelo, duración y formato de este clip en Creación de vídeo para elegir después su reemplazo",
-    "loadingGenerationSettings": "Cargando ajustes de generación…"
+    "loadingGenerationSettings": "Cargando ajustes de generación…",
+    "transition": "Transición {{n}}",
+    "duration": "Duración: {{value}}s",
+    "durationInsert": "Esta cartela se inserta entre clips y suma a la duración total.",
+    "durationClamp": "La previsualización y la exportación recortan esto automáticamente en clips muy cortos.",
+    "previewTransition": "Previsualizar esta transición",
+    "alpha": "Canal alfa · {{format}}",
+    "noAlpha": "Sin alfa · {{format}}",
+    "unmute": "Activar audio del clip",
+    "mute": "Silenciar clip",
+    "fit": "Encajar · sin recorte",
+    "fill": "Llenar · recortar"
   },
   "timeline": {
     "aria": "Línea de tiempo del Video Editor",
@@ -96,6 +107,8 @@
     "handoffRetry": "No se pudo reintentar la entrega: {{message}}",
     "draftSave": "No se pudo guardar el borrador del editor. Se conservó la entrega para Reintentar.",
     "reconnectExport": "No se pudo reconectar con la exportación {{jobId}}: {{message}}",
+    "comicAnimatic": "animática de cómic",
+    "seriesShot": "Plano de Series {{n}}",
     "slotGone": "La posición original {{n}} ya no está disponible en el montaje.",
     "replaceFailed": "No se pudo reemplazar el clip {{n}}: {{message}}",
     "noReusableSettings": "Este clip no conserva ajustes de generación reutilizables.",
@@ -108,7 +121,10 @@
     "addHandoff_other": "El editor ya contiene {{count}} clips. ¿Añadir la entrega a este montaje?"
   },
   "actions": {
-    "retryHandoff": "Reintentar la entrega"
+    "retryHandoff": "Reintentar la entrega",
+    "duplicate": "Duplicar clip",
+    "earlier": "Antes",
+    "later": "Después"
   },
   "timeCard": {
     "default": "Momentos después…",
@@ -159,6 +175,12 @@
     "hint": "Arrastra los tiradores para fijar la entrada y la salida. El vídeo original no se modifica; estos cortes solo se aplican a la previsualización y al MP4 exportado.",
     "exactIn": "Entrada exacta",
     "exactOut": "Salida exacta",
-    "restore": "Restaurar clip completo"
+    "restore": "Restaurar clip completo",
+    "nondestructive": "Recorte no destructivo",
+    "keepsRemoves": "Conserva {{kept}} · quita {{removed}}",
+    "inPoint": "Punto de entrada",
+    "outPoint": "Punto de salida",
+    "inTime": "Entrada {{time}}",
+    "outTime": "Salida {{time}}"
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { fetchPreflight, type PreflightCheck } from '../api/client'
+import { useUiTranslation } from '../i18n'
 import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
 
 /**
@@ -14,6 +15,7 @@ import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
  * acknowledged it, but returns next launch if the problem persists.
  */
 export function PreflightBanner() {
+  const { t } = useUiTranslation('shell')
   const [checks, setChecks] = useState<PreflightCheck[]>([])
   const [dismissed, setDismissed] = useState(
     () => safeStorageGet('session', 'maestro_preflight_dismissed') === '1'
@@ -54,7 +56,7 @@ export function PreflightBanner() {
           setDismissed(true)
         }}
         className="shrink-0 p-0.5 rounded text-text-muted hover:text-text-primary transition-colors"
-        aria-label="Dismiss"
+        aria-label={t('preflight.dismiss')}
       >
         <X size={13} />
       </button>

@@ -24,6 +24,11 @@ Typed JSON under `ui/src/i18n/locales/<lng>/<namespace>.json`.
 | `styleSheet` | Style sheet library, import and delete chrome |
 | `projects` | Durable projects catalog |
 | `auditDev` | Internal audio-hallucination audit panel |
+| `scene3d` | 3D Video, Hunyuan3D, Rig & Animate |
+| `shell` | Intro, LAN gate, preflight/OOM/download banners |
+| `characters` | Character Creator and Character Kits |
+| `comics` | Comic Studio |
+| `studio` | Direct generation sidebar (prompt, inputs, modes, tools) |
 
 Add a namespace only when a new product surface needs its own file. Do not grow a single giant JSON.
 

@@ -12,6 +12,7 @@ import {
   type AlternativeSongList,
   type ApiOutput,
 } from '../../api/client'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 
 // Kept exported for the focused DOM contract test.
@@ -29,6 +30,8 @@ function formatSeconds(value: number): string {
 }
 
 export function AlternativeSongsDialog({ name, onClose }: { name: string; onClose: () => void }) {
+  const { t } = useUiTranslation('activity')
+  const { t: tCommon } = useUiTranslation('common')
   const workspace = useStore(s => s.activeWorkspace) || 'default'
   const loadOutputs = useStore(s => s.loadOutputs)
   const setMediaFilter = useStore(s => s.setMediaFilter)
@@ -92,7 +95,7 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
   }
 
   const attach = () => run('attach', async () => {
-    if (!selectedAudio) throw new Error('Elige una canción de la galería de audio.')
+    if (!selectedAudio) throw new Error(t('alternativeSongs.pickSong'))
     await attachAlternativeSong(name, selectedAudio, workspace)
   })
 
@@ -115,14 +118,13 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div>
             <h2 id="alternative-songs-title" className="flex items-center gap-2 text-base font-semibold text-text-primary">
-              <Music2 size={18} /> Canciones alternativas
+              <Music2 size={18} /> {t('alternativeSongs.title')}
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-text-muted">
-              Reutiliza los planos de este videoclip. Si la canción es más corta se recorta el montaje;
-              si es más larga se añaden planos aleatorios del mismo pool. No se regenera H3.
+              {t('alternativeSongs.description')}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-text-muted hover:bg-bg-hover" aria-label="Close">
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-text-muted hover:bg-bg-hover" aria-label={tCommon('actions.close')}>
             <X size={16} />
           </button>
         </div>
@@ -130,11 +132,13 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {list && (
             <p className="text-[11px] text-text-muted">
-              {list.source_clip_count} {list.source_clip_count === 1 ? 'plano' : 'planos'} · videoclip {formatSeconds(list.duration_seconds)} · {
-                list.adaptation === 'random_extras'
-                  ? 'extras aleatorios si hace falta'
-                  : 'si falta duración se repetirá el videoclip'
-              }
+              {t('alternativeSongs.summary', {
+                count: list.source_clip_count,
+                duration: formatSeconds(list.duration_seconds),
+                adaptation: list.adaptation === 'random_extras'
+                  ? t('alternativeSongs.adaptationRandom')
+                  : t('alternativeSongs.adaptationRepeat'),
+              })}
             </p>
           )}
 
@@ -144,7 +148,7 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
               onChange={event => setSelectedAudio(event.target.value)}
               className="min-w-0 flex-1 rounded-lg border border-border bg-bg-tertiary px-2 py-2 text-xs text-text-primary"
             >
-              <option value="">Elegir canción existente…</option>
+              <option value="">{t('alternativeSongs.chooseSong')}</option>
               {audio.map(item => (
                 <option key={item.name} value={item.name}>{item.name}</option>
               ))}
@@ -155,13 +159,13 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
               disabled={!selectedAudio || busy !== null}
               className="shrink-0 rounded-lg bg-accent-blue px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
             >
-              {busy === 'attach' ? <Loader2 size={14} className="animate-spin" /> : 'Añadir'}
+              {busy === 'attach' ? <Loader2 size={14} className="animate-spin" /> : tCommon('actions.add')}
             </button>
           </div>
 
           {(list?.songs || []).length === 0 && (
             <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-[11px] text-text-muted">
-              Aún no hay canciones alternativas. Añade un MP3/WAV de la galería Audio y luego pulsa Montar.
+              {t('alternativeSongs.empty')}
             </p>
           )}
 
@@ -174,12 +178,12 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
                 </div>
                 <p className="mt-1 text-[10px] text-text-muted">
                   {song.status === 'mounted' && song.mounted_output
-                    ? `Montado · ${song.mounted_output}${song.extra_clip_count ? ` · +${song.extra_clip_count} extras` : ''}`
+                    ? `${t('alternativeSongs.mounted', { name: song.mounted_output })}${song.extra_clip_count ? t('alternativeSongs.extras', { count: song.extra_clip_count }) : ''}`
                     : song.status === 'mounting'
-                      ? 'Montando con FFmpeg…'
+                      ? t('alternativeSongs.mounting')
                       : song.status === 'failed'
-                        ? 'Falló el montaje'
-                        : 'Lista para montar'}
+                        ? t('alternativeSongs.failed')
+                        : t('alternativeSongs.ready')}
                 </p>
                 <div className="mt-2 flex gap-2">
                   {song.mounted_output ? (
@@ -188,7 +192,7 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
                       className="rounded-md border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-bg-hover"
                       onClick={() => { setMediaFilter('videoclips'); onClose() }}
                     >
-                      Ver resultado
+                      {t('alternativeSongs.viewResult')}
                     </button>
                   ) : (
                     <button
@@ -199,7 +203,7 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
                     >
                       {busy === `mount-${song.id}` || song.status === 'mounting'
                         ? <Loader2 size={12} className="animate-spin" />
-                        : 'Montar'}
+                        : t('alternativeSongs.mount')}
                     </button>
                   )}
                   <button
@@ -207,7 +211,7 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
                     disabled={busy !== null || song.status === 'mounting'}
                     onClick={() => void remove(song)}
                     className="ml-auto rounded-md p-1 text-text-muted hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
-                    title="Quitar de la lista (no borra el archivo de audio)"
+                    title={t('alternativeSongs.removeTitle')}
                   >
                     <Trash2 size={12} />
                   </button>

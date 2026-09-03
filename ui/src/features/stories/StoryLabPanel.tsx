@@ -796,14 +796,14 @@ export function StoryLabPanel() {
           replaceCollections: true,
           generateImagesAfterApply,
         })
-        setNotice({ kind: 'ok', text: 'A Story Lab result completed on the server and was recovered automatically. Review and apply it below.' })
+        setNotice({ kind: 'ok', text: t('notice.recoveredServerResult') })
       }).catch(() => {
         // The visible Resume control remains available for failed, cancelled,
         // temporarily unreachable, or still-running checkpoints.
       })
     }
     return () => { disposed = true }
-  }, [activeWorkspace, agentDraftRevision, project.id])
+  }, [activeWorkspace, agentDraftRevision, project.id, t])
 
   useEffect(() => {
     if (project.projectType === 'quick_video') {
@@ -850,12 +850,12 @@ export function StoryLabPanel() {
 
   const approve = (key: keyof StoryProject['approvals']) => {
     if (key === 'overview' && (!storyProjectPremise(project).trim() || !project.logline.trim() || !project.synopsis.trim())) {
-      setNotice({ kind: 'error', text: 'Premise, logline and synopsis are required before approving the story.' })
+      setNotice({ kind: 'error', text: t('notice.premiseRequired') })
       setTab('overview')
       return
     }
     if (key === 'world' && (!project.world.summary.trim() || !project.world.visualLanguage.trim())) {
-      setNotice({ kind: 'error', text: 'Add a world summary and visual language before approving the world.' })
+      setNotice({ kind: 'error', text: t('notice.worldRequired') })
       openStorySection('world')
       return
     }
@@ -863,22 +863,22 @@ export function StoryLabPanel() {
       const requiresVisualIdentities = !directVideo
       const incomplete = project.characters.flatMap(character => {
         const reasons = [
-          character.approval !== 'approved' ? 'still marked draft' : '',
+          character.approval !== 'approved' ? t('notice.reasonStillDraft') : '',
           requiresVisualIdentities && !character.primaryReferenceAssetId
-            ? 'has no primary identity selected'
+            ? t('notice.reasonNoPrimary')
             : requiresVisualIdentities && character.primaryReferenceAssetId
               && project.assets[character.primaryReferenceAssetId]?.approval !== 'approved'
-              ? 'has a missing or unapproved primary identity asset'
+              ? t('notice.reasonUnapprovedPrimary')
               : '',
         ].filter(Boolean)
-        return reasons.length ? [`${character.name || 'Unnamed character'} (${reasons.join(', ')})`] : []
+        return reasons.length ? [`${character.name || t('notice.unnamedCharacter')} (${reasons.join(', ')})`] : []
       })
       if (!project.characters.length || (requiresVisualIdentities && incomplete.length)) {
         setNotice({
           kind: 'error',
           text: !project.characters.length
-            ? 'Add at least one character before approving the cast.'
-            : `Cast approval is blocked: ${incomplete.join(' · ')}. Review each listed character, select its primary image, then click its draft button to approve it.`,
+            ? t('notice.addCharacterFirst')
+            : t('notice.castBlocked', { details: incomplete.join(' · ') }),
         })
         openStorySection('characters')
         return
@@ -893,7 +893,7 @@ export function StoryLabPanel() {
           }
           return current
         })
-        setNotice({ kind: 'ok', text: 'Character descriptions approved. Direct-video mode does not require identity images.' })
+        setNotice({ kind: 'ok', text: t('notice.descriptionsApproved') })
         return
       }
     }
@@ -902,7 +902,7 @@ export function StoryLabPanel() {
       || !relationship.toCharacterId
       || relationship.fromCharacterId === relationship.toCharacterId
       || !relationship.dynamic.trim())) {
-      setNotice({ kind: 'error', text: 'Every relationship needs two different characters and a current dynamic.' })
+      setNotice({ kind: 'error', text: t('notice.relationshipsRequired') })
       openStorySection('relationships')
       return
     }
@@ -910,7 +910,7 @@ export function StoryLabPanel() {
       project.beats.length < 3
       || project.beats.some(beat => !beat.summary.trim() || !beat.conflict.trim() || !beat.turn.trim())
     )) {
-      setNotice({ kind: 'error', text: 'Use at least three causal beats, each with action, conflict and a consequence.' })
+      setNotice({ kind: 'error', text: t('notice.beatsRequired') })
       openStorySection('structure')
       return
     }
@@ -1116,10 +1116,16 @@ export function StoryLabPanel() {
     const overview = result.overview && typeof result.overview === 'object'
       ? result.overview as Record<string, unknown> : null
     const appliedTitle = typeof overview?.title === 'string' && overview.title.trim()
-      ? overview.title.trim() : useStoryStore.getState().projects[projectId]?.title || 'Untitled story'
+      ? overview.title.trim() : useStoryStore.getState().projects[projectId]?.title || t('notice.untitledStory')
     setNotice({
       kind: 'ok',
-      text: `Applied to “${appliedTitle}”: ${characterCount} characters · ${locationCount} locations · ${structure.length} moments · ${musicCount} song${musicCount === 1 ? '' : 's'}.`,
+      text: t('notice.appliedDraft', {
+        title: appliedTitle,
+        characters: t('notice.partCharacters', { count: characterCount }),
+        locations: t('notice.partLocations', { count: locationCount }),
+        moments: t('notice.partMoments', { count: structure.length }),
+        songs: t('notice.partSongs', { count: musicCount }),
+      }),
     })
   }
 
@@ -1144,15 +1150,19 @@ export function StoryLabPanel() {
       return current.world.locations.find(location => location.id === item.target.id)?.referenceAssetIds.length === 0
     })
     if (!targets.length) {
-      setNotice({ kind: 'ok', text: 'The text is ready. Every available visual target already has an image, or no visual prompt was generated.' })
+      setNotice({ kind: 'ok', text: t('notice.visualsAlreadyReady') })
       return true
     }
     const creditWarning = current.provider.imageProvider === 'minimax'
-      ? ' This uses MiniMax image credits.' : ''
+      ? t('notice.minimaxImageCredits') : ''
     if (!window.confirm(
-      `Generate ${targets.length} concept image${targets.length === 1 ? '' : 's'} now: ${targets.map(item => item.label).join(', ')}? Existing references are preserved.${creditWarning}`,
+      t('notice.generateConceptImagesConfirm', {
+        count: targets.length,
+        labels: targets.map(item => item.label).join(', '),
+        credits: creditWarning,
+      }),
     )) {
-      setNotice({ kind: 'ok', text: 'The text preparation is complete. Image generation was skipped and can be started later.' })
+      setNotice({ kind: 'ok', text: t('notice.imagesSkipped') })
       return true
     }
     setReferenceBatchBusy(true)
@@ -1182,13 +1192,17 @@ export function StoryLabPanel() {
         if (!ready) {
           setNotice({
             kind: 'error',
-            text: `Generated ${completed}/${targets.length} images. ${lastError || `Could not generate ${item.label}.`} The prepared text remains saved.`,
+            text: t('notice.partialImagesGenerated', {
+              completed,
+              total: targets.length,
+              detail: lastError || t('notice.couldNotGenerateItem', { label: item.label }),
+            }),
           })
           return false
         }
         completed += 1
       }
-      setNotice({ kind: 'ok', text: `Text preparation and ${completed} concept image${completed === 1 ? '' : 's'} completed.` })
+      setNotice({ kind: 'ok', text: t('notice.textAndImagesCompleted', { count: completed }) })
       return true
     } finally {
       activity.finish()
@@ -1213,8 +1227,8 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'ok',
         text: options.generateImages
-          ? 'A generated text draft is ready. Review and apply it; its missing concept images will then be generated.'
-          : 'A generated text draft is ready. Review the changes before applying them.',
+          ? t('notice.textDraftReadyWithImages')
+          : t('notice.textDraftReady'),
       })
       return
     }
@@ -1222,7 +1236,7 @@ export function StoryLabPanel() {
     if (scope === 'all') {
       if (options.generateImages && !await generateMissingImagesForScope(scope, projectId)) return
       if (!options.generateImages) {
-        setNotice({ kind: 'ok', text: 'Text preparation completed. No images were generated.' })
+        setNotice({ kind: 'ok', text: t('notice.textReadyNoImages') })
       }
       setTab(project.projectType === 'music_video' ? 'music' : project.projectType === 'trailer' ? 'trailer' : 'productions')
     } else if (options.generateImages) {
@@ -1233,21 +1247,20 @@ export function StoryLabPanel() {
   const generate = async (scope: StoryGenerationScope, options: StoryGenerationOptions = {}) => {
     const generationPremise = storyProjectPremise(project)
     if (!generationPremise.trim()) {
-      setNotice({ kind: 'error', text: project.projectType === 'full_story' ? 'Write a premise first.' : 'Complete the creative brief first.' })
+      setNotice({ kind: 'error', text: project.projectType === 'full_story' ? t('notice.writePremiseFirst') : t('notice.completeBriefFirst') })
       return
     }
     const existingStoryParts = [
-      project.characters.length ? `${project.characters.length} characters` : '',
-      project.world.locations.length ? `${project.world.locations.length} locations` : '',
-      project.beats.length ? `${project.beats.length} moments` : '',
-      project.music.cues.length
-        ? `${project.music.cues.length} song${project.music.cues.length === 1 ? '' : 's'}` : '',
+      project.characters.length ? t('notice.partCharacters', { count: project.characters.length }) : '',
+      project.world.locations.length ? t('notice.partLocations', { count: project.world.locations.length }) : '',
+      project.beats.length ? t('notice.partMoments', { count: project.beats.length }) : '',
+      project.music.cues.length ? t('notice.partSongs', { count: project.music.cues.length }) : '',
     ].filter(Boolean)
     if (
       scope === 'all'
       && existingStoryParts.length
       && !window.confirm(
-        `This Story already contains ${existingStoryParts.join(', ')}. Generate a new replacement draft? The current material remains unchanged until you review and apply the new draft.`,
+        t('notice.replaceDraftConfirm', { parts: existingStoryParts.join(', ') }),
       )
     ) return
     setBusy(scope)
@@ -1311,7 +1324,7 @@ export function StoryLabPanel() {
         generateImagesAfterApply: options.generateImages === true,
       }))
       if (useStoryStore.getState().project.id !== sourceProjectId) {
-        setNotice({ kind: 'ok', text: 'Generation completed and was saved with its source story. Reopen that story to review the draft.' })
+        setNotice({ kind: 'ok', text: t('notice.generationSavedElsewhere') })
         return
       }
       await completeGeneratedDraft(scope, result, options, sourceProjectId)
@@ -1324,7 +1337,7 @@ export function StoryLabPanel() {
       setNotice({
         kind: (error as Error).name === 'AbortError' ? 'ok' : 'error',
         text: (error as Error).name === 'AbortError'
-          ? 'Generation cancelled. Completed stages remain available through Resume.'
+          ? t('notice.generationCancelled')
           : (error as Error).message,
       })
     } finally {
@@ -1402,12 +1415,12 @@ export function StoryLabPanel() {
         result,
         generateImagesAfterApply,
       }))
-      setNotice({ kind: 'ok', text: 'Recovered Story Lab draft is ready for review.' })
+      setNotice({ kind: 'ok', text: t('notice.recoveredDraftReady') })
     } catch (error) {
       const message = (error as Error).message
       if (/cancelled/i.test(message)) {
         activity.cancel('Saved Story Lab generation cancelled')
-        setNotice({ kind: 'ok', text: 'That saved attempt was cancelled. Any completed stages and newer completed drafts remain available.' })
+        setNotice({ kind: 'ok', text: t('notice.attemptCancelled') })
       } else {
         activity.fail(error)
         setNotice({ kind: 'error', text: message })
@@ -1530,7 +1543,7 @@ export function StoryLabPanel() {
       if (useStoryStore.getState().project.id !== sourceProjectId) {
         setNotice({
           kind: 'error',
-          text: 'The concept finished after you changed stories, so it was not attached to the wrong one. Reopen the source story and retry to recover the completed job.',
+          text: t('notice.conceptWrongStory'),
         })
         return false
       }
@@ -1553,7 +1566,7 @@ export function StoryLabPanel() {
         return latest
       })
       if (!options.quiet) {
-        setNotice({ kind: 'ok', text: 'Concept image generated and attached as a reference.' })
+        setNotice({ kind: 'ok', text: t('notice.conceptAttached') })
       }
       return true
     } catch (error) {
@@ -1627,14 +1640,14 @@ export function StoryLabPanel() {
     const latest = useStoryStore.getState().projects[request.projectId]
     const assetIds = latest ? Object.keys(latest.assets).filter(id => !assetIdsBefore.has(id)) : []
     if (assetIds.length !== completed) throw new Error('Las referencias visuales terminaron sin poder correlacionar todos sus IDs de asset.')
-    setNotice({ kind: 'ok', text: message })
+    setNotice({ kind: 'ok', text: t('notice.visualReferencesAttached', { count: completed, title: current.title }) })
     return { message, assetIds }
-  }), [])
+  }), [t])
 
   const writeStyleIntoPrompts = () => {
     const style = storyRenderStyle(project)
     if (!style) {
-      setNotice({ kind: 'error', text: 'Write a global or character visual style before applying it to prompts.' })
+      setNotice({ kind: 'error', text: t('notice.writeStyleBeforePrompts') })
       return
     }
     let changed = 0
@@ -1657,8 +1670,8 @@ export function StoryLabPanel() {
     setNotice({
       kind: 'ok',
       text: changed
-        ? `The replaceable style lock was written into ${changed} existing visual prompt${changed === 1 ? '' : 's'} and render-time enforcement is on.`
-        : 'There are no existing visual prompts to update yet; render-time style enforcement is on.',
+        ? t('notice.styleLockWritten', { count: changed })
+        : t('notice.styleLockNoPrompts'),
     })
   }
 
@@ -1667,7 +1680,7 @@ export function StoryLabPanel() {
     const current = useStoryStore.getState().projects[sourceProjectId]
     if (!current) return false
     if (!storyRenderStyle(current)) {
-      setNotice({ kind: 'error', text: 'Write a global or character visual style before preparing reference conversion.' })
+      setNotice({ kind: 'error', text: t('notice.writeStyleBeforeConversion') })
       return
     }
     const ids = [...new Set([
@@ -1676,7 +1689,7 @@ export function StoryLabPanel() {
       ...current.characters.flatMap(character => character.referenceAssetIds),
     ])].filter(id => Boolean(current.assets[id]))
     if (!ids.length) {
-      setNotice({ kind: 'error', text: 'There are no attached reference images to convert yet.' })
+      setNotice({ kind: 'error', text: t('notice.noReferencesToConvert') })
       return
     }
     update(latest => {
@@ -1688,7 +1701,7 @@ export function StoryLabPanel() {
     setTab('assets')
     setNotice({
       kind: 'ok',
-      text: `${ids.length} attached reference${ids.length === 1 ? ' is' : 's are'} selected. Review the style and start the non-destructive MiniMax conversion from Images.`,
+      text: t('notice.referencesSelectedForConversion', { count: ids.length }),
     })
   }
 
@@ -1718,7 +1731,7 @@ export function StoryLabPanel() {
   const analyzeSmartAssets = async (files: File[]) => {
     const images = files.filter(file => file.type.startsWith('image/')).slice(0, 24)
     if (!images.length) {
-      setNotice({ kind: 'error', text: 'Choose one or more image files.' })
+      setNotice({ kind: 'error', text: t('notice.chooseImageFiles') })
       return
     }
     const sourceProjectId = project.id
@@ -1756,7 +1769,7 @@ export function StoryLabPanel() {
       if (useStoryStore.getState().projects[sourceProjectId]) {
         setPendingSmartAssets(result.assets.map(item => ({ ...item, selected: item.kind !== 'ignore' })))
       }
-      setNotice({ kind: 'ok', text: `${result.assets.length} asset suggestions are ready for review.` })
+      setNotice({ kind: 'ok', text: t('notice.assetSuggestionsReady', { count: result.assets.length }) })
       activity.finish()
     } catch (error) {
       activity.fail(error, 'analyzing_assets')
@@ -1850,7 +1863,7 @@ export function StoryLabPanel() {
       return current
     })
     setPendingSmartAssets([])
-    setNotice({ kind: 'ok', text: `${selected.length} assets applied to Story Lab. New entities remain editable drafts.` })
+    setNotice({ kind: 'ok', text: t('notice.assetsApplied', { count: selected.length }) })
   }
 
   const patchVisualAsset = (assetId: string, patchValue: Partial<StoryVisualAsset>) => {
@@ -1876,11 +1889,14 @@ export function StoryLabPanel() {
     const draftIds = styleAssetIds.filter(id => snapshot.assets[id]?.approval === 'draft')
     const approvedCount = styleAssetIds.filter(id => snapshot.assets[id]?.approval === 'approved').length
     if (!draftIds.length) {
-      setNotice({ kind: 'error', text: 'Select one or more Draft images to remove from the Story library.' })
+      setNotice({ kind: 'error', text: t('notice.selectDraftsToRemove') })
       return
     }
     if (!window.confirm(
-      `Remove ${draftIds.length} selected Draft image${draftIds.length === 1 ? '' : 's'} from this Story?${approvedCount ? ` ${approvedCount} approved selection${approvedCount === 1 ? ' is' : 's are'} protected and will be kept.` : ''} Generated files remain available in Gallery.`,
+      t('notice.removeDraftsConfirm', {
+        count: draftIds.length,
+        protected: approvedCount ? t('notice.approvedProtected', { count: approvedCount }) : '',
+      }),
     )) return
 
     update(current => {
@@ -1909,7 +1925,10 @@ export function StoryLabPanel() {
     setStyleAssetIds(current => current.filter(id => !removed.has(id)))
     setNotice({
       kind: 'ok',
-      text: `${draftIds.length} Draft image${draftIds.length === 1 ? '' : 's'} removed from the Story library. Generated files remain in Gallery.${approvedCount ? ` ${approvedCount} approved image${approvedCount === 1 ? ' was' : 's were'} kept.` : ''}`,
+      text: t('notice.draftsRemoved', {
+        count: draftIds.length,
+        kept: approvedCount ? t('notice.draftsRemovedKept', { count: approvedCount }) : '',
+      }),
     })
   }
 
@@ -1941,10 +1960,10 @@ export function StoryLabPanel() {
             || styleModelDownloading
           setStyleModelDownloading('')
           setStyleModelDownloadError('')
-          setNotice({ kind: 'ok', text: `${installedName} is installed and ready for local style conversion.` })
+          setNotice({ kind: 'ok', text: t('notice.modelInstalled', { name: installedName }) })
         } else if (current?.status === 'failed') {
           setStyleModelDownloading('')
-          setStyleModelDownloadError(current.error || 'Model download failed. Check Activity for details.')
+          setStyleModelDownloadError(current.error || t('notice.modelDownloadFailed'))
         }
       } catch {
         // Maestro may be restarting while a background download continues.
@@ -1956,18 +1975,18 @@ export function StoryLabPanel() {
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [styleModelDownloading])
+  }, [styleModelDownloading, t])
 
   const installStyleConversionModel = async () => {
     if (styleUsesMiniMax || !selectedStyleModel || selectedStyleModel.is_downloaded) return
     if (!window.confirm(
-      `Install ${selectedStyleModel.name}? Model files download once and may require tens of GB; progress remains visible in Activity.`,
+      t('notice.installModelConfirm', { name: selectedStyleModel.name }),
     )) return
     setStyleModelDownloadError('')
     setStyleModelDownloading(selectedStyleModel.model_type)
     try {
       await api.downloadModel(selectedStyleModel.model_type)
-      setNotice({ kind: 'ok', text: `Downloading ${selectedStyleModel.name}. You can keep using HocusPocus while it installs.` })
+      setNotice({ kind: 'ok', text: t('notice.downloadingModel', { name: selectedStyleModel.name }) })
     } catch (error) {
       setStyleModelDownloading('')
       setStyleModelDownloadError((error as Error).message)
@@ -1981,29 +2000,33 @@ export function StoryLabPanel() {
       .map(id => useStoryStore.getState().project.assets[id])
       .filter((asset): asset is StoryVisualAsset => Boolean(asset))
     if (!style) {
-      setNotice({ kind: 'error', text: 'Describe the destination style before converting images.' })
+      setNotice({ kind: 'error', text: t('notice.describeDestinationStyle') })
       return
     }
     if (!selected.length) {
-      setNotice({ kind: 'error', text: 'Select one or more images from the library first.' })
+      setNotice({ kind: 'error', text: t('notice.selectImagesFirst') })
       return
     }
     if (styleUsesMiniMax && !servicesConfig?.minimax_api_key_set) {
-      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first, or choose local Qwen or Flux image editing.' })
+      setNotice({ kind: 'error', text: t('notice.minimaxKeyOrLocal') })
       return
     }
     if (miniMaxIncompatibleSelection) {
-      setNotice({ kind: 'error', text: 'MiniMax Image-01 references are documented for character identity only. Choose Qwen Image Edit or Flux 2 Klein for locations, worlds, props or style references.' })
+      setNotice({ kind: 'error', text: t('notice.minimaxCharactersOnly') })
       return
     }
     if (!styleUsesMiniMax && !selectedStyleModel?.is_downloaded) {
-      setNotice({ kind: 'error', text: 'Install the selected local image editor before starting the batch.' })
+      setNotice({ kind: 'error', text: t('notice.installEditorFirst') })
       return
     }
     const modelLabel = styleUsesMiniMax
-      ? 'MiniMax Image-01 API' : `${selectedStyleModel?.name || styleConversionModel} · local`
+      ? t('notice.minimaxImage01Api') : t('notice.localModelLabel', { name: selectedStyleModel?.name || styleConversionModel })
     if (!window.confirm(
-      `Create ${selected.length} non-destructive style variant${selected.length === 1 ? '' : 's'} with ${modelLabel}? The originals remain available.${styleUsesMiniMax ? ' Each API request may consume credits.' : ' Generation runs locally on the GPU.'}`,
+      t('notice.createStyleVariantsConfirm', {
+        count: selected.length,
+        model: modelLabel,
+        hint: styleUsesMiniMax ? t('notice.styleCreditsApi') : t('notice.styleRunsLocal'),
+      }),
     )) return
 
     styleConversionCancelRequested.current = false
@@ -2091,13 +2114,13 @@ export function StoryLabPanel() {
         )
       }
       if (styleConversionCancelRequested.current) {
-        setNotice({ kind: 'ok', text: `Style conversion stopped after ${completed}/${selected.length}. Completed variants were preserved as drafts.` })
+        setNotice({ kind: 'ok', text: t('notice.styleStopped', { completed, total: selected.length }) })
       } else {
-        setNotice({ kind: 'ok', text: `${completed} styled variant${completed === 1 ? '' : 's'} created. Review and approve only the images Director should use.` })
+        setNotice({ kind: 'ok', text: t('notice.styleVariantsCreated', { count: completed }) })
       }
     } catch (error) {
       activity.fail(error, 'converting_reference_style')
-      setNotice({ kind: 'error', text: `Style conversion stopped after ${completed}/${selected.length}: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.styleStoppedError', { completed, total: selected.length, message: (error as Error).message }) })
     } finally {
       activity.finish()
       styleConversionCancelRequested.current = false
@@ -2108,7 +2131,7 @@ export function StoryLabPanel() {
 
   const cancelStyleConversion = () => {
     styleConversionCancelRequested.current = true
-    setNotice({ kind: 'ok', text: 'Stopping after the current image finishes…' })
+    setNotice({ kind: 'ok', text: t('notice.stoppingAfterCurrent') })
   }
 
   const removeReference = (target: 'world' | 'character' | 'location', targetId: string | undefined, assetId: string) => {
@@ -2196,11 +2219,11 @@ export function StoryLabPanel() {
       // Import is owned by the Story that opened the file picker. If the user
       // navigated while uploads were in flight, do not replace the new Story.
       if (useStoryStore.getState().project.id !== sourceProjectId) {
-        setNotice({ kind: 'error', text: 'The Storypack finished after you changed Stories; it was not applied to the wrong Story.' })
+        setNotice({ kind: 'error', text: t('notice.storypackWrongStory') })
         return
       }
       setProject(normalized)
-      setNotice({ kind: 'ok', text: 'Story project imported with its editable bible and available visual references.' })
+      setNotice({ kind: 'ok', text: t('notice.storypackImported') })
     } catch (error) {
       setNotice({ kind: 'error', text: (error as Error).message })
     } finally {
@@ -2215,10 +2238,10 @@ export function StoryLabPanel() {
     const estimatedPanels = pageCount * panelsPerPage
     const confirmed = autoStart
       ? window.confirm(
-        `Generate a complete ${pageCount}-page, ${estimatedPanels}-panel comic chapter from this story? The current comic will be replaced and image generation may use provider credits.`,
+        t('notice.generateComicConfirm', { pages: pageCount, panels: estimatedPanels }),
       )
       : !existingDirty || window.confirm(
-        'Open a new comic chapter in Director? Unsaved changes in the current comic will be lost.',
+        t('notice.openComicConfirm'),
       )
     if (!confirmed) return
     const { comic, request } = buildComicAdaptation(project, comicDirection, {
@@ -2379,8 +2402,8 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'error',
         text: legacyVideoOverridePending
-          ? 'Restoring this legacy Story’s previous video model and format. Try again in a moment.'
-          : 'Checking the selected video model’s supported formats. Try again in a moment.',
+          ? t('notice.restoringPreviousModel')
+          : t('notice.checkingVideoFormats'),
       })
       return
     }
@@ -2395,19 +2418,19 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'error',
         text: directReferenceVideoSupported
-          ? 'Approve at least one visual asset before using direct references.'
-          : 'Choose a MiniMax H3 video model before using direct references.',
+          ? t('notice.approveImageBeforeDirectRefs')
+          : t('notice.chooseH3BeforeDirectRefs'),
       })
       return
     }
     const confirmed = autoStart
       ? window.confirm(
         directReferenceVideo
-          ? `Generate this video with ${approvedVisualReferenceCount} approved references sent directly to H3 Ref2VA? No start images will be generated.`
-          : 'Generate a complete short-film episode from this story? The current Director draft will be replaced and image/video generation may use provider credits.',
+          ? t('notice.generateDirectRefsConfirm', { count: approvedVisualReferenceCount })
+          : t('notice.generateFilmConfirm'),
       )
       : !hasDirectorWork || window.confirm(
-        'Open a clean short-film episode in Director? The current Director draft will be replaced.',
+        t('notice.openFilmConfirm'),
     )
     if (!confirmed) return
     beginProjectOperation(sourceProjectId)
@@ -2448,13 +2471,13 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'ok',
         text: autoStart
-          ? 'The short-film episode is running in Director; its pipeline remains recoverable from Productions.'
-          : 'The complete story canon and approved visual references are loaded in Short Film Director.',
+          ? t('notice.filmRunning')
+          : t('notice.filmLoaded'),
       })
     } catch (error) {
       setNotice({
         kind: 'error',
-        text: `The short-film episode could not be staged: ${(error as Error).message}`,
+        text: t('notice.filmStageFailed', { message: (error as Error).message }),
       })
     } finally {
       endProjectOperation(sourceProjectId)
@@ -2618,11 +2641,11 @@ export function StoryLabPanel() {
           lyricsLanguage: project.language,
         },
       }))
-      setNotice({ kind: 'ok', text: 'Song prompt and editable lyrics are ready. Review them before spending MiniMax credits.' })
+      setNotice({ kind: 'ok', text: t('notice.songDraftReady') })
       return { brief, style: written.style, lyrics: written.lyrics }
     } catch (error) {
       activity.fail(error)
-      setNotice({ kind: 'error', text: `The song draft could not be written: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.songDraftFailed', { message: (error as Error).message }) })
       return null
     } finally {
       activity.finish()
@@ -2634,7 +2657,7 @@ export function StoryLabPanel() {
     const sourceProjectId = project.id
     const sourceLyrics = project.music.sourceLyrics.trim()
     if (!sourceLyrics) {
-      setNotice({ kind: 'error', text: 'Paste the source lyrics you are authorized to adapt first.' })
+      setNotice({ kind: 'error', text: t('notice.pasteSourceLyrics') })
       return
     }
     const activity = beginStoryActivity('writing_song', 'Story Lab is adapting the lyrics to this story…', 1)
@@ -2663,10 +2686,10 @@ export function StoryLabPanel() {
           lyricsLanguage: project.language,
         },
       }))
-      setNotice({ kind: 'ok', text: 'The Story lyrics were adapted and remain fully editable before generation.' })
+      setNotice({ kind: 'ok', text: t('notice.lyricsAdapted') })
     } catch (error) {
       activity.fail(error)
-      setNotice({ kind: 'error', text: `The lyrics could not be adapted: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.lyricsAdaptFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setProductionBusy(null)
@@ -2677,7 +2700,7 @@ export function StoryLabPanel() {
     if (!file) return
     const sourceProjectId = project.id
     if (file.size > 50 * 1024 * 1024) {
-      setNotice({ kind: 'error', text: 'MiniMax Cover accepts reference audio up to 50 MB.' })
+      setNotice({ kind: 'error', text: t('notice.coverTooLarge') })
       return
     }
     const activity = beginStoryActivity('uploading_music_reference', `Uploading cover reference “${file.name}”…`, 1)
@@ -2693,10 +2716,10 @@ export function StoryLabPanel() {
           coverReferenceName: file.name,
         },
       }))
-      setNotice({ kind: 'ok', text: 'Cover reference uploaded. You can keep its lyrics or replace them with the editable Story lyrics.' })
+      setNotice({ kind: 'ok', text: t('notice.coverUploaded') })
     } catch (error) {
       activity.fail(error)
-      setNotice({ kind: 'error', text: `The cover reference could not be uploaded: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.coverUploadFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setProductionBusy(null)
@@ -2707,11 +2730,11 @@ export function StoryLabPanel() {
   const generateMinimaxSongs = async () => {
     const sourceProjectId = project.id
     if (!servicesConfig?.minimax_api_key_set) {
-      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
+      setNotice({ kind: 'error', text: t('notice.minimaxKeyFirst') })
       return
     }
     if (project.music.mode === 'cover' && !project.music.coverReferenceFilename) {
-      setNotice({ kind: 'error', text: 'Upload a reference song before generating a cover.' })
+      setNotice({ kind: 'error', text: t('notice.uploadCoverFirst') })
       return
     }
     const activity = beginStoryActivity(
@@ -2803,12 +2826,12 @@ export function StoryLabPanel() {
       setNotice({
         kind: result.status === 'completed' ? 'ok' : 'error',
         text: result.status === 'completed'
-          ? `${candidates.length} MiniMax Music candidates generated. Listen and choose one for the musical trailer.`
-          : `${result.message}. ${candidates.length} completed candidate(s) were preserved.`,
+          ? t('notice.candidatesGenerated', { count: candidates.length })
+          : t('notice.candidatesPartial', { count: candidates.length, message: result.message }),
       })
     } catch (error) {
       activity.fail(error, 'generating_music')
-      setNotice({ kind: 'error', text: `MiniMax Music could not generate the candidates: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.candidatesFailed', { message: (error as Error).message }) })
     } finally {
       activeMusicJobId.current = ''
       activity.finish()
@@ -2834,7 +2857,7 @@ export function StoryLabPanel() {
     const targetLanguage = (lyricsTranslationLanguage[cueId] || '').trim()
     if (!cue?.lyrics.trim()) return
     if (!targetLanguage) {
-      setNotice({ kind: 'error', text: 'Write the target language before translating the lyrics.' })
+      setNotice({ kind: 'error', text: t('notice.writeTargetLanguage') })
       return
     }
     const activity = beginStoryActivity('writing_song', `Translating “${cue.title}” into ${targetLanguage}…`, 1)
@@ -2852,10 +2875,10 @@ export function StoryLabPanel() {
         if (target) Object.assign(target, { lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage })
         return current
       })
-      setNotice({ kind: 'ok', text: `“${cue.title}” lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
+      setNotice({ kind: 'ok', text: t('notice.lyricsTranslated', { title: cue.title, language: translated.targetLanguage }) })
     } catch (error) {
       activity.fail(error, 'writing_song')
-      setNotice({ kind: 'error', text: `Lyrics could not be translated: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.lyricsTranslateFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setMusicCueBusy('')
@@ -2868,7 +2891,7 @@ export function StoryLabPanel() {
     const targetLanguage = (lyricsTranslationLanguage.manual || '').trim()
     if (!lyrics) return
     if (!targetLanguage) {
-      setNotice({ kind: 'error', text: 'Write the target language before translating the lyrics.' })
+      setNotice({ kind: 'error', text: t('notice.writeTargetLanguage') })
       return
     }
     const activity = beginStoryActivity('writing_song', `Translating the manual song into ${targetLanguage}…`, 1)
@@ -2885,10 +2908,10 @@ export function StoryLabPanel() {
         ...current,
         music: { ...current.music, lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage },
       }))
-      setNotice({ kind: 'ok', text: `Manual song lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
+      setNotice({ kind: 'ok', text: t('notice.manualLyricsTranslated', { language: translated.targetLanguage }) })
     } catch (error) {
       activity.fail(error, 'writing_song')
-      setNotice({ kind: 'error', text: `Lyrics could not be translated: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.lyricsTranslateFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setProductionBusy(null)
@@ -2946,11 +2969,11 @@ export function StoryLabPanel() {
     const current = useStoryStore.getState().project
     if (current.projectType !== 'music_video') return
     if (!musicWritingReady) {
-      setNotice({ kind: 'error', text: 'Configure the selected Story Lab writing model before creating a new song.' })
+      setNotice({ kind: 'error', text: t('notice.configureWritingModel') })
       return
     }
     if (generateAudio && !servicesConfig?.minimax_api_key_set) {
-      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services before generating the new song.' })
+      setNotice({ kind: 'error', text: t('notice.minimaxKeyBeforeNewSong') })
       return
     }
     const existingCue = current.music.cues.find(cue => cue.kind === 'story') || current.music.cues[0]
@@ -3009,15 +3032,15 @@ export function StoryLabPanel() {
           return
         }
         activity.update('The new song and its fresh prompts are ready.', 'generating_music', 2, 2)
-        setNotice({ kind: 'ok', text: `A new version of “${cue.title}” was written and generated. Previous audio remains available.` })
+        setNotice({ kind: 'ok', text: t('notice.newSongGenerated', { title: cue.title }) })
       } else {
-        setNotice({ kind: 'ok', text: `Fresh prompts and lyrics for “${cue.title}” are ready. No MiniMax music credits were used and previous audio remains available.` })
+        setNotice({ kind: 'ok', text: t('notice.newSongPromptsReady', { title: cue.title }) })
       }
     } catch (error) {
       activity.fail(error, generateAudio ? 'generating_music' : 'writing_song')
       setNotice({
         kind: 'error',
-        text: `The new song could not be prepared: ${(error as Error).message}`,
+        text: t('notice.newSongFailed', { message: (error as Error).message }),
       })
     } finally {
       activity.finish()
@@ -3033,7 +3056,7 @@ export function StoryLabPanel() {
     const requestedStyle = (musicVersionStyle[cueId] || '').trim()
     const requestedLanguage = (musicVersionLanguage[cueId] || '').trim()
     if (!requestedStyle && !requestedLanguage) {
-      setNotice({ kind: 'error', text: 'Write a new style, a new language, or both before creating the version.' })
+      setNotice({ kind: 'error', text: t('notice.writeStyleOrLanguage') })
       return
     }
     const changeLabel = [requestedStyle, requestedLanguage].filter(Boolean).join(' · ')
@@ -3044,11 +3067,11 @@ export function StoryLabPanel() {
       patchMusicCue(cueId, rewritten, sourceProjectId)
       setNotice({
         kind: 'ok',
-        text: `A completely new “${cue.title}” draft is ready in ${rewritten.lyricsLanguage}. Existing generated audio was preserved. Review the prompts before generating it.`,
+        text: t('notice.newCueDraftReady', { title: cue.title, language: rewritten.lyricsLanguage }),
       })
     } catch (error) {
       activity.fail(error, 'writing_song')
-      setNotice({ kind: 'error', text: `The new song version could not be written: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.newCueVersionFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setMusicCueBusy('')
@@ -3061,15 +3084,15 @@ export function StoryLabPanel() {
     const requestedStyle = (musicVersionStyle.all || '').trim()
     const requestedLanguage = (musicVersionLanguage.all || '').trim()
     if (!cues.length) {
-      setNotice({ kind: 'error', text: 'Generate the music proposals before creating alternate versions.' })
+      setNotice({ kind: 'error', text: t('notice.generateProposalsFirst') })
       return
     }
     if (!requestedStyle && !requestedLanguage) {
-      setNotice({ kind: 'error', text: 'Write a global style, a global language, or both.' })
+      setNotice({ kind: 'error', text: t('notice.writeGlobalStyleOrLanguage') })
       return
     }
     if (!window.confirm(
-      `Rewrite all ${cues.length} music proposals sequentially? This makes ${cues.length} LLM call${cues.length === 1 ? '' : 's'}, but does not generate paid MiniMax audio. Existing audio candidates will remain available.`,
+      t('notice.rewriteAllConfirm', { count: cues.length }),
     )) return
     const activity = beginStoryActivity('writing_song', `Preparing alternate music drafts · 0/${cues.length}`, cues.length)
     setMusicCueBusy('version:all')
@@ -3086,13 +3109,13 @@ export function StoryLabPanel() {
       }
       setNotice({
         kind: 'ok',
-        text: `${completed} alternate music drafts are ready. Existing audio was preserved; review each new prompt before generating tracks.`,
+        text: t('notice.alternateDraftsReady', { count: completed }),
       })
     } catch (error) {
       activity.fail(error, 'writing_song')
       setNotice({
         kind: 'error',
-        text: `Bulk versioning stopped after ${completed}/${cues.length}. Completed drafts were preserved: ${(error as Error).message}`,
+        text: t('notice.bulkVersioningStopped', { completed, total: cues.length, message: (error as Error).message }),
       })
     } finally {
       activity.finish()
@@ -3105,7 +3128,7 @@ export function StoryLabPanel() {
     const requestedStyle = (musicVersionStyle.manual || '').trim()
     const requestedLanguage = (musicVersionLanguage.manual || '').trim()
     if (!requestedStyle && !requestedLanguage) {
-      setNotice({ kind: 'error', text: 'Write a new style, a new language, or both before creating the manual version.' })
+      setNotice({ kind: 'error', text: t('notice.writeStyleOrLanguageManual') })
       return
     }
     const targetLanguage = requestedLanguage || project.music.lyricsLanguage || project.language
@@ -3132,10 +3155,10 @@ export function StoryLabPanel() {
           lyricsLanguage: targetLanguage,
         },
       }))
-      setNotice({ kind: 'ok', text: `The manual ${requestedStyle || 'alternate'} version is ready in ${targetLanguage}. Existing audio candidates were preserved.` })
+      setNotice({ kind: 'ok', text: t('notice.manualVersionReady', { style: requestedStyle || t('notice.manualAlternate'), language: targetLanguage }) })
     } catch (error) {
       activity.fail(error, 'writing_song')
-      setNotice({ kind: 'error', text: `The manual song version could not be written: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.manualVersionFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setProductionBusy(null)
@@ -3178,14 +3201,14 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'ok',
         text: lyriaMissing
-          ? `“${cue.title}” has a valid MiniMax prompt${cue.instrumental ? '' : ' and structured lyrics'}. The optional Lyria prompt was omitted, but nothing was discarded.`
+          ? t('notice.cueAdaptedLyriaOmitted', { title: cue.title, lyrics: cue.instrumental ? '' : t('notice.withStructuredLyrics') })
           : includeLyria
-            ? `“${cue.title}” now has editable MiniMax and Google Lyria prompts${cue.instrumental ? '' : ' with structured lyrics'}.`
-            : `“${cue.title}” now has an editable MiniMax prompt${cue.instrumental ? '' : ' with structured lyrics'}. Lyria was not requested.`,
+            ? t('notice.cueAdaptedMinimaxLyria', { title: cue.title, lyrics: cue.instrumental ? '' : t('notice.withStructuredLyricsPhrase') })
+            : t('notice.cueAdaptedMinimaxOnly', { title: cue.title, lyrics: cue.instrumental ? '' : t('notice.withStructuredLyricsPhrase') }),
       })
     } catch (error) {
       activity.fail(error, 'music_planning')
-      setNotice({ kind: 'error', text: `The music proposal could not be adapted: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.musicAdaptFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setMusicCueBusy('')
@@ -3227,10 +3250,10 @@ export function StoryLabPanel() {
         }
         return current
       })
-      setNotice({ kind: 'ok', text: `Google Lyria result imported under “${cue.title}”.` })
+      setNotice({ kind: 'ok', text: t('notice.lyriaImported', { title: cue.title }) })
     } catch (error) {
       activity.fail(error, 'uploading_music')
-      setNotice({ kind: 'error', text: `The Lyria result could not be imported: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.lyriaImportFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setMusicCueBusy('')
@@ -3281,10 +3304,10 @@ export function StoryLabPanel() {
         return latest
       })
       setMusicProductionCandidateId(candidate.id)
-      setNotice({ kind: 'ok', text: `Custom audio imported and selected under “${destination}”.` })
+      setNotice({ kind: 'ok', text: t('notice.customAudioImported', { title: destination }) })
     } catch (error) {
       activity.fail(error, 'uploading_music')
-      setNotice({ kind: 'error', text: `The custom audio could not be imported: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.customAudioFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setMusicCueBusy('')
@@ -3299,7 +3322,7 @@ export function StoryLabPanel() {
     onJobSubmitted?: (jobId: string) => void,
   ): Promise<boolean> => {
     if (!isAceStepMusicModel(useStoryStore.getState().projects[project.id]?.music.model) && !servicesConfig?.minimax_api_key_set) {
-      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first, or switch the song model to ACE-Step.' })
+      setNotice({ kind: 'error', text: t('notice.minimaxOrAceStep') })
       return false
     }
     const sourceProjectId = project.id
@@ -3308,13 +3331,13 @@ export function StoryLabPanel() {
     const cue = current.music.cues.find(item => item.id === cueId)
     if (!cue) return false
     if (!cue.style.trim() || (!cue.instrumental && !cue.lyrics.trim())) {
-      setNotice({ kind: 'error', text: `Review or adapt the prompt${cue.instrumental ? '' : ' and lyrics'} for “${cue.title}” first.` })
+      setNotice({ kind: 'error', text: cue.instrumental ? t('notice.reviewPromptFirst', { title: cue.title }) : t('notice.reviewPromptAndLyricsFirst', { title: cue.title }) })
       return false
     }
     if (!cue.instrumental && !MINIMAX_LYRIC_SECTION.test(cue.lyrics)) {
       setNotice({
         kind: 'error',
-        text: `“${cue.title}” needs [Verse], [Chorus] or another supported section tag before generation. Adapt it with the LLM or edit the lyrics first.`,
+        text: t('notice.needsSectionTags', { title: cue.title }),
       })
       return false
     }
@@ -3368,7 +3391,7 @@ export function StoryLabPanel() {
             },
           }
         })
-        setNotice({ kind: 'ok', text: `ACE-Step generated “${cue.title}”.` })
+        setNotice({ kind: 'ok', text: t('notice.aceStepGenerated', { title: cue.title }) })
         return true
       }
       const prompt = cue.style.trim().slice(0, 300)
@@ -3424,14 +3447,14 @@ export function StoryLabPanel() {
         setNotice({
           kind: result.status === 'completed' ? 'ok' : 'error',
           text: result.status === 'completed'
-            ? `MiniMax generated “${cue.title}”. The result is saved under this proposal.`
-            : `${result.message}. Any completed audio was saved under “${cue.title}”.`,
+            ? t('notice.minimaxCueGenerated', { title: cue.title })
+            : t('notice.minimaxCuePartial', { title: cue.title, message: result.message }),
         })
       }
       return result.status === 'completed' || result.status === 'cancelled'
     } catch (error) {
       activity?.fail(error, 'generating_music')
-      setNotice({ kind: 'error', text: `“${cue.title}” could not be generated: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.cueGenerateFailed', { title: cue.title, message: (error as Error).message }) })
       return false
     } finally {
       activeMusicJobId.current = ''
@@ -3443,20 +3466,20 @@ export function StoryLabPanel() {
   const generateAllMusicCues = async () => {
     const cues = useStoryStore.getState().project.music.cues
     if (!cues.length) {
-      setNotice({ kind: 'error', text: 'Generate and review the LLM music proposals first.' })
+      setNotice({ kind: 'error', text: t('notice.reviewProposalsFirst') })
       return
     }
     const incomplete = cues.filter(cue => !cue.style.trim() || (!cue.instrumental && !cue.lyrics.trim()))
     if (incomplete.length) {
-      setNotice({ kind: 'error', text: `Review ${incomplete.length} incomplete music proposal${incomplete.length === 1 ? '' : 's'} before generating the complete queue.` })
+      setNotice({ kind: 'error', text: t('notice.reviewIncompleteProposals', { count: incomplete.length }) })
       return
     }
     if (!servicesConfig?.minimax_api_key_set) {
-      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
+      setNotice({ kind: 'error', text: t('notice.minimaxKeyFirst') })
       return
     }
     if (!window.confirm(
-      `Generate ${cues.length} MiniMax track${cues.length === 1 ? '' : 's'} sequentially? This consumes one paid music request per proposal.`,
+      t('notice.generateTracksConfirm', { count: cues.length }),
     )) return
     const ids = cues.map(cue => cue.id)
     const activity = beginStoryActivity(
@@ -3492,13 +3515,13 @@ export function StoryLabPanel() {
         if (musicQueueCancelRequested.current) break
       }
       if (musicQueueCancelRequested.current) {
-        setNotice({ kind: 'ok', text: `Music queue cancelled after ${completed}/${ids.length}; completed tracks were preserved.` })
+        setNotice({ kind: 'ok', text: t('notice.queueCancelled', { completed, total: ids.length }) })
       } else if (completed === ids.length) {
-        setNotice({ kind: 'ok', text: `Music queue completed: ${completed} tracks generated one after another.` })
+        setNotice({ kind: 'ok', text: t('notice.queueCompleted', { count: completed }) })
       } else {
         activity.fail(new Error(`Music queue stopped after ${completed}/${ids.length}`), 'music_queue')
         setNotice(current => current?.kind === 'error' ? current : {
-          kind: 'error', text: `Music queue stopped after ${completed}/${ids.length}; completed tracks were preserved.`,
+          kind: 'error', text: t('notice.queueStopped', { completed, total: ids.length }),
         })
       }
     } finally {
@@ -3515,12 +3538,12 @@ export function StoryLabPanel() {
     const jobId = activeMusicJobId.current
     if (jobId) {
       void api.cancelStoryMusicCandidatesJob(jobId).catch(error => {
-        setNotice({ kind: 'error', text: `Could not request MiniMax cancellation: ${(error as Error).message}` })
+        setNotice({ kind: 'error', text: t('notice.cancelMinimaxFailed', { message: (error as Error).message }) })
       })
     }
     setNotice({ kind: 'ok', text: jobId
-      ? 'Cancellation sent to the active MiniMax request; waiting for its safe boundary…'
-      : 'Music queue cancellation requested before the next track starts.' })
+      ? t('notice.cancelSentWaiting')
+      : t('notice.queueCancelRequested') })
   }
 
   const musicCueForCandidate = (source: StoryProject, candidateId?: string) =>
@@ -3705,8 +3728,8 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'error',
         text: legacyVideoOverridePending
-          ? 'Restoring this legacy Story’s previous video model and format. Try again in a moment.'
-          : 'Checking the selected video model’s supported formats. Try again in a moment.',
+          ? t('notice.restoringPreviousModel')
+          : t('notice.checkingVideoFormats'),
       })
       return
     }
@@ -3722,7 +3745,7 @@ export function StoryLabPanel() {
         if (selected !== filmVideoModel) {
           setNotice({
             kind: 'error',
-            text: `Director could not apply this Story’s video model: requested ${filmVideoModel}, effective ${selected || 'none'}.`,
+            text: t('notice.directorModelMismatch', { requested: filmVideoModel, effective: selected || t('notice.none') }),
           })
           return
         }
@@ -3830,16 +3853,19 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'ok',
         text: options.autoStart
-          ? `The ${options.mode === 'trailer' ? 'musical trailer' : 'music video'} for “${loaded.adaptation.focusLabel}” is running in Director.`
+          ? t('notice.musicVideoRunning', {
+            kind: options.mode === 'trailer' ? t('notice.kindMusicalTrailer') : t('notice.kindMusicVideo'),
+            title: loaded.adaptation.focusLabel,
+          })
           : loaded.generationSettings.generationMode === 'direct_video'
-            ? `The song, lyrics and direct T2V master prompt for “${loaded.adaptation.focusLabel}” are loaded in Director; no images were transferred.`
+            ? t('notice.musicVideoT2vLoaded', { title: loaded.adaptation.focusLabel })
             : loaded.generationSettings.generationMode === 'direct_references'
-              ? `The song, lyrics and approved references for “${loaded.adaptation.focusLabel}” are loaded for H3 Ref2VA; no start-image generation is needed.`
-            : `The song, lyrics and visual references for “${loaded.adaptation.focusLabel}” are loaded in Director.`,
+              ? t('notice.musicVideoRefsLoaded', { title: loaded.adaptation.focusLabel })
+            : t('notice.musicVideoLoaded', { title: loaded.adaptation.focusLabel }),
       })
     } catch (error) {
       activity.fail(error, 'preparing_music_video')
-      setNotice({ kind: 'error', text: `The music video could not load the song: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: t('notice.musicVideoLoadFailed', { message: (error as Error).message }) })
     } finally {
       activity.finish()
       setProductionBusy(null)
@@ -3851,36 +3877,42 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'error',
         text: legacyVideoOverridePending
-          ? 'Restoring this legacy Story’s previous video model and format. Try again in a moment.'
-          : 'Checking the selected video model’s supported formats. Try again in a moment.',
+          ? t('notice.restoringPreviousModel')
+          : t('notice.checkingVideoFormats'),
       })
       return
     }
     if (!selectedMusicOption) {
-      setNotice({ kind: 'error', text: 'Generate or import a song in Music before creating a music video.' })
+      setNotice({ kind: 'error', text: t('notice.generateOrImportSong') })
       return
     }
     if (musicProductionMode === 'trailer' && musicTrailerRange.end <= musicTrailerRange.start + 0.99) {
-      setNotice({ kind: 'error', text: 'Choose and preview a trailer excerpt of at least one second.' })
+      setNotice({ kind: 'error', text: t('notice.chooseTrailerExcerpt') })
       return
     }
     if (!directReferenceVideoReady) {
       setNotice({
         kind: 'error',
         text: directReferenceVideoSupported
-          ? 'Approve at least one visual asset before using direct references.'
-          : 'Choose a MiniMax H3 video model before using direct references.',
+          ? t('notice.approveImageBeforeDirectRefs')
+          : t('notice.chooseH3BeforeDirectRefs'),
       })
       return
     }
     if (autoStart && !window.confirm(
-      `Generate the ${musicProductionMode === 'trailer' ? 'musical trailer' : 'complete music video'} for “${selectedMusicOption.label}”? `
-      + `Video model: ${selectedFilmVideoModel?.name || filmVideoModel} (${filmVideoModel}) · ${storyVideoResolution} ${storyVideoAspectRatio}. `
-      + (directMusicVideo
-        ? 'This sends one pure text-to-video request per planned clip, without creating or uploading images, and may consume video-generation credits.'
-        : directReferenceVideo
-          ? `This sends ${approvedVisualReferenceCount} approved reference${approvedVisualReferenceCount === 1 ? '' : 's'} directly to H3 Ref2VA and skips start-image generation.`
-        : 'This creates one start image and one video render per planned clip and may consume provider credits.'),
+      t('notice.generateMusicVideoConfirm', {
+        kind: musicProductionMode === 'trailer' ? t('notice.kindMusicalTrailer') : t('notice.kindCompleteMusicVideo'),
+        title: selectedMusicOption.label,
+        model: selectedFilmVideoModel?.name || filmVideoModel,
+        modelId: filmVideoModel,
+        resolution: storyVideoResolution,
+        aspect: storyVideoAspectRatio,
+        method: directMusicVideo
+          ? t('notice.confirmMethodT2v')
+          : directReferenceVideo
+            ? t('notice.confirmMethodRefs', { count: approvedVisualReferenceCount })
+            : t('notice.confirmMethodImages'),
+      }),
     )) return
     await openMusicalTrailer(selectedMusicOption.candidate.id, {
       autoStart,
@@ -3902,7 +3934,7 @@ export function StoryLabPanel() {
       const candidate = musicCandidateById(source, candidateId)
       const cue = musicCueForCandidate(source, candidateId)
       if (!candidate) {
-        setNotice({ kind: 'error', text: 'The selected song for this production is no longer available.' })
+        setNotice({ kind: 'error', text: t('notice.songNoLongerAvailable') })
         return
       }
       const pacingValue = production.targetSnapshot?.pacing
@@ -3949,13 +3981,13 @@ export function StoryLabPanel() {
       const current = useStore.getState()
       const hasWork = Boolean(current.directorSceneDescription.trim() || current.directorPlannedClips.length)
       if (hasWork && !window.confirm(
-        'Reopen this music-video production? The current Director draft will be replaced.',
+        t('notice.reopenMusicVideoConfirm'),
       )) return
       setProductionBusy('music')
       try {
         await loadMusicVideoProduction(source, cue, candidate, false, pacing, excerpt, generationSettings)
       } catch (error) {
-        setNotice({ kind: 'error', text: `The music-video production could not be reopened: ${(error as Error).message}` })
+        setNotice({ kind: 'error', text: t('notice.musicVideoReopenFailed', { message: (error as Error).message }) })
       } finally {
         setProductionBusy(null)
       }
@@ -3965,11 +3997,11 @@ export function StoryLabPanel() {
       const comic = production.targetSnapshot?.comic
       const request = production.targetSnapshot?.request
       if (!comic || typeof comic !== 'object') {
-        setNotice({ kind: 'error', text: 'This legacy adaptation has no reopenable comic snapshot.' })
+        setNotice({ kind: 'error', text: t('notice.comicSnapshotMissing') })
         return
       }
       if (useComicStore.getState().dirty && !window.confirm(
-        'Reopen this staged comic? Unsaved changes in the current comic will be lost.',
+        t('notice.reopenComicConfirm'),
       )) return
       useComicStore.getState().setProject(comic as unknown as ComicProject)
       window.localStorage.removeItem('maestro-last-comic-plan-result')
@@ -3996,7 +4028,7 @@ export function StoryLabPanel() {
     if (hasWork && !window.confirm(
       production.kind === 'trailer'
         ? t('notice.reopenTrailerConfirm')
-        : 'Reopen this film staging? The current Director draft will be replaced.',
+        : t('notice.reopenFilmConfirm'),
     )) return
     const direction = typeof production.targetSnapshot?.direction === 'string'
       ? production.targetSnapshot.direction
@@ -4061,7 +4093,7 @@ export function StoryLabPanel() {
       revision: 1,
     })
     setProject(restored)
-    setNotice({ kind: 'ok', text: 'The adaptation source was restored as a new editable story; the current version was preserved.' })
+    setNotice({ kind: 'ok', text: t('notice.sourceRestored') })
   }
 
   const changeProjectType = (projectType: StoryProjectType) => {
@@ -4255,8 +4287,8 @@ export function StoryLabPanel() {
               <div className="mb-4 rounded-xl border border-amber-400/25 bg-amber-500/5 p-3">
                 <div className="flex flex-col xl:flex-row xl:items-start gap-3">
                   <div className="min-w-56">
-                    <p className="text-xs font-semibold text-amber-200">Generated draft · {pendingDraft.scope}</p>
-                    <p className="text-[10px] text-text-muted mt-1">Choose exactly which generated items to apply. Existing references are preserved.</p>
+                    <p className="text-xs font-semibold text-amber-200">{t('draft.title', { scope: pendingDraft.scope })}</p>
+                    <p className="text-[10px] text-text-muted mt-1">{t('draft.hint')}</p>
                     <label className="mt-2 flex items-center gap-2 text-[10px] text-text-secondary">
                       <input
                         type="checkbox"
@@ -4265,7 +4297,7 @@ export function StoryLabPanel() {
                           ...current, replaceCollections: event.target.checked,
                         } : current)}
                       />
-                      Replace complete selected collections
+                      {t('draft.replaceCollections')}
                     </label>
                   </div>
                   <div className="flex-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-1 max-h-36 overflow-y-auto">
@@ -4290,16 +4322,16 @@ export function StoryLabPanel() {
                     <button className={`${button} ${requiredPreparationButton}`} disabled={!pendingDraft.selected.length || referenceBatchBusy}
                       onClick={() => void applyPendingGeneratedDraft()}>
                       {referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                      {pendingDraft.generateImagesAfterApply ? 'Apply selected + generate images' : 'Apply selected text'}
+                      {pendingDraft.generateImagesAfterApply ? t('draft.applyWithImages') : t('draft.applyText')}
                     </button>
                     <button className={button} onClick={() => {
                       setPendingDraft(null)
                       window.localStorage.removeItem(storyResultKey(activeWorkspace, project.id))
                       window.localStorage.removeItem(storyJobKey(activeWorkspace, project.id))
                       setRecoveryJobId('')
-                    }}>Discard</button>
+                    }}>{t('draft.discard')}</button>
                     <details className="text-[10px] text-text-muted">
-                      <summary className="cursor-pointer py-2">Raw JSON</summary>
+                      <summary className="cursor-pointer py-2">{t('draft.rawJson')}</summary>
                       <pre className="absolute z-30 right-4 mt-1 max-w-[70vw] max-h-[50vh] overflow-auto rounded-lg border border-border bg-bg-primary p-3 shadow-xl whitespace-pre-wrap">
                         {JSON.stringify(pendingDraft.result, null, 2)}
                       </pre>

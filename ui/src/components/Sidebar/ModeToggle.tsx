@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
+import type { ParseKeys } from 'i18next'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 
 /** Studio Video sub-modes and what a model must support to run them.
  *
@@ -22,14 +24,15 @@ interface ModeCaps {
   videoContinuation: boolean
 }
 
-const MODES = [
-  { value: 0, label: 'Frames', supported: () => true },
-  { value: 2, label: 'Multi-Shot', supported: (c: ModeCaps) => c.allowed.includes('S') },
-  { value: 3, label: 'Extend', supported: (c: ModeCaps) => c.allowed.includes('V') || c.videoContinuation },
-  { value: 4, label: 'Blend', supported: (c: ModeCaps) => c.allowed.includes('S') && c.allowed.includes('E') },
+const MODES: Array<{ value: number; labelKey: ParseKeys<'studio'>; supported: (caps: ModeCaps) => boolean }> = [
+  { value: 0, labelKey: 'videoSubModes.frames', supported: () => true },
+  { value: 2, labelKey: 'videoSubModes.multiShot', supported: (c: ModeCaps) => c.allowed.includes('S') },
+  { value: 3, labelKey: 'videoSubModes.extend', supported: (c: ModeCaps) => c.allowed.includes('V') || c.videoContinuation },
+  { value: 4, labelKey: 'videoSubModes.blend', supported: (c: ModeCaps) => c.allowed.includes('S') && c.allowed.includes('E') },
 ]
 
 export function ModeToggle() {
+  const { t } = useUiTranslation('studio')
   const imageMode = useStore(s => s.params.image_mode)
   const setParam = useStore(s => s.setParam)
   const modelOptions = useStore(s => s.modelOptions)
@@ -60,7 +63,7 @@ export function ModeToggle() {
               : 'text-text-secondary hover:text-text-primary'
           }`}
         >
-          {m.label}
+          {t(m.labelKey)}
         </button>
       ))}
     </div>

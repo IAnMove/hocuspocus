@@ -37,7 +37,9 @@ function makeEpisode(approved: boolean) {
 
 test('approving a selected Series shot removes it from selection and bulk count', { concurrency: false }, async () => {
   const { render, screen, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { SeriesShotsPanel } = await import('../src/features/series/SeriesShotsPanel.tsx')
+  const t = ensureUiI18n().getFixedT('en', 'seriesLab')
   const series = {
     id: 'series-1', characters: [], locations: [], assets: {}, bestEffortLipSyncAcknowledged: false,
   }
@@ -49,20 +51,20 @@ test('approving a selected Series shot removes it from selection and bulk count'
   }
   try {
     const view = render(<SeriesShotsPanel {...props} episode={makeEpisode(false) as never} />)
-    const select = screen.getByRole('button', { name: 'Select shot 1 for rendering' })
+    const select = screen.getByRole('button', { name: t('shots.selectAria', { order: 1 }) })
     fireEvent.click(select)
     assert.equal(select.getAttribute('aria-pressed'), 'true')
-    assert.equal((screen.getByRole('button', { name: 'Render selected (1)' }) as HTMLButtonElement).disabled, false)
+    assert.equal((screen.getByRole('button', { name: t('shots.renderSelected', { count: 1 }) }) as HTMLButtonElement).disabled, false)
 
     view.rerender(<SeriesShotsPanel {...props} episode={makeEpisode(true) as never} />)
-    const approved = await screen.findByRole('button', { name: 'Shot 1 is approved' })
+    const approved = await screen.findByRole('button', { name: t('shots.approvedAria', { order: 1 }) })
     assert.equal((approved as HTMLButtonElement).disabled, true)
     assert.equal(approved.getAttribute('aria-pressed'), 'false')
-    assert.equal((screen.getByRole('button', { name: 'Render selected (0)' }) as HTMLButtonElement).disabled, true)
+    assert.equal((screen.getByRole('button', { name: t('shots.renderSelected', { count: 0 }) }) as HTMLButtonElement).disabled, true)
 
     view.rerender(<SeriesShotsPanel {...props} episode={makeEpisode(false) as never} />)
     await waitFor(() => assert.equal(
-      screen.getByRole('button', { name: 'Select shot 1 for rendering' }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: t('shots.selectAria', { order: 1 }) }).getAttribute('aria-pressed'),
       'false',
     ))
   } finally {

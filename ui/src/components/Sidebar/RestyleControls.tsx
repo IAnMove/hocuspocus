@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import type { RepaintRegionMapping } from '../../types'
 import { VideoTimelineSelector } from '../shared/VideoTimelineSelector'
 import { InfoTooltip } from './InfoTooltip'
@@ -35,6 +36,7 @@ type PreviewResult = Awaited<ReturnType<typeof api.repaintPreview>>
  * then animate it with the source video's exact SCAIL-2 motion path.
  */
 export function RestyleControls() {
+  const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoPath = useStore(s => s.editVideoPath)
   const editVideoUrl = useStore(s => s.editVideoUrl)
@@ -143,25 +145,25 @@ export function RestyleControls() {
       setPreview(result)
       setPreviewState(result.found ? 'found' : 'error')
       if (!result.found) {
-        setPreviewError('One or more descriptions did not match. Refine the highlighted fields.')
+        setPreviewError(t('repaint.mismatch'))
       }
     } catch (error) {
       setPreviewState('error')
-      setPreviewError(error instanceof Error ? error.message : 'Region preview failed')
+      setPreviewError(error instanceof Error ? error.message : t('repaint.previewFailed'))
     }
-  }, [editStartTime, editVideoPath, mappings, targetFramePath])
+  }, [editStartTime, editVideoPath, mappings, targetFramePath, t])
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-1.5">
         <Paintbrush size={13} className="shrink-0 text-accent-blue" />
         <span className="text-[10px] font-medium text-text-primary">
-          Repaint from first frame
+          {t('repaint.title')}
         </span>
         <InfoTooltip
           placement="bottom"
-          label="About Repaint"
-          text={"Edit the selected first frame, then SCAIL-2 carries that look through the source motion, interaction, and camera movement.\n\nFast is recommended (6 steps). HQ uses the full 40-step schedule."}
+          label={t('repaint.about')}
+          text={t('repaint.aboutText')}
         />
       </div>
 
@@ -186,7 +188,7 @@ export function RestyleControls() {
           className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-accent-blue/50 hover:bg-bg-hover/30 transition-all"
         >
           <Upload size={24} className="mx-auto mb-2 text-text-muted" />
-          <p className="text-xs text-text-secondary">Drop the source video or click to upload</p>
+          <p className="text-xs text-text-secondary">{t('repaint.drop')}</p>
           <input
             ref={videoInputRef}
             type="file"
@@ -207,7 +209,7 @@ export function RestyleControls() {
               resetPreview()
             }}
             className="absolute top-1.5 right-1.5 z-20 p-1 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors"
-            title="Remove source video"
+            title={t('repaint.removeSource')}
           >
             <X size={14} />
           </button>
@@ -230,10 +232,10 @@ export function RestyleControls() {
 
       <div className="space-y-2 rounded-lg border border-border bg-bg-secondary/40 p-2.5">
         <div className="flex items-center gap-1">
-          <p className="text-[10px] font-medium text-text-primary">Edited first frame</p>
+          <p className="text-[10px] font-medium text-text-primary">{t('repaint.editedFrame')}</p>
           <InfoTooltip
-            label="About the edited first frame"
-            text="Change anything you want while keeping the same canvas, viewpoint, and pose. This frame defines the new visual."
+            label={t('repaint.aboutFrame')}
+            text={t('repaint.aboutFrameText')}
           />
         </div>
 
@@ -241,7 +243,7 @@ export function RestyleControls() {
           <div className="relative">
             <img
               src={targetFrameUrl}
-              alt="Edited first frame"
+              alt={t('repaint.editedFrame')}
               className="w-full max-h-48 object-contain rounded border border-border bg-black/20"
             />
             <button
@@ -250,7 +252,7 @@ export function RestyleControls() {
                 resetPreview()
               }}
               className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/65 text-white/80 hover:text-white"
-              title="Remove edited frame"
+              title={t('repaint.removeFrame')}
             >
               <X size={12} />
             </button>
@@ -263,12 +265,12 @@ export function RestyleControls() {
           className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded border border-accent-blue/40 bg-accent-blue/10 text-[10px] text-accent-blue hover:bg-accent-blue/20 disabled:opacity-40"
         >
           <Pencil size={11} />
-          {targetFramePath ? 'Edit first frame again' : 'Edit first frame'}
+          {targetFramePath ? t('repaint.editAgain') : t('repaint.editFrame')}
         </button>
 
         <label className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded border border-dashed border-border text-[10px] text-text-secondary hover:text-text-primary hover:border-accent-blue/50 cursor-pointer">
           <Upload size={11} />
-          {targetFramePath ? 'Replace edited frame' : 'Upload edited frame'}
+          {targetFramePath ? t('repaint.replaceFrame') : t('repaint.uploadFrame')}
           <input
             type="file"
             accept="image/*"
@@ -288,13 +290,13 @@ export function RestyleControls() {
             className="flex flex-1 items-center gap-1.5 px-2.5 py-2 text-left hover:bg-bg-hover/40"
           >
             {showRegions ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            <span className="text-[10px] text-text-primary">Track changed regions</span>
-            <span className="ml-auto text-[9px] text-text-muted">Optional</span>
+            <span className="text-[10px] text-text-primary">{t('repaint.trackRegions')}</span>
+            <span className="ml-auto text-[9px] text-text-muted">{t('chrome.optional')}</span>
           </button>
           <div className="pr-2">
             <InfoTooltip
-              label="About changed-region tracking"
-              text="Leave this empty for whole-frame Repaint. Add a source-to-edited-frame mapping only when an object or person needs an explicit color correspondence."
+              label={t('repaint.aboutRegions')}
+              text={t('repaint.aboutRegionsText')}
             />
           </div>
         </div>
@@ -310,11 +312,11 @@ export function RestyleControls() {
                       className="h-3 w-3 rounded-full border border-white/30"
                       style={{ backgroundColor: REGION_COLORS[index] }}
                     />
-                    <span className="text-[9px] text-text-secondary">Region {index + 1}</span>
+                    <span className="text-[9px] text-text-secondary">{t('repaint.region', { n: index + 1 })}</span>
                     <button
                       onClick={() => removeMapping(index)}
                       className="ml-auto p-0.5 text-text-muted hover:text-status-error"
-                      title="Remove region"
+                      title={t('repaint.removeRegion')}
                     >
                       <X size={11} />
                     </button>
@@ -323,19 +325,22 @@ export function RestyleControls() {
                     type="text"
                     value={mapping.source}
                     onChange={event => updateMapping(index, { source: event.target.value })}
-                    placeholder="In source video: electric wrench"
+                    placeholder={t('repaint.sourcePlaceholder')}
                     className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-[10px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                   />
                   <input
                     type="text"
                     value={mapping.target}
                     onChange={event => updateMapping(index, { target: event.target.value })}
-                    placeholder="In edited frame: sci-fi gun"
+                    placeholder={t('repaint.targetPlaceholder')}
                     className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-[10px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                   />
                   {result && (
                     <p className={`text-[8px] ${result.source_found && result.target_found ? 'text-accent-green' : 'text-status-warning'}`}>
-                      Source {result.source_found ? 'found' : 'not found'} · edited frame {result.target_found ? 'found' : 'not found'}
+                      {t('repaint.matchLine', {
+                        source: result.source_found ? t('repaint.found') : t('repaint.notFound'),
+                        target: result.target_found ? t('repaint.found') : t('repaint.notFound'),
+                      })}
                     </p>
                   )}
                 </div>
@@ -349,7 +354,7 @@ export function RestyleControls() {
                   className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded border border-dashed border-border text-[9px] text-text-secondary hover:text-accent-blue hover:border-accent-blue/50"
                 >
                   <Plus size={11} />
-                  Add region
+                  {t('repaint.addRegion')}
                 </button>
               )}
               {mappings.length > 0 && (
@@ -366,7 +371,7 @@ export function RestyleControls() {
                   {previewState === 'loading'
                     ? <Loader2 size={11} className="animate-spin" />
                     : <Eye size={11} />}
-                  Preview regions
+                  {t('repaint.previewRegions')}
                 </button>
               )}
             </div>
@@ -374,12 +379,12 @@ export function RestyleControls() {
             {preview && (
               <div className="grid grid-cols-2 gap-1.5">
                 <div>
-                  <img src={preview.source_preview} alt="Source region preview" className="w-full rounded border border-border" />
-                  <p className="text-[8px] text-text-muted mt-0.5">source video</p>
+                  <img src={preview.source_preview} alt={t('repaint.sourceAlt')} className="w-full rounded border border-border" />
+                  <p className="text-[8px] text-text-muted mt-0.5">{t('repaint.sourceCaption')}</p>
                 </div>
                 <div>
-                  <img src={preview.target_preview} alt="Edited-frame region preview" className="w-full rounded border border-border" />
-                  <p className="text-[8px] text-text-muted mt-0.5">edited frame</p>
+                  <img src={preview.target_preview} alt={t('repaint.editedAlt')} className="w-full rounded border border-border" />
+                  <p className="text-[8px] text-text-muted mt-0.5">{t('repaint.editedCaption')}</p>
                 </div>
               </div>
             )}

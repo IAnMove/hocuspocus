@@ -5,6 +5,7 @@ import { getFileUrl } from '../../api/client'
 import { getOutputReference } from '../../lib/outputReference'
 import type { H3SegmentState, PipelineClipState, SavedPipelineState } from '../../types'
 import { ModalShell } from '../common/ModalShell'
+import i18n, { useUiTranslation } from '../../i18n'
 
 /** Safely coerce any value to a displayable string */
 function safeStr(val: unknown): string {
@@ -19,33 +20,39 @@ function fileLabel(path: string): string {
 }
 
 /** Error boundary to prevent the productions view crashing on bad saved data. */
+function DashboardCrash({ error, onRetry }: { error: string; onRetry: () => void }) {
+  const { t } = useUiTranslation('director')
+  return (
+    <div className="p-4 text-center">
+      <p className="text-red-400 text-sm mb-2">{t('dashboard.crash', { error })}</p>
+      <button onClick={onRetry}
+        className="text-xs text-accent-blue hover:underline">{t('dashboard.tryAgain')}</button>
+    </div>
+  )
+}
+
 class DashboardErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   state = { error: null as string | null }
   static getDerivedStateFromError(err: Error) { return { error: err.message } }
   render() {
     if (this.state.error) {
-      return (
-        <div className="p-4 text-center">
-          <p className="text-red-400 text-sm mb-2">Video workflows error: {this.state.error}</p>
-          <button onClick={() => this.setState({ error: null })}
-            className="text-xs text-accent-blue hover:underline">Try again</button>
-        </div>
-      )
+      return <DashboardCrash error={this.state.error} onRetry={() => this.setState({ error: null })} />
     }
     return this.props.children
   }
 }
 
 function formatTime(sec: number | null): string {
-  if (!sec) return '--'
-  if (sec < 60) return `${Math.round(sec)}s`
+  if (!sec) return i18n.t('dashboard.noTime', { ns: 'director' })
+  if (sec < 60) return i18n.t('dashboard.seconds', { ns: 'director', count: Math.round(sec) })
   const m = Math.floor(sec / 60)
   const s = Math.round(sec % 60)
-  return `${m}m ${s}s`
+  return i18n.t('dashboard.minutesSeconds', { ns: 'director', minutes: m, seconds: s })
 }
 
 function formatDate(ts: number): string {
-  return new Date(ts * 1000).toLocaleString(undefined, {
+  const locale = i18n.language === 'es' ? 'es-ES' : 'en-US'
+  return new Date(ts * 1000).toLocaleString(locale, {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   })
 }
@@ -66,29 +73,32 @@ function completedH3Segments(clip: PipelineClipState): number {
 }
 
 function PipelineProgressBar({ pipeline }: { pipeline: SavedPipelineState }) {
+  const { t } = useUiTranslation('director')
   const fallbackImageTime = pipeline.clips.reduce((sum, c) => sum + (c.image_gen_time_sec || 0), 0) || null
   const fallbackVideoTime = pipeline.clips.reduce((sum, c) => sum + (c.video_gen_time_sec || 0), 0) || null
   const llmPassCount = pipeline.llm_log?.passes?.length || (pipeline.llm_log ? 1 : 0)
+  const readyImages = pipeline.clips.filter(c => Boolean(c.start_image_filename)).length
+  const readyVideos = pipeline.clips.filter(c => Boolean(c.video_filename)).length
   const phases = [
     {
       key: 'planning',
-      label: 'Prompts',
+      label: t('dashboard.prompts'),
       time: pipeline.prompt_generation_time_sec ?? pipeline.llm_log?.planning_time_sec,
-      detail: `${llmPassCount} LLM pass${llmPassCount === 1 ? '' : 'es'}`,
+      detail: t('dashboard.llmPass', { count: llmPassCount }),
     },
     {
       key: 'images',
-      label: 'Images / preparation',
+      label: t('dashboard.imagesPrep'),
       time: pipeline.image_generation_time_sec ?? fallbackImageTime,
-      detail: `${pipeline.clips.filter(c => Boolean(c.start_image_filename)).length}/${pipeline.clips.length} ready`,
+      detail: t('dashboard.ready', { ready: readyImages, total: pipeline.clips.length }),
     },
     {
       key: 'video',
-      label: 'Videos + final assembly',
+      label: t('dashboard.videosAssembly'),
       time: pipeline.video_generation_time_sec ?? fallbackVideoTime,
       detail: pipeline.video_model === 'minimax_h3'
-        ? `${pipeline.clips.reduce((sum, clip) => sum + completedH3Segments(clip), 0)} segments`
-        : `${pipeline.clips.filter(c => Boolean(c.video_filename)).length}/${pipeline.clips.length} clips`,
+        ? t('dashboard.segmentsCount', { count: pipeline.clips.reduce((sum, clip) => sum + completedH3Segments(clip), 0) })
+        : t('dashboard.clipsReady', { ready: readyVideos, total: pipeline.clips.length }),
     },
   ]
   const timedTotal = phases.reduce((s, p) => s + (p.time || 0), 0) || 1
@@ -119,26 +129,27 @@ function PipelineProgressBar({ pipeline }: { pipeline: SavedPipelineState }) {
         <div className="rounded bg-bg-tertiary px-2 py-1.5">
           <div className="flex items-center gap-1 text-[9px] text-text-muted">
             {isComplete ? <Check size={9} className="text-indicator-success" /> : <Clock size={9} />}
-            Total elapsed
+            {t('dashboard.totalElapsed')}
           </div>
           <div className="text-xs text-text-primary font-medium">{formatTime(pipeline.total_time_sec)}</div>
-          <div className="text-[8px] text-text-muted">Since production started</div>
+          <div className="text-[8px] text-text-muted">{t('dashboard.sinceStarted')}</div>
         </div>
       </div>
       {pipeline.assembly_time_sec != null && (
         <div className="text-[9px] text-text-muted">
-          Latest re-join: {formatTime(pipeline.assembly_time_sec)}
-          {pipeline.assembly_count ? ` · ${pipeline.assembly_count} re-join${pipeline.assembly_count === 1 ? '' : 's'}` : ''}
+          {t('dashboard.latestRejoin', { time: formatTime(pipeline.assembly_time_sec) })}
+          {pipeline.assembly_count ? t('dashboard.rejoinCount', { count: pipeline.assembly_count }) : ''}
         </div>
       )}
       <p className="text-[8px] text-text-muted">
-        Image and video work can overlap; total elapsed is wall-clock time and may be lower than the sum of stages.
+        {t('dashboard.overlapNote')}
       </p>
     </div>
   )
 }
 
 function LlmPassView({ pass: p, index }: { pass: { pass: string; system_prompt: string; user_prompt?: string; response_text: string; thinking_text?: string | null }; index: number }) {
+  const { t } = useUiTranslation('director')
   const [showSystem, setShowSystem] = useState(false)
   const [showUser, setShowUser] = useState(false)
   const [showResponse, setShowResponse] = useState(false)
@@ -147,16 +158,16 @@ function LlmPassView({ pass: p, index }: { pass: { pass: string; system_prompt: 
 
   return (
     <div className="border border-border rounded p-2 space-y-1.5">
-      <div className="text-[10px] font-medium text-text-primary">Pass {index + 1}: {label}</div>
+      <div className="text-[10px] font-medium text-text-primary">{t('dashboard.pass', { n: index + 1, label })}</div>
 
       <button onClick={() => setShowSystem(!showSystem)}
         className="flex items-center gap-1 text-[9px] text-text-secondary hover:text-text-primary w-full text-left">
         {showSystem ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-        System Prompt ({p.system_prompt?.length || 0} chars)
+        {t('dashboard.systemPrompt', { count: p.system_prompt?.length || 0 })}
       </button>
       {showSystem && (
         <pre className="text-[8px] text-text-muted bg-bg-tertiary rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono">
-          {p.system_prompt || '(empty)'}
+          {p.system_prompt || t('dashboard.emptyPrompt')}
         </pre>
       )}
 
@@ -169,11 +180,11 @@ function LlmPassView({ pass: p, index }: { pass: { pass: string; system_prompt: 
           <button onClick={() => setShowUser(!showUser)}
             className="flex items-center gap-1 text-[9px] text-text-secondary hover:text-text-primary w-full text-left">
             {showUser ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-            User Prompt ({p.user_prompt?.length || 0} chars)
+            {t('dashboard.userPrompt', { count: p.user_prompt?.length || 0 })}
           </button>
           {showUser && (
             <pre className="text-[8px] text-text-muted bg-bg-tertiary rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono">
-              {p.user_prompt || '(empty)'}
+              {p.user_prompt || t('dashboard.emptyPrompt')}
             </pre>
           )}
         </>
@@ -184,7 +195,7 @@ function LlmPassView({ pass: p, index }: { pass: { pass: string; system_prompt: 
           <button onClick={() => setShowThinking(!showThinking)}
             className="flex items-center gap-1 text-[9px] text-indicator-warning hover:text-indicator-warning/80 w-full text-left">
             {showThinking ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-            <Sparkles size={8} /> Thinking ({p.thinking_text.length} chars)
+            <Sparkles size={8} /> {t('dashboard.thinking', { count: p.thinking_text.length })}
           </button>
           {showThinking && (
             <pre className="text-[8px] text-text-muted bg-bg-tertiary rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono">
@@ -197,11 +208,11 @@ function LlmPassView({ pass: p, index }: { pass: { pass: string; system_prompt: 
       <button onClick={() => setShowResponse(!showResponse)}
         className="flex items-center gap-1 text-[9px] text-text-secondary hover:text-text-primary w-full text-left">
         {showResponse ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-        Response ({p.response_text?.length || 0} chars)
+        {t('dashboard.response', { count: p.response_text?.length || 0 })}
       </button>
       {showResponse && (
         <pre className="text-[8px] text-text-muted bg-bg-tertiary rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono">
-          {p.response_text || '(empty)'}
+          {p.response_text || t('dashboard.emptyPrompt')}
         </pre>
       )}
     </div>
@@ -209,8 +220,9 @@ function LlmPassView({ pass: p, index }: { pass: { pass: string; system_prompt: 
 }
 
 function LlmLogPanel({ pipeline }: { pipeline: SavedPipelineState }) {
+  const { t } = useUiTranslation('director')
   const log = pipeline.llm_log
-  if (!log) return <p className="text-xs text-text-muted italic">No LLM log captured</p>
+  if (!log) return <p className="text-xs text-text-muted italic">{t('dashboard.noLlmLog')}</p>
 
   const passes = log.passes
 
@@ -218,8 +230,8 @@ function LlmLogPanel({ pipeline }: { pipeline: SavedPipelineState }) {
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-[10px] text-text-muted">
         <Brain size={12} className="text-chip-purple" />
-        <span>{log.provider}/{log.model_id || 'unknown'}</span>
-        <span className="ml-1 text-text-muted">({passes?.length || 1} pass{(passes?.length || 1) > 1 ? 'es' : ''})</span>
+        <span>{log.provider}/{log.model_id || t('dashboard.unknownModel')}</span>
+        <span className="ml-1 text-text-muted">{t('dashboard.passCount', { count: passes?.length || 1 })}</span>
         <span className="ml-auto">{formatTime(log.planning_time_sec)}</span>
       </div>
 
@@ -247,6 +259,8 @@ function H3SegmentCard({ segment, shotIndex, onRerun }: {
   shotIndex: number
   onRerun: (segmentIndex: number, prompt: string) => void
 }) {
+  const { t } = useUiTranslation('director')
+  const { t: tCommon } = useUiTranslation('common')
   const [editing, setEditing] = useState(false)
   const [prompt, setPrompt] = useState(segment.prompt || '')
   const [copied, setCopied] = useState(false)
@@ -265,16 +279,16 @@ function H3SegmentCard({ segment, shotIndex, onRerun }: {
   return (
     <div className={`rounded border p-2 space-y-2 ${segment.stale ? 'border-amber-500/50 bg-amber-500/5' : 'border-cyan-500/20 bg-bg-tertiary/60'}`}>
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-medium text-cyan-300">Segment {segment.index + 1}</span>
-        <span className="text-[9px] text-text-muted">{(segment.frames / 24).toFixed(1)}s · seed {segment.seed}</span>
+        <span className="text-[10px] font-medium text-cyan-300">{t('dashboard.segment', { n: segment.index + 1 })}</span>
+        <span className="text-[9px] text-text-muted">{t('dashboard.durationSeed', { seconds: (segment.frames / 24).toFixed(1), seed: segment.seed })}</span>
         <span className="text-[9px] text-text-muted">{
           segment.reference_mode === 'direct_video'
-            ? 'text only · no images'
+            ? t('dashboard.textOnly')
             : segment.reference_mode === 'references'
-              ? 'identity references'
-              : 'exact first frame'
+              ? t('dashboard.identityRefs')
+              : t('dashboard.exactFirstFrame')
         }</span>
-        {segment.stale && <span className="ml-auto text-[9px] text-amber-300">Needs regeneration</span>}
+        {segment.stale && <span className="ml-auto text-[9px] text-amber-300">{t('dashboard.needsRegen')}</span>}
       </div>
       {segment.filename && (
         <video
@@ -290,7 +304,7 @@ function H3SegmentCard({ segment, shotIndex, onRerun }: {
             type="button"
             onClick={copyReference}
             className="flex items-center gap-1 rounded border border-border px-1.5 py-1 text-[9px] text-text-muted hover:text-text-primary"
-            title={`Copy output ID ${reference}`}
+            title={t('dashboard.copyOutput', { id: reference })}
           >
             {copied ? <Check size={9} className="text-green-400" /> : <Copy size={9} />}
             {reference}
@@ -301,15 +315,15 @@ function H3SegmentCard({ segment, shotIndex, onRerun }: {
           onClick={() => setEditing(value => !value)}
           className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-1 text-[9px] text-text-secondary hover:text-accent-blue"
         >
-          <Pencil size={9} /> Edit
+          <Pencil size={9} /> {tCommon('actions.edit')}
         </button>
         <button
           type="button"
           onClick={() => onRerun(segment.index, prompt)}
           className="flex items-center gap-1 rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-1 text-[9px] text-cyan-300 hover:bg-cyan-500/20"
-          title={`Regenerate shot ${shotIndex + 1} from this segment and rebuild its dependent continuations`}
+          title={t('dashboard.regenFromHereTitle', { n: shotIndex + 1 })}
         >
-          <RefreshCw size={9} /> Regenerate from here
+          <RefreshCw size={9} /> {t('dashboard.regenFromHere')}
         </button>
       </div>
       {editing && (
@@ -333,6 +347,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
   onRerunVideo: (clipIndex: number, prompt?: string) => void
   onRerunH3Segment: (clipIndex: number, segmentIndex: number, prompt?: string) => void
 }) {
+  const { t } = useUiTranslation('director')
   const [expandImage, setExpandImage] = useState(false)
   const [expandVideo, setExpandVideo] = useState(false)
   const [showPolish, setShowPolish] = useState(false)
@@ -363,12 +378,12 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-bg-tertiary border-b border-border">
         <span className="text-xs font-medium text-text-primary">
-          Shot {clip.index + 1}
+          {t('dashboard.shot', { n: clip.index + 1 })}
           {(clip.planned_clip as unknown as Record<string, unknown> | null)?.duration_sec ? (
-            <span className="text-text-muted font-normal ml-1">({Math.round((clip.planned_clip as unknown as Record<string, unknown>).duration_sec as number)}s)</span>
+            <span className="text-text-muted font-normal ml-1">{t('dashboard.shotDuration', { count: Math.round((clip.planned_clip as unknown as Record<string, unknown>).duration_sec as number) })}</span>
           ) : null}
           {clip.window_count > 1 && (
-            <span className="text-chip-purple font-normal ml-1 text-[9px]">{clip.window_count}W</span>
+            <span className="text-chip-purple font-normal ml-1 text-[9px]">{t('dashboard.windowCount', { count: clip.window_count })}</span>
           )}
         </span>
         <div className="flex items-center gap-1">
@@ -382,13 +397,13 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
           <button onClick={() => onTag(clip.tag === 'good' ? null : 'good')}
             disabled={busy}
             className={`ml-2 p-0.5 rounded disabled:opacity-40 ${clip.tag === 'good' ? 'bg-green-500 text-white' : 'text-text-muted hover:text-indicator-success'}`}
-            title="Mark as good">
+            title={t('dashboard.markGood')}>
             <Check size={12} />
           </button>
           <button onClick={() => onTag(clip.tag === 'needs_work' ? null : 'needs_work')}
             disabled={busy}
             className={`p-0.5 rounded disabled:opacity-40 ${clip.tag === 'needs_work' ? 'bg-amber-500 text-white' : 'text-text-muted hover:text-indicator-warning'}`}
-            title="Needs work">
+            title={t('dashboard.needsWork')}>
             <AlertTriangle size={12} />
           </button>
         </div>
@@ -400,7 +415,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
           {/* Thumbnail */}
           <div className="w-20 h-20 shrink-0 rounded overflow-hidden bg-bg-tertiary border border-border">
             {clip.start_image_filename ? (
-              <img src={getFileUrl(clip.start_image_filename)} alt={`Shot ${clip.index + 1}`}
+              <img src={getFileUrl(clip.start_image_filename)} alt={t('dashboard.shotAlt', { n: clip.index + 1 })}
                 className="w-full h-full object-cover" loading="lazy" />
             ) : clip.video_filename ? (
               <video
@@ -409,7 +424,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                 muted
                 playsInline
                 preload="metadata"
-                aria-label={`Shot ${clip.index + 1} video preview`}
+                aria-label={t('dashboard.shotVideoPreview', { n: clip.index + 1 })}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-text-muted">
@@ -421,18 +436,18 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-0.5">
               <span className="text-[9px] text-text-muted uppercase tracking-wider">
-                {requiresShotImage ? 'Image Prompt' : 'Planned Visual'}
+                {requiresShotImage ? t('dashboard.imagePrompt') : t('dashboard.plannedVisual')}
               </span>
               {requiresShotImage && <div className="flex items-center gap-1">
                 <button onClick={() => { setEditingImage(!editingImage); setEditImagePrompt(clip.image_prompt || '') }}
                   className={`p-0.5 rounded transition-colors ${editingImage ? 'text-accent-blue' : 'text-text-muted hover:text-text-secondary'}`}
-                  title="Edit prompt">
+                  title={t('dashboard.editPrompt')}>
                   <Pencil size={9} />
                 </button>
                 <button onClick={() => onRerunImage(clip.index, editingImage ? editImagePrompt : undefined)}
                   disabled={busy}
                   className="p-0.5 rounded text-text-muted hover:text-accent-blue transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Re-generate start image">
+                  title={t('dashboard.regenStartImage')}>
                   <Camera size={10} />
                 </button>
               </div>}
@@ -447,7 +462,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
             ) : (
               <p className={`text-[10px] text-text-secondary ${expandImage ? '' : 'line-clamp-3'} cursor-pointer`}
                 onClick={() => setExpandImage(!expandImage)}>
-                {clip.image_prompt || <span className="italic text-text-muted">No image prompt</span>}
+                {clip.image_prompt || <span className="italic text-text-muted">{t('dashboard.noImagePrompt')}</span>}
               </p>
             )}
           </div>
@@ -456,13 +471,13 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
         {clip.h3_references && (
           <div className="rounded border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-medium uppercase tracking-wider text-cyan-300">H3 conditioning</span>
+              <span className="text-[9px] font-medium uppercase tracking-wider text-cyan-300">{t('dashboard.h3Conditioning')}</span>
               <span className="text-[9px] text-text-muted">
                 {clip.h3_references.mode === 'direct_video'
-                  ? 'T2V · no images'
+                  ? t('dashboard.t2vNoImages')
                   : clip.h3_references.mode === 'first_frame'
-                    ? 'FL2VA · exact frame'
-                    : 'Ref2VA · references'}
+                    ? t('dashboard.fl2vaExact')
+                    : t('dashboard.ref2va')}
               </span>
             </div>
             <p className="text-[9px] text-text-muted">{clip.h3_references.note}</p>
@@ -472,24 +487,24 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                   ? 'text-green-300'
                   : 'text-amber-300'
               }`}>
-                Prompt: {clip.h3_prompt_validation === 'optimized'
-                  ? `validated and optimized for H3 · ${clip.h3_segment_prompts?.length || 0} segments`
+                {clip.h3_prompt_validation === 'optimized'
+                  ? t('dashboard.promptOptimized', { count: clip.h3_segment_prompts?.length || 0 })
                   : clip.h3_prompt_validation === 'direct_video_contract'
-                    ? 'direct T2V contract · master prompt repeated per segment'
-                  : 'deterministic safe prompt · LLM validation unavailable'}
+                    ? t('dashboard.promptDirect')
+                  : t('dashboard.promptSafe')}
               </div>
             )}
             <div className="text-[9px] text-text-secondary space-y-0.5">
-              <div>Shot frame: {clip.h3_references.mode === 'direct_video' ? 'not used' : fileLabel(clip.h3_references.shot_frame) || 'missing'}</div>
+              <div>{t('dashboard.shotFrame', { value: clip.h3_references.mode === 'direct_video' ? t('dashboard.notUsed') : fileLabel(clip.h3_references.shot_frame) || t('dashboard.missingFile') })}</div>
               {clip.h3_references.image_references.length > 0 && (
-                <div>Images: {clip.h3_references.image_references.map(fileLabel).join(', ')}</div>
+                <div>{t('dashboard.imagesList', { value: clip.h3_references.image_references.map(fileLabel).join(', ') })}</div>
               )}
-              {clip.h3_references.location_label && <div>Location: {clip.h3_references.location_label}</div>}
+              {clip.h3_references.location_label && <div>{t('dashboard.locationList', { value: clip.h3_references.location_label })}</div>}
               {clip.h3_references.video_references.length > 0 && (
-                <div>Videos: {clip.h3_references.video_references.map(fileLabel).join(', ')}</div>
+                <div>{t('dashboard.videosList', { value: clip.h3_references.video_references.map(fileLabel).join(', ') })}</div>
               )}
               {clip.h3_references.audio_references.length > 0 && (
-                <div>Audio: {clip.h3_references.audio_references.map(fileLabel).join(', ')}</div>
+                <div>{t('dashboard.audioList', { value: clip.h3_references.audio_references.map(fileLabel).join(', ') })}</div>
               )}
             </div>
             {clip.h3_references.warnings?.map((warning, index) => (
@@ -504,12 +519,12 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
         {(clip.keyframe_prompts?.length > 0 || clip.keyframe_filenames?.length > 0) && (
           <div>
             <div className="text-[9px] text-text-muted uppercase tracking-wider mb-0.5">
-              Keyframes ({clip.keyframe_prompts?.length || clip.keyframe_filenames?.length || 0})
+              {t('dashboard.keyframes', { count: clip.keyframe_prompts?.length || clip.keyframe_filenames?.length || 0 })}
             </div>
             <div className="flex gap-1.5 overflow-x-auto">
               {clip.keyframe_filenames?.map((kf, ki) => (
                 <div key={ki} className="shrink-0">
-                  <img src={getFileUrl(kf)} alt={`KF ${ki + 1}`}
+                  <img src={getFileUrl(kf)} alt={t('dashboard.keyframeAlt', { n: ki + 1 })}
                     className="w-14 h-14 object-cover rounded border border-border" loading="lazy" />
                   {clip.keyframe_prompts?.[ki] && (
                     <p className="text-[8px] text-text-muted mt-0.5 w-14 truncate" title={safeStr(clip.keyframe_prompts[ki])}>
@@ -531,7 +546,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
         {clip.h3_segments && clip.h3_segments.length > 0 && (
           <div className="space-y-2">
             <div className="text-[9px] text-text-muted uppercase tracking-wider">
-              Editable H3 segments ({clip.h3_segments.length})
+              {t('dashboard.editableH3', { count: clip.h3_segments.length })}
             </div>
             {clip.h3_segments.map(segment => (
               <H3SegmentCard
@@ -542,7 +557,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
               />
             ))}
             <p className="text-[9px] text-text-muted">
-              Regenerating an intermediate segment also rebuilds the following segments in this shot, preventing an old drifted face from propagating.
+              {t('dashboard.h3RegenNote')}
             </p>
           </div>
         )}
@@ -551,9 +566,9 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
         <div>
           <div className="flex items-center justify-between mb-0.5">
             <span className="text-[9px] text-text-muted uppercase tracking-wider">
-              Video Prompt{clip.h3_segment_prompts?.length
-                ? ` (${clip.h3_segment_prompts.length} H3 segments)`
-                : clip.window_prompts?.length > 1 ? ` (${clip.window_prompts.length} windows)` : ''}
+              {t('dashboard.videoPrompt')}{clip.h3_segment_prompts?.length
+                ? t('dashboard.h3SegmentsSuffix', { count: clip.h3_segment_prompts.length })
+                : clip.window_prompts?.length > 1 ? t('dashboard.windowsSuffix', { count: clip.window_prompts.length }) : ''}
             </span>
             <div className="flex items-center gap-1">
               <button onClick={() => {
@@ -562,7 +577,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                 setEditWindowPrompts(clip.window_prompts || [])
               }}
                 className={`p-0.5 rounded transition-colors ${editingVideo ? 'text-accent-blue' : 'text-text-muted hover:text-text-secondary'}`}
-                title="Edit prompt">
+                title={t('dashboard.editPrompt')}>
                 <Pencil size={9} />
               </button>
               <button onClick={() => {
@@ -575,10 +590,10 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                 disabled={busy || (requiresShotImage && !clip.start_image_filename)}
                 className="p-0.5 rounded text-text-muted hover:text-indicator-success transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 title={busy
-                  ? 'Wait for pipeline repair to finish'
+                  ? t('dashboard.waitRepair')
                   : requiresShotImage && !clip.start_image_filename
-                    ? 'Generate the start image first'
-                    : 'Re-generate video clip'}>
+                    ? t('dashboard.generateStartFirst')
+                    : t('dashboard.regenVideo')}>
                 <Film size={10} />
               </button>
             </div>
@@ -588,7 +603,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
               <div className="space-y-1.5">
                 {editWindowPrompts.map((wp, wi) => (
                   <div key={wi}>
-                    <div className="text-[8px] text-text-muted mb-0.5">Window {wi + 1}</div>
+                    <div className="text-[8px] text-text-muted mb-0.5">{t('dashboard.windowN', { n: wi + 1 })}</div>
                     <textarea
                       value={wp}
                       onChange={e => {
@@ -616,7 +631,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                 {clip.h3_segment_prompts.map((prompt, index) => (
                   <p key={index} className={`text-[10px] text-text-secondary pl-2 border-l-2 ${index === 0 ? 'border-cyan-400/50' : 'border-border'} ${expandVideo ? '' : 'line-clamp-2'} cursor-pointer`}
                     onClick={() => setExpandVideo(!expandVideo)}>
-                    <span className="text-[8px] text-cyan-300 mr-1">H3-{index + 1}</span>
+                    <span className="text-[8px] text-cyan-300 mr-1">{t('dashboard.h3SegmentTag', { n: index + 1 })}</span>
                     {safeStr(prompt)}
                   </p>
                 ))}
@@ -626,7 +641,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                 {clip.window_prompts.map((wp, wi) => (
                   <p key={wi} className={`text-[10px] text-text-secondary pl-2 border-l-2 ${wi === 0 ? 'border-accent-blue/40' : 'border-border'} ${expandVideo ? '' : 'line-clamp-2'} cursor-pointer`}
                     onClick={() => setExpandVideo(!expandVideo)}>
-                    <span className="text-[8px] text-text-muted mr-1">W{wi + 1}</span>
+                    <span className="text-[8px] text-text-muted mr-1">{t('dashboard.windowTag', { n: wi + 1 })}</span>
                     {safeStr(wp)}
                   </p>
                 ))}
@@ -634,7 +649,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
             ) : (
               <p className={`text-[10px] text-text-secondary ${expandVideo ? '' : 'line-clamp-3'} cursor-pointer`}
                 onClick={() => setExpandVideo(!expandVideo)}>
-                {clip.video_prompt || <span className="italic text-text-muted">No video prompt</span>}
+                {clip.video_prompt || <span className="italic text-text-muted">{t('dashboard.noVideoPrompt')}</span>}
               </p>
             )
           )}
@@ -646,7 +661,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
             <button onClick={() => setShowPolish(!showPolish)}
               className="flex items-center gap-1 text-[9px] text-accent-blue hover:underline">
               <Sparkles size={8} />
-              {showPolish ? 'Hide' : 'Show'} prompt polish diff
+              {showPolish ? t('dashboard.hidePolish') : t('dashboard.showPolish')}
             </button>
             {showPolish && (() => {
               // Compute change flags so the "no changes from polish"
@@ -669,38 +684,38 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                 <div className="mt-1 space-y-1.5 bg-bg-tertiary rounded p-2">
                   {imageChanged && (
                     <div>
-                      <div className="text-[8px] text-text-muted uppercase">Image — Before Polish</div>
+                      <div className="text-[8px] text-text-muted uppercase">{t('dashboard.imageBeforePolish')}</div>
                       <p className="text-[9px] text-red-400/70 line-through">{clip.image_prompt_pre_polish}</p>
-                      <div className="text-[8px] text-text-muted uppercase mt-0.5">After</div>
+                      <div className="text-[8px] text-text-muted uppercase mt-0.5">{t('dashboard.afterPolish')}</div>
                       <p className="text-[9px] text-indicator-success/80">{clip.image_prompt}</p>
                     </div>
                   )}
                   {videoChanged && (
                     <div>
-                      <div className="text-[8px] text-text-muted uppercase">Video — Before Polish</div>
+                      <div className="text-[8px] text-text-muted uppercase">{t('dashboard.videoBeforePolish')}</div>
                       <p className="text-[9px] text-red-400/70 line-through">{clip.video_prompt_pre_polish}</p>
-                      <div className="text-[8px] text-text-muted uppercase mt-0.5">After</div>
+                      <div className="text-[8px] text-text-muted uppercase mt-0.5">{t('dashboard.afterPolish')}</div>
                       <p className="text-[9px] text-indicator-success/80">{clip.video_prompt}</p>
                     </div>
                   )}
                   {windowDiffs.map(({ pre, post, i }) => (
                     <div key={`wp${i}`}>
-                      <div className="text-[8px] text-text-muted uppercase">Window {i + 1} — Before Polish</div>
+                      <div className="text-[8px] text-text-muted uppercase">{t('dashboard.windowBeforePolish', { n: i + 1 })}</div>
                       <p className="text-[9px] text-red-400/70 line-through">{pre}</p>
-                      <div className="text-[8px] text-text-muted uppercase mt-0.5">After</div>
+                      <div className="text-[8px] text-text-muted uppercase mt-0.5">{t('dashboard.afterPolish')}</div>
                       <p className="text-[9px] text-indicator-success/80">{post}</p>
                     </div>
                   ))}
                   {keyframeDiffs.map(({ pre, post, i }) => (
                     <div key={`kf${i}`}>
-                      <div className="text-[8px] text-text-muted uppercase">Keyframe {i + 1} — Before Polish</div>
+                      <div className="text-[8px] text-text-muted uppercase">{t('dashboard.keyframeBeforePolish', { n: i + 1 })}</div>
                       <p className="text-[9px] text-red-400/70 line-through">{pre}</p>
-                      <div className="text-[8px] text-text-muted uppercase mt-0.5">After</div>
+                      <div className="text-[8px] text-text-muted uppercase mt-0.5">{t('dashboard.afterPolish')}</div>
                       <p className="text-[9px] text-indicator-success/80">{post}</p>
                     </div>
                   ))}
                   {!anyChange && (
-                    <p className="text-[9px] text-text-muted italic">No changes from polish</p>
+                    <p className="text-[9px] text-text-muted italic">{t('dashboard.noPolishChanges')}</p>
                   )}
                 </div>
               )
@@ -725,6 +740,8 @@ export function DirectorDashboard() {
 }
 
 function DirectorDashboardInner() {
+  const { t } = useUiTranslation('director')
+  const { t: tCommon } = useUiTranslation('common')
   const setOpen = useStore(s => s.setDashboardOpen)
   const pipelineList = useStore(s => s.dashboardPipelineList)
   const selectedPipeline = useStore(s => s.dashboardSelectedPipeline)
@@ -859,11 +876,11 @@ function DirectorDashboardInner() {
   }
 
   return (
-    <ModalShell open title="Director video workflows" onClose={() => setOpen(false)}
+    <ModalShell open title={t('dashboard.title')} onClose={() => setOpen(false)}
       className="fixed inset-0 z-[60] flex flex-col bg-bg-primary">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2 shrink-0">
-        <h1 className="text-sm font-semibold text-text-primary shrink-0">Video workflows</h1>
+        <h1 className="text-sm font-semibold text-text-primary shrink-0">{t('dashboard.heading')}</h1>
 
         {/* Pipeline selector */}
         <select
@@ -871,11 +888,11 @@ function DirectorDashboardInner() {
           onChange={e => { if (e.target.value) loadPipeline(e.target.value) }}
           className="flex-1 min-w-0 max-w-md bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue truncate"
         >
-          <option value="">Select an independent creation...</option>
+          <option value="">{t('dashboard.selectCreation')}</option>
           {pipelineList.map(p => (
             <option key={p.id} value={p.id}>
-              {p.repair_status ? `[repair: ${p.repair_status}] ` : ''}
-              {formatDate(p.created_at)} — {p.pipeline_type} ({p.clip_count} clips) [{p.status}]
+              {p.repair_status ? t('dashboard.repairTag', { status: p.repair_status }) : ''}
+              {t('dashboard.optionMeta', { date: formatDate(p.created_at), type: p.pipeline_type, count: p.clip_count, status: p.status })}
               {p.scene_description ? ` — ${p.scene_description}` : ''}
             </option>
           ))}
@@ -891,7 +908,7 @@ function DirectorDashboardInner() {
               <AlertTriangle size={10} /> {needsWorkCount}
             </span>
             <span className="text-text-muted">
-              / {totalClips} clips
+              {t('dashboard.clipsTotal', { count: totalClips })}
             </span>
             {(selectedPipeline.status === 'crashed' || selectedPipeline.status === 'failed') && (
               <button
@@ -908,10 +925,10 @@ function DirectorDashboardInner() {
                 }}
                 disabled={resuming || loading || repairBusy}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] bg-green-500/10 border border-green-500/30 rounded text-indicator-success hover:bg-green-500/20 disabled:opacity-40 transition-colors"
-                title="Re-run this pipeline from where it crashed — reuses the planning and start images that already completed"
+                title={t('dashboard.resumeTitle')}
               >
                 <Play size={10} />
-                {resuming ? 'Resuming…' : 'Resume'}
+                {resuming ? t('dashboard.resuming') : tCommon('actions.resume')}
               </button>
             )}
             {selectedPipeline.status === 'preview_ready' && selectedPipeline.comic_id && (
@@ -925,21 +942,21 @@ function DirectorDashboardInner() {
                   setOpen(false)
                 }}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] bg-red-500/10 border border-red-500/30 rounded text-red-300 hover:bg-red-500/20 transition-colors"
-                title="Open this durable PRE in Comic Studio. Load its matching comic first if another comic is currently open."
+                title={t('dashboard.openComicPreTitle')}
               >
                 <Film size={10} />
-                Open comic PRE
+                {t('dashboard.openComicPre')}
               </button>
             )}
             {repairActive ? (
               <>
                 <span
                   className="flex items-center gap-1 px-2 py-1 text-[10px] bg-orange-500/10 border border-orange-500/30 rounded text-chip-orange"
-                  title={repair?.message || 'Repair running'}
+                  title={repair?.message || t('dashboard.repairRunning')}
                 >
                   <Loader2 size={10} className="animate-spin" />
-                  {repair?.message || 'Repairing'}
-                  {repair && repair.total > 0 ? ` (${repair.current}/${repair.total})` : ''}
+                  {repair?.message || t('dashboard.repairing')}
+                  {repair && repair.total > 0 ? ` ${t('dashboard.progress', { current: repair.current, total: repair.total })}` : ''}
                 </span>
                 <button
                   onClick={async () => {
@@ -956,10 +973,10 @@ function DirectorDashboardInner() {
                   }}
                   disabled={repairCancelling || repair?.status === 'cancelling'}
                   className="flex items-center gap-1 px-2 py-1 text-[10px] bg-red-500/10 border border-red-500/30 rounded text-red-400 hover:bg-red-500/20 disabled:opacity-40 transition-colors"
-                  title="Stop after aborting the current model step"
+                  title={t('dashboard.stopTitle')}
                 >
                   {repairCancelling ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
-                  {repair?.status === 'cancelling' ? 'Cancelling...' : 'Stop'}
+                  {repair?.status === 'cancelling' ? t('dashboard.cancelling') : t('dashboard.stop')}
                 </button>
               </>
             ) : showRepairAction ? (
@@ -968,23 +985,23 @@ function DirectorDashboardInner() {
                 disabled={loading || repairBusy}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] bg-orange-500/10 border border-orange-500/30 rounded text-chip-orange hover:bg-orange-500/20 disabled:opacity-40 transition-colors"
                 title={hasEditableH3Segments
-                  ? `Resume the sequential H3 render for ${missingVideos} missing segment${missingVideos === 1 ? '' : 's'}`
+                  ? t('dashboard.resumeH3Title', { count: missingVideos })
                   : hasMissing
                     ? requiresShotImages
-                      ? `Repair ${missingImages} missing images + ${missingVideos} missing or stale videos, then join when possible`
-                      : `Repair ${missingVideos} missing or stale videos, then join when possible`
-                    : 'Check saved clip files and repair anything missing or invalid, then join when possible'}
+                      ? t('dashboard.repairImagesVideosTitle', { images: missingImages, videos: missingVideos })
+                      : t('dashboard.repairVideosTitle', { videos: missingVideos })
+                    : t('dashboard.checkRepairTitle')}
               >
                 {repairStarting ? <Loader2 size={10} className="animate-spin" /> : <Play size={10} />}
                 {isH3Pipeline
-                  ? `Resume ${missingVideos} missing segment${missingVideos === 1 ? '' : 's'}`
+                  ? t('dashboard.resumeMissingSegments', { count: missingVideos })
                   : repairRetryable && !hasMissing
-                    ? 'Retry repair'
+                    ? t('dashboard.retryRepair')
                     : missingImages > 0
-                      ? `Repair ${incompleteClips} clip${incompleteClips === 1 ? '' : 's'}`
+                      ? t('dashboard.repairClips', { count: incompleteClips })
                       : missingVideos > 0
-                        ? `Repair ${missingVideos} video${missingVideos === 1 ? '' : 's'}`
-                        : 'Check + repair'}
+                        ? t('dashboard.repairVideos', { count: missingVideos })
+                        : t('dashboard.checkRepair')}
               </button>
             ) : null}
             {repair?.status === 'completed' && (
@@ -994,13 +1011,13 @@ function DirectorDashboardInner() {
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1 px-2 py-1 text-[10px] bg-green-500/10 border border-green-500/30 rounded text-indicator-success hover:bg-green-500/20 transition-colors"
-                  title="Open the repaired joined video"
+                  title={t('dashboard.openRepairedTitle')}
                 >
-                  <Check size={10} /> Repaired + joined
+                  <Check size={10} /> {t('dashboard.repairedJoined')}
                 </a>
               ) : (
                 <span className="flex items-center gap-1 px-2 py-1 text-[10px] text-indicator-success">
-                  <Check size={10} /> Repair complete
+                  <Check size={10} /> {t('dashboard.repairComplete')}
                 </span>
               )
             )}
@@ -1011,14 +1028,14 @@ function DirectorDashboardInner() {
                 // Surface failures in the existing error slot — a bare
                 // rejected promise here looked like the button doing nothing.
                 rejoinClips(selectedPipeline.pipeline_id).catch(e =>
-                  setRegenError(e instanceof Error ? e.message : 'Rejoin failed'))
+                  setRegenError(e instanceof Error ? e.message : t('dashboard.rejoinFailed')))
               }}
               disabled={loading || repairBusy || videoPartCount < 2}
               className="flex items-center gap-1 px-2 py-1 text-[10px] bg-accent-blue/10 border border-accent-blue/30 rounded text-accent-blue hover:bg-accent-blue/20 disabled:opacity-40 transition-colors"
-              title="Re-join all clips into a new video"
+              title={t('dashboard.rejoinTitle')}
             >
               <Combine size={10} />
-              Re-join
+              {t('dashboard.rejoin')}
             </button>
             <button
               onClick={async () => {
@@ -1035,7 +1052,7 @@ function DirectorDashboardInner() {
                 try {
                   await deletePipeline(pid)
                 } catch (e) {
-                  setRegenError(e instanceof Error ? e.message : 'Delete failed')
+                  setRegenError(e instanceof Error ? e.message : t('dashboard.deleteFailed'))
                 } finally {
                   setDeletingPipeline(false)
                 }
@@ -1047,11 +1064,11 @@ function DirectorDashboardInner() {
                   : 'bg-red-500/10 border-red-500/30 text-red-400/80 hover:bg-red-500/20'
               }`}
               title={confirmDeletePid === selectedPipeline.pipeline_id
-                ? `Click again to permanently delete this pipeline and its ${selectedPipeline.output_files?.length ?? 0} media files (they disappear from the gallery too)`
-                : 'Delete this pipeline and ALL media it generated'}
+                ? t('dashboard.confirmDeleteTitle', { count: selectedPipeline.output_files?.length ?? 0 })
+                : t('dashboard.deleteTitle')}
             >
               {deletingPipeline ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
-              {confirmDeletePid === selectedPipeline.pipeline_id ? 'Confirm?' : 'Delete'}
+              {confirmDeletePid === selectedPipeline.pipeline_id ? t('dashboard.confirmDelete') : tCommon('actions.delete')}
             </button>
             {(regenError || (repairRetryable ? repair?.error || repair?.message : null)) && (
               <span className="text-[9px] text-red-400 max-w-[200px] truncate" title={regenError || repair?.error || repair?.message || undefined}>
@@ -1061,7 +1078,7 @@ function DirectorDashboardInner() {
           </div>
         )}
 
-        <button onClick={() => setOpen(false)} aria-label="Close Director video workflows"
+        <button onClick={() => setOpen(false)} aria-label={t('dashboard.closeAria')}
           className="fixed top-3 right-4 z-[61] p-1.5 rounded-lg bg-bg-secondary hover:bg-bg-hover transition-colors shadow-md border border-border">
           <X size={16} className="text-text-muted" />
         </button>
@@ -1071,28 +1088,28 @@ function DirectorDashboardInner() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {dashboardLoadError && (
           <div role="alert" aria-live="assertive" className="flex flex-wrap items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-            <span className="min-w-0 flex-1">Could not load the selected pipeline: {dashboardLoadError}</span>
+            <span className="min-w-0 flex-1">{t('dashboard.loadError', { error: dashboardLoadError })}</span>
             <button
               type="button"
               onClick={() => void retryDashboardLoad()}
               disabled={loading}
               className="rounded border border-red-400/40 px-2 py-1 text-[10px] text-red-200 hover:bg-red-500/15 disabled:opacity-40"
             >
-              Retry
+              {tCommon('actions.retry')}
             </button>
           </div>
         )}
         {loading && (
           <div className="flex items-center justify-center py-12 text-text-muted">
             <Loader2 size={20} className="animate-spin mr-2" />
-            Loading pipeline...
+            {t('dashboard.loading')}
           </div>
         )}
 
         {!loading && !selectedPipeline && pipelineList.length === 0 && (
           <div className="text-center py-12 text-text-muted">
-            <p className="text-sm">No saved productions yet</p>
-            <p className="text-xs mt-1">Run a Director production and it will appear here</p>
+            <p className="text-sm">{t('dashboard.empty')}</p>
+            <p className="text-xs mt-1">{t('dashboard.emptyHint')}</p>
           </div>
         )}
 
@@ -1106,7 +1123,7 @@ function DirectorDashboardInner() {
                   selectedPipeline.status === 'failed' || selectedPipeline.status === 'crashed' ? 'bg-red-500/20 text-chip-red' :
                   'bg-blue-500/20 text-chip-blue'
                 }`}>
-                  {selectedPipeline.status === 'crashed' ? 'crashed (process died)' : selectedPipeline.status}
+                  {selectedPipeline.status === 'crashed' ? t('dashboard.crashed') : selectedPipeline.status}
                 </span>
                 <span className="text-text-muted">{selectedPipeline.pipeline_type}</span>
                 <span className="text-text-muted">|</span>
@@ -1121,7 +1138,7 @@ function DirectorDashboardInner() {
               {finalOutputFilename && (
                 <div className="pt-2 border-t border-border space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase tracking-wider text-text-muted">Current final assembly</span>
+                    <span className="text-[10px] uppercase tracking-wider text-text-muted">{t('dashboard.finalAssembly')}</span>
                     <span className="text-[9px] text-text-muted">
                       {getOutputReference({ name: finalOutputFilename, type: 'video' })}
                     </span>
@@ -1138,14 +1155,14 @@ function DirectorDashboardInner() {
 
             {/* LLM Log */}
             <div className="bg-bg-secondary rounded-lg border border-border p-3">
-              <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium mb-2">LLM Planning Log</h3>
+              <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium mb-2">{t('dashboard.llmLog')}</h3>
               <LlmLogPanel pipeline={selectedPipeline} />
             </div>
 
             {/* Clip Grid */}
             <div>
               <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium mb-2">
-                Clips ({totalClips})
+                {t('dashboard.clipsHeading', { count: totalClips })}
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {selectedPipeline.clips.map(clip => (

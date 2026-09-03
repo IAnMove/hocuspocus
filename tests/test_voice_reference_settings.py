@@ -1,5 +1,6 @@
 """Regression coverage for Voice Reference and beta-feature defaults."""
 
+import json
 import os
 import unittest
 
@@ -13,6 +14,9 @@ _SERVICES_PANEL_PATH = os.path.join(
     "components",
     "SettingsDrawer",
     "ServicesSettingsPanel.tsx",
+)
+_SETTINGS_EN_PATH = os.path.join(
+    _ROOT, "ui", "src", "i18n", "locales", "en", "settings.json",
 )
 
 
@@ -36,17 +40,20 @@ class TestVoiceReferenceSettings(unittest.TestCase):
 
     def test_voice_reference_setting_is_not_behind_beta_feature_gate(self):
         panel = _read(_SERVICES_PANEL_PATH)
+        settings = json.loads(_read(_SETTINGS_EN_PATH))
         block_start = panel.index("{/* Voice Reference (ID-LoRA)")
         block_end = panel.index("</label>", block_start)
         voice_reference_block = panel[block_start:block_end]
 
-        self.assertIn("Voice Reference (ID-LoRA)", voice_reference_block)
+        self.assertIn("t('services.voiceTitle')", voice_reference_block)
+        self.assertEqual(settings["services"]["voiceTitle"], "Voice Reference (ID-LoRA)")
         self.assertIn("voice_reference_enabled", voice_reference_block)
         self.assertNotIn("show_experimental", voice_reference_block)
         self.assertNotIn("Experimental", voice_reference_block)
 
-        beta_copy = panel[panel.index("Show in-development features"):]
-        self.assertNotIn("Voice Reference", beta_copy)
+        beta_copy = panel[panel.index("t('services.betaToggle')"):]
+        self.assertEqual(settings["services"]["betaToggle"], "Show in-development features")
+        self.assertNotIn("services.voiceTitle", beta_copy)
 
 
 if __name__ == "__main__":

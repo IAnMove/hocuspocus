@@ -1,5 +1,6 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { KeyRound, LoaderCircle, ShieldCheck } from 'lucide-react'
+import { useUiTranslation } from '../i18n'
 
 type LanAuthStatus = {
   enabled: boolean
@@ -10,6 +11,10 @@ type LanAuthStatus = {
 type GateState = 'checking' | 'locked' | 'ready' | 'unreachable'
 
 export function LanAuthGate({ children }: { children: ReactNode }) {
+  const { t } = useUiTranslation('shell')
+  const { t: tCommon } = useUiTranslation('common')
+  const tRef = useRef(t)
+  tRef.current = t
   const [state, setState] = useState<GateState>('checking')
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
@@ -23,11 +28,11 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
         credentials: 'same-origin',
         cache: 'no-store',
       })
-      if (!response.ok) throw new Error(`Status request failed (${response.status})`)
+      if (!response.ok) throw new Error(tRef.current('lan.statusFailed', { status: response.status }))
       const status = await response.json() as LanAuthStatus
       setState(!status.required || status.authenticated ? 'ready' : 'locked')
     } catch {
-      setError('HocusPocus could not reach its local server.')
+      setError(tRef.current('lan.unreachable'))
       setState('unreachable')
     }
   }, [])
@@ -50,14 +55,14 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
       })
       if (!response.ok) {
         setError(response.status === 401
-          ? 'That LAN access token is not valid.'
-          : `The server rejected the login (${response.status}).`)
+          ? t('lan.invalidToken')
+          : t('lan.loginRejected', { status: response.status }))
         return
       }
       setToken('')
       setState('ready')
     } catch {
-      setError('HocusPocus could not reach its local server.')
+      setError(t('lan.unreachable'))
     } finally {
       setSubmitting(false)
     }
@@ -76,10 +81,10 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
             ? <LoaderCircle size={24} className="animate-spin" aria-hidden="true" />
             : <ShieldCheck size={24} aria-hidden="true" />}
         </div>
-        <h1 id="lan-auth-title" className="text-xl font-semibold">HocusPocus LAN access</h1>
+        <h1 id="lan-auth-title" className="text-xl font-semibold">{t('lan.title')}</h1>
 
         {state === 'checking' ? (
-          <p className="mt-2 text-sm text-text-secondary">Checking this device…</p>
+          <p className="mt-2 text-sm text-text-secondary">{t('lan.checking')}</p>
         ) : state === 'unreachable' ? (
           <>
             <p className="mt-2 text-sm text-text-secondary">{error}</p>
@@ -88,21 +93,21 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
               onClick={() => { void checkAccess() }}
               className="mt-5 w-full rounded-lg bg-accent-blue px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-blue-hover"
             >
-              Retry
+              {tCommon('actions.retry')}
             </button>
           </>
         ) : (
           <form onSubmit={submit} className="mt-4">
             <p className="mb-4 text-sm text-text-secondary">
-              Enter the session token shown in the Pinokio launch terminal. You only need to do this once per browser session.
+              {t('lan.hint')}
             </p>
             {window.location.protocol !== 'https:' && (
               <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
-                This LAN page is using unencrypted HTTP. Only enter the token on a network you trust.
+                {t('lan.httpWarning')}
               </p>
             )}
             <label htmlFor="lan-access-token" className="mb-1.5 block text-sm font-medium">
-              LAN access token
+              {t('lan.tokenLabel')}
             </label>
             <div className="relative">
               <KeyRound
@@ -127,7 +132,7 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-accent-blue px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting && <LoaderCircle size={16} className="animate-spin" aria-hidden="true" />}
-              Unlock this session
+              {t('lan.unlock')}
             </button>
           </form>
         )}

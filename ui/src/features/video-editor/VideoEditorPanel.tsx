@@ -468,6 +468,7 @@ function ClipTrimBar({
   end: number
   onChange: (next: { trimStart?: number; trimEnd?: number }) => void
 }) {
+  const { t } = useUiTranslation('videoEditor')
   const trackRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef<'start' | 'end' | null>(null)
   const [dragging, setDragging] = useState<'start' | 'end' | null>(null)
@@ -529,9 +530,12 @@ function ClipTrimBar({
   return (
     <div className="rounded-lg border border-border bg-bg-tertiary/70 p-3">
       <div className="mb-2 flex items-center justify-between gap-3 text-[10px] tabular-nums">
-        <span className="text-text-muted">Recorte no destructivo</span>
+        <span className="text-text-muted">{t('trim.nondestructive')}</span>
         <span className="text-text-secondary">
-          Conserva {formatTime(Math.max(0, end - start))} · quita {formatTime(start + Math.max(0, duration - end))}
+          {t('trim.keepsRemoves', {
+            kept: formatTime(Math.max(0, end - start)),
+            removed: formatTime(start + Math.max(0, duration - end)),
+          })}
         </span>
       </div>
       <div
@@ -559,7 +563,7 @@ function ClipTrimBar({
               type="button"
               role="slider"
               data-trim-handle={handle}
-              aria-label={handle === 'start' ? 'Punto de entrada' : 'Punto de salida'}
+              aria-label={handle === 'start' ? t('trim.inPoint') : t('trim.outPoint')}
               aria-valuemin={handle === 'start' ? 0 : start + MIN_TRIM_DURATION}
               aria-valuemax={handle === 'start' ? end - MIN_TRIM_DURATION : safeDuration}
               aria-valuenow={Number(value.toFixed(2))}
@@ -574,8 +578,8 @@ function ClipTrimBar({
         })}
       </div>
       <div className="flex justify-between text-[9px] text-text-muted tabular-nums">
-        <span>Entrada {formatTime(start)}</span>
-        <span>Salida {formatTime(end)}</span>
+        <span>{t('trim.inTime', { time: formatTime(start) })}</span>
+        <span>{t('trim.outTime', { time: formatTime(end) })}</span>
       </div>
     </div>
   )
@@ -881,7 +885,7 @@ export function VideoEditorPanel() {
       : (typeof (handoff as PendingEditorSource).url === 'string'
           && (handoff as PendingEditorSource).url.trim()
         ? [{
-            name: (handoff as PendingEditorSource).name || 'comic animatic',
+            name: (handoff as PendingEditorSource).name || tRef.current('errors.comicAnimatic'),
             url: (handoff as PendingEditorSource).url,
           }]
         : [])
@@ -905,8 +909,12 @@ export function VideoEditorPanel() {
         const item = pendingSources[index]
         setAddProgress(kind === 'sequence'
           ? tRef.current('status.openingSeriesShot', { current: index + 1, total: pendingSources.length })
-          : tRef.current('status.openingNamed', { name: item.name || 'comic animatic' }))
-        nextClips.push(await createClipFromSource(item.url, item.url, item.name || `Series shot ${index + 1}`))
+          : tRef.current('status.openingNamed', { name: item.name || tRef.current('errors.comicAnimatic') }))
+        nextClips.push(await createClipFromSource(
+          item.url,
+          item.url,
+          item.name || tRef.current('errors.seriesShot', { n: index + 1 }),
+        ))
       }
 
       if (clips.length && !window.confirm(
@@ -2305,7 +2313,7 @@ export function VideoEditorPanel() {
               <div className="flex items-start gap-2 mb-3">
                 <WandSparkles size={14} className="text-purple-400 mt-0.5 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-text-primary">Transition {selectedTransitionIndex + 1}</p>
+                  <p className="text-xs text-text-primary">{t('inspector.transition', { n: selectedTransitionIndex + 1 })}</p>
                   <p className="text-[9px] text-text-muted truncate">
                     {clips[selectedTransitionIndex].name} → {clips[selectedTransitionIndex + 1].name}
                   </p>
@@ -2431,7 +2439,7 @@ export function VideoEditorPanel() {
                     </div>
                   )}
                   <label className="block text-[10px] text-text-muted">
-                    Duration: {clips[selectedTransitionIndex].transitionDuration.toFixed(1)}s
+                    {t('inspector.duration', { value: clips[selectedTransitionIndex].transitionDuration.toFixed(1) })}
                     <input
                       type="range"
                       min={isInterstitialTransition(clips[selectedTransitionIndex].transition) ? 0.5 : 0.1}
@@ -2445,8 +2453,8 @@ export function VideoEditorPanel() {
                     />
                     <span className="block mt-1 text-[9px] text-text-muted/70">
                       {isInterstitialTransition(clips[selectedTransitionIndex].transition)
-                        ? 'This card is inserted between clips and adds to the total duration.'
-                        : 'The preview and export clamp this automatically for very short clips.'}
+                        ? t('inspector.durationInsert')
+                        : t('inspector.durationClamp')}
                     </span>
                   </label>
                 </div>
@@ -2465,7 +2473,7 @@ export function VideoEditorPanel() {
                 }}
                 className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded border border-purple-500/30 bg-purple-500/10 text-[10px] text-purple-300 hover:bg-purple-500/20"
               >
-                <Play size={11} /> Preview this transition
+                <Play size={11} /> {t('inspector.previewTransition')}
               </button>
             </div>
           )}
@@ -2480,8 +2488,8 @@ export function VideoEditorPanel() {
                   </p>
                   <p className={`text-[9px] ${selected.has_alpha ? 'text-green-400' : 'text-text-muted'}`}>
                     {selected.has_alpha
-                      ? `Alpha channel · ${selected.pixel_format}`
-                      : `No alpha · ${selected.pixel_format}`}
+                      ? t('inspector.alpha', { format: selected.pixel_format })
+                      : t('inspector.noAlpha', { format: selected.pixel_format })}
                   </p>
                 </div>
                 <button
@@ -2560,7 +2568,7 @@ export function VideoEditorPanel() {
                 <button
                   onClick={() => patchClip(selected.id, { muted: !selected.muted })}
                   className={`p-1.5 rounded border ${selected.muted ? 'border-red-500/40 text-red-400' : 'border-border text-text-secondary'}`}
-                  title={selected.muted ? 'Unmute clip' : 'Mute clip'}
+                  title={selected.muted ? t('inspector.unmute') : t('inspector.mute')}
                 >
                   {selected.muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
                 </button>
@@ -2590,7 +2598,7 @@ export function VideoEditorPanel() {
                         : 'border-border text-text-muted hover:text-text-secondary'
                     }`}
                   >
-                    {value === 'fit' ? 'Fit · no crop' : 'Fill · crop'}
+                    {value === 'fit' ? t('inspector.fit') : t('inspector.fill')}
                   </button>
                 ))}
               </div>
@@ -2601,14 +2609,14 @@ export function VideoEditorPanel() {
                   disabled={selectedIndex <= 0}
                   className="flex-1 flex items-center justify-center gap-1 py-1 text-[10px] border border-border rounded hover:bg-bg-hover disabled:opacity-30"
                 >
-                  <ArrowUp size={11} /> Earlier
+                  <ArrowUp size={11} /> {t('actions.earlier')}
                 </button>
                 <button
                   onClick={() => reorder(selected.id, 1)}
                   disabled={selectedIndex < 0 || selectedIndex >= clips.length - 1}
                   className="flex-1 flex items-center justify-center gap-1 py-1 text-[10px] border border-border rounded hover:bg-bg-hover disabled:opacity-30"
                 >
-                  <ArrowDown size={11} /> Later
+                  <ArrowDown size={11} /> {t('actions.later')}
                 </button>
                 <button
                   onClick={() => {
@@ -2623,7 +2631,7 @@ export function VideoEditorPanel() {
                     setSelectedId(duplicate.id)
                   }}
                   className="p-1.5 border border-border rounded hover:bg-bg-hover"
-                  title="Duplicate clip"
+                  title={t('actions.duplicate')}
                 >
                   <Copy size={11} />
                 </button>

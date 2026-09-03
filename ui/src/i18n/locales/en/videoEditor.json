@@ -39,7 +39,18 @@
     "removeTitle": "Remove this video from the timeline",
     "redoInVideoCreation": "Redo in Video Creation",
     "redoInVideoCreationTitle": "Load this clip’s prompt, model, duration and format into Video Creation so you can pick its replacement afterwards",
-    "loadingGenerationSettings": "Loading generation settings…"
+    "loadingGenerationSettings": "Loading generation settings…",
+    "transition": "Transition {{n}}",
+    "duration": "Duration: {{value}}s",
+    "durationInsert": "This card is inserted between clips and adds to the total duration.",
+    "durationClamp": "The preview and export clamp this automatically for very short clips.",
+    "previewTransition": "Preview this transition",
+    "alpha": "Alpha channel · {{format}}",
+    "noAlpha": "No alpha · {{format}}",
+    "unmute": "Unmute clip",
+    "mute": "Mute clip",
+    "fit": "Fit · no crop",
+    "fill": "Fill · crop"
   },
   "timeline": {
     "aria": "Video editor timeline",
@@ -96,6 +107,8 @@
     "handoffRetry": "Could not retry the hand-off: {{message}}",
     "draftSave": "The editor draft could not be saved. The hand-off was kept for Retry.",
     "reconnectExport": "Could not reconnect to export {{jobId}}: {{message}}",
+    "comicAnimatic": "comic animatic",
+    "seriesShot": "Series shot {{n}}",
     "slotGone": "Original position {{n}} is no longer available in the montage.",
     "replaceFailed": "Could not replace clip {{n}}: {{message}}",
     "noReusableSettings": "This clip does not keep reusable generation settings.",
@@ -108,7 +121,10 @@
     "addHandoff_other": "The editor already contains {{count}} clips. Add the hand-off to this montage?"
   },
   "actions": {
-    "retryHandoff": "Retry hand-off"
+    "retryHandoff": "Retry hand-off",
+    "duplicate": "Duplicate clip",
+    "earlier": "Earlier",
+    "later": "Later"
   },
   "timeCard": {
     "default": "Moments later…",
@@ -159,6 +175,12 @@
     "hint": "Drag the handles to set the in and out points. The original video is not modified; these cuts apply only to the preview and the exported MP4.",
     "exactIn": "Exact in",
     "exactOut": "Exact out",
-    "restore": "Restore full clip"
+    "restore": "Restore full clip",
+    "nondestructive": "Non-destructive trim",
+    "keepsRemoves": "Keeps {{kept}} · removes {{removed}}",
+    "inPoint": "In point",
+    "outPoint": "Out point",
+    "inTime": "In {{time}}",
+    "outTime": "Out {{time}}"
   }
 }

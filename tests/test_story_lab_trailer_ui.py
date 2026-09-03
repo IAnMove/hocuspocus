@@ -1,5 +1,7 @@
 """Source contracts for Story Lab's cinematic trailer creator."""
 
+import json
+
 from pathlib import Path
 
 
@@ -141,9 +143,11 @@ def test_trailer_supports_text_only_direct_video_without_visual_inputs():
 def test_direct_trailer_cast_approval_does_not_require_identity_images():
     panel = PANEL.read_text(encoding="utf-8")
     approval = panel.split("const approve =", 1)[1].split("const isApproved", 1)[0]
+    catalog = json.loads(CATALOG_EN.read_text(encoding="utf-8"))
 
     assert "const requiresVisualIdentities = !directVideo" in approval
-    assert "Character descriptions approved. Direct-video mode does not require identity images." in approval
+    assert "t('notice.descriptionsApproved')" in approval
+    assert catalog["notice"]["descriptionsApproved"] == "Character descriptions approved. Direct-video mode does not require identity images."
     assert "project.projectType === 'trailer'" in panel
     assert "? trailerProductionIssues" in panel
     assert "requiresVisualIdentities={!directVideo}" in panel

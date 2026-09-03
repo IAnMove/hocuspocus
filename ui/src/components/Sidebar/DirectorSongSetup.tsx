@@ -1,5 +1,6 @@
 import { Music } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 
 // Director Music Video — "Generate a track" up-front options. The description
 // itself is typed into the bottom chat (its Send button kicks off the whole
@@ -7,6 +8,7 @@ import { useStore } from '../../stores/useStore'
 // small choices: instrumental + length. The LLM writes the Style + Lyrics
 // internally — power users who want to hand-edit those use Studio → Audio → Music.
 export function DirectorSongSetup() {
+  const { t } = useUiTranslation('director')
   const instrumental = useStore(s => s.directorSongInstrumental)
   const setInstrumental = useStore(s => s.setDirectorSongInstrumental)
   const duration = useStore(s => s.directorSongDuration)
@@ -16,7 +18,7 @@ export function DirectorSongSetup() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <label className="text-[11px] text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-          <Music size={12} /> Generate a song
+          <Music size={12} /> {t('song.title')}
         </label>
         <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-text-secondary hover:text-text-primary transition-colors">
           <input
@@ -25,14 +27,14 @@ export function DirectorSongSetup() {
             onChange={e => setInstrumental(e.target.checked)}
             className="accent-accent-blue"
           />
-          Instrumental
+          {t('song.instrumental')}
         </label>
       </div>
 
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-[11px] text-text-muted uppercase tracking-wider">Length</label>
-          <span className="text-[10px] text-text-secondary tabular-nums">{duration}s</span>
+          <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('song.length')}</label>
+          <span className="text-[10px] text-text-secondary tabular-nums">{t('song.duration', { count: duration })}</span>
         </div>
         <input
           type="range"
@@ -46,9 +48,7 @@ export function DirectorSongSetup() {
       </div>
 
       <p className="text-[10px] text-text-muted leading-snug">
-        Describe your music video in the box below and hit Generate — the song
-        {instrumental ? '' : ' + lyrics'} is written for you, then the full video is
-        produced. For hands-on control of style and lyrics, use Studio → Audio → Music.
+        {instrumental ? t('song.hintInstrumental') : t('song.hint')}
       </p>
     </div>
   )

@@ -1,0 +1,309 @@
+{
+  "library": {
+    "title": "Cutout characters",
+    "subtitle": "A character is a body + mouths placed on top. This is not Character Creator (that is the 3D turnaround).",
+    "savedCount_zero": "empty",
+    "savedCount_one": "{{count}} saved",
+    "savedCount_other": "{{count}} saved",
+    "bodyCount_one": "{{count}} body",
+    "bodyCount_other": "{{count}} bodies",
+    "newHint": "For a new character: select its drawing on the canvas, name it, and create it.",
+    "namePlaceholder": "Name, for example Luma",
+    "createFromSelected": "New character from the selected drawing",
+    "now": "Now: {{title}}",
+    "goToTab": "Go to {{tab}}",
+    "nameAria": "Character name",
+    "styleAria": "Character style",
+    "styles": {
+      "cutout": "Cutout",
+      "childrenIllustration": "Children’s",
+      "anime2d": "Anime 2D"
+    },
+    "editingBody": "Body you are editing",
+    "ready": "ready",
+    "pending": "pending",
+    "tabs": {
+      "bodies": "Bodies",
+      "mouthsEyes": "Mouths and eyes"
+    },
+    "advanced": {
+      "summary": "Advanced: use a canvas layer",
+      "hint": "Only if the drawing is already in the scene. Select it and assign it. The normal path is to generate or clean in Mouths and eyes.",
+      "mainBody": "Main body",
+      "otherPose": "Other pose ({{pose}})",
+      "mouthTypeAria": "Mouth type",
+      "thisLayerMouth": "This layer is a mouth",
+      "thisLayerBlink": "This layer is a blink",
+      "saveLayerPosition": "Save the selected layer position",
+      "alphaWhenAssigning": "Transparency when assigning"
+    },
+    "saving": "Saving…",
+    "putOnScene": "Put on the scene",
+    "deleteTitle": "Delete only the card, not the files",
+    "loading": "Loading characters…"
+  },
+  "poses": {
+    "base": "Standing",
+    "pointing": "Pointing",
+    "reaction": "Reaction"
+  },
+  "mouths": {
+    "closed": "Closed",
+    "small": "Small",
+    "wide": "Open",
+    "round": "Round"
+  },
+  "alpha": {
+    "transparent": "Transparent",
+    "unknown": "Not reviewed",
+    "opaque": "Opaque"
+  },
+  "review": {
+    "pending": "pending",
+    "approved": "approved",
+    "rejected": "rejected",
+    "missing": "missing"
+  },
+  "guide": {
+    "pickCharacter": {
+      "title": "Pick a character",
+      "detail": "Press Luma or Brin. That opens their body and the mouths they already have."
+    },
+    "missingBody": {
+      "title": "A body is missing",
+      "detail": "This character does not have the “{{pose}}” pose. Generate a body cutout or use a drawing from the canvas."
+    },
+    "approveBody": {
+      "title": "Approve the “{{pose}}” body",
+      "detail": "Without an approved body you cannot place mouths or put it on the scene."
+    },
+    "wipeMouth": {
+      "title": "Place the box over the lips",
+      "detail": "On “{{pose}}”, drag the yellow box until it covers the mouth. If the drawing still has painted lips, press Wipe mouth area. If it is already clean, press Lock mouths and then Save."
+    },
+    "makeMouths": {
+      "title": "Make or approve the mouths",
+      "detail": "You need at least a closed mouth and one open mouth. Generate the missing ones, place them on the lips, and approve the transparent ones."
+    },
+    "putOnScene": {
+      "title": "Put it on the scene",
+      "detail": "“{{name}} · {{pose}}” already has a body and mouths. Press Put on the scene. Then use Cutout dialogue so it can speak."
+    }
+  },
+  "faceRig": {
+    "mouthsOnPose": "Mouths on “{{pose}}”",
+    "steps": {
+      "box": "Drag the yellow box until it covers the lips. It saves when you release.",
+      "wipe": "If the drawing still has a painted mouth, press Wipe mouth area.",
+      "eyes": "Open eyes stay on; Close eyes only blinks on top. If the body already has eyes, generate only Close eyes.",
+      "scene": "Put on the scene and Preview. The mouth and blink animate on their own."
+    },
+    "createNew": {
+      "summary": "Create a new body or mouths",
+      "hint": "Style and traits are only for generation. Luma and Brin already exist: you do not need this to place their mouth."
+    },
+    "styles": {
+      "paper-cut": "Paper cut",
+      "plasticine": "Plasticine",
+      "cartoon": "Cartoon",
+      "watercolor": "Watercolor",
+      "comic-ink": "Comic ink",
+      "felt-puppet": "Felt puppet",
+      "limited-anime": "Limited anime",
+      "children-illustration": "Children’s illustration"
+    },
+    "traits": {
+      "afro hair": "Afro hair",
+      "braids": "Braids",
+      "pigtails": "Pigtails",
+      "beanie": "Beanie",
+      "round glasses": "Round glasses",
+      "goggles": "Goggles",
+      "freckles": "Freckles",
+      "dark skin": "Dark skin",
+      "pale skin": "Pale skin",
+      "winter coat": "Winter coat",
+      "school uniform": "School uniform"
+    },
+    "extraNotes": "Extra notes (optional)",
+    "extraNotesPlaceholder": "Only what the tags do not cover…",
+    "generatingBody": "Generating body…",
+    "regenerateBody": "Regenerate body (stays pending)",
+    "generateBody": "Generate body cutout",
+    "mouthPackAria": "Mouth style pack",
+    "usePack": "Use pack",
+    "poseAlt": "{{name}} pose",
+    "overlayAlt": "{{name}} {{state}} overlay",
+    "dragBoxHint": "Drag the box. The corner changes the size.",
+    "wiping": "Wiping…",
+    "wipeMouth": "Wipe mouth area",
+    "lockMouths": "Lock mouths",
+    "states": {
+      "closed": "Closed",
+      "small": "Small",
+      "wide": "Open",
+      "round": "Round",
+      "open-eyes": "Eyes",
+      "blink": "Close eyes"
+    },
+    "promptUsed": "Prompt used for {{name}}",
+    "cleaningCutout": "Cleaning cutout…",
+    "cleanMouthBackground": "Clean this mouth’s background",
+    "hideMouth": "Hide mouth",
+    "showMouth": "Show mouth",
+    "solidBackground": "Solid background",
+    "checkerboard": "Checkerboard",
+    "nudge": {
+      "up": "Up",
+      "down": "Down",
+      "left": "Left",
+      "right": "Right",
+      "smaller": "Smaller",
+      "bigger": "Bigger"
+    },
+    "fields": {
+      "x": "X",
+      "y": "Y (down →)",
+      "scale": "Scale",
+      "rotate": "Rotate"
+    },
+    "readout": "x {{x}} · y {{y}} · scale {{scale}} · rot {{rot}}°",
+    "saveMouth": "Save this mouth",
+    "reset": "Reset",
+    "flashBlink": "Flash blink 0.4s",
+    "blinking": "Blinking…",
+    "approveTransparent": "Approve transparent",
+    "reject": "Reject",
+    "generatingNamed": "Generating {{name}}…",
+    "generateNamed": "Generate / replace {{name}}",
+    "generatingPack": "Generating pack…",
+    "generateMissing": "Generate the missing ones",
+    "tryLine": {
+      "sample": "The square is frozen and the bell is too loud.",
+      "summary": "Try a line (not saved)",
+      "planMouths": "See mouth rhythm",
+      "speak": "Speak 3 s",
+      "generatingVoice": "Generating voice…",
+      "beats": "{{count}} beats · {{duration}}s · available {{available}}",
+      "none": "none",
+      "missing": "Missing {{missing}}; those beats use {{fallback}} as fallback.",
+      "remainingMouth": "the remaining mouth",
+      "playMouths": "Play mouths"
+    },
+    "unsavedHint": "Until you press Save, changes are not in the library. The LLM does not see pending pieces.",
+    "status": {
+      "bodyGenerated": "Body “{{pose}}” generated. Approve it under Bodies, then place the mouths.",
+      "statePending": "{{name}} is ready as pending. Drag it onto the lips and press Lock mouths.",
+      "generatingState": "Generating Face Rig {{name}}…",
+      "packGenerated": "Generated {{count}} Face Rig states. Review transparency and placement before approval.",
+      "cleaned": "{{name}} cleaned as {{status}}. It stays pending until you approve the placement.",
+      "planned": "Planned {{count}} visemes over {{duration}}s. Missing mouths stay as fallbacks and are not saved.",
+      "speechReady": "Preview speech ready with {{count}} visemes. Nothing was saved to the kit.",
+      "presetApplied": "Applied {{name}} as pending Face Rig mouths. Check placement before approval.",
+      "eyesSaved": "Eyes saved on “{{pose}}”.",
+      "mouthSaved": "Mouth saved on “{{pose}}”. Preview should already move it.",
+      "wiped": "Painted mouth cleaned on “{{pose}}”. The box is already saved.",
+      "reviewed": "{{name}} {{result}}. Save the kit to publish this review.",
+      "approved": "approved as transparent",
+      "rejected": "rejected"
+    },
+    "errors": {
+      "inspectAlpha": "Could not inspect the generated image alpha channel.",
+      "inspectBrowser": "This browser cannot inspect image transparency.",
+      "packComplete": "Every piece is already there. Generate a selected one to replace it.",
+      "cleanBeforeGenerate": "Generate {{name}} before cleaning it.",
+      "writeLine": "Write a short test line first.",
+      "choosePack": "Choose a mouth style pack first.",
+      "approvePoseBeforeWipe": "Approve a pose before cleaning its mouth zone.",
+      "loadPose": "Could not load the pose image.",
+      "editPose": "This browser cannot edit the pose image.",
+      "encodeWiped": "Could not encode the wiped pose.",
+      "blinkFirst": "Generate a blink overlay first, then flash it to check the eyes.",
+      "approvalBlocked": "Approval is blocked: this output does not contain a verified transparent alpha channel.",
+      "poseFailed": "Character pose generation failed.",
+      "generateFailed": "Face Rig generation failed.",
+      "packFailed": "Face Rig pack generation failed.",
+      "cleanupFailed": "Face Rig cleanup failed.",
+      "planFailed": "Could not plan this Face Rig line.",
+      "speechFailed": "Face Rig speech preview failed.",
+      "applyPackFailed": "Could not apply this mouth pack.",
+      "savePlacementFailed": "Could not save this Face Rig placement.",
+      "wipeFailed": "Could not wipe the mouth zone.",
+      "reviewFailed": "Could not review this Face Rig state."
+    },
+    "warnings": {
+      "farFromCenter": "This overlay sits far from the pose center and may miss the face.",
+      "tooSmall": "This overlay is unusually small compared with the pose.",
+      "eyeTooLarge": "This eye overlay is larger than a typical eye mask. Scale it down until it only covers the eyes.",
+      "mouthTooLarge": "This mouth overlay is larger than a typical viseme. Scale it down until it sits on the lips.",
+      "mouthTooLow": "Mouths on a full-body cutout usually sit above the chest. Nudge Down/Up until the overlay covers the lips, then lock all mouths."
+    }
+  },
+  "creator": {
+    "title": "Character Creator",
+    "subtitle": "3D turnaround: upload a photo. MiniMax or the internal LLM describe the subject if you leave the A Prompt empty. You get a 360 video and, if you want, a Hunyuan mesh. This is not the 2D Face Rig puppet.",
+    "openFaceRig": "Create / open CharacterKit Face Rig",
+    "history": "History in this Workspace",
+    "kind": {
+      "character": "Character",
+      "object": "Object"
+    },
+    "subjectImage": "Main subject image",
+    "objectImage": "Main object image",
+    "subjectHint": "Required. One is enough. MiniMax reads the photo and writes the A Prompt.",
+    "extraRef": "Extra reference {{index}}",
+    "extraHint": "Optional. Face, outfit, accessory, or another angle.",
+    "addOptionalRef": "Add optional reference",
+    "hideAPrompt": "Hide A Prompt",
+    "optionalAPrompt": "Optional A Prompt",
+    "aPromptPlaceholder": "Empty = MiniMax or the internal LLM describe the photos. Other providers require an A Prompt.",
+    "engineNote": "Isolated ConvRot Character Sheet engine · Native Turbo off to keep the 6-panel orbit.",
+    "engineMeta": "{{model}} · {{resolution}} 9:16 · {{frames}} frames · grabs {{grabs}}",
+    "orbitGenerate": "Generate 360 orbit",
+    "takePhotos": "Take photo · 4 views",
+    "hunyuanGenerate": "Generate Hunyuan3D",
+    "emptyOrbit": "Upload at least one image and generate the orbit",
+    "adjustCapture": "Adjust capture: {{label}}",
+    "adjustHint": "Pick a moment in the video and replace only this view.",
+    "captureTimeAria": "Capture time",
+    "replaceView": "Take image and replace view",
+    "noPhoto": "No photo",
+    "selectViewAria": "Select {{label}} view",
+    "hunyuanAlt": "Hunyuan3D",
+    "dropOrChoose": "Drop or choose an image",
+    "removeRefAria": "Remove {{label}}",
+    "roles": {
+      "extra": "Another angle / detail",
+      "face": "Face only",
+      "outfit": "Outfit only",
+      "accessory": "Accessory / extra object"
+    },
+    "views": {
+      "front": "Front",
+      "left": "Left",
+      "back": "Back",
+      "right": "Right"
+    },
+    "objectViews": {
+      "front": "Front",
+      "left": "Left",
+      "back": "Rear",
+      "right": "Right"
+    },
+    "status": {
+      "minimaxDescribe": "MiniMax is describing the image…",
+      "llmDescribe": "The internal LLM is describing the image…",
+      "orbitQueued": "H3 orbit queued…",
+      "hunyuanQueued": "Hunyuan3D queued…"
+    },
+    "errors": {
+      "autoDescribe": "Auto-describe only works with MiniMax or the internal LLM. Type an A Prompt, or switch Settings → LLM.",
+      "faceRigKitsOnly": "Face Rig is for Character Kits. Keep Character Creator for identity and turnaround sheets.",
+      "needViewOrUpload": "Capture a turnaround view or upload the subject image first.",
+      "orbitFailed": "Orbit failed",
+      "orbitCancelled": "Orbit cancelled",
+      "hunyuanFailed": "Hunyuan3D failed",
+      "hunyuanCancelled": "Hunyuan3D cancelled"
+    }
+  }
+}

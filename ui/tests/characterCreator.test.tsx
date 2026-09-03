@@ -204,17 +204,17 @@ test('Character Creator captures 4 stills before Hunyuan, from one image', async
   })
   try {
     render(<CharacterCreatorPanel />)
-    assert.ok(screen.getByRole('button', { name: 'Objeto' }))
-    assert.ok(screen.getByRole('button', { name: /Generar órbita 360/ }))
-    assert.equal((screen.getByRole('button', { name: /Generar órbita 360/ }) as HTMLButtonElement).disabled, true)
-    const hunyuan = screen.getByRole('button', { name: /Generar Hunyuan3D/ }) as HTMLButtonElement
+    assert.ok(screen.getByRole('button', { name: 'Object' }))
+    assert.ok(screen.getByRole('button', { name: /Generate 360 orbit/ }))
+    assert.equal((screen.getByRole('button', { name: /Generate 360 orbit/ }) as HTMLButtonElement).disabled, true)
+    const hunyuan = screen.getByRole('button', { name: /Generate Hunyuan3D/ }) as HTMLButtonElement
     assert.equal(hunyuan.disabled, true)
-    assert.ok(screen.getByText(/MiniMax o el LLM interno describen/i))
-    assert.ok(screen.getByText(/Turnaround 3D/i))
-    assert.ok(screen.getByText(/No es el puppet 2D de Face Rig/i))
+    assert.ok(screen.getByText(/MiniMax or the internal LLM describe/i))
+    assert.ok(screen.getByText(/3D turnaround/i))
+    assert.ok(screen.getByText(/not the 2D Face Rig puppet/i))
     assert.ok(screen.getByRole('button', { name: /Create \/ open CharacterKit Face Rig/ }))
-    assert.ok(screen.getByRole('button', { name: /A Prompt opcional/ }))
-    assert.ok(screen.getByText(/Turbo nativo desactivado/i))
+    assert.ok(screen.getByRole('button', { name: /Optional A Prompt/ }))
+    assert.ok(screen.getByText(/Native Turbo off/i))
   assert.ok(screen.getByText(/grabs 2 \/ 21 \/ 42 \/ 63/))
   } finally {
     cleanup()

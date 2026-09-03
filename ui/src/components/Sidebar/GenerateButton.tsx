@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Play, AlertTriangle } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { splitPromptSchedule } from '../../lib/promptScheduler'
 import { newUserGenerationContext } from '../../features/studio/generationProvenance'
 
 export function GenerateButton() {
+  const { t } = useUiTranslation('studio')
+  const { t: tCommon } = useUiTranslation('common')
   const jobs = useStore(s => s.jobs)
   const startGeneration = useStore(s => s.startGeneration)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
@@ -63,18 +66,18 @@ export function GenerateButton() {
 
   if (blocked) {
     const label = needsImage
-      ? 'Need image'
+      ? t('generate.needImage')
       : needsReference
-        ? 'Need reference'
+        ? t('generate.needReference')
       : needsOutpaintSource
-        ? 'Need source'
+        ? t('generate.needSource')
       : needsOutpaintArea
-        ? 'Choose canvas'
-        : 'Add prompt'
+        ? t('generate.chooseCanvas')
+        : t('generate.addPrompt')
     const title = needsOutpaintArea
-      ? 'Choose a larger output aspect or resize the source to create an area for Outpaint to generate.'
+      ? t('generate.outpaintAreaHint')
       : needsReference
-        ? 'Add at least one image or video reference. Audio cannot be the only reference.'
+        ? t('generate.referenceHint')
         : undefined
     return (
       <button
@@ -105,12 +108,12 @@ export function GenerateButton() {
     >
       <Play size={13} fill={cooldown || needsScheduledPrompts ? 'currentColor' : 'white'} />
       {needsScheduledPrompts
-        ? 'Add prompts'
+        ? t('generate.addPrompts')
         : cooldown
-          ? scheduledVideoCount > 1 ? `${scheduledVideoCount} queued` : 'Queued'
+          ? scheduledVideoCount > 1 ? t('generate.queuedCount', { count: scheduledVideoCount }) : tCommon('status.queued')
           : scheduledVideoCount > 1
-            ? `Queue ${scheduledVideoCount}`
-            : queueCount > 0 ? `Go (${queueCount})` : 'Generate'}
+            ? t('generate.queueCount', { count: scheduledVideoCount })
+            : queueCount > 0 ? t('generate.goCount', { count: queueCount }) : tCommon('actions.generate')}
     </button>
   )
 }

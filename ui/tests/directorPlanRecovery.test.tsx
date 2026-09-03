@@ -57,6 +57,31 @@ test('partial-plan card explains saved work and resumes only missing clips', { c
         onResume={() => { resumed += 1 }}
       />,
     )
+    assert.ok(screen.getByRole('heading', { name: 'Recoverable partial proposal' }))
+    assert.match(screen.getByText(/24 of 41 clips/).textContent || '', /No image generation has started/)
+    assert.equal(screen.getByText('Clips 25–41').textContent, 'Clips 25–41')
+    assert.equal(screen.getByText('12,345').textContent, '12,345')
+    fireEvent.click(screen.getByRole('button', { name: 'Resume missing clips' }))
+    assert.equal(resumed, 1)
+  } finally {
+    cleanup()
+  }
+})
+
+test('partial-plan card uses the Spanish director catalog', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { setUiLanguage } = await import('../src/i18n/index.ts')
+  const { DirectorPlanRecoveryCard } = await import('../src/components/Sidebar/DirectorPlanRecoveryCard.tsx')
+  let resumed = 0
+  await setUiLanguage('es')
+  try {
+    render(
+      <DirectorPlanRecoveryCard
+        job={recoverableJob()}
+        loading={false}
+        onResume={() => { resumed += 1 }}
+      />,
+    )
     assert.ok(screen.getByRole('heading', { name: 'Propuesta parcial recuperable' }))
     assert.match(screen.getByText(/24 de 41 clips/).textContent || '', /No se ha iniciado ninguna generación de imágenes/)
     assert.equal(screen.getByText('Clips 25–41').textContent, 'Clips 25–41')
@@ -65,6 +90,7 @@ test('partial-plan card explains saved work and resumes only missing clips', { c
     assert.equal(resumed, 1)
   } finally {
     cleanup()
+    await setUiLanguage('en')
   }
 })
 

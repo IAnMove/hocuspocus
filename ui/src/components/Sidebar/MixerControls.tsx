@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, Play, ArrowRight } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { FileUploadZone } from '../shared/FileUploadZone'
 import * as api from '../../api/client'
 
@@ -34,6 +35,8 @@ function getAudioDuration(file: File): Promise<number | null> {
 }
 
 export function MixerControls() {
+  const { t } = useUiTranslation('studio')
+  const { t: tCommon } = useUiTranslation('common')
   const setParam = useStore(s => s.setParam)
   const setAudioGuideFilename = useStore(s => s.setAudioGuideFilename)
   const setGenerationMode = useStore(s => s.setGenerationMode)
@@ -116,10 +119,10 @@ export function MixerControls() {
       {/* Base Track */}
       <div>
         <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-          Base Track <span className="normal-case text-text-muted">(full duration)</span>
+          {t('mixer.base')} <span className="normal-case text-text-muted">({t('mixer.fullDuration')})</span>
         </label>
         <FileUploadZone
-          label="Drop base audio (.wav, .mp3)"
+          label={t('mixer.dropBase')}
           accept=".wav,.mp3,.flac,.ogg,.m4a"
           filename={baseTrack.filename}
           onFile={f => handleFileUpload(f, baseTrack, setBaseTrack)}
@@ -129,7 +132,7 @@ export function MixerControls() {
           <div className="flex items-center gap-3 mt-1.5">
             <div className="flex-1">
               <div className="flex items-center justify-between">
-                <span className="text-[9px] text-text-muted">Volume</span>
+                <span className="text-[9px] text-text-muted">{t('mixer.volume')}</span>
                 <span className="text-[9px] text-text-muted">{baseTrack.volume}%</span>
               </div>
               <input type="range" min={0} max={100} step={1}
@@ -149,19 +152,19 @@ export function MixerControls() {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-[11px] text-text-muted uppercase tracking-wider">
-            Overlay Tracks
+            {t('mixer.overlays')}
           </label>
           <button
             onClick={() => setOverlays(prev => [...prev, { ...emptyTrack(), volume: 30 }])}
             className="flex items-center gap-1 text-[10px] text-accent-blue hover:text-accent-blue/80 transition-colors"
           >
-            <Plus size={11} /> Add
+            <Plus size={11} /> {tCommon('actions.add')}
           </button>
         </div>
 
         {overlays.length === 0 && (
           <p className="text-[9px] text-text-muted text-center py-2">
-            Add overlay tracks (SFX, ambience) to layer on top of the base track.
+            {t('mixer.emptyOverlays')}
           </p>
         )}
 
@@ -173,7 +176,7 @@ export function MixerControls() {
                 <div className="flex-1 min-w-0">
                   {!track.path ? (
                     <FileUploadZone
-                      label="Drop audio"
+                      label={t('mixer.dropAudio')}
                       accept=".wav,.mp3,.flac,.ogg,.m4a"
                       filename={track.filename}
                       onFile={f => handleFileUpload(f, track, t => updateOverlay(track.id, t))}
@@ -200,7 +203,7 @@ export function MixerControls() {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-text-muted">Start</span>
+                      <span className="text-[9px] text-text-muted">{t('mixer.start')}</span>
                       <span className="text-[9px] text-text-muted">{track.startTime}s</span>
                     </div>
                     <input type="number" min={0} step={0.1}
@@ -211,7 +214,7 @@ export function MixerControls() {
                   </div>
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-text-muted">Volume</span>
+                      <span className="text-[9px] text-text-muted">{t('mixer.volume')}</span>
                       <span className="text-[9px] text-text-muted">{track.volume}%</span>
                     </div>
                     <input type="range" min={0} max={100} step={1}
@@ -230,7 +233,7 @@ export function MixerControls() {
       {/* Duration summary */}
       {canMix && (
         <div className="text-[10px] text-text-muted text-center">
-          Total duration: ~{totalDuration()}s
+          {t('mixer.total', { duration: totalDuration() })}
         </div>
       )}
 
@@ -242,7 +245,7 @@ export function MixerControls() {
           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs border border-border bg-bg-tertiary text-text-secondary hover:text-text-primary hover:border-border-light transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Play size={12} />
-          {mixing ? 'Mixing...' : 'Mix & Save'}
+          {mixing ? t('mixer.mixing') : t('mixer.mixSave')}
         </button>
         <button
           onClick={() => doMix(true)}
@@ -250,14 +253,14 @@ export function MixerControls() {
           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <ArrowRight size={12} />
-          {mixing ? 'Mixing...' : 'Mix & Use as Guide'}
+          {mixing ? t('mixer.mixing') : t('mixer.mixGuide')}
         </button>
       </div>
 
       {/* Result / Error */}
       {mixResult && (
         <div className="text-[10px] text-indicator-success bg-green-500/10 border border-green-500/20 rounded px-2 py-1.5">
-          Saved: {mixResult}
+          {t('mixer.saved', { name: mixResult })}
         </div>
       )}
       {error && (

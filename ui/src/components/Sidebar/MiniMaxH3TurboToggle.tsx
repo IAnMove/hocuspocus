@@ -1,9 +1,11 @@
 import { AlertTriangle, Zap } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { InfoTooltip } from './InfoTooltip'
 
 /** Compact, reproducible preset for Maestro's managed H3 Turbo adapter. */
 export function MiniMaxH3TurboToggle() {
+  const { t } = useUiTranslation('studio')
   const option = useStore(s => s.modelOptions?.minimax_h3_turbo)
   const advisory = useStore(s => s.modelOptions?.minimax_h3_runtime_advisory)
   const enabled = useStore(s => s.params.minimax_h3_turbo_mode === true)
@@ -78,7 +80,7 @@ export function MiniMaxH3TurboToggle() {
                   onClick={useRecommendedPrunedTurbo}
                   className="mt-2 rounded-md bg-amber-500/20 px-2 py-1 text-[10px] font-medium text-indicator-warning transition-colors hover:bg-amber-500/30"
                 >
-                  Use Pruned Turbo
+                  {t('h3Turbo.usePruned')}
                 </button>
               )}
             </div>
@@ -106,15 +108,15 @@ export function MiniMaxH3TurboToggle() {
               </span>
               {option.experimental && (
                 <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-indicator-warning">
-                  Experimental
+                  {t('chrome.experimental')}
                 </span>
               )}
             </label>
-            <InfoTooltip label="About H3 Turbo mode" text={option.guide} />
+            <InfoTooltip label={t('h3Turbo.about')} text={option.guide} />
           </div>
           {enabled && (
             <p className="mt-1.5 text-[9px] leading-relaxed text-indicator-warning">
-              Speed preset: prompt/style fidelity can drop. Disable Turbo and use the normal 20 steps for maximum quality.
+              {t('h3Turbo.speedWarning')}
             </p>
           )}
         </div>

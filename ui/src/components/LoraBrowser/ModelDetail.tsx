@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { ArrowLeft, Download, Tag, Loader2, Check, ExternalLink, KeyRound, Boxes } from 'lucide-react'
 import DOMPurify from 'dompurify'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { fetchLoraDirectories, fetchCheckpointArchitectures } from '../../api/client'
 import type { CheckpointArchitecture } from '../../api/client'
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
+  const { t } = useUiTranslation('settings')
   const isCheckpoint = kind === 'checkpoint'
   const startDownload = useStore(s => s.startCivitAIDownload)
   const downloads = useStore(s => s.civitDownloads)
@@ -159,7 +161,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
         <div className="flex-1 min-w-0">
           <h2 className="text-sm font-semibold text-text-primary truncate">{model.name}</h2>
           <div className="text-[10px] text-text-muted">
-            by {model.creator?.username || 'Unknown'}
+            {t('loraBrowser.byCreator', { name: model.creator?.username || t('loraBrowser.unknownCreator') })}
             {model.type && <span className="ml-1.5 text-accent-blue">{model.type}</span>}
           </div>
         </div>
@@ -168,7 +170,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           target="_blank"
           rel="noopener noreferrer"
           className="p-1.5 rounded-lg hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors"
-          title="Open on CivitAI"
+          title={t('loraBrowser.openOnCivitai')}
         >
           <ExternalLink size={14} />
         </a>
@@ -194,7 +196,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           {/* Version selector */}
           {versions.length > 1 && (
             <div>
-              <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">Version</label>
+              <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">{t('loraBrowser.version')}</label>
               <select
                 value={selectedVersionIdx}
                 onChange={e => { setSelectedVersionIdx(Number(e.target.value)); setSelectedFileIdx(0) }}
@@ -212,7 +214,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           {/* File selector */}
           {files.length > 1 && (
             <div>
-              <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">File</label>
+              <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">{t('loraBrowser.file')}</label>
               <select
                 value={selectedFileIdx}
                 onChange={e => setSelectedFileIdx(Number(e.target.value))}
@@ -237,12 +239,12 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
             )}
             {!isCheckpoint && localArch && (
               <span className="text-[10px] px-2 py-1 rounded bg-accent-blue/10 text-accent-blue">
-                Target: {localArch}
+                {t('loraBrowser.target', { arch: localArch })}
               </span>
             )}
             {!isCheckpoint && !localArch && version && (
               <span className="text-[10px] px-2 py-1 rounded bg-amber-500/10 text-indicator-warning">
-                Unknown architecture
+                {t('loraBrowser.unknownArch')}
               </span>
             )}
             {file && (
@@ -257,7 +259,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
             <div>
               <div className="flex items-center gap-1 mb-1.5">
                 <Tag size={11} className="text-text-muted" />
-                <span className="text-[11px] text-text-muted uppercase tracking-wider">Trigger Words</span>
+                <span className="text-[11px] text-text-muted uppercase tracking-wider">{t('loraBrowser.triggerWords')}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {trainedWords.map(word => (
@@ -275,7 +277,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           {/* Description */}
           {sanitizedDescription && (
             <div>
-              <div className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5">Description</div>
+              <div className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5">{t('loraBrowser.description')}</div>
               <div
                 className="text-xs text-text-secondary leading-relaxed max-h-[200px] overflow-y-auto bg-bg-active rounded-lg px-3 py-2 border border-border prose-sm"
                 dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
@@ -287,14 +289,14 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           {isCheckpoint ? (
             <div>
               <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                <Boxes size={12} /> Import as model
+                <Boxes size={12} /> {t('loraBrowser.importAsModel')}
               </label>
               <select
                 value={targetArchitecture}
                 onChange={e => setTargetArchitecture(e.target.value)}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
               >
-                <option value="">Select base architecture…</option>
+                <option value="">{t('loraBrowser.selectArchitecture')}</option>
                 {Object.entries(groupedArchs).map(([family, list]) => (
                   <optgroup key={family} label={family}>
                     {list.map(a => (
@@ -304,20 +306,19 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
                 ))}
               </select>
               <p className="text-[10px] text-text-muted mt-1 leading-snug">
-                The base model this checkpoint was trained for{baseModel ? ` (CivitAI base: ${baseModel})` : ''}.
-                It'll be registered as a new selectable model.
+                {t('loraBrowser.importHint', { base: baseModel ? t('loraBrowser.civitaiBase', { base: baseModel }) : '' })}
               </p>
             </div>
           ) : (
             loraDirs.length > 0 && (
               <div>
-                <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">Save to Directory</label>
+                <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">{t('loraBrowser.saveToDirectory')}</label>
                 <select
                   value={targetDirOverride}
                   onChange={e => setTargetDirOverride(e.target.value)}
                   className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
                 >
-                  <option value="">Auto ({localArch || 'loras'})</option>
+                  <option value="">{t('loraBrowser.autoDir', { dir: localArch || 'loras' })}</option>
                   {loraDirs.map(d => (
                     <option key={d} value={d}>{d}</option>
                   ))}
@@ -336,10 +337,10 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
                 className="w-3.5 h-3.5 rounded accent-accent-blue mt-0.5"
               />
               <span className="text-[11px] text-text-secondary leading-snug">
-                Optimize VRAM (load as int8)
+                {t('loraBrowser.optimizeVram')}
                 <span className="block text-[10px] text-text-muted">
-                  Recommended for large checkpoints — runs at roughly half the VRAM with minimal quality loss.
-                  {fileBytes > 0 ? ` File: ${formatBytes(fileBytes)}.` : ''}
+                  {t('loraBrowser.optimizeHint')}
+                  {fileBytes > 0 ? t('loraBrowser.fileSize', { size: formatBytes(fileBytes) }) : ''}
                 </span>
               </span>
             </label>
@@ -352,9 +353,9 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-text-secondary">
                     {activeDownload.status === 'completed' ? (
-                      <span className="flex items-center gap-1 text-accent-green"><Check size={12} /> {isCheckpoint ? 'Imported — added to models' : 'Downloaded'}</span>
+                      <span className="flex items-center gap-1 text-accent-green"><Check size={12} /> {isCheckpoint ? t('loraBrowser.imported') : t('loraBrowser.downloaded')}</span>
                     ) : (
-                      <span className="flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Downloading...</span>
+                      <span className="flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> {t('loraBrowser.downloading')}</span>
                     )}
                   </span>
                   {activeDownload.status === 'downloading' && (
@@ -388,7 +389,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
               <>
                 {activeDownload?.status === 'failed' && (
                   <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-[11px] text-red-400 leading-snug">
-                    Failed: {activeDownload.error || 'Download failed'}. You can retry below.
+                    {t('loraBrowser.failedRetry', { error: activeDownload.error || t('loraBrowser.downloadFailed') })}
                   </div>
                 )}
                 {/* Inline API-key advisory shown only when no key is set.
@@ -402,22 +403,21 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
                   <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-text-primary leading-snug">
                     <KeyRound size={12} className="text-indicator-warning shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      No CivitAI API key set. Most NSFW or restricted LoRAs
-                      will fail to download.{' '}
+                      {t('loraBrowser.noKeyInline')}{' '}
                       <a
                         href="https://civitai.com/user/account"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-indicator-warning underline decoration-indicator-warning/40 hover:decoration-indicator-warning hover:text-indicator-warning/80"
                       >
-                        Get a key
+                        {t('loraBrowser.getAKey')}
                       </a>
                       {' '}then{' '}
                       <button
                         onClick={goToCivitaiKeySettings}
                         className="text-indicator-warning underline decoration-indicator-warning/40 hover:decoration-indicator-warning hover:text-indicator-warning/80"
                       >
-                        paste it in Settings
+                        {t('loraBrowser.pasteInSettings')}
                       </button>.
                     </div>
                   </div>
@@ -429,10 +429,10 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
                 >
                   <Download size={14} />
                   {activeDownload?.status === 'failed'
-                    ? `Retry ${file?.name || (isCheckpoint ? 'checkpoint' : 'LoRA')}`
+                    ? t('loraBrowser.retryNamed', { name: file?.name || (isCheckpoint ? t('loraBrowser.checkpoint') : 'LoRA') })
                     : isCheckpoint
-                      ? `Import ${file?.name || 'checkpoint'}`
-                      : `Download ${file?.name || 'LoRA'}`}
+                      ? t('loraBrowser.importNamed', { name: file?.name || t('loraBrowser.checkpoint') })
+                      : t('loraBrowser.downloadNamed', { name: file?.name || 'LoRA' })}
                 </button>
               </>
             )}

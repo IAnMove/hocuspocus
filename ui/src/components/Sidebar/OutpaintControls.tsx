@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Upload, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { VideoTimelineSelector } from '../shared/VideoTimelineSelector'
 import { OutpaintCanvas } from './OutpaintCanvas'
 import * as api from '../../api/client'
@@ -28,16 +29,17 @@ import * as api from '../../api/client'
  */
 
 const QUALITY_OPTIONS = [
-  { v: 'auto', label: 'Auto', hint: 'Native source resolution after padding' },
-  { v: '480p', label: '480p', hint: 'Lowest VRAM' },
-  { v: '540p', label: '540p', hint: 'Lower VRAM' },
-  { v: '720p', label: '720p', hint: '' },
-  { v: '1080p', label: '1080p', hint: 'Highest quality' },
+  { v: 'auto', labelKey: 'outpaint.auto', hintKey: 'outpaint.autoHint' },
+  { v: '480p', label: '480p', hintKey: 'outpaint.p480' },
+  { v: '540p', label: '540p', hintKey: 'outpaint.p540' },
+  { v: '720p', label: '720p', hintKey: '' },
+  { v: '1080p', label: '1080p', hintKey: 'outpaint.p1080' },
 ] as const
 
 type Quality = (typeof QUALITY_OPTIONS)[number]['v']
 
 export function OutpaintControls() {
+  const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoUrl = useStore(s => s.editVideoUrl)
   const editVideoDuration = useStore(s => s.editVideoDuration)
@@ -150,8 +152,8 @@ export function OutpaintControls() {
           className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-accent-blue transition-colors"
         >
           <Upload size={24} className="mx-auto mb-2 text-text-muted" />
-          <p className="text-xs text-text-secondary">Drop a video or image to outpaint</p>
-          <p className="text-[10px] text-text-muted mt-1">or click to browse</p>
+          <p className="text-xs text-text-secondary">{t('outpaint.drop')}</p>
+          <p className="text-[10px] text-text-muted mt-1">{t('chrome.orBrowse')}</p>
           <input
             ref={fileRef}
             type="file"
@@ -171,7 +173,7 @@ export function OutpaintControls() {
             <button
               onClick={() => clearEditVideo()}
               className="shrink-0 p-1 rounded text-text-muted hover:bg-bg-hover hover:text-red-400 transition-colors"
-              title="Remove clip"
+              title={t('outpaint.removeClip')}
             >
               <X size={14} />
             </button>
@@ -211,26 +213,26 @@ export function OutpaintControls() {
           loaded next, so it's useful to set even before upload. */}
       <div>
         <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-          Output Quality
+          {t('outpaint.quality')}
         </label>
         <div className="grid grid-cols-5 gap-1">
           {QUALITY_OPTIONS.map(q => (
             <button
               key={q.v}
               onClick={() => setOutpaintResolutionPreset(q.v as Quality)}
-              title={q.hint}
+              title={q.hintKey ? t(q.hintKey) : undefined}
               className={`px-1 py-1.5 rounded text-[10px] border transition-colors ${
                 outpaintResolutionPreset === q.v
                   ? 'border-accent-blue bg-accent-blue/15 text-accent-blue'
                   : 'border-border text-text-muted hover:border-border-light hover:text-text-secondary'
               }`}
             >
-              {q.label}
+              {'labelKey' in q ? t(q.labelKey) : q.label}
             </button>
           ))}
         </div>
         <p className="text-[10px] text-text-muted mt-1">
-          Auto keeps full source resolution after padding. Pick a preset to scale down for lower-VRAM models.
+          {t('outpaint.qualityHint')}
         </p>
       </div>
 
@@ -239,13 +241,13 @@ export function OutpaintControls() {
         onClick={() => setShowAdvanced(!showAdvanced)}
         className="text-[10px] text-text-muted hover:text-text-primary transition-colors"
       >
-        {showAdvanced ? '▾' : '▸'} Advanced
+        {showAdvanced ? '▾' : '▸'} {t('chrome.advanced')}
       </button>
       {showAdvanced && (
         <div className="space-y-3 pl-2 border-l border-border/50">
           <label
             className="flex items-start gap-2 cursor-pointer"
-            title="Uses LTX-2.3's binary-mask conditioning and a soft multiscale boundary blend. Disable only to compare with HocusPocus's legacy Outpaint path."
+            title={t('outpaint.preserveTitle')}
           >
             <input
               type="checkbox"
@@ -255,13 +257,13 @@ export function OutpaintControls() {
             />
             <div className="flex-1">
               <span className="text-[10px] text-text-secondary">
-                Preserve original scene
+                {t('outpaint.preserveScene')}
               </span>
               <span className="ml-1 text-[9px] text-accent-blue">
-                Recommended
+                {t('chrome.recommended')}
               </span>
               <p className="text-[9px] text-text-muted mt-0.5">
-                Protects the source and softly blends the new area.
+                {t('outpaint.preserveSceneHint')}
               </p>
             </div>
           </label>
@@ -274,9 +276,9 @@ export function OutpaintControls() {
               className="w-3 h-3 mt-0.5 rounded border-border accent-accent-blue shrink-0"
             />
             <div className="flex-1">
-              <span className="text-[10px] text-text-secondary">Preserve source audio</span>
+              <span className="text-[10px] text-text-secondary">{t('outpaint.preserveAudio')}</span>
               <p className="text-[9px] text-text-muted mt-0.5">
-                Re-mux the original soundtrack into the outpainted clip. The model would otherwise generate fresh audio that doesn't match the source.
+                {t('outpaint.preserveAudioHint')}
               </p>
             </div>
           </label>
@@ -289,9 +291,9 @@ export function OutpaintControls() {
               className="w-3 h-3 mt-0.5 rounded border-border accent-accent-blue shrink-0"
             />
             <div className="flex-1">
-              <span className="text-[10px] text-text-secondary">Trim window smear</span>
+              <span className="text-[10px] text-text-secondary">{t('outpaint.trimSmear')}</span>
               <p className="text-[9px] text-text-muted mt-0.5">
-                Trim the last few frames of each sliding-window segment where the model occasionally smears the boundary.
+                {t('outpaint.trimSmearHint')}
               </p>
             </div>
           </label>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { FileUploadZone } from '../shared/FileUploadZone'
 import * as api from '../../api/client'
 
@@ -8,6 +9,7 @@ import * as api from '../../api/client'
  * User can optionally upload a video clip, plus prompt/neg prompt and duration.
  */
 export function SfxControls() {
+  const { t } = useUiTranslation('studio')
   const params = useStore(s => s.params)
   const setParam = useStore(s => s.setParam)
   const durationSeconds = useStore(s => s.durationSeconds)
@@ -50,10 +52,10 @@ export function SfxControls() {
       {/* Video clip upload (optional) */}
       <div>
         <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-          Video Clip <span className="normal-case text-text-muted">(optional)</span>
+          {t('sfx.videoClip')} <span className="normal-case text-text-muted">({t('chrome.optional')})</span>
         </label>
         <FileUploadZone
-          label={uploading ? 'Uploading...' : 'Drop video to generate matching audio'}
+          label={uploading ? t('chrome.uploading') : t('sfx.dropVideo')}
           accept=".mp4,.webm,.avi,.mov,.mkv"
           filename={videoFilename}
           onFile={handleVideoUpload}
@@ -63,7 +65,7 @@ export function SfxControls() {
           }}
         />
         <p className="text-[9px] text-text-muted mt-1">
-          With video: generates matching sound effects. Without: generates from text prompt.
+          {t('sfx.hint')}
         </p>
       </div>
 
@@ -71,7 +73,7 @@ export function SfxControls() {
       {!videoFilename && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">Duration</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('sfx.duration')}</label>
             <span className="text-xs text-text-secondary">{Math.min(durationSeconds, 20)}s</span>
           </div>
           <input
@@ -88,12 +90,12 @@ export function SfxControls() {
       {/* SFX Prompt */}
       <div>
         <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-          Sound Description
+          {t('sfx.description')}
         </label>
         <textarea
           value={sfxPrompt}
           onChange={e => setParam('MMAudio_prompt' as keyof typeof params, e.target.value)}
-          placeholder="e.g. rain falling on roof, distant thunder, birds chirping"
+          placeholder={t('sfx.promptPlaceholder')}
           rows={2}
           className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
           style={{ resize: 'vertical', minHeight: 48 }}
@@ -103,13 +105,13 @@ export function SfxControls() {
       {/* Negative prompt */}
       <div>
         <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-          Negative Prompt
+          {t('sfx.negative')}
         </label>
         <input
           type="text"
           value={sfxNegPrompt}
           onChange={e => setParam('MMAudio_neg_prompt' as keyof typeof params, e.target.value)}
-          placeholder="e.g. music, speech, talking"
+          placeholder={t('sfx.negativePlaceholder')}
           className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
         />
       </div>
@@ -118,7 +120,7 @@ export function SfxControls() {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-[11px] text-text-muted uppercase tracking-wider">
-            Prompt Strength
+            {t('sfx.strength')}
           </label>
           <span className="text-xs text-text-secondary">{textWeight.toFixed(1)}x</span>
         </div>
@@ -131,7 +133,7 @@ export function SfxControls() {
           onChange={e => setParam('sfx_text_weight' as keyof typeof params, parseFloat(e.target.value))}
         />
         <p className="text-[9px] text-text-muted mt-0.5">
-          How strongly the text prompt influences the output vs the video content.
+          {t('sfx.strengthHint')}
         </p>
       </div>
     </div>

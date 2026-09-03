@@ -1,0 +1,52 @@
+{
+  "intro": {
+    "aria": "HocusPocus is starting",
+    "tagline": "Forge stories. Shape worlds.",
+    "body": "The local studio to imagine, direct, and turn worlds into images, video, sound, and 3D.",
+    "skip": "Skip"
+  },
+  "lan": {
+    "title": "HocusPocus LAN access",
+    "checking": "Checking this device…",
+    "unreachable": "HocusPocus could not reach its local server.",
+    "statusFailed": "Status request failed ({{status}})",
+    "invalidToken": "That LAN access token is not valid.",
+    "loginRejected": "The server rejected the login ({{status}}).",
+    "hint": "Enter the session token shown in the Pinokio launch terminal. You only need to do this once per browser session.",
+    "httpWarning": "This LAN page is using unencrypted HTTP. Only enter the token on a network you trust.",
+    "tokenLabel": "LAN access token",
+    "unlock": "Unlock this session"
+  },
+  "preflight": {
+    "dismiss": "Dismiss"
+  },
+  "oom": {
+    "title": "Out of VRAM",
+    "generationFailed": "Generation failed.",
+    "directorFailed": "Director pipeline failed.",
+    "directorFailedClip": "Director pipeline failed on clip {{current}} of {{total}}.",
+    "vramHint": "Your GPU has {{vram}} GB VRAM.",
+    "applied": "VRAM headroom lowered to {{value}} — try the generation again",
+    "lowerBody": "Lower VRAM headroom from {{current}} to {{suggested}} to reserve more memory for generation spikes (long videos, VAE decode). About ~5% slower per generation.",
+    "lowerAction": "Lower to {{value}} & save",
+    "applying": "Applying…",
+    "afterApply": "After applying, re-run the generation — it'll use the new headroom on next model load.",
+    "atFloor": "VRAM headroom is already at {{value}} (the safe minimum). Lowering it further won't help. Try a smaller model variant (e.g. INT8 or GGUF), reduce resolution, or shorten video length.",
+    "showDetails": "Show error details",
+    "dismiss": "Dismiss",
+    "dismissTitle": "Dismiss"
+  },
+  "download": {
+    "interrupted": "A download was interrupted — re-run to finish it",
+    "slow": "Download is slow — waiting for retry",
+    "title": "Downloading model files",
+    "files": "{{count}} files",
+    "noProgress": "No progress for {{seconds}}s. The download will resume from where it left off as soon as the connection recovers — no action needed from you."
+  },
+  "execution": {
+    "banner": "{{mode}} mode · {{workspace}}",
+    "title": "Boot-locked {{mode}} mode · isolated workspace {{workspace}} · paid providers {{paid}}",
+    "allowed": "allowed",
+    "blocked": "blocked"
+  }
+}

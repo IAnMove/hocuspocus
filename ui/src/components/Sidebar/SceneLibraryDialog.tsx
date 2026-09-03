@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, FolderOpen, Loader2, X } from 'lucide-react'
 import { fetchOutputMetadata, fetchOutputs, type ApiOutput } from '../../api/client'
+import { useUiTranslation } from '../../i18n'
 import { ModalShell } from '../common/ModalShell'
 import { SCENE_LIBRARY_PAGE_SIZE, isCompositorVideo, sceneFromLibraryPayload, sceneLibraryTitle } from '../../lib/sceneLibrary'
 import type { Scene } from '../../types'
@@ -20,6 +21,7 @@ export function SceneLibraryDialog({
   onOpenScene: (scene: Scene, label: string) => void
   onPickFile: () => void
 }) {
+  const { t } = useUiTranslation('scene3d')
   const [tab, setTab] = useState<LibraryTab>('scenes')
   const [page, setPage] = useState(0)
   const [items, setItems] = useState<ApiOutput[]>([])
@@ -56,7 +58,7 @@ export function SceneLibraryDialog({
         setSelected(slice[0] ?? null)
       } catch (loadError) {
         if ((loadError as { name?: string }).name === 'AbortError') return
-        setError(loadError instanceof Error ? loadError.message : 'Could not list saved 3D Video scenes.')
+        setError(loadError instanceof Error ? loadError.message : t('library.listFailed'))
         setItems([])
         setTotal(0)
         setSelected(null)
@@ -66,7 +68,7 @@ export function SceneLibraryDialog({
     }
     void load()
     return () => controller.abort()
-  }, [open, page, tab, workspace])
+  }, [open, page, tab, workspace, t])
 
   const pages = Math.max(1, Math.ceil(total / SCENE_LIBRARY_PAGE_SIZE))
 
@@ -76,42 +78,42 @@ export function SceneLibraryDialog({
     try {
       if (file.type === 'scene') {
         const response = await fetch(file.url)
-        if (!response.ok) throw new Error('Could not load the saved scene')
+        if (!response.ok) throw new Error(t('library.loadFailed'))
         onOpenScene(sceneFromLibraryPayload(await response.json()), sceneLibraryTitle(file.name))
         return
       }
       const metadata = await fetchOutputMetadata(file.name, workspace)
       onOpenScene(sceneFromLibraryPayload(metadata), sceneLibraryTitle(file.name))
     } catch (openError) {
-      setError(openError instanceof Error ? openError.message : 'Could not open this 3D Video scene.')
+      setError(openError instanceof Error ? openError.message : t('library.openFailed'))
     } finally {
       setOpening(null)
     }
   }
 
   return (
-    <ModalShell open={open} title="Open 3D Video scene" onClose={onClose} className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+    <ModalShell open={open} title={t('library.title')} onClose={onClose} className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
       <div className="flex max-h-[86vh] w-[760px] max-w-[96vw] flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary shadow-2xl" onMouseDown={event => event.stopPropagation()}>
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
             <FolderOpen size={15} className="text-accent-blue" />
             <div>
-              <h2 className="text-sm font-semibold text-text-primary">Open 3D Video scene</h2>
-              <p className="text-[10px] text-text-muted">Saved compositor projects and exported 3D clips, with a preview of each one.</p>
+              <h2 className="text-sm font-semibold text-text-primary">{t('library.title')}</h2>
+              <p className="text-[10px] text-text-muted">{t('library.subtitle')}</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close scene library" className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary"><X size={13} /></button>
+          <button type="button" onClick={onClose} aria-label={t('library.closeAria')} className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary"><X size={13} /></button>
         </div>
         <div className="flex gap-1 border-b border-border px-4 py-2">
-          {([['scenes', 'Saved scenes'], ['videos', '3D videos']] as const).map(([id, label]) => (
-            <button key={id} type="button" onClick={() => { setTab(id); setPage(0) }} className={`rounded px-2.5 py-1 text-[10px] ${tab === id ? 'bg-accent-blue/15 text-accent-blue' : 'text-text-muted hover:text-text-primary'}`}>{label}</button>
+          {([['scenes', 'library.savedScenes'], ['videos', 'library.videos']] as const).map(([id, labelKey]) => (
+            <button key={id} type="button" onClick={() => { setTab(id); setPage(0) }} className={`rounded px-2.5 py-1 text-[10px] ${tab === id ? 'bg-accent-blue/15 text-accent-blue' : 'text-text-muted hover:text-text-primary'}`}>{t(labelKey)}</button>
           ))}
-          <button type="button" onClick={onPickFile} className="ml-auto rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:text-text-primary">From JSON file…</button>
+          <button type="button" onClick={onPickFile} className="ml-auto rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:text-text-primary">{t('library.fromJson')}</button>
         </div>
         <div className="grid min-h-0 flex-1 gap-3 overflow-hidden p-4 md:grid-cols-[minmax(0,1fr)_220px]">
           <div className="min-h-0 overflow-y-auto">
             {loading ? (
-              <div className="flex items-center justify-center gap-2 py-16 text-[11px] text-text-muted"><Loader2 size={14} className="animate-spin" /> Loading scenes…</div>
+              <div className="flex items-center justify-center gap-2 py-16 text-[11px] text-text-muted"><Loader2 size={14} className="animate-spin" /> {t('library.loading')}</div>
             ) : items.length ? (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {items.map(file => (
@@ -126,7 +128,7 @@ export function SceneLibraryDialog({
                       {file.thumbnail_url || file.type === 'video' ? (
                         <img src={file.thumbnail_url || file.url} alt="" className="h-full w-full object-cover" loading="lazy" />
                       ) : (
-                        <div className="flex h-full items-center justify-center text-[9px] text-text-muted">No preview</div>
+                        <div className="flex h-full items-center justify-center text-[9px] text-text-muted">{t('library.noPreview')}</div>
                       )}
                     </div>
                     <div className="truncate px-1.5 py-1 text-[9px] text-text-secondary">{sceneLibraryTitle(file.name)}</div>
@@ -134,7 +136,7 @@ export function SceneLibraryDialog({
                 ))}
               </div>
             ) : (
-              <p className="py-16 text-center text-[11px] text-text-muted">{tab === 'scenes' ? 'No saved 3D Video scenes yet. Use Save scene to keep one.' : 'No exported 3D Video clips yet.'}</p>
+              <p className="py-16 text-center text-[11px] text-text-muted">{tab === 'scenes' ? t('library.emptyScenes') : t('library.emptyVideos')}</p>
             )}
           </div>
           <aside className="flex min-h-[180px] flex-col rounded-lg border border-border bg-bg-tertiary p-2">
@@ -146,21 +148,21 @@ export function SceneLibraryDialog({
                   ) : null}
                 </div>
                 <div className="mt-2 text-[11px] font-medium text-text-primary">{sceneLibraryTitle(selected.name)}</div>
-                <div className="mt-0.5 text-[9px] text-text-muted">{selected.type === 'scene' ? 'Editable compositor project' : 'Exported 3D clip'} · {new Date((selected.completed_at || selected.created_at) * 1000).toLocaleString()}</div>
+                <div className="mt-0.5 text-[9px] text-text-muted">{selected.type === 'scene' ? t('library.editableProject') : t('library.exportedClip')} · {new Date((selected.completed_at || selected.created_at) * 1000).toLocaleString()}</div>
                 <button type="button" disabled={Boolean(opening)} onClick={() => void openItem(selected)} className="mt-auto rounded bg-accent-blue px-2 py-1.5 text-[10px] text-white disabled:opacity-40">
-                  {opening === selected.name ? 'Opening…' : 'Open in 3D Video'}
+                  {opening === selected.name ? t('library.opening') : t('library.openIn')}
                 </button>
               </>
             ) : (
-              <p className="m-auto text-center text-[10px] text-text-muted">Select a scene to preview it.</p>
+              <p className="m-auto text-center text-[10px] text-text-muted">{t('library.selectPreview')}</p>
             )}
           </aside>
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-2">
-          <span className="text-[10px] text-text-muted">{total} saved · page {Math.min(page + 1, pages)} / {pages}</span>
+          <span className="text-[10px] text-text-muted">{t('library.savedPage', { total, current: Math.min(page + 1, pages), pages })}</span>
           <div className="flex gap-1">
-            <button type="button" aria-label="Previous page" disabled={page <= 0} onClick={() => setPage(value => Math.max(0, value - 1))} className="rounded border border-border p-1.5 disabled:opacity-30"><ChevronLeft size={13} /></button>
-            <button type="button" aria-label="Next page" disabled={page + 1 >= pages} onClick={() => setPage(value => value + 1)} className="rounded border border-border p-1.5 disabled:opacity-30"><ChevronRight size={13} /></button>
+            <button type="button" aria-label={t('library.previousPage')} disabled={page <= 0} onClick={() => setPage(value => Math.max(0, value - 1))} className="rounded border border-border p-1.5 disabled:opacity-30"><ChevronLeft size={13} /></button>
+            <button type="button" aria-label={t('library.nextPage')} disabled={page + 1 >= pages} onClick={() => setPage(value => value + 1)} className="rounded border border-border p-1.5 disabled:opacity-30"><ChevronRight size={13} /></button>
           </div>
         </div>
         {error && <p className="border-t border-border px-4 py-2 text-[10px] text-red-300">{error}</p>}

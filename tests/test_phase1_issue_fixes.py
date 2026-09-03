@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import math
 import os
 import sys
@@ -67,6 +68,9 @@ _OUTPAINT_CANVAS_PATH = os.path.join(
     "components",
     "Sidebar",
     "OutpaintCanvas.tsx",
+)
+_STUDIO_EN_PATH = os.path.join(
+    _ROOT, "ui", "src", "i18n", "locales", "en", "studio.json",
 )
 
 _requires_torch = unittest.skipUnless(
@@ -1725,7 +1729,9 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         controls = _read(_OUTPAINT_CONTROLS_PATH)
         client = api_client_source()
         store = _read(_STORE_PATH)
-        self.assertIn("Preserve original scene", controls)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
+        self.assertIn("t('outpaint.preserveScene')", controls)
+        self.assertEqual(studio["outpaint"]["preserveScene"], "Preserve original scene")
         self.assertIn("outpaintMaskPreserving: true", store)
         self.assertIn("mask_preserving_outpaint?: boolean", client)
         self.assertIn("outpaint_aspect?:", client)
@@ -1760,9 +1766,12 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
                 "GenerateButton.tsx",
             )
         )
+        studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn("needsOutpaintArea", generate_button)
-        self.assertIn("Choose canvas", generate_button)
-        self.assertIn("area for Outpaint to generate", generate_button)
+        self.assertIn("t('generate.chooseCanvas')", generate_button)
+        self.assertIn("t('generate.outpaintAreaHint')", generate_button)
+        self.assertEqual(studio["generate"]["chooseCanvas"], "Choose canvas")
+        self.assertIn("area for Outpaint to generate", studio["generate"]["outpaintAreaHint"])
 
     def test_backend_uses_official_lora_and_internal_blend(self):
         launch = _read(_LAUNCH_PATH)
@@ -2692,14 +2701,18 @@ class TestModelVisibilityPersistence(unittest.TestCase):
 class TestFramesControlVideoAudio(unittest.TestCase):
     def test_control_video_presence_is_not_derived_from_audio_mode(self):
         source = _read(_INPUTS_PATH)
+        studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn(
             "const hasControlVid = supportsControlVid && "
             "!!params.video_guide",
             source,
         )
-        self.assertIn("Generate soundtrack from text prompt", source)
-        self.assertIn("Generate new audio from control video", source)
-        self.assertIn("The control video remains attached", source)
+        self.assertIn("t('inputs.generateFromText')", source)
+        self.assertIn("t('inputs.generateFromControl')", source)
+        self.assertIn("t('inputs.controlStays')", source)
+        self.assertEqual(studio["inputs"]["generateFromText"], "Generate soundtrack from text prompt")
+        self.assertEqual(studio["inputs"]["generateFromControl"], "Generate new audio from control video")
+        self.assertIn("The control video remains attached", studio["inputs"]["controlStays"])
         self.assertIn("rawControlProcess", source)
         self.assertNotIn("supportsSoundtrack && !hasControlVid", source)
         self.assertNotIn("supportsControlVid && !hasSoundtrack", source)

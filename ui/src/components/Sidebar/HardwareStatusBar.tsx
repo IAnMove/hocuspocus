@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronUp, ChevronDown, Cpu, MemoryStick, Power, Zap } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { fetchSystemStats, releaseModels } from '../../api/client'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 
@@ -63,6 +64,8 @@ const COLLAPSE_KEY = 'hwbar_collapsed'
  * Pauses when the tab is hidden.
  */
 export function HardwareStatusBar() {
+  const { t } = useUiTranslation('studio')
+  const { t: tCommon } = useUiTranslation('common')
   const stats = useStore(s => s.systemStats)
   const loadSystemStats = useStore(s => s.loadSystemStats)
   const llmStatus = useStore(s => s.llmStatus)
@@ -94,10 +97,10 @@ export function HardwareStatusBar() {
     setUnloading(true)
     try {
       const r = await releaseModels()
-      setUnloadNote(r.released.length ? 'Unloaded — memory freed' : 'Nothing to unload')
+      setUnloadNote(r.released.length ? t('hardware.unloaded') : t('hardware.nothing'))
       loadSystemStats()
     } catch (e) {
-      setUnloadNote(e instanceof Error ? e.message : 'Unload failed')
+      setUnloadNote(e instanceof Error ? e.message : t('hardware.unloadFailed'))
     } finally {
       setUnloading(false)
       window.clearTimeout(noteTimer.current)
@@ -137,33 +140,37 @@ export function HardwareStatusBar() {
     return (
       <button
         onClick={toggle}
-        title="Show hardware status"
+        title={t('hardware.show')}
         className="w-full flex items-center gap-2.5 px-3 py-1.5 border-t border-border bg-bg-secondary hover:bg-bg-hover transition-colors text-[10px] shrink-0"
       >
         {gpu?.available && (
           <span
             className="flex items-center gap-1 shrink-0 text-text-secondary"
-            title={`GPU ${gpu.percent.toFixed(0)}% (3D engine)${gpu.compute_percent != null ? ` · compute ${gpu.compute_percent.toFixed(0)}%` : ''} · VRAM ${fmtGb(gpu.vram_used_gb, gpu.vram_total_gb)}`}
+            title={t('hardware.gpuTitle', {
+              percent: gpu.percent.toFixed(0),
+              compute: gpu.compute_percent != null ? t('hardware.compute', { percent: gpu.compute_percent.toFixed(0) }) : '',
+              vram: fmtGb(gpu.vram_used_gb, gpu.vram_total_gb),
+            })}
           >
             <Zap size={11} className="text-text-muted" />
             <span className="tabular-nums">{gpu.percent.toFixed(0)}%</span>
             <span className={`tabular-nums ${fullnessText(gpu.vram_percent)}`}>{fmtG(gpu.vram_used_gb)}</span>
           </span>
         )}
-        <span className="flex items-center gap-1 shrink-0 text-text-secondary" title={`CPU ${(cpu?.percent ?? 0).toFixed(0)}%`}>
+        <span className="flex items-center gap-1 shrink-0 text-text-secondary" title={t('hardware.cpuTitle', { percent: (cpu?.percent ?? 0).toFixed(0) })}>
           <Cpu size={11} className="text-text-muted" />
           <span className="tabular-nums">{(cpu?.percent ?? 0).toFixed(0)}%</span>
         </span>
-        <span className="flex items-center gap-1 shrink-0 text-text-secondary" title={`RAM ${fmtGb(ram?.used_gb, ram?.total_gb)}`}>
+        <span className="flex items-center gap-1 shrink-0 text-text-secondary" title={t('hardware.ramTitle', { vram: fmtGb(ram?.used_gb, ram?.total_gb) })}>
           <MemoryStick size={11} className="text-text-muted" />
           <span className={`tabular-nums ${fullnessText(ram?.percent ?? 0)}`}>{fmtG(ram?.used_gb)}</span>
         </span>
         <span
           className="flex items-center gap-1 min-w-0 ml-auto"
-          title={modelLoaded ? `${model?.name || 'Unknown model'} — loaded` : 'No model loaded'}
+          title={modelLoaded ? t('hardware.modelLoaded', { name: model?.name || t('hardware.unknownModel') }) : t('hardware.noModelLoaded')}
         >
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${modelLoaded ? 'bg-emerald-500' : 'bg-text-muted/40'}`} />
-          <span className="truncate text-text-muted">{modelLoaded ? (model?.name || '—') : 'No model'}</span>
+          <span className="truncate text-text-muted">{modelLoaded ? (model?.name || '—') : t('hardware.noModel')}</span>
         </span>
         <ChevronUp size={13} className="shrink-0 text-text-muted" />
       </button>
@@ -174,10 +181,10 @@ export function HardwareStatusBar() {
   return (
     <div className="px-3 py-2 border-t border-border bg-bg-secondary shrink-0">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[9px] uppercase tracking-wider text-text-muted">System</span>
+        <span className="text-[9px] uppercase tracking-wider text-text-muted">{t('hardware.system')}</span>
         <button
           onClick={toggle}
-          title="Collapse"
+          title={t('hardware.collapse')}
           className="p-0.5 rounded hover:bg-bg-hover text-text-muted hover:text-text-secondary transition-colors"
         >
           <ChevronDown size={13} />
@@ -186,36 +193,36 @@ export function HardwareStatusBar() {
       <div className="flex flex-col gap-1">
         {gpu?.available ? (
           <>
-            <Gauge label="GPU" percent={gpu.percent} value={`${gpu.percent.toFixed(0)}%`} fill="bg-accent-blue"
-              title={gpu.compute_percent != null ? `3D engine (matches Task Manager) · compute (nvidia-smi): ${gpu.compute_percent.toFixed(0)}%` : undefined} />
+            <Gauge label={t('hardware.gpu')} percent={gpu.percent} value={`${gpu.percent.toFixed(0)}%`} fill="bg-accent-blue"
+              title={gpu.compute_percent != null ? t('hardware.engineTitle', { percent: gpu.compute_percent.toFixed(0) }) : undefined} />
             <Gauge
-              label="VRAM"
+              label={t('hardware.vram')}
               percent={gpu.vram_percent}
               value={fmtGb(gpu.vram_used_gb, gpu.vram_total_gb)}
               fill={fullnessColor(gpu.vram_percent)}
             />
           </>
         ) : (
-          <div className="text-[10px] text-text-muted">No NVIDIA GPU detected</div>
+          <div className="text-[10px] text-text-muted">{t('hardware.noGpu')}</div>
         )}
-        <Gauge label="CPU" percent={cpu?.percent ?? 0} value={`${(cpu?.percent ?? 0).toFixed(0)}%`} fill="bg-accent-blue" />
-        <Gauge label="RAM" percent={ram?.percent ?? 0} value={fmtGb(ram?.used_gb, ram?.total_gb)} fill={fullnessColor(ram?.percent ?? 0)} />
+        <Gauge label={t('hardware.cpu')} percent={cpu?.percent ?? 0} value={`${(cpu?.percent ?? 0).toFixed(0)}%`} fill="bg-accent-blue" />
+        <Gauge label={t('hardware.ram')} percent={ram?.percent ?? 0} value={fmtGb(ram?.used_gb, ram?.total_gb)} fill={fullnessColor(ram?.percent ?? 0)} />
       </div>
 
       {/* Currently-loaded model(s) */}
       <div className="mt-1.5 pt-1.5 border-t border-border/50 flex flex-col gap-0.5">
         <div
           className="flex items-center gap-1.5 min-w-0"
-          title={modelLoaded ? `${model?.name || 'Unknown model'} — resident in VRAM` : 'No generation model loaded'}
+          title={modelLoaded ? t('hardware.resident', { name: model?.name || t('hardware.unknownModel') }) : t('hardware.noGenerationModel')}
         >
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${modelLoaded ? 'bg-emerald-500' : 'bg-text-muted/40'}`} />
           <span className="text-[11px] text-text-secondary truncate">
-            {modelLoaded ? (model?.name || 'Unknown model') : 'No model loaded'}
+            {modelLoaded ? (model?.name || t('hardware.unknownModel')) : t('hardware.noModelLoaded')}
           </span>
           {(modelLoaded || llmStatus?.loaded) && !confirmUnload && !unloading && (
             <button
               onClick={() => setConfirmUnload(true)}
-              title="Unload model — frees VRAM/RAM now; the next generation reloads it"
+              title={t('hardware.unloadTitle')}
               className="ml-auto p-0.5 rounded shrink-0 text-text-muted hover:text-text-secondary hover:bg-bg-hover transition-colors"
             >
               <Power size={11} />
@@ -223,29 +230,29 @@ export function HardwareStatusBar() {
           )}
         </div>
         {llmStatus?.loaded && llmStatus.model_id && (
-          <div className="flex items-center gap-1.5 min-w-0" title="LLM (Director / prompt enhancer)">
+          <div className="flex items-center gap-1.5 min-w-0" title={t('hardware.llmTitle')}>
             <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-accent-blue" />
-            <span className="text-[10px] text-text-muted truncate">LLM · {llmStatus.model_id}</span>
+            <span className="text-[10px] text-text-muted truncate">{t('hardware.llmLine', { id: llmStatus.model_id })}</span>
           </div>
         )}
         {confirmUnload && (
           <div className="flex items-center gap-1.5 text-[10px]">
-            <span className="text-text-secondary">Unload and free memory?</span>
+            <span className="text-text-secondary">{t('hardware.confirm')}</span>
             <button
               onClick={doUnload}
               className="px-1.5 py-0.5 rounded bg-red-500/15 text-chip-red hover:bg-red-500/25 transition-colors"
             >
-              Unload
+              {t('hardware.unload')}
             </button>
             <button
               onClick={() => setConfirmUnload(false)}
               className="px-1.5 py-0.5 rounded text-text-muted hover:bg-bg-hover transition-colors"
             >
-              Cancel
+              {tCommon('actions.cancel')}
             </button>
           </div>
         )}
-        {unloading && <div className="text-[10px] text-text-muted">Unloading…</div>}
+        {unloading && <div className="text-[10px] text-text-muted">{t('hardware.unloading')}</div>}
         {unloadNote && !unloading && <div className="text-[10px] text-text-muted">{unloadNote}</div>}
       </div>
     </div>

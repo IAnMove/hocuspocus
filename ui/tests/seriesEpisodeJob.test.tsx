@@ -56,7 +56,9 @@ const series = {
 
 test('does not show or apply a late E1 proposal after switching to E2', { concurrency: false }, async () => {
   const { render, screen, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { SeriesEpisodePanel } = await import('../src/features/series/SeriesEpisodePanel.tsx')
+  const t = ensureUiI18n().getFixedT('en', 'seriesLab')
   const originalFetch = globalThis.fetch
   let resolveStart!: (response: Response) => void
   const startResponse = new Promise<Response>(resolve => { resolveStart = resolve })
@@ -81,7 +83,7 @@ test('does not show or apply a late E1 proposal after switching to E2', { concur
     updateEpisode: () => {}, saveNow: async () => {}, reload: async () => {},
   })
   const view = render(<SeriesEpisodePanel {...props(first)} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Generate outline only' }))
+  fireEvent.click(screen.getByRole('button', { name: t('episode.generateOutline') }))
   view.rerender(<SeriesEpisodePanel {...props(second)} />)
 
   resolveStart(new Response(JSON.stringify({

@@ -1,15 +1,17 @@
 import { Mic, Music, Zap, Layers } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import type { AudioSubMode } from '../../types'
 
-const modes: { value: AudioSubMode; label: string; icon: typeof Mic }[] = [
-  { value: 'speech', label: 'Speech', icon: Mic },
-  { value: 'music', label: 'Music', icon: Music },
-  { value: 'sfx', label: 'SFX', icon: Zap },
-  { value: 'mixer', label: 'Mixer', icon: Layers },
+const modes: { value: AudioSubMode; icon: typeof Mic }[] = [
+  { value: 'speech', icon: Mic },
+  { value: 'music', icon: Music },
+  { value: 'sfx', icon: Zap },
+  { value: 'mixer', icon: Layers },
 ]
 
 export function AudioSubModeToggle() {
+  const { t } = useUiTranslation('studio')
   const audioSubMode = useStore(s => s.audioSubMode)
   const setAudioSubMode = useStore(s => s.setAudioSubMode)
 
@@ -29,7 +31,7 @@ export function AudioSubModeToggle() {
             }`}
           >
             <Icon size={13} />
-            <span>{m.label}</span>
+            <span>{t(`audioSubModes.${m.value}`)}</span>
           </button>
         )
       })}

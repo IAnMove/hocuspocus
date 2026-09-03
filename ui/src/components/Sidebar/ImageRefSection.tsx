@@ -1,8 +1,11 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Upload, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 
 export function ImageRefSection() {
+  const { t } = useUiTranslation('studio')
+  const { t: tCommon } = useUiTranslation('common')
   const modelOptions = useStore(s => s.modelOptions)
   const imageMode = useStore(s => Number(s.params.image_mode ?? 1))
   const imageRefs = useStore(s => s.imageRefs)
@@ -68,7 +71,7 @@ export function ImageRefSection() {
   return (
     <div className="space-y-2">
       <label className="text-[11px] text-text-muted uppercase tracking-wider block">
-        Reference Images
+        {t('imageRef.title')}
       </label>
 
       {/* Thumbnails + add button in a unified row */}
@@ -100,12 +103,12 @@ export function ImageRefSection() {
           >
             <img
               src={URL.createObjectURL(file)}
-              alt={`Ref ${i + 1}`}
+              alt={t('inputs.refAlt', { n: i + 1 })}
               className="w-full h-full object-cover pointer-events-none"
             />
             {i === 0 && imageRefs.length > 1 && hasLandscapeMode && imageRefType === 'KI' && (
               <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white text-center py-0.5">
-                Main
+                {t('imageRef.main')}
               </div>
             )}
             {/* Position number */}
@@ -130,14 +133,14 @@ export function ImageRefSection() {
             onClick={handleFileSelect}
           >
             <Upload size={14} className="text-text-muted" />
-            <span className="text-[8px] text-text-muted">Add</span>
+            <span className="text-[8px] text-text-muted">{tCommon('actions.add')}</span>
           </div>
         )}
       </div>
 
       {maxRefs != null && (
         <p className="text-[9px] text-text-muted">
-          Up to {maxRefs} reference image{maxRefs === 1 ? '' : 's'}.
+          {t('imageRef.max', { count: maxRefs })}
         </p>
       )}
 
@@ -152,7 +155,7 @@ export function ImageRefSection() {
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
-            Subject / Landscape
+            {t('inputs.subjectLandscape')}
           </button>
           <button
             onClick={() => setImageRefType('I')}
@@ -162,7 +165,7 @@ export function ImageRefSection() {
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
-            People / Objects
+            {t('inputs.peopleObjects')}
           </button>
         </div>
       )}
@@ -170,7 +173,7 @@ export function ImageRefSection() {
       {/* Hint text */}
       {imageRefs.length > 0 && hasLandscapeMode && imageRefType === 'KI' && (
         <p className="text-[10px] text-text-muted">
-          First image is the main subject/landscape. Additional images are people/objects to inject. Drag to reorder.
+          {t('imageRef.hint')}
         </p>
       )}
 

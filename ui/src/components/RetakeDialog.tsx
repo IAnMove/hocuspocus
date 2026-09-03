@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
+import { useUiTranslation } from '../i18n'
 import { useStore } from '../stores/useStore'
 import { VideoTimelineSelector } from './shared/VideoTimelineSelector'
 import * as api from '../api/client'
 import { modelDisplayName } from '../lib/modelDisplay'
 
 export function RetakeDialog() {
+  const { t } = useUiTranslation('activity')
   const retakeOpen = useStore(s => s.retakeDialogOpen)
   const retakeFile = useStore(s => s.retakeSourceFile)
   const closeRetake = useStore(s => s.closeRetakeDialog)
@@ -71,7 +73,7 @@ export function RetakeDialog() {
         loras_multipliers: lorasMultipliers,
         workspace: activeWorkspace,
       })
-      setSuccess(`Retake queued: ${result.retake_frames}`)
+      setSuccess(t('retake.queued', { frames: result.retake_frames }))
       loadOutputs()
       setTimeout(() => closeRetake(), 1500)
     } catch (e) {
@@ -90,8 +92,8 @@ export function RetakeDialog() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div>
-            <h2 className="text-sm font-semibold text-text-primary">Retake</h2>
-            <p className="text-[10px] text-text-muted">Select the part you want to fix, then describe the change</p>
+            <h2 className="text-sm font-semibold text-text-primary">{t('retake.title')}</h2>
+            <p className="text-[10px] text-text-muted">{t('retake.subtitle')}</p>
           </div>
           <button onClick={closeRetake} className="p-1 rounded hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors">
             <X size={16} />
@@ -112,11 +114,11 @@ export function RetakeDialog() {
           {/* Prompt */}
           <div>
             <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-              What should happen in this section?
+              {t('retake.promptLabel')}
             </label>
             <textarea value={prompt}
               onChange={e => setPrompt(e.target.value)}
-              placeholder="Describe the new content for the selected time range..."
+              placeholder={t('retake.promptPlaceholder')}
               rows={2}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
               style={{ resize: 'vertical', minHeight: 48 }} />
@@ -127,39 +129,39 @@ export function RetakeDialog() {
             <input type="checkbox" checked={regenerateAudio}
               onChange={e => setRegenerateAudio(e.target.checked)}
               className="w-3.5 h-3.5 rounded border-border accent-accent-blue" />
-            <span className="text-xs text-text-secondary">Regenerate Audio</span>
+            <span className="text-xs text-text-secondary">{t('retake.regenerateAudio')}</span>
             <span className="text-[9px] text-text-muted ml-auto">
-              {regenerateAudio ? 'New audio from prompt' : 'Keep source audio'}
+              {regenerateAudio ? t('retake.newAudio') : t('retake.keepAudio')}
             </span>
           </label>
 
           {/* Advanced toggle */}
           <button onClick={() => setShowAdvanced(!showAdvanced)}
             className="text-[10px] text-text-muted hover:text-text-primary transition-colors">
-            {showAdvanced ? '▾' : '▸'} Advanced
+            {showAdvanced ? '▾' : '▸'} {t('retake.advanced')}
           </button>
           {showAdvanced && (
             <div className="space-y-2 pl-2 border-l border-border/50">
               <div>
-                <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Negative Prompt</label>
+                <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{t('retake.negativePrompt')}</label>
                 <input type="text" value={negPrompt}
                   onChange={e => setNegPrompt(e.target.value)}
-                  placeholder="What to avoid..."
+                  placeholder={t('retake.negativePlaceholder')}
                   className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue" />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="text-[9px] text-text-muted block mb-0.5">Seed</label>
+                  <label className="text-[9px] text-text-muted block mb-0.5">{t('retake.seed')}</label>
                   <input type="number" value={seed} onChange={e => setSeed(parseInt(e.target.value) || -1)}
                     className="w-full bg-bg-tertiary border border-border rounded px-1.5 py-1 text-[10px] text-text-primary focus:outline-none focus:border-accent-blue" />
                 </div>
                 <div>
-                  <label className="text-[9px] text-text-muted block mb-0.5">Steps</label>
+                  <label className="text-[9px] text-text-muted block mb-0.5">{t('retake.steps')}</label>
                   <input type="number" min={1} max={50} value={steps} onChange={e => setSteps(parseInt(e.target.value) || 8)}
                     className="w-full bg-bg-tertiary border border-border rounded px-1.5 py-1 text-[10px] text-text-primary focus:outline-none focus:border-accent-blue" />
                 </div>
                 <div>
-                  <label className="text-[9px] text-text-muted block mb-0.5">Guidance</label>
+                  <label className="text-[9px] text-text-muted block mb-0.5">{t('retake.guidance')}</label>
                   <input type="number" min={0} max={20} step={0.1} value={guidance}
                     onChange={e => setGuidance(parseFloat(e.target.value) || 1.0)}
                     className="w-full bg-bg-tertiary border border-border rounded px-1.5 py-1 text-[10px] text-text-primary focus:outline-none focus:border-accent-blue" />
@@ -170,8 +172,8 @@ export function RetakeDialog() {
 
           {/* Model + LoRA info */}
           <p className="text-[9px] text-text-muted">
-            <span title={modelType}>Model: {modelLabel}</span> | Engine: Native
-            {activatedLoras.length > 0 && ` | LoRAs: ${activatedLoras.length}`}
+            <span title={modelType}>{t('retake.model', { name: modelLabel })}</span> | {t('retake.engine')}
+            {activatedLoras.length > 0 && t('retake.loras', { count: activatedLoras.length })}
           </p>
 
           {/* Error/Success */}
@@ -181,7 +183,7 @@ export function RetakeDialog() {
           {/* Submit */}
           <button onClick={handleSubmit} disabled={submitting || !prompt}
             className="w-full py-2.5 rounded-lg text-sm font-medium bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-            {submitting ? 'Submitting...' : 'Retake'}
+            {submitting ? t('retake.submitting') : t('retake.title')}
           </button>
         </div>
       </div>

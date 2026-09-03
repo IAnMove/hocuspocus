@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Lock, Unlock } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import type { ModelOptions } from '../../types'
 
 /* eslint-disable react-refresh/only-export-components -- shared slider helpers are intentionally exported. */
@@ -43,6 +44,7 @@ export const recommendedWindowProfile = (
 }
 
 export function DurationSlider() {
+  const { t } = useUiTranslation('studio')
   const duration = useStore(s => s.durationSeconds)
   const setDuration = useStore(s => s.setDurationSeconds)
   const windowSize = useStore(s => s.slidingWindowSeconds)
@@ -139,11 +141,11 @@ export function DurationSlider() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-[11px] text-text-muted uppercase tracking-wider">Duration</label>
+        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('duration.label')}</label>
         <span className="text-xs text-text-secondary">
           {duration >= 60 ? `${Math.floor(duration / 60)}m${duration % 60 ? ` ${Math.round(duration % 60)}s` : ''}` : formatSeconds(duration)}
           {showSlidingWindow && (
-            <span className="text-text-muted ml-1">({windowCount} win)</span>
+            <span className="text-text-muted ml-1">{t('duration.windowsShort', { count: windowCount })}</span>
           )}
         </span>
       </div>
@@ -157,17 +159,23 @@ export function DurationSlider() {
       />
       {showSlidingWindow && !isMultiClip && (
         <div className="text-[10px] text-text-muted mt-1">
-          {windowCount} windows of {formatSeconds(windowSize)} &middot;{' '}
+          {t('duration.windowsOf', { count: windowCount, size: formatSeconds(windowSize) })} &middot;{' '}
           {automaticPromptPacing
-            ? 'full prompt auto-paced'
-            : <>{promptLineCount}/{windowCount} prompts{promptLineCount < windowCount && ' (last reused)'}</>}
+            ? t('duration.autoPaced')
+            : promptLineCount < windowCount
+              ? t('duration.promptsReuse', { used: promptLineCount, total: windowCount })
+              : t('duration.prompts', { used: promptLineCount, total: windowCount })}
         </div>
       )}
       {unsupportedAutoResolution && (
         <div className="text-[10px] text-amber-400 mt-1">
           {locked
-            ? `Manual VRAM override: ${resolution} may run out of memory on this ${totalVramGb.toFixed(0)} GB GPU.`
-            : `For ${totalVramGb.toFixed(0)} GB, H3 Auto recommends ${windowRecommendation?.fallbackResolution ?? 'a lower resolution'} instead of ${resolution}. Lock Window Size in Advanced to override.`}
+            ? t('duration.manualVram', { resolution, vram: totalVramGb.toFixed(0) })
+            : t('duration.autoRecommend', {
+              vram: totalVramGb.toFixed(0),
+              fallback: windowRecommendation?.fallbackResolution ?? t('duration.lowerResolution'),
+              resolution,
+            })}
         </div>
       )}
     </div>
@@ -176,6 +184,7 @@ export function DurationSlider() {
 
 /** Exposed for Advanced Settings popup */
 export function WindowSettings() {
+  const { t } = useUiTranslation('studio')
   const studioDuration = useStore(s => s.durationSeconds)
   const generationMode = useStore(s => s.generationMode)
   const editSubMode = useStore(s => s.editSubMode)
@@ -237,7 +246,7 @@ export function WindowSettings() {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">Window Size</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('window.size')}</label>
             <button
               onClick={() => {
                 if (locked) {
@@ -253,14 +262,14 @@ export function WindowSettings() {
                   ? 'text-accent-blue hover:text-accent-blue/70'
                   : 'text-text-muted hover:text-text-secondary'
               }`}
-              title={locked ? 'Window size locked — click to unlock (auto-track)' : 'Click to lock window size'}
+              title={locked ? t('window.lockTitle') : t('window.unlockTitle')}
             >
               {locked ? <Lock size={10} /> : <Unlock size={10} />}
             </button>
           </div>
           <span className="text-xs text-text-secondary">
             {formatSeconds(windowSize)}
-            {locked && <span className="text-accent-blue/60 ml-1 text-[9px]">locked</span>}
+            {locked && <span className="text-accent-blue/60 ml-1 text-[9px]">{t('chrome.locked')}</span>}
           </span>
         </div>
         <input
@@ -277,18 +286,22 @@ export function WindowSettings() {
         />
         {showSlidingWindow && (
           <div className="text-[10px] text-text-muted mt-1">
-            {windowCount} window{windowCount > 1 ? 's' : ''} of {formatSeconds(windowSize)}
+            {t('window.count', { count: windowCount, size: formatSeconds(windowSize) })}
           </div>
         )}
         {windowRecommendation != null && (
           <div className={`text-[10px] mt-1 ${unsupportedAutoResolution || exceedsSafeRecommendation ? 'text-amber-400' : 'text-text-muted'}`}>
             {unsupportedAutoResolution
               ? (locked
-                ? `Manual override enabled: ${resolution} is above the automatic profile for ${totalVramGb.toFixed(0)} GB and may run out of VRAM.`
-                : `Auto does not recommend ${resolution} on ${totalVramGb.toFixed(0)} GB. Choose ${windowRecommendation.fallbackResolution ?? 'a lower resolution'}, or lock Window Size to try it experimentally.`)
+                ? t('window.manualOverride', { resolution, vram: totalVramGb.toFixed(0) })
+                : t('window.autoReject', {
+                  resolution,
+                  vram: totalVramGb.toFixed(0),
+                  fallback: windowRecommendation.fallbackResolution ?? t('duration.lowerResolution'),
+                }))
               : (exceedsSafeRecommendation
-                ? `Manual override exceeds the ${formatSeconds(safeWindowSeconds!)} recommendation for ${totalVramGb.toFixed(0)} GB at this resolution and may run out of VRAM.`
-                : `Auto max: ${formatSeconds(safeWindowSeconds!)} for ${totalVramGb.toFixed(0)} GB at this resolution.`)}
+                ? t('window.exceeds', { size: formatSeconds(safeWindowSeconds!), vram: totalVramGb.toFixed(0) })
+                : t('window.autoMax', { size: formatSeconds(safeWindowSeconds!), vram: totalVramGb.toFixed(0) }))}
           </div>
         )}
       </div>
@@ -296,7 +309,7 @@ export function WindowSettings() {
       {showSlidingWindow && overlapStep > 0 && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">Window Overlap</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('window.overlap')}</label>
             <span className="text-xs text-text-secondary">{overlap}f ({formatSeconds(overlapSeconds)})</span>
           </div>
           <input

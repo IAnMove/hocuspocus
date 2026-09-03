@@ -87,6 +87,21 @@ test('required glossary keys exist in both languages', async () => {
     ['styleSheet', 'title'],
     ['projects', 'title'],
     ['auditDev', 'banner'],
+    ['shell', 'intro.skip'],
+    ['shell', 'lan.title'],
+    ['shell', 'oom.title'],
+    ['shell', 'download.title'],
+    ['characters', 'library.title'],
+    ['comics', 'tabs.script'],
+    ['studio', 'generate.goCount'],
+    ['scene3d', 'animator.openScene'],
+    ['activity', 'alternativeSongs.title'],
+    ['activity', 'retake.title'],
+    ['activity', 'recipes.title'],
+    ['settings', 'services.llmTitle'],
+    ['settings', 'loraBrowser.title'],
+    ['settings', 'storage.title'],
+    ['wizard', 'pendingAria'],
   ]
   for (const language of ['en', 'es']) {
     await i18n.changeLanguage(language)
@@ -183,6 +198,38 @@ test('language persists and switches without a reload', { concurrency: false }, 
   assert.equal(window.localStorage.getItem(LANGUAGE_STORAGE_KEY), 'en')
 })
 
+test('language switching keeps an authenticated LAN app mounted', { concurrency: false }, async () => {
+  const { render, screen, cleanup, waitFor } = await import('@testing-library/react')
+  const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
+  const { LanAuthGate } = await import('../src/components/LanAuthGate.tsx')
+  const originalFetch = globalThis.fetch
+  let statusChecks = 0
+  ensureUiI18n()
+  await setUiLanguage('en')
+  globalThis.fetch = async input => {
+    assert.equal(String(input), '/api/v1/auth/lan/status')
+    statusChecks += 1
+    return new Response(JSON.stringify({ enabled: true, required: true, authenticated: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  try {
+    render(<LanAuthGate><div data-testid="authenticated-app">App state</div></LanAuthGate>)
+    const app = await screen.findByTestId('authenticated-app')
+    assert.equal(statusChecks, 1)
+
+    await setUiLanguage('es')
+    await waitFor(() => assert.equal(document.documentElement.lang, 'es'))
+    assert.strictEqual(screen.getByTestId('authenticated-app'), app)
+    assert.equal(statusChecks, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+    cleanup()
+    await setUiLanguage('en')
+  }
+})
+
 test('pilot navigation and settings render translated labels', { concurrency: false }, async () => {
   const { render, screen, cleanup, fireEvent } = await import('@testing-library/react')
   const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
@@ -260,11 +307,13 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
 
 test('resources register the extraInfo, storyLab and videoEditor namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'shell', 'characters', 'comics', 'studio'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)
   assert.ok('storyLab' in resources.es)
+  assert.ok('shell' in resources.en)
+  assert.ok('shell' in resources.es)
   assert.ok('videoEditor' in resources.en)
   assert.ok('videoEditor' in resources.es)
 })

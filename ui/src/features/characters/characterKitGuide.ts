@@ -1,4 +1,6 @@
 import type { CharacterKit, CharacterKitAsset, CharacterMouthState } from '../../lib/characterKit'
+import type { ParseKeys } from 'i18next'
+import i18n from '../../i18n'
 
 export type CharacterKitEditorTab = 'kit' | 'face-rig'
 
@@ -16,17 +18,18 @@ export type CharacterKitNextStep = {
   tab: CharacterKitEditorTab
 }
 
-const POSE_LABELS: Record<string, string> = {
-  base: 'De pie',
-  pointing: 'Señala',
-  reaction: 'Reacción',
-}
+const KNOWN_POSES = ['base', 'pointing', 'reaction'] as const
 
 const MOUTH_STATES: CharacterMouthState[] = ['closed', 'small', 'wide', 'round']
 
+function tCharacters(key: ParseKeys<'characters'>, options?: Record<string, unknown>): string {
+  return i18n.t(key, { ns: 'characters', ...options })
+}
+
 export function characterKitPoseLabel(poseId: string): string {
   const id = poseId.trim() || 'base'
-  return POSE_LABELS[id] || id.replace(/[-_]+/g, ' ')
+  if ((KNOWN_POSES as readonly string[]).includes(id)) return tCharacters(`poses.${id}` as ParseKeys<'characters'>)
+  return id.replace(/[-_]+/g, ' ')
 }
 
 export function characterKitPoseAsset(kit: CharacterKit, poseId: string): CharacterKitAsset | undefined {
@@ -88,8 +91,8 @@ export function characterKitNextStep(kit: CharacterKit | null, poseId = 'base'):
   if (!kit) {
     return {
       id: 'pick-character',
-      title: 'Elige un personaje',
-      detail: 'Pulsa Luma o Brin. Eso abre su cuerpo y las bocas que ya tiene.',
+      title: tCharacters('guide.pickCharacter.title'),
+      detail: tCharacters('guide.pickCharacter.detail'),
       tab: 'kit',
     }
   }
@@ -98,39 +101,39 @@ export function characterKitNextStep(kit: CharacterKit | null, poseId = 'base'):
   if (!pose) {
     return {
       id: 'add-body',
-      title: 'Falta un cuerpo',
-      detail: `Este personaje no tiene la pose “${poseName}”. Genera un recorte de cuerpo o usa un dibujo del lienzo.`,
+      title: tCharacters('guide.missingBody.title'),
+      detail: tCharacters('guide.missingBody.detail', { pose: poseName }),
       tab: 'kit',
     }
   }
   if (pose.reviewState !== 'approved') {
     return {
       id: 'add-body',
-      title: `Aprueba el cuerpo “${poseName}”`,
-      detail: 'Sin un cuerpo aprobado no se pueden colocar bocas ni ponerlo en la escena.',
+      title: tCharacters('guide.approveBody.title', { pose: poseName }),
+      detail: tCharacters('guide.approveBody.detail'),
       tab: 'kit',
     }
   }
   if (!poseMouthWasWiped(kit, poseId) || !poseMouthsAreLocked(kit, poseId)) {
     return {
       id: 'wipe-mouth',
-      title: 'Coloca la caja sobre los labios',
-      detail: `En “${poseName}”, arrastra la caja amarilla hasta tapar la boca. Si el dibujo todavía tiene labios pintados, pulsa Limpiar zona de la boca. Si ya está limpio, pulsa Bloquear bocas y luego Guardar.`,
+      title: tCharacters('guide.wipeMouth.title'),
+      detail: tCharacters('guide.wipeMouth.detail', { pose: poseName }),
       tab: 'face-rig',
     }
   }
   if (characterKitApprovedMouths(kit).length < 2) {
     return {
       id: 'make-mouths',
-      title: 'Haz o aprueba las bocas',
-      detail: 'Hace falta al menos boca cerrada y una abierta. Genera las que falten, colócalas sobre los labios y aprueba las transparentes.',
+      title: tCharacters('guide.makeMouths.title'),
+      detail: tCharacters('guide.makeMouths.detail'),
       tab: 'face-rig',
     }
   }
   return {
     id: 'put-on-scene',
-    title: 'Ponlo en la escena',
-    detail: `“${kit.name} · ${poseName}” ya tiene cuerpo y bocas. Pulsa Poner en la escena. Después usa Diálogo recortable para que hable.`,
+    title: tCharacters('guide.putOnScene.title'),
+    detail: tCharacters('guide.putOnScene.detail', { name: kit.name, pose: poseName }),
     tab: 'face-rig',
   }
 }

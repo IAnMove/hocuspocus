@@ -20,7 +20,7 @@ import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
-import { useUiTranslation } from '../../i18n'
+import i18n, { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
 
@@ -98,8 +98,16 @@ const welcomeMessage = (): AgentMessage => ({
 
 function formatActionResults(results: AgentActionResult[]): string {
   if (!results.length) return ''
-  const lines = results.map(result => `- **${result.ok ? 'Hecho' : 'No se pudo'}.** ${result.message}`)
-  return `### Qué he hecho\n${lines.join('\n')}`
+  const done = i18n.t('actionDone', { ns: 'wizard' })
+  const failed = i18n.t('actionFailed', { ns: 'wizard' })
+  const lines = results.map(result => `- **${result.ok ? done : failed}.** ${result.message}`)
+  return `### ${i18n.t('actionReport', { ns: 'wizard' })}\n${lines.join('\n')}`
+}
+
+function workflowStatusText(workflow: WizardWorkflowRecord): string {
+  return workflow.state === 'awaiting_input'
+    ? i18n.t('needDecisionBody', { ns: 'wizard', reason: workflow.pendingInput?.reason || i18n.t('missingRequired', { ns: 'wizard' }) })
+    : i18n.t('workflowState', { ns: 'wizard', type: workflow.type, state: workflow.state })
 }
 
 function readMessages(workspace: string): AgentMessage[] {
@@ -132,13 +140,14 @@ function writeMessages(workspace: string, messages: AgentMessage[]): void {
 
 export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = false }: AgentAssistantPanelProps) {
   const { t } = useUiTranslation('wizard')
+  const { t: tCommon } = useUiTranslation('common')
   const [messages, setMessages] = useState<AgentMessage[]>(() => readMessages(workspace))
   const [conversationWorkspace, setConversationWorkspace] = useState(workspace)
   const [hydratedWorkspace, setHydratedWorkspace] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [state, setState] = useState<AgentVisualState>('idle')
   const [busy, setBusy] = useState(false)
-  const [busyMessage, setBusyMessage] = useState('Consultando el grimorio de HocusPocus…')
+  const [busyMessage, setBusyMessage] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [errorCardId, setErrorCardId] = useState<string | null>(null)
   const [activeWorkflow, setActiveWorkflow] = useState<WizardWorkflowRecord | null>(null)
@@ -174,9 +183,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           found = true
           return {
             ...message,
-            text: workflow.state === 'awaiting_input'
-              ? `🪄 **Necesito una decisión para continuar el mismo hechizo.**\n\n${workflow.pendingInput?.reason || 'Falta un dato requerido.'}`
-              : `El hechizo duradero **${workflow.type}** está ahora en estado **${workflow.state}**.`,
+            text: workflowStatusText(workflow),
             cards: message.cards.map(existing => existing.id === card.id ? card : existing),
           }
         })
@@ -184,9 +191,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         return [...updated, {
           id: `wizard-workflow-${workflow.workflowId}`,
           role: 'assistant' as const,
-          text: workflow.state === 'awaiting_input'
-            ? `🪄 **Necesito una decisión para continuar el mismo hechizo.**\n\n${workflow.pendingInput?.reason || 'Falta un dato requerido.'}`
-            : `El hechizo duradero **${workflow.type}** está ahora en estado **${workflow.state}**.`,
+          text: workflowStatusText(workflow),
           createdAt: Date.now(),
           cards: [card],
         }].slice(-40)
@@ -352,7 +357,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
     setMessages(nextMessages)
     setDraft('')
     setBusy(true)
-    setBusyMessage('Consultando el grimorio de HocusPocus…')
+    setBusyMessage(t('consulting'))
     setState('thinking')
     const traceStartedAt = new Date().toISOString()
     try {
@@ -361,10 +366,10 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         if (!answer) {
           const choices = pendingInput.options.map(option => `“${option.label}”`).join(', ')
           throw new Error(choices
-            ? `Elige una de estas opciones para continuar el hechizo: ${choices}.`
-            : `Responde los campos ${pendingInput.fields.map(field => `${field}=valor`).join(', ')}.`)
+            ? t('pendingChoice', { choices })
+            : t('pendingFields', { fields: pendingInput.fields.map(field => `${field}=value`).join(', ') }))
         }
-        setBusyMessage('Aplicando tu decisión al paso bloqueado…')
+        setBusyMessage(t('applyingDecision'))
         await defaultWizardWorkflowRuntime.answer(pendingInput.workflowId, answer, {
           stepId: pendingInput.stepId,
           version: pendingInput.version,
@@ -416,7 +421,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       const assistantMessage: AgentMessage = {
         id: newId(),
         role: 'assistant',
-        text: [humanReply(turn.reply || '') || 'Mi bola de cristal no ha devuelto una respuesta utilizable.', actionReport]
+        text: [humanReply(turn.reply || '') || t('emptyReply'), actionReport]
           .filter(Boolean)
           .join('\n\n'),
         createdAt: Date.now(),
@@ -439,8 +444,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         id: newId(),
         role: 'assistant',
         text: pendingInput
-          ? `No puedo aplicar todavía esa respuesta al paso bloqueado: ${message}`
-          : `No he podido consultar el LLM: ${message}. Comprueba Settings → Services y vuelve a intentarlo.`,
+          ? t('pendingError', { message })
+          : t('llmError', { message }),
         createdAt: Date.now(),
       }
       setMessages(current => [...current, assistantMessage].slice(-40))
@@ -480,13 +485,13 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           <AgentAvatar state={state} size={48} />
           <div className="min-w-0 flex-1">
             <h2 className="hp-wordmark max-w-36 whitespace-normal text-xl font-semibold leading-[1.05] text-amber-50">{t('title')}</h2>
-            <p className="truncate text-[10px] text-white/45">Workspace: {workspace}</p>
+            <p className="truncate text-[10px] text-white/45">{t('workspace', { name: workspace })}</p>
           </div>
           <button
             type="button"
             onClick={() => setExpanded(current => !current)}
             className="rounded-lg p-1.5 text-white/40 hover:bg-white/5 hover:text-white"
-            title={expanded ? 'Restore chat size' : 'Maximize chat'}
+            title={expanded ? t('restore') : t('maximize')}
             aria-label={expanded ? t('restore') : t('maximize')}
             aria-pressed={expanded}
           >
@@ -497,8 +502,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         </div>
         <div className="relative mt-2 flex items-center gap-2 text-[9px] text-white/45">
           <span className={`h-1.5 w-1.5 rounded-full ${activeCount ? 'animate-pulse bg-blue-300' : 'bg-emerald-300'}`} />
-          <span>{activeCount ? `${activeCount} active ${activeCount === 1 ? 'task' : 'tasks'}` : 'No active tasks'}</span>
-          {latestTask && <span className="min-w-0 flex-1 truncate">Latest: {latestTask.title} · {latestTask.status}</span>}
+          <span>{activeCount ? t('activeTasks', { count: activeCount }) : t('noActiveTasks')}</span>
+          {latestTask && <span className="min-w-0 flex-1 truncate">{t('latestTask', { title: latestTask.title, status: latestTask.status })}</span>}
         </div>
       </div>
 
@@ -517,29 +522,29 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
                   </div>
                   <p className="mt-1 text-[10px] leading-relaxed text-amber-50/80">{card.message}</p>
                   {card.outputNames?.length ? (
-                    <p className="mt-1 truncate text-[9px] text-emerald-200/80">Outputs: {card.outputNames.join(', ')}</p>
+                    <p className="mt-1 truncate text-[9px] text-emerald-200/80">{t('outputs', { names: card.outputNames.join(', ') })}</p>
                   ) : null}
                   {card.assetIds?.length ? (
-                    <p className="mt-1 truncate text-[9px] text-emerald-200/80">Assets: {card.assetIds.join(', ')}</p>
+                    <p className="mt-1 truncate text-[9px] text-emerald-200/80">{t('assets', { ids: card.assetIds.join(', ') })}</p>
                   ) : null}
                   {errorCardId === card.id && card.controls.viewErrors && (
                     <p className="mt-1 text-[9px] text-rose-200/80">{card.message}</p>
                   )}
                   <div className="mt-2 flex flex-wrap gap-1">
                     {card.controls.open && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'open_tab', tab: tabForExecutionTarget(card.target?.kind) }])}>Abrir destino</button>
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'open_tab', tab: tabForExecutionTarget(card.target?.kind) }])}>{t('openTarget')}</button>
                     )}
                     {card.controls.cancel && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'cancel_task', taskId: card.taskId || 'latest', confirm: true }])}>Cancelar</button>
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'cancel_task', taskId: card.taskId || 'latest', confirm: true }])}>{tCommon('actions.cancel')}</button>
                     )}
                     {card.controls.resume && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'resume_task', taskId: card.taskId || 'latest', confirm: true }])}>Reanudar</button>
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'resume_task', taskId: card.taskId || 'latest', confirm: true }])}>{tCommon('actions.resume')}</button>
                     )}
                     {card.controls.viewErrors && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => setErrorCardId(card.id)}>Ver errores</button>
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => setErrorCardId(card.id)}>{t('viewErrors')}</button>
                     )}
                     {card.controls.retryPending && (
-                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'retry_task', taskId: card.taskId || 'latest', confirm: true }])}>Reintentar pendientes</button>
+                      <button type="button" className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/5" onClick={() => void executeAgentActions([{ type: 'retry_task', taskId: card.taskId || 'latest', confirm: true }])}>{t('retryPending')}</button>
                     )}
                   </div>
                 </div>
@@ -558,15 +563,15 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
 
       {messages.length <= 1 && (
         <div className="flex flex-wrap gap-1.5 border-t border-white/5 px-3 pt-2">
-          {['¿Qué hay en cola?', 'Abre 3D Video', 'Hazme un cómic de ejemplo'].map(suggestion => (
+          {[t('suggestions.queue'), t('suggestions.video3d'), t('suggestions.comic')].map(suggestion => (
             <button key={suggestion} type="button" disabled={busy} onClick={() => void ask(suggestion)} className="rounded-full border border-amber-200/15 bg-amber-200/5 px-2 py-1 text-[9px] text-amber-100/65 hover:border-amber-200/35 hover:text-amber-50 disabled:opacity-40">{suggestion}</button>
           ))}
         </div>
       )}
 
       {pendingInput && (
-        <div className="border-t border-amber-200/10 bg-amber-200/[.035] px-3 py-2" role="group" aria-label="Wizard pending question">
-          <p className="text-[10px] font-medium text-amber-100">El hechizo está esperando tu elección</p>
+        <div className="border-t border-amber-200/10 bg-amber-200/[.035] px-3 py-2" role="group" aria-label={t('pendingAria')}>
+          <p className="text-[10px] font-medium text-amber-100">{t('pendingTitle')}</p>
           <p className="mt-0.5 text-[9px] text-amber-50/65">{pendingInput.reason}</p>
           {pendingInput.options.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -581,7 +586,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
                     className="rounded-lg border border-amber-200/25 bg-amber-200/10 px-2 py-1 text-[9px] text-amber-50 hover:bg-amber-200/20 disabled:opacity-40"
                     title={option.description}
                   >
-                    {option.label}{Object.is(option.value, pendingInput.recommended) ? ' · recomendado' : ''}
+                    {option.label}{Object.is(option.value, pendingInput.recommended) ? ` · ${t('recommended')}` : ''}
                   </button>
                 )
               })}
@@ -607,7 +612,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
             {busy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUp size={14} />}
           </button>
         </div>
-        <p className="mt-1.5 text-center text-[8px] text-white/30">Consulta, navega y prepara. Las órdenes explícitas de generación entran en la cola real.</p>
+        <p className="mt-1.5 text-center text-[8px] text-white/30">{t('footerHint')}</p>
       </form>
     </section>
   )

@@ -1,5 +1,6 @@
 import { Mic } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 
 const AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a'
 
@@ -22,6 +23,8 @@ const AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a'
  * works in both contexts.
  */
 export function VoiceRefSection() {
+  const { t } = useUiTranslation('studio')
+  const { t: tCommon } = useUiTranslation('common')
   const enabled = useStore(s => !!s.servicesConfig?.voice_reference_enabled)
   const voiceRef = useStore(s => s.directorVoiceRef)
   const setVoiceRef = useStore(s => s.setDirectorVoiceRef)
@@ -35,11 +38,11 @@ export function VoiceRefSection() {
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-[11px] text-text-muted uppercase tracking-wider flex items-center gap-1">
           <Mic size={10} />
-          Voice Reference (ID-LoRA)
+          {t('voiceRef.title')}
         </span>
         {!voiceRef ? (
           <label className="cursor-pointer text-[10px] text-accent-blue hover:underline">
-            + Add audio
+            {t('voiceRef.addAudio')}
             <input
               type="file"
               accept={AUDIO_ACCEPT}
@@ -56,7 +59,7 @@ export function VoiceRefSection() {
             onClick={() => setVoiceRef(null)}
             className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
           >
-            Remove
+            {tCommon('actions.remove')}
           </button>
         )}
       </div>
@@ -67,7 +70,7 @@ export function VoiceRefSection() {
             <span className="text-[10px] text-text-secondary truncate">{voiceRef.name}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-text-muted whitespace-nowrap">Identity scale</span>
+            <span className="text-[10px] text-text-muted whitespace-nowrap">{t('inputs.identityScale')}</span>
             <input
               type="range"
               min={0}
@@ -82,7 +85,7 @@ export function VoiceRefSection() {
         </div>
       ) : (
         <p className="text-[10px] text-text-muted italic">
-          ~5-second voice sample. Combined with an active ID-LoRA, keeps the speaker's voice consistent across video clips.
+          {t('voiceRef.hint')}
         </p>
       )}
     </div>

@@ -24,7 +24,9 @@ installDom()
 
 test('Series Shots controls have programmatic names and selection state', async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ensureUiI18n } = await import('../src/i18n/index.ts')
   const { SeriesShotsPanel } = await import('../src/features/series/SeriesShotsPanel.tsx')
+  const t = ensureUiI18n().getFixedT('en', 'seriesLab')
   const shot = {
     id: 'shot-1', sceneId: 'scene-1', order: 1, durationSeconds: 10, framing: 'medium', camera: 'locked',
     action: 'A character enters', prompt: 'A character enters the workshop', negativePrompt: '', dialogueBeats: [],
@@ -51,18 +53,18 @@ test('Series Shots controls have programmatic names and selection state', async 
     onRender={() => {}}
   />)
 
-  const selectShot = screen.getByRole('button', { name: 'Select shot 1 for rendering' })
+  const selectShot = screen.getByRole('button', { name: t('shots.selectAria', { order: 1 }) })
   assert.equal(selectShot.getAttribute('aria-pressed'), 'false')
   fireEvent.click(selectShot)
   assert.equal(selectShot.getAttribute('aria-pressed'), 'true')
-  const selectAll = screen.getByRole('button', { name: 'Clear selection' })
+  const selectAll = screen.getByRole('button', { name: t('shots.clearSelection') })
   assert.equal(selectAll.getAttribute('aria-pressed'), 'true')
-  assert.ok(screen.getByRole('combobox', { name: 'Requested clip for shot 1' }))
-  assert.ok(screen.getByRole('combobox', { name: 'Render strategy for shot 1' }))
-  assert.ok(screen.getByRole('textbox', { name: 'Prompt for shot 1' }))
-  assert.ok(screen.getByRole('checkbox', { name: 'Include asset-1 in shot 1' }))
-  assert.ok(screen.getByRole('checkbox', { name: 'Exclude asset-1 from shot 1' }))
-  assert.ok(screen.getByLabelText('Composed start'))
-  assert.ok(screen.getByLabelText('Composed end'))
+  assert.ok(screen.getByRole('combobox', { name: t('duration.shotAria', { order: 1 }) }))
+  assert.ok(screen.getByRole('combobox', { name: t('shots.strategyAria', { order: 1 }) }))
+  assert.ok(screen.getByRole('textbox', { name: t('shots.promptAria', { order: 1 }) }))
+  assert.ok(screen.getByRole('checkbox', { name: t('shots.includeAria', { id: 'asset-1', order: 1 }) }))
+  assert.ok(screen.getByRole('checkbox', { name: t('shots.excludeAria', { id: 'asset-1', order: 1 }) }))
+  assert.ok(screen.getByLabelText(t('shots.composedStart')))
+  assert.ok(screen.getByLabelText(t('shots.composedEnd')))
   cleanup()
 })

@@ -1,0 +1,309 @@
+{
+  "library": {
+    "title": "Personajes recortables",
+    "subtitle": "Un personaje es un cuerpo + bocas que se colocan encima. No es Character Creator (eso es el turnaround 3D).",
+    "savedCount_zero": "vacío",
+    "savedCount_one": "{{count}} guardado",
+    "savedCount_other": "{{count}} guardados",
+    "bodyCount_one": "{{count}} cuerpo",
+    "bodyCount_other": "{{count}} cuerpos",
+    "newHint": "Para un personaje nuevo: selecciona su dibujo en el lienzo, ponle nombre y créalo.",
+    "namePlaceholder": "Nombre, por ejemplo Luma",
+    "createFromSelected": "Nuevo personaje desde el dibujo seleccionado",
+    "now": "Ahora: {{title}}",
+    "goToTab": "Ir a {{tab}}",
+    "nameAria": "Nombre del personaje",
+    "styleAria": "Estilo del personaje",
+    "styles": {
+      "cutout": "Recorte",
+      "childrenIllustration": "Infantil",
+      "anime2d": "Anime 2D"
+    },
+    "editingBody": "Cuerpo que estás editando",
+    "ready": "listo",
+    "pending": "pendiente",
+    "tabs": {
+      "bodies": "Cuerpos",
+      "mouthsEyes": "Bocas y ojos"
+    },
+    "advanced": {
+      "summary": "Avanzado: usar una capa del lienzo",
+      "hint": "Solo si el dibujo ya está en la escena. Selecciónalo y asígnalo. El camino normal es generar o limpiar en Bocas y ojos.",
+      "mainBody": "Cuerpo principal",
+      "otherPose": "Otra pose ({{pose}})",
+      "mouthTypeAria": "Tipo de boca",
+      "thisLayerMouth": "Esta capa es una boca",
+      "thisLayerBlink": "Esta capa es un parpadeo",
+      "saveLayerPosition": "Guardar posición de la capa seleccionada",
+      "alphaWhenAssigning": "Transparencia al asignar"
+    },
+    "saving": "Guardando…",
+    "putOnScene": "Poner en la escena",
+    "deleteTitle": "Borrar solo la ficha, no los archivos",
+    "loading": "Cargando personajes…"
+  },
+  "poses": {
+    "base": "De pie",
+    "pointing": "Señala",
+    "reaction": "Reacción"
+  },
+  "mouths": {
+    "closed": "Cerrada",
+    "small": "Pequeña",
+    "wide": "Abierta",
+    "round": "Redonda"
+  },
+  "alpha": {
+    "transparent": "Transparente",
+    "unknown": "Sin revisar",
+    "opaque": "Opaca"
+  },
+  "review": {
+    "pending": "pendiente",
+    "approved": "aprobado",
+    "rejected": "rechazado",
+    "missing": "falta"
+  },
+  "guide": {
+    "pickCharacter": {
+      "title": "Elige un personaje",
+      "detail": "Pulsa Luma o Brin. Eso abre su cuerpo y las bocas que ya tiene."
+    },
+    "missingBody": {
+      "title": "Falta un cuerpo",
+      "detail": "Este personaje no tiene la pose “{{pose}}”. Genera un recorte de cuerpo o usa un dibujo del lienzo."
+    },
+    "approveBody": {
+      "title": "Aprueba el cuerpo “{{pose}}”",
+      "detail": "Sin un cuerpo aprobado no se pueden colocar bocas ni ponerlo en la escena."
+    },
+    "wipeMouth": {
+      "title": "Coloca la caja sobre los labios",
+      "detail": "En “{{pose}}”, arrastra la caja amarilla hasta tapar la boca. Si el dibujo todavía tiene labios pintados, pulsa Limpiar zona de la boca. Si ya está limpio, pulsa Bloquear bocas y luego Guardar."
+    },
+    "makeMouths": {
+      "title": "Haz o aprueba las bocas",
+      "detail": "Hace falta al menos boca cerrada y una abierta. Genera las que falten, colócalas sobre los labios y aprueba las transparentes."
+    },
+    "putOnScene": {
+      "title": "Ponlo en la escena",
+      "detail": "“{{name}} · {{pose}}” ya tiene cuerpo y bocas. Pulsa Poner en la escena. Después usa Diálogo recortable para que hable."
+    }
+  },
+  "faceRig": {
+    "mouthsOnPose": "Bocas sobre “{{pose}}”",
+    "steps": {
+      "box": "Arrastra la caja amarilla hasta tapar los labios. Al soltar se guarda sola.",
+      "wipe": "Si el dibujo todavía tiene boca pintada, pulsa Limpiar zona de la boca.",
+      "eyes": "Los ojos abiertos se quedan siempre; Cerrar ojos solo parpadea encima. Si el cuerpo ya tiene ojos, genera solo Cerrar ojos.",
+      "scene": "Poner en la escena y Preview. La boca y el parpadeo se animan solos."
+    },
+    "createNew": {
+      "summary": "Crear un cuerpo o bocas nuevas",
+      "hint": "Estilo y rasgos solo para generar. Luma y Brin ya existen: no hace falta esto para colocarles la boca."
+    },
+    "styles": {
+      "paper-cut": "Recorte de papel",
+      "plasticine": "Plastilina",
+      "cartoon": "Cartoon",
+      "watercolor": "Acuarela",
+      "comic-ink": "Tinta cómic",
+      "felt-puppet": "Títere de fieltro",
+      "limited-anime": "Anime limitado",
+      "children-illustration": "Ilustración infantil"
+    },
+    "traits": {
+      "afro hair": "Pelo afro",
+      "braids": "Trenzas",
+      "pigtails": "Coletas",
+      "beanie": "Gorro",
+      "round glasses": "Gafas redondas",
+      "goggles": "Goggles",
+      "freckles": "Pecas",
+      "dark skin": "Piel oscura",
+      "pale skin": "Piel clara",
+      "winter coat": "Abrigo de invierno",
+      "school uniform": "Uniforme escolar"
+    },
+    "extraNotes": "Notas extra (opcional)",
+    "extraNotesPlaceholder": "Solo lo que no cubren las etiquetas…",
+    "generatingBody": "Generando cuerpo…",
+    "regenerateBody": "Regenerar cuerpo (queda pendiente)",
+    "generateBody": "Generar recorte de cuerpo",
+    "mouthPackAria": "Pack de estilo de boca",
+    "usePack": "Usar pack",
+    "poseAlt": "Pose de {{name}}",
+    "overlayAlt": "Superposición {{state}} de {{name}}",
+    "dragBoxHint": "Arrastra la caja. La esquina cambia el tamaño.",
+    "wiping": "Limpiando…",
+    "wipeMouth": "Limpiar zona de la boca",
+    "lockMouths": "Bloquear bocas",
+    "states": {
+      "closed": "Cerrada",
+      "small": "Pequeña",
+      "wide": "Abierta",
+      "round": "Redonda",
+      "open-eyes": "Ojos",
+      "blink": "Cerrar ojos"
+    },
+    "promptUsed": "Prompt usado para {{name}}",
+    "cleaningCutout": "Limpiando recorte…",
+    "cleanMouthBackground": "Limpiar fondo de esta boca",
+    "hideMouth": "Ocultar boca",
+    "showMouth": "Ver boca",
+    "solidBackground": "Fondo liso",
+    "checkerboard": "Cuadros",
+    "nudge": {
+      "up": "Arriba",
+      "down": "Abajo",
+      "left": "Izquierda",
+      "right": "Derecha",
+      "smaller": "Más pequeña",
+      "bigger": "Más grande"
+    },
+    "fields": {
+      "x": "X",
+      "y": "Y (abajo →)",
+      "scale": "Escala",
+      "rotate": "Rotación"
+    },
+    "readout": "x {{x}} · y {{y}} · scale {{scale}} · rot {{rot}}°",
+    "saveMouth": "Guardar esta boca",
+    "reset": "Restablecer",
+    "flashBlink": "Parpadeo 0,4 s",
+    "blinking": "Parpadeando…",
+    "approveTransparent": "Aprobar transparente",
+    "reject": "Rechazar",
+    "generatingNamed": "Generando {{name}}…",
+    "generateNamed": "Generar / cambiar {{name}}",
+    "generatingPack": "Generando pack…",
+    "generateMissing": "Generar las que faltan",
+    "tryLine": {
+      "sample": "El cuadrado está congelado y la campana es demasiado alta.",
+      "summary": "Probar una frase (no se guarda)",
+      "planMouths": "Ver ritmo de bocas",
+      "speak": "Hablar 3 s",
+      "generatingVoice": "Generando voz…",
+      "beats": "{{count}} beats · {{duration}}s · disponibles {{available}}",
+      "none": "ninguna",
+      "missing": "Faltan {{missing}}; esos beats usan {{fallback}} como respaldo.",
+      "remainingMouth": "la boca restante",
+      "playMouths": "Reproducir bocas"
+    },
+    "unsavedHint": "Hasta que pulses Guardar, los cambios no están en la biblioteca. El LLM no ve piezas pendientes.",
+    "status": {
+      "bodyGenerated": "Cuerpo “{{pose}}” generado. Apruébalo en Cuerpos y luego coloca las bocas.",
+      "statePending": "{{name}} lista como pendiente. Arrástrala a los labios y pulsa Bloquear bocas.",
+      "generatingState": "Generando Face Rig {{name}}…",
+      "packGenerated": "Se generaron {{count}} estados de Face Rig. Revisa transparencia y colocación antes de aprobar.",
+      "cleaned": "{{name}} limpiada como {{status}}. Sigue pendiente hasta que apruebes la colocación.",
+      "planned": "Planificados {{count}} visemas en {{duration}}s. Las bocas que faltan quedan como respaldo y no se guardan.",
+      "speechReady": "Voz de prueba lista con {{count}} visemas. No se guardó nada en el kit.",
+      "presetApplied": "Se aplicó {{name}} como bocas de Face Rig pendientes. Revisa la colocación antes de aprobar.",
+      "eyesSaved": "Ojos guardados en “{{pose}}”.",
+      "mouthSaved": "Boca guardada en “{{pose}}”. Preview ya debería moverla.",
+      "wiped": "Boca pintada limpiada en “{{pose}}”. La caja ya está guardada.",
+      "reviewed": "{{name}} {{result}}. Guarda el kit para publicar esta revisión.",
+      "approved": "aprobada como transparente",
+      "rejected": "rechazada"
+    },
+    "errors": {
+      "inspectAlpha": "No se pudo inspeccionar el canal alfa de la imagen generada.",
+      "inspectBrowser": "Este navegador no puede inspeccionar la transparencia de la imagen.",
+      "packComplete": "Ya están todas las piezas. Genera una seleccionada para sustituirla.",
+      "cleanBeforeGenerate": "Genera {{name}} antes de limpiarla.",
+      "writeLine": "Escribe primero una frase corta de prueba.",
+      "choosePack": "Elige primero un pack de estilo de boca.",
+      "approvePoseBeforeWipe": "Aprueba una pose antes de limpiar su zona de la boca.",
+      "loadPose": "No se pudo cargar la imagen de la pose.",
+      "editPose": "Este navegador no puede editar la imagen de la pose.",
+      "encodeWiped": "No se pudo codificar la pose limpia.",
+      "blinkFirst": "Genera primero una superposición de parpadeo y luego pruébala para ver los ojos.",
+      "approvalBlocked": "La aprobación está bloqueada: esta salida no tiene un canal alfa transparente verificado.",
+      "poseFailed": "Falló la generación de la pose del personaje.",
+      "generateFailed": "Falló la generación de Face Rig.",
+      "packFailed": "Falló la generación del pack de Face Rig.",
+      "cleanupFailed": "Falló la limpieza de Face Rig.",
+      "planFailed": "No se pudo planificar esta frase de Face Rig.",
+      "speechFailed": "Falló la vista previa de voz de Face Rig.",
+      "applyPackFailed": "No se pudo aplicar este pack de bocas.",
+      "savePlacementFailed": "No se pudo guardar esta colocación de Face Rig.",
+      "wipeFailed": "No se pudo limpiar la zona de la boca.",
+      "reviewFailed": "No se pudo revisar este estado de Face Rig."
+    },
+    "warnings": {
+      "farFromCenter": "Esta superposición queda lejos del centro de la pose y puede no cubrir la cara.",
+      "tooSmall": "Esta superposición es demasiado pequeña respecto a la pose.",
+      "eyeTooLarge": "Esta superposición de ojos es más grande que una máscara típica. Redúcela hasta que cubra solo los ojos.",
+      "mouthTooLarge": "Esta superposición de boca es más grande que un visema típico. Redúcela hasta que quede sobre los labios.",
+      "mouthTooLow": "En un recorte de cuerpo entero las bocas suelen quedar por encima del pecho. Mueve Abajo/Arriba hasta tapar los labios y luego bloquea las bocas."
+    }
+  },
+  "creator": {
+    "title": "Character Creator",
+    "subtitle": "Turnaround 3D: sube una foto. MiniMax o el LLM interno describen el sujeto si dejas el A Prompt vacío. Sale un vídeo 360 y, si quieres, un mesh Hunyuan. No es el puppet 2D de Face Rig.",
+    "openFaceRig": "Crear / abrir CharacterKit Face Rig",
+    "history": "Historial de este Workspace",
+    "kind": {
+      "character": "Personaje",
+      "object": "Objeto"
+    },
+    "subjectImage": "Imagen principal del sujeto",
+    "objectImage": "Imagen principal del objeto",
+    "subjectHint": "Obligatoria. Una sola basta. MiniMax lee la foto y escribe el A Prompt.",
+    "extraRef": "Referencia extra {{index}}",
+    "extraHint": "Opcional. Cara, ropa, accesorio u otro ángulo.",
+    "addOptionalRef": "Añadir referencia opcional",
+    "hideAPrompt": "Ocultar A Prompt",
+    "optionalAPrompt": "A Prompt opcional",
+    "aPromptPlaceholder": "Vacío = MiniMax o el LLM interno describen las fotos. Otros proveedores requieren un A Prompt.",
+    "engineNote": "Motor Character Sheet ConvRot aislado · Turbo nativo desactivado para conservar la órbita de 6 paneles.",
+    "engineMeta": "{{model}} · {{resolution}} 9:16 · {{frames}} frames · grabs {{grabs}}",
+    "orbitGenerate": "Generar órbita 360",
+    "takePhotos": "Take photo · 4 vistas",
+    "hunyuanGenerate": "Generar Hunyuan3D",
+    "emptyOrbit": "Sube al menos una imagen y genera la órbita",
+    "adjustCapture": "Ajustar captura: {{label}}",
+    "adjustHint": "Elige un instante del vídeo y sustituye solo esta vista.",
+    "captureTimeAria": "Tiempo de captura",
+    "replaceView": "Take image y sustituir vista",
+    "noPhoto": "Sin foto",
+    "selectViewAria": "Seleccionar vista {{label}}",
+    "hunyuanAlt": "Hunyuan3D",
+    "dropOrChoose": "Soltar o elegir imagen",
+    "removeRefAria": "Quitar {{label}}",
+    "roles": {
+      "extra": "Otro ángulo / detalle",
+      "face": "Solo cara",
+      "outfit": "Solo ropa",
+      "accessory": "Accesorio / objeto extra"
+    },
+    "views": {
+      "front": "Frente",
+      "left": "Izquierda",
+      "back": "Espalda",
+      "right": "Derecha"
+    },
+    "objectViews": {
+      "front": "Frente",
+      "left": "Izquierda",
+      "back": "Trasera",
+      "right": "Derecha"
+    },
+    "status": {
+      "minimaxDescribe": "MiniMax está describiendo la imagen…",
+      "llmDescribe": "El LLM interno está describiendo la imagen…",
+      "orbitQueued": "Órbita H3 en cola…",
+      "hunyuanQueued": "Hunyuan3D en cola…"
+    },
+    "errors": {
+      "autoDescribe": "La descripción automática solo funciona con MiniMax o el LLM interno. Escribe un A Prompt o cambia Ajustes → LLM.",
+      "faceRigKitsOnly": "Face Rig es para Character Kits. Deja Character Creator para la identidad y las hojas de turnaround.",
+      "needViewOrUpload": "Captura una vista del turnaround o sube primero la imagen del sujeto.",
+      "orbitFailed": "La órbita falló",
+      "orbitCancelled": "Órbita cancelada",
+      "hunyuanFailed": "Hunyuan3D falló",
+      "hunyuanCancelled": "Hunyuan3D cancelado"
+    }
+  }
+}
