@@ -147,6 +147,11 @@ export interface ComicProject {
   translationGlossary?: ComicGlossaryEntry[]
   pages: ComicPage[]
   assets: Record<string, ComicAsset>
+  /**
+   * Immutable lineage for cross-domain adaptations. Display names remain
+   * snapshots for humans; restoration must use the IDs and workspace below.
+   */
+  provenance?: ComicProvenance
   director?: {
     planId: string
     provider: 'maestro' | 'minimax'
@@ -266,6 +271,53 @@ export interface ComicSourceStory {
   title: string
 }
 
+export interface ComicSourceSeries {
+  id: string
+  revision: number
+  title: string
+}
+
+export interface ComicSourceEpisode {
+  id: string
+  seasonId: string
+  title: string
+  updatedAt: string
+}
+
+/**
+ * Portable identity for a Comic staged from a Series episode.
+ *
+ * The source and destination namespaces are intentional. Source production
+ * and output IDs belong to the episode that was adapted; destination run,
+ * task and output IDs are added only after the Comic is actually executed.
+ * No title or selected version is an identity key.
+ */
+export interface ComicProvenance {
+  schema: 'comic-provenance-v1'
+  workspaceId: string
+  source: {
+    kind: 'series_episode'
+    seriesId: string
+    seriesRevision: number
+    episodeId: string
+    episodeUpdatedAt: string
+    productionIds: string[]
+    outputAssetIds: string[]
+  }
+  destination: {
+    comicId: string
+    productionId?: string
+    runId?: string
+    taskId?: string
+    rootTaskId?: string
+    outputAssetIds?: string[]
+  }
+  actor: 'user' | 'wizard' | 'system'
+  tool: string
+  capability: string
+  createdAt: string
+}
+
 export interface ComicDirectorRequest {
   /** New comics follow the credential-free global production profile. */
   useGlobalProfile?: boolean
@@ -279,6 +331,9 @@ export interface ComicDirectorRequest {
   storyContext?: string
   /** Identifies the Story Lab revision used to stage this adaptation. */
   sourceStory?: ComicSourceStory
+  /** Identifies the exact Series and Episode used to stage this adaptation. */
+  sourceSeries?: ComicSourceSeries
+  sourceEpisode?: ComicSourceEpisode
   pageCount: number
   language: string
   format: ComicProject['format']['preset']

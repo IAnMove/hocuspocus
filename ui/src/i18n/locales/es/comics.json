@@ -285,6 +285,7 @@
     "premise": "Premisa de la historia",
     "premisePlaceholder": "¿Qué ocurre en el cómic?",
     "fromStory": "Cargado desde Story Lab: {{title}} · revisión {{revision}}. El brief de adaptación completo de abajo es editable antes de planificar.",
+    "fromSeries": "Cargado desde Series Lab: {{series}} → {{episode}} · IDs de origen {{seriesId}} / {{episodeId}}. El brief es editable; al recargar se usarán estos IDs.",
     "brief": "Biblia / brief de adaptación (opcional, editable)",
     "briefPlaceholder": "Personajes, relaciones, beats dramáticos, tema y restricciones de adaptación. Story Lab lo rellena automáticamente.",
     "pages": "Páginas",

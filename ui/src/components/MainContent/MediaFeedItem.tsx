@@ -4,7 +4,7 @@ import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
-import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject, selectPipelineClipVideo } from '../../api/client'
+import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject, fetchSeriesLibrary, selectPipelineClipVideo } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
 import { modelDisplayName } from '../../lib/modelDisplay'
 import { getOutputReference } from '../../lib/outputReference'
@@ -12,6 +12,8 @@ import { stageSceneForEditor } from '../../lib/sceneOutput'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
 import { formatAppAction, formatAppTimestamp } from '../../lib/locale'
 import { useComicStore } from '../../features/comics/store'
+import { normalizeComicProject } from '../../features/comics/model'
+import { resolveComicSource } from '../../features/comics/provenance'
 import {
   readVideoEditorReplacementTarget,
   writeVideoEditorReplacementResult,
@@ -132,6 +134,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const [moving, setMoving] = useState(false)
   const [selectingForMontage, setSelectingForMontage] = useState(false)
   const [montageSelectionError, setMontageSelectionError] = useState('')
+  const [comicOpenError, setComicOpenError] = useState('')
   const moveRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -275,12 +278,25 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       return
     }
     if (isComic) {
+      setComicOpenError('')
       void loadComicProject(file.name)
+        .then(rawProject => {
+          const project = normalizeComicProject(rawProject)
+          if (!project.provenance) return project
+          return fetchSeriesLibrary(project.provenance.workspaceId)
+            .then(library => {
+              resolveComicSource(project, library, project.provenance!.workspaceId)
+              return project
+            })
+        })
         .then(project => {
           useComicStore.getState().setProject(project, file.name)
           setMediaFilter('comics')
         })
-        .catch(error => console.error('Failed to open comic:', error))
+        .catch(error => {
+          console.error('Failed to open comic:', error)
+          setComicOpenError(error instanceof Error ? error.message : String(error))
+        })
       return
     }
     setSelectedOutput(index)
@@ -681,6 +697,12 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           />
         )}
       </div>
+
+      {comicOpenError && (
+        <div role="alert" className="border-t border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          {t('comicOpenFailed', { error: comicOpenError })}
+        </div>
+      )}
 
       {/* Inline info bar */}
       <div className="px-3 py-2 flex items-center gap-2 min-h-[40px]">

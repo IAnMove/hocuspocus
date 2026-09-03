@@ -64,10 +64,16 @@ export async function openProject(project: ProjectCatalogItem): Promise<void> {
     return
   }
   if (project.kind === 'comic') {
-    const [{ loadComicProject }, { useComicStore }] = await Promise.all([
-      import('../../api/comics'), import('../comics/store'),
+    const [{ loadComicProject }, { fetchSeriesLibrary }, { normalizeComicProject }, { resolveComicSource }, { useComicStore }] = await Promise.all([
+      import('../../api/comics'), import('../../api/series'), import('../comics/model'),
+      import('../comics/provenance'), import('../comics/store'),
     ])
-    useComicStore.getState().setProject(await loadComicProject(source.key), source.key)
+    const loaded = normalizeComicProject(await loadComicProject(source.key))
+    if (loaded.provenance) {
+      const library = await fetchSeriesLibrary(loaded.provenance.workspaceId)
+      resolveComicSource(loaded, library, loaded.provenance.workspaceId)
+    }
+    useComicStore.getState().setProject(loaded, source.key)
     useStore.getState().setMediaFilter('comics')
     return
   }

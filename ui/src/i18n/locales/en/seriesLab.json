@@ -324,6 +324,8 @@
     "generateOutline": "Generate outline only",
     "generateComplete": "Generate script + timed shots",
     "regenerateShots": "Regenerate shot proposal only",
+    "adaptToComic": "Open as editable comic",
+    "adaptToComicConfirm": "Replace the current Comic draft with this episode adaptation?",
     "cancelJob": "Cancel after current LLM call",
     "resumeStages": "Resume completed stages",
     "outline": "Outline",

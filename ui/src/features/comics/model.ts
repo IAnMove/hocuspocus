@@ -4,6 +4,7 @@ import type {
   ComicPanelElement,
   ComicPlan,
   ComicPlanPanel,
+  ComicProvenance,
   ComicProject,
   ComicTextElement,
   ComicVideoOverrideField,
@@ -798,11 +799,108 @@ export function varyDirectorLayouts(project: ComicProject): ComicProject {
   })
 }
 
+function provenanceId(value: unknown, path: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`Invalid comic provenance: ${path} must be a non-empty ID`)
+  }
+  return value.trim()
+}
+
+function provenanceRevision(value: unknown, path: string): number {
+  const revision = Number(value)
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    throw new Error(`Invalid comic provenance: ${path} must be a non-negative revision`)
+  }
+  return revision
+}
+
+function provenanceTimestamp(value: unknown, path: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`Invalid comic provenance: ${path} must be a timestamp`)
+  }
+  return value.trim()
+}
+
+function provenanceIds(value: unknown, path: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid comic provenance: ${path} must be an ID list`)
+  }
+  return Array.from(new Set(value.map((item, index) => provenanceId(item, `${path}[${index}]`))))
+}
+
+/**
+ * Normalize and validate the persisted Comic lineage contract.
+ *
+ * This deliberately throws for a present-but-invalid provenance object. An
+ * invalid source must be visible to the caller; silently dropping it would
+ * make a reload fall back to a title or the currently selected project.
+ */
+export function normalizeComicProvenance(value: unknown): ComicProvenance | undefined {
+  if (value == null) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid comic provenance: expected an object')
+  }
+  const raw = value as Record<string, unknown>
+  if (raw.schema !== 'comic-provenance-v1') {
+    throw new Error('Invalid comic provenance: unsupported schema')
+  }
+  const source = raw.source
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    throw new Error('Invalid comic provenance: source is required')
+  }
+  const sourceRaw = source as Record<string, unknown>
+  if (sourceRaw.kind !== 'series_episode') {
+    throw new Error('Invalid comic provenance: unsupported source kind')
+  }
+  const destination = raw.destination
+  if (!destination || typeof destination !== 'object' || Array.isArray(destination)) {
+    throw new Error('Invalid comic provenance: destination is required')
+  }
+  const destinationRaw = destination as Record<string, unknown>
+  const optionalIds = (path: string) => destinationRaw[path] == null
+    ? undefined : provenanceId(destinationRaw[path], `destination.${path}`)
+  const optionalOutputIds = destinationRaw.outputAssetIds == null
+    ? undefined : provenanceIds(destinationRaw.outputAssetIds, 'destination.outputAssetIds')
+  const actor = raw.actor
+  if (actor !== 'user' && actor !== 'wizard' && actor !== 'system') {
+    throw new Error('Invalid comic provenance: actor is invalid')
+  }
+  return {
+    schema: 'comic-provenance-v1',
+    workspaceId: provenanceId(raw.workspaceId, 'workspaceId'),
+    source: {
+      kind: 'series_episode',
+      seriesId: provenanceId(sourceRaw.seriesId, 'source.seriesId'),
+      seriesRevision: provenanceRevision(sourceRaw.seriesRevision, 'source.seriesRevision'),
+      episodeId: provenanceId(sourceRaw.episodeId, 'source.episodeId'),
+      episodeUpdatedAt: provenanceTimestamp(sourceRaw.episodeUpdatedAt, 'source.episodeUpdatedAt'),
+      productionIds: provenanceIds(sourceRaw.productionIds, 'source.productionIds'),
+      outputAssetIds: provenanceIds(sourceRaw.outputAssetIds, 'source.outputAssetIds'),
+    },
+    destination: {
+      comicId: provenanceId(destinationRaw.comicId, 'destination.comicId'),
+      ...(optionalIds('productionId') ? { productionId: optionalIds('productionId') } : {}),
+      ...(optionalIds('runId') ? { runId: optionalIds('runId') } : {}),
+      ...(optionalIds('taskId') ? { taskId: optionalIds('taskId') } : {}),
+      ...(optionalIds('rootTaskId') ? { rootTaskId: optionalIds('rootTaskId') } : {}),
+      ...(optionalOutputIds ? { outputAssetIds: optionalOutputIds } : {}),
+    },
+    actor,
+    tool: provenanceId(raw.tool, 'tool'),
+    capability: provenanceId(raw.capability, 'capability'),
+    createdAt: provenanceTimestamp(raw.createdAt, 'createdAt'),
+  }
+}
+
 export function normalizeComicProject(raw: unknown): ComicProject {
   if (!raw || typeof raw !== 'object') throw new Error('Invalid comic project')
   const doc = raw as Record<string, unknown>
   if (doc.version === 2 && Array.isArray(doc.pages)) {
     const project = repairComicText(doc as unknown as ComicProject)
+    project.provenance = normalizeComicProvenance(project.provenance)
+    if (project.provenance && project.provenance.destination.comicId !== project.id) {
+      throw new Error('Invalid comic provenance: destination.comicId does not match project.id')
+    }
     project.languageIntent = normalizeLanguageIntent(project.languageIntent, {
       contentLanguage: project.language || 'English',
       technicalPromptLanguage: 'en',
