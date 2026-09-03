@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from pathlib import Path
+import uuid
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient as FastApiTestClient
@@ -8,6 +9,7 @@ from PIL import Image
 from routers.tools import create_tools_router
 from shared.tools.background_removal import remove_background_file
 from shared.tools.background_removal_job import BackgroundRemovalJobHooks, run_remove_background_job
+from shared.tools.background_removal_request import child_workspace_name
 from services.asset_manifest import read_asset_manifest
 
 
@@ -398,7 +400,7 @@ def test_background_removal_worker_acknowledges_registration_cancel_race(tmp_pat
         record_job_outputs=lambda *_args, **_kwargs: None,
         register_abort_state=register,
         unregister_abort_state=lambda *_args, **_kwargs: None,
-        acknowledge_cancel=lambda current: acknowledgements.append(current["id"]) or True,
+        acknowledge_cancel=lambda current: current.update(status="cancelled") or acknowledgements.append(current["id"]) or True,
         active_states=active_states,
         publish_sidecar=lambda *_args, **_kwargs: None,
     )
@@ -436,13 +438,14 @@ def test_background_removal_worker_settles_cancel_after_registration(tmp_path):
         record_job_outputs=lambda *_args, **_kwargs: None,
         register_abort_state=lambda *_args, **_kwargs: True,
         unregister_abort_state=lambda *_args, **_kwargs: None,
-        acknowledge_cancel=lambda current: acknowledgements.append(current["id"]) or True,
+        acknowledge_cancel=lambda current: current.update(status="cancelled") or acknowledgements.append(current["id"]) or True,
         active_states={},
         publish_sidecar=lambda *_args, **_kwargs: None,
     )
 
     assert run_remove_background_job(job, hooks=hooks) is False
     assert acknowledgements == ["job-bg-cancelled"]
+    assert job["status"] == "cancelled"
 
 
 def test_background_removal_worker_settles_interrupted_simulation(tmp_path):
@@ -490,3 +493,148 @@ def test_background_removal_worker_settles_interrupted_simulation(tmp_path):
 
     assert run_remove_background_job(job, hooks=hooks) is False
     assert acknowledgements == ["job-bg-sim-cancelled"]
+
+
+def test_tools_route_rejects_unknown_query_workspace_without_creating_it(tmp_path):
+    uploads = tmp_path / "uploads"
+    default_workspace = tmp_path / "default"
+    uploads.mkdir()
+    default_workspace.mkdir()
+    created = []
+
+    def workspace_dir(name):
+        path = tmp_path / name
+        if name != "default":
+            path.mkdir(exist_ok=True)
+        created.append(name)
+        return str(path)
+
+    jobs = []
+    app = FastAPI()
+    app.include_router(create_tools_router(
+        get_active_workspace=lambda: "default",
+        list_workspaces=lambda: [{"name": "default"}],
+        workspace_dir=workspace_dir,
+        uploads_dir=lambda: str(uploads),
+        register_job=lambda job: jobs.append(job) or job,
+        start_remove_background=lambda _job: None,
+    ))
+    client = FastApiTestClient(app)
+
+    for source in (
+        "missing.png",
+        "/api/v1/file/missing.png?workspace=ghost",
+        "/api/v1/file/my%20portrait.png?workspace=ghost",
+    ):
+        response = client.post("/api/v1/tools/remove-background", json={
+            "source": source,
+            **({} if "?" in source else {"source_workspace": "ghost"}),
+            "workspace": "default",
+        })
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Source workspace not found"
+    invalid = client.post("/api/v1/tools/remove-background", json={
+        "source": "/api/v1/file/missing.png?workspace=bad%20name",
+        "workspace": "default",
+    })
+    assert invalid.status_code == 400
+    assert invalid.json()["detail"] == "Invalid source workspace"
+    assert "ghost" not in created and "bad name" not in created
+    assert not jobs
+
+
+def test_tools_route_accepts_encoded_source_with_matching_asset_id(tmp_path):
+    uploads = tmp_path / "uploads"
+    workspace = tmp_path / "outputs"
+    uploads.mkdir()
+    workspace.mkdir()
+    source = workspace / "my portrait.png"
+    _image(source)
+    jobs = []
+    asset = {
+        "id": "asset_portrait",
+        "kind": "image",
+        "filename": "my portrait.png",
+        "locations": [{"workspace_id": "default", "filename": "my portrait.png"}],
+    }
+    app = FastAPI()
+    app.include_router(create_tools_router(
+        get_active_workspace=lambda: "default",
+        list_workspaces=lambda: [{"name": "default"}],
+        workspace_dir=lambda _name: str(workspace),
+        uploads_dir=lambda: str(uploads),
+        asset_finder=lambda asset_id: asset if asset_id == "asset_portrait" else None,
+        register_job=lambda job: jobs.append(job) or job,
+        start_remove_background=lambda _job: None,
+    ))
+    client = FastApiTestClient(app)
+
+    for source_url in ("/api/v1/file/my%20portrait.png", "/api/v1/file/my%20portrait.png?workspace=default"):
+        response = client.post("/api/v1/tools/remove-background", json={
+            "asset_id": "asset_portrait", "source": source_url, "workspace": "default",
+        })
+        assert response.status_code == 200
+        assert jobs[-1]["params"]["source"] == "my portrait.png"
+    source_only = client.post("/api/v1/tools/remove-background", json={
+        "source": "/api/v1/file/my%20portrait.png", "workspace": "default",
+    })
+    assert source_only.status_code == 200
+    conflict = client.post("/api/v1/tools/remove-background", json={
+        "asset_id": "asset_portrait", "source": "/api/v1/file/other%20portrait.png", "workspace": "default",
+    })
+    assert conflict.status_code == 409
+    assert len(jobs) == 3
+
+
+def test_child_workspace_name_distinguishes_default_from_nested_folders(tmp_path):
+    default_root = str((tmp_path / "outputs").resolve())
+    assert child_workspace_name(f"{default_root}/hero.png", default_root) is None
+    assert child_workspace_name(f"{default_root}/film/portrait.png", default_root) == "film"
+    assert child_workspace_name(f"{default_root}/_hocuspocus/hidden.png", default_root) is None
+    assert child_workspace_name(f"{default_root}/.cache/hidden.png", default_root) is None
+    assert child_workspace_name(str((tmp_path / "elsewhere" / "x.png").resolve()), default_root) is None
+
+
+def test_tools_route_does_not_attribute_nested_workspace_file_to_default(tmp_path):
+    uploads = tmp_path / "uploads"
+    default_workspace = tmp_path / "outputs"
+    film_workspace = default_workspace / "film"
+    uploads.mkdir()
+    default_workspace.mkdir()
+    film_workspace.mkdir()
+    nested = film_workspace / "portrait.png"
+    owned = default_workspace / "hero.png"
+    _image(nested)
+    _image(owned)
+    jobs = []
+
+    def workspace_dir(name: str) -> str:
+        return str(default_workspace if name == "default" else default_workspace / name)
+
+    app = FastAPI()
+    app.include_router(create_tools_router(
+        get_active_workspace=lambda: "default",
+        list_workspaces=lambda: [{"name": "default"}, {"name": "film"}],
+        workspace_dir=workspace_dir,
+        uploads_dir=lambda: str(uploads),
+        register_job=lambda job: jobs.append(job) or job,
+        start_remove_background=lambda _job: None,
+    ))
+    client = FastApiTestClient(app)
+
+    nested_response = client.post("/api/v1/tools/remove-background", json={"source": str(nested), "workspace": "default"})
+    assert nested_response.status_code == 200
+    assert jobs[0]["params"]["source_workspace"] == "film"
+    assert jobs[0]["params"]["_workspace_root"] == str(film_workspace)
+    assert jobs[0]["params"]["source_asset_id"] == (
+        "asset_unmanaged_" + uuid.uuid5(uuid.NAMESPACE_URL, "hocuspocus:unmanaged:film:portrait.png").hex
+    )
+
+    owned_response = client.post("/api/v1/tools/remove-background", json={"source": str(owned), "workspace": "default"})
+    assert owned_response.status_code == 200
+    assert jobs[1]["params"]["source_workspace"] == "default"
+    assert jobs[1]["params"]["_workspace_root"] == str(default_workspace)
+
+    foreign = client.post("/api/v1/tools/remove-background", json={"source": str(owned), "workspace": "film"})
+    assert foreign.status_code == 400
+    assert len(jobs) == 2

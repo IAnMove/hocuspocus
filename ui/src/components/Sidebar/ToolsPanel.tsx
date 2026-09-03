@@ -122,7 +122,12 @@ export function ToolsPanel() {
 
   const hasRefs = revoiceRefs.some(r => r && r.path)
   const currentIsImage = !!current && current.type === 'image'
-  const canRun = !!sourcePath && (tool === 'upscale' || hasRefs || (tool === 'remove_background' && sourceKind === 'image'))
+  const hasVideoSource = !!sourcePath && sourceKind === 'video'
+  const hasImageSource = !!sourcePath && sourceKind === 'image'
+  const canRun =
+    (tool === 'upscale' && hasVideoSource) ||
+    (tool === 'revoice' && hasVideoSource && hasRefs) ||
+    (tool === 'remove_background' && hasImageSource)
   const flashvsrOff = flashvsrMode === 0 && method.startsWith('flashvsr')
 
   return (

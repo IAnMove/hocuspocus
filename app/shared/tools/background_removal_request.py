@@ -33,6 +33,44 @@ def _valid_workspace_name(value: str) -> bool:
     return bool(re.fullmatch(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)", value))
 
 
+def _canonical_source_path(source: str) -> str:
+    """Strip query/fragment and decode canonical API file URLs."""
+    without_query = source.strip().split("?", 1)[0].split("#", 1)[0]
+    return unquote(without_query) if without_query.startswith("/api/v1/") else without_query
+
+
+def _requested_source_name(source: str) -> str:
+    return os.path.basename(_canonical_source_path(source))
+
+
+def _file_url_query_workspace(source: str | None) -> str | None:
+    """Read the physical workspace from a canonical file URL."""
+    raw_source = (source or "").strip()
+    if not raw_source or not _canonical_source_path(raw_source).startswith("/api/v1/file/"):
+        return None
+    value = parse_qs(urlsplit(raw_source).query).get("workspace", [None])[0]
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _explicit_source_workspace(payload: RemoveBackgroundRequest) -> str | None:
+    """Prefer the typed workspace, falling back to a file URL query."""
+    if payload.source_workspace and payload.source_workspace.strip():
+        return payload.source_workspace.strip()
+    return _file_url_query_workspace(payload.source)
+
+
+def child_workspace_name(path: str, default_root: str) -> str | None:
+    """Identify a named workspace nested below the shared default folder."""
+    try:
+        relative = os.path.relpath(path, default_root)
+    except ValueError:
+        return None
+    if relative in {os.curdir, os.pardir} or relative.startswith(".." + os.sep) or os.path.isabs(relative):
+        return None
+    first = relative.split(os.sep, 1)[0]
+    return first if not first.startswith((".", "_")) and _valid_workspace_name(first) and first != "default" else None
+
+
 def _safe_image_in_root(filename: str, root: str) -> str | None:
     if not isinstance(filename, str) or not filename or os.path.basename(filename) != filename:
         return None
@@ -113,16 +151,14 @@ def _source_from_asset(
         raise HTTPException(status_code=404, detail="Source asset location is unavailable")
     path, resolved_scope = location
     filename = os.path.basename(path)
-    if payload.source and os.path.basename(unquote(payload.source.split("?", 1)[0])) != filename:
+    if payload.source and _requested_source_name(payload.source) != filename:
         raise HTTPException(status_code=409, detail="Source does not match asset_id")
     return path, filename, resolved_scope
 
 
 def _parse_source(payload: RemoveBackgroundRequest) -> tuple[str, str, str, str | None, bool]:
     raw = payload.source.strip() if payload.source else ""
-    source_without_query = raw.split("?", 1)[0].split("#", 1)[0]
-    if source_without_query.startswith("/api/v1/"):
-        source_without_query = unquote(source_without_query)
+    source_without_query = _canonical_source_path(raw)
     source_name = os.path.basename(source_without_query)
     is_api_path = source_without_query.startswith("/api/v1/")
     is_virtual = source_without_query in {
@@ -133,11 +169,7 @@ def _parse_source(payload: RemoveBackgroundRequest) -> tuple[str, str, str, str 
         or (not is_api_path and source_without_query != source_name and not os.path.isabs(source_without_query))
     ):
         raise HTTPException(status_code=400, detail="Source image path is not allowed")
-    scope = payload.source_workspace.strip() if payload.source_workspace else None
-    if scope is None and source_without_query.startswith("/api/v1/file/"):
-        query_workspace = parse_qs(urlsplit(raw).query).get("workspace", [None])[0]
-        if isinstance(query_workspace, str) and query_workspace.strip():
-            scope = query_workspace.strip()
+    scope = _explicit_source_workspace(payload)
     return raw, source_without_query, source_name, scope, is_virtual
 
 
@@ -161,7 +193,18 @@ def _absolute_source(
         if _contained(absolute, uploads_root):
             scope, root = "__uploads__", uploads_root
         elif _contained(absolute, destination_root):
-            scope, root = destination_workspace, destination_root
+            child = (
+                child_workspace_name(absolute, destination_root)
+                if destination_workspace == "default" else None
+            )
+            if child:
+                try:
+                    root = os.path.realpath(os.path.abspath(workspace_dir(child)))
+                except Exception as exc:
+                    raise HTTPException(status_code=400, detail="Source image path is not allowed") from exc
+                scope = child
+            else:
+                scope, root = destination_workspace, destination_root
         else:
             raise HTTPException(status_code=400, detail="Source image path is not allowed")
     if not _contained(absolute, root) or absolute == root:
@@ -284,7 +327,7 @@ def destination_context(
     destination = str(payload.workspace or get_active_workspace() or "default").strip()
     if not _valid_workspace_name(destination):
         raise HTTPException(status_code=400, detail="Invalid workspace")
-    requested = payload.source_workspace.strip() if payload.source_workspace else None
+    requested = _explicit_source_workspace(payload)
     validate_requested_workspace(requested, list_workspaces)
     try:
         output_dir = workspace_dir(destination)
@@ -316,6 +359,6 @@ def job_response(
 
 
 __all__ = [
-    "RemoveBackgroundRequest", "destination_context", "job_response", "resolve_source",
+    "RemoveBackgroundRequest", "child_workspace_name", "destination_context", "job_response", "resolve_source",
     "validate_requested_workspace",
 ]

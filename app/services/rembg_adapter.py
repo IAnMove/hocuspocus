@@ -56,6 +56,10 @@ def remove_background_image(
     ``session`` and extra rembg options remain injectable for existing
     preprocessing paths and tests. Normal callers share the cached U2Net
     session and the same transparent-background defaults.
+
+    Pass ``bgcolor=None`` to skip rembg's background composite. Face Rig
+    overlays need that so translucent edge pixels keep their original RGB
+    instead of picking up a white mix that shows as a halo.
     """
     if not isinstance(image, Image.Image):
         raise TypeError("Background removal expects a PIL image")
@@ -70,6 +74,10 @@ def remove_background_image(
         "bgcolor": list(_TRANSPARENT_BACKGROUND),
         **options,
     }
+    # rembg only composites when bgcolor is not None. Drop the key so callers
+    # can restore the historical "no mix" cutout used by Face Rig overlays.
+    if kwargs.get("bgcolor") is None:
+        kwargs.pop("bgcolor", None)
     cleaned = remove(image.convert("RGBA"), **kwargs)
     if isinstance(cleaned, Image.Image):
         return cleaned.convert("RGBA")

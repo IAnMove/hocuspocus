@@ -21,10 +21,20 @@ type ResolvedSource = {
   sourceWorkspace?: string
 }
 
+function sourceBasename(source: string): string {
+  const path = source.trim().split(/[?#]/, 1)[0]
+  const name = path.split(/[/\\]/).pop() || path
+  try {
+    return decodeURIComponent(name)
+  } catch {
+    return name
+  }
+}
+
 function sourceUrl(source: string, sourceWorkspace: string | undefined, workspace: string): string {
   const raw = source.trim()
   if (raw.startsWith('/api/')) return raw
-  const filename = raw.split(/[?#]/, 1)[0].split('/').pop() || raw
+  const filename = sourceBasename(raw)
   if (sourceWorkspace === '__uploads__') return `/api/v1/uploads/${encodeURIComponent(filename)}`
   return `/api/v1/file/${encodeURIComponent(filename)}?workspace=${encodeURIComponent(sourceWorkspace || workspace)}`
 }
@@ -53,9 +63,12 @@ function finishSource(
   assetId: string | undefined,
   assetSource: { asset: api.AssetCatalogItem; source: string; sourceWorkspace: string } | undefined,
 ): ResolvedSource {
-  const source = action.source?.trim() || assetSource?.source || ''
+  const rawSource = action.source?.trim() || ''
+  const source = assetSource
+    ? (rawSource ? sourceBasename(rawSource) : assetSource.source)
+    : rawSource
   if (!source) throw new Error(i18n.t('removeBackgroundMissingSource', { ns: 'wizard' }))
-  const fallbackName = source.split(/[?#]/, 1)[0].split('/').pop() || source
+  const fallbackName = sourceBasename(source)
   const name = assetSource?.asset.filename || fallbackName
   const sourceWorkspace = action.sourceWorkspace?.trim() || assetSource?.sourceWorkspace
   return { source, name, url: sourceUrl(source, sourceWorkspace, workspace), assetId, sourceWorkspace }

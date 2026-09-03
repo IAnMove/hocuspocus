@@ -3893,6 +3893,7 @@ export const useStore = create<AppState>((set, get) => {
       .map(r => r.path)
     if (tool === 'revoice' && refPaths.length === 0) return
     if (tool === 'remove_background' && s.toolsSourceKind !== 'image') return
+    if ((tool === 'upscale' || tool === 'revoice') && s.toolsSourceKind !== 'video') return
     set({ toolsSubmitting: true })
 
     // Placeholder job tile — mirrors the blend/edit submit pattern so the
