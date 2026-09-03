@@ -64,6 +64,21 @@ The canonical backend test command is run from the repository root, so the
 app/env/bin/python -m pytest -q
 ```
 
+## Task cost report
+
+Every pull request and delegated coding task must include a short cost report.
+Record measurements before finishing the work, and use `N/A` when a tool does
+not expose them; never invent token counts. The canonical template and the
+definitions of each field are in
+[`docs/development/TASK_COST_REPORT.md`](docs/development/TASK_COST_REPORT.md).
+
+The report belongs in the PR description (or in its final handoff comment) and
+must distinguish simulated tests from live provider calls. Unit tests and
+simulated E2E tests normally cost **0 external LLM tokens**. Live Wizard/LLM
+calls must include the provider-reported prompt, completion and total tokens
+when available. Media generation count and elapsed time should be recorded as
+well.
+
 ### The clean-repo guard
 
 `scripts/verify_clean_repo.py` enforces that certain **locally-generated or
