@@ -176,7 +176,19 @@ const LITERAL_CUES: Array<[VerbatimContentKind, RegExp]> = [
   ['name', /\b(?:titulado|llamad[oa]|named|titled|nomm[eé]|intitul[eé]|genannt|namens|intitolat[oa])\b/iu],
   ['dialogue', /\b(?:diga|digan|dice|decir|hable|habla|di[aá]logo|say|says|speak|dialogue|dialog|dit|dire|parle|sagt|sprechen|dialog|dice|parla|dialogo)\b/iu],
 ]
-const EXPLICIT_LANGUAGE = /\b(?:(?:en|in)\s+(espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic)|(?:idioma|language|langue|sprache|lingua)\s+(espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic|[a-z]{2,3}(?:-[a-z0-9]{2,8})*))\b/iu
+const EXPLICIT_LANGUAGE = /\b(?:(?:en|in)\s+(espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic)|(?:idioma|language|langue|sprache|lingua)\s+(espa[nñ]ol|castellano|spanish|english|ingl[eé]s|fran[cç]ais|franc[eé]s|french|deutsch|alem[aá]n|german|italiano|italian|portugu[eê]s|portuguese|japanese|japon[eé]s|korean|coreano|chinese|chino|arabic|(?:es|en|fr|de|it|pt|ja|ko|zh|ar|nl|ru)(?:-[a-z0-9]{2,8})?))\b/iu
+
+function literalLanguage(before: string, after: string): string {
+  // A request may contain more than one language, for example “lyrics in
+  // Spanish, but keep \"Hello\" in English”. Prefer the language declaration
+  // immediately following this literal, then the nearest declaration before
+  // it, instead of the first match in a broad context window.
+  const following = after.match(EXPLICIT_LANGUAGE)
+  if (following) return following[1] || following[2] || ''
+  const preceding = [...before.matchAll(new RegExp(EXPLICIT_LANGUAGE.source, `${EXPLICIT_LANGUAGE.flags}g`))]
+  const nearest = preceding.at(-1)
+  return nearest?.[1] || nearest?.[2] || ''
+}
 
 /**
  * Deterministic safety net for exact user-authored text. The LLM should emit
@@ -189,12 +201,12 @@ export function extractVerbatimSegments(request: string): VerbatimContentSegment
     const literal = match[1]
     const start = match.index || 0
     const prefix = request.slice(Math.max(0, start - 120), start)
-    const context = `${prefix} ${request.slice(start + match[0].length, start + match[0].length + 80)}`
+    const suffix = request.slice(start + match[0].length, start + match[0].length + 80)
+    const context = `${prefix} ${suffix}`
     if (TECHNICAL_QUOTE_PREFIX.test(prefix)) continue
     const kind = LITERAL_CUES.find(([, cue]) => cue.test(context))?.[0]
     if (!kind) continue
-    const languageMatch = context.match(EXPLICIT_LANGUAGE)
-    const explicitLanguage = languageMatch?.[1] || languageMatch?.[2] || ''
+    const explicitLanguage = literalLanguage(prefix, suffix)
     result.push({
       kind,
       text: literal,

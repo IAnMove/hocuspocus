@@ -7,6 +7,65 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted'])
 const clean = value => typeof value === 'string' ? value.trim() : ''
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
+const SMOKE_LANGUAGE_MARKERS = {
+  es: new Set(['el', 'la', 'los', 'las', 'que', 'de', 'del', 'en', 'y', 'un', 'una', 'por', 'para', 'con', 'no', 'se', 'es', 'noche', 'red', 'canta', 'reinicia']),
+  en: new Set(['the', 'and', 'that', 'this', 'with', 'from', 'through', 'night', 'our', 'your', 'you', 'we', 'is', 'are', 'to', 'of', 'in', 'on', 'not', 'fight', 'sing']),
+}
+
+const foldSmokeText = value => clean(value)
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLocaleLowerCase()
+
+/**
+ * Provider-free semantic gate used by the opt-in media smoke. A valid WAV or
+ * MP4 is not evidence that the selected song survived the workflow: the
+ * canonical candidate must still carry the requested language and subject.
+ */
+export function evaluateSmokeSongFidelity({
+  lyrics = '', lyricsLanguage = '', requiredTerms = [], protectedSegments = [],
+} = {}) {
+  const source = clean(lyrics)
+  const folded = foldSmokeText(source)
+  const missingTerms = requiredTerms.filter(term => !folded.includes(foldSmokeText(term)))
+  const missingProtectedSegments = protectedSegments
+    .filter(segment => !source.includes(segment))
+  // Quoted lyrics can intentionally use another language. Check those
+  // literals separately, but exclude them from the authored-language score.
+  const languageSample = protectedSegments.reduce(
+    (value, segment) => value.split(segment).join(' '),
+    source,
+  )
+  const words = languageSample.toLocaleLowerCase().match(/[\p{L}]+/gu) || []
+  const language = foldSmokeText(lyricsLanguage)
+  const target = language.startsWith('es') || language.includes('spanish') || language.includes('espanol') ? 'es'
+    : language.startsWith('en') || language.includes('english') || language.includes('ingles') ? 'en' : ''
+  const scores = Object.fromEntries(Object.entries(SMOKE_LANGUAGE_MARKERS).map(([code, markers]) => [
+    code, words.reduce((score, word) => score + (markers.has(word) ? 1 : 0), 0),
+  ]))
+  const strongestOther = target
+    ? Math.max(...Object.entries(scores).filter(([code]) => code !== target).map(([, score]) => score), 0)
+    : 0
+  const languageMismatch = Boolean(target && words.length >= 8 && (
+    (scores[target] || 0) === 0 && strongestOther >= 2
+    || strongestOther >= (scores[target] || 0) + 3 && strongestOther >= 4
+  ))
+  const reasons = []
+  if (!source) reasons.push('the canonical candidate has no editable lyrics')
+  if (missingTerms.length) reasons.push(`missing requested subject: ${missingTerms.join(', ')}`)
+  if (missingProtectedSegments.length) reasons.push('a protected lyric fragment was changed')
+  if (languageMismatch) reasons.push(`lyrics do not show evidence of ${lyricsLanguage}`)
+  const checks = [Boolean(source), !missingTerms.length, !missingProtectedSegments.length, !languageMismatch]
+  return {
+    ok: reasons.length === 0,
+    score: Math.round((checks.filter(Boolean).length / checks.length) * 100),
+    reasons,
+    missingTerms,
+    missingProtectedSegments,
+    languageMismatch,
+  }
+}
+
 export function normalizeSmokeBaseUrl(value) {
   const raw = clean(value)
   if (!raw) throw new Error('HOCUSPOCUS_SMOKE_BASE_URL is required.')
@@ -67,7 +126,7 @@ function smokeProject(projectId, cueId, now) {
       candidateCount: 2, candidates: [], cues: [{
         id: cueId, kind: 'story', targetId: projectId, title: 'Himno smoke', purpose: 'Prueba nocturna',
         referenceSong: '', brief: 'Himno breve del sysadmin', style: 'heavy metal ochentero, voz ronca, coro grave',
-        lyrics: '[Verse]\nGuardianes del rack, la noche no caerá.\n[Chorus]\nReinicia, resiste, la red despertará.',
+        lyrics: '[Verse]\nGuardianes sysadmin del rack, la noche no caerá.\n[Chorus]\nReinicia, resiste, la red despertará.',
         lyricsLanguage: 'Español', lyriaPrompt: '', instrumental: false, durationSeconds: 15, candidates: [],
       }],
     },
@@ -107,9 +166,16 @@ export async function runMediaSmoke({
     const audioPath = clean(candidate?.audio_path || candidate?.source)
     if (!audioPath) throw new Error('Song completed without a candidate audio path.')
     const candidateId = `song-smoke-${globalThis.crypto.randomUUID()}`
+    const semantic = evaluateSmokeSongFidelity({
+      lyrics: candidate?.lyrics || cue.lyrics,
+      lyricsLanguage: cue.lyricsLanguage,
+      requiredTerms: ['sysadmin', 'red'],
+    })
+    if (!semantic.ok) throw new Error(`Song semantic fidelity failed (${semantic.score}%): ${semantic.reasons.join('; ')}`)
     const canonicalCandidate = {
       id: candidateId, name: candidate.filename || audioPath.split('/').at(-1), source: audioPath,
       prompt: cue.style, lyrics: cue.lyrics, provider: 'local', model: 'ace_step_v1_5_xl_sft_lm_4b',
+      language: cue.lyricsLanguage,
       durationSeconds: candidate.duration_seconds || 15, createdAt: new Date().toISOString(),
       taskId: song.taskId || startedSong.taskId, rootTaskId: song.rootTaskId || startedSong.rootTaskId,
     }
@@ -157,7 +223,7 @@ export async function runMediaSmoke({
         projectIds: [projectId], cueIds: [cueId], outputIds,
         taskIds: [song.taskId || startedSong.taskId].filter(Boolean), pipelineIds: [pipelineId],
       },
-      songStatus: song.status, pipelineStatus: pipeline.status,
+      songStatus: song.status, pipelineStatus: pipeline.status, semantic,
     }
   } finally {
     clearTimeout(timer)
