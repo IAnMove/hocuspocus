@@ -28,6 +28,7 @@ interface Props {
   isActive: boolean
   onVisible: (index: number) => void
   onMeasured: (index: number, height: number) => void
+  maxMediaHeight?: number
   style?: CSSProperties
 }
 
@@ -83,7 +84,7 @@ function RetryImage({ url, alt }: { url: string; alt: string }) {
   )
 }
 
-export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, style }: Props) {
+export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, maxMediaHeight, style }: Props) {
   const { t } = useUiTranslation('activity')
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
   const setMediaFilter = useStore(s => s.setMediaFilter)
@@ -571,7 +572,11 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
       onClick={handleSelect}
     >
       {/* Media player */}
-      <div className="w-full aspect-video flex items-center justify-center bg-media-canvas relative">
+      <div
+        data-testid="media-feed-viewport"
+        className="w-full aspect-video flex items-center justify-center bg-media-canvas relative"
+        style={maxMediaHeight == null ? undefined : { maxHeight: `${maxMediaHeight}px` }}
+      >
         <button
           type="button"
           onClick={handleCopyReference}

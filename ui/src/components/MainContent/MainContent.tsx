@@ -16,6 +16,10 @@ import {
   readDirectorClipReplacementTarget,
 } from '../../features/stories/directorClipHandoff'
 import { useUiTranslation } from '../../i18n'
+import {
+  estimatedMediaFeedItemHeight,
+  mediaFeedMaxPreviewHeight,
+} from './mediaFeedSizing'
 
 const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
   .then(module => ({ default: module.SceneAnimatorPanel })))
@@ -56,9 +60,6 @@ function PanelLoadingFallback() {
 // How many items to render beyond the viewport in each direction
 const OVERSCAN = 5
 // Info bar height + border/padding
-const INFO_BAR_HEIGHT = 48
-// aspect-video = 56.25% of width (16:9)
-const ASPECT_RATIO = 0.5625
 // Gap between items (tailwind space-y-3 = 12px)
 const GAP = 12
 
@@ -319,7 +320,8 @@ export function MainContent() {
   const prevOutputNames = useRef<string[]>([])
 
   // Dynamic estimated item height based on actual container width
-  const estimatedItemHeight = Math.round(containerWidth * ASPECT_RATIO) + INFO_BAR_HEIGHT
+  const maxMediaHeight = mediaFeedMaxPreviewHeight(containerHeight)
+  const estimatedItemHeight = estimatedMediaFeedItemHeight(containerWidth, containerHeight)
 
   // Measure container on mount and resize; clear stale heights on width change
   useEffect(() => {
@@ -557,6 +559,7 @@ export function MainContent() {
           isActive={activeIndex === i}
           onVisible={handleItemVisible}
           onMeasured={handleItemMeasured}
+          maxMediaHeight={maxMediaHeight}
           style={{
             position: 'absolute',
             top: itemOffsets[i],
@@ -567,7 +570,7 @@ export function MainContent() {
       )
     }
     return items
-  }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets])
+  }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets, maxMediaHeight])
   const [replacementTarget, setReplacementTarget] = useState(readVideoEditorReplacementTarget)
   const [directorReplacementTarget, setDirectorReplacementTarget] = useState(readDirectorClipReplacementTarget)
 
