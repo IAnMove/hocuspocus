@@ -130,3 +130,95 @@ test('remove-background adapter unquotes encoded source when submitting with ass
     clearExecutionMemory()
   }
 })
+
+test('remove-background adapter uses file URL workspace for multi-location assets', async () => {
+  const { createDefaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const { clearExecutionMemory } = await import('../src/features/agent/agentContract.ts')
+  const before = {
+    mediaFilter: useStore.getState().mediaFilter,
+    sidebarMode: useStore.getState().sidebarMode,
+    sidebarOpen: useStore.getState().sidebarOpen,
+    settingsOpen: useStore.getState().settingsOpen,
+    dashboardOpen: useStore.getState().dashboardOpen,
+    activeWorkspace: useStore.getState().activeWorkspace,
+    toolsSourcePath: useStore.getState().toolsSourcePath,
+    toolsSourceName: useStore.getState().toolsSourceName,
+    toolsSourceUrl: useStore.getState().toolsSourceUrl,
+    toolsSourceAssetId: useStore.getState().toolsSourceAssetId,
+    toolsSourceWorkspace: useStore.getState().toolsSourceWorkspace,
+  }
+  const received = []
+  const previousFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const requestUrl = typeof input === 'string' ? input : input.url || String(input)
+    if (requestUrl.includes('/api/v1/assets/asset_shared')) {
+      return new Response(JSON.stringify({
+        id: 'asset_shared',
+        kind: 'image',
+        filename: 'portrait.png',
+        size_bytes: 12,
+        created_at: 1,
+        completed_at: 2,
+        metadata_status: 'canonical',
+        workspace_ids: ['default', 'film'],
+        locations: [
+          {
+            workspace_id: 'default',
+            filename: 'portrait.png',
+            url: '/api/v1/file/portrait.png?workspace=default',
+          },
+          {
+            workspace_id: 'film',
+            filename: 'portrait.png',
+            url: '/api/v1/file/portrait.png?workspace=film',
+          },
+        ],
+        url: '/api/v1/file/portrait.png?workspace=default',
+        origin: { tool: 'studio' },
+        execution: {},
+        model: { provider: 'local', id: 'flux' },
+        prompt_preview: 'portrait',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    if (requestUrl.includes('/api/v1/tools/remove-background')) {
+      received.push(JSON.parse(init.body))
+      return new Response(JSON.stringify({ job_id: 'job-shared', task_id: 'job-shared' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  clearExecutionMemory()
+  useStore.setState({
+    activeWorkspace: 'default',
+    settingsOpen: false,
+    dashboardOpen: false,
+    sidebarMode: 'studio',
+    sidebarOpen: false,
+  })
+  try {
+    const adapters = createDefaultApplicationAdapters()
+    const outcome = await adapters.tools.removeBackground({
+      type: 'remove_background',
+      assetId: 'asset_shared',
+      source: '/api/v1/file/portrait.png?workspace=film',
+      confirm: true,
+    }, { actor: 'wizard', capability: 'remove_background', commandId: 'cmd-url-workspace' })
+    assert.equal(received.length, 1)
+    assert.equal(received[0].asset_id, 'asset_shared')
+    assert.equal(received[0].source, 'portrait.png')
+    assert.equal(received[0].source_workspace, 'film')
+    assert.equal(received[0].workspace, 'default')
+    assert.equal(useStore.getState().toolsSourcePath, 'portrait.png')
+    assert.equal(useStore.getState().toolsSourceWorkspace, 'film')
+    assert.equal(useStore.getState().toolsSourceUrl, '/api/v1/file/portrait.png?workspace=film')
+    assert.equal(useStore.getState().toolsSourceAssetId, 'asset_shared')
+    assert.equal(outcome.taskId, 'job-shared')
+    assert.equal(outcome.metadata.sourceWorkspace, 'film')
+  } finally {
+    globalThis.fetch = previousFetch
+    useStore.setState(before)
+    clearExecutionMemory()
+  }
+})

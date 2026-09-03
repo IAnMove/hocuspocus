@@ -586,6 +586,69 @@ def test_tools_route_accepts_encoded_source_with_matching_asset_id(tmp_path):
     assert len(jobs) == 3
 
 
+def test_tools_route_resolves_multi_location_asset_from_canonical_file_url(tmp_path):
+    uploads = tmp_path / "uploads"
+    default_workspace = tmp_path / "default"
+    film_workspace = tmp_path / "film"
+    uploads.mkdir()
+    default_workspace.mkdir()
+    film_workspace.mkdir()
+    default_copy = default_workspace / "portrait.png"
+    film_copy = film_workspace / "portrait.png"
+    _image(default_copy, size=(24, 18))
+    _image(film_copy, size=(32, 24))
+    jobs = []
+    asset = {
+        "id": "asset_shared",
+        "kind": "image",
+        "filename": "portrait.png",
+        "locations": [
+            {"workspace_id": "default", "filename": "portrait.png"},
+            {"workspace_id": "film", "filename": "portrait.png"},
+        ],
+    }
+    app = FastAPI()
+    app.include_router(create_tools_router(
+        get_active_workspace=lambda: "default",
+        list_workspaces=lambda: [{"name": "default"}, {"name": "film"}],
+        workspace_dir=lambda name: str({"default": default_workspace, "film": film_workspace}[name]),
+        uploads_dir=lambda: str(uploads),
+        asset_finder=lambda asset_id: asset if asset_id == "asset_shared" else None,
+        register_job=lambda job: jobs.append(job) or job,
+        start_remove_background=lambda _job: None,
+    ))
+    client = FastApiTestClient(app)
+
+    from_url = client.post("/api/v1/tools/remove-background", json={
+        "asset_id": "asset_shared",
+        "source": "/api/v1/file/portrait.png?workspace=film",
+        "workspace": "default",
+    })
+    assert from_url.status_code == 200
+    assert jobs[0]["params"]["source_workspace"] == "film"
+    assert jobs[0]["params"]["_source_path"] == str(film_copy.resolve())
+    assert jobs[0]["params"]["_workspace_root"] == str(film_workspace)
+
+    typed_wins = client.post("/api/v1/tools/remove-background", json={
+        "asset_id": "asset_shared",
+        "source": "/api/v1/file/portrait.png?workspace=film",
+        "source_workspace": "default",
+        "workspace": "default",
+    })
+    assert typed_wins.status_code == 200
+    assert jobs[1]["params"]["source_workspace"] == "default"
+    assert jobs[1]["params"]["_source_path"] == str(default_copy.resolve())
+
+    destination_default = client.post("/api/v1/tools/remove-background", json={
+        "asset_id": "asset_shared",
+        "source": "portrait.png",
+        "workspace": "default",
+    })
+    assert destination_default.status_code == 200
+    assert jobs[2]["params"]["source_workspace"] == "default"
+    assert jobs[2]["params"]["_source_path"] == str(default_copy.resolve())
+
+
 def test_child_workspace_name_distinguishes_default_from_nested_folders(tmp_path):
     default_root = str((tmp_path / "outputs").resolve())
     assert child_workspace_name(f"{default_root}/hero.png", default_root) is None

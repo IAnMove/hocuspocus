@@ -139,7 +139,7 @@ def _source_from_asset(
         raise HTTPException(status_code=404, detail="Source asset not found")
     if str(asset.get("kind") or "") != "image":
         raise HTTPException(status_code=400, detail="Source asset must be an image")
-    scope = payload.source_workspace.strip() if payload.source_workspace else None
+    scope = _explicit_source_workspace(payload)
     location = _asset_location(
         asset,
         source_workspace=scope,

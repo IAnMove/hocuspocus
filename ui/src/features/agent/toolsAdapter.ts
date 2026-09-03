@@ -39,12 +39,33 @@ function sourceUrl(source: string, sourceWorkspace: string | undefined, workspac
   return `/api/v1/file/${encodeURIComponent(filename)}?workspace=${encodeURIComponent(sourceWorkspace || workspace)}`
 }
 
+function fileUrlQueryWorkspace(source: string | undefined): string | undefined {
+  const raw = (source || '').trim()
+  const path = raw.split(/[?#]/, 1)[0]
+  let decoded = path
+  try {
+    decoded = decodeURIComponent(path)
+  } catch {
+    decoded = path
+  }
+  if (!raw || !decoded.startsWith('/api/v1/file/')) return undefined
+  try {
+    return new URL(raw, 'http://local.invalid').searchParams.get('workspace')?.trim() || undefined
+  } catch {
+    return undefined
+  }
+}
+
+function explicitSourceWorkspace(action: AgentRemoveBackgroundAction): string | undefined {
+  return action.sourceWorkspace?.trim() || fileUrlQueryWorkspace(action.source)
+}
+
 async function resolveSource(
   action: AgentRemoveBackgroundAction,
   workspace: string,
 ): Promise<ResolvedSource> {
   const assetId = action.assetId?.trim() || undefined
-  const assetSource = await loadAssetSource(assetId, action.sourceWorkspace, workspace)
+  const assetSource = await loadAssetSource(assetId, explicitSourceWorkspace(action), workspace)
   return finishSource(action, workspace, assetId, assetSource)
 }
 
@@ -70,7 +91,7 @@ function finishSource(
   if (!source) throw new Error(i18n.t('removeBackgroundMissingSource', { ns: 'wizard' }))
   const fallbackName = sourceBasename(source)
   const name = assetSource?.asset.filename || fallbackName
-  const sourceWorkspace = action.sourceWorkspace?.trim() || assetSource?.sourceWorkspace
+  const sourceWorkspace = explicitSourceWorkspace(action) || assetSource?.sourceWorkspace
   return { source, name, url: sourceUrl(source, sourceWorkspace, workspace), assetId, sourceWorkspace }
 }
 
