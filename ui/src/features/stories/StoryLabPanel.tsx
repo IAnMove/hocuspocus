@@ -43,9 +43,6 @@ import { syncTrailerDuration, trailerDurationForProject } from './trailerDefault
 import { resolveStoryWritingProvider } from './provider'
 import {
   buildComicAdaptation,
-  buildMusicVideoAdaptation,
-  buildShortFilmAdaptation,
-  buildTrailerAdaptation,
   DEFAULT_COMIC_CHAPTER_DIRECTION,
   DEFAULT_SHORT_FILM_DIRECTION,
   DEFAULT_TRAILER_DIRECTION,
@@ -53,6 +50,13 @@ import {
 import type { TrailerAdaptationOptions } from './adaptations'
 import { normalizeStoryProject, storyId, useStoryStore } from './store'
 import { musicVideoShouldUseDirectVideo } from './musicVideoLook'
+import {
+  loadStoryFilmProduction,
+  loadStoryMusicVideoProduction,
+  musicCandidateById,
+  musicCueForCandidate,
+} from './storyProductionController'
+import type { StoryMusicVideoGenerationSettings } from './storyProductionController'
 import {
   analyzeStoryPromptHealth,
   applyStoryVisualStyle,
@@ -181,18 +185,6 @@ type PendingDraft = {
   replaceCollections: boolean
   generateImagesAfterApply: boolean
 }
-type MusicVideoGenerationSettings = {
-  imageModel: string
-  videoModel: string
-  resolution: ResolutionPreset
-  aspectRatio: AspectRatio
-  generationMode: StoryProject['musicVideoGenerationMode']
-  directVideoMasterPrompt: string
-  writingProvider: StoryWritingProvider
-  writingModel: string
-  writingBaseUrl: string
-}
-
 const storyJobKey = (workspace: string, projectId: string) =>
   `maestro-story-plan-job:${workspace}:${projectId}`
 const storyResultKey = (workspace: string, projectId: string) =>
@@ -2282,120 +2274,6 @@ export function StoryLabPanel() {
     window.dispatchEvent(new Event('maestro:director-open'))
   }
 
-  const loadFilmProduction = async (
-    source: StoryProject,
-    direction = DEFAULT_SHORT_FILM_DIRECTION,
-    autoStart = false,
-    targetDuration = filmDuration,
-    preserveVisualStyle = filmPreserveVisualStyle,
-    videoModel = filmVideoModel,
-    imageModel = filmImageModel,
-    resolution = storyVideoResolution,
-    aspectRatio = storyVideoAspectRatio,
-    trailerOptions?: TrailerAdaptationOptions,
-  ) => {
-    const directVideo = source.musicVideoGenerationMode === 'direct_video'
-    const directReferences = source.musicVideoGenerationMode === 'direct_references'
-    if (directReferences && !videoModel.startsWith('minimax_h3')) {
-      throw new Error('Direct references currently require a MiniMax H3 video model with Ref2VA support.')
-    }
-    const adaptation = trailerOptions
-      ? buildTrailerAdaptation(source, direction, targetDuration, trailerOptions)
-      : buildShortFilmAdaptation(source, direction, targetDuration, {
-          preserveVisualStyle,
-        })
-    if (directReferences && !adaptation.characterReferences.length && !adaptation.locationReferences.length) {
-      throw new Error('Direct references need at least one approved image attached to the Story world, a location or a character.')
-    }
-    const director = useStore.getState()
-    director.directorReset()
-    const store = useStore.getState()
-    store.setGenerationMode('video')
-    if (!directVideo && !directReferences && imageModel) {
-      useStore.getState().selectDirectorImageModel(imageModel)
-    }
-    if (videoModel) {
-      await useStore.getState().selectDirectorVideoModel(videoModel)
-      const selected = useStore.getState().selectedModelPerMode.video
-      if (selected !== videoModel) {
-        throw new Error(
-          `Video model selection did not settle: requested ${videoModel}, effective ${selected || 'none'}.`,
-        )
-      }
-    }
-    store.setDirectorResolution(resolution)
-    store.setDirectorAspectRatio(aspectRatio)
-    store.setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')
-    if (videoModel.startsWith('minimax_h3') && !directVideo) {
-      store.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
-    }
-    // setSidebarMode normally sends a fresh Director session to its route
-    // chooser. Open it before restoring the Story Lab payload, otherwise it
-    // overwrites the preloaded `style` step with `upload`.
-    store.setSidebarMode('director')
-    store.directorSetSceneDescription(adaptation.sceneDescription)
-    store.setDirectorSkill('short_film')
-    store.setDirectorMusicVideoTreatment({
-      generation_mode: directVideo ? 'direct_video' : 'image_guided',
-      direct_video_master_prompt: source.directVideoMasterPrompt,
-    })
-    store.shortFilmSetPath('story')
-    store.shortFilmSetCharacters(adaptation.characters)
-    store.shortFilmSetTargetDuration(adaptation.targetDuration)
-    store.shortFilmSetNarrative(adaptation.narrative)
-    store.shortFilmSetVisualStyle(directVideo ? '' : adaptation.visualStyle)
-    store.shortFilmSetPreserveVisualStyle(directVideo ? false : adaptation.preserveVisualStyle)
-    store.setDirectorCharacterVisualStyle(directVideo ? '' : source.characterVisualStyle)
-    store.setDirectorAllowClipText(source.allowClipText)
-    store.setDirectorSpokenLanguage(source.spokenLanguage)
-    store.setDirectorAutoMode(autoStart)
-    useStore.setState({
-      directorWritingProvider: source.provider.writingProvider,
-      directorWritingModel: source.provider.writingModel,
-      directorWritingBaseUrl: source.provider.writingBaseUrl,
-    })
-    for (const reference of directVideo ? [] : adaptation.characterReferences) {
-      const asset = source.assets[reference.assetId]
-      if (!asset) continue
-      try {
-        const blob = await fetch(asset.source).then(response => {
-          if (!response.ok) throw new Error('Reference unavailable')
-          return response.blob()
-        })
-        const file = new File([blob], asset.name || `${reference.assetId}.png`, { type: blob.type })
-        store.directorAddCharacterRef(file)
-        const index = useStore.getState().directorCharacterRefs.length - 1
-        useStore.getState().directorSetCharacterRefLabel(index, reference.label)
-      } catch {
-        // The written bible is still staged if an older reference disappeared.
-      }
-    }
-    for (const reference of directVideo ? [] : adaptation.locationReferences) {
-      const asset = source.assets[reference.assetId]
-      if (!asset) continue
-      try {
-        const blob = await fetch(asset.source).then(response => {
-          if (!response.ok) throw new Error('Reference unavailable')
-          return response.blob()
-        })
-        store.directorAddLocationRef(new File(
-          [blob],
-          asset.name || `${reference.assetId}.png`,
-          { type: blob.type || 'image/png' },
-        ))
-        const index = useStore.getState().directorLocationRefs.length - 1
-        useStore.getState().directorSetLocationRefLabel(index, reference.label)
-      } catch {
-        // Keep staging the production; the missing asset remains visible in Story Lab.
-      }
-    }
-    useStore.setState({ directorStep: 'style' })
-    store.setMediaFilter('all')
-    window.dispatchEvent(new Event('maestro:director-open'))
-    if (autoStart) await useStore.getState().startDirectorPipeline()
-    return adaptation
-  }
-
   const stageFilm = async (autoStart = false) => {
     const sourceProjectId = project.id
     if (!storyVideoConfigurationReady) {
@@ -2436,13 +2314,17 @@ export function StoryLabPanel() {
     beginProjectOperation(sourceProjectId)
     setProductionBusy('film')
     try {
-      const adaptation = await loadFilmProduction(
-        project,
-        filmDirection,
+      const adaptation = await loadStoryFilmProduction({
+        source: project,
+        direction: filmDirection,
         autoStart,
-        filmDuration,
-        filmPreserveVisualStyle,
-      )
+        targetDuration: filmDuration,
+        preserveVisualStyle: filmPreserveVisualStyle,
+        videoModel: filmVideoModel,
+        imageModel: filmImageModel,
+        resolution: storyVideoResolution,
+        aspectRatio: storyVideoAspectRatio,
+      })
       updateProjectById(sourceProjectId, current => ({
         ...current,
         productions: [...current.productions, {
@@ -2549,18 +2431,18 @@ export function StoryLabPanel() {
     }
     setProductionBusy('trailer')
     try {
-      const adaptation = await loadFilmProduction(
-        project,
-        trailerDirection,
+      const adaptation = await loadStoryFilmProduction({
+        source: project,
+        direction: trailerDirection,
         autoStart,
-        trailerDuration,
-        trailerPreserveVisualStyle,
-        filmVideoModel,
-        filmImageModel,
-        storyVideoResolution,
-        storyVideoAspectRatio,
+        targetDuration: trailerDuration,
+        preserveVisualStyle: trailerPreserveVisualStyle,
+        videoModel: filmVideoModel,
+        imageModel: filmImageModel,
+        resolution: storyVideoResolution,
+        aspectRatio: storyVideoAspectRatio,
         trailerOptions,
-      )
+      })
       updateProjectById(sourceProjectId, current => ({
         ...current,
         productions: [...current.productions, {
@@ -3546,191 +3428,6 @@ export function StoryLabPanel() {
       : t('notice.queueCancelRequested') })
   }
 
-  const musicCueForCandidate = (source: StoryProject, candidateId?: string) =>
-    source.music.cues.find(item => item.candidates.some(candidate => candidate.id === candidateId))
-
-  const musicCandidateById = (source: StoryProject, candidateId?: string) => {
-    const cue = musicCueForCandidate(source, candidateId)
-    return source.music.candidates.find(item => item.id === candidateId)
-      || cue?.candidates.find(item => item.id === candidateId)
-  }
-
-  const effectiveMusicCue = (
-    source: StoryProject,
-    cue: StoryMusicCue | undefined,
-    candidate: StoryMusicCandidate,
-  ): StoryMusicCue => cue || {
-    id: 'story-song',
-    kind: 'story',
-    targetId: source.id,
-    title: candidate.title || candidate.displayName || candidate.name,
-    purpose: source.music.brief || `Tell ${source.title} as a song-led visual story.`,
-    referenceSong: '',
-    brief: source.music.brief,
-    style: candidate.prompt || source.music.style,
-    lyrics: candidate.lyrics || source.music.lyrics,
-    lyriaPrompt: '',
-    instrumental: !(candidate.lyrics || source.music.lyrics).trim(),
-    durationSeconds: candidate.durationSeconds || source.music.targetDurationSeconds,
-    candidates: [candidate],
-    selectedCandidateId: candidate.id,
-  }
-
-  const loadMusicVideoProduction = async (
-    source: StoryProject,
-    cue: StoryMusicCue | undefined,
-    candidate: StoryMusicCandidate,
-    autoStart = false,
-    pacing: 'cinematic' | 'balanced' | 'rhythmic' = 'balanced',
-    excerpt?: { start: number; end: number },
-    generationSettings: MusicVideoGenerationSettings = {
-      imageModel: filmImageModel,
-      videoModel: filmVideoModel,
-      resolution: storyVideoResolution,
-      aspectRatio: storyVideoAspectRatio,
-      generationMode: source.musicVideoGenerationMode,
-      directVideoMasterPrompt: source.directVideoMasterPrompt,
-      writingProvider: source.provider.writingProvider,
-      writingModel: source.provider.writingModel,
-      writingBaseUrl: source.provider.writingBaseUrl,
-    },
-    onDirectorHandoff?: () => void,
-  ) => {
-    const resolvedCue = effectiveMusicCue(source, cue, candidate)
-    const directVideo = generationSettings.generationMode === 'direct_video'
-    const directReferences = generationSettings.generationMode === 'direct_references'
-    if (directReferences && !generationSettings.videoModel.startsWith('minimax_h3')) {
-      throw new Error('Direct references currently require a MiniMax H3 video model with Ref2VA support.')
-    }
-    const adaptation = buildMusicVideoAdaptation(source, resolvedCue, {
-      generationMode: generationSettings.generationMode,
-    })
-    if (directReferences && !adaptation.characterReferences.length && !adaptation.locationReferences.length) {
-      throw new Error('No approved references match this song focus. Approve an attached world/location image or a reference for the focused character.')
-    }
-    const director = useStore.getState()
-    director.directorReset()
-    const store = useStore.getState()
-    store.setGenerationMode('video')
-    if (!directVideo && !directReferences && generationSettings.imageModel) {
-      store.selectDirectorImageModel(generationSettings.imageModel)
-    }
-    if (generationSettings.videoModel) {
-      await store.selectDirectorVideoModel(generationSettings.videoModel)
-      const selected = useStore.getState().selectedModelPerMode.video
-      if (selected !== generationSettings.videoModel) {
-        throw new Error(
-          `Video model selection did not settle: requested ${generationSettings.videoModel}, effective ${selected || 'none'}.`,
-        )
-      }
-    }
-    store.setDirectorResolution(generationSettings.resolution)
-    store.setDirectorAspectRatio(generationSettings.aspectRatio)
-    store.setSidebarMode('director')
-    store.setDirectorSkill('music_video')
-    store.setDirectorAutoMode(autoStart)
-    store.setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')
-    if (generationSettings.videoModel.startsWith('minimax_h3') && !directVideo) {
-      store.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
-    }
-    store.setDirectorMusicVideoTreatment({
-      // Director already has a model-aware direct-reference policy. Keep its
-      // normal visual planner but skip generated shot images and feed the
-      // approved Story references straight into H3 Ref2VA.
-      generation_mode: directVideo ? 'direct_video' : 'image_guided',
-      direct_video_master_prompt: generationSettings.directVideoMasterPrompt,
-    })
-    store.directorSetSceneDescription(adaptation.sceneDescription)
-    store.shortFilmSetVisualStyle(directVideo ? '' : source.visualStyle)
-    store.shortFilmSetPreserveVisualStyle(directVideo ? false : source.enforceVisualStyle)
-    store.setDirectorCharacterVisualStyle(directVideo ? '' : source.characterVisualStyle)
-    store.setDirectorAllowClipText(source.allowClipText)
-    store.setDirectorSpokenLanguage(source.spokenLanguage)
-    useStore.setState({
-      directorMusicSource: 'upload',
-      directorSongDescription: resolvedCue.brief,
-      directorSongStyle: resolvedCue.style,
-      directorSongLyrics: resolvedCue.lyrics,
-      directorSongDuration: excerpt ? excerpt.end - excerpt.start : resolvedCue.durationSeconds,
-      directorPacingProfile: pacing,
-      directorStep: 'upload',
-      directorWritingProvider: generationSettings.writingProvider,
-      directorWritingModel: generationSettings.writingModel,
-      directorWritingBaseUrl: generationSettings.writingBaseUrl,
-    })
-
-    for (const reference of directVideo ? [] : adaptation.characterReferences) {
-      const asset = source.assets[reference.assetId]
-      if (!asset) continue
-      try {
-        const blob = await fetch(asset.source).then(response => {
-          if (!response.ok) throw new Error('Character reference unavailable')
-          return response.blob()
-        })
-        store.directorAddCharacterRef(new File(
-          [blob], asset.name || `${reference.assetId}.png`, { type: blob.type || 'image/png' },
-        ))
-        const index = useStore.getState().directorCharacterRefs.length - 1
-        useStore.getState().directorSetCharacterRefLabel(index, reference.label)
-      } catch { /* The written identity remains available in the visual brief. */ }
-    }
-    for (const reference of directVideo ? [] : adaptation.locationReferences) {
-      const asset = source.assets[reference.assetId]
-      if (!asset) continue
-      try {
-        const blob = await fetch(asset.source).then(response => {
-          if (!response.ok) throw new Error('Location reference unavailable')
-          return response.blob()
-        })
-        store.directorAddLocationRef(new File(
-          [blob], asset.name || `${reference.assetId}.png`, { type: blob.type || 'image/png' },
-        ))
-        const index = useStore.getState().directorLocationRefs.length - 1
-        useStore.getState().directorSetLocationRefLabel(index, reference.label)
-      } catch { /* The written world bible remains available in the visual brief. */ }
-    }
-
-    window.dispatchEvent(new Event('maestro:director-open'))
-    const audioOptions = {
-      lyricsHint: resolvedCue.lyrics || undefined,
-      trimStart: excerpt?.start,
-      trimEnd: excerpt?.end,
-    }
-    // The song is nearly always a track this server generated and still
-    // holds, so hand Director its name and let the backend open it. Pulling
-    // the whole file into the browser only to post the same bytes back is a
-    // round trip over the network for something already on that disk — and
-    // the step that breaks when the UI is driven from another machine. The
-    // download stays for audio the server cannot reach on its own, and for
-    // anything the uploader has to transcode or demux first.
-    const songReference = api.getServerMediaReference(candidate.source, candidate.name, activeWorkspace)
-    // Exactly the formats the uploader leaves alone. It transcodes mp3/m4a/aac
-    // to PCM WAV because libsndfile cannot read them and the clip slicer opens
-    // the file with soundfile directly, so those still have to go through it.
-    const adoptable = songReference && /\.(?:wav|flac|ogg)$/i.test(songReference.audio_path)
-    if (songReference && adoptable) {
-      onDirectorHandoff?.()
-      await useStore.getState().directorAdoptAndAnalyze(songReference, candidate.name, audioOptions)
-    } else {
-      const blob = await fetch(api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)).then(response => {
-        if (!response.ok) throw new Error('The selected song file is unavailable')
-        return response.blob()
-      })
-      onDirectorHandoff?.()
-      await useStore.getState().directorUploadAndAnalyze(new File(
-        [blob], candidate.name, { type: blob.type || 'audio/mpeg' },
-      ), audioOptions)
-    }
-    if (autoStart && useStore.getState().directorStep === 'structure') {
-      useStore.getState().directorConfirmStructure()
-      await useStore.getState().startDirectorPipeline()
-      if (!useStore.getState().pipelineId) {
-        throw new Error('Director did not return a pipeline ID; video generation was not started.')
-      }
-    }
-    return { adaptation, resolvedCue, pipelineId: useStore.getState().pipelineId, generationSettings }
-  }
-
   const openMusicalTrailer = async (
     candidateId?: string,
     options: {
@@ -3804,7 +3501,7 @@ export function StoryLabPanel() {
           : 'Loading character and world references…',
         'preparing_music_video', 1, 3,
       )
-      const generationSettings: MusicVideoGenerationSettings = {
+      const generationSettings: StoryMusicVideoGenerationSettings = {
         imageModel: filmImageModel,
         videoModel: filmVideoModel,
         resolution: storyVideoResolution,
@@ -3815,16 +3512,17 @@ export function StoryLabPanel() {
         writingModel: project.provider.writingModel,
         writingBaseUrl: project.provider.writingBaseUrl,
       }
-      const loaded = await loadMusicVideoProduction(
-        project,
+      const loaded = await loadStoryMusicVideoProduction({
+        source: project,
         cue,
         candidate,
-        options.autoStart === true,
-        options.pacing || musicProductionPacing,
-        options.mode === 'trailer' ? options.excerpt : undefined,
+        activeWorkspace,
+        autoStart: options.autoStart === true,
+        pacing: options.pacing || musicProductionPacing,
+        excerpt: options.mode === 'trailer' ? options.excerpt : undefined,
         generationSettings,
-        () => activity.handoff('Continuing in Director as a recoverable music-video workflow'),
-      )
+        onDirectorHandoff: () => activity.handoff('Continuing in Director as a recoverable music-video workflow'),
+      })
       activity.update('Saving the independent production snapshot…', 'preparing_music_video', 2, 3)
       if (options.saveProduction !== false) {
         updateProjectById(sourceProjectId, current => ({
@@ -3965,7 +3663,7 @@ export function StoryLabPanel() {
         ? { start: trimStart, end: trimEnd }
         : undefined
       const savedWritingProvider = production.targetSnapshot?.writingProvider
-      const generationSettings: MusicVideoGenerationSettings = {
+      const generationSettings: StoryMusicVideoGenerationSettings = {
         imageModel: typeof production.targetSnapshot?.imageModel === 'string'
           ? production.targetSnapshot.imageModel : filmImageModel,
         videoModel: typeof production.targetSnapshot?.videoModel === 'string'
@@ -4003,7 +3701,16 @@ export function StoryLabPanel() {
       )) return
       setProductionBusy('music')
       try {
-        await loadMusicVideoProduction(source, cue, candidate, false, pacing, excerpt, generationSettings)
+        await loadStoryMusicVideoProduction({
+          source,
+          cue,
+          candidate,
+          activeWorkspace,
+          autoStart: false,
+          pacing,
+          excerpt,
+          generationSettings,
+        })
       } catch (error) {
         setNotice({ kind: 'error', text: t('notice.musicVideoReopenFailed', { message: (error as Error).message }) })
       } finally {
@@ -4085,10 +3792,10 @@ export function StoryLabPanel() {
           preserveVisualStyle,
         }
       : undefined
-    await loadFilmProduction(
+    await loadStoryFilmProduction({
       source,
       direction,
-      false,
+      autoStart: false,
       targetDuration,
       preserveVisualStyle,
       videoModel,
@@ -4096,7 +3803,7 @@ export function StoryLabPanel() {
       resolution,
       aspectRatio,
       trailerOptions,
-    )
+    })
   }
 
   const restoreProductionSource = (productionId: string) => {
