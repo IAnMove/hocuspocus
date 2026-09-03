@@ -104,6 +104,7 @@ def test_audio_trim_and_analysis_endpoints_use_the_shared_resolver():
         "trim_uploaded_audio",
         "analyze_audio",
         "start_audio_analysis_job",
+        "adopt_audio",
     ):
         calls = [
             node.func.id
@@ -112,3 +113,23 @@ def test_audio_trim_and_analysis_endpoints_use_the_shared_resolver():
         ]
         assert "_resolve_request_media_path" in calls, name
 
+
+def test_adopting_audio_is_confined_to_audio_the_uploader_would_not_transcode():
+    """Adoption takes a file in place, so it may only accept what the rest of
+    the pipeline can already open. The uploader transcodes mp3/m4a/aac to PCM
+    WAV because the clip slicer reads with soundfile; nothing does that for an
+    adopted file, so the endpoint asks the resolver for audio only."""
+    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+    adopt = next(
+        node for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "adopt_audio"
+    )
+    resolver = next(
+        node for node in ast.walk(adopt)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_resolve_request_media_path"
+    )
+    kinds = next(kw.value for kw in resolver.keywords if kw.arg == "kinds")
+    assert [element.value for element in kinds.elts] == ["audio"]

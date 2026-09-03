@@ -3668,18 +3668,36 @@ export function StoryLabPanel() {
     }
 
     window.dispatchEvent(new Event('maestro:director-open'))
-    const blob = await fetch(api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)).then(response => {
-      if (!response.ok) throw new Error('The selected song file is unavailable')
-      return response.blob()
-    })
-    onDirectorHandoff?.()
-    await useStore.getState().directorUploadAndAnalyze(new File(
-      [blob], candidate.name, { type: blob.type || 'audio/mpeg' },
-    ), {
+    const audioOptions = {
       lyricsHint: resolvedCue.lyrics || undefined,
       trimStart: excerpt?.start,
       trimEnd: excerpt?.end,
-    })
+    }
+    // The song is nearly always a track this server generated and still
+    // holds, so hand Director its name and let the backend open it. Pulling
+    // the whole file into the browser only to post the same bytes back is a
+    // round trip over the network for something already on that disk — and
+    // the step that breaks when the UI is driven from another machine. The
+    // download stays for audio the server cannot reach on its own, and for
+    // anything the uploader has to transcode or demux first.
+    const songReference = api.getServerMediaReference(candidate.source, candidate.name, activeWorkspace)
+    // Exactly the formats the uploader leaves alone. It transcodes mp3/m4a/aac
+    // to PCM WAV because libsndfile cannot read them and the clip slicer opens
+    // the file with soundfile directly, so those still have to go through it.
+    const adoptable = songReference && /\.(?:wav|flac|ogg)$/i.test(songReference.audio_path)
+    if (songReference && adoptable) {
+      onDirectorHandoff?.()
+      await useStore.getState().directorAdoptAndAnalyze(songReference, candidate.name, audioOptions)
+    } else {
+      const blob = await fetch(api.getPlayableFileUrl(candidate.source, candidate.name, activeWorkspace)).then(response => {
+        if (!response.ok) throw new Error('The selected song file is unavailable')
+        return response.blob()
+      })
+      onDirectorHandoff?.()
+      await useStore.getState().directorUploadAndAnalyze(new File(
+        [blob], candidate.name, { type: blob.type || 'audio/mpeg' },
+      ), audioOptions)
+    }
     if (autoStart && useStore.getState().directorStep === 'structure') {
       useStore.getState().directorConfirmStructure()
       await useStore.getState().startDirectorPipeline()

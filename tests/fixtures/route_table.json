@@ -942,6 +942,16 @@
       "ordinal": 93
     },
     {
+      "method": "POST",
+      "path": "/api/v1/audio/adopt",
+      "endpoint": "adopt_audio",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/_launch_runtime.py",
+      "ordinal": 94
+    },
+    {
       "method": "GET",
       "path": "/api/v1/uploads/audio/{filename}",
       "endpoint": "serve_audio_upload",
@@ -949,7 +959,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 94
+      "ordinal": 95
     },
     {
       "method": "POST",
@@ -959,7 +969,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 95
+      "ordinal": 96
     },
     {
       "method": "POST",
@@ -969,7 +979,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 96
+      "ordinal": 97
     },
     {
       "method": "POST",
@@ -979,7 +989,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 97
+      "ordinal": 98
     },
     {
       "method": "GET",
@@ -989,7 +999,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 98
+      "ordinal": 99
     },
     {
       "method": "POST",
@@ -999,7 +1009,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 99
+      "ordinal": 100
     },
     {
       "method": "GET",
@@ -1009,7 +1019,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 100
+      "ordinal": 101
     },
     {
       "method": "POST",
@@ -1019,7 +1029,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 101
+      "ordinal": 102
     },
     {
       "method": "POST",
@@ -1029,7 +1039,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 102
+      "ordinal": 103
     },
     {
       "method": "POST",
@@ -1039,7 +1049,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 103
+      "ordinal": 104
     },
     {
       "method": "POST",
@@ -1049,7 +1059,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 104
+      "ordinal": 105
     },
     {
       "method": "POST",
@@ -1059,7 +1069,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 105
+      "ordinal": 106
     },
     {
       "method": "POST",
@@ -1069,7 +1079,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 106
+      "ordinal": 107
     },
     {
       "method": "POST",
@@ -1079,7 +1089,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 107
+      "ordinal": 108
     },
     {
       "method": "POST",
@@ -1089,7 +1099,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 108
+      "ordinal": 109
     },
     {
       "method": "POST",
@@ -1099,7 +1109,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 109
+      "ordinal": 110
     },
     {
       "method": "POST",
@@ -1109,7 +1119,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 110
+      "ordinal": 111
     },
     {
       "method": "POST",
@@ -1119,7 +1129,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 111
+      "ordinal": 112
     },
     {
       "method": "GET",
@@ -1129,7 +1139,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 112
+      "ordinal": 113
     },
     {
       "method": "POST",
@@ -1139,7 +1149,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 113
+      "ordinal": 114
     },
     {
       "method": "POST",
@@ -1149,7 +1159,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 114
+      "ordinal": 115
     },
     {
       "method": "PATCH",
@@ -1159,7 +1169,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 115
+      "ordinal": 116
     },
     {
       "method": "POST",
@@ -1169,7 +1179,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 116
+      "ordinal": 117
     },
     {
       "method": "POST",
@@ -1179,7 +1189,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 117
+      "ordinal": 118
     },
     {
       "method": "GET",
@@ -1189,7 +1199,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 118
+      "ordinal": 119
     },
     {
       "method": "GET",
@@ -1199,7 +1209,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 119
+      "ordinal": 120
     },
     {
       "method": "GET",
@@ -1209,7 +1219,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 120
+      "ordinal": 121
     },
     {
       "method": "PUT",
@@ -1219,7 +1229,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 121
+      "ordinal": 122
     },
     {
       "method": "PUT",
@@ -1229,7 +1239,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 122
+      "ordinal": 123
     },
     {
       "method": "PUT",
@@ -1239,7 +1249,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 123
+      "ordinal": 124
     },
     {
       "method": "POST",
@@ -1249,7 +1259,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 124
+      "ordinal": 125
     },
     {
       "method": "POST",
@@ -1259,7 +1269,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 125
+      "ordinal": 126
     },
     {
       "method": "POST",
@@ -1269,7 +1279,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 126
+      "ordinal": 127
     },
     {
       "method": "POST",
@@ -1279,7 +1289,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 127
+      "ordinal": 128
     },
     {
       "method": "POST",
@@ -1289,7 +1299,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 128
+      "ordinal": 129
     },
     {
       "method": "POST",
@@ -1299,7 +1309,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 129
+      "ordinal": 130
     },
     {
       "method": "DELETE",
@@ -1309,7 +1319,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 130
+      "ordinal": 131
     },
     {
       "method": "POST",
@@ -1319,7 +1329,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 131
+      "ordinal": 132
     },
     {
       "method": "GET",
@@ -1329,7 +1339,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 132
+      "ordinal": 133
     },
     {
       "method": "GET",
@@ -1339,7 +1349,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 133
+      "ordinal": 134
     },
     {
       "method": "POST",
@@ -1349,7 +1359,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 134
+      "ordinal": 135
     },
     {
       "method": "GET",
@@ -1359,7 +1369,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 135
+      "ordinal": 136
     },
     {
       "method": "POST",
@@ -1369,7 +1379,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 136
+      "ordinal": 137
     },
     {
       "method": "POST",
@@ -1379,7 +1389,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 137
+      "ordinal": 138
     },
     {
       "method": "POST",
@@ -1389,7 +1399,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 138
+      "ordinal": 139
     },
     {
       "method": "POST",
@@ -1399,7 +1409,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 139
+      "ordinal": 140
     },
     {
       "method": "POST",
@@ -1409,7 +1419,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 140
+      "ordinal": 141
     },
     {
       "method": "POST",
@@ -1419,7 +1429,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 141
+      "ordinal": 142
     },
     {
       "method": "POST",
@@ -1429,7 +1439,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 142
+      "ordinal": 143
     },
     {
       "method": "POST",
@@ -1439,7 +1449,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 143
+      "ordinal": 144
     },
     {
       "method": "POST",
@@ -1449,7 +1459,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 144
+      "ordinal": 145
     },
     {
       "method": "POST",
@@ -1459,7 +1469,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 145
+      "ordinal": 146
     },
     {
       "method": "GET",
@@ -1469,7 +1479,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 146
+      "ordinal": 147
     },
     {
       "method": "POST",
@@ -1479,7 +1489,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 147
+      "ordinal": 148
     },
     {
       "method": "POST",
@@ -1489,7 +1499,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 148
+      "ordinal": 149
     },
     {
       "method": "POST",
@@ -1499,7 +1509,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 149
+      "ordinal": 150
     },
     {
       "method": "POST",
@@ -1509,7 +1519,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 150
+      "ordinal": 151
     },
     {
       "method": "GET",
@@ -1519,7 +1529,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 151
+      "ordinal": 152
     },
     {
       "method": "POST",
@@ -1529,7 +1539,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 152
+      "ordinal": 153
     },
     {
       "method": "GET",
@@ -1539,7 +1549,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 153
+      "ordinal": 154
     },
     {
       "method": "GET",
@@ -1549,7 +1559,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 154
+      "ordinal": 155
     },
     {
       "method": "POST",
@@ -1559,7 +1569,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 155
+      "ordinal": 156
     },
     {
       "method": "POST",
@@ -1569,7 +1579,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 156
+      "ordinal": 157
     },
     {
       "method": "GET",
@@ -1579,7 +1589,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 157
+      "ordinal": 158
     },
     {
       "method": "POST",
@@ -1589,7 +1599,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 158
+      "ordinal": 159
     },
     {
       "method": "POST",
@@ -1599,7 +1609,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 159
+      "ordinal": 160
     },
     {
       "method": "GET",
@@ -1609,7 +1619,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 160
+      "ordinal": 161
     },
     {
       "method": "PATCH",
@@ -1619,7 +1629,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 161
+      "ordinal": 162
     },
     {
       "method": "DELETE",
@@ -1629,7 +1639,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 162
+      "ordinal": 163
     },
     {
       "method": "POST",
@@ -1639,7 +1649,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/character_kit_face.py",
-      "ordinal": 163
+      "ordinal": 164
     },
     {
       "method": "POST",
@@ -1649,7 +1659,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 164
+      "ordinal": 165
     },
     {
       "method": "POST",
@@ -1659,7 +1669,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 165
+      "ordinal": 166
     },
     {
       "method": "POST",
@@ -1669,7 +1679,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 166
+      "ordinal": 167
     },
     {
       "method": "GET",
@@ -1679,7 +1689,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 167
+      "ordinal": 168
     },
     {
       "method": "GET",
@@ -1689,7 +1699,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 168
+      "ordinal": 169
     },
     {
       "method": "PUT",
@@ -1699,7 +1709,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 169
+      "ordinal": 170
     },
     {
       "method": "GET",
@@ -1709,7 +1719,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 170
+      "ordinal": 171
     },
     {
       "method": "POST",
@@ -1719,7 +1729,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 171
+      "ordinal": 172
     },
     {
       "method": "GET",
@@ -1729,7 +1739,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 172
+      "ordinal": 173
     },
     {
       "method": "POST",
@@ -1739,7 +1749,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 173
+      "ordinal": 174
     },
     {
       "method": "POST",
@@ -1749,7 +1759,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 174
+      "ordinal": 175
     },
     {
       "method": "GET",
@@ -1759,7 +1769,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 175
+      "ordinal": 176
     },
     {
       "method": "PUT",
@@ -1769,7 +1779,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 176
+      "ordinal": 177
     },
     {
       "method": "GET",
@@ -1779,7 +1789,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 177
+      "ordinal": 178
     },
     {
       "method": "POST",
@@ -1789,7 +1799,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 178
+      "ordinal": 179
     },
     {
       "method": "GET",
@@ -1799,7 +1809,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 179
+      "ordinal": 180
     },
     {
       "method": "PUT",
@@ -1809,7 +1819,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 180
+      "ordinal": 181
     },
     {
       "method": "DELETE",
@@ -1819,7 +1829,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 181
+      "ordinal": 182
     },
     {
       "method": "POST",
@@ -1829,7 +1839,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 182
+      "ordinal": 183
     },
     {
       "method": "POST",
@@ -1839,7 +1849,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 183
+      "ordinal": 184
     },
     {
       "method": "POST",
@@ -1849,7 +1859,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 184
+      "ordinal": 185
     },
     {
       "method": "GET",
@@ -1859,7 +1869,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 185
+      "ordinal": 186
     },
     {
       "method": "GET",
@@ -1869,7 +1879,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 186
+      "ordinal": 187
     },
     {
       "method": "DELETE",
@@ -1879,7 +1889,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 187
+      "ordinal": 188
     },
     {
       "method": "POST",
@@ -1889,7 +1899,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 188
+      "ordinal": 189
     },
     {
       "method": "PUT",
@@ -1899,7 +1909,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 189
+      "ordinal": 190
     },
     {
       "method": "POST",
@@ -1909,7 +1919,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 190
+      "ordinal": 191
     },
     {
       "method": "POST",
@@ -1919,7 +1929,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 191
+      "ordinal": 192
     },
     {
       "method": "POST",
@@ -1929,7 +1939,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 192
+      "ordinal": 193
     },
     {
       "method": "POST",
@@ -1939,7 +1949,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 193
+      "ordinal": 194
     },
     {
       "method": "POST",
@@ -1949,7 +1959,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 194
+      "ordinal": 195
     },
     {
       "method": "GET",
@@ -1959,7 +1969,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 195
+      "ordinal": 196
     },
     {
       "method": "POST",
@@ -1969,7 +1979,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 196
+      "ordinal": 197
     },
     {
       "method": "POST",
@@ -1979,7 +1989,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 197
+      "ordinal": 198
     },
     {
       "method": "POST",
@@ -1989,7 +1999,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 198
+      "ordinal": 199
     },
     {
       "method": "POST",
@@ -1999,7 +2009,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 199
+      "ordinal": 200
     },
     {
       "method": "POST",
@@ -2009,7 +2019,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 200
+      "ordinal": 201
     },
     {
       "method": "GET",
@@ -2019,7 +2029,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 201
+      "ordinal": 202
     },
     {
       "method": "DELETE",
@@ -2029,7 +2039,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 202
+      "ordinal": 203
     },
     {
       "method": "POST",
@@ -2039,7 +2049,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 203
+      "ordinal": 204
     },
     {
       "method": "GET",
@@ -2049,7 +2059,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 204
+      "ordinal": 205
     },
     {
       "method": "POST",
@@ -2059,7 +2069,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 205
+      "ordinal": 206
     },
     {
       "method": "GET",
@@ -2069,7 +2079,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 206
+      "ordinal": 207
     },
     {
       "method": "POST",
@@ -2079,7 +2089,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 207
+      "ordinal": 208
     },
     {
       "method": "DELETE",
@@ -2089,7 +2099,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 208
+      "ordinal": 209
     },
     {
       "method": "POST",
@@ -2099,7 +2109,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 209
+      "ordinal": 210
     },
     {
       "method": "POST",
@@ -2109,7 +2119,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 210
+      "ordinal": 211
     },
     {
       "method": "POST",
@@ -2119,7 +2129,7 @@
       "response_model": "SeriesAssemblyJobResponse",
       "include_in_schema": null,
       "source": "app/routers/series_assembly.py",
-      "ordinal": 211
+      "ordinal": 212
     },
     {
       "method": "POST",
@@ -2129,7 +2139,7 @@
       "response_model": "SeriesAssemblyJobResponse",
       "include_in_schema": null,
       "source": "app/routers/series_assembly.py",
-      "ordinal": 212
+      "ordinal": 213
     },
     {
       "method": "POST",
@@ -2139,7 +2149,7 @@
       "response_model": "SeriesAssemblyJobResponse",
       "include_in_schema": null,
       "source": "app/routers/series_assembly.py",
-      "ordinal": 213
+      "ordinal": 214
     },
     {
       "method": "GET",
@@ -2149,7 +2159,7 @@
       "response_model": "SeriesAssemblyRecoveryResponse",
       "include_in_schema": null,
       "source": "app/routers/series_assembly.py",
-      "ordinal": 214
+      "ordinal": 215
     },
     {
       "method": "DELETE",
@@ -2159,7 +2169,7 @@
       "response_model": "SeriesAssemblyDiscardResponse",
       "include_in_schema": null,
       "source": "app/routers/series_assembly.py",
-      "ordinal": 215
+      "ordinal": 216
     },
     {
       "method": "GET",
@@ -2169,7 +2179,7 @@
       "response_model": "SeriesAssemblyJobResponse",
       "include_in_schema": null,
       "source": "app/routers/series_assembly.py",
-      "ordinal": 216
+      "ordinal": 217
     },
     {
       "method": "POST",
@@ -2179,7 +2189,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/quick_video_batches.py",
-      "ordinal": 217
+      "ordinal": 218
     },
     {
       "method": "GET",
@@ -2189,7 +2199,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/quick_video_batches.py",
-      "ordinal": 218
+      "ordinal": 219
     },
     {
       "method": "GET",
@@ -2199,7 +2209,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/quick_video_batches.py",
-      "ordinal": 219
+      "ordinal": 220
     },
     {
       "method": "POST",
@@ -2209,7 +2219,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/quick_video_batches.py",
-      "ordinal": 220
+      "ordinal": 221
     },
     {
       "method": "GET",
@@ -2219,7 +2229,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 221
+      "ordinal": 222
     },
     {
       "method": "GET",
@@ -2229,7 +2239,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 222
+      "ordinal": 223
     },
     {
       "method": "POST",
@@ -2239,7 +2249,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 223
+      "ordinal": 224
     },
     {
       "method": "GET",
@@ -2249,7 +2259,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 224
+      "ordinal": 225
     },
     {
       "method": "POST",
@@ -2259,7 +2269,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 225
+      "ordinal": 226
     },
     {
       "method": "GET",
@@ -2269,7 +2279,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 226
+      "ordinal": 227
     },
     {
       "method": "POST",
@@ -2279,7 +2289,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 227
+      "ordinal": 228
     },
     {
       "method": "GET",
@@ -2289,7 +2299,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 228
+      "ordinal": 229
     },
     {
       "method": "GET",
@@ -2299,7 +2309,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 229
+      "ordinal": 230
     },
     {
       "method": "DELETE",
@@ -2309,7 +2319,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/style_library.py",
-      "ordinal": 230
+      "ordinal": 231
     },
     {
       "method": "POST",
@@ -2319,7 +2329,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 231
+      "ordinal": 232
     },
     {
       "method": "GET",
@@ -2329,7 +2339,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 232
+      "ordinal": 233
     },
     {
       "method": "PUT",
@@ -2339,7 +2349,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 233
+      "ordinal": 234
     },
     {
       "method": "GET",
@@ -2349,7 +2359,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 234
+      "ordinal": 235
     },
     {
       "method": "PUT",
@@ -2359,7 +2369,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 235
+      "ordinal": 236
     },
     {
       "method": "GET",
@@ -2369,7 +2379,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 236
+      "ordinal": 237
     },
     {
       "method": "PUT",
@@ -2379,7 +2389,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 237
+      "ordinal": 238
     },
     {
       "method": "PATCH",
@@ -2389,7 +2399,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 238
+      "ordinal": 239
     },
     {
       "method": "DELETE",
@@ -2399,7 +2409,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 239
+      "ordinal": 240
     },
     {
       "method": "POST",
@@ -2409,7 +2419,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 240
+      "ordinal": 241
     },
     {
       "method": "POST",
@@ -2419,7 +2429,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 241
+      "ordinal": 242
     },
     {
       "method": "POST",
@@ -2429,7 +2439,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 242
+      "ordinal": 243
     },
     {
       "method": "GET",
@@ -2439,7 +2449,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 243
+      "ordinal": 244
     },
     {
       "method": "POST",
@@ -2449,7 +2459,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 244
+      "ordinal": 245
     },
     {
       "method": "POST",
@@ -2459,7 +2469,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 245
+      "ordinal": 246
     },
     {
       "method": "POST",
@@ -2469,7 +2479,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 246
+      "ordinal": 247
     },
     {
       "method": "POST",
@@ -2479,7 +2489,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 247
+      "ordinal": 248
     },
     {
       "method": "GET",
@@ -2489,7 +2499,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 248
+      "ordinal": 249
     },
     {
       "method": "POST",
@@ -2499,7 +2509,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 249
+      "ordinal": 250
     },
     {
       "method": "POST",
@@ -2509,7 +2519,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 250
+      "ordinal": 251
     },
     {
       "method": "POST",
@@ -2519,7 +2529,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 251
+      "ordinal": 252
     },
     {
       "method": "POST",
@@ -2529,7 +2539,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 252
+      "ordinal": 253
     },
     {
       "method": "POST",
@@ -2539,7 +2549,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 253
+      "ordinal": 254
     },
     {
       "method": "POST",
@@ -2549,7 +2559,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 254
+      "ordinal": 255
     },
     {
       "method": "GET",
@@ -2559,7 +2569,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 255
+      "ordinal": 256
     },
     {
       "method": "POST",
@@ -2569,7 +2579,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 256
+      "ordinal": 257
     },
     {
       "method": "GET",
@@ -2579,7 +2589,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 257
+      "ordinal": 258
     },
     {
       "method": "GET",
@@ -2589,7 +2599,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 258
+      "ordinal": 259
     },
     {
       "method": "GET",
@@ -2599,7 +2609,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 259
+      "ordinal": 260
     },
     {
       "method": "GET",
@@ -2609,7 +2619,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 260
+      "ordinal": 261
     },
     {
       "method": "GET",
@@ -2619,7 +2629,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 261
+      "ordinal": 262
     },
     {
       "method": "GET",
@@ -2629,7 +2639,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 262
+      "ordinal": 263
     },
     {
       "method": "POST",
@@ -2639,7 +2649,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 263
+      "ordinal": 264
     },
     {
       "method": "DELETE",
@@ -2649,7 +2659,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 264
+      "ordinal": 265
     },
     {
       "method": "POST",
@@ -2659,7 +2669,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 265
+      "ordinal": 266
     },
     {
       "method": "GET",
@@ -2669,7 +2679,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 266
+      "ordinal": 267
     },
     {
       "method": "POST",
@@ -2679,7 +2689,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 267
+      "ordinal": 268
     },
     {
       "method": "POST",
@@ -2689,7 +2699,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 268
+      "ordinal": 269
     },
     {
       "method": "GET",
@@ -2699,7 +2709,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 269
+      "ordinal": 270
     },
     {
       "method": "POST",
@@ -2709,7 +2719,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 270
+      "ordinal": 271
     },
     {
       "method": "POST",
@@ -2719,7 +2729,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 271
+      "ordinal": 272
     },
     {
       "method": "GET",
@@ -2729,7 +2739,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 272
+      "ordinal": 273
     },
     {
       "method": "POST",
@@ -2739,7 +2749,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 273
+      "ordinal": 274
     },
     {
       "method": "POST",
@@ -2749,7 +2759,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 274
+      "ordinal": 275
     },
     {
       "method": "POST",
@@ -2759,7 +2769,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/comics.py",
-      "ordinal": 275
+      "ordinal": 276
     },
     {
       "method": "GET",
@@ -2769,7 +2779,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 276
+      "ordinal": 277
     },
     {
       "method": "POST",
@@ -2779,7 +2789,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 277
+      "ordinal": 278
     },
     {
       "method": "POST",
@@ -2789,7 +2799,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 278
+      "ordinal": 279
     },
     {
       "method": "DELETE",
@@ -2799,7 +2809,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 279
+      "ordinal": 280
     },
     {
       "method": "POST",
@@ -2809,7 +2819,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 280
+      "ordinal": 281
     },
     {
       "method": "GET",
@@ -2819,7 +2829,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 281
+      "ordinal": 282
     },
     {
       "method": "GET",
@@ -2829,7 +2839,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 282
+      "ordinal": 283
     },
     {
       "method": "GET",
@@ -2839,7 +2849,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/canonical_tasks.py",
-      "ordinal": 283
+      "ordinal": 284
     },
     {
       "method": "POST",
@@ -2849,7 +2859,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/canonical_tasks.py",
-      "ordinal": 284
+      "ordinal": 285
     },
     {
       "method": "GET",
@@ -2859,7 +2869,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/canonical_tasks.py",
-      "ordinal": 285
+      "ordinal": 286
     },
     {
       "method": "GET",
@@ -2869,7 +2879,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/canonical_tasks.py",
-      "ordinal": 286
+      "ordinal": 287
     },
     {
       "method": "GET",
@@ -2879,7 +2889,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/canonical_tasks.py",
-      "ordinal": 287
+      "ordinal": 288
     },
     {
       "method": "POST",
@@ -2889,7 +2899,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/canonical_tasks.py",
-      "ordinal": 288
+      "ordinal": 289
     },
     {
       "method": "POST",
@@ -2899,7 +2909,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/canonical_tasks.py",
-      "ordinal": 289
+      "ordinal": 290
     },
     {
       "method": "POST",
@@ -2909,7 +2919,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/canonical_tasks.py",
-      "ordinal": 290
+      "ordinal": 291
     },
     {
       "method": "DELETE",
@@ -2919,7 +2929,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/canonical_tasks.py",
-      "ordinal": 291
+      "ordinal": 292
     },
     {
       "method": "GET",
@@ -2929,7 +2939,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/assets.py",
-      "ordinal": 292
+      "ordinal": 293
     },
     {
       "method": "GET",
@@ -2939,7 +2949,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/assets.py",
-      "ordinal": 293
+      "ordinal": 294
     },
     {
       "method": "GET",
@@ -2949,7 +2959,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/projects.py",
-      "ordinal": 294
+      "ordinal": 295
     },
     {
       "method": "GET",
@@ -2959,7 +2969,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/projects.py",
-      "ordinal": 295
+      "ordinal": 296
     },
     {
       "method": "GET",
@@ -2969,7 +2979,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/productions.py",
-      "ordinal": 296
+      "ordinal": 297
     },
     {
       "method": "GET",
@@ -2979,7 +2989,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/productions.py",
-      "ordinal": 297
+      "ordinal": 298
     },
     {
       "method": "GET",
@@ -2989,7 +2999,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/productions.py",
-      "ordinal": 298
+      "ordinal": 299
     },
     {
       "method": "GET",
@@ -2999,7 +3009,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/productions.py",
-      "ordinal": 299
+      "ordinal": 300
     },
     {
       "method": "GET",
@@ -3009,7 +3019,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/workspace_collections.py",
-      "ordinal": 300
+      "ordinal": 301
     },
     {
       "method": "GET",
@@ -3019,7 +3029,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/workspace_collections.py",
-      "ordinal": 301
+      "ordinal": 302
     },
     {
       "method": "POST",
@@ -3029,7 +3039,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/workspace_collections.py",
-      "ordinal": 302
+      "ordinal": 303
     },
     {
       "method": "PUT",
@@ -3039,7 +3049,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/workspace_collections.py",
-      "ordinal": 303
+      "ordinal": 304
     },
     {
       "method": "DELETE",
@@ -3049,7 +3059,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/workspace_collections.py",
-      "ordinal": 304
+      "ordinal": 305
     },
     {
       "method": "GET",
@@ -3059,7 +3069,7 @@
       "response_model": null,
       "include_in_schema": false,
       "source": "app/_launch_runtime.py",
-      "ordinal": 305
+      "ordinal": 306
     },
     {
       "method": "GET",
@@ -3069,7 +3079,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 306
+      "ordinal": 307
     }
   ]
 }

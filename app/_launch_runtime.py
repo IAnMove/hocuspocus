@@ -8650,6 +8650,44 @@ async def upload_audio(file: UploadFile = File(...)):
     }
 
 
+@api.post("/api/v1/audio/adopt")
+async def adopt_audio(request: Request):
+    """Adopt audio this machine already holds as the current audio source.
+
+    The counterpart to /api/v1/upload-audio for a file that never left the
+    server. Story Lab handing a generated song to Director used to download
+    the whole track into the browser only to post the same bytes straight
+    back — a round trip over the network for a file sitting on this disk,
+    and the one step of that flow that breaks when the UI is driven from
+    another machine. Callers send the name instead.
+
+    Audio only, and adopted in place: the uploader owns transcoding and
+    demuxing. The response shape mirrors the uploader's so everything
+    downstream is identical regardless of how the audio arrived.
+    """
+    body = await request.json()
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    filepath = _resolve_request_media_path(
+        body.get("audio_path", ""),
+        workspace=workspace,
+        kinds=("audio",),
+    )
+    filename = os.path.basename(filepath)
+    uploads_audio = os.path.realpath(os.path.join(os.getcwd(), "uploads", "audio"))
+    from_uploads = os.path.dirname(os.path.realpath(filepath)) == uploads_audio
+    workspace_suffix = f"?workspace={quote(workspace, safe='')}" if workspace else ""
+    return {
+        "filename": filename,
+        "path": filepath,
+        "url": (
+            f"/api/v1/uploads/audio/{quote(filename, safe='')}"
+            if from_uploads
+            else f"/api/v1/file/{quote(filename, safe='')}{workspace_suffix}"
+        ),
+        "duration_seconds": _probe_audio_duration(filepath),
+    }
+
+
 @api.get("/api/v1/uploads/audio/{filename}")
 def serve_audio_upload(filename: str):
     """Serve an uploaded audio file."""
