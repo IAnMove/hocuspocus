@@ -1066,12 +1066,14 @@ type DirectorAudioOptions = {
 
 /** How one track reaches Director. Only the delivery differs — posting the
  *  bytes, or naming a file the server already has — and it answers with the
- *  server-side path the rest of the flow works from. */
+ *  server-side path the rest of the flow works from. Adopted songs stay in
+ *  their workspace folder, so that workspace has to travel with the path. */
 type DirectorAudioSource = {
   name: string
   phase: 'uploading_audio' | 'adopting_audio'
   activityMessage: string
   loadingMessage: string
+  workspace?: string
   deliver: () => Promise<{ path: string }>
 }
 
@@ -1843,7 +1845,7 @@ interface AppState extends LlmSlice {
   setDirectorSongDuration: (v: number) => void
   directorWriteSong: () => Promise<void>
   directorGenerateTrack: () => Promise<void>
-  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string; totalDuration?: number }) => Promise<void>
+  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string; totalDuration?: number; workspace?: string }) => Promise<void>
   directorSetEnergyBias: (bias: number) => Promise<void>
   directorSetPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
   directorConfirmStructure: () => void
@@ -7204,6 +7206,7 @@ export const useStore = create<AppState>((set, get) => {
     phase: 'adopting_audio',
     activityMessage: `Loading “${name}”…`,
     loadingMessage: 'Loading audio...',
+    workspace: reference.workspace,
     deliver: () => api.adoptAudio(reference),
   }, opts),
 
@@ -7244,12 +7247,13 @@ export const useStore = create<AppState>((set, get) => {
           total: 10,
         })
       }
+      const workspace = source.workspace ?? get().activeWorkspace
       const prepared = shouldTrim
         ? await api.trimAudio({
             audio_path: delivered.path,
             start: Number(opts?.trimStart),
             end: Number(opts?.trimEnd),
-            workspace: get().activeWorkspace,
+            workspace,
           })
         : delivered
       analysisStarted = true
@@ -7259,6 +7263,7 @@ export const useStore = create<AppState>((set, get) => {
         classifyLyricsHint: shouldTrim ? '' : opts?.lyricsHint,
         activityId,
         totalDuration: opts?.totalDuration,
+        workspace,
       })
     } catch (e: unknown) {
       if (analysisStarted) return
@@ -7329,7 +7334,7 @@ export const useStore = create<AppState>((set, get) => {
         transcribe,
         extract_vocals: transcribe,
         lyrics_hint: opts?.lyricsHint || undefined,
-        workspace: get().activeWorkspace,
+        workspace: opts?.workspace ?? get().activeWorkspace,
       })
       backendAccepted = true
       get().upsertActivity({
