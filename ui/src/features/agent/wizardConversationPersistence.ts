@@ -27,6 +27,13 @@ export interface QueuedWizardConversationWrite {
   base?: WizardConversationPayload
 }
 
+export function newestWizardConversationSnapshot(
+  known: WizardConversationPayload | undefined,
+  incoming: WizardConversationPayload,
+): WizardConversationPayload {
+  return known && known.revision >= incoming.revision ? known : incoming
+}
+
 const defaultTransport: WizardConversationTransport = {
   fetch: fetchWizardConversation,
   save: saveWizardConversation,

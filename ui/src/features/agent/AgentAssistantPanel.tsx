@@ -28,7 +28,7 @@ import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
-import { enqueueWizardConversationSave, persistQueuedWizardConversation } from './wizardConversationPersistence'
+import { enqueueWizardConversationSave, newestWizardConversationSnapshot, persistQueuedWizardConversation } from './wizardConversationPersistence'
 import i18n, { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -280,14 +280,15 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
     void fetchWizardConversation(conversationWorkspace).then(payload => {
       if (cancelled || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
       const knownSnapshot = conversationSnapshotsRef.current.get(conversationWorkspace)
+      const canonicalSnapshot = newestWizardConversationSnapshot(knownSnapshot, payload)
       const choice = applyRemoteWizardConversation({
         localMessages: messagesRef.current,
         localRevision: knownSnapshot?.revision || 0,
-        remoteMessages: payload.messages,
-        remoteRevision: payload.revision || 0,
-        remoteExecutions: payload.executions,
+        remoteMessages: canonicalSnapshot.messages,
+        remoteRevision: canonicalSnapshot.revision || 0,
+        remoteExecutions: canonicalSnapshot.executions,
       })
-      conversationSnapshotsRef.current.set(conversationWorkspace, payload)
+      conversationSnapshotsRef.current.set(conversationWorkspace, canonicalSnapshot)
       skipNextConversationSaveRef.current = choice.source === 'remote'
       // A local choice may still adopt the backend's newer CAS revision and
       // merge remote-only messages. Use a fresh array so the persistence
