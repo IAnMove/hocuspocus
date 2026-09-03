@@ -10,7 +10,6 @@ import torch
 import decord
 from PIL import Image
 import numpy as np
-from rembg import remove, new_session
 import random
 import ffmpeg
 import os
@@ -270,10 +269,9 @@ def resize_lanczos(img, h, w, method = None):
     return img
 
 def remove_background(img, session=None):
-    if session ==None:
-        session = new_session() 
     img = Image.fromarray(np.clip(255. * img.movedim(0, -1).cpu().numpy(), 0, 255).astype(np.uint8))
-    img = remove(img, session=session, alpha_matting = True, bgcolor=[255, 255, 255, 0]).convert('RGB')
+    from services.rembg_adapter import remove_background_image
+    img = remove_background_image(img, session=session).convert('RGB')
     return torch.from_numpy(np.array(img).astype(np.float32) / 255.0).movedim(-1, 0)
 
 
@@ -441,7 +439,8 @@ def calculate_dimensions_and_resize_image(image, canvas_height, canvas_width, fi
 
 def resize_and_remove_background(img_list, budget_width, budget_height, rm_background, any_background_ref, fit_into_canvas = 0, block_size= 16, outpainting_dims = None, outpainting_ratio = "", background_ref_outpainted = True, inpaint_color = 127.5, return_tensor = False, ignore_last_refs = 0, background_removal_color =  [255, 255, 255] ):
     if rm_background:
-        session = new_session() 
+        from services.rembg_adapter import remove_background_image
+        session = None
 
     output_list =[]
     output_mask_list =[]
@@ -483,7 +482,12 @@ def resize_and_remove_background(img_list, budget_width, budget_height, rm_backg
             resized_image= img.resize((new_width,new_height), resample=Image.Resampling.LANCZOS) 
         if rm_background  and not (any_background_ref and i==0 or any_background_ref == 2) :
             # resized_image = remove(resized_image, session=session, alpha_matting_erode_size = 1,alpha_matting_background_threshold = 70, alpha_foreground_background_threshold = 100, alpha_matting = True, bgcolor=[255, 255, 255, 0]).convert('RGB')
-            resized_image = remove(resized_image, session=session, alpha_matting_erode_size = 1, alpha_matting = True, bgcolor=background_removal_color + [0]).convert('RGB')
+            resized_image = remove_background_image(
+                resized_image,
+                session=session,
+                alpha_matting_erode_size=1,
+                bgcolor=background_removal_color + [0],
+            ).convert('RGB')
         if return_tensor:
             output_list.append(convert_image_to_tensor(resized_image).unsqueeze(1)) 
         else:
@@ -594,5 +598,3 @@ def prepare_video_guide_and_mask( video_guides, video_masks, pre_video_guide, im
         src_videos.append(src_video)
         src_masks.append(src_mask)
     return src_videos, src_masks
-
-

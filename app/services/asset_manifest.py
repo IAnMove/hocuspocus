@@ -347,6 +347,7 @@ def adapt_legacy_sidecar(
         "effective": params.get("prompt") or params.get("video_prompt"),
         "negative": params.get("negative_prompt"),
         "audio": params.get("audio_prompt"),
+        "instruction": params.get("instruction"),
         "language": params.get("language") or params.get("prompt_language"),
     }
     model = {
@@ -374,6 +375,18 @@ def adapt_legacy_sidecar(
             or params.get("director_pipeline_id")
             or params.get("_director_pipeline_id")
         )
+    inputs = legacy.get("inputs")
+    if not isinstance(inputs, Sequence) or isinstance(inputs, (str, bytes, bytearray)):
+        inputs = params.get("inputs")
+    parents = legacy.get("parents")
+    if not isinstance(parents, Sequence) or isinstance(parents, (str, bytes, bytearray)):
+        parents = params.get("parents")
+    transformations = legacy.get("transformations")
+    if not isinstance(transformations, Sequence) or isinstance(transformations, (str, bytes, bytearray)):
+        transformations = params.get("transformations")
+    technical = legacy.get("technical")
+    if not isinstance(technical, Mapping):
+        technical = params.get("technical")
     stable_workspace = workspace_id or legacy.get("workspace") or params.get("workspace")
     stable_folder = (
         output_folder
@@ -412,7 +425,10 @@ def adapt_legacy_sidecar(
             "completed_at": completed_at,
             "inference_ms": inference_ms,
         },
-        technical={"legacy_sidecar": True},
+        inputs=inputs,
+        parents=parents,
+        transformations=transformations,
+        technical={"legacy_sidecar": True, **dict(technical or {})},
         error=legacy.get("error") if isinstance(legacy.get("error"), Mapping) else None,
     )
 

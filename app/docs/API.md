@@ -697,6 +697,35 @@ status = requests.get(f"{base}/api/v1/video-editor/export/{job['job_id']}").json
 
 `POST /api/v1/video-editor/screenshot` writes a PNG (`generation_mode: "image"`) at `{source, time, name?, workspace?}`. Character Creator uses it for Hunyuan views.
 
+## Image background removal
+
+`POST /api/v1/tools/remove-background` queues a standalone image tool job. It
+uses the shared rembg U2Net adapter, never overwrites the source, and publishes
+the transparent PNG plus a canonical `.meta.json` asset manifest in the
+destination workspace. Use an exact `asset_id` from `GET /api/v1/assets?kind=image`
+whenever possible; `source` may be the exact filename, an `/api/v1/file/...`
+URL, or an absolute path already inside the selected uploads/workspace root.
+`source_workspace` is required when the source belongs to another output
+folder. Poll `GET /api/v1/status/{job_id}` and cancel with
+`POST /api/v1/cancel/{job_id}`.
+
+```bash
+curl -X POST "$HOCUSPOCUS_URL/api/v1/tools/remove-background" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "asset_id": "asset_image_123",
+    "workspace": "default",
+    "instruction": "preserve the hair edges",
+    "provenance": {"actor": "user"}
+  }'
+```
+
+The response is accepted immediately with `job_id`, canonical task IDs and
+frozen model details (`rembg-u2net`). The Activity/task record reports queued,
+running, completed, failed or cancelled state; the derived asset exposes the
+source asset ID, tool/capability, instruction, model/backend, timings and
+transparent-PNG technical metadata.
+
 ## Gallery mix kinds
 
 `GET /api/v1/outputs` accepts `result_kind=music_video|trailer|series_episode` (plus the existing `media_type`, `multiclip_only`, `favorites_only`, `search`, `workspace`, `limit`, `offset`). Classification lives in `services.output_result_kind` and applies only to **assembled** filenames (`multiclip`, `_mv.mp4`, `_movie.mp4`, `_rejoin_multiclip.mp4`, `_series_assembly`). Requesting `series_episode` also matches `chapter`. When `result_kind` is set, pagination is bypassed and every match is returned.

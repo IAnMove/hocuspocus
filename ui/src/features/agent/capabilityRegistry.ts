@@ -43,6 +43,7 @@ import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferen
 import { registerStudioCapabilities } from './studioCapabilities'
 import { registerNavigationQueueCapabilities } from './navigationQueueCapabilities'
 import { registerEditorAuxCapabilities } from './editorAuxCapabilities'
+import { registerToolCapabilities } from './toolCapabilities'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import {
   LANGUAGE_INTENT_SCHEMA,
@@ -1105,6 +1106,7 @@ defineSceneControlCapability<AgentExport3dSceneAction>('export_3d_scene', 'Expor
 registerStudioCapabilities(defineCapability)
 registerNavigationQueueCapabilities(defineCapability)
 registerEditorAuxCapabilities(defineCapability)
+registerToolCapabilities(defineCapability)
 
 export function getCapability(name: string): CapabilityDefinition | undefined {
   return definitions.get(name)

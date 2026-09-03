@@ -307,13 +307,19 @@
     "saved": "Saved: {{name}}"
   },
   "tools": {
-    "title": "Tools — post-process any clip",
+    "title": "Tools — post-process media",
     "upscale": "Upscale",
     "revoice": "Revoice",
+    "removeBackground": "Remove background",
     "sourceClip": "Source Clip",
+    "sourceImage": "Source Image",
+    "loadingImages": "Loading images…",
     "uploadClip": "Upload a video clip",
+    "uploadImage": "Upload an image",
     "useGallery": "Use selected gallery clip",
     "selectGallery": "Select a video in the gallery first",
+    "useGalleryImage": "Use selected gallery image",
+    "selectGalleryImage": "Select an image from the library",
     "upscaleMethod": "Upscale Method",
     "flashvsrOff": "FlashVSR is disabled in Settings → Services. Enable it, or pick a Lanczos method.",
     "upscaleHint": "FlashVSR is model-based super-resolution (sharper, slower; weights download on first use). Lanczos is a fast classic resize. The clip's audio is preserved.",
@@ -327,7 +333,14 @@
     "referenceVoice": "Reference Voice",
     "uploadSample": "Upload {{label}} sample",
     "upscaleClip": "Upscale Clip",
-    "replaceVoiceAction": "Replace Voice"
+    "replaceVoiceAction": "Replace Voice",
+    "removeBackgroundInstruction": "Optional instruction",
+    "removeBackgroundInstructionPlaceholder": "For example: preserve fine hair and transparent edges",
+    "removeBackgroundHint": "Creates a transparent PNG copy and keeps the original image unchanged.",
+    "removeBackgroundAction": "Remove Background",
+    "submittingRemoveBackground": "Submitting background removal…",
+    "queuedRemoveBackground": "Background removal queued…",
+    "removeBackgroundFailed": "Background removal failed"
   },
   "post": {
     "title": "Post Processing",

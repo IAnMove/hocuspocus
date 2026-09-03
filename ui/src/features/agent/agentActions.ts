@@ -525,6 +525,17 @@ export interface AgentConfigureStudioLorasAction {
   replaceExisting: boolean
 }
 
+export interface AgentRemoveBackgroundAction {
+  type: 'remove_background'
+  /** Canonical asset identity when the source comes from the library. */
+  assetId?: string
+  /** Exact canonical filename or API/absolute path resolved by the server. */
+  source: string
+  sourceWorkspace?: string
+  instruction?: string
+  confirm: true
+}
+
 export interface AgentInspectQueueAction {
   type: 'inspect_queue'
   scope: 'active' | 'all'
@@ -619,6 +630,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateComicPanelAction
   | AgentAttachStudioReferencesAction
   | AgentConfigureStudioLorasAction
+  | AgentRemoveBackgroundAction
   | AgentInspectQueueAction
   | AgentCancelTaskAction
   | AgentResumeTaskAction
@@ -853,6 +865,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   mountvideoclipalternativesong: 'mount_videoclip_alternative_song',
   attachstudioreferences: 'attach_studio_references',
   configurestudioloras: 'configure_studio_loras',
+  removebackground: 'remove_background',
   inspectqueue: 'inspect_queue',
   canceltask: 'cancel_task',
   resumetask: 'resume_task',
@@ -982,6 +995,7 @@ const CANONICAL_FIELD_NAMES = [
   'kit_name', 'look_notes', 'preset_id',
   'clip_names', 'clip_name', 'trim_start', 'trim_end', 'project_name',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
+  'asset_id', 'source', 'source_workspace',
   'loras', 'weight',
   'workspace_name', 'workspace_id', 'expected_revision', 'description',
   'project_ids', 'asset_ids', 'production_ids',
@@ -2531,6 +2545,9 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           reference_role: { type: 'string', enum: ['', 'start_frame', 'subject', 'style'] },
           replace_existing: { type: 'boolean' },
           remove_background: { type: 'boolean' },
+          asset_id: { type: 'string', maxLength: 180 },
+          source: { type: 'string', maxLength: 1_200 },
+          source_workspace: { type: 'string', maxLength: 160 },
           workspace_name: { type: 'string', maxLength: 120 },
           workspace_id: { type: 'string', maxLength: 200 },
           expected_revision: { type: 'integer', minimum: 1 },

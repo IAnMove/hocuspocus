@@ -1138,7 +1138,7 @@ function pipelineRefsFromStore(
 function contextCapabilities(location: WizardContextLocation): WizardContextCapabilities {
   const common = ['open_tab', 'inspect_queue', 'select_workspace']
   const byTab: Record<string, string[]> = {
-    studio: ['prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'start_generation'],
+    studio: ['prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'remove_background', 'start_generation'],
     story_lab: ['open_story_section', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'configure_story_song', 'generate_story_song', 'stage_story_music_video', 'start_director_production'],
     series_lab: ['open_series_section', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon'],
     comics: ['create_comic', 'generate_comic', 'generate_comic_panel'],

@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
-import { Wrench, Upload, X, Film, Mic, Play } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Wrench, Upload, X, Film, Image as ImageIcon, Mic, Play } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
+import type { AssetCatalogItem } from '../../api/assets'
 
 // Upscale methods — same set as Post Processing's Spatial Upsampling, minus the
 // VAE options (those are tied to the generation pipeline, not a standalone clip).
@@ -24,6 +25,9 @@ export function ToolsPanel() {
   const sourcePath = useStore(s => s.toolsSourcePath)
   const sourceName = useStore(s => s.toolsSourceName)
   const sourceUrl = useStore(s => s.toolsSourceUrl)
+  const sourceAssetId = useStore(s => s.toolsSourceAssetId)
+  const sourceWorkspace = useStore(s => s.toolsSourceWorkspace)
+  const sourceKind = useStore(s => s.toolsSourceKind)
   const setSource = useStore(s => s.setToolsSource)
   const method = useStore(s => s.toolsUpscaleMethod)
   const setMethod = useStore(s => s.setToolsUpscaleMethod)
@@ -31,9 +35,12 @@ export function ToolsPanel() {
   const setRevoiceMode = useStore(s => s.setToolsRevoiceMode)
   const revoiceRefs = useStore(s => s.toolsRevoiceRefs)
   const setRevoiceRef = useStore(s => s.setToolsRevoiceRef)
+  const removeBackgroundInstruction = useStore(s => s.toolsRemoveBackgroundInstruction)
+  const setRemoveBackgroundInstruction = useStore(s => s.setToolsRemoveBackgroundInstruction)
   const runTool = useStore(s => s.runTool)
   const outputs = useStore(s => s.outputs)
   const selectedOutput = useStore(s => s.selectedOutput)
+  const activeWorkspace = useStore(s => s.activeWorkspace)
   const flashvsrMode = useStore(s => s.servicesConfig?.flashvsr_mode ?? 1)
   const current = outputs[selectedOutput]
   const currentIsVideo = !!current && current.type === 'video'
@@ -42,12 +49,37 @@ export function ToolsPanel() {
   const vcFileRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)]
   const [uploading, setUploading] = useState(false)
   const [vcUploading, setVcUploading] = useState<number | null>(null)
+  const [imageAssets, setImageAssets] = useState<AssetCatalogItem[]>([])
+  const [imageAssetsLoading, setImageAssetsLoading] = useState(false)
+
+  useEffect(() => {
+    if (tool !== 'remove_background') return
+    const controller = new AbortController()
+    setImageAssetsLoading(true)
+    api.fetchAssets({ kind: 'image', limit: 100, signal: controller.signal })
+      .then(result => {
+        if (!controller.signal.aborted) setImageAssets(result.assets)
+      })
+      .catch(error => {
+        if (!controller.signal.aborted) console.error('Image asset catalog failed:', error)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setImageAssetsLoading(false)
+      })
+    return () => controller.abort()
+  }, [tool])
 
   const handleSourceUpload = async (file: File) => {
     setUploading(true)
     try {
       const r = await api.uploadImage(file)  // /api/v1/upload handles video too
-      setSource({ path: r.path, name: file.name, url: r.url })
+      setSource({
+        path: r.path,
+        name: file.name,
+        url: r.url,
+        workspace: tool === 'remove_background' ? '__uploads__' : null,
+        kind: tool === 'remove_background' ? 'image' : 'video',
+      })
     } catch (e) {
       console.error('Source upload failed:', e)
     } finally {
@@ -56,7 +88,33 @@ export function ToolsPanel() {
   }
 
   const useCurrentClip = () => {
-    if (currentIsVideo) setSource({ path: current.name, name: current.name, url: current.url })
+    if (currentIsVideo) setSource({ path: current.name, name: current.name, url: current.url, kind: 'video' })
+  }
+
+  const useCurrentImage = () => {
+    if (currentIsImage) setSource({ path: current.name, name: current.name, url: current.url, kind: 'image' })
+  }
+
+  const selectImageAsset = (assetId: string) => {
+    const asset = imageAssets.find(item => item.id === assetId)
+    if (!asset) {
+      setSource(null)
+      return
+    }
+    const location = asset.locations.find(item => item.workspace_id === activeWorkspace)
+      || asset.locations[0]
+    if (!location) {
+      setSource(null)
+      return
+    }
+    setSource({
+      path: location.filename,
+      name: asset.filename,
+      url: location.url || asset.url,
+      assetId: asset.id,
+      workspace: location.workspace_id,
+      kind: 'image',
+    })
   }
 
   const handleVcUpload = async (index: number, file: File) => {
@@ -72,7 +130,8 @@ export function ToolsPanel() {
   }
 
   const hasRefs = revoiceRefs.some(r => r && r.path)
-  const canRun = !!sourcePath && (tool === 'upscale' || hasRefs)
+  const currentIsImage = !!current && current.type === 'image'
+  const canRun = !!sourcePath && (tool === 'upscale' || hasRefs || (tool === 'remove_background' && sourceKind === 'image'))
   const flashvsrOff = flashvsrMode === 0 && method.startsWith('flashvsr')
 
   return (
@@ -83,7 +142,7 @@ export function ToolsPanel() {
         </div>
         {/* Tool selector */}
         <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
-          {([['upscale', 'tools.upscale'], ['revoice', 'tools.revoice']] as const).map(([val, labelKey]) => (
+          {([['upscale', 'tools.upscale'], ['revoice', 'tools.revoice'], ['remove_background', 'tools.removeBackground']] as const).map(([val, labelKey]) => (
             <button
               key={val}
               onClick={() => setTool(val)}
@@ -97,17 +156,22 @@ export function ToolsPanel() {
         </div>
       </div>
 
-      {/* Source clip — upload, or use the clip currently selected in the gallery */}
+      {/* Source media — upload, select an exact catalog asset, or use the current gallery item. */}
       <div>
-        <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('tools.sourceClip')}</label>
+        <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+          {tool === 'remove_background' ? t('tools.sourceImage') : t('tools.sourceClip')}
+        </label>
         {sourcePath ? (
           <div className="bg-bg-tertiary border border-border rounded-lg p-2 space-y-2">
             {sourceUrl && (
-              <video src={sourceUrl} className="w-full rounded-md max-h-44 bg-black" muted controls playsInline />
+              sourceKind === 'image'
+                ? <img src={sourceUrl} alt={sourceName || ''} className="w-full rounded-md max-h-44 object-contain bg-black" />
+                : <video src={sourceUrl} className="w-full rounded-md max-h-44 bg-black" muted controls playsInline />
             )}
             <div className="flex items-center gap-2">
-              <Film size={12} className="text-accent-blue shrink-0" />
+              {sourceKind === 'image' ? <ImageIcon size={12} className="text-accent-blue shrink-0" /> : <Film size={12} className="text-accent-blue shrink-0" />}
               <span className="flex-1 min-w-0 truncate text-[11px] text-text-primary">{sourceName}</span>
+              {sourceAssetId && <span className="text-[9px] text-text-muted shrink-0">{sourceWorkspace || 'workspace'}</span>}
               <button onClick={() => setSource(null)} className="p-0.5 text-text-muted hover:text-red-400 transition-colors" title={t('chrome.clear')}>
                 <X size={12} />
               </button>
@@ -120,22 +184,46 @@ export function ToolsPanel() {
               className={`border-2 border-dashed border-border rounded-lg p-3 text-center cursor-pointer hover:border-accent-blue transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
             >
               <Upload size={16} className="mx-auto mb-1 text-text-muted" />
-              <p className="text-[11px] text-text-secondary">{uploading ? t('chrome.uploading') : t('tools.uploadClip')}</p>
+              <p className="text-[11px] text-text-secondary">{uploading ? t('chrome.uploading') : tool === 'remove_background' ? t('tools.uploadImage') : t('tools.uploadClip')}</p>
               <input
                 ref={fileRef}
                 type="file"
-                accept="video/*"
+                accept={tool === 'remove_background' ? 'image/*' : 'video/*'}
                 className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleSourceUpload(f) }}
               />
             </div>
-            <button
-              onClick={useCurrentClip}
-              disabled={!currentIsVideo}
-              className="w-full text-[11px] py-1.5 rounded-md border border-border bg-bg-tertiary text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {currentIsVideo ? t('tools.useGallery') : t('tools.selectGallery')}
-            </button>
+            {tool === 'remove_background' ? (
+              <>
+                <select
+                  aria-label={t('tools.sourceImage')}
+                  value={sourceAssetId || ''}
+                  onChange={event => selectImageAsset(event.target.value)}
+                  className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
+                  disabled={imageAssetsLoading}
+                >
+                  <option value="">{imageAssetsLoading ? t('tools.loadingImages') : t('tools.selectGalleryImage')}</option>
+                  {imageAssets.map(asset => (
+                    <option key={asset.id} value={asset.id}>{asset.filename}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={useCurrentImage}
+                  disabled={!currentIsImage}
+                  className="w-full text-[11px] py-1.5 rounded-md border border-border bg-bg-tertiary text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {currentIsImage ? t('tools.useGalleryImage') : t('tools.selectGalleryImage')}
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={useCurrentClip}
+                disabled={!currentIsVideo}
+                className="w-full text-[11px] py-1.5 rounded-md border border-border bg-bg-tertiary text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {currentIsVideo ? t('tools.useGallery') : t('tools.selectGallery')}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -160,7 +248,7 @@ export function ToolsPanel() {
             {t('tools.upscaleHint')}
           </p>
         </div>
-      ) : (
+      ) : tool === 'revoice' ? (
         <div className="space-y-2">
           <label className="text-[11px] text-text-muted uppercase tracking-wider block">{t('tools.replaceVoice')}</label>
           <div className="flex gap-1.5 text-xs">
@@ -216,6 +304,18 @@ export function ToolsPanel() {
             )
           })}
         </div>
+      ) : (
+        <div className="space-y-2">
+          <label className="text-[11px] text-text-muted uppercase tracking-wider block">{t('tools.removeBackgroundInstruction')}</label>
+          <textarea
+            value={removeBackgroundInstruction}
+            onChange={event => setRemoveBackgroundInstruction(event.target.value)}
+            placeholder={t('tools.removeBackgroundInstructionPlaceholder')}
+            rows={3}
+            className="w-full resize-y bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
+          />
+          <p className="text-[10px] text-text-muted leading-snug">{t('tools.removeBackgroundHint')}</p>
+        </div>
       )}
 
       {/* Run */}
@@ -229,7 +329,7 @@ export function ToolsPanel() {
         }`}
       >
         <Play size={13} fill={canRun ? 'white' : 'currentColor'} />
-        {tool === 'upscale' ? t('tools.upscaleClip') : t('tools.replaceVoiceAction')}
+        {tool === 'upscale' ? t('tools.upscaleClip') : tool === 'revoice' ? t('tools.replaceVoiceAction') : t('tools.removeBackgroundAction')}
       </button>
     </div>
   )

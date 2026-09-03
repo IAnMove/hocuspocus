@@ -559,7 +559,11 @@ def _coordinated_generation_slot(
 def _is_durable_generation_job(job: dict) -> bool:
     """Only persist ordinary Studio generations, not Director sub-jobs."""
     params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    return bool(params.get("model_type")) and not params.get("_director_pipeline_id")
+    return (
+        bool(params.get("model_type"))
+        and not params.get("_director_pipeline_id")
+        and not params.get("_non_durable_tool")
+    )
 
 
 def _persist_generation_job(job: dict) -> None:
@@ -783,6 +787,7 @@ _PUBLIC_MODEL_LABELS = {
     "minimax:image-01": "MiniMax Image-01",
     "minimax_h3_legacy": "MiniMax H3 Legacy Quality — ConvRot",
     "post_processing": "Post-processing",
+    "rembg-u2net": "rembg U2Net",
 }
 
 
@@ -14963,25 +14968,13 @@ def _get_recast_u2net_session():
             model_home = os.path.join(_app_dir, "ckpts", "rembg")
             os.makedirs(model_home, exist_ok=True)
             os.environ.setdefault("U2NET_HOME", model_home)
-            import onnxruntime as _ort
-            from rembg import new_session
+            from services.rembg_adapter import background_session
 
             print(
                 "[Recast] Loading U2Net edge refinement on CPU "
-                "(SAM3 remains the person selector)"
+                "(SAM3 remains the person selector; shared rembg adapter)"
             )
-            # This rembg release ignores a caller-supplied providers list and
-            # chooses CUDA whenever the GPU build of ONNX Runtime is present.
-            # That both spends generation VRAM and emits a scary DLL error on
-            # systems whose ORT CUDA version differs from PyTorch. Report CPU
-            # only for the brief session-construction call; the resulting ORT
-            # session then remains explicitly CPU-backed for its lifetime.
-            original_get_device = _ort.get_device
-            try:
-                _ort.get_device = lambda: "CPU"
-                _recast_u2net_session = new_session("u2net")
-            finally:
-                _ort.get_device = original_get_device
+            _recast_u2net_session = background_session("u2net", force_cpu=True)
     return _recast_u2net_session
 
 
@@ -14989,7 +14982,7 @@ def _run_recast_u2net_matte(reference_frame, reference_path=None):
     """Return decontaminated foreground RGB and alpha, with a small cache."""
     import numpy as np
     from PIL import Image as _PILImage
-    from rembg import remove
+    from services.rembg_adapter import remove_background_image
 
     frame = np.asarray(reference_frame, dtype=np.uint8)
     cache_key = None
@@ -15011,8 +15004,9 @@ def _run_recast_u2net_matte(reference_frame, reference_path=None):
 
     session = _get_recast_u2net_session()
     with _recast_u2net_run_lock:
-        cutout = remove(
+        cutout = remove_background_image(
             _PILImage.fromarray(frame),
+            model="u2net",
             session=session,
             alpha_matting=True,
             alpha_matting_erode_size=1,
@@ -35773,6 +35767,13 @@ def _publish_generation_task(job: dict) -> dict:
             [] if status in {"created", "queued", "waiting_resource"}
             else ["remote:https://api.minimax.io" if is_remote else _local_gpu_lane.key]
         )
+    task_title = {
+        "image": "Image generation", "video": "Video generation",
+        "audio": "Audio generation", "music": "Music generation",
+        "model3d": "3D generation", "avatar": "Video edit",
+    }.get(mode, "Generation job")
+    if str(provenance.get("capability") or "") == "remove_background":
+        task_title = "Tools · Remove background"
     return _upsert_canonical_task(
         workspace,
         task_id,
@@ -35780,11 +35781,7 @@ def _publish_generation_task(job: dict) -> dict:
         parent_id=parent_task_id,
         kind=mode,
         workflow="generation",
-        title={
-            "image": "Image generation", "video": "Video generation",
-            "audio": "Audio generation", "music": "Music generation",
-            "model3d": "3D generation", "avatar": "Video edit",
-        }.get(mode, "Generation job"),
+        title=task_title,
         status=status,
         phase=str(job.get("phase") or status),
         message=str(job.get("message") or status.replace("_", " ").title()),
@@ -36281,6 +36278,56 @@ api.include_router(create_assets_router(
     list_workspaces=_list_workspaces,
     workspace_dir=_workspace_dir,
     uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
+))
+
+from routers.tools import create_tools_router
+from services.background_removal_job import (
+    BackgroundRemovalJobHooks,
+    run_remove_background_job,
+)
+
+
+def _start_remove_background_job(job: dict) -> None:
+    """Start the Tools worker with the shared generation lifecycle seams."""
+    def worker() -> None:
+        hooks = BackgroundRemovalJobHooks(
+            generation_slot=lambda current: _coordinated_generation_slot(
+                current,
+                description="HocusPocus Lab GPU tool · background removal",
+            ),
+            try_start=try_start,
+            update_job=update_job,
+            finish_job=finish_job,
+            is_cancel_requested=is_cancel_requested,
+            record_job_outputs=record_job_outputs,
+            register_abort_state=register_abort_state,
+            unregister_abort_state=unregister_abort_state,
+            acknowledge_cancel=acknowledge_cancel,
+            active_states=_active_gen_states,
+            publish_sidecar=lambda current, path, sidecar: _publish_generation_sidecar_for_studio_job(
+                current,
+                path,
+                sidecar,
+                tool="remove_background",
+            ),
+            simulated_artifact=execution_mode.create_artifact,
+        )
+        run_remove_background_job(job, hooks=hooks)
+
+    threading.Thread(
+        target=worker,
+        name=f"remove-background-{job.get('id', 'job')}",
+        daemon=False,
+    ).start()
+
+
+api.include_router(create_tools_router(
+    get_active_workspace=_get_active_workspace,
+    list_workspaces=_list_workspaces,
+    workspace_dir=_workspace_dir,
+    uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
+    register_job=_register_manual_generation_job,
+    start_remove_background=_start_remove_background_job,
 ))
 
 from routers.projects import create_projects_router

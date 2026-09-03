@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanJob, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
+import i18n from '../i18n'
 import { type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
@@ -1439,19 +1440,24 @@ interface AppState extends LlmSlice, StudioConfigurationSlice {
   // Apply FlashVSR upscale or SeedVC revoice to any gallery output or an
   // uploaded clip, independent of a generation. See ToolsPanel.tsx + the
   // /api/v1/tools/* endpoints.
-  toolsTool: 'upscale' | 'revoice'
-  setToolsTool: (t: 'upscale' | 'revoice') => void
+  toolsTool: 'upscale' | 'revoice' | 'remove_background'
+  setToolsTool: (t: 'upscale' | 'revoice' | 'remove_background') => void
   /** Gallery filename (resolved against the workspace) OR an absolute upload path. */
   toolsSourcePath: string | null
   toolsSourceName: string | null
   toolsSourceUrl: string | null
-  setToolsSource: (src: { path: string; name: string; url: string | null } | null) => void
+  toolsSourceAssetId: string | null
+  toolsSourceWorkspace: string | null
+  toolsSourceKind: 'image' | 'video' | 'audio' | 'model3d' | null
+  setToolsSource: (src: { path: string; name: string; url: string | null; assetId?: string | null; workspace?: string | null; kind?: 'image' | 'video' | 'audio' | 'model3d' | null } | null) => void
   toolsUpscaleMethod: string
   setToolsUpscaleMethod: (m: string) => void
   toolsRevoiceMode: 'single' | 'two'
   setToolsRevoiceMode: (m: 'single' | 'two') => void
   toolsRevoiceRefs: ({ filename: string; path: string } | null)[]
   setToolsRevoiceRef: (index: number, ref: { filename: string; path: string } | null) => void
+  toolsRemoveBackgroundInstruction: string
+  setToolsRemoveBackgroundInstruction: (instruction: string) => void
   runTool: () => Promise<void>
   /** Gallery one-click: upscale a specific clip now, with the configured method. */
   quickUpscaleClip: (name: string, url: string | null) => Promise<void>
@@ -3836,9 +3842,26 @@ export const useStore = create<AppState>((set, get) => {
   toolsSourcePath: null,
   toolsSourceName: null,
   toolsSourceUrl: null,
+  toolsSourceAssetId: null,
+  toolsSourceWorkspace: null,
+  toolsSourceKind: null,
   setToolsSource: (src) => set(src
-    ? { toolsSourcePath: src.path, toolsSourceName: src.name, toolsSourceUrl: src.url }
-    : { toolsSourcePath: null, toolsSourceName: null, toolsSourceUrl: null }),
+    ? {
+      toolsSourcePath: src.path,
+      toolsSourceName: src.name,
+      toolsSourceUrl: src.url,
+      toolsSourceAssetId: src.assetId ?? null,
+      toolsSourceWorkspace: src.workspace ?? null,
+      toolsSourceKind: src.kind ?? null,
+    }
+    : {
+      toolsSourcePath: null,
+      toolsSourceName: null,
+      toolsSourceUrl: null,
+      toolsSourceAssetId: null,
+      toolsSourceWorkspace: null,
+      toolsSourceKind: null,
+    }),
   toolsUpscaleMethod: 'flashvsr2',
   setToolsUpscaleMethod: (m) => set({ toolsUpscaleMethod: m }),
   toolsRevoiceMode: 'single',
@@ -3850,6 +3873,8 @@ export const useStore = create<AppState>((set, get) => {
     next[index] = ref
     return { toolsRevoiceRefs: next }
   }),
+  toolsRemoveBackgroundInstruction: '',
+  setToolsRemoveBackgroundInstruction: (instruction) => set({ toolsRemoveBackgroundInstruction: instruction }),
   runTool: async () => {
     const s = get()
     const source = s.toolsSourcePath
@@ -3861,12 +3886,18 @@ export const useStore = create<AppState>((set, get) => {
       .filter((r): r is { filename: string; path: string } => !!r && !!r.path)
       .map(r => r.path)
     if (tool === 'revoice' && refPaths.length === 0) return
+    if (tool === 'remove_background' && s.toolsSourceKind !== 'image') return
 
     // Placeholder job tile — mirrors the blend/edit submit pattern so the
     // progress shows in the main feed and the gallery refreshes on completion.
+    const removingBackground = tool === 'remove_background'
     const newJob: GenerationJob = {
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-      phase: '', message: tool === 'upscale' ? 'Submitting upscale...' : 'Submitting revoice...',
+      phase: '', message: tool === 'upscale'
+        ? 'Submitting upscale...'
+        : tool === 'revoice'
+          ? 'Submitting revoice...'
+          : i18n.t('tools.submittingRemoveBackground', { ns: 'studio' }),
       outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
     }
     set(st => {
@@ -3876,10 +3907,24 @@ export const useStore = create<AppState>((set, get) => {
     try {
       const result = tool === 'upscale'
         ? await api.submitToolUpscale({ video_path: source, method: s.toolsUpscaleMethod, workspace: s.activeWorkspace })
-        : await api.submitToolRevoice({ video_path: source, voice_ref_paths: refPaths, mode: s.toolsRevoiceMode, workspace: s.activeWorkspace })
+        : tool === 'revoice'
+          ? await api.submitToolRevoice({ video_path: source, voice_ref_paths: refPaths, mode: s.toolsRevoiceMode, workspace: s.activeWorkspace })
+          : await api.submitToolRemoveBackground({
+            asset_id: s.toolsSourceAssetId || undefined,
+            source,
+            source_workspace: s.toolsSourceWorkspace || undefined,
+            workspace: s.activeWorkspace,
+            instruction: s.toolsRemoveBackgroundInstruction,
+            provenance: { actor: 'user' },
+          })
 
       set(st => ({
-        jobs: st.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'queued', message: 'Queued...' } : j),
+        jobs: st.jobs.map(j => j === newJob ? {
+          ...j,
+          id: result.job_id,
+          status: 'queued',
+          message: removingBackground ? i18n.t('tools.queuedRemoveBackground', { ns: 'studio' }) : 'Queued...',
+        } : j),
       }))
 
       const pollInterval = setInterval(async () => {
@@ -3910,7 +3955,11 @@ export const useStore = create<AppState>((set, get) => {
         } catch { /* ignore poll errors */ }
       }, 2000)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : (tool === 'upscale' ? 'Upscale failed' : 'Revoice failed')
+      const msg = e instanceof Error ? e.message : (tool === 'upscale'
+        ? 'Upscale failed'
+        : tool === 'revoice'
+          ? 'Revoice failed'
+          : i18n.t('tools.removeBackgroundFailed', { ns: 'studio' }))
       set(st => updateJob(st.jobs, j => j === newJob, j => ({
         ...j, id: j.id || `tool-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
       })))
@@ -3921,11 +3970,11 @@ export const useStore = create<AppState>((set, get) => {
     // Point the Tools state at this clip and run an upscale immediately,
     // reusing runTool()'s submit+poll. The Tools panel reflects this clip
     // afterward (harmless — and convenient if the user opens it).
-    set({ toolsTool: 'upscale', toolsSourcePath: name, toolsSourceName: name, toolsSourceUrl: url })
+    set({ toolsTool: 'upscale', toolsSourcePath: name, toolsSourceName: name, toolsSourceUrl: url, toolsSourceAssetId: null, toolsSourceWorkspace: null, toolsSourceKind: 'video' })
     await get().runTool()
   },
   sendClipToTools: (name, url, tool) => {
-    set({ toolsTool: tool, toolsSourcePath: name, toolsSourceName: name, toolsSourceUrl: url })
+    set({ toolsTool: tool, toolsSourcePath: name, toolsSourceName: name, toolsSourceUrl: url, toolsSourceAssetId: null, toolsSourceWorkspace: null, toolsSourceKind: 'video' })
     get().setGenerationMode('tools')
   },
 

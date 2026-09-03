@@ -127,11 +127,13 @@ def crop_to_alpha(image: Image.Image, *, padding: int = DEFAULT_PADDING) -> Imag
 
 
 def _rembg_remove(image: Image.Image) -> Image.Image:
-    from rembg import remove
-    cleaned = remove(image.convert("RGBA"))
-    if not isinstance(cleaned, Image.Image):
-        cleaned = Image.open(cleaned).convert("RGBA")
-    return cleaned.convert("RGBA")
+    # Keep Face Rig and the general Tools operation on the same cached U2Net
+    # adapter. The wrapper remains a named seam for existing tests/callers.
+    from services.rembg_adapter import remove_background_image
+
+    # Preserve Face Rig's historical rembg defaults while sharing session and
+    # decoding through the common adapter.
+    return remove_background_image(image, alpha_matting=False)
 
 
 def clean_character_kit_overlay(
