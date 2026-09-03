@@ -7,7 +7,7 @@ const {
   mergeQueuedWizardConversationSnapshots,
   enqueueWizardConversationSave,
   persistQueuedWizardConversation,
-  newestWizardConversationSnapshot,
+  resolveWizardConversationHydration,
 } = await import('../src/features/agent/wizardConversationPersistence.ts')
 const {
   WizardConversationRequestError,
@@ -355,11 +355,24 @@ test('a CAS conflict during a queued edit keeps the edit and the concurrent turn
   assert.deepEqual(saved.conversation.messages.map(message => message.id), ['shared-user', 'remote-assistant'])
 })
 
-test('a late hydration fetch cannot replace a newer confirmed snapshot', () => {
+test('a late hydration fetch cannot replace a newer confirmed snapshot or visible edits', () => {
   const confirmed = payload(8, ['confirmed-user', 'confirmed-assistant'])
   const staleFetch = payload(7, ['stale-user'])
 
-  assert.equal(newestWizardConversationSnapshot(confirmed, staleFetch), confirmed)
-  assert.equal(newestWizardConversationSnapshot(undefined, staleFetch), staleFetch)
-  assert.equal(newestWizardConversationSnapshot(staleFetch, confirmed), confirmed)
+  assert.deepEqual(resolveWizardConversationHydration(confirmed, staleFetch), {
+    snapshot: confirmed,
+    applyToVisibleState: false,
+  })
+  assert.deepEqual(resolveWizardConversationHydration(confirmed, clone(confirmed)), {
+    snapshot: confirmed,
+    applyToVisibleState: false,
+  })
+  assert.deepEqual(resolveWizardConversationHydration(undefined, staleFetch), {
+    snapshot: staleFetch,
+    applyToVisibleState: true,
+  })
+  assert.deepEqual(resolveWizardConversationHydration(staleFetch, confirmed), {
+    snapshot: confirmed,
+    applyToVisibleState: true,
+  })
 })

@@ -27,11 +27,14 @@ export interface QueuedWizardConversationWrite {
   base?: WizardConversationPayload
 }
 
-export function newestWizardConversationSnapshot(
+export function resolveWizardConversationHydration(
   known: WizardConversationPayload | undefined,
   incoming: WizardConversationPayload,
-): WizardConversationPayload {
-  return known && known.revision >= incoming.revision ? known : incoming
+): { snapshot: WizardConversationPayload; applyToVisibleState: boolean } {
+  if (known && known.revision >= incoming.revision) {
+    return { snapshot: known, applyToVisibleState: false }
+  }
+  return { snapshot: incoming, applyToVisibleState: true }
 }
 
 const defaultTransport: WizardConversationTransport = {

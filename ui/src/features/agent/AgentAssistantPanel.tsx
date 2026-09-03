@@ -28,7 +28,7 @@ import { AgentMarkdown } from './AgentMarkdown'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
-import { enqueueWizardConversationSave, newestWizardConversationSnapshot, persistQueuedWizardConversation } from './wizardConversationPersistence'
+import { enqueueWizardConversationSave, persistQueuedWizardConversation, resolveWizardConversationHydration } from './wizardConversationPersistence'
 import i18n, { useUiTranslation } from '../../i18n'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -280,7 +280,16 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
     void fetchWizardConversation(conversationWorkspace).then(payload => {
       if (cancelled || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
       const knownSnapshot = conversationSnapshotsRef.current.get(conversationWorkspace)
-      const canonicalSnapshot = newestWizardConversationSnapshot(knownSnapshot, payload)
+      const hydration = resolveWizardConversationHydration(knownSnapshot, payload)
+      conversationSnapshotsRef.current.set(conversationWorkspace, hydration.snapshot)
+      if (!hydration.applyToVisibleState) {
+        // The response raced a confirmed save (or contains no newer revision).
+        // Keep visible local edits intact and let the normal persistence effect
+        // write them against the latest known canonical revision.
+        setHydratedWorkspace(conversationWorkspace)
+        return
+      }
+      const canonicalSnapshot = hydration.snapshot
       const choice = applyRemoteWizardConversation({
         localMessages: messagesRef.current,
         localRevision: knownSnapshot?.revision || 0,
@@ -288,7 +297,6 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         remoteRevision: canonicalSnapshot.revision || 0,
         remoteExecutions: canonicalSnapshot.executions,
       })
-      conversationSnapshotsRef.current.set(conversationWorkspace, canonicalSnapshot)
       skipNextConversationSaveRef.current = choice.source === 'remote'
       // A local choice may still adopt the backend's newer CAS revision and
       // merge remote-only messages. Use a fresh array so the persistence
