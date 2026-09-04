@@ -193,5 +193,15 @@ def test_shared_upscale_route_accepts_both_source_kinds_and_uses_one_worker(laun
     )
     assert isinstance(expected_kinds, ast.Tuple)
     assert [value.value for value in expected_kinds.elts] == ["image", "video"]
-    assert "_run_tool_upscale" in _called_names(route)
-    assert "_run_generation" in _called_names(route)
+    # The route selects the real or simulated worker once, then passes that
+    # callable to the shared thread launcher.  The worker names therefore
+    # appear in the assignment rather than as direct calls in the route body.
+    worker_assignment = next(
+        node for node in ast.walk(route)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "worker" for target in node.targets)
+    )
+    assert {
+        node.id for node in ast.walk(worker_assignment.value)
+        if isinstance(node, ast.Name)
+    } >= {"_run_tool_upscale", "_run_generation"}
