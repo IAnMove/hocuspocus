@@ -21,6 +21,10 @@ It extends the existing command plane; it does not create a second Wizard API.
 - **Run** is one execution attempt of a production or command. Retrying creates
   a new run while retaining lineage to the prior attempt.
 - **Task** is a technical queued step belonging to a run.
+- **Generation** is one attempt to produce an asset, identified by a stable
+  `generation_id`. A retry mints a new generation with lineage to the parent
+  attempt; `asset_id` is reused only when the bytes are the same artifact.
+  See `GENERATION_RECORD.md` and `generation-record-v1.schema.json`.
 
 The identity chain is therefore:
 
@@ -150,6 +154,17 @@ Every newly generated or imported item eventually receives one adjacent
 Secrets, credentials, authorization headers and tokens are recursively
 redacted. Absolute local paths are not part of the portable contract.
 Legacy top-level keys such as `params` may coexist during migration.
+
+## Generation record v1
+
+The generation record is a portable read/write projection over asset-manifest
+v1, generation provenance and the job lifecycle. It is not a second media
+store: published bytes remain the sidecar, and this contract adds typed attempt
+identity, status, cancellation and resume. Helpers live in
+`app/services/generation_record.py`; UI types live in
+`ui/src/lib/generationRecord.ts`. The schema is
+`generation-record-v1.schema.json`. Details and the attempt-identity policy are
+in `GENERATION_RECORD.md`.
 
 ## UI requirement: Extra info
 
