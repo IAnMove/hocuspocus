@@ -55,7 +55,10 @@ test('runs Remove Background from direct Tools and exposes the derived asset', a
       source_workspace: 'default',
       workspace: 'default',
     })
-    await expect(page.getByText('Queued...', { exact: true })).toBeVisible()
+    // The activity footer, job placeholder and progress card can all expose
+    // the same status while a tool job is queued. Assert the first visible
+    // status instead of requiring a globally unique text node.
+    await expect(page.getByText('Queued...', { exact: true }).first()).toBeVisible()
     await expect.poll(() => statuses.length, { timeout: 10_000 }).toBeGreaterThanOrEqual(2)
 
     await page.getByRole('button', { name: 'Media', exact: true }).click()
@@ -145,7 +148,7 @@ test('runs the shared Upscale action from an image and publishes a derived asset
       workspace: 'default',
     })
     expect(payload.video_path).toBeUndefined()
-    await expect(page.getByText('Queued...', { exact: true })).toBeVisible()
+    await expect(page.getByText('Queued...', { exact: true }).first()).toBeVisible()
     await expect.poll(() => statuses.length, { timeout: 10_000 }).toBeGreaterThanOrEqual(2)
 
     await page.getByRole('button', { name: 'Media', exact: true }).click()
