@@ -962,7 +962,9 @@ defineCapability<AgentConfigureStorySongAction>({
       ...(model === 'minimax_music3' || model === 'music-3.0' || model === 'music-2.6' || model === 'ace_step_v1_5_xl_sft_lm_4b'
         ? { model: model as AgentConfigureStorySongAction['model'] }
         : {}),
-      durationSeconds: raw.target_duration_seconds === undefined ? undefined : boundedNumber(raw.target_duration_seconds, 20, 360, 90),
+      durationSeconds: raw.target_duration_seconds === undefined ? undefined : boundedNumber(
+        raw.target_duration_seconds, 20, model === 'minimax_music3' ? 300 : 360, 90,
+      ),
     }
   },
   validate(action) { return action.style && (action.instrumental || action.lyrics || action.writeLyrics) ? [] : ['music style and vocal lyrics or write_lyrics are required'] },
