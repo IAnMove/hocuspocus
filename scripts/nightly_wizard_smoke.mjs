@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Explicit opt-in song -> Story cue -> Director videoclip smoke. */
+/** Explicit opt-in local ACE-Step -> Story cue -> Director videoclip smoke. */
 
 const CONFIRM_TOKEN = 'GENERATE_REAL_MEDIA'
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted'])
@@ -80,7 +80,6 @@ export function normalizeSmokeBaseUrl(value) {
 export function validateSmokeOptIn({ runGpu = false, runExternal = false, baseUrl, confirm } = {}) {
   const missing = []
   if (runGpu !== true) missing.push('RUN_GPU_TESTS=1')
-  if (runExternal !== true) missing.push('RUN_EXTERNAL_PROVIDER_TESTS=1')
   if (!clean(baseUrl)) missing.push('HOCUSPOCUS_SMOKE_BASE_URL')
   if (confirm !== CONFIRM_TOKEN) missing.push(`HOCUSPOCUS_SMOKE_CONFIRM=${CONFIRM_TOKEN}`)
   if (missing.length) throw new Error(`Level 8 is fail-closed; explicit opt-in is missing: ${missing.join(', ')}`)
@@ -155,29 +154,33 @@ export async function runMediaSmoke({
     }, controller.signal)
 
     const cue = project.music.cues[0]
-    const startedSong = await requestJson(fetchImpl, root, 'POST', '/api/v1/stories/music-candidates/jobs', {
-      prompt: cue.style, lyrics: cue.lyrics, count: 1, model: 'ace_step_v1_5_xl_sft_lm_4b',
-      instrumental: false, workspace,
+    // Level 8 is an explicit local-GPU smoke: submit the same ACE-Step
+    // generation contract used by Story Lab, then poll its durable job.
+    const startedSong = await requestJson(fetchImpl, root, 'POST', '/api/v1/generate', {
+      prompt: cue.lyrics, alt_prompt: cue.style, model_type: 'ace_step_v1_5_xl_sft_lm_4b',
+      instrumental: false, duration_seconds: cue.durationSeconds, video_length: 0,
+      image_mode: 0, multi_prompts_gen_type: 2, generation_mode: 'audio', workspace,
+      provenance: { actor: 'system', capability: 'nightly_local_ace_smoke', project_id: projectId, cue_id: cue.id },
     }, controller.signal)
-    const song = await poll(fetchImpl, root, `/api/v1/stories/music-candidates/jobs/${encodeURIComponent(startedSong.jobId)}`, {
+    const song = await poll(fetchImpl, root, `/api/v1/status/${encodeURIComponent(startedSong.job_id)}`, {
       signal: controller.signal, intervalMs: pollIntervalMs, timeoutAt,
     })
-    const candidate = song.candidates?.[0]
-    const audioPath = clean(candidate?.audio_path || candidate?.source)
+    const filename = clean(song.output_files?.[0])
+    const audioPath = filename
     if (!audioPath) throw new Error('Song completed without a candidate audio path.')
     const candidateId = `song-smoke-${globalThis.crypto.randomUUID()}`
     const semantic = evaluateSmokeSongFidelity({
-      lyrics: candidate?.lyrics || cue.lyrics,
+      lyrics: cue.lyrics,
       lyricsLanguage: cue.lyricsLanguage,
       requiredTerms: ['sysadmin', 'red'],
     })
     if (!semantic.ok) throw new Error(`Song semantic fidelity failed (${semantic.score}%): ${semantic.reasons.join('; ')}`)
     const canonicalCandidate = {
-      id: candidateId, name: candidate.filename || audioPath.split('/').at(-1), source: audioPath,
+      id: candidateId, name: filename.split('/').at(-1), source: audioPath,
       prompt: cue.style, lyrics: cue.lyrics, provider: 'local', model: 'ace_step_v1_5_xl_sft_lm_4b',
       language: cue.lyricsLanguage,
-      durationSeconds: candidate.duration_seconds || 15, createdAt: new Date().toISOString(),
-      taskId: song.taskId || startedSong.taskId, rootTaskId: song.rootTaskId || startedSong.rootTaskId,
+      durationSeconds: cue.durationSeconds || 15, createdAt: new Date().toISOString(),
+      taskId: song.task_id || startedSong.task_id, rootTaskId: song.root_task_id || startedSong.root_task_id,
     }
     project.music.candidates = [canonicalCandidate]
     project.music.selectedCandidateId = candidateId
@@ -190,7 +193,7 @@ export async function runMediaSmoke({
     }, controller.signal)
 
     const analysis = await requestJson(fetchImpl, root, 'POST', '/api/v1/audio/analyze', {
-      audio_path: audioPath, transcribe: true, extract_vocals: true, lyrics_hint: cue.lyrics,
+      audio_path: audioPath, transcribe: true, extract_vocals: true, lyrics_hint: cue.lyrics, workspace,
     }, controller.signal)
     const structure = await requestJson(fetchImpl, root, 'POST', '/api/v1/audio/plan-structure', {
       analysis, video_model: 'minimax_h3_legacy', energy_bias: 0,
@@ -210,7 +213,7 @@ export async function runMediaSmoke({
     const pipeline = await poll(fetchImpl, root, `/api/v1/director/pipeline/${encodeURIComponent(pipelineId)}`, {
       signal: controller.signal, intervalMs: pollIntervalMs, timeoutAt,
     })
-    const outputIds = [...new Set([candidate.filename, ...(pipeline.output_files || [])].filter(Boolean))]
+    const outputIds = [...new Set([filename, ...(pipeline.output_files || [])].filter(Boolean))]
     project.productions = [{ id: pipelineId, kind: 'music_video', title: project.title, createdAt: now, sourceVersion: 1, targetId: pipelineId, status: 'staged' }]
     project.updatedAt = new Date().toISOString()
     await requestJson(fetchImpl, root, 'PUT', '/api/v1/stories/library', {
@@ -221,7 +224,7 @@ export async function runMediaSmoke({
       workspace,
       identifiers: {
         projectIds: [projectId], cueIds: [cueId], outputIds,
-        taskIds: [song.taskId || startedSong.taskId].filter(Boolean), pipelineIds: [pipelineId],
+        taskIds: [song.task_id || startedSong.task_id].filter(Boolean), pipelineIds: [pipelineId],
       },
       songStatus: song.status, pipelineStatus: pipeline.status, semantic,
     }

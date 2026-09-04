@@ -77,16 +77,16 @@ test('level parsing rejects empty and unknown coverage requests', () => {
   assert.throws(() => parseLevels('1,99'), /Unknown NIGHTLY_LEVELS: 99/)
 })
 
-test('level 8 smoke is fail-closed until both flags and the base URL are explicit', () => {
+test('level 8 local ACE smoke is fail-closed until GPU, URL, and confirmation are explicit', () => {
   assert.deepEqual(smokeOptInMissing(), [
-    'RUN_GPU_TESTS=1', 'RUN_EXTERNAL_PROVIDER_TESTS=1', 'HOCUSPOCUS_SMOKE_BASE_URL',
+    'RUN_GPU_TESTS=1', 'HOCUSPOCUS_SMOKE_BASE_URL',
     'HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA',
   ])
-  assert.deepEqual(smokeOptInMissing({ runGpu: true, runExternal: true }), [
+  assert.deepEqual(smokeOptInMissing({ runGpu: true, runExternal: false }), [
     'HOCUSPOCUS_SMOKE_BASE_URL', 'HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA',
   ])
   assert.deepEqual(smokeOptInMissing({
-    runGpu: true, runExternal: true, baseUrl: 'http://127.0.0.1:8000', confirm: 'GENERATE_REAL_MEDIA',
+    runGpu: true, runExternal: false, baseUrl: 'http://127.0.0.1:8000', confirm: 'GENERATE_REAL_MEDIA',
   }), [])
 })
 
