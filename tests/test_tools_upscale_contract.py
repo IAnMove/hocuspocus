@@ -1,18 +1,21 @@
 """Contracts for the shared Tools upscale image/video boundary.
 
-The real worker is intentionally not imported here: importing the launch
-runtime initializes WanGP and model services.  Source resolution is exercised
-with real temporary files, while the routing assertions inspect the small
-launch adapter that owns the expensive pipeline.
+The launch runtime is intentionally not imported here: that bootstrap
+initializes WanGP and model services. Source resolution is exercised with
+real temporary files, and the still-image job helper is run against the
+standalone service module with a bound lifecycle hook.
 """
 
 from __future__ import annotations
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from services.job_lifecycle import update_job
+from services.tools_upscale import _upscale_image_job
 
 from shared.tools.background_removal_request import (
     RemoveBackgroundRequest,
@@ -138,8 +141,16 @@ def launch_tree():
     )
 
 
-def test_image_worker_branch_never_calls_video_decoder_or_writer(launch_tree):
-    worker = _function(launch_tree, "_run_tool_upscale")
+@pytest.fixture(scope="module")
+def service_tree():
+    return ast.parse(
+        (ROOT / "app" / "services" / "tools_upscale.py").read_text(encoding="utf-8"),
+        filename="app/services/tools_upscale.py",
+    )
+
+
+def test_image_worker_branch_never_calls_video_decoder_or_writer(service_tree):
+    worker = _function(service_tree, "run_tool_upscale")
     image_branch = next(
         node for node in ast.walk(worker)
         if isinstance(node, ast.If)
@@ -157,15 +168,56 @@ def test_image_worker_branch_never_calls_video_decoder_or_writer(launch_tree):
     image_calls = _called_names(ast.Module(body=image_branch.body, type_ignores=[]))
     video_calls = _called_names(ast.Module(body=image_branch.orelse, type_ignores=[]))
 
-    assert "_upscale_tool_image" in image_calls
-    assert not image_calls.intersection({
+    assert "_upscale_image_job" in image_calls
+    assert "_upscale_video_job" in video_calls
+
+    image_job = _function(service_tree, "_upscale_image_job")
+    video_job = _function(service_tree, "_upscale_video_job")
+    assert "upscale_image" in _called_names(image_job)
+    assert not _called_names(image_job).intersection({
         "get_video_info", "extract_audio_tracks", "get_resampled_video", "save_video",
     })
-    assert {"get_video_info", "extract_audio_tracks", "get_resampled_video", "save_video"} <= video_calls
+    assert {"get_video_info", "extract_audio_tracks", "get_resampled_video", "save_video"} <= _called_names(video_job)
 
 
-def test_still_adapter_uses_the_existing_upscale_pipeline_in_still_mode(launch_tree):
-    helper = _function(launch_tree, "_upscale_tool_image")
+def test_still_image_job_does_not_forward_job_into_the_bound_update_hook(tmp_path, monkeypatch):
+    """The image branch binds the live job in a lambda; passing job= again TypeErrors."""
+    job = {"id": "job-still", "status": "running", "message": "Preparing"}
+    seen = []
+
+    def fake_upscale_image(source_path, output_path, method, **kwargs):
+        seen.append((source_path, output_path, method, kwargs.get("seed")))
+        return (1920, 1080)
+
+    monkeypatch.setattr("services.tools_upscale.upscale_image", fake_upscale_image)
+    wgp = SimpleNamespace(
+        get_available_filename=lambda out_dir, source_filename, suffix, force_extension=".png": str(
+            tmp_path / f"{Path(source_filename).stem}{suffix}{force_extension}"
+        )
+    )
+
+    final_path, image_size = _upscale_image_job(
+        source_path=str(tmp_path / "poster.png"),
+        out_dir=str(tmp_path),
+        source_filename="poster.png",
+        method="lanczos2",
+        params={"seed": 11},
+        wgp=wgp,
+        abort=lambda: False,
+        progress=lambda *_args, **_kwargs: None,
+        update_job=lambda **kw: update_job(job, **kw),
+    )
+
+    assert image_size == (1920, 1080)
+    assert Path(final_path).name == "poster_upscaled.png"
+    assert seen == [(str(tmp_path / "poster.png"), final_path, "lanczos2", 11)]
+    assert job["message"] == "Upscaling image..."
+    assert job["phase"] == "Upscaling"
+    assert job["progress"] == 5
+
+
+def test_still_adapter_uses_the_existing_upscale_pipeline_in_still_mode(service_tree):
+    helper = _function(service_tree, "upscale_image")
     spatial_calls = [
         node for node in ast.walk(helper)
         if isinstance(node, ast.Call)
@@ -178,6 +230,19 @@ def test_still_adapter_uses_the_existing_upscale_pipeline_in_still_mode(launch_t
         if keyword.arg == "still_image"
     )
     assert isinstance(still_keyword, ast.Constant) and still_keyword.value is True
+
+
+def test_launch_worker_is_a_thin_facade_over_the_tools_service(launch_tree):
+    worker = _function(launch_tree, "_run_tool_upscale")
+    calls = _called_names(worker)
+    assert "run_tool_upscale" in calls
+    assert "_coordinated_generation_slot" not in calls
+
+
+def test_upscale_service_does_not_import_the_launch_runtime():
+    source = (ROOT / "app" / "services" / "tools_upscale.py").read_text(encoding="utf-8")
+    assert "_launch_runtime" not in source
+    assert "from fastapi" not in source
 
 
 def test_shared_upscale_route_accepts_both_source_kinds_and_uses_one_worker(launch_tree):
