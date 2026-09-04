@@ -1,9 +1,9 @@
 """Contracts for the shared Tools upscale image/video boundary.
 
 The real worker is intentionally not imported here: importing the launch
-runtime initializes WanGP and model services.  Source resolution is exercised
-with real temporary files, while the routing assertions inspect the small
-launch adapter that owns the expensive pipeline.
+runtime initializes WanGP and model services. Source resolution is exercised
+with real temporary files, while the worker implementation is checked from
+the standalone service module.
 """
 
 from __future__ import annotations
@@ -138,8 +138,16 @@ def launch_tree():
     )
 
 
-def test_image_worker_branch_never_calls_video_decoder_or_writer(launch_tree):
-    worker = _function(launch_tree, "_run_tool_upscale")
+@pytest.fixture(scope="module")
+def service_tree():
+    return ast.parse(
+        (ROOT / "app" / "services" / "tools_upscale.py").read_text(encoding="utf-8"),
+        filename="app/services/tools_upscale.py",
+    )
+
+
+def test_image_worker_branch_never_calls_video_decoder_or_writer(service_tree):
+    worker = _function(service_tree, "run_tool_upscale")
     image_branch = next(
         node for node in ast.walk(worker)
         if isinstance(node, ast.If)
@@ -157,15 +165,15 @@ def test_image_worker_branch_never_calls_video_decoder_or_writer(launch_tree):
     image_calls = _called_names(ast.Module(body=image_branch.body, type_ignores=[]))
     video_calls = _called_names(ast.Module(body=image_branch.orelse, type_ignores=[]))
 
-    assert "_upscale_tool_image" in image_calls
+    assert "upscale_image" in image_calls
     assert not image_calls.intersection({
         "get_video_info", "extract_audio_tracks", "get_resampled_video", "save_video",
     })
     assert {"get_video_info", "extract_audio_tracks", "get_resampled_video", "save_video"} <= video_calls
 
 
-def test_still_adapter_uses_the_existing_upscale_pipeline_in_still_mode(launch_tree):
-    helper = _function(launch_tree, "_upscale_tool_image")
+def test_still_adapter_uses_the_existing_upscale_pipeline_in_still_mode(service_tree):
+    helper = _function(service_tree, "upscale_image")
     spatial_calls = [
         node for node in ast.walk(helper)
         if isinstance(node, ast.Call)
@@ -178,6 +186,19 @@ def test_still_adapter_uses_the_existing_upscale_pipeline_in_still_mode(launch_t
         if keyword.arg == "still_image"
     )
     assert isinstance(still_keyword, ast.Constant) and still_keyword.value is True
+
+
+def test_launch_worker_is_a_thin_facade_over_the_tools_service(launch_tree):
+    worker = _function(launch_tree, "_run_tool_upscale")
+    calls = _called_names(worker)
+    assert "run_tool_upscale" in calls
+    assert "_coordinated_generation_slot" not in calls
+
+
+def test_upscale_service_does_not_import_the_launch_runtime():
+    source = (ROOT / "app" / "services" / "tools_upscale.py").read_text(encoding="utf-8")
+    assert "_launch_runtime" not in source
+    assert "from fastapi" not in source
 
 
 def test_shared_upscale_route_accepts_both_source_kinds_and_uses_one_worker(launch_tree):

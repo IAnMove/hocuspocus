@@ -37,6 +37,22 @@ def _called_names(node: ast.AST) -> set[str]:
     return names
 
 
+def _runtime_keys(node: ast.AST) -> set[str]:
+    """Return dependency names accessed through the extracted runtime map."""
+    return {
+        child.value
+        for child in ast.walk(node)
+        if isinstance(child, ast.Constant)
+        and isinstance(child.value, str)
+        and child.value in {
+            "try_start",
+            "register_abort_state",
+            "finish_job",
+            "record_job_outputs",
+        }
+    }
+
+
 def _load_isolated_function(relative_path: str, name: str, namespace: dict):
     function = _function(_parse(relative_path), name)
     module = ast.Module(body=[function], type_ignores=[])
@@ -49,6 +65,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.launch = _parse("app/_launch_runtime.py")
+        cls.tools_upscale = _parse("app/services/tools_upscale.py")
 
     def test_each_worker_uses_lifecycle_transitions(self):
         expected = {
@@ -71,7 +88,10 @@ class TestJobLifecycleWiring(unittest.TestCase):
         }
         for function_name, required in expected.items():
             with self.subTest(function=function_name):
-                calls = _called_names(_function(self.launch, function_name))
+                tree = self.tools_upscale if function_name == "_run_tool_upscale" else self.launch
+                lookup_name = "run_tool_upscale" if function_name == "_run_tool_upscale" else function_name
+                function = _function(tree, lookup_name)
+                calls = _called_names(function) | _runtime_keys(function)
                 self.assertTrue(required <= calls, required - calls)
 
     def test_cancel_endpoint_routes_through_shared_helper(self):
