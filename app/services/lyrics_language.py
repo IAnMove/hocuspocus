@@ -64,6 +64,10 @@ def _folded(value: str) -> str:
 
 def canonical_lyrics_language(value: str) -> str:
     key = _folded(value)
+    if key.startswith("es") or "spanish" in key or "espanol" in key or "castellano" in key:
+        return "es"
+    if key.startswith("en") or "english" in key or "ingles" in key:
+        return "en"
     return LANGUAGE_ALIASES.get(key) or LANGUAGE_ALIASES.get(key.split("-")[0], "")
 
 

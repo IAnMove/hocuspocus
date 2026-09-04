@@ -40,6 +40,9 @@ def test_spanish_structured_lyric_is_ok():
     report = validate_lyrics_language(SPANISH_OK, "Español")
     assert report["ok"] is True
     assert report["language_mismatch"] is False
+    regional = validate_lyrics_language(SPANISH_OK, "Español de España")
+    assert regional["ok"] is True
+    assert regional["language_mismatch"] is False
 
 
 def test_section_tags_are_not_english_contamination():

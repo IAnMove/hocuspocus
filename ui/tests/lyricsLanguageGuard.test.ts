@@ -12,6 +12,8 @@ test('Spanish structured lyrics stay valid', () => {
   const report = validateLyricsLanguage(SPANISH_OK, 'Español')
   assert.equal(report.ok, true)
   assert.equal(report.languageMismatch, false)
+  const regional = validateLyricsLanguage(SPANISH_OK, 'Español de España')
+  assert.equal(regional.ok, true)
 })
 
 test('English section tags are not contamination', () => {
