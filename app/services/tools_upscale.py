@@ -98,7 +98,7 @@ def upscale_image(
 def _upscale_image_job(
     *, source_path, out_dir, source_filename, method, params, wgp, abort, progress, update_job
 ):
-    if not update_job(job=None, message="Upscaling image...", phase="Upscaling", progress=5):
+    if not update_job(message="Upscaling image...", phase="Upscaling", progress=5):
         return None, None
     final_path = wgp.get_available_filename(
         out_dir, source_filename, "_upscaled", force_extension=".png"
