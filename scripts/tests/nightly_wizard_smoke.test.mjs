@@ -51,11 +51,18 @@ test('media smoke preserves project cue output task and pipeline identities', as
     if (options.method === 'GET' && route === '/api/v1/stories/library') {
       payload = { version: 2, revision, activeId: '', projects: {} }
     } else if (options.method === 'PUT' && route === '/api/v1/stories/library') {
+      const candidates = Object.values(request.library.projects || {}).flatMap(project => project.music?.candidates || [])
+      if (candidates.length) {
+        assert.equal(candidates[0].provider, 'minimax')
+        assert.equal(candidates[0].model, 'music-3.0')
+      }
       revision += 1
       payload = { ...request.library, revision }
     } else if (options.method === 'POST' && route === '/api/v1/stories/music-candidates/jobs') {
       assert.equal(request.instrumental, false)
-      assert.equal(request.model, 'ace_step_v1_5_xl_sft_lm_4b')
+      // The opt-in smoke exercises the real MiniMax Music contract; local
+      // ACE-Step remains covered by the regular local workflow tests.
+      assert.equal(request.model, 'music-3.0')
       payload = { jobId: 'song-job', taskId: 'task-song', rootTaskId: 'task-song' }
     } else if (options.method === 'GET' && route === '/api/v1/stories/music-candidates/jobs/song-job') {
       payload = { status: 'completed', taskId: 'task-song', candidates: [{ filename: 'himno.wav', audio_path: '/outputs/himno.wav', duration_seconds: 15 }] }

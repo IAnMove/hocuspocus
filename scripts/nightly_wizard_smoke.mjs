@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Explicit opt-in song -> Story cue -> Director videoclip smoke. */
+/** Explicit opt-in MiniMax Music -> Story cue -> Director videoclip smoke. */
 
 const CONFIRM_TOKEN = 'GENERATE_REAL_MEDIA'
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted'])
@@ -120,7 +120,7 @@ function smokeProject(projectId, cueId, now) {
     language: 'Español', visualStyle: 'animación fantástica heavy metal de 1981',
     premise: 'Un sysadmin mantiene viva la red al ritmo de un himno.',
     music: {
-      mode: 'original', model: 'ace_step_v1_5_xl_sft_lm_4b',
+      mode: 'original', model: 'music-3.0',
       brief: 'heavy metal ochentero español', style: 'voz ronca y coro grave',
       sourceLyrics: '', lyrics: '', lyricsLanguage: 'Español', targetDurationSeconds: 15,
       candidateCount: 2, candidates: [], cues: [{
@@ -155,8 +155,9 @@ export async function runMediaSmoke({
     }, controller.signal)
 
     const cue = project.music.cues[0]
+    // Level 8 is an explicit real-provider smoke: this endpoint is MiniMax Music.
     const startedSong = await requestJson(fetchImpl, root, 'POST', '/api/v1/stories/music-candidates/jobs', {
-      prompt: cue.style, lyrics: cue.lyrics, count: 1, model: 'ace_step_v1_5_xl_sft_lm_4b',
+      prompt: cue.style, lyrics: cue.lyrics, count: 1, model: 'music-3.0',
       instrumental: false, workspace,
     }, controller.signal)
     const song = await poll(fetchImpl, root, `/api/v1/stories/music-candidates/jobs/${encodeURIComponent(startedSong.jobId)}`, {
@@ -174,7 +175,7 @@ export async function runMediaSmoke({
     if (!semantic.ok) throw new Error(`Song semantic fidelity failed (${semantic.score}%): ${semantic.reasons.join('; ')}`)
     const canonicalCandidate = {
       id: candidateId, name: candidate.filename || audioPath.split('/').at(-1), source: audioPath,
-      prompt: cue.style, lyrics: cue.lyrics, provider: 'local', model: 'ace_step_v1_5_xl_sft_lm_4b',
+      prompt: cue.style, lyrics: cue.lyrics, provider: 'minimax', model: 'music-3.0',
       language: cue.lyricsLanguage,
       durationSeconds: candidate.duration_seconds || 15, createdAt: new Date().toISOString(),
       taskId: song.taskId || startedSong.taskId, rootTaskId: song.rootTaskId || startedSong.rootTaskId,
