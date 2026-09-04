@@ -91,7 +91,12 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 tree = self.tools_upscale if function_name == "_run_tool_upscale" else self.launch
                 lookup_name = "run_tool_upscale" if function_name == "_run_tool_upscale" else function_name
                 function = _function(tree, lookup_name)
-                calls = _called_names(function) | _runtime_keys(function)
+                functions = [function]
+                if function_name == "_run_tool_upscale":
+                    functions.append(_function(tree, "_publish_upscale_outputs"))
+                calls = set().union(
+                    *(_called_names(item) | _runtime_keys(item) for item in functions)
+                )
                 self.assertTrue(required <= calls, required - calls)
 
     def test_cancel_endpoint_routes_through_shared_helper(self):

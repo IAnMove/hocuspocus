@@ -165,11 +165,16 @@ def test_image_worker_branch_never_calls_video_decoder_or_writer(service_tree):
     image_calls = _called_names(ast.Module(body=image_branch.body, type_ignores=[]))
     video_calls = _called_names(ast.Module(body=image_branch.orelse, type_ignores=[]))
 
-    assert "upscale_image" in image_calls
-    assert not image_calls.intersection({
+    assert "_upscale_image_job" in image_calls
+    assert "_upscale_video_job" in video_calls
+
+    image_job = _function(service_tree, "_upscale_image_job")
+    video_job = _function(service_tree, "_upscale_video_job")
+    assert "upscale_image" in _called_names(image_job)
+    assert not _called_names(image_job).intersection({
         "get_video_info", "extract_audio_tracks", "get_resampled_video", "save_video",
     })
-    assert {"get_video_info", "extract_audio_tracks", "get_resampled_video", "save_video"} <= video_calls
+    assert {"get_video_info", "extract_audio_tracks", "get_resampled_video", "save_video"} <= _called_names(video_job)
 
 
 def test_still_adapter_uses_the_existing_upscale_pipeline_in_still_mode(service_tree):
