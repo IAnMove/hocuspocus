@@ -36,7 +36,7 @@ test('Tools exposes exact library images for background removal', async () => {
           locations: [{ workspace_id: 'default', filename: 'hero.png', url: '/api/v1/file/hero.png?workspace=default' }],
           url: '/api/v1/file/hero.png?workspace=default',
           origin: { tool: 'studio' }, execution: {}, model: { provider: 'local', id: 'flux' },
-          prompt_preview: 'hero',
+          prompt_preview: 'hero', manifest: { technical: { width: 1920, height: 1080 } },
         }],
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
@@ -50,20 +50,24 @@ test('Tools exposes exact library images for background removal', async () => {
   } as never)
   try {
     render(<ToolsPanel />)
-    await waitFor(() => screen.getByRole('option', { name: 'hero.png' }))
-    const picker = screen.getByRole('combobox', { name: 'Source Image' })
+    await waitFor(() => screen.getByRole('button', { name: 'Select image hero.png' }))
+    const picker = screen.getByRole('list', { name: 'Source Image' })
+    assert.equal(picker.querySelector('select'), null)
+    assert.match(picker.textContent || '', /Image · 1920×1080/)
     const runButton = screen.getByRole('button', { name: 'Remove Background' })
     assert.equal((runButton as HTMLButtonElement).disabled, true)
     assert.match(screen.getByRole('status').textContent || '', /Choose an image from the library/i)
     assert.ok(screen.getByText('Upload an image'))
-    assert.ok(screen.getByRole('option', { name: 'hero.png' }))
+    assert.ok(screen.getByRole('button', { name: 'Select image hero.png' }))
 
-    fireEvent.change(picker, { target: { value: 'asset-hero' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Select image hero.png' }))
     assert.equal(useStore.getState().toolsSourceAssetId, 'asset-hero')
     assert.equal(useStore.getState().toolsSourcePath, 'hero.png')
     assert.equal(useStore.getState().toolsSourceKind, 'image')
     assert.equal(useStore.getState().toolsSourceWorkspace, 'default')
-    assert.ok(screen.getByRole('img', { name: 'hero.png' }))
+    const selectedPreview = screen.getByRole('img', { name: 'hero.png' })
+    assert.match(selectedPreview.parentElement?.className || '', /linear-gradient/)
+    assert.equal(screen.getByRole('button', { name: 'Select image hero.png' }).getAttribute('aria-pressed'), 'true')
     assert.equal((runButton as HTMLButtonElement).disabled, false)
   } finally {
     cleanup()
@@ -71,13 +75,14 @@ test('Tools exposes exact library images for background removal', async () => {
   }
 })
 
-test('video tools stay disabled when the selected source is an image', async () => {
+test('upscale accepts an image while revoice remains video-only', async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { ToolsPanel } = await import('../src/components/Sidebar/ToolsPanel.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
   const previousFetch = globalThis.fetch
-  const toolPosts: string[] = []
-  globalThis.fetch = async input => {
+  const previousSetInterval = globalThis.setInterval
+  const toolPosts: Array<{ url: string; body?: Record<string, unknown> }> = []
+  globalThis.fetch = async (input, init) => {
     const requestUrl = typeof input === 'string' ? input : (input as Request).url || String(input)
     if (requestUrl.includes('/api/v1/assets')) {
       return new Response(JSON.stringify({ total: 0, assets: [] }), {
@@ -85,8 +90,8 @@ test('video tools stay disabled when the selected source is an image', async () 
       })
     }
     if (requestUrl.includes('/api/v1/tools/')) {
-      toolPosts.push(requestUrl)
-      return new Response(JSON.stringify({ job_id: 'should-not-run' }), {
+      toolPosts.push({ url: requestUrl, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      return new Response(JSON.stringify({ job_id: 'image-upscale-1' }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       })
     }
@@ -106,16 +111,21 @@ test('video tools stay disabled when the selected source is an image', async () 
     outputs: [],
     selectedOutput: -1,
   } as never)
+  globalThis.setInterval = (() => 1) as unknown as typeof setInterval
   try {
     render(<ToolsPanel />)
     fireEvent.click(screen.getByRole('button', { name: 'Upscale' }))
     assert.equal(useStore.getState().toolsTool, 'upscale')
     assert.equal(useStore.getState().toolsSourceKind, 'image')
-    const upscaleButton = screen.getByRole('button', { name: 'Upscale Clip' })
-    assert.equal(upscaleButton.disabled, true)
+    const upscaleButton = screen.getByRole('button', { name: 'Upscale Image' })
+    assert.equal(upscaleButton.disabled, false)
     fireEvent.click(upscaleButton)
     await useStore.getState().runTool()
-    assert.deepEqual(toolPosts, [])
+    assert.equal(toolPosts.length, 1)
+    assert.equal(toolPosts[0].url, '/api/v1/tools/upscale')
+    assert.equal(toolPosts[0].body?.source, 'hero.png')
+    assert.equal(toolPosts[0].body?.source_kind, 'image')
+    assert.equal(toolPosts[0].body?.video_path, undefined)
 
     fireEvent.click(screen.getByRole('button', { name: 'Revoice' }))
     assert.equal(useStore.getState().toolsTool, 'revoice')
@@ -123,13 +133,15 @@ test('video tools stay disabled when the selected source is an image', async () 
     assert.equal(revoiceButton.disabled, true)
     fireEvent.click(revoiceButton)
     await useStore.getState().runTool()
-    assert.deepEqual(toolPosts, [])
+    assert.equal(toolPosts.length, 1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove background' }))
+    await new Promise(resolve => setTimeout(resolve, 0))
     assert.equal(screen.getByRole('button', { name: 'Remove Background' }).disabled, false)
   } finally {
     cleanup()
     globalThis.fetch = previousFetch
+    globalThis.setInterval = previousSetInterval
   }
 })
 

@@ -12,9 +12,11 @@ export interface ApiRouteSession {
 }
 
 export type BackgroundRemovalE2EMode = 'complete' | 'cancel' | 'fail'
+export type UpscaleE2EMode = 'complete' | 'cancel' | 'fail'
 
 export interface ApiRouteOptions {
   backgroundRemovalMode?: BackgroundRemovalE2EMode
+  upscaleMode?: UpscaleE2EMode
 }
 
 const SYSTEM_STATS = {
@@ -160,6 +162,7 @@ const BACKGROUND_SOURCE_ASSET = {
   execution: { status: 'completed' },
   model: { provider: 'local', id: 'flux' },
   prompt_preview: 'A hero image used by the Tools E2E flow',
+  manifest: { technical: { width: 1920, height: 1080 } },
 }
 
 const BACKGROUND_DERIVED_ASSET = {
@@ -230,6 +233,71 @@ const BACKGROUND_DERIVED_OUTPUT = {
   completion_time_source: 'metadata',
   url: '/api/v1/file/hero-no-background.png?workspace=default',
   thumbnail_url: '/api/v1/file/hero-no-background.png?workspace=default',
+}
+
+const UPSCALE_DERIVED_ASSET = {
+  id: 'asset-hero-upscaled',
+  kind: 'image',
+  filename: 'hero_upscaled.png',
+  size_bytes: 48,
+  created_at: 3,
+  completed_at: 4,
+  metadata_status: 'canonical',
+  workspace_ids: ['default'],
+  locations: [{
+    workspace_id: 'default',
+    filename: 'hero_upscaled.png',
+    url: '/api/v1/file/hero_upscaled.png?workspace=default',
+  }],
+  url: '/api/v1/file/hero_upscaled.png?workspace=default',
+  origin: {
+    tool: 'tools',
+    capability: 'upscale',
+    actor: 'user',
+    workspace_id: 'default',
+  },
+  execution: {
+    status: 'completed',
+    job_id: 'tool-upscale-e2e',
+    task_id: 'task-generation-tool-upscale-e2e',
+  },
+  model: { provider: 'local', id: 'post_processing' },
+  prompt_preview: '',
+  manifest: {
+    schema_version: 1,
+    origin: {
+      tool: 'tools',
+      capability: 'upscale',
+      actor: 'user',
+      workspace_id: 'default',
+    },
+    execution: {
+      status: 'completed',
+      job_id: 'tool-upscale-e2e',
+      task_id: 'task-generation-tool-upscale-e2e',
+    },
+    generation: {
+      model: { provider: 'local', id: 'post_processing' },
+      parameters: { method: 'lanczos2', source_kind: 'image' },
+    },
+    lineage: {
+      parents: [{ id: 'asset-hero', kind: 'image', uri: 'hero.png', role: 'source' }],
+      transformations: [{ type: 'upscale', backend: 'lanczos', method: 'lanczos2' }],
+    },
+  },
+}
+
+const UPSCALE_DERIVED_OUTPUT = {
+  name: 'hero_upscaled.png',
+  type: 'image',
+  mode: 'image',
+  favorite: false,
+  size: 48,
+  created_at: 3,
+  completed_at: 4,
+  completion_time_source: 'metadata',
+  url: '/api/v1/file/hero_upscaled.png?workspace=default',
+  thumbnail_url: '/api/v1/file/hero_upscaled.png?workspace=default',
 }
 
 function json(body: Json, status = 200) {
@@ -388,6 +456,10 @@ export async function installApiRoutes(page: Page, options: ApiRouteOptions = {}
   let backgroundRemovalSubmitted = false
   let backgroundRemovalStatusCalls = 0
   let backgroundRemovalCancelRequested = false
+  const upscaleMode = options.upscaleMode || 'complete'
+  let upscaleSubmitted = false
+  let upscaleStatusCalls = 0
+  let upscaleCancelRequested = false
 
   const backgroundAssets = () => [
     BACKGROUND_SOURCE_ASSET,
@@ -413,6 +485,30 @@ export async function installApiRoutes(page: Page, options: ApiRouteOptions = {}
       phase: 'completed', message: 'Background removed', output_files: ['hero-no-background.png'], error: null,
     }
   }
+  const toolAssets = () => [
+    ...backgroundAssets(),
+    ...(upscaleSubmitted && upscaleStatusCalls > 1 && !upscaleCancelRequested && upscaleMode === 'complete'
+      ? [UPSCALE_DERIVED_ASSET]
+      : []),
+  ]
+  const upscaleStatus = () => {
+    if (upscaleCancelRequested) return {
+      status: 'cancelled', progress: 0, step: 0, total_steps: 1,
+      phase: 'cancelled', message: 'Upscale cancelled', output_files: [], error: null,
+    }
+    if (upscaleMode === 'fail') return {
+      status: 'failed', progress: 30, step: 1, total_steps: 3,
+      phase: 'upscaling', message: 'Upscale failed', output_files: [], error: 'upscale test failure',
+    }
+    if (upscaleStatusCalls < 2) return {
+      status: 'running', progress: 45, step: 1, total_steps: 2,
+      phase: 'upscaling', message: 'Upscaling image', output_files: [], error: null,
+    }
+    return {
+      status: 'completed', progress: 100, step: 2, total_steps: 2,
+      phase: 'completed', message: 'Image upscaled', output_files: ['hero_upscaled.png'], error: null,
+    }
+  }
 
   await page.route('**/api/**', async route => {
     const request = route.request()
@@ -421,11 +517,15 @@ export async function installApiRoutes(page: Page, options: ApiRouteOptions = {}
     const pathname = url.pathname
 
     if (method === 'GET' && pathname === '/api/v1/assets') {
-      await route.fulfill(json({ assets: backgroundAssets(), total: backgroundAssets().length }))
+      await route.fulfill(json({ assets: toolAssets(), total: toolAssets().length }))
       return
     }
     if (method === 'GET' && pathname === '/api/v1/assets/asset-hero-cutout') {
       await route.fulfill(json(BACKGROUND_DERIVED_ASSET))
+      return
+    }
+    if (method === 'GET' && pathname === '/api/v1/assets/asset-hero-upscaled') {
+      await route.fulfill(json(UPSCALE_DERIVED_ASSET))
       return
     }
     if (method === 'POST' && pathname === '/api/v1/tools/remove-background') {
@@ -436,6 +536,17 @@ export async function installApiRoutes(page: Page, options: ApiRouteOptions = {}
         job_id: 'tool-bg-e2e',
         task_id: 'task-generation-tool-bg-e2e',
         root_task_id: 'task-generation-tool-bg-e2e',
+      }))
+      return
+    }
+    if (method === 'POST' && pathname === '/api/v1/tools/upscale') {
+      upscaleSubmitted = true
+      upscaleStatusCalls = 0
+      upscaleCancelRequested = false
+      await route.fulfill(json({
+        job_id: 'tool-upscale-e2e',
+        task_id: 'task-generation-tool-upscale-e2e',
+        root_task_id: 'task-generation-tool-upscale-e2e',
       }))
       return
     }
@@ -453,13 +564,40 @@ export async function installApiRoutes(page: Page, options: ApiRouteOptions = {}
       }))
       return
     }
+    if (method === 'GET' && pathname === '/api/v1/status/tool-upscale-e2e' && upscaleSubmitted) {
+      upscaleStatusCalls += 1
+      await route.fulfill(json({
+        job_id: 'tool-upscale-e2e',
+        task_id: 'task-generation-tool-upscale-e2e',
+        root_task_id: 'task-generation-tool-upscale-e2e',
+        created_at: 1,
+        started_at: 2,
+        finished_at: upscaleStatusCalls > 1 ? 3 : null,
+        processing_time_sec: upscaleStatusCalls > 1 ? 1 : null,
+        generation_details: {
+          generation_mode: 'image', source_kind: 'image', source_asset_id: 'asset-hero',
+          capability: 'upscale', method: 'lanczos2',
+        },
+        ...upscaleStatus(),
+      }))
+      return
+    }
     if (method === 'POST' && pathname === '/api/v1/cancel/tool-bg-e2e') {
       backgroundRemovalCancelRequested = true
       await route.fulfill(json({ status: 'cancelling' }))
       return
     }
+    if (method === 'POST' && pathname === '/api/v1/cancel/tool-upscale-e2e') {
+      upscaleCancelRequested = true
+      await route.fulfill(json({ status: 'cancelling' }))
+      return
+    }
     if (method === 'GET' && pathname === '/api/v1/outputs' && backgroundRemovalSubmitted && backgroundRemovalStatusCalls > 1 && !backgroundRemovalCancelRequested && backgroundRemovalMode === 'complete') {
       await route.fulfill(json({ outputs: [BACKGROUND_DERIVED_OUTPUT], total: 1 }))
+      return
+    }
+    if (method === 'GET' && pathname === '/api/v1/outputs' && upscaleSubmitted && upscaleStatusCalls > 1 && !upscaleCancelRequested && upscaleMode === 'complete') {
+      await route.fulfill(json({ outputs: [UPSCALE_DERIVED_OUTPUT], total: 1 }))
       return
     }
     const exact = catalog[keyFor(method, pathname)]

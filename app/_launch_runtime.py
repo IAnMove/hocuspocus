@@ -822,6 +822,11 @@ def _public_generation_details(params: dict | None) -> dict:
         "generation_mode": params.get("generation_mode"),
         "execution_mode": params.get("_execution_mode"),
         "simulated": params.get("_execution_mode") == "simulate",
+        "capability": params.get("capability"),
+        "source_kind": params.get("source_kind"),
+        "source_asset_id": params.get("source_asset_id"),
+        "source_filename": params.get("source_filename"),
+        "method": params.get("method"),
         "resolution": params.get("resolution"),
         "seed": params.get("seed"),
         "steps": params.get("num_inference_steps"),
@@ -22721,6 +22726,188 @@ def _apply_spatial_upsampling_to_file(video_path: str, method: str, job: dict = 
 # See memory/project_tools_postprocessing.md.
 # ============================================================================
 
+
+_TOOL_UPSCALE_METHODS = frozenset({
+    "flashvsr2", "flashvsr3", "flashvsr4", "flashvsr2pass2",
+    "flashvsr2pass4", "lanczos1.5", "lanczos2",
+})
+_TOOL_SOURCE_EXTENSIONS = {
+    "image": frozenset({
+        ".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp",
+    }),
+    "video": frozenset({
+        ".avi", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".webm", ".wmv",
+    }),
+}
+
+
+def _tool_asset_roots() -> list[dict[str, str]]:
+    """Return every explicit root that the Tools asset catalog can own."""
+    roots: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in _list_workspaces():
+        if not isinstance(item, dict):
+            continue
+        workspace = str(item.get("name") or "").strip()
+        if not workspace or workspace in seen:
+            continue
+        try:
+            directory = _workspace_dir(workspace)
+        except Exception:
+            continue
+        roots.append({"workspace_id": workspace, "path": directory})
+        seen.add(workspace)
+    uploads = os.path.realpath(os.path.abspath(os.path.join(os.getcwd(), "uploads")))
+    if uploads not in {os.path.realpath(os.path.abspath(item["path"])) for item in roots}:
+        roots.append({"workspace_id": "__uploads__", "path": uploads})
+    return roots
+
+
+def _tool_source_kind_from_name(value: str) -> str | None:
+    from urllib.parse import unquote, urlsplit
+
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    parsed = urlsplit(raw)
+    candidate = unquote(
+        parsed.path
+        if parsed.scheme or raw.startswith("/api/v1/")
+        else raw.split("?", 1)[0].split("#", 1)[0]
+    )
+    extension = os.path.splitext(os.path.basename(candidate))[1].casefold()
+    for kind, extensions in _TOOL_SOURCE_EXTENSIONS.items():
+        if extension in extensions:
+            return kind
+    return None
+
+
+def _resolve_tool_source(
+    body: dict,
+    *,
+    expected_kinds: tuple[str, ...] = ("image", "video"),
+) -> tuple[str, str, str, str, str, str, str]:
+    """Resolve one exact Tools source and its destination context.
+
+    Source resolution is shared with the background-removal boundary so
+    canonical asset IDs, workspace-qualified file URLs, uploads, symlinks and
+    traversal attempts receive the same confinement rules.  The return tuple
+    is ``path, filename, source_workspace, kind, asset_id, destination,
+    output_dir``.
+    """
+    from shared.tools.background_removal_request import (
+        RemoveBackgroundRequest,
+        UPSCALE_IMAGE_EXTENSIONS,
+        UPSCALE_VIDEO_EXTENSIONS,
+        destination_context,
+        resolve_source,
+    )
+    from services.asset_catalog import find_asset
+
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Request body must be an object")
+
+    for field, limit in (
+        ("source", 1200), ("source_path", 1200), ("video_path", 1200),
+        ("source_workspace", 160), ("workspace", 160),
+    ):
+        value = body.get(field)
+        if value is not None and (
+            not isinstance(value, str)
+            or len(value) > limit
+            or "\x00" in value
+        ):
+            raise HTTPException(status_code=400, detail=f"Invalid {field}")
+
+    source_values = [
+        body.get(key) for key in ("source", "source_path", "video_path")
+        if body.get(key) not in (None, "")
+    ]
+    if len(source_values) > 1 and any(str(value) != str(source_values[0]) for value in source_values[1:]):
+        raise HTTPException(status_code=409, detail="Conflicting source paths")
+    source_value = str(source_values[0]).strip() if source_values else None
+
+    asset_id = body.get("asset_id")
+    if asset_id is not None:
+        if (
+            not isinstance(asset_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,179}", asset_id)
+        ):
+            raise HTTPException(status_code=400, detail="Invalid asset ID")
+
+    requested_kind = body.get("source_kind")
+    if requested_kind is not None:
+        if not isinstance(requested_kind, str) or requested_kind.casefold() not in _TOOL_SOURCE_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Source kind must be image or video")
+        requested_kind = requested_kind.casefold()
+
+    asset = None
+    if asset_id:
+        asset = find_asset(_tool_asset_roots(), asset_id)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="Source asset not found")
+        asset_kind = str(asset.get("kind") or "").casefold()
+        if asset_kind not in _TOOL_SOURCE_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Source asset must be an image or video")
+        if requested_kind and requested_kind != asset_kind:
+            raise HTTPException(status_code=400, detail="Source kind does not match asset")
+        source_kind = requested_kind or asset_kind
+    else:
+        source_kind = requested_kind or _tool_source_kind_from_name(source_value or "")
+        if source_kind is None:
+            raise HTTPException(status_code=400, detail="Source format is not supported")
+
+    if source_kind not in expected_kinds:
+        expected = " or ".join(expected_kinds)
+        raise HTTPException(status_code=400, detail=f"Source must be {expected}")
+    allowed_extensions = (
+        UPSCALE_IMAGE_EXTENSIONS
+        if source_kind == "image" else UPSCALE_VIDEO_EXTENSIONS
+    )
+    if source_value and _tool_source_kind_from_name(source_value) != source_kind:
+        raise HTTPException(status_code=400, detail="Source kind does not match file format")
+
+    payload = RemoveBackgroundRequest(
+        asset_id=asset_id,
+        source=source_value,
+        source_workspace=body.get("source_workspace"),
+        workspace=body.get("workspace"),
+        provenance=body.get("provenance") if isinstance(body.get("provenance"), dict) else {},
+    )
+    destination_workspace, output_dir = destination_context(
+        payload,
+        get_active_workspace=_get_active_workspace,
+        list_workspaces=_list_workspaces,
+        workspace_dir=_workspace_dir,
+    )
+    source_path, source_filename, source_workspace = resolve_source(
+        payload,
+        destination_workspace=destination_workspace,
+        workspace_dir=_workspace_dir,
+        uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
+        asset_finder=lambda value: find_asset(_tool_asset_roots(), value),
+        expected_kind=source_kind,
+        allowed_extensions=allowed_extensions,
+        source_label=source_kind,
+    )
+    source_asset_id = asset_id or (
+        "asset_unmanaged_"
+        + uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"hocuspocus:unmanaged:{source_workspace}:{source_filename}",
+        ).hex
+    )
+    return (
+        source_path,
+        source_filename,
+        source_workspace,
+        source_kind,
+        source_asset_id,
+        destination_workspace,
+        output_dir,
+    )
+
+
 def _resolve_tool_clip_path(raw_path, workspace=None):
     """Resolve a Tools input path. Accepts an absolute path, a filename in the
     active workspace output dir, or a name/relative path under uploads/.
@@ -22741,6 +22928,61 @@ def _resolve_tool_clip_path(raw_path, workspace=None):
     return raw_path if os.path.isfile(raw_path) else None
 
 
+def _upscale_tool_image(
+    source_path: str,
+    output_path: str,
+    method: str,
+    *,
+    seed: int = -1,
+    abort_callback=None,
+    progress_callback=None,
+) -> tuple[int, int]:
+    """Upscale one still image through the existing spatial adapter.
+
+    The FlashVSR bridge accepts the same ``[C, F, H, W]`` tensor used by the
+    video path.  ``still_image=True`` tells that adapter to use its image
+    inference path; Lanczos remains the stateless implementation in WGP.  No
+    video decoder, audio extractor, or video writer is involved here.
+    """
+    from PIL import Image
+    from shared.utils.utils import convert_image_to_tensor, convert_tensor_to_image
+
+    if callable(abort_callback) and abort_callback():
+        raise InterruptedError("Image upscale was cancelled")
+    temporary_path = f"{output_path}.tmp-{uuid.uuid4().hex}"
+    try:
+        with Image.open(source_path) as opened:
+            image = wgp.convert_image(opened).copy()
+            sample = convert_image_to_tensor(image).unsqueeze(1)
+        if callable(progress_callback):
+            progress_callback("Upscaling image", 5, 0, 1)
+        sample = wgp.perform_spatial_upsampling(
+            sample,
+            method,
+            seed=seed,
+            abort_callback=abort_callback,
+            progress_callback=progress_callback,
+            still_image=True,
+        )
+        if callable(abort_callback) and abort_callback():
+            raise InterruptedError("Image upscale was cancelled")
+        if sample is None:
+            if callable(abort_callback) and abort_callback():
+                raise InterruptedError("Image upscale was cancelled")
+            raise RuntimeError("Image upsampler returned no result")
+        result = convert_tensor_to_image(sample, 0).convert("RGB")
+        result.save(temporary_path, format="PNG")
+        os.replace(temporary_path, output_path)
+        return result.size
+    except Exception:
+        try:
+            if os.path.isfile(temporary_path):
+                os.remove(temporary_path)
+        except OSError:
+            pass
+        raise
+
+
 def _write_tool_sidecar(
     out_dir,
     filename,
@@ -22753,39 +22995,78 @@ def _write_tool_sidecar(
     task_id=None,
     root_task_id=None,
     workspace=None,
+    generation_mode="video",
+    source_asset_id=None,
+    source_kind=None,
+    provenance=None,
+    inputs=None,
+    parents=None,
+    transformations=None,
+    technical=None,
 ):
     """Write a .meta.json sidecar so a Tools output shows up in the gallery
     with the right mode + edit_sub_mode tag (mirrors _run_sfx_generation)."""
+    public_params = {
+        key: value
+        for key, value in (params or {}).items()
+        if not str(key).startswith("_")
+        and key not in {"source_path", "video_path", "voice_ref_paths"}
+    }
+    if source_asset_id:
+        public_params.setdefault("source_asset_id", source_asset_id)
+    if source_kind:
+        public_params.setdefault("source_kind", source_kind)
+    public_params.setdefault("source_filename", source_name)
+    provenance = provenance if isinstance(provenance, dict) else {}
+    capability = provenance.get("capability") or tool
     sidecar = {
-        "params": {**params, "edit_sub_mode": tool},
-        "generation_mode": "video",
+        "params": {**public_params, "edit_sub_mode": tool},
+        "generation_mode": generation_mode,
         "tool": tool,
+        "capability": capability,
         "tool_source": source_name,
+        "source_asset_id": source_asset_id,
+        "source_kind": source_kind,
         "job_id": job_id,
         "task_id": task_id,
         "root_task_id": root_task_id or task_id,
         "generation_time": round(elapsed),
         "created_at": time.time(),
     }
+    if inputs:
+        sidecar["inputs"] = list(inputs)
+    if parents:
+        sidecar["parents"] = list(parents)
+    if transformations:
+        sidecar["transformations"] = list(transformations)
+    if technical:
+        sidecar["technical"] = dict(technical)
     try:
         publish_generation_sidecar(
             os.path.join(out_dir, filename),
             sidecar,
-            workspace_id=workspace,
-            tool=tool,
+            workspace_id=provenance.get("workspace_id") or workspace,
+            output_folder=workspace,
+            tool=provenance.get("tool") or tool,
+            actor=provenance.get("actor"),
+            capability=capability,
         )
     except Exception:
         pass
 
 
 def _run_tool_upscale(job_id: str):
-    """Background worker: upscale an existing clip with the configured spatial
-    upsampler (FlashVSR / Lanczos), preserving the original audio. Thin extract
-    of edit_video's postprocessing path — no model generation/Gradio state."""
+    """Background worker for the shared image/video upscale action.
+
+    Video sources retain the existing audio-preserving path. Still images are
+    dispatched before any video metadata/decoder/audio calls and use the same
+    spatial adapter with its ``still_image`` mode.
+    """
     job = _jobs[job_id]
     start_time = None
     abort_state = {"abort": False}
     audio_tracks = []
+    final_path = None
     with _coordinated_generation_slot(
         job, description="HocusPocus Lab GPU tool · upscale",
     ) as acquired:
@@ -22809,28 +23090,27 @@ def _run_tool_upscale(job_id: str):
             wgp.save_path = out_dir
 
             method = params.get("method") or "flashvsr2"
-            video_source = _resolve_tool_clip_path(params.get("video_path"), workspace)
-            if not video_source:
+            if method not in _TOOL_UPSCALE_METHODS:
+                raise ValueError("Unsupported upscale method")
+            source_kind = str(params.get("source_kind") or "video").casefold()
+            source_value = (
+                params.get("source_path")
+                if source_kind == "image" else params.get("video_path")
+            ) or params.get("_source_path") or params.get("source")
+            source_path = _resolve_tool_clip_path(source_value, workspace)
+            if not source_path:
                 finish_job(
-                    job, "failed", error="Input clip not found",
-                    message="Error: input clip not found",
+                    job, "failed", error="Input source not found",
+                    message="Error: input source not found",
                 )
                 return False
+            if source_kind not in _TOOL_SOURCE_EXTENSIONS:
+                raise ValueError("Unsupported source kind")
+            source_extension = os.path.splitext(source_path)[1].casefold()
+            if source_extension not in _TOOL_SOURCE_EXTENSIONS[source_kind]:
+                raise ValueError("Source kind does not match file format")
 
             before = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
-
-            from shared.utils.utils import get_video_info
-            fps, _width, _height, _frames = get_video_info(video_source)
-
-            # Preserve original audio — re-muxed onto the upscaled video.
-            audio_tracks, audio_metadata = wgp.extract_audio_tracks(video_source)
-            has_audio = len(audio_tracks) > 0
-
-            if not update_job(
-                job, message="Upscaling...", phase="Upscaling", progress=5,
-            ):
-                wgp.cleanup_temp_audio_files(audio_tracks)
-                return False
 
             def _abort():
                 return bool(abort_state.get("abort")) or is_cancel_requested(job)
@@ -22856,77 +23136,173 @@ def _run_tool_upscale(job_id: str):
                 if changes:
                     update_job(job, **changes)
 
-            container = wgp.server_config.get("video_container", "mp4")
-            codec = wgp.server_config.get("video_output_codec", None)
-            final_path = wgp.get_available_filename(out_dir, os.path.basename(video_source), "_upscaled", force_extension=f".{container}")
+            source_filename = str(
+                params.get("source_filename") or os.path.basename(source_path)
+            )
+            final_path = None
+            image_size = None
+            if source_kind == "image":
+                if not update_job(
+                    job, message="Upscaling image...", phase="Upscaling", progress=5,
+                ):
+                    return False
+                final_path = wgp.get_available_filename(
+                    out_dir, source_filename, "_upscaled", force_extension=".png",
+                )
+                image_size = _upscale_tool_image(
+                    source_path,
+                    final_path,
+                    method,
+                    seed=int(params.get("seed", -1)),
+                    abort_callback=_abort,
+                    progress_callback=_progress,
+                )
+            else:
+                from shared.utils.utils import get_video_info
+                fps, _width, _height, _frames = get_video_info(source_path)
 
-            if wgp.flashvsr.is_upsampling(method):
-                # Chunked engine (shared with the post-generation pass) —
-                # bounds RAM on long clips. The previous unchunked path let
-                # FlashVSR allocate its float32 output buffer for the WHOLE
-                # video: a 4-minute 2x upscale tried 280+ GB and died in
-                # DefaultCPUAllocator.
-                tmp_path = _chunked_flashvsr_upscale(video_source, method, job=job, abort_check=_abort, progress_callback=_progress)
-                if tmp_path is None or _abort():
-                    if tmp_path and os.path.isfile(tmp_path):
+                # Preserve original audio — re-muxed onto the upscaled video.
+                audio_tracks, audio_metadata = wgp.extract_audio_tracks(source_path)
+                has_audio = len(audio_tracks) > 0
+
+                if not update_job(
+                    job, message="Upscaling...", phase="Upscaling", progress=5,
+                ):
+                    wgp.cleanup_temp_audio_files(audio_tracks)
+                    return False
+
+                container = wgp.server_config.get("video_container", "mp4")
+                codec = wgp.server_config.get("video_output_codec", None)
+                final_path = wgp.get_available_filename(
+                    out_dir, source_filename, "_upscaled",
+                    force_extension=f".{container}",
+                )
+
+                if wgp.flashvsr.is_upsampling(method):
+                    # Chunked engine (shared with the post-generation pass) —
+                    # bounds RAM on long clips. The previous unchunked path let
+                    # FlashVSR allocate its float32 output buffer for the WHOLE
+                    # video: a 4-minute 2x upscale tried 280+ GB and died in
+                    # DefaultCPUAllocator.
+                    tmp_path = _chunked_flashvsr_upscale(
+                        source_path, method, job=job, abort_check=_abort,
+                        progress_callback=_progress,
+                    )
+                    if tmp_path is None or _abort():
+                        if tmp_path and os.path.isfile(tmp_path):
+                            try:
+                                os.remove(tmp_path)
+                            except OSError:
+                                pass
+                        wgp.cleanup_temp_audio_files(audio_tracks)
+                        return False
+                    if has_audio:
+                        wgp.combine_video_with_audio_tracks(
+                            tmp_path, audio_tracks, final_path,
+                            audio_metadata=audio_metadata,
+                        )
                         try:
                             os.remove(tmp_path)
                         except OSError:
                             pass
-                    wgp.cleanup_temp_audio_files(audio_tracks)
-                    return False
-                if has_audio:
-                    wgp.combine_video_with_audio_tracks(tmp_path, audio_tracks, final_path, audio_metadata=audio_metadata)
-                    try:
-                        os.remove(tmp_path)
-                    except OSError:
-                        pass
-                    wgp.cleanup_temp_audio_files(audio_tracks)
+                        wgp.cleanup_temp_audio_files(audio_tracks)
+                    else:
+                        os.replace(tmp_path, final_path)
                 else:
-                    os.replace(tmp_path, final_path)
-            else:
-                # Lanczos & friends — cheap stateless resize, legacy inline path.
-                sample = wgp.get_resampled_video(video_source, 0, wgp.max_source_video_frames, fps)
-                sample = sample.permute(-1, 0, 1, 2)  # [F,H,W,C] -> [C,F,H,W]
-                sample = wgp.perform_spatial_upsampling(
-                    sample, method, seed=int(params.get("seed", -1)),
-                    abort_callback=_abort, progress_callback=_progress,
-                )
+                    # Lanczos & friends — cheap stateless resize, legacy inline path.
+                    sample = wgp.get_resampled_video(
+                        source_path, 0, wgp.max_source_video_frames, fps,
+                    )
+                    sample = sample.permute(-1, 0, 1, 2)  # [F,H,W,C] -> [C,F,H,W]
+                    sample = wgp.perform_spatial_upsampling(
+                        sample, method, seed=int(params.get("seed", -1)),
+                        abort_callback=_abort, progress_callback=_progress,
+                    )
 
-                if _abort():
-                    return False
+                    if _abort():
+                        return False
 
-                output_fps = round(fps)
-                if has_audio:
-                    tmp_path = wgp.get_available_filename(out_dir, os.path.basename(video_source), "_uptmp", force_extension=f".{container}")
-                    wgp.save_video(tensor=sample[None], save_file=tmp_path, fps=output_fps, nrow=1, normalize=True, value_range=(-1, 1), codec_type=codec, container=container)
-                    wgp.combine_video_with_audio_tracks(tmp_path, audio_tracks, final_path, audio_metadata=audio_metadata)
-                    try:
-                        os.remove(tmp_path)
-                    except OSError:
-                        pass
-                    wgp.cleanup_temp_audio_files(audio_tracks)
-                else:
-                    wgp.save_video(tensor=sample[None], save_file=final_path, fps=output_fps, nrow=1, normalize=True, value_range=(-1, 1), codec_type=codec, container=container)
+                    output_fps = round(fps)
+                    if has_audio:
+                        tmp_path = wgp.get_available_filename(
+                            out_dir, source_filename, "_uptmp",
+                            force_extension=f".{container}",
+                        )
+                        wgp.save_video(
+                            tensor=sample[None], save_file=tmp_path,
+                            fps=output_fps, nrow=1, normalize=True,
+                            value_range=(-1, 1), codec_type=codec, container=container,
+                        )
+                        wgp.combine_video_with_audio_tracks(
+                            tmp_path, audio_tracks, final_path,
+                            audio_metadata=audio_metadata,
+                        )
+                        try:
+                            os.remove(tmp_path)
+                        except OSError:
+                            pass
+                        wgp.cleanup_temp_audio_files(audio_tracks)
+                    else:
+                        wgp.save_video(
+                            tensor=sample[None], save_file=final_path, fps=output_fps,
+                            nrow=1, normalize=True, value_range=(-1, 1),
+                            codec_type=codec, container=container,
+                        )
 
-                sample = None
+                    sample = None
             after = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
             new_files = sorted(f for f in (after - before) if not f.endswith(".meta.json") and "_uptmp" not in f)
-            record_job_outputs(job, new_files)
             if is_cancel_requested(job):
+                # A cancellation can win just after the adapter commits its
+                # bytes. Do not expose that late result in Activity or leave a
+                # derived artifact behind when the source was never published.
+                for fname in new_files:
+                    try:
+                        os.remove(os.path.join(out_dir, fname))
+                    except OSError:
+                        pass
                 return False
+            record_job_outputs(job, new_files)
+            source_asset_id = params.get("source_asset_id")
+            source_ref = {
+                "id": source_asset_id,
+                "kind": source_kind,
+                "uri": source_filename,
+                "role": "source",
+            }
             for fname in new_files:
                 _write_tool_sidecar(
                     out_dir,
                     fname,
-                    source_name=os.path.basename(video_source),
+                    source_name=source_filename,
                     tool="upscale",
-                    params={"method": method, "model_type": "post_processing"},
+                    params={
+                        "method": method,
+                        "model_type": "post_processing",
+                        "source_asset_id": source_asset_id,
+                        "source_kind": source_kind,
+                        "source_filename": source_filename,
+                    },
                     elapsed=time.time() - start_time,
                     job_id=job_id,
                     task_id=job.get("task_id"),
                     root_task_id=job.get("root_task_id"),
                     workspace=job.get("workspace"),
+                    generation_mode=source_kind,
+                    source_asset_id=source_asset_id,
+                    source_kind=source_kind,
+                    provenance=job.get("provenance"),
+                    inputs=[source_ref] if source_asset_id else [],
+                    parents=[source_ref] if source_asset_id else [],
+                    transformations=[{
+                        "type": "upscale",
+                        "backend": "flashvsr" if method.startswith("flashvsr") else "lanczos",
+                        "method": method,
+                    }],
+                    technical=(
+                        {"width": image_size[0], "height": image_size[1], "output": "png"}
+                        if image_size else {"output": "video"}
+                    ),
                 )
 
             completed = finish_job(
@@ -22936,8 +23312,16 @@ def _run_tool_upscale(job_id: str):
                 phase="",
                 message="Done",
             )
-            print(f"[Tools/upscale] {os.path.basename(video_source)} -> {new_files} ({wgp.format_time(time.time() - start_time)})")
+            print(f"[Tools/upscale] {source_filename} -> {new_files} ({wgp.format_time(time.time() - start_time)})")
             return completed
+        except InterruptedError:
+            if final_path and os.path.isfile(final_path):
+                try:
+                    os.remove(final_path)
+                except OSError:
+                    pass
+            acknowledge_cancel(job)
+            return False
         except Exception as e:
             traceback.print_exc()
             finish_job(job, "failed", error=str(e), message=f"Error: {e}")
@@ -22991,6 +23375,13 @@ def _run_tool_revoice(job_id: str):
                     message="Error: input clip not found",
                 )
                 return False
+            if str(params.get("source_kind") or "video").casefold() != "video":
+                raise ValueError("Revoice only supports video sources")
+            if os.path.splitext(video_source)[1].casefold() not in _TOOL_SOURCE_EXTENSIONS["video"]:
+                raise ValueError("Revoice source format is not supported")
+            source_filename = str(
+                params.get("source_filename") or os.path.basename(video_source)
+            )
 
             mode = params.get("mode", "single")
             voice_refs = []
@@ -23066,14 +23457,41 @@ def _run_tool_revoice(job_id: str):
             _write_tool_sidecar(
                 out_dir,
                 fname,
-                source_name=os.path.basename(video_source),
+                source_name=source_filename,
                 tool="revoice",
-                params={"mode": mode, "model_type": "post_processing"},
+                params={
+                    "mode": mode,
+                    "model_type": "post_processing",
+                    "source_asset_id": params.get("source_asset_id"),
+                    "source_kind": "video",
+                    "source_filename": source_filename,
+                },
                 elapsed=time.time() - start_time,
                 job_id=job_id,
                 task_id=job.get("task_id"),
                 root_task_id=job.get("root_task_id"),
                 workspace=job.get("workspace"),
+                generation_mode="video",
+                source_asset_id=params.get("source_asset_id"),
+                source_kind="video",
+                provenance=job.get("provenance"),
+                inputs=[{
+                    "id": params.get("source_asset_id"),
+                    "kind": "video",
+                    "uri": source_filename,
+                    "role": "source",
+                }],
+                parents=[{
+                    "id": params.get("source_asset_id"),
+                    "kind": "video",
+                    "uri": source_filename,
+                    "role": "source",
+                }],
+                transformations=[{
+                    "type": "revoice",
+                    "backend": "seedvc",
+                    "mode": mode,
+                }],
             )
 
             completed = finish_job(
@@ -23095,34 +23513,82 @@ def _run_tool_revoice(job_id: str):
 
 @api.post("/api/v1/tools/upscale")
 async def tools_upscale(request: Request):
-    """Upscale an existing clip (a gallery output or an uploaded file) with the
-    configured spatial upsampler. Returns a job_id; poll /api/v1/status/{job_id}.
+    """Upscale one image or video through the shared Tools action.
 
-    Body: { video_path: str, method?: str (default "flashvsr2"),
-            seed?: int, workspace?: str }
+    Images use ``source``/``source_kind=image`` and produce a PNG.  Videos may
+    continue sending the legacy ``video_path`` field and retain the existing
+    audio-preserving pipeline.
     """
     body = await request.json()
-    video_path = body.get("video_path")
-    if not video_path:
-        raise HTTPException(status_code=400, detail="video_path is required")
-    workspace = body.get("workspace") or _get_active_workspace()
-    resolved = _resolve_tool_clip_path(video_path, workspace)
-    if not resolved:
-        raise HTTPException(status_code=400, detail=f"Clip not found: {video_path}")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Request body must be an object")
+    method = body.get("method") or "flashvsr2"
+    if not isinstance(method, str) or method not in _TOOL_UPSCALE_METHODS:
+        raise HTTPException(status_code=400, detail="Unsupported upscale method")
+    (
+        resolved,
+        source_filename,
+        source_workspace,
+        source_kind,
+        source_asset_id,
+        workspace,
+        output_dir,
+    ) = _resolve_tool_source(body, expected_kinds=("image", "video"))
+    from services.generation_provenance import normalize_submission_provenance
+
+    provenance = normalize_submission_provenance({
+        **(body.get("provenance") if isinstance(body.get("provenance"), dict) else {}),
+        "capability": "upscale",
+        # Workspace identity is runtime-owned, not browser-authored.
+        "workspace_id": workspace,
+    })
+    source_ref = {
+        "id": source_asset_id,
+        "kind": source_kind,
+        "uri": source_filename,
+        "role": "source",
+    }
+    transformation = {
+        "type": "upscale",
+        "backend": "flashvsr" if str(method).startswith("flashvsr") else "lanczos",
+        "method": method,
+    }
+    try:
+        raw_seed = body.get("seed", -1)
+        if isinstance(raw_seed, bool):
+            raise ValueError
+        seed = int(raw_seed)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Seed must be an integer") from None
 
     job_id = uuid.uuid4().hex[:8]
     job = {
         "id": job_id, "status": "queued", "progress": 0, "step": 0, "total_steps": 0,
         "phase": "", "message": "Queued (upscale)", "created_at": time.time(),
         "params": {
-            "video_path": resolved,
-            "method": body.get("method") or "flashvsr2",
-            "seed": body.get("seed", -1),
+            # Keep the physical source private to the in-memory worker. The
+            # sidecar writer deliberately strips it before publishing.
+            "source_path": resolved if source_kind == "image" else None,
+            "video_path": resolved if source_kind == "video" else None,
+            "source": source_filename,
+            "source_filename": source_filename,
+            "source_workspace": source_workspace,
+            "source_asset_id": source_asset_id,
+            "source_kind": source_kind,
+            "method": method,
+            "seed": seed,
             "model_type": "post_processing",
-            "generation_mode": "video",
+            "generation_mode": source_kind,
+            "provider": "local",
+            "capability": "upscale",
+            "inputs": [source_ref],
+            "parents": [source_ref],
+            "transformations": [transformation],
+            "_non_durable_tool": "upscale",
         },
         "output_files": [], "error": None,
-        "workspace": workspace, "out_dir": _workspace_dir(workspace),
+        "workspace": workspace, "out_dir": output_dir,
+        "provenance": provenance,
     }
     _register_manual_generation_job(job)
     worker = _run_generation if execution_mode.policy().simulated else _run_tool_upscale
@@ -23143,19 +23609,49 @@ async def tools_revoice(request: Request):
             workspace?: str }
     """
     body = await request.json()
-    video_path = body.get("video_path")
-    if not video_path:
-        raise HTTPException(status_code=400, detail="video_path is required")
-    workspace = body.get("workspace") or _get_active_workspace()
-    resolved = _resolve_tool_clip_path(video_path, workspace)
-    if not resolved:
-        raise HTTPException(status_code=400, detail=f"Clip not found: {video_path}")
+    (
+        resolved,
+        source_filename,
+        source_workspace,
+        _source_kind,
+        source_asset_id,
+        workspace,
+        output_dir,
+    ) = _resolve_tool_source(body, expected_kinds=("video",))
+    from services.generation_provenance import normalize_submission_provenance
+
+    provenance = normalize_submission_provenance({
+        **(body.get("provenance") if isinstance(body.get("provenance"), dict) else {}),
+        "capability": "revoice",
+        "workspace_id": workspace,
+    })
 
     voice_refs = body.get("voice_ref_paths")
     if not voice_refs and body.get("voice_ref_path"):
         voice_refs = [body.get("voice_ref_path")]
     if not voice_refs:
         raise HTTPException(status_code=400, detail="At least one voice_ref_path is required")
+    if (
+        not isinstance(voice_refs, list)
+        or len(voice_refs) > 2
+        or any(
+            not isinstance(value, str)
+            or not value.strip()
+            or len(value) > 1200
+            or "\x00" in value
+            for value in voice_refs
+        )
+    ):
+        raise HTTPException(status_code=400, detail="Invalid voice reference paths")
+    resolved_voice_refs = []
+    for value in voice_refs:
+        resolved_voice_refs.append(
+            _resolve_request_media_path(
+                value,
+                workspace=workspace,
+                kinds=("audio", "video"),
+            )
+        )
 
     mode = body.get("mode", "single")
     if mode not in ("single", "two"):
@@ -23167,15 +23663,23 @@ async def tools_revoice(request: Request):
         "phase": "", "message": "Queued (revoice)", "created_at": time.time(),
         "params": {
             "video_path": resolved,
-            "voice_ref_paths": voice_refs,
+            "source": source_filename,
+            "source_filename": source_filename,
+            "source_workspace": source_workspace,
+            "source_asset_id": source_asset_id,
+            "source_kind": "video",
+            "voice_ref_paths": resolved_voice_refs,
             "mode": mode,
             "diffusion_steps": body.get("diffusion_steps", 25),
             "cfg_rate": body.get("cfg_rate", 0.5),
             "model_type": "post_processing",
             "generation_mode": "video",
+            "capability": "revoice",
+            "_non_durable_tool": "revoice",
         },
         "output_files": [], "error": None,
-        "workspace": workspace, "out_dir": _workspace_dir(workspace),
+        "workspace": workspace, "out_dir": output_dir,
+        "provenance": provenance,
     }
     _register_manual_generation_job(job)
     worker = _run_generation if execution_mode.policy().simulated else _run_tool_revoice
@@ -23215,9 +23719,23 @@ def _run_simulated_generation(job: dict, *, finalize: bool) -> bool:
         return False
     output_name = os.path.basename(generated_path)
     record_job_outputs(job, [output_name])
+    tool_job = str(params.get("_non_durable_tool") or "") in {"upscale", "revoice"}
+    sidecar_params = params
+    if tool_job:
+        # Simulation still exercises the real queue/task/manifest path, but
+        # host filesystem paths and uploaded voice references must never enter
+        # the durable sidecar.
+        sidecar_params = {
+            key: value
+            for key, value in params.items()
+            if not str(key).startswith("_")
+            and key not in {"source_path", "video_path", "voice_ref_paths"}
+        }
     sidecar = {
-        "params": params,
+        "params": sidecar_params,
         "generation_mode": params.get("generation_mode"),
+        "tool": "tools" if tool_job else None,
+        "capability": params.get("capability") if tool_job else None,
         "job_id": job.get("id"),
         "task_id": job.get("task_id"),
         "root_task_id": job.get("root_task_id") or job.get("task_id"),
@@ -23227,6 +23745,10 @@ def _run_simulated_generation(job: dict, *, finalize: bool) -> bool:
         "simulated": True,
         "execution_mode": "simulate",
     }
+    if tool_job:
+        sidecar["inputs"] = params.get("inputs") or []
+        sidecar["parents"] = params.get("parents") or []
+        sidecar["transformations"] = params.get("transformations") or []
     _publish_generation_sidecar_for_studio_job(job, generated_path, sidecar)
     if not finalize:
         return update_job(
@@ -35774,6 +36296,10 @@ def _publish_generation_task(job: dict) -> dict:
     }.get(mode, "Generation job")
     if str(provenance.get("capability") or "") == "remove_background":
         task_title = "Tools · Remove background"
+    elif str(provenance.get("capability") or "") == "upscale":
+        task_title = "Tools · Upscale"
+    elif str(provenance.get("capability") or "") == "revoice":
+        task_title = "Tools · Revoice"
     return _upsert_canonical_task(
         workspace,
         task_id,

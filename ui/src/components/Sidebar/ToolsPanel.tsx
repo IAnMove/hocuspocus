@@ -42,17 +42,23 @@ export function ToolsPanel() {
   const [vcUploading, setVcUploading] = useState<number | null>(null)
   const [imageAssets, setImageAssets] = useState<AssetCatalogItem[]>([])
   const [imageAssetsLoading, setImageAssetsLoading] = useState(false)
+  const [imageAssetsError, setImageAssetsError] = useState(false)
+  const [sourceUploadError, setSourceUploadError] = useState(false)
 
   useEffect(() => {
-    if (tool !== 'remove_background') return
+    if (tool !== 'upscale' && tool !== 'remove_background') return
     const controller = new AbortController()
     setImageAssetsLoading(true)
+    setImageAssetsError(false)
     api.fetchAssets({ kind: 'image', limit: 100, signal: controller.signal })
       .then(result => {
         if (!controller.signal.aborted) setImageAssets(result.assets)
       })
       .catch(error => {
-        if (!controller.signal.aborted) console.error('Image asset catalog failed:', error)
+        if (!controller.signal.aborted) {
+          setImageAssetsError(true)
+          console.error('Image asset catalog failed:', error)
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setImageAssetsLoading(false)
@@ -61,17 +67,26 @@ export function ToolsPanel() {
   }, [tool, toolsAssetsRevision])
 
   const handleSourceUpload = async (file: File) => {
+    const image = file.type.startsWith('image/') || /\.(bmp|gif|jpe?g|png|tiff?|webp)$/i.test(file.name)
+    const video = file.type.startsWith('video/') || /\.(avi|m4v|mkv|mov|mp4|mpeg|mpg|webm|wmv)$/i.test(file.name)
+    if ((!image && !video) || (tool === 'remove_background' && !image) || (tool === 'revoice' && !video)) {
+      setSourceUploadError(true)
+      return
+    }
+    setSourceUploadError(false)
     setUploading(true)
     try {
       const r = await api.uploadImage(file)  // /api/v1/upload handles video too
+      const kind = image ? 'image' : 'video'
       setSource({
         path: r.path,
         name: file.name,
         url: r.url,
-        workspace: tool === 'remove_background' ? '__uploads__' : null,
-        kind: tool === 'remove_background' ? 'image' : 'video',
+        workspace: '__uploads__',
+        kind,
       })
     } catch (e) {
+      setSourceUploadError(true)
       console.error('Source upload failed:', e)
     } finally {
       setUploading(false)
@@ -125,7 +140,7 @@ export function ToolsPanel() {
   const hasVideoSource = !!sourcePath && sourceKind === 'video'
   const hasImageSource = !!sourcePath && sourceKind === 'image'
   const canRun =
-    (tool === 'upscale' && hasVideoSource) ||
+    (tool === 'upscale' && (hasVideoSource || hasImageSource)) ||
     (tool === 'revoice' && hasVideoSource && hasRefs) ||
     (tool === 'remove_background' && hasImageSource)
   const flashvsrOff = flashvsrMode === 0 && method.startsWith('flashvsr')
@@ -170,6 +185,8 @@ export function ToolsPanel() {
         useCurrentClip={useCurrentClip}
         imageAssets={imageAssets}
         imageAssetsLoading={imageAssetsLoading}
+        imageAssetsError={imageAssetsError}
+        sourceUploadError={sourceUploadError}
         selectImageAsset={selectImageAsset}
       />
       {tool === 'remove_background' && !sourcePath && (
@@ -205,7 +222,9 @@ export function ToolsPanel() {
         }`}
       >
         <Play size={13} fill={canRun ? 'white' : 'currentColor'} />
-        {tool === 'upscale' ? t('tools.upscaleClip') : tool === 'revoice' ? t('tools.replaceVoiceAction') : t('tools.removeBackgroundAction')}
+        {tool === 'upscale'
+          ? sourceKind === 'image' ? t('tools.upscaleImage') : t('tools.upscaleClip')
+          : tool === 'revoice' ? t('tools.replaceVoiceAction') : t('tools.removeBackgroundAction')}
       </button>
     </div>
   )

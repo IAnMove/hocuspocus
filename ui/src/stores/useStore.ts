@@ -3893,7 +3893,8 @@ export const useStore = create<AppState>((set, get) => {
       .map(r => r.path)
     if (tool === 'revoice' && refPaths.length === 0) return
     if (tool === 'remove_background' && s.toolsSourceKind !== 'image') return
-    if ((tool === 'upscale' || tool === 'revoice') && s.toolsSourceKind !== 'video') return
+    if (tool === 'upscale' && s.toolsSourceKind !== 'image' && s.toolsSourceKind !== 'video') return
+    if (tool === 'revoice' && s.toolsSourceKind !== 'video') return
     set({ toolsSubmitting: true })
 
     // Placeholder job tile — mirrors the blend/edit submit pattern so the
@@ -3914,7 +3915,15 @@ export const useStore = create<AppState>((set, get) => {
 
     try {
       const result = tool === 'upscale'
-        ? await api.submitToolUpscale({ video_path: source, method: s.toolsUpscaleMethod, workspace: s.activeWorkspace })
+        ? await api.submitToolUpscale({
+          source,
+          source_kind: s.toolsSourceKind as 'image' | 'video',
+          asset_id: s.toolsSourceAssetId || undefined,
+          source_workspace: s.toolsSourceWorkspace || undefined,
+          method: s.toolsUpscaleMethod,
+          workspace: s.activeWorkspace,
+          provenance: { actor: 'user' },
+        })
         : tool === 'revoice'
           ? await api.submitToolRevoice({ video_path: source, voice_ref_paths: refPaths, mode: s.toolsRevoiceMode, workspace: s.activeWorkspace })
           : await api.submitToolRemoveBackground({
