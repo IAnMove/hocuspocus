@@ -143,6 +143,19 @@ def _normalize_minimax_song_output(style: str, lyrics: str, instrumental: bool, 
     return style, lyrics
 
 
+def _normalize_music3_song_output(style: str, lyrics: str, instrumental: bool):
+    """Keep the multiline Music3 caption intact; do not apply remote API limits."""
+    style = str(style or "").strip()
+    if len(style) > 8000:
+        style = style[:8000].rsplit("\n", 1)[0].rstrip()
+    if instrumental:
+        return style, ""
+    lyrics = str(lyrics or "").strip()
+    if len(lyrics) > 8000:
+        lyrics = lyrics[:8000].rsplit("\n", 1)[0].rstrip()
+    return style, lyrics
+
+
 def _ace_song_request_prompt(description: str, language: str, instrumental: bool) -> str:
     """Keep technical direction in English and lyrics in the selected language."""
     target = str(language or "English").strip()[:80] or "English"
@@ -256,8 +269,11 @@ def _song_writer_payload(raw, instrumental: bool, target: str, include_lyria: bo
     """Parse STYLE/LYRICS (and optional Lyria) into the write-song JSON body."""
     style, lyrics = _parse_song_output(raw, instrumental)
     lyria_prompt = _parse_lyria_output(raw) if target == "minimax" and include_lyria else ""
-    if target in {"minimax", "minimax-music3"}:
+    if target == "minimax":
         style, lyrics = _normalize_minimax_song_output(style, lyrics, instrumental, model)
+    elif target == "minimax-music3":
+        style, lyrics = _normalize_music3_song_output(style, lyrics, instrumental)
+    if target in {"minimax", "minimax-music3"}:
         if len(style) < 10:
             raise HTTPException(status_code=502, detail="The LLM did not return a valid MiniMax style prompt")
         if not instrumental and not lyrics:

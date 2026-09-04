@@ -2,7 +2,7 @@ import { ChevronRight, Film, Loader2, Music, Sparkles, Upload } from 'lucide-rea
 import * as api from '../../api/client'
 import { useUiTranslation } from '../../i18n'
 import { button, completeGenerationButton, input } from './storyLabChrome'
-import { ACE_STEP_MUSIC_MODEL, MINIMAX_MUSIC3_LOCAL_MODEL, isAceStepMusicModel, isLocalMusicModel, normalizeStoryMusicModel } from './musicModel'
+import { ACE_STEP_MUSIC_MODEL, MINIMAX_MUSIC3_LOCAL_MODEL, clampStoryMusicDuration, isAceStepMusicModel, isLocalMusicModel, normalizeStoryMusicModel, storyMusicDurationMax, storyMusicGenerationReady } from './musicModel'
 import { musicCandidateDisplayName, storySongBrief } from './storyLabMusic'
 import type { StoryProductionsTabProps } from './storyLabProductions'
 
@@ -57,9 +57,9 @@ export function StoryMusicProductionLegacyDrawer(props: StoryProductionsTabProps
         aria-label={t('productions.songBriefAria')} />
       <div className="grid grid-cols-2 gap-2">
         <label className="block text-[10px] text-text-muted">{t('productions.approxDuration')}
-          <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
+          <input className={`${input} mt-1`} type="number" min={20} max={storyMusicDurationMax(project.music.model)} step={5}
             value={project.music.targetDurationSeconds}
-            onChange={event => patch({ music: { ...project.music, targetDurationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) } })} />
+            onChange={event => patch({ music: { ...project.music, targetDurationSeconds: clampStoryMusicDuration(event.target.value, project.music.model) } })} />
         </label>
         <label className="block text-[10px] text-text-muted">{t('productions.candidates')}
           <select className={`${input} mt-1`} value={project.music.candidateCount}
@@ -94,7 +94,7 @@ export function StoryMusicProductionLegacyDrawer(props: StoryProductionsTabProps
           aria-label={t('productions.lyricsAria')} />
       )}
       <button className={`${button} ${completeGenerationButton} w-full`}
-        disabled={productionBusy === 'music' || (!isLocalMusicModel(project.music.model) && !minimaxConfigured)}
+        disabled={productionBusy === 'music' || !storyMusicGenerationReady(project.music.model, minimaxConfigured)}
         onClick={() => void generateMinimaxSongs()}>
         {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
         {project.music.mode === 'cover'

@@ -77,7 +77,14 @@ def test_model_definition_is_local_and_license_aware():
     assert model["source_repo"].endswith("MiniMax-Music3")
     assert model["license_name"] == "MiniMax-Music3 Community License"
     assert model["model_size_gb"] >= 28
-    assert len(model["required_model_assets"]) >= 7
+    required = set(model["required_model_assets"])
+    expected = set(_handler_namespace()["required_model_assets"]())
+    assert expected <= required
+    assert "minimax_music3/language_model/model-00001-of-00004.safetensors" in required
+    assert "minimax_music3/language_model/model-00004-of-00004.safetensors" in required
+    assert "minimax_music3/transformer/diffusion_pytorch_model-00001-of-00002.safetensors" in required
+    assert "minimax_music3/transformer/diffusion_pytorch_model-00002-of-00002.safetensors" in required
+    assert len([path for path in required if path.endswith(".safetensors")]) >= 8
 
 
 def test_handler_registers_model_and_validates_audio_contract():

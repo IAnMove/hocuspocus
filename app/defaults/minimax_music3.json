@@ -22,9 +22,13 @@
         "required_model_assets": [
             "minimax_music3/LICENSE",
             "minimax_music3/tokenizer/tokenizer.json",
+            "minimax_music3/language_model/model-00001-of-00004.safetensors",
+            "minimax_music3/language_model/model-00002-of-00004.safetensors",
+            "minimax_music3/language_model/model-00003-of-00004.safetensors",
             "minimax_music3/language_model/model-00004-of-00004.safetensors",
             "minimax_music3/rvq_depth_decoder/diffusion_pytorch_model.safetensors",
             "minimax_music3/condition_encoder/diffusion_pytorch_model.safetensors",
+            "minimax_music3/transformer/diffusion_pytorch_model-00001-of-00002.safetensors",
             "minimax_music3/transformer/diffusion_pytorch_model-00002-of-00002.safetensors",
             "minimax_music3/vocoder/diffusion_pytorch_model.safetensors"
         ]

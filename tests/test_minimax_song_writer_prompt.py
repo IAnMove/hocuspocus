@@ -8,9 +8,11 @@ from routers.llm import (
     _ace_song_request_prompt,
     _minimax_song_request_prompt,
     _normalize_minimax_song_output,
+    _normalize_music3_song_output,
     _optional_lyria_warning,
     _parse_lyria_output,
     _parse_song_output,
+    _song_writer_payload,
 )
 
 
@@ -63,6 +65,38 @@ class TestMiniMaxSongWriterPrompt(unittest.TestCase):
         )
         self.assertEqual(instrumental_style, "Ambient electronic, soft pads, slow build")
         self.assertEqual(instrumental_lyrics, "")
+
+    def test_music3_captions_keep_required_sections_and_are_not_api_truncated(self):
+        caption = (
+            "### Global Metadata\n"
+            "Heavy metal of 1981, 142 BPM, E minor, adult-fantasy animation, "
+            + ("wide chorus and stacked guitars " * 18)
+            + "\n\n### Vocal Details\nRaspy male lead, grave choir.\n\n"
+            "### Arrangement\nPalm-muted verse, exploding chorus, analog reverb."
+        )
+        self.assertGreater(len(caption), 300)
+        style, lyrics = _normalize_music3_song_output(
+            caption,
+            "[Verse]\nEn la red despierta el sysadmin.\n[Chorus]\nLa noche canta.",
+            False,
+        )
+        self.assertIn("### Global Metadata", style)
+        self.assertIn("### Vocal Details", style)
+        self.assertIn("### Arrangement", style)
+        self.assertIn("\n", style)
+        self.assertGreater(len(style), 300)
+        self.assertIn("[Chorus]", lyrics)
+
+        payload = _song_writer_payload(
+            f"[STYLE]\n{caption}\n[LYRICS]\n[Verse]\nHola\n[Chorus]\nLa noche",
+            False,
+            "minimax-music3",
+            False,
+            "minimax_music3",
+        )
+        self.assertIn("### Global Metadata", payload["style"])
+        self.assertIn("### Vocal Details", payload["style"])
+        self.assertGreater(len(payload["style"]), 300)
 
     def test_separates_minimax_lyrics_from_optional_timed_lyria_prompt(self):
         raw = """[STYLE]

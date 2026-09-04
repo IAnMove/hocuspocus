@@ -70,7 +70,7 @@ import type {
   StoryTrailerFormat, StoryTrailerIntensity, StoryTrailerNarration, StoryTrailerSpoiler, StoryWritingProvider,
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
-import { isAceStepMusicModel, isLocalMusicModel, songWriteTarget } from './musicModel'
+import { clampStoryMusicDuration, isAceStepMusicModel, isLocalMusicModel, songWriteTarget } from './musicModel'
 import { listenForAgentStoryDraft, listenForAgentStorySection, listenForAgentStoryVisualGeneration } from '../../lib/uiBus'
 
 const storyLookupName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
@@ -2618,13 +2618,22 @@ export function StoryLabPanel() {
         setNotice({ kind: 'error', text: t('notice.localSongCueRequired') })
         return
       }
+      const durationSeconds = clampStoryMusicDuration(
+        project.music.targetDurationSeconds,
+        project.music.model,
+      )
       patchMusicCue(cue.id, {
         style: project.music.style,
         lyrics: project.music.lyrics,
         lyricsLanguage: project.music.lyricsLanguage || project.language,
-        durationSeconds: project.music.targetDurationSeconds,
+        durationSeconds,
       }, sourceProjectId)
-      await generateMusicCueAudio(cue.id, true)
+      setProductionBusy('music')
+      try {
+        await generateMusicCueAudio(cue.id)
+      } finally {
+        setProductionBusy(null)
+      }
       return
     }
     if (!servicesConfig?.minimax_api_key_set) {
@@ -3249,11 +3258,15 @@ export function StoryLabPanel() {
     try {
       if (usingLocalMusic) {
         const prompt = cue.style.trim()
+        const durationSeconds = clampStoryMusicDuration(
+          cue.durationSeconds || current.music.targetDurationSeconds,
+          current.music.model,
+        )
         const rendered = await api.generateMusic({
           style: prompt,
           lyrics: cue.instrumental ? '[Instrumental]' : cue.lyrics,
           instrumental: cue.instrumental,
-          duration_seconds: current.music.targetDurationSeconds,
+          duration_seconds: durationSeconds,
           model_type: current.music.model,
           workspace: activeWorkspace,
           initiator: `Story Lab · ${current.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
@@ -3273,7 +3286,7 @@ export function StoryLabPanel() {
           lyrics: cue.lyrics,
           provider: 'local' as const,
           model: current.music.model,
-          durationSeconds: current.music.targetDurationSeconds,
+          durationSeconds,
           createdAt,
         }]
         updateProjectById(sourceProjectId, latest => {

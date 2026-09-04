@@ -16,6 +16,23 @@ ASSET_ROOT = "minimax_music3"
 DEFAULT_DURATION_SECONDS = 120
 
 
+def required_model_assets():
+    """Return the files that must exist before Music3 is marked ready.
+
+    Readiness cannot rest on the last shard of a split weight group. A
+    partial download that only has ``model-00004-of-00004`` would otherwise
+    look installed while ``from_pretrained`` still fails.
+    """
+    definition = _download_definition()
+    assets = []
+    for folder, files in zip(definition["sourceFolderList"], definition["fileList"]):
+        prefix = f"{ASSET_ROOT}/{folder}" if folder else ASSET_ROOT
+        for name in files:
+            if name.endswith(".safetensors") or name in {"LICENSE", "tokenizer.json"}:
+                assets.append(f"{prefix}/{name}")
+    return assets
+
+
 def _download_definition():
     return {
         "repoId": REPO_ID,

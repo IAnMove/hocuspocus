@@ -4,7 +4,7 @@ import * as api from '../../api/client'
 import { useUiTranslation } from '../../i18n'
 import { button, completeGenerationButton, input, panel, Field } from './storyLabChrome'
 import { musicCandidateDisplayName, storySongBrief } from './storyLabMusic'
-import { isLocalMusicModel } from './musicModel'
+import { clampStoryMusicDuration, storyMusicDurationMax, storyMusicGenerationReady } from './musicModel'
 import type { StoryMusicTabProps } from './StoryMusicTab'
 
 export function ManualSongPanel({
@@ -89,13 +89,13 @@ export function ManualSongPanel({
             <p className="text-[9px] text-text-muted">{t('music.manualVersionHint')}</p>
           </div>
           <label className="block text-[10px] text-text-muted">{t('music.targetDuration')}
-            <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
+            <input className={`${input} mt-1`} type="number" min={20} max={storyMusicDurationMax(project.music.model)} step={5}
               value={project.music.targetDurationSeconds}
-              onChange={event => patch({ music: { ...project.music, targetDurationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) } })} />
+              onChange={event => patch({ music: { ...project.music, targetDurationSeconds: clampStoryMusicDuration(event.target.value, project.music.model) } })} />
           </label>
           <p className="text-[9px] text-text-muted">{t('music.manualDurationHint')}</p>
           <button className={`${button} ${completeGenerationButton} w-full`}
-            disabled={productionBusy === 'music' || (!minimaxConfigured && !isLocalMusicModel(project.music.model))}
+            disabled={productionBusy === 'music' || !storyMusicGenerationReady(project.music.model, minimaxConfigured)}
             onClick={() => void generateMinimaxSongs()}><Music size={13} /> {t('music.generateManual')}</button>
           {project.music.candidates.map(candidate => (
             <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">

@@ -22,6 +22,7 @@ test('registers the complete Studio family behind one injected registrar', async
     'start_generation',
     'attach_studio_references',
     'configure_studio_loras',
+    'download_model',
   ])
   assert.equal(definitions.get('prepare_video').presentation.destination, 'studio')
   assert.equal(definitions.get('prepare_video').report.successState, 'prepared')

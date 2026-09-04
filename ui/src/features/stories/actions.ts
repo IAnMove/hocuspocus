@@ -28,7 +28,7 @@ import {
   buildMusicVideoProduction,
   validateMusicVideoStaging,
 } from './musicWorkflowState'
-import { resolveStoryMusicModel } from './musicModel'
+import { clampStoryMusicDuration, resolveStoryMusicModel } from './musicModel'
 import type {
   ApplyStoryProposalCommand,
   ApproveStorySectionCommand,
@@ -167,7 +167,6 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
   if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
   const lyricsLanguage = resolveStorySongLanguage(action.lyricsLanguage, languageIntent, target.language)
   const protectedLyrics = protectedSongLyrics(languageIntent)
-  const durationSeconds = boundedDuration(action.durationSeconds, target.music.targetDurationSeconds)
   const model = resolveStoryMusicModel(
     action.model,
     target.music.model,
@@ -176,6 +175,10 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
       family: item.family,
       is_downloaded: item.is_downloaded,
     })),
+  )
+  const durationSeconds = clampStoryMusicDuration(
+    boundedDuration(action.durationSeconds, target.music.targetDurationSeconds),
+    model,
   )
   const brief = action.brief.trim() || target.music.brief || target.creativeBrief.songStory || target.premise
   const semanticAnchors = storySongSemanticAnchors({
@@ -317,7 +320,7 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
       ), { medium: 'music' }),
       lyrics: cue.instrumental ? '[Instrumental]' : cue.lyrics,
       instrumental: cue.instrumental,
-      duration_seconds: cue.durationSeconds,
+      duration_seconds: clampStoryMusicDuration(cue.durationSeconds, target.music.model),
       model_type: target.music.model,
       workspace,
       initiator: `Story Lab · ${target.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,

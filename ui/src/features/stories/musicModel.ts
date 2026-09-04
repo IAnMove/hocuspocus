@@ -21,6 +21,29 @@ export function isLocalMusicModel(model: string | undefined): boolean {
   return isAceStepMusicModel(model) || String(model || '') === MINIMAX_MUSIC3_LOCAL_MODEL
 }
 
+export const STORY_MUSIC_DURATION_MIN = 20
+export const STORY_MUSIC_DURATION_MAX = 360
+export const MINIMAX_MUSIC3_DURATION_MAX = 300
+
+export function storyMusicDurationMax(model: string | undefined): number {
+  return String(model || '') === MINIMAX_MUSIC3_LOCAL_MODEL
+    ? MINIMAX_MUSIC3_DURATION_MAX
+    : STORY_MUSIC_DURATION_MAX
+}
+
+export function clampStoryMusicDuration(value: unknown, model?: string): number {
+  const numeric = Number(value)
+  const seconds = Number.isFinite(numeric) && numeric > 0 ? numeric : 90
+  return Math.max(STORY_MUSIC_DURATION_MIN, Math.min(storyMusicDurationMax(model), seconds))
+}
+
+export function storyMusicGenerationReady(
+  model: string | undefined,
+  minimaxConfigured: boolean,
+): boolean {
+  return isLocalMusicModel(model) || minimaxConfigured
+}
+
 export function normalizeStoryMusicModel(model: unknown): StoryMusicDraft['model'] {
   const value = String(model || '')
   if (value === 'music-2.6' || value === 'music-3.0' || value === MINIMAX_MUSIC3_LOCAL_MODEL) return value

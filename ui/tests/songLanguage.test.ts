@@ -8,7 +8,12 @@ import {
   resolveSongLyricsLanguage,
 } from '../src/features/stories/songLanguage'
 import { protectUserVerbatimSegments, reconcileAgentTurnWithRequest } from '../src/features/agent/agentActions'
-import { resolveStoryMusicModel } from '../src/features/stories/musicModel'
+import {
+  clampStoryMusicDuration,
+  resolveStoryMusicModel,
+  storyMusicDurationMax,
+  storyMusicGenerationReady,
+} from '../src/features/stories/musicModel'
 
 test('Wizard resolves Story music models from explicit choice, selected install, then sole install', () => {
   const inventory = [
@@ -19,6 +24,17 @@ test('Wizard resolves Story music models from explicit choice, selected install,
   assert.equal(resolveStoryMusicModel(undefined, 'ace_step_v1_5_xl_sft_lm_4b', inventory), 'minimax_music3')
   assert.equal(resolveStoryMusicModel(undefined, undefined, inventory), 'minimax_music3')
   assert.equal(resolveStoryMusicModel(undefined, 'ace_step_v1_5_xl_sft_lm_4b', [inventory[0]]), 'ace_step_v1_5_xl_sft_lm_4b')
+})
+
+test('Story music duration and generate-readiness follow the selected backend', () => {
+  assert.equal(storyMusicDurationMax('minimax_music3'), 300)
+  assert.equal(storyMusicDurationMax('ace_step_v1_5_xl_sft_lm_4b'), 360)
+  assert.equal(clampStoryMusicDuration(360, 'minimax_music3'), 300)
+  assert.equal(clampStoryMusicDuration(12, 'minimax_music3'), 20)
+  assert.equal(clampStoryMusicDuration(360, 'ace_step_v1_5_xl_sft_lm_4b'), 360)
+  assert.equal(storyMusicGenerationReady('minimax_music3', false), true)
+  assert.equal(storyMusicGenerationReady('music-3.0', false), false)
+  assert.equal(storyMusicGenerationReady('music-3.0', true), true)
 })
 
 test('lyrics language follows the user request, not the UI or conversation language', () => {
