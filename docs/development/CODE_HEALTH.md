@@ -45,7 +45,9 @@ AST-based McCabe count. UI complexity uses ESLint's built-in `complexity` rule.
 If `ui/node_modules` is absent, the normal report still works but warns that UI
 complexity is unavailable.
 
-CI compares the result with the committed baseline:
+CI compares a pull request with the exact code-health report generated from
+its base commit. The committed baseline remains the repository trend
+dashboard and is used when running the check outside a pull request:
 
 ```bash
 python scripts/code_health.py --check

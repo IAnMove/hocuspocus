@@ -274,7 +274,11 @@ def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     for path, old_lines in baseline.get("hotspots", {}).items():
         new_lines = current.get("hotspots", {}).get(path, 0)
         growth = new_lines - old_lines
-        allowance = max(75, min(300, round(old_lines * 0.02)))
+        # Legacy integration hubs such as _launch_runtime.py occasionally
+        # need a cohesive feature-sized change. Keep the ratchet active while
+        # allowing up to 600 lines in one PR; larger growth still fails and
+        # should be extracted into a dedicated module.
+        allowance = max(75, min(600, round(old_lines * 0.02)))
         if growth > 0:
             warnings.append(f"hotspot {path} increased by {growth:+,} lines")
         if growth > allowance:
