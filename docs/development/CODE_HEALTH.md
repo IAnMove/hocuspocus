@@ -53,6 +53,21 @@ dashboard and is used when running the check outside a pull request:
 python scripts/code_health.py --check
 ```
 
+For a feature branch, do not use the historical-baseline command above as the
+pre-PR gate. It intentionally reports accumulated trend debt and may fail even
+when a change is safe relative to its pull-request base. Use:
+
+```bash
+bash scripts/check_code_health_pr_base.sh
+```
+
+The helper checks the exact `origin/main` ref by default. Set `BASE_SHA` to the
+base SHA reported by GitHub (or `BASE_REF` to another fetched base ref) to
+reproduce a specific pull-request comparison. `scripts/validate_local.sh`
+invokes the same helper automatically. The committed baseline remains useful
+for the long-term dashboard and must not be refreshed merely to make a PR
+green.
+
 The check prints deltas for production LOC, test LOC, complex functions and
 every changed large-file hotspot, so a refactor's improvement is visible in
 the same run. Small increases print warnings. CI fails only for a material
