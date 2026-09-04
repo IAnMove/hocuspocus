@@ -726,6 +726,24 @@ running, completed, failed or cancelled state; the derived asset exposes the
 source asset ID, tool/capability, instruction, model/backend, timings and
 transparent-PNG technical metadata.
 
+## Tools upscale
+
+`POST /api/v1/tools/upscale` is one shared post-processing action for either a
+still image or a video. Send `{ "source": "image.png", "source_kind":
+"image", "asset_id": "...", "source_workspace": "...", "method":
+"flashvsr2", "workspace": "default" }` for an image, or keep the legacy
+`video_path` field with `source_kind: "video"` for a clip. Supported image
+formats are `.bmp`, `.gif`, `.jpeg`, `.jpg`, `.png`, `.tif`, `.tiff`, and
+`.webp`; supported video formats are `.avi`, `.m4v`, `.mkv`, `.mov`, `.mp4`,
+`.mpeg`, `.mpg`, `.webm`, and `.wmv`. The source must be an exact asset, upload, or
+file inside the selected workspace roots; path traversal and mismatched asset
+IDs/kinds are rejected. Images use the existing spatial upsampler in still
+mode and produce a new PNG beside the source. Videos retain the existing
+audio-preserving pipeline and produce a new video. Neither path overwrites its
+source. Poll the returned job with `GET /api/v1/status/{job_id}` and cancel it
+with `POST /api/v1/cancel/{job_id}`. Activity and the canonical asset manifest
+retain the source lineage, method, workspace, provenance, and execution mode.
+
 ## Gallery mix kinds
 
 `GET /api/v1/outputs` accepts `result_kind=music_video|trailer|series_episode` (plus the existing `media_type`, `multiclip_only`, `favorites_only`, `search`, `workspace`, `limit`, `offset`). Classification lives in `services.output_result_kind` and applies only to **assembled** filenames (`multiclip`, `_mv.mp4`, `_movie.mp4`, `_rejoin_multiclip.mp4`, `_series_assembly`). Requesting `series_episode` also matches `chapter`. When `result_kind` is set, pagination is bypassed and every match is returned.

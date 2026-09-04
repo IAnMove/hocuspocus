@@ -24,6 +24,8 @@ _TASK_REFERENCE_FIELDS = (
 _TRUSTED_TOOL_BY_CAPABILITY = {
     "generate_story_song": "story_lab",
     "start_director_production": "director",
+    "upscale": "tools",
+    "revoice": "tools",
     "remove_background": "tools",
 }
 _TASK_ENTITY_FIELDS = (

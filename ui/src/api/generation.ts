@@ -246,18 +246,37 @@ export async function fetchJobStatus(jobId: string): Promise<ApiJobStatus> {
   return res.json()
 }
 
-// --- Tools: standalone post-processing on an existing clip ---
+// --- Tools: standalone post-processing on existing media ---
 
 export async function submitToolUpscale(params: {
-  video_path: string
+  source?: string
+  // Kept for callers that submit the legacy video contract.
+  video_path?: string
+  source_kind?: 'image' | 'video'
+  asset_id?: string
+  source_workspace?: string
   method?: string
   seed?: number
   workspace?: string
+  provenance?: {
+    actor?: 'user' | 'wizard' | 'system' | 'unknown'
+    capability?: string
+    workspace_id?: string
+    command?: { command_id?: string; workflow_id?: string; run_id?: string }
+  }
 }): Promise<{ job_id: string }> {
+  const { source, video_path, source_kind, ...rest } = params
+  const selectedSource = source ?? video_path
+  const body = {
+    ...rest,
+    ...(source_kind === 'image'
+      ? { source: selectedSource, source_kind }
+      : { video_path: selectedSource, ...(source_kind ? { source_kind } : {}) }),
+  }
   const res = await fetch(`${BASE}/api/v1/tools/upscale`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Upscale failed' }))

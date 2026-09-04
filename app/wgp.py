@@ -5923,7 +5923,14 @@ def perform_temporal_upsampling(sample, previous_last_frame, temporal_upsampling
     return sample, previous_last_frame, output_fps 
 
 
-def perform_spatial_upsampling(sample, spatial_upsampling, seed=0, abort_callback=None, progress_callback=None):
+def perform_spatial_upsampling(
+    sample,
+    spatial_upsampling,
+    seed=0,
+    abort_callback=None,
+    progress_callback=None,
+    still_image=False,
+):
     from shared.utils.utils import resize_lanczos
     if spatial_upsampling == "vae2":
         return sample
@@ -5946,7 +5953,7 @@ def perform_spatial_upsampling(sample, spatial_upsampling, seed=0, abort_callbac
             continue_cache=None, return_continue_cache=False,
             vae_tile_size=None, process_files=process_files_def,
             vae_config=vae_config, init_pipe=init_pipe, profile=profile,
-            still_image=False, abort_callback=abort_callback,
+            still_image=still_image, abort_callback=abort_callback,
             progress_callback=progress_callback,
         )
         return sample

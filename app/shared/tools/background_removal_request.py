@@ -18,6 +18,17 @@ from pydantic import BaseModel, Field
 from services.character_kit_face_cleanup import IMAGE_EXTENSIONS, _contained
 
 
+# Keep the accepted formats at the source boundary. ``IMAGE_EXTENSIONS`` is
+# intentionally the narrower set used by background removal; Tools -> Upscale
+# can also consume the image formats Pillow/asset-catalog already understand.
+UPSCALE_IMAGE_EXTENSIONS = frozenset(
+    IMAGE_EXTENSIONS | {".bmp", ".gif", ".tif", ".tiff"}
+)
+UPSCALE_VIDEO_EXTENSIONS = frozenset({
+    ".avi", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".webm", ".wmv",
+})
+
+
 class RemoveBackgroundRequest(BaseModel):
     """Canonical request accepted by both Tools and the Wizard adapter."""
 
@@ -71,10 +82,15 @@ def child_workspace_name(path: str, default_root: str) -> str | None:
     return first if not first.startswith((".", "_")) and _valid_workspace_name(first) and first != "default" else None
 
 
-def _safe_image_in_root(filename: str, root: str) -> str | None:
+def _safe_image_in_root(
+    filename: str,
+    root: str,
+    allowed_extensions: Iterable[str] = IMAGE_EXTENSIONS,
+) -> str | None:
     if not isinstance(filename, str) or not filename or os.path.basename(filename) != filename:
         return None
-    if os.path.splitext(filename)[1].casefold() not in IMAGE_EXTENSIONS:
+    extensions = {str(value).casefold() for value in allowed_extensions}
+    if os.path.splitext(filename)[1].casefold() not in extensions:
         return None
     root_real = os.path.realpath(os.path.abspath(root))
     candidate = os.path.realpath(os.path.abspath(os.path.join(root_real, filename)))
@@ -111,6 +127,7 @@ def _asset_location(
     destination_workspace: str,
     workspace_dir: Callable[[str], str],
     uploads_dir: Callable[[], str],
+    allowed_extensions: Iterable[str] = IMAGE_EXTENSIONS,
 ) -> tuple[str, str] | None:
     for location in _asset_locations(asset, source_workspace, destination_workspace):
         scope = str(location.get("workspace_id") or "").strip()
@@ -120,7 +137,7 @@ def _asset_location(
         root = _location_root(scope, workspace_dir, uploads_dir)
         if root is None:
             continue
-        path = _safe_image_in_root(filename, root)
+        path = _safe_image_in_root(filename, root, allowed_extensions)
         if path:
             return path, scope
     return None
@@ -133,12 +150,18 @@ def _source_from_asset(
     workspace_dir: Callable[[str], str],
     uploads_dir: Callable[[], str],
     asset_finder: Callable[[str], Mapping[str, Any] | None],
+    expected_kind: str = "image",
+    allowed_extensions: Iterable[str] = IMAGE_EXTENSIONS,
+    source_label: str = "image",
 ) -> tuple[str, str, str]:
     asset = asset_finder(payload.asset_id or "")
     if not asset:
         raise HTTPException(status_code=404, detail="Source asset not found")
-    if str(asset.get("kind") or "") != "image":
-        raise HTTPException(status_code=400, detail="Source asset must be an image")
+    if expected_kind and str(asset.get("kind") or "") != expected_kind:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Source asset must be a {source_label}",
+        )
     scope = _explicit_source_workspace(payload)
     location = _asset_location(
         asset,
@@ -146,6 +169,7 @@ def _source_from_asset(
         destination_workspace=destination_workspace,
         workspace_dir=workspace_dir,
         uploads_dir=uploads_dir,
+        allowed_extensions=allowed_extensions,
     )
     if not location:
         raise HTTPException(status_code=404, detail="Source asset location is unavailable")
@@ -168,7 +192,7 @@ def _parse_source(payload: RemoveBackgroundRequest) -> tuple[str, str, str, str 
         (is_api_path and not is_virtual)
         or (not is_api_path and source_without_query != source_name and not os.path.isabs(source_without_query))
     ):
-        raise HTTPException(status_code=400, detail="Source image path is not allowed")
+        raise HTTPException(status_code=400, detail="Source path is not allowed")
     scope = _explicit_source_workspace(payload)
     return raw, source_without_query, source_name, scope, is_virtual
 
@@ -181,6 +205,8 @@ def _absolute_source(
     destination_workspace: str,
     workspace_dir: Callable[[str], str],
     uploads_dir: Callable[[], str],
+    allowed_extensions: Iterable[str] = IMAGE_EXTENSIONS,
+    source_label: str = "image",
 ) -> tuple[str, str, str]:
     absolute = os.path.realpath(os.path.abspath(source))
     uploads_root = os.path.realpath(os.path.abspath(uploads_dir()))
@@ -201,18 +227,19 @@ def _absolute_source(
                 try:
                     root = os.path.realpath(os.path.abspath(workspace_dir(child)))
                 except Exception as exc:
-                    raise HTTPException(status_code=400, detail="Source image path is not allowed") from exc
+                    raise HTTPException(status_code=400, detail="Source path is not allowed") from exc
                 scope = child
             else:
                 scope, root = destination_workspace, destination_root
         else:
-            raise HTTPException(status_code=400, detail="Source image path is not allowed")
+            raise HTTPException(status_code=400, detail="Source path is not allowed")
     if not _contained(absolute, root) or absolute == root:
-        raise HTTPException(status_code=400, detail="Source image path is not allowed")
-    if os.path.splitext(source_name)[1].casefold() not in IMAGE_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Source must be an image")
+        raise HTTPException(status_code=400, detail="Source path is not allowed")
+    extensions = {str(value).casefold() for value in allowed_extensions}
+    if os.path.splitext(source_name)[1].casefold() not in extensions:
+        raise HTTPException(status_code=400, detail=f"Source must be a {source_label}")
     if not os.path.isfile(absolute):
-        raise HTTPException(status_code=404, detail="Source image not found")
+        raise HTTPException(status_code=404, detail=f"Source {source_label} not found")
     return absolute, source_name, scope or destination_workspace
 
 
@@ -249,14 +276,16 @@ def _named_source(
     destination_workspace: str,
     workspace_dir: Callable[[str], str],
     uploads_dir: Callable[[], str],
+    allowed_extensions: Iterable[str] = IMAGE_EXTENSIONS,
+    source_label: str = "image",
 ) -> tuple[str, str, str]:
     _validate_virtual_scope(source_without_query if is_virtual else "", scope)
     scope = _canonical_source_scope(source_without_query, scope, destination_workspace)
     _validate_source_scope(scope)
     root = uploads_dir() if scope == "__uploads__" else workspace_dir(scope)
-    path = _safe_image_in_root(source_name, root)
+    path = _safe_image_in_root(source_name, root, allowed_extensions)
     if not path:
-        raise HTTPException(status_code=404, detail="Source image not found")
+        raise HTTPException(status_code=404, detail=f"Source {source_label} not found")
     return path, os.path.basename(path), scope
 
 
@@ -267,6 +296,9 @@ def resolve_source(
     workspace_dir: Callable[[str], str],
     uploads_dir: Callable[[], str],
     asset_finder: Callable[[str], Mapping[str, Any] | None],
+    expected_kind: str = "image",
+    allowed_extensions: Iterable[str] = IMAGE_EXTENSIONS,
+    source_label: str = "image",
 ) -> tuple[str, str, str]:
     """Resolve a canonical asset ID or a safe exact source path."""
     if payload.asset_id:
@@ -276,6 +308,9 @@ def resolve_source(
             workspace_dir=workspace_dir,
             uploads_dir=uploads_dir,
             asset_finder=asset_finder,
+            expected_kind=expected_kind,
+            allowed_extensions=allowed_extensions,
+            source_label=source_label,
         )
     if not payload.source:
         raise HTTPException(status_code=400, detail="asset_id or source is required")
@@ -288,6 +323,8 @@ def resolve_source(
             destination_workspace=destination_workspace,
             workspace_dir=workspace_dir,
             uploads_dir=uploads_dir,
+            allowed_extensions=allowed_extensions,
+            source_label=source_label,
         )
     return _named_source(
         source_without_query,
@@ -297,6 +334,8 @@ def resolve_source(
         destination_workspace=destination_workspace,
         workspace_dir=workspace_dir,
         uploads_dir=uploads_dir,
+        allowed_extensions=allowed_extensions,
+        source_label=source_label,
     )
 
 
@@ -359,6 +398,7 @@ def job_response(
 
 
 __all__ = [
-    "RemoveBackgroundRequest", "child_workspace_name", "destination_context", "job_response", "resolve_source",
-    "validate_requested_workspace",
+    "IMAGE_EXTENSIONS", "UPSCALE_IMAGE_EXTENSIONS", "UPSCALE_VIDEO_EXTENSIONS",
+    "RemoveBackgroundRequest", "child_workspace_name", "destination_context",
+    "job_response", "resolve_source", "validate_requested_workspace",
 ]
