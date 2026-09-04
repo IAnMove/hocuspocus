@@ -2,7 +2,7 @@ import { ChevronRight, Film, Loader2, Music, Sparkles, Upload } from 'lucide-rea
 import * as api from '../../api/client'
 import { useUiTranslation } from '../../i18n'
 import { button, completeGenerationButton, input } from './storyLabChrome'
-import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, normalizeStoryMusicModel } from './musicModel'
+import { ACE_STEP_MUSIC_MODEL, MINIMAX_MUSIC3_LOCAL_MODEL, isAceStepMusicModel, isLocalMusicModel, normalizeStoryMusicModel } from './musicModel'
 import { musicCandidateDisplayName, storySongBrief } from './storyLabMusic'
 import type { StoryProductionsTabProps } from './storyLabProductions'
 
@@ -33,6 +33,7 @@ export function StoryMusicProductionLegacyDrawer(props: StoryProductionsTabProps
               ? <option value="music-cover">{t('productions.minimaxCover')}</option>
               : <>
                 <option value={ACE_STEP_MUSIC_MODEL}>{t('music.aceStepDefault')}</option>
+                <option value={MINIMAX_MUSIC3_LOCAL_MODEL}>{t('music.music30Local')}</option>
                 <option value="music-3.0">{t('music.music30Unavailable')}</option>
                 <option value="music-2.6">{t('music.music26')}</option>
               </>}
@@ -93,7 +94,7 @@ export function StoryMusicProductionLegacyDrawer(props: StoryProductionsTabProps
           aria-label={t('productions.lyricsAria')} />
       )}
       <button className={`${button} ${completeGenerationButton} w-full`}
-        disabled={productionBusy === 'music' || !minimaxConfigured}
+        disabled={productionBusy === 'music' || (!isLocalMusicModel(project.music.model) && !minimaxConfigured)}
         onClick={() => void generateMinimaxSongs()}>
         {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
         {project.music.mode === 'cover'
@@ -104,7 +105,7 @@ export function StoryMusicProductionLegacyDrawer(props: StoryProductionsTabProps
               ? t('productions.generate26', { count: project.music.candidateCount })
               : t('productions.generate30', { count: project.music.candidateCount })}
       </button>
-      {!minimaxConfigured && <p className="text-[9px] text-amber-300">{t('productions.configureMinimaxCandidates')}</p>}
+      {!minimaxConfigured && !isLocalMusicModel(project.music.model) && <p className="text-[9px] text-amber-300">{t('productions.configureMinimaxCandidates')}</p>}
       <p className="text-[9px] text-text-muted">{t('productions.optionalAce')}</p>
       {project.music.candidates.length > 0 && (
         <div className="space-y-2">

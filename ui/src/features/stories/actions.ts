@@ -28,6 +28,7 @@ import {
   buildMusicVideoProduction,
   validateMusicVideoStaging,
 } from './musicWorkflowState'
+import { resolveStoryMusicModel } from './musicModel'
 import type {
   ApplyStoryProposalCommand,
   ApproveStorySectionCommand,
@@ -145,7 +146,7 @@ async function saveActiveStoryProjectMutation(
 
 export async function configureStorySong(action: ConfigureStorySongCommand): Promise<CommandResult> {
   const workspace = useStore.getState().activeWorkspace || 'default'
-  const [{ useStoryStore, normalizeStoryProject, storyId }, { normalizeStoryMusicModel, songWriteTarget }, { resolveStoryWritingProvider }, api] = await Promise.all([
+  const [{ useStoryStore, normalizeStoryProject, storyId }, { songWriteTarget }, { resolveStoryWritingProvider }, api] = await Promise.all([
     import('./store'), import('./musicModel'), import('./provider'), import('../../api/client'),
   ])
   await useStoryStore.getState().loadWorkspace(workspace)
@@ -167,7 +168,15 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
   const lyricsLanguage = resolveStorySongLanguage(action.lyricsLanguage, languageIntent, target.language)
   const protectedLyrics = protectedSongLyrics(languageIntent)
   const durationSeconds = boundedDuration(action.durationSeconds, target.music.targetDurationSeconds)
-  const model = normalizeStoryMusicModel(action.model)
+  const model = resolveStoryMusicModel(
+    action.model,
+    target.music.model,
+    useStore.getState().models.map(item => ({
+      model_type: item.model_type,
+      family: item.family,
+      is_downloaded: item.is_downloaded,
+    })),
+  )
   const brief = action.brief.trim() || target.music.brief || target.creativeBrief.songStory || target.premise
   const semanticAnchors = storySongSemanticAnchors({
     premise: target.premise, theme: target.theme, songStory: target.creativeBrief.songStory, brief,
@@ -266,7 +275,7 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
 export async function generateStorySong(action: GenerateStorySongCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Generar la canción requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
-  const [{ useStoryStore, normalizeStoryProject, storyId }, { isAceStepMusicModel, ACE_STEP_MUSIC_MODEL }, api] = await Promise.all([
+  const [{ useStoryStore, normalizeStoryProject, storyId }, { isLocalMusicModel }, api] = await Promise.all([
     import('./store'), import('./musicModel'), import('../../api/client'),
   ])
   await useStoryStore.getState().loadWorkspace(workspace)
@@ -291,8 +300,8 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
   if (!cue) throw new Error(`No existe la canción “${action.cueTitle || 'principal'}” en “${target.title}”.`)
   if (!cue.style.trim()) throw new Error(`“${cue.title}” necesita un estilo musical antes de generarse.`)
   if (!cue.instrumental && !cue.lyrics.trim()) throw new Error(`“${cue.title}” necesita letra antes de generarse.`)
-  if (!isAceStepMusicModel(target.music.model)) {
-    throw new Error('Este contrato automatizado genera canciones con ACE-Step 1.5 XL. Selecciónalo o genera MiniMax desde Story Lab.')
+  if (!isLocalMusicModel(target.music.model)) {
+    throw new Error('Este contrato automatizado necesita un modelo local: ACE-Step 1.5 XL o MiniMax Music 3 local.')
   }
   if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
   useStoryStore.getState().beginProjectOperation(target.id)
@@ -309,7 +318,7 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
       lyrics: cue.instrumental ? '[Instrumental]' : cue.lyrics,
       instrumental: cue.instrumental,
       duration_seconds: cue.durationSeconds,
-      model_type: ACE_STEP_MUSIC_MODEL,
+      model_type: target.music.model,
       workspace,
       initiator: `Story Lab · ${target.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
       provenance: {
@@ -320,7 +329,7 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
         candidate_id: candidateId,
       },
     })
-    if (!rendered.filename || !rendered.audio_path) throw new Error('ACE-Step terminó sin devolver un archivo de audio verificable.')
+    if (!rendered.filename || !rendered.audio_path) throw new Error('El modelo local terminó sin devolver un archivo de audio verificable.')
     const completedAt = new Date().toISOString()
     const taskId = rendered.task_id || undefined
     const rootTaskId = rendered.root_task_id || taskId
@@ -349,7 +358,7 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
         const candidate = existingCandidate || buildGeneratedSongCandidate({
           project: source, cue: latestCue, candidateId, version,
           filename: rendered.filename, source: api.getFileUrl(rendered.filename, workspace),
-          model: ACE_STEP_MUSIC_MODEL, taskId, rootTaskId, provenance,
+          model: target.music.model, taskId, rootTaskId, provenance,
         })
         return normalizeStoryProject({
           ...source,
@@ -376,7 +385,7 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
       workspace,
       project,
       'music',
-      `ACE-Step ha generado “${savedCue.title}” y la versión v${version} ha quedado seleccionada en Story Lab → Music.`,
+      `${target.music.model === 'minimax_music3' ? 'MiniMax Music 3 local' : 'ACE-Step'} ha generado “${savedCue.title}” y la versión v${version} ha quedado seleccionada en Story Lab → Music.`,
       {
         projectId: project.id,
         cueId: savedCue.id,

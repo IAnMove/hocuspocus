@@ -4,6 +4,7 @@ import * as api from '../../api/client'
 import { useUiTranslation } from '../../i18n'
 import { button, completeGenerationButton, input, panel, Field } from './storyLabChrome'
 import { musicCandidateDisplayName, storySongBrief } from './storyLabMusic'
+import { isLocalMusicModel } from './musicModel'
 import type { StoryMusicTabProps } from './StoryMusicTab'
 
 export function ManualSongPanel({
@@ -94,7 +95,7 @@ export function ManualSongPanel({
           </label>
           <p className="text-[9px] text-text-muted">{t('music.manualDurationHint')}</p>
           <button className={`${button} ${completeGenerationButton} w-full`}
-            disabled={productionBusy === 'music' || !minimaxConfigured}
+            disabled={productionBusy === 'music' || (!minimaxConfigured && !isLocalMusicModel(project.music.model))}
             onClick={() => void generateMinimaxSongs()}><Music size={13} /> {t('music.generateManual')}</button>
           {project.music.candidates.map(candidate => (
             <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">

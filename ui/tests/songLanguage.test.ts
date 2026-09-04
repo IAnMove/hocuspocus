@@ -8,6 +8,18 @@ import {
   resolveSongLyricsLanguage,
 } from '../src/features/stories/songLanguage'
 import { protectUserVerbatimSegments, reconcileAgentTurnWithRequest } from '../src/features/agent/agentActions'
+import { resolveStoryMusicModel } from '../src/features/stories/musicModel'
+
+test('Wizard resolves Story music models from explicit choice, selected install, then sole install', () => {
+  const inventory = [
+    { model_type: 'ace_step_v1_5_xl_sft_lm_4b', family: 'tts', is_downloaded: false },
+    { model_type: 'minimax_music3', family: 'tts', is_downloaded: true },
+  ]
+  assert.equal(resolveStoryMusicModel('ace_step_v1_5_xl_sft_lm_4b', 'minimax_music3', inventory), 'ace_step_v1_5_xl_sft_lm_4b')
+  assert.equal(resolveStoryMusicModel(undefined, 'ace_step_v1_5_xl_sft_lm_4b', inventory), 'minimax_music3')
+  assert.equal(resolveStoryMusicModel(undefined, undefined, inventory), 'minimax_music3')
+  assert.equal(resolveStoryMusicModel(undefined, 'ace_step_v1_5_xl_sft_lm_4b', [inventory[0]]), 'ace_step_v1_5_xl_sft_lm_4b')
+})
 
 test('lyrics language follows the user request, not the UI or conversation language', () => {
   const intent = normalizeLanguageIntent({

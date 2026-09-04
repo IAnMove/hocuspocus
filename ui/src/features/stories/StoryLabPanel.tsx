@@ -70,7 +70,7 @@ import type {
   StoryTrailerFormat, StoryTrailerIntensity, StoryTrailerNarration, StoryTrailerSpoiler, StoryWritingProvider,
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
-import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, songWriteTarget } from './musicModel'
+import { isAceStepMusicModel, isLocalMusicModel, songWriteTarget } from './musicModel'
 import { listenForAgentStoryDraft, listenForAgentStorySection, listenForAgentStoryVisualGeneration } from '../../lib/uiBus'
 
 const storyLookupName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
@@ -2611,6 +2611,22 @@ export function StoryLabPanel() {
 
   const generateMinimaxSongs = async () => {
     const sourceProjectId = project.id
+    const usingLocalMusic = isLocalMusicModel(project.music.model)
+    if (usingLocalMusic) {
+      const cue = project.music.cues.find(item => item.kind === 'story')
+      if (!cue) {
+        setNotice({ kind: 'error', text: t('notice.localSongCueRequired') })
+        return
+      }
+      patchMusicCue(cue.id, {
+        style: project.music.style,
+        lyrics: project.music.lyrics,
+        lyricsLanguage: project.music.lyricsLanguage || project.language,
+        durationSeconds: project.music.targetDurationSeconds,
+      }, sourceProjectId)
+      await generateMusicCueAudio(cue.id, true)
+      return
+    }
     if (!servicesConfig?.minimax_api_key_set) {
       setNotice({ kind: 'error', text: t('notice.minimaxKeyFirst') })
       return
@@ -2854,7 +2870,7 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t('notice.configureWritingModel') })
       return
     }
-    if (generateAudio && !servicesConfig?.minimax_api_key_set) {
+    if (generateAudio && !isLocalMusicModel(current.music.model) && !servicesConfig?.minimax_api_key_set) {
       setNotice({ kind: 'error', text: t('notice.minimaxKeyBeforeNewSong') })
       return
     }
@@ -3203,7 +3219,8 @@ export function StoryLabPanel() {
     queued = false,
     onJobSubmitted?: (jobId: string) => void,
   ): Promise<boolean> => {
-    if (!isAceStepMusicModel(useStoryStore.getState().projects[project.id]?.music.model) && !servicesConfig?.minimax_api_key_set) {
+    const selectedModel = useStoryStore.getState().projects[project.id]?.music.model
+    if (!isLocalMusicModel(selectedModel) && !servicesConfig?.minimax_api_key_set) {
       setNotice({ kind: 'error', text: t('notice.minimaxOrAceStep') })
       return false
     }
@@ -3224,19 +3241,20 @@ export function StoryLabPanel() {
       return false
     }
     const usingAceStep = isAceStepMusicModel(current.music.model)
+    const usingLocalMusic = isLocalMusicModel(current.music.model)
     const activity = queued
       ? null
       : beginStoryActivity('generating_music', `${usingAceStep ? 'ACE-Step' : 'MiniMax Music'} is generating “${cue.title}”…`, 1)
     setMusicCueBusy(`audio:${cueId}`)
     try {
-      if (usingAceStep) {
+      if (usingLocalMusic) {
         const prompt = cue.style.trim()
         const rendered = await api.generateMusic({
           style: prompt,
           lyrics: cue.instrumental ? '[Instrumental]' : cue.lyrics,
           instrumental: cue.instrumental,
           duration_seconds: current.music.targetDurationSeconds,
-          model_type: ACE_STEP_MUSIC_MODEL,
+          model_type: current.music.model,
           workspace: activeWorkspace,
           initiator: `Story Lab · ${current.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
         })
@@ -3254,7 +3272,7 @@ export function StoryLabPanel() {
           prompt,
           lyrics: cue.lyrics,
           provider: 'local' as const,
-          model: ACE_STEP_MUSIC_MODEL,
+          model: current.music.model,
           durationSeconds: current.music.targetDurationSeconds,
           createdAt,
         }]
@@ -3273,7 +3291,7 @@ export function StoryLabPanel() {
             },
           }
         })
-        setNotice({ kind: 'ok', text: t('notice.aceStepGenerated', { title: cue.title }) })
+        setNotice({ kind: 'ok', text: t(usingAceStep ? 'notice.aceStepGenerated' : 'notice.minimaxMusic3LocalGenerated', { title: cue.title }) })
         return true
       }
       const prompt = cue.style.trim().slice(0, 300)

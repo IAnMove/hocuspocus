@@ -6,6 +6,7 @@ import * as api from '../../api/client'
 import type { GenerationMode } from '../../types'
 import { FAMILIES, resolveVariant, onOsThemeChange, type FamilyId, type ThemeMode } from '../../lib/theme'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
+import { MINIMAX_MUSIC_COMMUNITY_MODELS, modelRequirementsText } from '../../lib/minimaxMusicCatalog'
 
 const profileLabels: Record<string, string> = {
   '1': 'Profile 1: High RAM + High VRAM',
@@ -204,6 +205,7 @@ function ModelVisibilitySection() {
     is_downloaded?: boolean
     architecture?: string
     shared_cache_group?: string[]
+    resource_requirements?: { vram_gb?: number; storage_gb?: number; platform?: string; backend?: string; note?: string }
   }
   const modelsByMode = new Map<GenerationMode, { familyId: string; familyLabel: string; models: ModelRow[] }[]>()
   for (const { mode } of MODE_LABELS) {
@@ -221,6 +223,7 @@ function ModelVisibilitySection() {
             is_downloaded: m.is_downloaded,
             architecture: m.architecture,
             shared_cache_group: m.shared_cache_group,
+            resource_requirements: m.resource_requirements,
           })),
         })
       }
@@ -391,6 +394,18 @@ function ModelVisibilitySection() {
                           }`}>
                             {m.name}
                           </span>
+                          {m.resource_requirements && (
+                            <span
+                              className="shrink-0 text-[9px] text-text-muted tabular-nums"
+                              title={modelRequirementsText(m.resource_requirements)}
+                            >
+                              {m.resource_requirements.vram_gb != null
+                                ? `~${m.resource_requirements.vram_gb} GB VRAM`
+                                : m.resource_requirements.storage_gb != null
+                                  ? `~${m.resource_requirements.storage_gb} GB`
+                                  : 'info'}
+                            </span>
+                          )}
                         </label>
                         {/* Delete button — only for downloaded models */}
                         {m.is_downloaded && (
@@ -427,6 +442,50 @@ function ModelVisibilitySection() {
         )
       })}
     </div>
+      )}
+    </div>
+  )
+}
+
+function CommunityMusicModelsSection() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(value => !value)}
+        className="flex items-center gap-1.5 text-[11px] text-text-secondary uppercase tracking-wider font-medium hover:text-text-primary transition-colors w-full"
+      >
+        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <span className="flex-1 text-left">Community MiniMax Music variants</span>
+        <span className="text-[10px] text-text-muted font-normal normal-case">experimental</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-2">
+          <p className="text-[10px] text-text-muted leading-relaxed">
+            Ports comunitarios del modelo oficial. Se muestran para comparar requisitos, pero no se pueden seleccionar hasta que exista un adaptador validado para HocusPocus.
+          </p>
+          {MINIMAX_MUSIC_COMMUNITY_MODELS.map(model => (
+            <div key={model.id} className="rounded-lg border border-border bg-bg-tertiary/40 px-2.5 py-2">
+              <div className="flex items-center gap-2">
+                <span className="flex-1 min-w-0 text-[11px] text-text-primary truncate">{model.name}</span>
+                <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-300">experimental</span>
+                <a
+                  href={model.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] text-accent-blue hover:text-accent-blue-hover"
+                  title="Abrir repositorio"
+                >
+                  ↗
+                </a>
+              </div>
+              <div className="mt-0.5 text-[10px] text-text-muted">{model.format}</div>
+              <div className="mt-1 text-[10px] text-text-secondary" title={modelRequirementsText(model.requirements)}>
+                {modelRequirementsText(model.requirements)}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
@@ -1133,6 +1192,10 @@ export function SystemSettingsPanel() {
 
       {/* Model Visibility — moved to top */}
       <ModelVisibilitySection />
+
+      <hr className="border-border" />
+
+      <CommunityMusicModelsSection />
 
       <hr className="border-border" />
 

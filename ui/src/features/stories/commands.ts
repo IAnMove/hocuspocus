@@ -130,7 +130,7 @@ export interface ConfigureStorySongCommand {
   writeLyrics: boolean
   lyricsLanguage: string
   instrumental: boolean
-  model: 'music-3.0' | 'music-2.6' | 'ace_step_v1_5_xl_sft_lm_4b'
+  model?: 'music-3.0' | 'music-2.6' | 'minimax_music3' | 'ace_step_v1_5_xl_sft_lm_4b'
   durationSeconds?: number
   languageIntent?: LanguageIntent
 }

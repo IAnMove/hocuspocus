@@ -31,6 +31,17 @@ export interface DirectorModelCompatibility {
   max_image_refs: number | null
 }
 
+/** Hardware/runtime guidance shown next to a model, never used as a hard gate. */
+export interface ModelResourceRequirements {
+  storage_gb?: number
+  vram_gb?: number
+  ram_gb?: number
+  platform?: string
+  backend?: string
+  tier?: 'stable' | 'experimental' | 'remote'
+  note?: string
+}
+
 export interface ModelDef {
   model_type: string
   name: string
@@ -39,6 +50,7 @@ export interface ModelDef {
   lora_compatibility_note?: string
   family: string
   architecture: string
+  resource_requirements?: ModelResourceRequirements
   is_i2v: boolean
   is_t2v: boolean
   guidance_max_phases: number

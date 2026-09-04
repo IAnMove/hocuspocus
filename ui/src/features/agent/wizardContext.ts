@@ -197,6 +197,7 @@ export interface WizardLabSnapshots {
     active_cue_title: string
     selected_song_name: string
     selected_song_id: string
+    selected_music_model: string
     state: string
   }
   series: {
@@ -600,6 +601,7 @@ function normalizeLabSnapshots(value: unknown): WizardLabSnapshots {
       active_cue_title: stringValue(story.active_cue_title || story.activeCueTitle),
       selected_song_name: stringValue(story.selected_song_name || story.selectedSongName),
       selected_song_id: idValue(story.selected_song_id || story.selectedSongId), state: stringValue(story.state, 'empty'),
+      selected_music_model: stringValue(story.selected_music_model || story.selectedMusicModel),
     },
     series: {
       series_id: idValue(series.series_id || series.seriesId), title: stringValue(series.title),
@@ -716,6 +718,7 @@ function storySnapshot(): WizardLabSnapshots['story'] {
     active_cue_title: cue?.title || '',
     selected_song_name: candidate?.displayName || candidate?.title || candidate?.name || '',
     selected_song_id: candidate?.id || '',
+    selected_music_model: project.music?.model || '',
     state: running ? 'running' : project.title && project.title !== 'Untitled story' ? 'ready' : 'empty',
   }
 }

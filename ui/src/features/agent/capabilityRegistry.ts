@@ -934,7 +934,7 @@ defineCapability<AgentConfigureStorySongAction>({
       write_lyrics: { type: 'boolean' },
       lyrics_language: { type: 'string', maxLength: 120 },
       instrumental: { type: 'boolean' },
-      model_type: { type: 'string', enum: ['ace_step_v1_5_xl_sft_lm_4b', 'music-3.0', 'music-2.6'] },
+      model_type: { type: 'string', enum: ['ace_step_v1_5_xl_sft_lm_4b', 'minimax_music3', 'music-3.0', 'music-2.6'] },
       target_duration_seconds: { type: 'number', minimum: 20, maximum: 360 },
     },
     required: ['type', 'music_style', 'instrumental'],
@@ -959,7 +959,9 @@ defineCapability<AgentConfigureStorySongAction>({
       writeLyrics,
       lyricsLanguage: text(raw.lyrics_language, 120),
       instrumental,
-      model: model === 'music-3.0' || model === 'music-2.6' ? model : 'ace_step_v1_5_xl_sft_lm_4b',
+      ...(model === 'minimax_music3' || model === 'music-3.0' || model === 'music-2.6' || model === 'ace_step_v1_5_xl_sft_lm_4b'
+        ? { model: model as AgentConfigureStorySongAction['model'] }
+        : {}),
       durationSeconds: raw.target_duration_seconds === undefined ? undefined : boundedNumber(raw.target_duration_seconds, 20, 360, 90),
     }
   },

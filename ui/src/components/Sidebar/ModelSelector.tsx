@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import { InfoTooltip } from './InfoTooltip'
+import { modelRequirementsText } from '../../lib/minimaxMusicCatalog'
 
 export function ModelSelector() {
   const { t } = useUiTranslation('studio')
@@ -101,7 +102,8 @@ export function ModelSelector() {
                 {/* Models in family */}
                 {famModels.map(model => {
                   const isSelected = model.model_type === currentModelType
-                  const help = model.selector_help
+                  const requirements = modelRequirementsText(model.resource_requirements)
+                  const help = [model.selector_help, requirements].filter(Boolean).join('\n\n')
                   return (
                     <div
                       key={model.model_type}
@@ -119,6 +121,11 @@ export function ModelSelector() {
                         className="min-w-0 flex-1 px-3 py-1.5 flex items-center gap-2 text-left"
                       >
                         <span className="flex-1 min-w-0 text-xs truncate">{model.name}</span>
+                        {model.resource_requirements?.vram_gb != null && (
+                          <span className="shrink-0 text-[9px] text-text-muted tabular-nums">
+                            ~{model.resource_requirements.vram_gb} GB VRAM
+                          </span>
+                        )}
                         <ModelBadges model={model} />
                         {isSelected && <Check size={12} className="shrink-0 text-accent-blue" />}
                       </button>
@@ -152,6 +159,7 @@ function ModelBadges({ model }: {
     supports_audio_input?: boolean
     generates_audio?: boolean
     supports_ref_images?: boolean
+    resource_requirements?: { vram_gb?: number }
   }
 }) {
   const { t } = useUiTranslation('studio')
