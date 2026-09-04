@@ -814,7 +814,7 @@ def transition_status(
     """Apply one legal lifecycle transition. Cancellation already requested wins."""
     current = validate_generation_record(record)
     resolved = (_clean(target) or "").casefold()
-    if current["cancellation"]["requested"] and resolved in {"completed", "failed"}:
+    if current["cancellation"]["requested"] and resolved != "cancelled":
         return apply_cancel(current, reason=current["cancellation"].get("reason"), at=at)
     if not is_legal_transition(current["status"], resolved):
         raise GenerationRecordError(

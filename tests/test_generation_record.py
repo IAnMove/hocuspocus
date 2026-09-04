@@ -21,6 +21,7 @@ from app.services.generation_record import (
     belongs_to_workspace,
     build_generation_record,
     load_generation_record,
+    map_manifest_status,
     persist_generation_record,
     project_from_asset_manifest,
     prompt_display_text,
@@ -179,6 +180,8 @@ def test_cancellation_before_and_during_running():
     assert settled["cancellation"]["requested"] is True
     late = transition_status(requested, "completed")
     assert late["status"] == "cancelled"
+    requeued = transition_status(requested, "queued")
+    assert requeued["status"] == "cancelled"
 
 
 def test_cross_workspace_isolation(tmp_path: Path):
@@ -299,6 +302,9 @@ def test_manifest_partial_maps_to_result_kind(tmp_path: Path):
     })
     assert failed["status"] == "failed"
     assert failed["error"]["code"] == "partial"
+    status, _result, error = map_manifest_status("bogus")
+    assert status == "failed"
+    assert error["code"] == "invalid_status"
 
 
 def test_module_does_not_import_runtime_engines():

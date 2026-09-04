@@ -213,7 +213,12 @@ export function mapAssetManifestStatus(
   if (STATUS_SET.has(raw)) {
     return { status: raw as GenerationStatus, resultKind: null, error: null }
   }
-  return { status: 'planned', resultKind: null, error: null }
+  if (!raw) return { status: 'planned', resultKind: null, error: null }
+  return {
+    status: 'failed',
+    resultKind: null,
+    error: { code: 'invalid_status', message: `Unsupported status '${raw}'` },
+  }
 }
 
 export function mapGenerationStatusToManifest(
@@ -370,10 +375,22 @@ export function toAssetManifestPatch(record: GenerationRecord): JsonMap {
       parameters: record.model.configuration,
       inputs: parents,
     },
-    timing: record.timestamps,
+    timing: {
+      created_at: record.timestamps.created_at,
+      queued_at: record.timestamps.queued_at,
+      started_at: record.timestamps.started_at,
+      completed_at: record.timestamps.completed_at,
+      total_ms: record.timestamps.duration_ms,
+    },
     lineage: { parents, transformations: [] },
     technical: { generation_id: record.generation_id, result: record.result },
   }
+}
+
+function mintAttemptId(prefix: string): string {
+  const token = globalThis.crypto?.randomUUID?.().replace(/-/g, '')
+    || `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`
+  return `${prefix}_${token.slice(0, 24)}`
 }
 
 export function retryGeneration(record: GenerationRecord, sameArtifact = false): Pick<
@@ -381,8 +398,8 @@ export function retryGeneration(record: GenerationRecord, sameArtifact = false):
   'asset_id' | 'generation_id' | 'retry_count' | 'lineage' | 'status' | 'workspace_id'
 > {
   return {
-    generation_id: `gen_retry_${record.generation_id}`,
-    asset_id: sameArtifact ? record.asset_id : `asset_retry_${record.asset_id}`,
+    generation_id: mintAttemptId('gen'),
+    asset_id: sameArtifact ? record.asset_id : mintAttemptId('asset'),
     retry_count: record.retry_count + 1,
     status: 'planned',
     workspace_id: record.workspace_id,
@@ -409,6 +426,9 @@ export function requestCancel(record: GenerationRecord): Pick<GenerationRecord, 
 }
 
 export function applyCancel(record: GenerationRecord): Pick<GenerationRecord, 'status' | 'cancellation'> {
+  if (record.status === 'completed' || record.status === 'failed' || record.status === 'cancelled') {
+    return { status: record.status, cancellation: record.cancellation }
+  }
   return {
     status: 'cancelled',
     cancellation: { requested: true, at: record.cancellation.at, reason: record.cancellation.reason },

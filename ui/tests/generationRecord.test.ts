@@ -93,6 +93,8 @@ test('maps prepared and partial without a seventh public status', () => {
     status: 'completed', resultKind: 'partial', error: null,
   })
   assert.equal(mapAssetManifestStatus('partial', false).status, 'failed')
+  assert.equal(mapAssetManifestStatus('bogus').status, 'failed')
+  assert.equal(mapAssetManifestStatus('bogus').error?.code, 'invalid_status')
   assert.equal(mapGenerationProduct('scene-animator-3d'), 'video_3d')
   assert.equal(mapGenerationProduct('spoofed', 'generate_story_song'), 'story_lab')
 })
@@ -118,7 +120,9 @@ test('identity is generation_id/asset_id, never title or prompt', () => {
 test('retry mints a new generation_id and parent lineage', () => {
   const child = retryGeneration(sample)
   const sameBytes = retryGeneration(sample, true)
+  const second = retryGeneration(sample)
   assert.notEqual(child.generation_id, sample.generation_id)
+  assert.notEqual(second.generation_id, child.generation_id)
   assert.notEqual(child.asset_id, sample.asset_id)
   assert.equal(child.retry_count, 1)
   assert.equal(child.status, 'planned')
@@ -135,6 +139,8 @@ test('cancellation before running settles; during running waits for apply', () =
   assert.equal(requested.status, 'running')
   assert.equal(requested.cancellation.requested, true)
   assert.equal(applyCancel(running).status, 'cancelled')
+  assert.equal(applyCancel({ ...sample, status: 'completed' }).status, 'completed')
+  assert.equal(applyCancel({ ...sample, status: 'failed' }).status, 'failed')
   assert.equal(isLegalGenerationTransition('running', 'completed'), true)
   assert.equal(isLegalGenerationTransition('completed', 'running'), false)
 })
@@ -145,7 +151,11 @@ test('records cannot be adopted across workspaces and paths stay relative', () =
   assert.equal(isHostPath('/tmp/outputs'), true)
   assert.equal(isHostPath('night-shift'), false)
   assert.equal(portableFilename('/tmp/outputs/choir.mp4'), 'choir.mp4')
-  const patch = toAssetManifestPatch(sample)
+  const patch = toAssetManifestPatch({
+    ...sample,
+    timestamps: { ...sample.timestamps, duration_ms: 4120 },
+  })
+  assert.equal((patch.timing as { total_ms: number }).total_ms, 4120)
   assert.equal((patch.origin as { workspace_id: string }).workspace_id, 'collection-a')
   assert.equal((patch.asset as { id: string }).id, 'asset_video_1')
   assert.equal(JSON.stringify(patch).includes('/tmp'), false)
