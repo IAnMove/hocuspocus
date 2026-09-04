@@ -839,12 +839,24 @@ export class WizardWorkflowRuntime {
     return workflow
   }
 
+  private ownsOpen(openSequence: number, workspace: string): boolean {
+    return this.openSequence === openSequence && this.workspace === workspace
+  }
+
   private async persistAndEmit(workflow: WizardWorkflowRecord): Promise<void> {
     await this.persist()
-    this.emit(this.find(workflow.workflowId))
+    const current = this.collection.workflows.find(item => item.workflowId === workflow.workflowId)
+    if (!current || current.workspace !== this.workspace) return
+    this.emit(current)
   }
 
   private async persist(): Promise<void> {
+    // Pin the workspace that owns this snapshot. `open()` rebinds
+    // `this.workspace` immediately, so a conflict retry must not follow the
+    // live pointer or it will merge the source checkpoint into the destination
+    // store and then poison the in-memory collection.
+    const targetWorkspace = this.workspace
+    const openSequence = this.openSequence
     let candidate = clone(this.collection)
     let lastError: unknown
     // Workflow updates can race with conversation/library autosaves in another
@@ -852,14 +864,18 @@ export class WizardWorkflowRuntime {
     // failure; every retry still uses the server's current CAS revision.
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        const saved = await this.persistence.save(this.workspace, clone(candidate))
-        this.collection.revision = saved.revision
+        const saved = await this.persistence.save(targetWorkspace, clone(candidate))
+        if (this.ownsOpen(openSequence, targetWorkspace)) {
+          this.collection.revision = saved.revision
+        }
         return
       } catch (error) {
         lastError = error
-        const remote = await this.persistence.load(this.workspace)
+        const remote = await this.persistence.load(targetWorkspace)
         candidate = mergeCollections(candidate, remote)
-        this.collection = candidate
+        if (this.ownsOpen(openSequence, targetWorkspace)) {
+          this.collection = candidate
+        }
       }
     }
     throw lastError instanceof Error ? lastError : new Error('Could not persist Wizard workflow.')

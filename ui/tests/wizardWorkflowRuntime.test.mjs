@@ -16,6 +16,54 @@ function memoryPersistence() {
   }
 }
 
+function workspaceMemoryPersistence() {
+  const stores = new Map()
+  const store = workspace => {
+    if (!stores.has(workspace)) stores.set(workspace, { version: 1, revision: 0, workflows: [] })
+    return stores.get(workspace)
+  }
+  let holdSave = null
+  let conflictNextSave = false
+  const savedWorkspaces = []
+  return {
+    savedWorkspaces,
+    async load(workspace) { return clone(store(workspace)) },
+    async save(workspace, next) {
+      if (holdSave) {
+        holdSave.notifyBlocked()
+        await holdSave.promise
+      }
+      if (conflictNextSave) {
+        conflictNextSave = false
+        throw new Error('revision conflict')
+      }
+      const collection = store(workspace)
+      if (next.revision !== collection.revision) throw new Error('revision conflict')
+      const saved = { ...clone(next), revision: collection.revision + 1 }
+      stores.set(workspace, saved)
+      savedWorkspaces.push(workspace)
+      return clone(saved)
+    },
+    snapshot(workspace) { return clone(store(workspace)) },
+    conflictAndHoldNextSave() {
+      conflictNextSave = true
+      let release
+      let notifyBlocked
+      const promise = new Promise(resolve => { release = resolve })
+      const blocked = new Promise(resolve => { notifyBlocked = resolve })
+      holdSave = { promise, release, notifyBlocked, blocked }
+    },
+    waitUntilSaveBlocked() {
+      if (!holdSave) throw new Error('conflictAndHoldNextSave() was not armed')
+      return holdSave.blocked
+    },
+    releaseSaves() {
+      holdSave?.release()
+      holdSave = null
+    },
+  }
+}
+
 function taskEvent(eventId, taskId, status, resultRefs = []) {
   return {
     event_id: eventId,
@@ -282,4 +330,50 @@ test('awaiting input rejects prototype-polluting field paths before persistence'
   assert.equal(failed.state, 'failed')
   assert.match(failed.recoverableError, /requested input/)
   assert.equal(Object.prototype.polluted, undefined)
+})
+
+test('an in-flight persist stays on the source workspace after open() retargets', async () => {
+  const { WizardWorkflowRuntime } = await import('../src/features/agent/wizardWorkflowRuntime.ts')
+  const persistence = workspaceMemoryPersistence()
+  const runtime = new WizardWorkflowRuntime(persistence)
+  runtime.register({
+    type: 'source_job',
+    steps: [{
+      stepId: 'wait', kind: 'wait for task',
+      async execute() { return { state: 'waiting', taskId: 'task-source' } },
+    }],
+  })
+
+  await runtime.open('workspace-a')
+  await runtime.start({
+    workflowId: 'workflow-a', type: 'source_job', workspace: 'workspace-a',
+    userRequest: 'Keep this checkpoint on A',
+  })
+  await runtime.open('workspace-b')
+  await runtime.start({
+    workflowId: 'workflow-b', type: 'source_job', workspace: 'workspace-b',
+    userRequest: 'Destination already has its own checkpoint',
+  })
+  await runtime.open('workspace-a')
+  assert.equal(runtime.get('workflow-a').state, 'waiting')
+  assert.equal(runtime.get('workflow-b'), undefined)
+
+  persistence.conflictAndHoldNextSave()
+  const persistDuringSwitch = runtime.handleTaskEvent(taskEvent(70, 'task-source', 'running'))
+  await persistence.waitUntilSaveBlocked()
+  await runtime.open('workspace-b')
+  persistence.releaseSaves()
+  await persistDuringSwitch
+
+  const destination = persistence.snapshot('workspace-b')
+  assert.deepEqual(destination.workflows.map(item => item.workflowId), ['workflow-b'])
+  assert.equal(destination.workflows[0].workspace, 'workspace-b')
+  assert.equal(runtime.get('workflow-a'), undefined)
+  assert.equal(runtime.get('workflow-b').workspace, 'workspace-b')
+
+  const source = persistence.snapshot('workspace-a')
+  assert.deepEqual(source.workflows.map(item => item.workflowId), ['workflow-a'])
+  assert.equal(source.workflows[0].state, 'running')
+  assert.equal(source.workflows[0].workspace, 'workspace-a')
+  assert.deepEqual(persistence.savedWorkspaces.slice(-1), ['workspace-a'])
 })
