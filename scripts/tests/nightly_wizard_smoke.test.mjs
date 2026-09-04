@@ -3,14 +3,14 @@ import test from 'node:test'
 
 import { evaluateSmokeSongFidelity, normalizeSmokeBaseUrl, runMediaSmoke, validateSmokeOptIn } from '../nightly_wizard_smoke.mjs'
 
-test('media smoke is fail-closed behind four explicit controls', () => {
+test('media smoke is fail-closed behind GPU, URL, and confirmation controls', () => {
   assert.equal(normalizeSmokeBaseUrl(' http://127.0.0.1:8000/ '), 'http://127.0.0.1:8000')
   assert.throws(() => normalizeSmokeBaseUrl('file:///tmp/hocuspocus'), /http:\/\/ or https:\/\//)
   assert.throws(() => validateSmokeOptIn({
-    runGpu: true, runExternal: true, baseUrl: 'http://127.0.0.1:8000',
+    runGpu: true, runExternal: false, baseUrl: 'http://127.0.0.1:8000',
   }), /HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA/)
   assert.equal(validateSmokeOptIn({
-    runGpu: true, runExternal: true, baseUrl: 'http://127.0.0.1:8000', confirm: 'GENERATE_REAL_MEDIA',
+    runGpu: true, runExternal: false, baseUrl: 'http://127.0.0.1:8000', confirm: 'GENERATE_REAL_MEDIA',
   }), 'http://127.0.0.1:8000')
 })
 
@@ -53,12 +53,14 @@ test('media smoke preserves project cue output task and pipeline identities', as
     } else if (options.method === 'PUT' && route === '/api/v1/stories/library') {
       revision += 1
       payload = { ...request.library, revision }
-    } else if (options.method === 'POST' && route === '/api/v1/stories/music-candidates/jobs') {
+    } else if (options.method === 'POST' && route === '/api/v1/generate') {
       assert.equal(request.instrumental, false)
-      assert.equal(request.model, 'ace_step_v1_5_xl_sft_lm_4b')
-      payload = { jobId: 'song-job', taskId: 'task-song', rootTaskId: 'task-song' }
-    } else if (options.method === 'GET' && route === '/api/v1/stories/music-candidates/jobs/song-job') {
-      payload = { status: 'completed', taskId: 'task-song', candidates: [{ filename: 'himno.wav', audio_path: '/outputs/himno.wav', duration_seconds: 15 }] }
+      assert.equal(request.model_type, 'ace_step_v1_5_xl_sft_lm_4b')
+      assert.equal(request.generation_mode, 'audio')
+      assert.equal(request.video_length, 0)
+      payload = { job_id: 'song-job', task_id: 'task-song', root_task_id: 'task-song', status: 'queued' }
+    } else if (options.method === 'GET' && route === '/api/v1/status/song-job') {
+      payload = { status: 'completed', task_id: 'task-song', root_task_id: 'task-song', output_files: ['himno.wav'] }
     } else if (options.method === 'POST' && route === '/api/v1/audio/analyze') {
       payload = { bpm: 112, lyrics: request.lyrics_hint, beats: [0, .5, 1] }
     } else if (options.method === 'POST' && route === '/api/v1/audio/plan-structure') {
@@ -76,7 +78,7 @@ test('media smoke preserves project cue output task and pipeline identities', as
 
   const result = await runMediaSmoke({
     baseUrl: 'http://127.0.0.1:8000', workspace: 'nightly-smoke',
-    runGpu: true, runExternal: true, confirm: 'GENERATE_REAL_MEDIA',
+    runGpu: true, runExternal: false, confirm: 'GENERATE_REAL_MEDIA',
     fetchImpl, timeoutMs: 2_000, pollIntervalMs: 0,
   })
   assert.equal(result.songStatus, 'completed')

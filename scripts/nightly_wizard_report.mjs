@@ -56,7 +56,6 @@ export function smokeOptInMissing({
 } = {}) {
   const missing = []
   if (runGpu !== true) missing.push('RUN_GPU_TESTS=1')
-  if (runExternal !== true) missing.push('RUN_EXTERNAL_PROVIDER_TESTS=1')
   if (!String(baseUrl || '').trim()) missing.push('HOCUSPOCUS_SMOKE_BASE_URL')
   if (confirm !== 'GENERATE_REAL_MEDIA') missing.push('HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA')
   return missing
