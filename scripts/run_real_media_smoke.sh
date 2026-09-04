@@ -13,4 +13,5 @@ fi
 # Level 8 is deliberately local for music: ACE-Step, never MiniMax Music.
 export RUN_EXTERNAL_PROVIDER_TESTS=0
 export NIGHTLY_LEVELS=8
+export NIGHTLY_MEDIA_SCOPE="${NIGHTLY_MEDIA_SCOPE:-all}"
 exec "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/nightly_wizard_validation.sh" "$@"

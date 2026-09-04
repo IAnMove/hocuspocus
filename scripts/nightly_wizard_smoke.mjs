@@ -135,6 +135,7 @@ function smokeProject(projectId, cueId, now) {
 
 export async function runMediaSmoke({
   baseUrl, workspace = 'nightly-smoke', runGpu = false, runExternal = false, confirm,
+  mediaScope = 'all',
   fetchImpl = globalThis.fetch, timeoutMs = 6 * 60 * 60 * 1000, pollIntervalMs = 5_000,
 } = {}) {
   const root = validateSmokeOptIn({ runGpu, runExternal, baseUrl, confirm })
@@ -192,6 +193,17 @@ export async function runMediaSmoke({
       library: { ...saved, activeId: projectId, projects: { ...saved.projects, [projectId]: project } },
     }, controller.signal)
 
+    if (mediaScope === 'song') {
+      return {
+        workspace,
+        identifiers: {
+          projectIds: [projectId], cueIds: [cueId], outputIds: [filename],
+          taskIds: [song.task_id || startedSong.task_id].filter(Boolean), pipelineIds: [],
+        },
+        songStatus: song.status, pipelineStatus: 'not_requested', semantic,
+      }
+    }
+
     const analysis = await requestJson(fetchImpl, root, 'POST', '/api/v1/audio/analyze', {
       audio_path: audioPath, transcribe: true, extract_vocals: true, lyrics_hint: cue.lyrics, workspace,
     }, controller.signal)
@@ -241,6 +253,7 @@ if (invokedPath === new URL(import.meta.url).pathname) {
       workspace: process.env.HOCUSPOCUS_SMOKE_WORKSPACE || 'nightly-smoke',
       runGpu: process.env.RUN_GPU_TESTS === '1', runExternal: process.env.RUN_EXTERNAL_PROVIDER_TESTS === '1',
       confirm: process.env.HOCUSPOCUS_SMOKE_CONFIRM,
+      mediaScope: process.env.NIGHTLY_MEDIA_SCOPE || 'all',
       timeoutMs: Number(process.env.NIGHTLY_SMOKE_TIMEOUT_MS || 6 * 60 * 60 * 1000),
     })
     process.stdout.write(`SMOKE_RESULT ${JSON.stringify(result)}\n`)
