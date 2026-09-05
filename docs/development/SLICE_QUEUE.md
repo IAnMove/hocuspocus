@@ -1,7 +1,9 @@
 # Slice queue
 
-Humans own merges. Agents do not merge until checks are green, and never
-open a second PR on the same hotspot.
+Humans own merges as an operational act; that click is not a technical code
+review. Agents own technical review and QA. See
+`docs/development/AGENT_QA_POLICY.md`. Agents do not merge until checks are
+green, and never open a second PR on the same hotspot.
 
 PRs should be **medium and cohesive** (about 300–1,000 net lines) with one
 verifiable contract. Do not open a PR per property, action or tiny component.
