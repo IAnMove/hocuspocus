@@ -48,6 +48,35 @@ def test_creates_then_updates_existing_comment(tmp_path: Path, monkeypatch):
     assert any("-X" in call and "POST" in call for call in calls)
 
 
+def test_cli_strips_helper_logs_before_marker(tmp_path: Path, monkeypatch):
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"pull_request": {"number": 152}}), encoding="utf-8")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "IAnMove/hocuspocus")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    report = tmp_path / "code-health.md"
+    report.write_text(
+        "[code-health] fetching missing base abc\n"
+        f"{DEFAULT_MARKER}\n## Code health\n**Quality score: 50.1/100**\n",
+        encoding="utf-8",
+    )
+    posted: list[str] = []
+
+    def run(argv, **kwargs):
+        class Result:
+            stdout = "[]"
+            returncode = 0
+        if kwargs.get("input"):
+            posted.append(kwargs["input"])
+        return Result()
+
+    monkeypatch.setattr("scripts.publish_pr_markdown.subprocess.run", run)
+    assert main(["--file", str(report)]) == 0
+    assert posted
+    body = json.loads(posted[0])["body"]
+    assert body.startswith(DEFAULT_MARKER)
+    assert "fetching missing base" not in body
+
+
 def test_skips_when_not_a_pull_request(tmp_path: Path, monkeypatch):
     event = tmp_path / "event.json"
     event.write_text(json.dumps({"ref": "refs/heads/development"}), encoding="utf-8")

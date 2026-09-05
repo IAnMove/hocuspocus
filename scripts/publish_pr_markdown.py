@@ -70,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.marker not in markdown:
         print(f"refuse: {path} does not contain {args.marker}", file=sys.stderr)
         return 1
+    markdown = markdown[markdown.index(args.marker):]
     try:
         result = publish_pr_comment(markdown, marker=args.marker)
     except (OSError, RuntimeError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
