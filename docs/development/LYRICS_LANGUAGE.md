@@ -33,7 +33,8 @@ scripts must not turn a vocal lyric into a valid empty song.
 `assert_lyrics_language(..., repair=False)` is the default.
 
 Required verbatim spans (`protected_segments`) must appear **exactly**,
-including newlines. Missing spans are invalid.
+including newlines. Missing spans are **invalid** even when the requested
+language is unevaluable; the structural check runs before language scoring.
 
 Shared corpus: `tests/fixtures/lyrics_language_corpus.json`, executed by
 Python and TypeScript.

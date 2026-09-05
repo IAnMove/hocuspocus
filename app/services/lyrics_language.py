@@ -239,6 +239,14 @@ def validate_lyrics_language(
             reasons=["A vocal song must contain lyrics."],
         )
 
+    missing = [span for span in protected if span not in text]
+    if missing:
+        return _report(
+            verdict="invalid",
+            lyrics=text,
+            reasons=["A required verbatim span is missing from the lyric."],
+        )
+
     code = canonical_lyrics_language(lyrics_language)
     if not code:
         return _report(
@@ -251,14 +259,6 @@ def validate_lyrics_language(
             verdict="unevaluable",
             lyrics=text,
             reasons=[f"Language {code!r} is not scored by this guard."],
-        )
-
-    missing = [span for span in protected if span not in text]
-    if missing:
-        return _report(
-            verdict="invalid",
-            lyrics=text,
-            reasons=["A required verbatim span is missing from the lyric."],
         )
 
     masked, _present = _mask_protected(text, protected)

@@ -46,6 +46,15 @@ test('English requested as French is unevaluable', () => {
   assert.equal(report.verdict, 'unevaluable')
 })
 
+test('missing protected span is invalid even when the language is unevaluable', () => {
+  const report = validateLyricsLanguage('[Chorus]\nLa noche nos verá.\n', 'français', {
+    protectedSegments: [{ kind: 'lyrics', text: 'Hello, world', language: 'en' }],
+  })
+  assert.equal(report.verdict, 'invalid')
+  assert.equal(report.ok, false)
+  assert.equal(report.reasons.some(reason => reason.includes('verbatim')), true)
+})
+
 test('repair keeps the original lyric', () => {
   const original = '[Verse]\nEn la red despierta el sysadmin.\n[Chorus]\n夜晚在服务器里唱歌'
   const report = repairLyricsLanguage(original, 'Español')

@@ -28,6 +28,13 @@
       "verdict": "invalid"
     },
     {
+      "id": "missing-protected-unevaluable-language",
+      "lyrics": "[Chorus]\nLa noche nos verá.\n",
+      "language": "français",
+      "protected": [{"kind": "lyrics", "text": "Hello, world", "language": "en"}],
+      "verdict": "invalid"
+    },
+    {
       "id": "multiline-protected-present",
       "lyrics": "[Verse]\nKeep this\nexact block\nLa noche canta.\n",
       "language": "Español",

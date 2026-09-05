@@ -87,6 +87,17 @@ def test_missing_protected_span_is_invalid():
     assert any("verbatim" in reason for reason in report["reasons"])
 
 
+def test_missing_protected_span_is_invalid_when_language_is_unevaluable():
+    report = validate_lyrics_language(
+        "[Chorus]\nLa noche nos verá.\n",
+        "français",
+        protected_segments=[{"kind": "lyrics", "text": "Hello, world", "language": "en"}],
+    )
+    assert report["verdict"] == "invalid"
+    assert report["ok"] is False
+    assert any("verbatim" in reason for reason in report["reasons"])
+
+
 def test_multiline_protected_span_is_exact():
     block = "Keep this\nexact block"
     report = validate_lyrics_language(

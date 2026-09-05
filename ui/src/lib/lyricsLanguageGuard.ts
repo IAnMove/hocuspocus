@@ -165,14 +165,14 @@ export function validateLyricsLanguage(
   if (!text.trim()) {
     return report('invalid', text, ['A vocal song must contain lyrics.'])
   }
+  const protectedList = protectedTexts(options.protectedSegments)
+  if (protectedList.some(span => !text.includes(span))) {
+    return report('invalid', text, ['A required verbatim span is missing from the lyric.'])
+  }
   const code = canonicalLyricsLanguage(lyricsLanguage)
   if (!code) return report('unevaluable', text, ['The requested lyrics language is not recognized.'])
   if (!SCORED.has(code)) {
     return report('unevaluable', text, [`Language '${code}' is not scored by this guard.`])
-  }
-  const protectedList = protectedTexts(options.protectedSegments)
-  if (protectedList.some(span => !text.includes(span))) {
-    return report('invalid', text, ['A required verbatim span is missing from the lyric.'])
   }
   const masked = maskProtected(text, protectedList)
   const sample = stripTags(masked).replace(/\{\{PROTECTED_\d+\}\}/g, ' ')
