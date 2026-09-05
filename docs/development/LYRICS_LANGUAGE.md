@@ -1,7 +1,8 @@
 # Lyrics language contract
 
-Status: library only (2026-09-04). Not yet wired into write-song or generate
-endpoints; those files are reserved by MiniMax-Music3 (#135).
+Status: library only (2026-09-05). MiniMax-Music3 (#135) is on `main`; wiring
+the guard into write-song/generate remains a follow-up so this PR stays
+outside `_launch_runtime.py`.
 
 User conversation language, authored lyric language and the provider-facing
 technical prompt are three different decisions:
@@ -26,11 +27,21 @@ Python: `app/services/lyrics_language.py`
 
 TypeScript: `ui/src/lib/lyricsLanguageGuard.ts` (same rules for Wizard tests).
 
+`canonical_lyrics_language` / `canonicalLyricsLanguage` resolve Story Lab
+spoken-language names without prefix traps:
+
+1. exact folded aliases (`es`, `espanol`, `spanish`, `en`, `english`, …);
+2. BCP-47 prefixes via the token before `-` (`es-MX`, `en-US`);
+3. tokens longer than two letters so `Español de España` is Spanish and
+   `en español` is Spanish, while `en` and `English` stay English.
+
+Do not use `startswith("es")` / `startswith("en")`: `English` starts with
+`es`, and `en español` starts with `en`.
+
 A valid WAV is not proof of language fidelity. CI runs these tests without
 GPU. Real smoke should call the same guard after a local song is written.
 
 ## Follow-up
 
-Call the guard from Story Lab generate and `/api/v1/llm/write-song` after
-#135 no longer owns those hotspots. Do not silently replace user-authored
-Spanish lines.
+Call the guard from Story Lab generate and `/api/v1/llm/write-song`. Do not
+silently replace user-authored Spanish lines.

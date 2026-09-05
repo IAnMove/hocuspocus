@@ -41,14 +41,26 @@ export interface LyricsLanguageReport {
   strippedSpans: { script: string; text: string }[]
 }
 
+const LANGUAGE_ALIASES: Record<string, string> = {
+  es: 'es', espanol: 'es', castellano: 'es',
+  spanish: 'es', 'es-es': 'es', 'es-mx': 'es',
+  en: 'en', english: 'en', ingles: 'en',
+}
+
 function folded(value: string): string {
   return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim()
 }
 
 export function canonicalLyricsLanguage(value: string): string {
   const key = folded(value)
-  if (key.startsWith('es') || key.includes('spanish') || key.includes('espanol') || key.includes('castellano')) return 'es'
-  if (key.startsWith('en') || key.includes('english') || key.includes('ingles')) return 'en'
+  const exact = LANGUAGE_ALIASES[key] || LANGUAGE_ALIASES[key.split('-')[0]] || ''
+  if (exact) return exact
+  // Story Lab names such as "Español de España" are not exact aliases.
+  // Skip 2-letter tokens so "en español" does not become English.
+  for (const token of key.match(/[a-z]+/g) || []) {
+    const mapped = LANGUAGE_ALIASES[token]
+    if (mapped && token.length > 2) return mapped
+  }
   return ''
 }
 

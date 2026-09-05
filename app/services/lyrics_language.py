@@ -64,11 +64,16 @@ def _folded(value: str) -> str:
 
 def canonical_lyrics_language(value: str) -> str:
     key = _folded(value)
-    if key.startswith("es") or "spanish" in key or "espanol" in key or "castellano" in key:
-        return "es"
-    if key.startswith("en") or "english" in key or "ingles" in key:
-        return "en"
-    return LANGUAGE_ALIASES.get(key) or LANGUAGE_ALIASES.get(key.split("-")[0], "")
+    exact = LANGUAGE_ALIASES.get(key) or LANGUAGE_ALIASES.get(key.split("-")[0], "")
+    if exact:
+        return exact
+    # Story Lab names such as "Español de España" are not exact aliases.
+    # Skip 2-letter tokens so "en español" does not become English.
+    for token in re.findall(r"[a-z]+", key):
+        mapped = LANGUAGE_ALIASES.get(token)
+        if mapped and len(token) > 2:
+            return mapped
+    return ""
 
 
 def _protected_texts(segments: Sequence[Mapping[str, Any]] | None) -> list[str]:
