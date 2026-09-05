@@ -61,6 +61,12 @@
 
 <!-- Keep the complete command list and results. Do not omit focused tests. -->
 
+- Date (UTC): <!-- YYYY-MM-DD -->
+- Base SHA: <!-- exact base this PR is compared against -->
+- Head SHA: <!-- current PR HEAD; update in this body when HEAD moves -->
+- Validation scope: focused / fast / CI-equivalent (`--full`) / real smoke
+  <!-- Pick one. A simulation, a noisy log, or CI green is not real generation. -->
+
 - [ ] `python scripts/verify_clean_repo.py`
 - [ ] `python -m compileall -q app/services app/launch.py scripts`
 - [ ] Focused Python tests: <!-- command + result -->
@@ -70,7 +76,6 @@
 - [ ] `cd ui && npm run build`
 - [ ] `git diff --check`
 - [ ] E2E/smoke checks: <!-- command + result, or N/A with reason -->
-- [ ] Validation scope: fast / `--full` / CI / real media <!-- pick one; do not claim real media from a simulation -->
 
 ## Code quality
 
@@ -85,10 +90,22 @@
 
 ## CI and review
 
+Mutable CI/Cursor facts belong in this PR body. Updating them does **not**
+require a new documentary commit. Stable behavior evidence belongs in docs.
+
 - CI of this HEAD: pending
-- Cursor/Bugbot of this HEAD: pending
 - Independent agent review of this HEAD: pending
 - Human merge click (operational, not code review): pending
+
+Cursor/Bugbot — pick exactly one. A review of an older SHA does not cover a
+new HEAD. Silence is not approval. If required QA is missing, use another
+authorized agent or leave pending; do not assume a human code review will
+substitute.
+
+- [ ] Reviewed at current HEAD
+- [ ] Earlier review; HEAD has changed since (stale)
+- [ ] Pending
+- [ ] Unavailable
 
 <!-- Record the final state here. Do not call the PR ready while required CI or
      review is still running. Preserve all findings and their resolutions. -->
