@@ -19,8 +19,11 @@ Python helpers live in `app/services/generation_record.py`. UI types and pure
 mappers live in `ui/src/lib/generationRecord.ts`. The JSON schema is
 `generation-record-v1.schema.json`.
 
-This module does not import FastAPI, WanGP or launch. Wiring into
-`_launch_runtime.py`, Activity and the Library catalog is a later sequential PR.
+This module does not import FastAPI, WanGP or launch. It is not a second
+scheduler: TaskRegistry owns tasks/events, the Story library owns
+cues/candidates, and asset-manifest v1 owns published bytes. Wiring into
+`_launch_runtime.py`, Activity and the Library catalog is a later sequential PR
+(see `docs/development/EXECUTION_BASELINE.md`).
 
 ## Identity
 

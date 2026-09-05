@@ -53,7 +53,9 @@ will expose registries/read models before any physical file move:
 
 The migration must be additive and reversible. No old output is deleted or
 moved merely because its metadata cannot be upgraded. Remaining work is listed
-in `SLICE_QUEUE.md`.
+in `SLICE_QUEUE.md`. Generation-record v1 is a **projection** over this
+manifest, provenance and job lifecycle; it is not a second scheduler. See
+`docs/development/GENERATION_RECORD.md` and `docs/development/EXECUTION_BASELINE.md`.
 
 ## Workspace vs output folder
 
