@@ -460,6 +460,67 @@ test('in-flight job for another workspace does not write the current project', a
   assert.equal(recovered.projects[project.id].music.cues[0].candidates[0].status, 'pending')
 })
 
+test('a duplicated pending row does not inherit the reserved job audio', async () => {
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongRecovery.ts')
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const base = createStoryProject('music_video')
+  const project = normalizeStoryProject({
+    ...base,
+    id: 'story-job',
+    music: {
+      ...base.music,
+      cues: [{
+        id: 'cue-job',
+        kind: 'story',
+        targetId: 'story-job',
+        title: 'Job',
+        purpose: '',
+        referenceSong: '',
+        brief: '',
+        style: 'folk',
+        lyrics: '[Verse]\nLa noche',
+        lyriaPrompt: '',
+        instrumental: false,
+        durationSeconds: 30,
+        candidates: [
+          pendingProject({ id: 'song-reserved' }),
+          pendingProject({ id: 'song-copy', provenance: { jobId: 'minimax-music-abc', outputFolder: 'lab' } }),
+        ],
+      }],
+    },
+  })
+  const recovered = recoverInFlightStorySongs({ [project.id]: project }, [{
+    jobId: 'minimax-music-abc',
+    taskId: 'task-1',
+    rootTaskId: 'task-1',
+    workspace: 'lab',
+    status: 'completed',
+    phase: 'completed',
+    message: 'done',
+    current: 1,
+    total: 1,
+    progress: 100,
+    provider: 'minimax',
+    model: 'music-3.0',
+    candidateId: 'song-reserved',
+    candidates: [{
+      filename: 'job.mp3',
+      audio_path: '/tmp/job.mp3',
+      source: '/api/v1/file/job.mp3',
+      duration_seconds: 61.5,
+      provider: 'minimax',
+      model: 'music-3.0',
+    }],
+  }], { workspace: 'lab' })
+  const byId = Object.fromEntries(
+    recovered.projects[project.id].music.cues[0].candidates.map(row => [row.id, row]),
+  )
+  assert.equal(byId['song-reserved'].status, 'ready')
+  assert.equal(byId['song-reserved'].name, 'job.mp3')
+  assert.equal(byId['song-copy'].status, 'pending')
+  assert.equal(byId['song-copy'].source, '')
+})
+
 test('failed in-flight job without audio marks the reserved candidate failed', async () => {
   const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongRecovery.ts')
   const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')

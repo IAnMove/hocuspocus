@@ -41,6 +41,8 @@ export interface MiniMaxMusicJob {
   candidates: MiniMaxMusicCandidate[]
   error?: string | null
   statusCode?: number
+  candidateId?: string
+  generationId?: string
 }
 
 export interface StoryMusicCandidateRequest {

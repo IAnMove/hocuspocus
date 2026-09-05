@@ -219,12 +219,18 @@ export function inFlightJobIds(projects: Record<string, StoryProject>): string[]
   return [...ids]
 }
 
+function reservedCandidateId(job: MiniMaxMusicJob): string {
+  return String(job.candidateId || '').trim()
+}
+
 function applyInFlightJob(
   candidate: StoryMusicCandidate,
   job: MiniMaxMusicJob,
   workspace: string,
 ): StoryMusicCandidate {
   if (job.workspace && job.workspace !== workspace) return candidate
+  const reserved = reservedCandidateId(job)
+  if (reserved && reserved !== candidate.id) return candidate
   const rendered = job.candidates?.[0]
   if (rendered?.filename && rendered.source) {
     return patchSongCandidateReady(candidate, {
@@ -263,6 +269,7 @@ export function recoverInFlightStorySongs(
 ): { projects: Record<string, StoryProject>; changed: boolean } {
   if (!jobs.length) return { projects, changed: false }
   const byId = new Map(jobs.map(job => [job.jobId, job]))
+  const claimedAudio = new Set<string>()
   let changed = false
   const next: Record<string, StoryProject> = {}
   Object.entries(projects).forEach(([projectId, project]) => {
@@ -272,8 +279,13 @@ export function recoverInFlightStorySongs(
       const jobId = candidate.provenance?.jobId?.trim()
       const job = jobId ? byId.get(jobId) : undefined
       if (!job) return candidate
+      const rendered = job.candidates?.[0]
+      if (rendered?.filename && rendered.source) {
+        if (claimedAudio.has(job.jobId)) return candidate
+      }
       const patched = applyInFlightJob(candidate, job, context.workspace)
       if (patched === candidate) return candidate
+      if (patched.status === 'ready') claimedAudio.add(job.jobId)
       projectChanged = true
       return patched
     }
