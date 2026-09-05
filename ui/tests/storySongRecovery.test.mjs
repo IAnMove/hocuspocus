@@ -333,3 +333,288 @@ test('loadWorkspace attaches a matching WAV after client close with no live gene
   assert.equal(useStoryStore.getState().libraryRevision, 5)
   assert.equal(useStoryStore.getState().dirty, false)
 })
+
+function pendingProject(overrides = {}) {
+  return {
+    id: 'song-job',
+    status: 'pending',
+    name: '',
+    source: '',
+    prompt: 'folk',
+    lyrics: '[Verse]\nLa noche',
+    provider: 'minimax',
+    model: 'music-3.0',
+    durationSeconds: 30,
+    createdAt: '2026-09-05T00:00:00.000Z',
+    provenance: { jobId: 'minimax-music-abc', outputFolder: 'lab', projectId: 'story-job', cueId: 'cue-job' },
+    ...overrides,
+  }
+}
+
+test('in-flight completed job rehydrates the reserved candidate by job id', async () => {
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const base = createStoryProject('music_video')
+  const project = normalizeStoryProject({
+    ...base,
+    id: 'story-job',
+    music: {
+      ...base.music,
+      cues: [{
+        id: 'cue-job',
+        kind: 'story',
+        targetId: 'story-job',
+        title: 'Job',
+        purpose: '',
+        referenceSong: '',
+        brief: '',
+        style: 'folk',
+        lyrics: '[Verse]\nLa noche',
+        lyriaPrompt: '',
+        instrumental: false,
+        durationSeconds: 30,
+        candidates: [pendingProject()],
+      }],
+    },
+  })
+  const recovered = recoverInFlightStorySongs({ [project.id]: project }, [{
+    jobId: 'minimax-music-abc',
+    taskId: 'task-1',
+    rootTaskId: 'task-1',
+    workspace: 'lab',
+    status: 'completed',
+    phase: 'completed',
+    message: 'done',
+    current: 1,
+    total: 1,
+    progress: 100,
+    provider: 'minimax',
+    model: 'music-3.0',
+    candidateId: 'song-job',
+    candidates: [{
+      filename: 'job.mp3',
+      audio_path: '/tmp/job.mp3',
+      source: '/api/v1/file/job.mp3',
+      duration_seconds: 61.5,
+      provider: 'minimax',
+      model: 'music-3.0',
+      taskId: 'task-1',
+    }],
+  }], { workspace: 'lab' })
+  const candidate = recovered.projects[project.id].music.cues[0].candidates[0]
+  assert.equal(recovered.changed, true)
+  assert.equal(candidate.status, 'ready')
+  assert.equal(candidate.name, 'job.mp3')
+  assert.equal(candidate.durationSeconds, 61.5)
+  assert.equal(candidate.provenance.jobId, 'minimax-music-abc')
+})
+
+test('in-flight job for another workspace does not write the current project', async () => {
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const base = createStoryProject('music_video')
+  const project = normalizeStoryProject({
+    ...base,
+    id: 'story-job',
+    music: {
+      ...base.music,
+      cues: [{
+        id: 'cue-job',
+        kind: 'story',
+        targetId: 'story-job',
+        title: 'Job',
+        purpose: '',
+        referenceSong: '',
+        brief: '',
+        style: 'folk',
+        lyrics: '[Verse]\nLa noche',
+        lyriaPrompt: '',
+        instrumental: false,
+        durationSeconds: 30,
+        candidates: [pendingProject()],
+      }],
+    },
+  })
+  const recovered = recoverInFlightStorySongs({ [project.id]: project }, [{
+    jobId: 'minimax-music-abc',
+    taskId: 'task-1',
+    rootTaskId: 'task-1',
+    workspace: 'other-folder',
+    status: 'completed',
+    phase: 'completed',
+    message: 'done',
+    current: 1,
+    total: 1,
+    progress: 100,
+    provider: 'minimax',
+    model: 'music-3.0',
+    candidates: [{
+      filename: 'wrong.mp3',
+      audio_path: '/tmp/wrong.mp3',
+      source: '/api/v1/file/wrong.mp3',
+      duration_seconds: 12,
+      provider: 'minimax',
+      model: 'music-3.0',
+    }],
+  }], { workspace: 'lab' })
+  assert.equal(recovered.changed, false)
+  assert.equal(recovered.projects[project.id].music.cues[0].candidates[0].status, 'pending')
+})
+
+test('a duplicated pending row does not inherit the reserved job audio', async () => {
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const base = createStoryProject('music_video')
+  const project = normalizeStoryProject({
+    ...base,
+    id: 'story-job',
+    music: {
+      ...base.music,
+      cues: [{
+        id: 'cue-job',
+        kind: 'story',
+        targetId: 'story-job',
+        title: 'Job',
+        purpose: '',
+        referenceSong: '',
+        brief: '',
+        style: 'folk',
+        lyrics: '[Verse]\nLa noche',
+        lyriaPrompt: '',
+        instrumental: false,
+        durationSeconds: 30,
+        candidates: [
+          pendingProject({ id: 'song-reserved' }),
+          pendingProject({ id: 'song-copy', provenance: { jobId: 'minimax-music-abc', outputFolder: 'lab' } }),
+        ],
+      }],
+    },
+  })
+  const recovered = recoverInFlightStorySongs({ [project.id]: project }, [{
+    jobId: 'minimax-music-abc',
+    taskId: 'task-1',
+    rootTaskId: 'task-1',
+    workspace: 'lab',
+    status: 'completed',
+    phase: 'completed',
+    message: 'done',
+    current: 1,
+    total: 1,
+    progress: 100,
+    provider: 'minimax',
+    model: 'music-3.0',
+    candidateId: 'song-reserved',
+    candidates: [{
+      filename: 'job.mp3',
+      audio_path: '/tmp/job.mp3',
+      source: '/api/v1/file/job.mp3',
+      duration_seconds: 61.5,
+      provider: 'minimax',
+      model: 'music-3.0',
+    }],
+  }], { workspace: 'lab' })
+  const byId = Object.fromEntries(
+    recovered.projects[project.id].music.cues[0].candidates.map(row => [row.id, row]),
+  )
+  assert.equal(byId['song-reserved'].status, 'ready')
+  assert.equal(byId['song-reserved'].name, 'job.mp3')
+  assert.equal(byId['song-copy'].status, 'pending')
+  assert.equal(byId['song-copy'].source, '')
+})
+
+test('failed in-flight job without audio marks the reserved candidate failed', async () => {
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const base = createStoryProject('music_video')
+  const project = normalizeStoryProject({
+    ...base,
+    id: 'story-job',
+    music: {
+      ...base.music,
+      cues: [{
+        id: 'cue-job',
+        kind: 'story',
+        targetId: 'story-job',
+        title: 'Job',
+        purpose: '',
+        referenceSong: '',
+        brief: '',
+        style: 'folk',
+        lyrics: '[Verse]\nLa noche',
+        lyriaPrompt: '',
+        instrumental: false,
+        durationSeconds: 30,
+        candidates: [pendingProject()],
+      }],
+    },
+  })
+  const recovered = recoverInFlightStorySongs({ [project.id]: project }, [{
+    jobId: 'minimax-music-abc',
+    taskId: 'task-1',
+    rootTaskId: 'task-1',
+    workspace: 'lab',
+    status: 'failed',
+    phase: 'failed',
+    message: 'provider error',
+    current: 0,
+    total: 1,
+    progress: 0,
+    provider: 'minimax',
+    model: 'music-3.0',
+    candidateId: 'song-job',
+    candidates: [],
+  }], { workspace: 'lab' })
+  assert.equal(recovered.projects[project.id].music.cues[0].candidates[0].status, 'failed')
+})
+
+test('a completed job without candidateId does not attach audio by walk order', async () => {
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const base = createStoryProject('music_video')
+  const project = normalizeStoryProject({
+    ...base,
+    id: 'story-job',
+    music: {
+      ...base.music,
+      cues: [{
+        id: 'cue-job',
+        kind: 'story',
+        targetId: 'story-job',
+        title: 'Job',
+        purpose: '',
+        referenceSong: '',
+        brief: '',
+        style: 'folk',
+        lyrics: '[Verse]\nLa noche',
+        lyriaPrompt: '',
+        instrumental: false,
+        durationSeconds: 30,
+        candidates: [pendingProject({ id: 'song-copy' })],
+      }],
+    },
+  })
+  const recovered = recoverInFlightStorySongs({ [project.id]: project }, [{
+    jobId: 'minimax-music-abc',
+    taskId: 'task-1',
+    rootTaskId: 'task-1',
+    workspace: 'lab',
+    status: 'completed',
+    phase: 'completed',
+    message: 'done',
+    current: 1,
+    total: 1,
+    progress: 100,
+    provider: 'minimax',
+    model: 'music-3.0',
+    candidates: [{
+      filename: 'job.mp3',
+      audio_path: '/tmp/job.mp3',
+      source: '/api/v1/file/job.mp3',
+      duration_seconds: 61.5,
+      provider: 'minimax',
+      model: 'music-3.0',
+    }],
+  }], { workspace: 'lab' })
+  assert.equal(recovered.changed, false)
+  assert.equal(recovered.projects[project.id].music.cues[0].candidates[0].status, 'pending')
+})
