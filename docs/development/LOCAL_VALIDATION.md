@@ -56,6 +56,11 @@ GitHub compares a pull request with the current base commit. Locally:
 - `BASE_REF` defaults to `origin/main`
 - `HEAD_SHA` defaults to `git rev-parse HEAD`
 
+CI calls the same helper (`scripts/check_code_health_pr_base.sh`) with
+`BASE_SHA` from the PR base or, on push, the previous branch tip. The
+measuring job has `contents: read` only; the report goes to the job
+summary and an artifact, not a PR comment.
+
 The committed dashboard `scripts/code_health_baseline.json` is not used to
 decide whether the current PR may pass.
 

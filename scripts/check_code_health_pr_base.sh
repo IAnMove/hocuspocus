@@ -27,13 +27,25 @@ fi
 HEAD_SHA="${HEAD_SHA:-$(git -C "$ROOT" rev-parse --verify HEAD 2>/dev/null || true)}"
 BASE_SHA="${BASE_SHA:-}"
 BASE_REF="${BASE_REF:-origin/main}"
+ZERO_SHA="0000000000000000000000000000000000000000"
 
+if [[ "$BASE_SHA" == "$ZERO_SHA" ]]; then
+  BASE_SHA=""
+fi
 if [[ -z "$BASE_SHA" ]]; then
   BASE_SHA="$(git -C "$ROOT" rev-parse --verify "$BASE_REF^{commit}" 2>/dev/null || true)"
 fi
-if [[ -z "$BASE_SHA" ]]; then
+if [[ -z "$BASE_SHA" || "$BASE_SHA" == "$ZERO_SHA" ]]; then
   echo "[code-health] cannot resolve base: set BASE_SHA or fetch $BASE_REF" >&2
   exit 2
+fi
+if ! git -C "$ROOT" cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+  echo "[code-health] fetching missing base $BASE_SHA"
+  if ! git -C "$ROOT" fetch --no-tags --depth=1 origin "$BASE_SHA"; then
+    echo "[code-health] cannot fetch base SHA: $BASE_SHA" >&2
+    echo "[code-health] base SHA is not a commit in this repository: $BASE_SHA" >&2
+    exit 2
+  fi
 fi
 if ! git -C "$ROOT" cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
   echo "[code-health] base SHA is not a commit in this repository: $BASE_SHA" >&2
