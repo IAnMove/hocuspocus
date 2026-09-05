@@ -58,8 +58,10 @@ GitHub compares a pull request with the current base commit. Locally:
 
 CI calls the same helper (`scripts/check_code_health_pr_base.sh`) with
 `BASE_SHA` from the PR base or, on push, the previous branch tip. The
-measuring job has `contents: read` only; the report goes to the job
-summary and an artifact, not a PR comment.
+measuring job has `contents: read` only and writes the job summary plus an
+artifact. A separate `Code-health PR comment` job publishes that artifact
+onto the pull request so the quality score stays visible. It does not run
+the ratchet.
 
 The committed dashboard `scripts/code_health_baseline.json` is not used to
 decide whether the current PR may pass.

@@ -176,6 +176,28 @@ jobs:
             ui/test-results
           if-no-files-found: ignore
 
+  code-health-comment:
+    name: Code-health PR comment
+    if: ${{ github.event_name == 'pull_request' && always() }}
+    needs: [ui-check]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Download code-health report
+        continue-on-error: true
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: code-health-report
+          path: .
+      - name: Publish score comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish_pr_markdown.py --file code-health.md
+
   ci-required:
     name: CI required
     if: always()

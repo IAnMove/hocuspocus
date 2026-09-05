@@ -6,9 +6,11 @@ and JavaScript. Markdown, JSON catalogs, tests and vendored models are
 excluded. Test LOC is reported separately because adding tests is not a
 production-code regression.
 
-CI prints a table in the job summary and upserts the same table as a PR
-comment (`<!-- code-health-report -->`) so every pull request shows the
-current hotspots and the delta versus the committed baseline.
+CI prints a table in the job summary and a separate write-only job upserts
+the same table as a PR comment (`<!-- code-health-report -->`) so every
+pull request shows the current hotspots, the 0–100 quality score and the
+delta versus the PR base. The job that runs the ratchet does not get
+comment permissions.
 
 The PR table starts with a transparent quality score from 0 to 100 and its
 change against the PR's exact base commit. Higher is better. The score combines
