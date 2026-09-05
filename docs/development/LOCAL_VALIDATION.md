@@ -1,15 +1,69 @@
 # Validación local
 
-## Antes de cada push
+`bash scripts/validate_local.sh` is provider-free. It never loads models,
+reserves a GPU, or calls external providers. It does **not** install Python or
+npm packages; missing tools fail closed.
 
-Ejecuta `bash scripts/validate_local.sh`. Esta rutina cubre contratos Python,
-la suite UI, lint, build y E2E de navegador con API simulada. No carga modelos,
-no reserva GPU y no llama a proveedores externos. El ratchet de code-health
-compara contra `origin/main`, la referencia equivalente a la base del PR. Para
-reproducir una base concreta de CI se puede indicar `BASE_SHA=<sha>`; `BASE_REF`
-sirve para una rama remota alternativa. El baseline histórico
-`scripts/code_health_baseline.json` sólo se usa para el dashboard deliberado,
-no para decidir si un PR actual puede pasar.
+The script prints `mode`, `HEAD` and the exact code-health `base` SHA, and
+keeps a log under `logs/local-validation/` (gitignored).
+
+## Fast mode (default)
+
+```bash
+bash scripts/validate_local.sh
+```
+
+This is the compatible pre-push command. It runs:
+
+- Python contracts: `tests/test_tools_upscale_contract.py` and
+  `tests/test_architecture_contracts.py`
+- Code-health ratchet against the exact PR base (`BASE_SHA` or `origin/main`)
+- UI tests, lint, and build
+- Simulated browser E2E
+
+A PASS here is **not** CI-equivalent. The final line says so.
+
+If the ratchet base cannot be resolved, the command exits non-zero. It never
+skips `scripts/check_code_health_pr_base.sh`. Analyzer or worktree failures
+are failures. Ratchet output is shown, not discarded.
+
+## Full mode (CI-equivalent)
+
+```bash
+bash scripts/validate_local.sh --full
+```
+
+Adds the remaining CI-safe checks, still without installing dependencies or
+running GPU/provider work:
+
+- `scripts/verify_clean_repo.py`
+- `scripts/check_dependency_contract.py`
+- `scripts/check_documentation_links.py`
+- `scripts/check_brand_contract.py`
+- `python -m compileall` on `app/services`, `app/launch.py`, `scripts`
+- the full safe pytest suite (`tests/`)
+- the same ratchet as fast mode
+- UI tests, lint, build **and** `npm run budget`
+- simulated E2E
+
+A budget failure fails `--full`. Unknown arguments fail closed.
+
+## Base SHA
+
+GitHub compares a pull request with the current base commit. Locally:
+
+- `BASE_SHA=<sha>` reproduces a specific PR base
+- `BASE_REF` defaults to `origin/main`
+- `HEAD_SHA` defaults to `git rev-parse HEAD`
+
+The committed dashboard `scripts/code_health_baseline.json` is not used to
+decide whether the current PR may pass.
+
+CPU dependencies for `--full` match CI's Python job plus a local UI
+`node_modules` and Playwright Chromium. ffmpeg is required by some media
+unit tests. This environment is not identical to GitHub runners (no `apt-get`
+or `pip install` inside the wrapper). If a required tool is missing, record
+it; do not treat mocks as a full run.
 
 ## Smoke de medios reales (sólo manual)
 
@@ -28,14 +82,3 @@ bash scripts/run_real_media_smoke.sh
 El wrapper fuerza `RUN_EXTERNAL_PROVIDER_TESTS=0`; cualquier ejecución real
 requiere la confirmación explícita. Los artefactos y tiempos deben anotarse en
 `comunicaciones/review.md` (fuera de Git).
-
-Para probar únicamente ACE-Step y no renderizar el videoclip:
-
-```bash
-NIGHTLY_MEDIA_SCOPE=song \
-RUN_GPU_TESTS=1 HOCUSPOCUS_SMOKE_CONFIRM=GENERATE_REAL_MEDIA \
-HOCUSPOCUS_SMOKE_BASE_URL=http://127.0.0.1:42003 \
-bash scripts/run_real_media_smoke.sh
-```
-
-El valor `all` (por defecto) continúa con análisis, planificación y videoclip.

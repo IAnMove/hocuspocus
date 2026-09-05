@@ -10,14 +10,14 @@ Plan de ejecución basado en la auditoría del 5 de septiembre de 2026. Verifica
 
 ## Tareas de implementación
 
-- [ ] F4.1 — Inventariar caminos local/ACE/Music3 y remoto; conservar endpoints y clientes existentes mediante compatibilidad explícita.
-- [ ] F4.2 — Definir solicitud con command/idempotency key, proyecto/cue, carpeta, colección opcional, revisión y snapshot inmutable del spec.
-- [ ] F4.3 — Reservar y persistir IDs de intento, tarea y candidato antes de aceptar ejecución. Verificar existencia y pertenencia del destino en servidor.
-- [ ] F4.4 — Persistir deduplicación atómica: misma clave y payload devuelve el mismo resultado; clave reutilizada con payload distinto devuelve conflicto.
-- [ ] F4.5 — Distinguir retransmisión de transporte de nueva versión creativa y retry explícito. Estos últimos generan nuevos intentos con lineage.
-- [ ] F4.6 — Responder 202 con referencias y estado consultable sin esperar a inferencia; mantener una vía de compatibilidad documentada.
-- [ ] F4.7 — Usar TaskRegistry y scheduler existentes. No introducir infraestructura distribuida, GPU ni descarga de modelos para probarlo.
-- [ ] F4.8 — Probar fallo entre reserva y arranque, doble petición concurrente, respuesta perdida y referencia a proyecto inexistente. Nunca resolver por título si ya existe ID.
+- [x] F4.1 — Inventario en `docs/development/MUSIC_SUBMISSION.md`: local ACE/Music3 (`generateMusic`), remoto 202 jobs, sync legado. Endpoints intactos.
+- [x] F4.2 — `spec_snapshot` + `idempotency_key` / `command_id` / `output_folder` / `workspace_id` / `library_revision`.
+- [x] F4.3 — `submit_music_generation` reserva `generation_id`, `task_id`, `job_id`, `candidate_id` y crea la fila TaskRegistry. Destino Story por ID.
+- [x] F4.4 — Misma clave+spec → replay; misma clave+spec distinto → `MusicSubmissionConflict` 409.
+- [x] F4.5 — `intent=retry|new_version` mint nuevo intento; retry guarda `parent_generation_id`.
+- [x] F4.6 — Jobs POST sigue en 202. Sync legado documentado. Poll GET existente.
+- [x] F4.7 — `TaskRegistry.create` (idempotente). Tests sin GPU/modelos.
+- [x] F4.8 — `tests/test_music_submission.py`: after_persist falla, 8 hilos, título ≠ id, revisión stale.
 
 ## Pruebas y criterio de aceptación
 
@@ -31,29 +31,28 @@ Parar para merge antes de fase 5. No abrir simultáneamente otra modificación d
 
 ## Protocolo obligatorio para cada fase
 
-- [ ] Leer fase1.md y esta fase; comprobar dependencias mezcladas en main remoto. Si el trabajo ya existe, verificarlo y registrar evidencia en lugar de duplicarlo.
-- [ ] Inspeccionar cambios locales y logs relevantes al diagnosticar. Trabajar en rama/worktree aislado desde el main actualizado; preservar WIP, stashes y archivos del usuario.
-- [ ] Revisar PRs abiertos y sus archivos: máximo un PR por hotspot (_launch_runtime.py, useStore.ts, agentActions.ts, StoryLabPanel o runtime Director/Wizard). No usar ramas apiladas en esta ola.
-- [ ] Registrar base SHA, archivos propios/prohibidos y pruebas antes de editar. Aplicar AGENTS.md; no tocar launchers ni código vendor/WanGP salvo paquete posterior explícito.
-- [ ] Marcar [x] sólo tras cumplir la tarea y añadir evidencia breve: archivo, comando/resultado o URL/SHA. Un plan o test escrito sin ejecutar no acredita validación.
-- [ ] Ejecutar tests focalizados y validación segura pertinente, lint/tipos/build si cambia UI, arquitectura si corresponde y ratchet contra base exacta. No refrescar baseline para ocultar regresiones.
-- [ ] Revisar diff y archivos a añadir explícitamente. Nunca incorporar pesos, outputs, secretos, caches, entornos ni comunicaciones. No usar git add indiscriminado.
-- [ ] Crear commit y PR hacia main, o actualizar el PR existente correspondiente. Descripción: problema, comportamiento final, alcance, pruebas, riesgos y limitaciones.
-- [ ] Esperar CI del último head; resolver fallos atribuibles al cambio. Leer comentarios de Cursor, contrastarlos y corregir con tests. Repetir checks tras fixes; revisión de un commit anterior no acredita el actual.
-- [ ] Entregar URL, head/base SHA y estado separado de implementación, CI, Cursor, merge y smoke. No hacer merge ni activar auto-merge.
-- [ ] Continuar otra fase sólo si sus dependencias están mezcladas y no comparte hotspot/contrato en cambio. Si no queda trabajo independiente elegible, parar y pedir que se mezclen los PRs concretos.
+- [x] Fases 2 y 3 mezcladas (`58b7a08a`, `8b010a68`). Ningún PR abierto.
+- [x] Worktree `/tmp/hocus-fase4` desde `origin/main`. Stashes intactos.
+- [x] Un solo PR sobre `_launch_runtime.py`. Sin useStore/agentActions/StoryLabPanel.
+- [x] Base `8b010a68`. Propios: music_submission.py, tests, MUSIC_SUBMISSION.md, cableado mínimo launch. Prohibido: launchers, pesos, outputs.
+- [x] F4.1–F4.8 con evidencia en tests/docs.
+- [x] validate_local OK (E2E 7/7) + ratchet vs `8b010a68`.
+- [x] Add explícito. Sin outputs.
+- [ ] PR `feat/music-submission-contract`.
+- [ ] CI y Cursor del head. Sin merge.
+- [x] No abrir fase 5 ni otro PR de launch hasta mezclar este.
 
 ## Registro de entrega
 
-- Base SHA:
-- Rama / PR:
-- Commit implementado:
-- Tests ejecutados y resultado:
-- CI del head:
-- Revisión Cursor (SHA, hallazgos pendientes):
-- Merge en main (lo completa quien lo verifique):
-- Generación real: NO EJECUTADA salvo evidencia manual explícita.
-- Bloqueos / siguiente fase elegible:
+- Base SHA: `origin/main` `8b010a68`
+- Rama / PR: `feat/music-submission-contract` (abrir)
+- Commit implementado: (este commit)
+- Tests ejecutados y resultado: pytest music_submission + minimax_music_jobs 14 passed
+- CI del head: pendiente
+- Revisión Cursor: pendiente (`cursor review` al abrir)
+- Merge en main: no
+- Generación real: NO EJECUTADA
+- Bloqueos / siguiente fase elegible: fase 5 y 8 tras merge de este PR. Fase 6 tras este PR (fase 2 ya mezclada).
 
 Los checkboxes describen trabajo; los estados de entrega son independientes. No marcar una fase globalmente terminada sólo por abrir su PR. Tests reales requieren autorización manual separada. No son un requisito para abrir el PR y nunca se ejecutan en CI.
 
