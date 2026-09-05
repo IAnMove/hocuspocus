@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "architecture:generate": "node scripts/generate-architecture.mjs",
+    "predev": "npm run architecture:generate",
     "dev": "vite",
+    "prebuild": "npm run architecture:generate",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

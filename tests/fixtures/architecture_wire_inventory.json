@@ -26,6 +26,12 @@
       "reason": "Imports the lazy factory and checks its runtime boundary without reading launch source."
     },
     {
+      "file": "tests/test_architecture_graph.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Tests the static graph extractor against synthetic launch-source fixtures, without importing runtime."
+    },
+    {
       "file": "tests/test_audio_analysis_jobs.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -372,6 +378,12 @@
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/architectureExtractor.test.mjs",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "architecture_rule",
+      "reason": "Tests compiler-AST extraction against synthetic store fixtures, not the runtime facade."
     },
     {
       "file": "ui/tests/architectureSlices.test.mjs",

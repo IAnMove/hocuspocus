@@ -1,0 +1,50 @@
+name: Architecture map
+
+# A downloadable source map, not a replacement for the full CI gates.
+on:
+  pull_request:
+    branches: [main, development]
+  push:
+    branches: [main, development]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  architecture-map:
+    name: Architecture map artifact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install locked UI dependencies and lightweight Python test runner
+        run: |
+          npm ci --prefix ui
+          python -m pip install 'pytest==8.3.5'
+      - name: Test Python extraction without models
+        run: python -m pytest -q tests/test_architecture_graph.py
+      - name: Test TypeScript extraction and viewer contract
+        working-directory: ui
+        run: >-
+          npx tsx --tsconfig tsconfig.app.json --import ./tests/setupI18n.ts --test
+          tests/architectureExtractor.test.mjs tests/architectureLoader.test.ts
+          tests/architectureViewerSchema.test.ts tests/architectureViewer.test.tsx
+      - name: Generate scoped architecture snapshot
+        working-directory: ui
+        run: npm run architecture:generate
+      - name: Upload source-only map
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: architecture-map-${{ github.sha }}
+          path: ui/public/dev/architecture/story-director-audio.json
+          if-no-files-found: error
+          retention-days: 7
