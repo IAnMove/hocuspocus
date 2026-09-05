@@ -6,6 +6,7 @@ import pytest
 
 from services.lyrics_language import (
     assert_lyrics_language,
+    canonical_lyrics_language,
     repair_lyrics_language,
     validate_lyrics_language,
 )
@@ -43,6 +44,19 @@ def test_spanish_structured_lyric_is_ok():
     regional = validate_lyrics_language(SPANISH_OK, "Español de España")
     assert regional["ok"] is True
     assert regional["language_mismatch"] is False
+
+
+def test_story_lab_spoken_language_name_is_scored():
+    assert canonical_lyrics_language("Español de España") == "es"
+    assert canonical_lyrics_language("en español") == "es"
+    assert canonical_lyrics_language("en") == "en"
+    assert canonical_lyrics_language("en-US") == "en"
+    assert canonical_lyrics_language("English") == "en"
+    assert canonical_lyrics_language("English (US)") == "en"
+    report = validate_lyrics_language(ENGLISH_CHORUS, "Español de España")
+    assert report["ok"] is False
+    assert report["language_mismatch"] is True
+    assert any("English" in reason for reason in report["reasons"])
 
 
 def test_section_tags_are_not_english_contamination():

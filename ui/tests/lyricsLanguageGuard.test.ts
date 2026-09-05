@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { repairLyricsLanguage, validateLyricsLanguage } from '../src/lib/lyricsLanguageGuard'
+import { canonicalLyricsLanguage, repairLyricsLanguage, validateLyricsLanguage } from '../src/lib/lyricsLanguageGuard'
 
 const SPANISH_OK = `[Verse]
 En la red despierta el sysadmin.
@@ -26,6 +26,21 @@ test('an accidental English chorus fails a Spanish song', () => {
     '[Verse]\nEn la red despierta el sysadmin y la noche canta.\n[Chorus]\nThe server fights through the night and we sing for our network.',
     'Español',
   )
+  assert.equal(report.ok, false)
+  assert.equal(report.languageMismatch, true)
+})
+
+test('Story Lab spoken-language names score as Spanish', () => {
+  const report = validateLyricsLanguage(
+    '[Verse]\nEn la red despierta el sysadmin y la noche canta.\n[Chorus]\nThe server fights through the night and we sing for our network.',
+    'Español de España',
+  )
+  assert.equal(canonicalLyricsLanguage('Español de España'), 'es')
+  assert.equal(canonicalLyricsLanguage('en español'), 'es')
+  assert.equal(canonicalLyricsLanguage('en'), 'en')
+  assert.equal(canonicalLyricsLanguage('en-US'), 'en')
+  assert.equal(canonicalLyricsLanguage('English'), 'en')
+  assert.equal(canonicalLyricsLanguage('English (US)'), 'en')
   assert.equal(report.ok, false)
   assert.equal(report.languageMismatch, true)
 })
