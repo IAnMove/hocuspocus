@@ -100,6 +100,11 @@ Browser E2E uses the simulated API and proves navigation/rendering, not real med
 generation. Unit fixtures cover parsing/multiplicity, bad inputs and safe evidence.
 CI already runs Python and UI suites plus build/budget/E2E; npm's prebuild step
 generates the real scoped map so a missing required source fails the UI build.
+The separate `Architecture map artifact` workflow runs the focused parser/viewer
+contracts and publishes the source-only JSON for seven days. It needs no write
+token, models or backend. Its success is not a substitute for full CI. During the
+development-branch transition, full CI also needs the branch-filter policy PR
+integrated into development; this artifact workflow works independently.
 
 Sources: [TypeScript Compiler API](https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API),
 [dependency-cruiser](https://github.com/sverweij/dependency-cruiser).
