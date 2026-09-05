@@ -1,6 +1,6 @@
 /**
  * Provider-free lyric language guard. Mirrors app/services/lyrics_language.py.
- * Technical captions are out of scope; pass only sung lyrics.
+ * Scores text, not sung audio. Technical captions are out of scope.
  */
 
 const SECTION_TAG = /\[(?:intro|verse|pre[ -]?chorus|chorus|post[ -]?chorus|interlude|bridge|transition|build[ -]?up|break|hook|inst|instrumental|solo|outro|start|end)(?:[^\]]*)\]/gi
@@ -32,20 +32,29 @@ export interface ProtectedLyricSegment {
   language?: string
 }
 
+export type LyricsLanguageVerdict = 'valid' | 'invalid' | 'unevaluable'
+
 export interface LyricsLanguageReport {
   ok: boolean
+  verdict: LyricsLanguageVerdict
   lyrics: string
   repaired: boolean
   reasons: string[]
   languageMismatch: boolean
   strippedSpans: { script: string; text: string }[]
+  proposal: string | null
+  proposalDiffs: { script: string; text: string }[]
 }
 
 const LANGUAGE_ALIASES: Record<string, string> = {
   es: 'es', espanol: 'es', castellano: 'es',
   spanish: 'es', 'es-es': 'es', 'es-mx': 'es',
   en: 'en', english: 'en', ingles: 'en',
+  fr: 'fr', french: 'fr', francais: 'fr',
+  et: 'et', estonian: 'et', eesti: 'et',
 }
+
+const SCORED = new Set(['es', 'en'])
 
 function folded(value: string): string {
   return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim()
@@ -55,8 +64,6 @@ export function canonicalLyricsLanguage(value: string): string {
   const key = folded(value)
   const exact = LANGUAGE_ALIASES[key] || LANGUAGE_ALIASES[key.split('-')[0]] || ''
   if (exact) return exact
-  // Story Lab names such as "Español de España" are not exact aliases.
-  // Skip 2-letter tokens so "en español" does not become English.
   for (const token of key.match(/[a-z]+/g) || []) {
     const mapped = LANGUAGE_ALIASES[token]
     if (mapped && token.length > 2) return mapped
@@ -79,7 +86,7 @@ function maskProtected(lyrics: string, literals: string[]): string {
 function restoreProtected(lyrics: string, literals: string[]): string {
   return lyrics.replace(/\{\{PROTECTED_(\d+)\}\}/g, (_match, raw) => {
     const index = Number(raw)
-    return literals[index] ?? `{{PROTECTED_${raw}}}`
+    return literals[index] || `{{PROTECTED_${raw}}}`
   })
 }
 
@@ -125,6 +132,26 @@ function spanishMismatch(sample: string): { mismatch: boolean; reasons: string[]
   return { mismatch: reasons.length > 0, reasons }
 }
 
+function report(
+  verdict: LyricsLanguageVerdict,
+  lyrics: string,
+  reasons: string[],
+  extras: Partial<LyricsLanguageReport> = {},
+): LyricsLanguageReport {
+  return {
+    ok: verdict === 'valid',
+    verdict,
+    lyrics,
+    repaired: false,
+    reasons,
+    languageMismatch: false,
+    strippedSpans: [],
+    proposal: null,
+    proposalDiffs: [],
+    ...extras,
+  }
+}
+
 export function validateLyricsLanguage(
   lyrics: string,
   lyricsLanguage: string,
@@ -133,19 +160,22 @@ export function validateLyricsLanguage(
   const text = lyrics || ''
   if (options.instrumental) {
     const ok = !text.trim() || /^\[?instrumental\]?$/i.test(text.trim())
-    return {
-      ok, lyrics: ok ? text : '', repaired: false,
-      reasons: ok ? [] : ['An instrumental song must not contain vocal lyrics.'],
-      languageMismatch: false, strippedSpans: [],
-    }
+    return report(ok ? 'valid' : 'invalid', text, ok ? [] : ['An instrumental song must not contain vocal lyrics.'])
+  }
+  if (!text.trim()) {
+    return report('invalid', text, ['A vocal song must contain lyrics.'])
   }
   const protectedList = protectedTexts(options.protectedSegments)
-  const masked = maskProtected(text, protectedList)
-  const sample = restoreProtected(
-    stripTags(masked).replace(/\{\{PROTECTED_\d+\}\}/g, ' '),
-    [],
-  )
+  if (protectedList.some(span => !text.includes(span))) {
+    return report('invalid', text, ['A required verbatim span is missing from the lyric.'])
+  }
   const code = canonicalLyricsLanguage(lyricsLanguage)
+  if (!code) return report('unevaluable', text, ['The requested lyrics language is not recognized.'])
+  if (!SCORED.has(code)) {
+    return report('unevaluable', text, [`Language '${code}' is not scored by this guard.`])
+  }
+  const masked = maskProtected(text, protectedList)
+  const sample = stripTags(masked).replace(/\{\{PROTECTED_\d+\}\}/g, ' ')
   let reasons: string[] = []
   let mismatch = false
   if (code === 'es') {
@@ -160,7 +190,7 @@ export function validateLyricsLanguage(
       }
     }
   }
-  return { ok: reasons.length === 0, lyrics: text, repaired: false, reasons, languageMismatch: mismatch, strippedSpans: [] }
+  return report(reasons.length ? 'invalid' : 'valid', text, reasons, { languageMismatch: mismatch })
 }
 
 export function repairLyricsLanguage(
@@ -168,10 +198,11 @@ export function repairLyricsLanguage(
   lyricsLanguage: string,
   options: { protectedSegments?: readonly ProtectedLyricSegment[]; instrumental?: boolean } = {},
 ): LyricsLanguageReport {
-  const first = validateLyricsLanguage(lyrics, lyricsLanguage, options)
-  if (first.ok || options.instrumental) return first
+  const original = lyrics || ''
+  const first = validateLyricsLanguage(original, lyricsLanguage, options)
+  if (first.verdict !== 'invalid' || options.instrumental) return first
   const protectedList = protectedTexts(options.protectedSegments)
-  let masked = maskProtected(lyrics || '', protectedList)
+  let masked = maskProtected(original, protectedList)
   const strippedSpans: { script: string; text: string }[] = []
   for (const [name, pattern] of Object.entries(SCRIPT_RUNS)) {
     masked = masked.replace(new RegExp(pattern.source, 'g'), match => {
@@ -183,11 +214,15 @@ export function repairLyricsLanguage(
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .split('\n').map(line => line.trimEnd()).join('\n').trim()
-  const second = validateLyricsLanguage(restored, lyricsLanguage, options)
-  second.repaired = restored !== (lyrics || '').trim()
-  second.strippedSpans = strippedSpans
-  if (second.repaired && !second.ok) {
-    second.reasons = [...second.reasons, 'Bounded repair stripped foreign scripts but did not invent a translation.']
+  first.proposal = restored
+  first.proposalDiffs = strippedSpans
+  first.strippedSpans = strippedSpans
+  first.repaired = restored !== original.trim()
+  first.lyrics = original
+  if (first.repaired && !restored.trim()) {
+    first.reasons = [...first.reasons, 'Repair would delete the vocal lyric; the original is kept.']
+    first.verdict = 'invalid'
+    first.ok = false
   }
-  return second
+  return first
 }

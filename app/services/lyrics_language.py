@@ -1,12 +1,15 @@
-"""Provider-free lyric language validation and bounded repair.
+"""Provider-free lyric language validation.
 
 Technical prompts may be English. Sung lyrics, dialogue and quoted text must
 keep the language the user asked for. Structural tags such as ``[Verse]``
 stay in English on purpose and are not contamination.
 
-This module does not import FastAPI, WanGP or launch. Callers in Story Lab
-and the song-writer should invoke it before enqueueing generation; that
-wiring is a follow-up while MiniMax-Music3 occupies those hotspots.
+This heuristic scores **text**, not the audio that a model later sings.
+UI locale, conversation language, content language, spoken language and the
+technical prompt stay separate. Callers in Story Lab / write-song should
+invoke it before enqueueing generation; that wiring is phase 6.
+
+This module does not import FastAPI, WanGP or launch.
 """
 
 from __future__ import annotations
@@ -41,15 +44,21 @@ SPANISH_MARKERS = frozenset({
     "por", "para", "con", "no", "se", "es", "mi", "tu", "yo", "somos",
     "noche", "canta", "cantar", "esta", "está", "como", "pero", "porque",
 })
+# Exact folded aliases only. Never startsWith("es"): English and Estonian
+# would become Spanish. BCP-47 uses the token before '-' after an exact miss.
 LANGUAGE_ALIASES = {
     "es": "es", "espanol": "es", "español": "es", "castellano": "es",
     "spanish": "es", "es-es": "es", "es-mx": "es",
     "en": "en", "english": "en", "ingles": "en", "inglés": "en",
+    "fr": "fr", "french": "fr", "francais": "fr", "français": "fr",
+    "et": "et", "estonian": "et", "eesti": "et",
 }
+SCORED_LANGUAGES = frozenset({"es", "en"})
+VERDICTS = frozenset({"valid", "invalid", "unevaluable"})
 
 
 class LyricsLanguageReport(dict):
-    """JSON-safe report: ok, lyrics, repaired, reasons, language_mismatch, stripped_spans."""
+    """JSON-safe report. ``lyrics`` is always the original input."""
 
 
 def _folded(value: str) -> str:
@@ -90,16 +99,20 @@ def _protected_texts(segments: Sequence[Mapping[str, Any]] | None) -> list[str]:
 
 def _mask_protected(lyrics: str, protected: Sequence[str]) -> tuple[str, list[str]]:
     masked = lyrics
+    present: list[str] = []
     for index, text in enumerate(protected):
         if text and text in masked:
             masked = masked.replace(text, f"{{{{PROTECTED_{index}}}}}")
-    return masked, list(protected)
+            present.append(text)
+        else:
+            present.append("")
+    return masked, present
 
 
 def _restore_protected(lyrics: str, protected: Sequence[str]) -> str:
     def replace(match: re.Match[str]) -> str:
         index = int(match.group(1))
-        if 0 <= index < len(protected):
+        if 0 <= index < len(protected) and protected[index]:
             return protected[index]
         return match.group(0)
     return PROTECTED_TOKEN_RE.sub(replace, lyrics)
@@ -171,6 +184,31 @@ def _strip_foreign_scripts(sample: str) -> tuple[str, list[dict[str, str]]]:
     return cleaned.strip() + ("\n" if sample.endswith("\n") and cleaned.strip() else ""), stripped
 
 
+def _report(
+    *,
+    verdict: str,
+    lyrics: str,
+    reasons: list[str],
+    language_mismatch: bool = False,
+    proposal: str | None = None,
+    proposal_diffs: list[dict[str, str]] | None = None,
+    stripped_spans: list[dict[str, str]] | None = None,
+) -> LyricsLanguageReport:
+    if verdict not in VERDICTS:
+        verdict = "unevaluable"
+    return LyricsLanguageReport(
+        ok=verdict == "valid",
+        verdict=verdict,
+        lyrics=lyrics,
+        repaired=False,
+        reasons=reasons,
+        language_mismatch=language_mismatch,
+        stripped_spans=stripped_spans or [],
+        proposal=proposal,
+        proposal_diffs=proposal_diffs or [],
+    )
+
+
 def validate_lyrics_language(
     lyrics: str,
     lyrics_language: str,
@@ -178,44 +216,70 @@ def validate_lyrics_language(
     protected_segments: Sequence[Mapping[str, Any]] | None = None,
     instrumental: bool = False,
 ) -> LyricsLanguageReport:
-    """Validate sung lyrics. Style/caption fields are out of scope."""
+    """Validate sung lyrics. Style/caption fields are out of scope.
+
+    ``lyrics`` in the report is always the original input. ``ok`` is true only
+    for verdict ``valid``. Unsupported languages are ``unevaluable``, never a
+    silent pass.
+    """
     text = str(lyrics or "")
     protected = _protected_texts(protected_segments)
     if instrumental:
         ok = not text.strip() or text.strip().lower() in {"[instrumental]", "instrumental"}
-        return LyricsLanguageReport(
-            ok=ok,
-            lyrics=text if ok else "",
-            repaired=False,
+        return _report(
+            verdict="valid" if ok else "invalid",
+            lyrics=text,
             reasons=[] if ok else ["An instrumental song must not contain vocal lyrics."],
-            language_mismatch=False,
-            stripped_spans=[],
+        )
+
+    if not text.strip():
+        return _report(
+            verdict="invalid",
+            lyrics=text,
+            reasons=["A vocal song must contain lyrics."],
+        )
+
+    missing = [span for span in protected if span not in text]
+    if missing:
+        return _report(
+            verdict="invalid",
+            lyrics=text,
+            reasons=["A required verbatim span is missing from the lyric."],
         )
 
     code = canonical_lyrics_language(lyrics_language)
-    masked, protected = _mask_protected(text, protected)
+    if not code:
+        return _report(
+            verdict="unevaluable",
+            lyrics=text,
+            reasons=["The requested lyrics language is not recognized."],
+        )
+    if code not in SCORED_LANGUAGES:
+        return _report(
+            verdict="unevaluable",
+            lyrics=text,
+            reasons=[f"Language {code!r} is not scored by this guard."],
+        )
+
+    masked, _present = _mask_protected(text, protected)
     sample = _strip_section_tags(masked)
     sample = PROTECTED_TOKEN_RE.sub(" ", sample)
     reasons: list[str] = []
     mismatch = False
     if code == "es":
         mismatch, reasons = _spanish_mismatch(sample)
-    elif code and _script_hits(sample) and any(_script_hits(sample).values()):
-        # Non-Spanish requested languages still reject scripts that were not asked.
-        if code == "en":
-            hits = _script_hits(sample)
-            for name, spans in hits.items():
-                if spans:
-                    mismatch = True
-                    reasons.append(f"Unrequested {name} script in English lyrics.")
+    elif code == "en":
+        hits = _script_hits(sample)
+        for name, spans in hits.items():
+            if spans:
+                mismatch = True
+                reasons.append(f"Unrequested {name} script in English lyrics.")
 
-    return LyricsLanguageReport(
-        ok=not reasons,
+    return _report(
+        verdict="invalid" if reasons else "valid",
         lyrics=text,
-        repaired=False,
         reasons=reasons,
         language_mismatch=mismatch,
-        stripped_spans=[],
     )
 
 
@@ -226,31 +290,32 @@ def repair_lyrics_language(
     protected_segments: Sequence[Mapping[str, Any]] | None = None,
     instrumental: bool = False,
 ) -> LyricsLanguageReport:
-    """Strip unrequested foreign-script runs. Never translate English to Spanish."""
+    """Propose stripping unrequested foreign-script runs. Never overwrite the original."""
+    original = str(lyrics or "")
     first = validate_lyrics_language(
-        lyrics, lyrics_language,
+        original, lyrics_language,
         protected_segments=protected_segments, instrumental=instrumental,
     )
-    if first["ok"] or instrumental:
+    if first["verdict"] != "invalid" or instrumental:
         return first
 
     protected = _protected_texts(protected_segments)
-    masked, protected = _mask_protected(str(lyrics or ""), protected)
+    masked, present = _mask_protected(original, protected)
     cleaned, spans = _strip_foreign_scripts(masked)
-    restored = _restore_protected(cleaned, protected)
+    restored = _restore_protected(cleaned, present)
     restored = "\n".join(line.rstrip() for line in restored.splitlines()).strip()
-    repaired = restored != str(lyrics or "").strip()
-    second = validate_lyrics_language(
-        restored, lyrics_language,
-        protected_segments=protected_segments, instrumental=instrumental,
-    )
-    second["repaired"] = repaired
-    second["stripped_spans"] = spans
-    if repaired and not second["ok"]:
-        second["reasons"] = list(second["reasons"]) + [
-            "Bounded repair stripped foreign scripts but did not invent a translation.",
+    diffs = [{"script": item["script"], "text": item["text"]} for item in spans]
+    first["proposal"] = restored
+    first["proposal_diffs"] = diffs
+    first["stripped_spans"] = spans
+    first["repaired"] = restored != original.strip()
+    if first["repaired"] and not restored.strip():
+        first["reasons"] = list(first["reasons"]) + [
+            "Repair would delete the vocal lyric; the original is kept.",
         ]
-    return second
+        first["verdict"] = "invalid"
+        first["ok"] = False
+    return first
 
 
 def assert_lyrics_language(
@@ -259,7 +324,7 @@ def assert_lyrics_language(
     *,
     protected_segments: Sequence[Mapping[str, Any]] | None = None,
     instrumental: bool = False,
-    repair: bool = True,
+    repair: bool = False,
 ) -> LyricsLanguageReport:
     report = (
         repair_lyrics_language(
