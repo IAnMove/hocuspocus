@@ -70,6 +70,7 @@ fi
 if [[ -d "$ROOT/ui/node_modules" ]]; then
   ln -s "$ROOT/ui/node_modules" "$BASE_DIR/ui/node_modules" 2>/dev/null || true
 fi
+export HEAD_SHA BASE_SHA
 if ! (cd "$BASE_DIR" && "$PYTHON" scripts/code_health.py --json) > "$BASE_DIR/code-health-base.json"; then
   echo "[code-health] analyzer failed on base $BASE_SHA" >&2
   exit 1

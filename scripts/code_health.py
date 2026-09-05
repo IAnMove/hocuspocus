@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import datetime
 import json
 import os
 import re
@@ -27,12 +28,30 @@ from code_quality_score import COMPONENT_WEIGHTS, quality_score, score_delta  # 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASELINE = ROOT / "scripts" / "code_health_baseline.json"
+DEFAULT_EXCEPTIONS = ROOT / "scripts" / "code_health_exceptions.json"
 PYTHON_EXACT = {"app/_launch_runtime.py", "app/launch.py", "app/wgp.py"}
 PYTHON_PREFIXES = ("app/services/", "app/routers/")
 UI_PREFIX = "ui/src/"
 UI_SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
 HOTSPOT_LINES = 1_000
 COMPLEXITY_WARNING = 15
+POLICY_VERSION = "code-health-policy-v1"
+POLICY = {
+    "complexity_warning": COMPLEXITY_WARNING,
+    "line_growth_pct": 0.03,
+    "line_growth_min": 2_000,
+    "complex_growth_budget": 5,
+    "max_complexity_delta": 3,
+    "complexity_hotspot_delta": 5,
+    "new_complexity_hotspot_limit": 25,
+    "hotspot_lines": HOTSPOT_LINES,
+    "new_hotspot_limit": 1_200,
+    "hotspot_growth_pct": 0.02,
+    "hotspot_growth_min": 75,
+    "hotspot_growth_max": 600,
+}
+EXCEPTION_FIELDS = ("path", "rule", "reason", "owner", "issue", "expires")
+WAIVABLE_RULES = {"hotspot_growth", "complexity_hotspot"}
 
 
 @dataclass(frozen=True)
@@ -204,7 +223,14 @@ def collect(*, require_ui: bool) -> dict:
         file_lines[relative] = physical
         non_blank += source
     test_lines = sum(_line_count(ROOT / relative)[0] for relative in tests)
-    functions = _python_complexity(product) + _ui_complexity(require_ui)
+    python_functions = _python_complexity(product)
+    ui_product = [path for path in product if path.startswith(UI_PREFIX)]
+    ui_functions = _ui_complexity(require_ui)
+    if require_ui and ui_product and not ui_functions:
+        raise RuntimeError(
+            "UI complexity produced no function metrics; missing UI measurement is not a pass"
+        )
+    functions = python_functions + ui_functions
     ranked = sorted(functions, key=lambda item: (-item.complexity, item.path, item.line))
     complexity_by_file: dict[str, int] = {}
     for item in functions:
@@ -213,8 +239,27 @@ def collect(*, require_ui: bool) -> dict:
         ((path, lines) for path, lines in file_lines.items() if lines >= HOTSPOT_LINES),
         key=lambda item: (-item[1], item[0]),
     ))
+    head_sha = str(os.environ.get("HEAD_SHA") or "").strip()
+    base_sha = str(os.environ.get("BASE_SHA") or "").strip()
+    if not head_sha:
+        try:
+            head_sha = subprocess.check_output(
+                ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+                text=True,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            head_sha = ""
     report = {
         "version": 1,
+        "policy_version": POLICY_VERSION,
+        "policy": dict(POLICY),
+        "measurement": {
+            "python": "complete",
+            "ui": "complete" if ui_functions or not ui_product else "missing",
+            "head_sha": head_sha,
+            "base_sha": base_sha,
+        },
+        "product_paths": product,
         "summary": {
             "production_files": len(product),
             "production_lines": sum(file_lines.values()),
@@ -239,37 +284,86 @@ def collect(*, require_ui: bool) -> dict:
 def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
     failures: list[str] = []
-    now = current["summary"]
-    old = baseline["summary"]
+    now = current.get("summary") or {}
+    old = baseline.get("summary") or {}
+    required = ("production_lines", "complex_functions", "max_complexity")
+    missing = [key for key in required if key not in now or key not in old]
+    if missing:
+        failures.append(
+            "incomplete baseline or current summary; missing "
+            + ", ".join(missing)
+            + " (missing metrics are not a pass)"
+        )
+        return warnings, failures
+
+    current_policy = current.get("policy")
+    baseline_policy = baseline.get("policy")
+    if isinstance(baseline_policy, dict) and isinstance(current_policy, dict):
+        if current_policy != baseline_policy:
+            failures.append(
+                "code-health policy changed vs baseline "
+                f"{baseline.get('policy_version') or 'unknown'} -> "
+                f"{current.get('policy_version') or 'unknown'}; "
+                "review rule diffs instead of silently tightening or loosening budgets"
+            )
+
+    current_measure = current.get("measurement") or {}
+    if current_measure.get("ui") == "missing":
+        failures.append("UI complexity was not measured; missing metrics are not a pass")
+    baseline_measure = baseline.get("measurement") or {}
+    if baseline_measure.get("ui") == "complete" and current_measure.get("ui") != "complete":
+        failures.append("UI complexity disappeared versus the baseline measurement")
+
+    baseline_paths = set(baseline.get("product_paths") or [])
+    current_paths = set(current.get("product_paths") or [])
+    if baseline_paths and current_paths:
+        excluded = sorted(path for path in baseline_paths - current_paths if (ROOT / path).exists())
+        if excluded:
+            failures.append(
+                "product scope excluded still-present files: "
+                + ", ".join(excluded[:8])
+                + ("" if len(excluded) <= 8 else f" (+{len(excluded) - 8} more)")
+            )
 
     line_growth = now["production_lines"] - old["production_lines"]
     if line_growth > 0:
         warnings.append(f"production LOC increased by {line_growth:+,}")
-    line_budget = max(2_000, round(old["production_lines"] * 0.03))
+    line_budget = max(
+        int(POLICY["line_growth_min"]),
+        round(old["production_lines"] * float(POLICY["line_growth_pct"])),
+    )
     if line_growth > line_budget:
         failures.append(f"production LOC grew {line_growth:,}; budget is {line_budget:,}")
 
     complex_growth = now["complex_functions"] - old["complex_functions"]
     if complex_growth > 0:
         warnings.append(f"functions at complexity >= {COMPLEXITY_WARNING} increased by {complex_growth:+d}")
-    if complex_growth > 5:
-        failures.append(f"high-complexity function count grew by {complex_growth}; budget is 5")
+    if complex_growth > int(POLICY["complex_growth_budget"]):
+        failures.append(
+            f"high-complexity function count grew by {complex_growth}; "
+            f"budget is {int(POLICY['complex_growth_budget'])}"
+        )
     if now["max_complexity"] > old["max_complexity"]:
         warnings.append(f"maximum complexity rose {old['max_complexity']} -> {now['max_complexity']}")
-    if now["max_complexity"] > old["max_complexity"] + 3:
-        failures.append("maximum cyclomatic complexity increased by more than 3")
+    if now["max_complexity"] > old["max_complexity"] + int(POLICY["max_complexity_delta"]):
+        failures.append(
+            f"maximum cyclomatic complexity increased by more than {int(POLICY['max_complexity_delta'])}"
+        )
 
     old_complexity = baseline.get("complexity_hotspots", {})
     for path, new_value in current.get("complexity_hotspots", {}).items():
         old_value = old_complexity.get(path)
         if old_value is None:
-            if new_value > 25:
-                failures.append(f"new complexity hotspot {path} is {new_value}; limit is 25")
+            if new_value > int(POLICY["new_complexity_hotspot_limit"]):
+                failures.append(
+                    f"new complexity hotspot {path} is {new_value}; "
+                    f"limit is {int(POLICY['new_complexity_hotspot_limit'])}"
+                )
             continue
         if new_value > old_value:
             warnings.append(f"complexity hotspot {path} rose {old_value} -> {new_value}")
-        if new_value > old_value + 5:
-            failures.append(f"complexity hotspot {path} increased by more than 5")
+        if new_value > old_value + int(POLICY["complexity_hotspot_delta"]):
+            failures.append(f"complexity hotspot {path} increased by more than {int(POLICY['complexity_hotspot_delta'])}")
 
     for path, old_lines in baseline.get("hotspots", {}).items():
         new_lines = current.get("hotspots", {}).get(path, 0)
@@ -278,14 +372,20 @@ def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
         # need a cohesive feature-sized change. Keep the ratchet active while
         # allowing up to 600 lines in one PR; larger growth still fails and
         # should be extracted into a dedicated module.
-        allowance = max(75, min(600, round(old_lines * 0.02)))
+        allowance = max(
+            int(POLICY["hotspot_growth_min"]),
+            min(int(POLICY["hotspot_growth_max"]), round(old_lines * float(POLICY["hotspot_growth_pct"]))),
+        )
         if growth > 0:
             warnings.append(f"hotspot {path} increased by {growth:+,} lines")
         if growth > allowance:
             failures.append(f"hotspot {path} grew {growth:,} lines; budget is {allowance:,}")
     for path, lines in current.get("hotspots", {}).items():
-        if path not in baseline.get("hotspots", {}) and lines > 1_200:
-            failures.append(f"new hotspot {path} has {lines:,} lines; limit is 1,200")
+        if path not in baseline.get("hotspots", {}) and lines > int(POLICY["new_hotspot_limit"]):
+            failures.append(
+                f"new hotspot {path} has {lines:,} lines; "
+                f"limit is {int(POLICY['new_hotspot_limit']):,}"
+            )
     return warnings, failures
 
 
@@ -322,6 +422,7 @@ def _markdown_report(
     score_baseline_label: str = "comparison base",
 ) -> str:
     summary = report["summary"]
+    measurement = report.get("measurement") or {}
     quality = report.get("quality") or quality_score(report)
     comparison_report = score_baseline or baseline
     previous_quality = quality_score(comparison_report) if comparison_report else None
@@ -363,6 +464,10 @@ def _markdown_report(
         f"| Functions measured | {summary['functions_measured']:,} |",
         f"| Functions complexity ≥ {COMPLEXITY_WARNING} | {summary['complex_functions']} |",
         f"| Maximum complexity | {summary['max_complexity']} |",
+        f"| Policy | {report.get('policy_version') or POLICY_VERSION} |",
+        f"| HEAD | `{measurement.get('head_sha') or 'unknown'}` |",
+        f"| Base | `{measurement.get('base_sha') or 'unset'}` |",
+        f"| UI measurement | {measurement.get('ui') or 'unknown'} |",
         "",
         "Markdown, JSON catalogs and tests are out of this table. Only `app/` runtime + `ui/src` TS/JS count.",
         "",
@@ -466,11 +571,72 @@ def _print_trend(current: dict, baseline: dict) -> None:
         print(f"  hotspot {change:+7,}  {path}")
 
 
+def load_exceptions(path: Path = DEFAULT_EXCEPTIONS) -> list[dict]:
+    if not path.is_file():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload in (None, []):
+        return []
+    if not isinstance(payload, list):
+        raise RuntimeError(f"{path} must be a JSON array of exception objects")
+    today = datetime.date.today().isoformat()
+    exceptions: list[dict] = []
+    for index, item in enumerate(payload):
+        if not isinstance(item, dict):
+            raise RuntimeError(f"{path}[{index}] must be an object")
+        missing = [field for field in EXCEPTION_FIELDS if not str(item.get(field) or "").strip()]
+        if missing:
+            raise RuntimeError(
+                f"{path}[{index}] missing {', '.join(missing)}; "
+                "exceptions need path, rule, reason, owner, issue and expires"
+            )
+        rule = str(item["rule"]).strip()
+        if rule not in WAIVABLE_RULES:
+            raise RuntimeError(
+                f"{path}[{index}] rule {rule!r} is not waivable; "
+                f"allowed: {', '.join(sorted(WAIVABLE_RULES))}"
+            )
+        if str(item["expires"]) < today:
+            continue
+        exceptions.append(item)
+    return exceptions
+
+
+def apply_exceptions(
+    failures: list[str],
+    warnings: list[str],
+    exceptions: list[dict],
+) -> tuple[list[str], list[str]]:
+    kept: list[str] = []
+    for failure in failures:
+        matched = None
+        for item in exceptions:
+            path = str(item["path"])
+            rule = str(item["rule"])
+            if path not in failure:
+                continue
+            if rule == "hotspot_growth" and "grew" in failure and "budget is" in failure:
+                matched = item
+                break
+            if rule == "complexity_hotspot" and "complexity hotspot" in failure:
+                matched = item
+                break
+        if matched:
+            warnings.append(
+                f"waived {matched['rule']} for {matched['path']} "
+                f"until {matched['expires']} ({matched['issue']})"
+            )
+            continue
+        kept.append(failure)
+    return warnings, kept
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="compare with the committed baseline")
     parser.add_argument("--write-baseline", action="store_true", help="replace the baseline intentionally")
     parser.add_argument("--json", action="store_true", help="print the complete report as JSON")
+    parser.add_argument("--require-ui", action="store_true", help="fail if UI complexity cannot be measured")
     parser.add_argument("--markdown", action="store_true", help="print a GitHub-flavored table")
     parser.add_argument("--publish-pr-comment", action="store_true", help="upsert the markdown table on the current PR")
     parser.add_argument("--score-baseline", type=Path, help="code-health JSON for an exact score comparison")
@@ -480,7 +646,7 @@ def main() -> int:
     if args.check and args.write_baseline:
         parser.error("--check and --write-baseline are mutually exclusive")
     try:
-        report = collect(require_ui=args.check or args.write_baseline)
+        report = collect(require_ui=args.check or args.write_baseline or args.require_ui)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 2
@@ -495,6 +661,11 @@ def main() -> int:
     if args.check:
         baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
         warnings, failures = compare(report, baseline)
+        try:
+            warnings, failures = apply_exceptions(failures, warnings, load_exceptions())
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 2
     if args.score_baseline:
         score_baseline = json.loads(args.score_baseline.read_text(encoding="utf-8"))
     elif baseline is not None:
