@@ -1,5 +1,13 @@
 # Slice queue
 
+## Current integration base
+
+New ordinary work branches from `origin/development` and targets `development`.
+`main` is reserved for the published Pinokio version. Follow
+[BRANCHING.md](BRANCHING.md) for releases, hotfixes and transition of existing PRs.
+Historical main/merge records below retain their original meaning; do not rewrite
+accepted history or infer that a PR is merged from its existence.
+
 Humans own merges. Agents do not merge until checks are green, and never
 open a second PR on the same hotspot.
 
