@@ -47,7 +47,7 @@ export interface StoryMusicCandidateRequest {
   prompt: string
   lyrics: string
   count: 1 | 2 | 3
-  model?: 'music-3.0' | 'music-2.6' | 'music-cover' | 'ace_step_v1_5_xl_sft_lm_4b'
+  model?: 'music-3.0' | 'music-2.6' | 'music-cover' | 'minimax_music3' | 'ace_step_v1_5_xl_sft_lm_4b'
   reference_audio_filename?: string
   instrumental?: boolean
   workspace?: string

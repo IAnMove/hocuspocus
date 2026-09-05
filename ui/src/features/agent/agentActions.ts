@@ -129,6 +129,13 @@ export interface AgentPrepareAudioAction extends AgentLanguageAwareAction {
   negativePrompt?: string
 }
 
+export interface AgentDownloadModelAction {
+  type: 'download_model'
+  /** Exact model_type from the Wizard inventory, never a display label. */
+  modelType: string
+  confirm: true
+}
+
 export interface AgentQueueSfxPackAction extends AgentLanguageAwareAction {
   type: 'queue_sfx_pack'
   style: string
@@ -312,7 +319,7 @@ export interface AgentConfigureStorySongAction extends AgentLanguageAwareAction 
   writeLyrics: boolean
   lyricsLanguage: string
   instrumental: boolean
-  model: 'music-3.0' | 'music-2.6' | 'ace_step_v1_5_xl_sft_lm_4b'
+  model?: 'music-3.0' | 'music-2.6' | 'minimax_music3' | 'ace_step_v1_5_xl_sft_lm_4b'
   durationSeconds?: number
 }
 
@@ -585,6 +592,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentPrepareVideoAction
   | AgentPrepareImageAction
   | AgentPrepareAudioAction
+  | AgentDownloadModelAction
   | AgentQueueSfxPackAction
   | AgentPrepare3dAction
   | AgentStartGenerationAction
@@ -696,6 +704,16 @@ export interface AgentAppSnapshot {
     installed: boolean
     enabled: boolean
   }>
+  available_audio_models: Array<{
+    model_type: string
+    name: string
+    family: string
+    installed: boolean
+    enabled: boolean
+    music: boolean
+    speech: boolean
+    sfx: boolean
+  }>
   recent_image_outputs: Array<{ name: string }>
   recent_scene_outputs: Array<{ name: string; title: string }>
   current_studio_loras: {
@@ -805,6 +823,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   preparevideo: 'prepare_video',
   prepareimage: 'prepare_image',
   prepareaudio: 'prepare_audio',
+  downloadmodel: 'download_model',
   prepare3d: 'prepare_3d',
   queuesfxpack: 'queue_sfx_pack',
   startgeneration: 'start_generation',
@@ -2170,7 +2189,6 @@ export async function reconcileAgentTurnWithRequest(
         // language resolver and takes precedence over the story language.
         lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
         instrumental: false,
-        model: 'ace_step_v1_5_xl_sft_lm_4b',
         durationSeconds: createdMusicVideo.durationSeconds || 90,
       }
       safeActions = [...safeActions, songDraft]
@@ -2238,7 +2256,6 @@ export async function reconcileAgentTurnWithRequest(
           writeLyrics: true,
           lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
           instrumental: false,
-          model: 'ace_step_v1_5_xl_sft_lm_4b',
           durationSeconds: createdMusicVideo.durationSeconds || 90,
         }
       : undefined
@@ -2706,6 +2723,19 @@ export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions 
         family: model.family,
         installed: model.is_downloaded === true,
         enabled: state.enabledModels.has(model.model_type),
+      })),
+    available_audio_models: state.models
+      .filter(model => model.family === 'tts' && !model.tool_only)
+      .slice(0, 80)
+      .map(model => ({
+        model_type: model.model_type,
+        name: model.name,
+        family: model.family,
+        installed: model.is_downloaded === true,
+        enabled: state.enabledModels.has(model.model_type),
+        music: /ace_step|minimax_music3|music[-_]/i.test(model.model_type),
+        speech: /qwen|chatterbox|kugelaudio|heartmula|yue|index_tts/i.test(model.model_type),
+        sfx: /^mmaudio/i.test(model.model_type),
       })),
     recent_image_outputs: state.outputs
       .filter(output => output.type === 'image')

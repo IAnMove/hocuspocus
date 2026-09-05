@@ -1255,6 +1255,13 @@ def _check_model_downloaded(model_type: str) -> bool:
             return False
         if not all(_variant_group_downloaded(g) for g in groups):
             return False
+        # Component-folder models can expose a tiny manifest as their primary
+        # URL while the family handler downloads the actual assets separately.
+        # Do not mark a partial install as ready merely because that manifest
+        # arrived first (MiniMax-Music3 is the first such local audio model).
+        for relative_path in model_def.get("required_model_assets", []):
+            if wgp.fl.locate_file(relative_path, error_if_none=False) is None:
+                return False
         # Some edit pipelines split required conditioning weights out of the
         # main transformer/text-encoder groups. Krea 2 Edit cannot run without
         # its Qwen3-VL vision tower, so do not report it as ready until that
@@ -1314,6 +1321,7 @@ def list_models():
             "lora_compatibility_note": md.get("lora_compatibility_note", ""),
             "family": family,
             "architecture": architecture,
+            "resource_requirements": md.get("resource_requirements"),
             "is_i2v": wgp.test_class_i2v(mt),
             "is_t2v": wgp.test_class_t2v(mt),
             "guidance_max_phases": md.get("guidance_max_phases", 1),
@@ -8255,6 +8263,7 @@ from routers.llm import (
     _parse_song_output,
     _SONG_WRITER_FALLBACK,
     _SONG_WRITER_FALLBACK_INSTRUMENTAL,
+    _SONG_WRITER_FALLBACK_MINIMAX_MUSIC3,
 )
 
 api.include_router(create_llm_router(
@@ -8304,6 +8313,22 @@ def _build_music_gen_params(model_type: str, lyrics: str, style: str, duration_s
     return params
 
 
+def _music3_writer_duration_instruction(duration_seconds) -> str:
+    """Keep local MiniMax-Music3 song writing proportional to its target runtime."""
+    try:
+        duration = min(300.0, max(5.0, float(duration_seconds or 120)))
+    except (TypeError, ValueError):
+        duration = 120.0
+    label = f"{duration:g}"
+    return (
+        "TARGET RUNTIME CONTRACT:\n"
+        f"- The generated track is {label} seconds long.\n"
+        "- Scale sections, lyric density, repetitions, transitions and instrumental "
+        "space to this runtime; do not write a full song that will be cut off.\n"
+        f"- In ### Arrangement, plan material from 0:00 to approximately {label} seconds."
+    )
+
+
 @api.post("/api/v1/director/generate-music")
 async def director_generate_music(request: Request):
     """Generate a music track for Director Music Video mode. Dual-mode:
@@ -8337,8 +8362,10 @@ async def director_generate_music(request: Request):
     except execution_mode.ExecutionModeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    if wgp.get_model_def(model_type) is None:
+    selected_model = wgp.get_model_def(model_type)
+    if selected_model is None:
         raise HTTPException(status_code=400, detail=f"Unknown model: {model_type}")
+    is_minimax_music3 = str(selected_model.get("architecture") or model_type) == "minimax_music3"
 
     image_paths = body.get("image_paths") or []
     if not image_paths and body.get("reference_image_path"):
@@ -8353,16 +8380,22 @@ async def director_generate_music(request: Request):
         from services import llm_service
         from services.guide_loader import load_guide
         _ensure_llm_loaded()
-        if instrumental:
+        if is_minimax_music3 and instrumental:
+            system_prompt = load_guide("music", "song_writer_minimax_music3_instrumental") or _SONG_WRITER_FALLBACK_MINIMAX_MUSIC3
+        elif is_minimax_music3:
+            system_prompt = load_guide("music", "song_writer_minimax_music3") or _SONG_WRITER_FALLBACK_MINIMAX_MUSIC3
+        elif instrumental:
             system_prompt = load_guide("music", "song_writer_instrumental") or _SONG_WRITER_FALLBACK_INSTRUMENTAL
         else:
             system_prompt = load_guide("music", "song_writer") or _SONG_WRITER_FALLBACK
+        if is_minimax_music3:
+            system_prompt = f"{system_prompt.rstrip()}\n\n{_music3_writer_duration_instruction(duration_seconds)}"
         try:
             raw = await asyncio.to_thread(
                 llm_service.generate,
                 prompt=description,
                 system_prompt=system_prompt,
-                max_new_tokens=body.get("max_new_tokens", 1024),
+                max_new_tokens=body.get("max_new_tokens", 1536 if is_minimax_music3 else 1024),
                 temperature=body.get("temperature", 0.85),
                 top_p=body.get("top_p", 0.9),
                 seed=body.get("seed"),
@@ -8393,7 +8426,10 @@ async def director_generate_music(request: Request):
         output_files = await asyncio.to_thread(
             _submit_and_wait,
             gen_params,
-            timeout_s=1800,
+            # Music3 can decode several minutes of stereo audio on a single
+            # consumer GPU; keep the HTTP worker alive long enough for the
+            # local job while retaining the shorter guard for ACE-Step.
+            timeout_s=3600 if is_minimax_music3 else 1800,
             workspace=workspace,
             out_dir=out_dir,
             provenance=provenance,

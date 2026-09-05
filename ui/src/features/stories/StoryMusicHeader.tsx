@@ -1,5 +1,6 @@
 import { Loader2, Music, RefreshCcw, Sparkles, Trash2, Upload } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
+import { storyMusicGenerationReady } from './musicModel'
 import { button, completeGenerationButton, input } from './storyLabChrome'
 import type { StoryMusicTabProps } from './StoryMusicTab'
 
@@ -32,9 +33,9 @@ export function StoryMusicHeader(props: StoryMusicTabProps) {
               {t('music.newSongPrompts')}
             </button>
             <button className={`${button} ${completeGenerationButton}`}
-              disabled={musicBusy || !musicWritingReady || !minimaxConfigured}
+              disabled={musicBusy || !musicWritingReady || !storyMusicGenerationReady(project.music.model, minimaxConfigured)}
               onClick={() => void createNewMusicVideoSong(true)}
-              title={minimaxConfigured ? t('music.newSongAudioTitle') : t('music.minimaxKeyTitle')}>
+              title={storyMusicGenerationReady(project.music.model, minimaxConfigured) ? t('music.newSongAudioTitle') : t('music.minimaxKeyTitle')}>
               {newSongAction === 'audio' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
               {t('music.newSongAudio')}
             </button>
@@ -54,7 +55,7 @@ export function StoryMusicHeader(props: StoryMusicTabProps) {
               </button>
             ) : (
               <button className={`${button} ${completeGenerationButton}`}
-                disabled={Boolean(busy || musicCueBusy) || !project.music.cues.length || !minimaxConfigured}
+                disabled={Boolean(busy || musicCueBusy) || !project.music.cues.length || !storyMusicGenerationReady(project.music.model, minimaxConfigured)}
                 onClick={() => void generateAllMusicCues()}>
                 <Music size={13} /> {t('music.generateAll')}
               </button>

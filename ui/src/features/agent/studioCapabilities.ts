@@ -11,6 +11,7 @@ import type {
   AgentAction,
   AgentAttachStudioReferencesAction,
   AgentConfigureStudioLorasAction,
+  AgentDownloadModelAction,
   AgentPrepare3dAction,
   AgentPrepareAudioAction,
   AgentPrepareImageAction,
@@ -353,5 +354,31 @@ export function registerStudioCapabilities(register: typeof defineCapability): v
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'studio_form', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
   presentation: commonPresentation(['loras', 'model']),
+  })
+
+  studioDefinition<AgentDownloadModelAction>({
+  name: 'download_model',
+  title: 'Download a model from Settings',
+  description: 'Download the exact model selected by the user and wait until the local model catalog reports it ready.',
+  useWhen: 'The user explicitly chooses a model that is available but not installed, or asks the Wizard to download it.',
+  parameters: ['model_type', 'confirm'],
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    properties: { type: { const: 'download_model' }, model_type: { type: 'string', minLength: 1, maxLength: 160 }, confirm: { const: true } },
+    required: ['type', 'model_type', 'confirm'],
+  },
+  risk: 'compute', confirmation: 'required', progress: 'Descargando el modelo elegido desde Settings…',
+  resolve(raw) {
+    const modelType = text(raw.model_type, 160)
+    return raw.confirm === true && modelType ? { type: 'download_model', modelType, confirm: true } : null
+  },
+  validate(action) { return action.modelType && action.confirm === true ? [] : ['model_type and confirmation are required'] },
+  async prepare(action) { return action },
+  async execute(action, context) { return context.adapters.studio.downloadModel(action) },
+  correlate(_action, outcome) { return outcome.target },
+  async track(_action, outcome) { return outcome },
+  report: { targetKind: 'model_download', successState: 'completed' },
+  summarize(_action, outcome) { return outcome.message },
+  presentation: { destination: 'settings', anchors: ['models', 'download'], replay: 'atomic' },
   })
 }

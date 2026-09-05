@@ -1,8 +1,10 @@
 import { Loader2, Palette, RefreshCcw } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { button, input, panel } from './storyLabChrome'
-import { ACE_STEP_MUSIC_MODEL, normalizeStoryMusicModel } from './musicModel'
+import { ACE_STEP_MUSIC_MODEL, MINIMAX_MUSIC3_LOCAL_MODEL, isLocalMusicModel, normalizeStoryMusicModel } from './musicModel'
 import type { StoryMusicTabProps } from './StoryMusicTab'
+import { useStore } from '../../stores/useStore'
+import { modelRequirementsText } from '../../lib/minimaxMusicCatalog'
 
 export function StoryMusicSettingsBar(props: StoryMusicTabProps) {
   const { t } = useUiTranslation('storyLab')
@@ -10,21 +12,28 @@ export function StoryMusicSettingsBar(props: StoryMusicTabProps) {
     project, patch, busy, musicQueue, musicCueBusy, musicWritingReady, minimaxConfigured,
     createAllMusicCueVersions, musicVersionStyle, setMusicVersionStyle, musicVersionLanguage, setMusicVersionLanguage,
   } = props
+  const selectedModel = useStore(state => state.models.find(model => model.model_type === project.music.model))
+  const resourceHint = modelRequirementsText(selectedModel?.resource_requirements)
+    || (project.music.model === MINIMAX_MUSIC3_LOCAL_MODEL ? '≈24 GB VRAM · ~28 GB en disco · CUDA' : '')
   const musicBusy = Boolean(busy || musicQueue || musicCueBusy)
   return (
     <>
       <div className={`${panel} mb-4 grid md:grid-cols-[1fr_1fr_2fr] gap-3 items-end`}>
         <label className="block text-[10px] text-text-muted">{t('music.songModel')}
-          <select className={`${input} mt-1`} value={project.music.model}
+          <select className={`${input} mt-1`} value={project.music.model} title={resourceHint || undefined}
             onChange={event => patch({ music: { ...project.music, model: normalizeStoryMusicModel(event.target.value) } })}>
             <option value={ACE_STEP_MUSIC_MODEL}>{t('music.aceStepDefault')}</option>
+            <option value={MINIMAX_MUSIC3_LOCAL_MODEL}>{t('music.music30Local')}</option>
             <option value="music-3.0">{t('music.music30Unavailable')}</option>
             <option value="music-2.6">{t('music.music26')}</option>
           </select>
+          {resourceHint && <span className="mt-1 block text-[9px] text-text-muted" title={resourceHint}>{resourceHint}</span>}
         </label>
         <div className="text-[10px] text-text-muted">{t('music.oneResultHint')}</div>
-        <div className={`rounded-md border px-3 py-2 text-[10px] ${minimaxConfigured ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/40 text-amber-300'}`}>
-          {minimaxConfigured ? t('music.minimaxReady') : t('music.minimaxMissing')}
+        <div className={`rounded-md border px-3 py-2 text-[10px] ${minimaxConfigured || isLocalMusicModel(project.music.model) ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/40 text-amber-300'}`}>
+          {isLocalMusicModel(project.music.model)
+            ? t('music.minimaxLocalReady')
+            : minimaxConfigured ? t('music.minimaxReady') : t('music.minimaxMissing')}
         </div>
       </div>
 

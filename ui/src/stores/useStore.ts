@@ -703,7 +703,10 @@ const audioSubFamilies: ModelFamily[] = [
 // were invisible in the Music group because an id list here missed
 // them. Keep the explicit set for one-off ids that don't share a
 // prefix with their line.
-const musicModelTypes = new Set<string>([])
+// Keep local MiniMax Music3 in the same direct-audio family as ACE-Step. It
+// does not share the ace_step prefix, so without this explicit entry it is
+// available to Story Lab but disappears from Studio → Audio → Music.
+const musicModelTypes = new Set<string>(['minimax_music3'])
 const musicModelPrefixes = ['ace_step', 'heartmula']
 
 function isMusicModelType(modelType: string): boolean {

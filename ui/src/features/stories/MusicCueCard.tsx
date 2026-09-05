@@ -2,6 +2,7 @@ import { Copy, ExternalLink, Film, Languages, Loader2, Music, Palette, RefreshCc
 import * as api from '../../api/client'
 import { useUiTranslation } from '../../i18n'
 import { button, completeGenerationButton, input, panel, Field } from './storyLabChrome'
+import { clampStoryMusicDuration, storyMusicDurationMax, storyMusicGenerationReady } from './musicModel'
 import { MINIMAX_LYRIC_SECTION, miniMaxCuePayload, musicCandidateDisplayName } from './storyLabMusic'
 import type { StoryMusicCue } from './types'
 import type { StoryMusicTabProps } from './StoryMusicTab'
@@ -51,9 +52,9 @@ export function MusicCueCard({
               {t('music.instrumental')}
             </label>
             <label className="block text-[10px] text-text-muted">{t('music.targetDuration')}
-              <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
+              <input className={`${input} mt-1`} type="number" min={20} max={storyMusicDurationMax(project.music.model)} step={5}
                 value={cue.durationSeconds}
-                onChange={event => patchMusicCue(cue.id, { durationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) })} />
+                onChange={event => patchMusicCue(cue.id, { durationSeconds: clampStoryMusicDuration(event.target.value, project.music.model) })} />
             </label>
           </div>
           <p className="text-[9px] text-text-muted">{t('music.durationHint')}</p>
@@ -120,7 +121,7 @@ export function MusicCueCard({
                 onCopied(t('music.payloadCopied', { title: cue.title }))
               }}><Copy size={12} /> {t('music.copyPayload')}</button>
               <button className={`${button} ${completeGenerationButton}`}
-                disabled={cueBusy || !minimaxConfigured || !cue.style.trim() || (!cue.instrumental && (!cue.lyrics.trim() || !MINIMAX_LYRIC_SECTION.test(cue.lyrics)))}
+                disabled={cueBusy || !storyMusicGenerationReady(project.music.model, minimaxConfigured) || !cue.style.trim() || (!cue.instrumental && (!cue.lyrics.trim() || !MINIMAX_LYRIC_SECTION.test(cue.lyrics)))}
                 onClick={() => void generateMusicCueAudio(cue.id)}>
                 {generatingAudio ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />} {t('music.generateTrack')}
               </button>

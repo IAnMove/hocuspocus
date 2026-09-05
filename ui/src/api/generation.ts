@@ -1,5 +1,5 @@
 import { rememberPrompt } from '../lib/promptHistory'
-import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ScailResolutionProfile } from '../types'
+import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ModelResourceRequirements, ScailResolutionProfile } from '../types'
 import { BASE } from './http'
 
 export interface ApiModel {
@@ -10,6 +10,7 @@ export interface ApiModel {
   lora_compatibility_note?: string
   family: string
   architecture: string
+  resource_requirements?: ModelResourceRequirements
   is_i2v: boolean
   is_t2v: boolean
   guidance_max_phases: number

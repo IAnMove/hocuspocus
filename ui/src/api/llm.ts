@@ -31,8 +31,8 @@ export async function planH3Windows(params: {
 export async function writeSong(params: {
   description: string
   instrumental?: boolean
-  target?: 'ace-step' | 'minimax'
-  model?: 'music-3.0' | 'music-2.6' | 'music-cover' | 'ace_step_v1_5_xl_sft_lm_4b'
+  target?: 'ace-step' | 'minimax' | 'minimax-music3'
+  model?: 'music-3.0' | 'music-2.6' | 'music-cover' | 'minimax_music3' | 'ace_step_v1_5_xl_sft_lm_4b'
   reference_song?: string
   style_direction?: string
   lyrics_direction?: string

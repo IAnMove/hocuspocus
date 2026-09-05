@@ -15,6 +15,7 @@ export const AGENT_ACTION_TYPES = [
   'prepare_video',
   'prepare_image',
   'prepare_audio',
+  'download_model',
   'queue_sfx_pack',
   'prepare_3d',
   'start_generation',

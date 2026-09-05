@@ -47,6 +47,14 @@ _SONG_WRITER_FALLBACK_MINIMAX = (
     "[Verse], [Pre Chorus], [Chorus], [Bridge], [Inst], [Solo] and [Outro], each "
     "on its own line, with short singable lines. For instrumentals leave LYRICS empty."
 )
+_SONG_WRITER_FALLBACK_MINIMAX_MUSIC3 = (
+    "You write prompts for local MiniMax-Music3. Output exactly [STYLE] and [LYRICS]. "
+    "STYLE must contain the headings ### Global Metadata, ### Vocal Details, and "
+    "### Arrangement, with concrete section-by-section musical direction. LYRICS must "
+    "use bare tags such as [Verse], [Chorus], [Bridge], [Instrumental] and [Outro] on "
+    "their own lines. Keep production directions out of the sung lyric text. Write the "
+    "style direction in English and the sung words in the requested language."
+)
 
 
 def _parse_song_output(raw, instrumental):
@@ -135,6 +143,19 @@ def _normalize_minimax_song_output(style: str, lyrics: str, instrumental: bool, 
     return style, lyrics
 
 
+def _normalize_music3_song_output(style: str, lyrics: str, instrumental: bool):
+    """Keep the multiline Music3 caption intact; do not apply remote API limits."""
+    style = str(style or "").strip()
+    if len(style) > 8000:
+        style = style[:8000].rsplit("\n", 1)[0].rstrip()
+    if instrumental:
+        return style, ""
+    lyrics = str(lyrics or "").strip()
+    if len(lyrics) > 8000:
+        lyrics = lyrics[:8000].rsplit("\n", 1)[0].rstrip()
+    return style, lyrics
+
+
 def _ace_song_request_prompt(description: str, language: str, instrumental: bool) -> str:
     """Keep technical direction in English and lyrics in the selected language."""
     target = str(language or "English").strip()[:80] or "English"
@@ -147,6 +168,23 @@ def _ace_song_request_prompt(description: str, language: str, instrumental: bool
             "exact segments character-for-character."
         )
     return f"LYRICS LANGUAGE: {target}. TECHNICAL PROMPT LANGUAGE: English. {rule}\n\n{str(description or '').strip()}"
+
+
+def _music3_song_request_prompt(description: str, language: str, instrumental: bool, duration_seconds: object) -> str:
+    """Build a bounded brief for the local MiniMax-Music3 writer."""
+    target = str(language or "English").strip()[:80] or "English"
+    try:
+        duration = max(5, min(300, int(float(duration_seconds or 120))))
+    except (TypeError, ValueError):
+        duration = 120
+    mode = "instrumental track" if instrumental else "vocal song"
+    return (
+        f"MODE: {mode}. LYRICS LANGUAGE: {target}. TECHNICAL STYLE LANGUAGE: English. "
+        f"TARGET RUNTIME: {duration} seconds. Scale section count, lyric density and "
+        "arrangement detail to this runtime; do not add unnecessary repeated sections. "
+        "Keep section tags such as [Verse] and [Chorus] in English.\n\n"
+        f"USER BRIEF:\n{str(description or '').strip()[:8000]}"
+    )
 
 
 def _song_writer_image_paths(body: dict) -> list:
@@ -163,7 +201,14 @@ def _song_writer_prompts(
     """Return (system_prompt, user_prompt, include_lyria) for the selected contract."""
     from services.guide_loader import load_guide
     include_lyria = False
-    if target == "minimax":
+    if target == "minimax-music3":
+        system_prompt = load_guide("music", "song_writer_minimax_music3") or _SONG_WRITER_FALLBACK_MINIMAX_MUSIC3
+        if instrumental:
+            system_prompt = load_guide("music", "song_writer_minimax_music3_instrumental") or system_prompt
+        user_prompt = _music3_song_request_prompt(
+            description, language, instrumental, body.get("duration_seconds"),
+        )
+    elif target == "minimax":
         system_prompt = load_guide("music", "song_writer_minimax") or _SONG_WRITER_FALLBACK_MINIMAX
         include_lyria = bool(body.get("include_lyria"))
         if include_lyria:
@@ -226,6 +271,9 @@ def _song_writer_payload(raw, instrumental: bool, target: str, include_lyria: bo
     lyria_prompt = _parse_lyria_output(raw) if target == "minimax" and include_lyria else ""
     if target == "minimax":
         style, lyrics = _normalize_minimax_song_output(style, lyrics, instrumental, model)
+    elif target == "minimax-music3":
+        style, lyrics = _normalize_music3_song_output(style, lyrics, instrumental)
+    if target in {"minimax", "minimax-music3"}:
         if len(style) < 10:
             raise HTTPException(status_code=502, detail="The LLM did not return a valid MiniMax style prompt")
         if not instrumental and not lyrics:

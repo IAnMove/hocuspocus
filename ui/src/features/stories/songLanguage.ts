@@ -223,7 +223,7 @@ export interface StorySongWritingRequestInput {
   lyricsLanguage: string
   protectedLyrics: readonly VerbatimContentSegment[]
   model: StoryMusicDraft['model']
-  targetProvider: 'ace-step' | 'minimax'
+  targetProvider: 'ace-step' | 'minimax' | 'minimax-music3'
   durationSeconds: number
   writingProvider: StoryWritingProvider
   writingModel: string

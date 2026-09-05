@@ -4,7 +4,12 @@
 
 Ejecuta `bash scripts/validate_local.sh`. Esta rutina cubre contratos Python,
 la suite UI, lint, build y E2E de navegador con API simulada. No carga modelos,
-no reserva GPU y no llama a proveedores externos.
+no reserva GPU y no llama a proveedores externos. El ratchet de code-health
+compara contra `origin/main`, la referencia equivalente a la base del PR. Para
+reproducir una base concreta de CI se puede indicar `BASE_SHA=<sha>`; `BASE_REF`
+sirve para una rama remota alternativa. El baseline histórico
+`scripts/code_health_baseline.json` sólo se usa para el dashboard deliberado,
+no para decidir si un PR actual puede pasar.
 
 ## Smoke de medios reales (sólo manual)
 

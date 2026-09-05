@@ -4,7 +4,7 @@ import { rememberedCharacterKitLibrary } from '../characters/session'
 import type { SeriesAssemblyJob } from '../series/assemblyContract'
 import type { SeriesJobStatus } from '../series/types'
 import type { MediaFilter } from '../../types'
-import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentAttachStudioReferencesAction, AgentCommitSeriesCanonAction, AgentConfigureStudioLorasAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentCreateWorkspaceAction, AgentCreateWorkspaceCollectionAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentPrepare3dAction, AgentPrepareAudioAction, AgentPrepareImageAction, AgentPrepareVideoAction, AgentQueueSfxPackAction, AgentRemoveBackgroundAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentSelectWorkspaceAction, AgentStartGenerationAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction, AgentUpdateWorkspaceCollectionAction } from './agentActions'
+import type { AgentApply3dRhythmAction, AgentApplySeriesPlanAction, AgentApplyStoryProposalAction, AgentApproveStorySectionAction, AgentApproveStoryVisualsAction, AgentAssembleSeriesEpisodeAction, AgentAttachStudioReferencesAction, AgentCommitSeriesCanonAction, AgentConfigureStudioLorasAction, AgentConfigureStorySongAction, AgentCreateComicAction, AgentCreateSeriesEpisodeAction, AgentCreateStoryAction, AgentCreateWorkspaceAction, AgentCreateWorkspaceCollectionAction, AgentDownloadModelAction, AgentGenerateComicAction, AgentGenerateSeriesPlanAction, AgentGenerateStorySectionAction, AgentGenerateStorySongAction, AgentGenerateStoryVisualsAction, AgentPrepare3dAction, AgentPrepareAudioAction, AgentPrepareImageAction, AgentPrepareVideoAction, AgentQueueSfxPackAction, AgentRemoveBackgroundAction, AgentRenderSeriesShotsAction, AgentReviewSeriesAttemptsAction, AgentSelectWorkspaceAction, AgentStartGenerationAction, AgentStageStoryComicAction, AgentStartDirectorProductionAction, AgentStageStoryMusicVideoAction, AgentStageStoryVideoAction, AgentUpdateSeriesEpisodeAction, AgentUpdateStoryAction, AgentUpdateWorkspaceCollectionAction } from './agentActions'
 import type {
   AgentAttachVideoclipAlternativeSongAction,
   AgentMountVideoclipAlternativeSongAction,
@@ -43,6 +43,7 @@ import type {
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
 import { createToolsAdapter } from './toolsAdapter'
+import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
 
 export interface AdapterOutcome {
   message: string
@@ -66,6 +67,7 @@ export interface AdapterOutcome {
 
 export interface StudioAdapter {
   open(tab?: 'studio' | 'images' | 'videos' | 'audio' | '3d'): Promise<AdapterOutcome>
+  downloadModel(action: AgentDownloadModelAction): Promise<AdapterOutcome>
   queueMusic(action: AgentPrepareAudioAction): Promise<AdapterOutcome>
   prepareVideo(action: AgentPrepareVideoAction): Promise<AdapterOutcome>
   prepareImage(action: AgentPrepareImageAction): Promise<AdapterOutcome>
@@ -304,6 +306,33 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   const adapters = {} as WizardApplicationAdapters
   adapters.studio = {
     open: tab => navigate(tab || 'studio'),
+    async downloadModel(action) {
+      const model = useStore.getState().models.find(item => item.model_type === action.modelType)
+      if (!model) throw new Error(`No conozco el modelo “${action.modelType}” en el catálogo actual.`)
+      await navigate('settings')
+      if (model.is_downloaded === true) {
+        return {
+          message: `El modelo “${model.name}” ya está descargado; Ajustes → Models queda abierto.`,
+          target: { kind: 'model', id: model.model_type, title: model.name },
+        }
+      }
+      await requestModelDownload(action.modelType)
+      for (let attempt = 0; attempt < 1_800; attempt += 1) {
+        const status = (await fetchModelDownloads()).downloads[action.modelType]
+        if (status?.status === 'completed') {
+          await useStore.getState().loadModels()
+          return {
+            message: `Modelo “${model.name}” descargado y listo para usar.`,
+            target: { kind: 'model', id: model.model_type, title: model.name },
+          }
+        }
+        if (status?.status === 'failed') {
+          throw new Error(status.error || `Falló la descarga del modelo “${model.name}”.`)
+        }
+        await new Promise(resolve => setTimeout(resolve, 2_000))
+      }
+      throw new Error(`La descarga de “${model.name}” sigue en curso; no he iniciado ninguna generación.`)
+    },
     async queueMusic(action) {
       const result = await queueMusic(action)
       return { ...result, target: { kind: 'queue_task', id: result.taskId, title: 'Song generation' } }

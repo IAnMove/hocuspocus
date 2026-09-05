@@ -4,6 +4,7 @@ import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 import type { GenerateParams } from '../../types'
+import { clampStoryMusicDuration, songWriteTarget } from '../../features/stories/musicModel'
 
 const TEXTAREA_BASE =
   'w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary ' +
@@ -104,7 +105,16 @@ export function MusicControls() {
     setWriting(true)
     setWriteError(null)
     try {
-      const r = await api.writeSong({ description: description.trim(), instrumental })
+      const modelType = String(params.model_type || '')
+      const r = await api.writeSong({
+        description: description.trim(),
+        instrumental,
+        target: songWriteTarget(modelType),
+        model: modelType === 'minimax_music3' || modelType === 'music-3.0' || modelType === 'music-2.6' || modelType.startsWith('ace_step')
+          ? modelType as 'minimax_music3' | 'music-3.0' | 'music-2.6' | 'ace_step_v1_5_xl_sft_lm_4b'
+          : undefined,
+        duration_seconds: clampStoryMusicDuration(params.duration_seconds, modelType),
+      })
       if (r.style) setStyle(r.style)
       setLyrics(instrumental ? '[Instrumental]' : (r.lyrics || ''))
     } catch (e) {

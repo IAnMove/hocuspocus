@@ -47,6 +47,16 @@ test('parses a filled Series Lab episode action without trusting unknown fields'
   assert.equal('ignored' in turn.actions[0], false)
 })
 
+test('parses an exact confirmed Wizard model download', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({
+    reply: 'Descargo el modelo elegido.',
+    actions: [{ type: 'download_model', model_type: 'minimax_music3', confirm: true, ignored: 'drop me' }],
+  }))
+  assert.equal(turn.actions.length, 1)
+  assert.deepEqual(turn.actions[0], { type: 'download_model', modelType: 'minimax_music3', confirm: true })
+})
+
 test('remembers an internal lab destination requested before its lazy panel mounts', async () => {
   const { listenForAgentSeriesSection, openAgentSeriesSection } = await import('../src/features/agent/agentUiBus.ts')
   openAgentSeriesSection('episode')
@@ -1024,7 +1034,9 @@ test('music-video negation rebuilds omitted song setup from the created project'
   assert.equal(reconciled.actions[1].targetStoryTitle, 'Himno visible')
   assert.equal(reconciled.actions[1].writeLyrics, true)
   assert.equal(reconciled.actions[1].lyricsLanguage, 'Español')
-  assert.equal(reconciled.actions[1].model, 'ace_step_v1_5_xl_sft_lm_4b')
+  // An omitted model is resolved at execution time from the active Story
+  // selector and installed catalog, instead of freezing ACE-Step here.
+  assert.equal(reconciled.actions[1].model, undefined)
   assert.equal(reconciled.actions[2].cueTitle, 'Himno visible')
 })
 
