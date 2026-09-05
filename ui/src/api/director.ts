@@ -41,6 +41,7 @@ export async function generateMusic(params: {
     production_id?: string
     cue_id?: string
     candidate_id?: string
+    song_version?: string
     command?: Record<string, string>
   }
 }): Promise<{

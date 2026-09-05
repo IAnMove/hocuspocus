@@ -160,6 +160,8 @@ export interface StoryProduction {
   status: 'draft' | 'staged'
 }
 
+export type StoryMusicCandidateStatus = 'pending' | 'ready' | 'failed'
+
 export interface StoryMusicCandidate {
   id: string
   /** Human-readable identity; the provider filename remains in `name`. */
@@ -175,6 +177,11 @@ export interface StoryMusicCandidate {
   model: string
   durationSeconds: number
   createdAt: string
+  /**
+   * Durable lifecycle of this `song-…` row. Display `v1/v2` is never identity.
+   * Pending/failed rows may have an empty source so they survive client close.
+   */
+  status?: StoryMusicCandidateStatus
   /** Canonical backend identity for audit, cancellation and exact output correlation. */
   taskId?: string
   rootTaskId?: string

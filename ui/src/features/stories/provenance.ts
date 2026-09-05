@@ -28,6 +28,28 @@ type RuntimeIds = {
   jobId?: string
 }
 
+export function pendingSongProvenance(input: {
+  outputFolder: string
+  projectId: string
+  cueId: string
+  candidateId: string
+  startedAt: string
+  songVersion?: number
+  actor?: StoryProvenance['actor']
+}): StoryProvenance {
+  return {
+    outputFolder: input.outputFolder,
+    projectId: input.projectId,
+    cueId: input.cueId,
+    candidateId: input.candidateId,
+    startedAt: input.startedAt,
+    songVersion: input.songVersion === undefined ? undefined : String(input.songVersion),
+    actor: input.actor || 'wizard',
+    tool: 'story_lab',
+    capability: 'generate_story_song',
+  }
+}
+
 export function generatedSongProvenance(input: RuntimeIds & {
   outputFolder: string
   projectId: string
@@ -36,11 +58,12 @@ export function generatedSongProvenance(input: RuntimeIds & {
   startedAt: string
   completedAt: string
   songVersion?: number
+  actor?: StoryProvenance['actor']
 }): StoryProvenance {
   return {
     ...input,
     songVersion: input.songVersion === undefined ? undefined : String(input.songVersion),
-    actor: 'wizard',
+    actor: input.actor || 'wizard',
     tool: 'story_lab',
     capability: 'generate_story_song',
   }

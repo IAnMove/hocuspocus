@@ -7,6 +7,10 @@ import {
 } from './adaptations'
 import type { TrailerAdaptationOptions } from './adaptations'
 import type { AspectRatio, ResolutionPreset } from '../../types'
+import {
+  effectiveStoryMusicCue,
+  isReadyStoryMusicCandidate,
+} from './musicVideoSelection'
 import type {
   StoryMusicCandidate,
   StoryMusicCue,
@@ -62,28 +66,14 @@ export function musicCandidateById(source: StoryProject, candidateId?: string): 
     || cue?.candidates.find(item => item.id === candidateId)
 }
 
-/** Build a cue around a legacy/global candidate so every Director handoff has a full context. */
+/** Build a cue around a legacy/global candidate only when the caller asked for `story-song`. */
 export function effectiveMusicCue(
   source: StoryProject,
   cue: StoryMusicCue | undefined,
   candidate: StoryMusicCandidate,
+  requestedCueId = '',
 ): StoryMusicCue {
-  return cue || {
-    id: 'story-song',
-    kind: 'story',
-    targetId: source.id,
-    title: candidate.title || candidate.displayName || candidate.name,
-    purpose: source.music.brief || `Tell ${source.title} as a song-led visual story.`,
-    referenceSong: '',
-    brief: source.music.brief,
-    style: candidate.prompt || source.music.style,
-    lyrics: candidate.lyrics || source.music.lyrics,
-    lyriaPrompt: '',
-    instrumental: !(candidate.lyrics || source.music.lyrics).trim(),
-    durationSeconds: candidate.durationSeconds || source.music.targetDurationSeconds,
-    candidates: [candidate],
-    selectedCandidateId: candidate.id,
-  }
+  return effectiveStoryMusicCue(source, cue, candidate, requestedCueId)
 }
 
 type StoryReference = { assetId: string; label: string }
@@ -330,7 +320,11 @@ export async function loadStoryFilmProduction(options: StoryFilmProductionOption
  */
 export async function loadStoryMusicVideoProduction(options: StoryMusicVideoProductionOptions) {
   const { source, cue, candidate, generationSettings } = options
-  const resolvedCue = effectiveMusicCue(source, cue, candidate)
+  if (!isReadyStoryMusicCandidate(candidate)) {
+    const label = candidate.displayName || candidate.title || candidate.name || candidate.id
+    throw new Error(`Cannot stage a videoclip from “${label}” until that song version is ready.`)
+  }
+  const resolvedCue = effectiveMusicCue(source, cue, candidate, cue?.id || '')
   const directReferences = generationSettings.generationMode === 'direct_references'
   if (directReferences && !generationSettings.videoModel.startsWith('minimax_h3')) {
     throw new Error('Direct references currently require a MiniMax H3 video model with Ref2VA support.')

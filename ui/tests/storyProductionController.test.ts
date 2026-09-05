@@ -68,13 +68,17 @@ test('music production resolves cue and candidate by durable IDs', () => {
   assert.equal(musicCandidateById(project, 'missing-song'), undefined)
 })
 
-test('effective music cue preserves the selected song context for legacy candidates', () => {
+test('effective music cue preserves the selected song context only when story-song is requested', () => {
   const project = createStoryProject('music_video')
   project.music.brief = 'A heroic uptime story'
   project.music.style = '80s heavy metal'
   const selected = candidate('song-legacy', { lyrics: '', durationSeconds: 42 })
 
-  const cue = effectiveMusicCue(project, undefined, selected)
+  assert.throws(
+    () => effectiveMusicCue(project, undefined, selected),
+    /no tiene un cue persistido/,
+  )
+  const cue = effectiveMusicCue(project, undefined, selected, 'story-song')
 
   assert.equal(cue.id, 'story-song')
   assert.equal(cue.targetId, project.id)

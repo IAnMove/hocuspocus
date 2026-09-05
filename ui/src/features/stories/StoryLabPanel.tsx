@@ -3256,66 +3256,13 @@ export function StoryLabPanel() {
       : beginStoryActivity('generating_music', `${usingAceStep ? 'ACE-Step' : 'MiniMax Music'} is generating “${cue.title}”…`, 1)
     setMusicCueBusy(`audio:${cueId}`)
     try {
-      if (usingLocalMusic) {
-        const prompt = cue.style.trim()
-        const durationSeconds = clampStoryMusicDuration(
-          cue.durationSeconds || current.music.targetDurationSeconds,
-          current.music.model,
-        )
-        const rendered = await api.generateMusic({
-          style: prompt,
-          lyrics: cue.instrumental ? '[Instrumental]' : cue.lyrics,
-          instrumental: cue.instrumental,
-          duration_seconds: durationSeconds,
-          model_type: current.music.model,
-          workspace: activeWorkspace,
-          initiator: `Story Lab · ${current.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
-        })
-        const createdAt = new Date().toISOString()
-        const language = cue.lyricsLanguage || current.language
-        const firstVersion = nextMusicCandidateVersion(cue.candidates, language, current.language)
-        const candidates = [{
-          id: storyId('song'),
-          displayName: `${cue.title} · ${language} · v${firstVersion}`,
-          title: cue.title,
-          language,
-          version: firstVersion,
-          name: rendered.filename,
-          source: api.getFileUrl(rendered.filename, activeWorkspace),
-          prompt,
-          lyrics: cue.lyrics,
-          provider: 'local' as const,
-          model: current.music.model,
-          durationSeconds,
-          createdAt,
-        }]
-        updateProjectById(sourceProjectId, latest => {
-          const target = latest.music.cues.find(item => item.id === cueId)
-          if (!target) return latest
-          return {
-            ...latest,
-            music: {
-              ...latest.music,
-              cues: latest.music.cues.map(item => item.id === cueId ? {
-                ...item,
-                candidates: [...item.candidates, ...candidates],
-                selectedCandidateId: candidates[0]?.id || item.selectedCandidateId,
-              } : item),
-            },
-          }
-        })
-        setNotice({ kind: 'ok', text: t(usingAceStep ? 'notice.aceStepGenerated' : 'notice.minimaxMusic3LocalGenerated', { title: cue.title }) })
-        return true
-      }
-      const prompt = cue.style.trim().slice(0, 300)
-      const result = await api.generateStoryMusicCandidates({
-        prompt,
-        lyrics: cue.instrumental ? '' : cue.lyrics,
-        instrumental: cue.instrumental,
-        count: 1,
-        model: current.music.model,
+      const { generateStoryCueSong } = await import('./storySongGeneration')
+      await generateStoryCueSong({
         workspace: activeWorkspace,
-      }, {
+        projectId: sourceProjectId,
+        cueId,
+        actor: 'user',
+        capability: 'generate_story_song',
         onJobSubmitted: job => {
           activeMusicJobId.current = job.jobId
           activity?.handoff(`Continuing as recoverable MiniMax Music job ${job.jobId}`)
@@ -3328,43 +3275,14 @@ export function StoryLabPanel() {
           job.total,
         ),
       })
-      const createdAt = new Date().toISOString()
-      const language = cue.lyricsLanguage || current.language
-      const firstVersion = nextMusicCandidateVersion(cue.candidates, language, current.language)
-      const candidates = result.candidates.map((candidate, index) => ({
-        id: storyId('song'),
-        displayName: `${cue.title} · ${language} · v${firstVersion + index}`,
-        title: cue.title,
-        language,
-        version: firstVersion + index,
-        name: candidate.filename,
-        source: candidate.source,
-        prompt,
-        lyrics: cue.lyrics,
-        provider: 'minimax' as const,
-        model: candidate.model,
-        durationSeconds: candidate.duration_seconds,
-        createdAt,
-        taskId: candidate.taskId || candidate.task_id,
-        rootTaskId: candidate.rootTaskId || candidate.root_task_id,
-      }))
-      updateProjectById(sourceProjectId, latest => {
-        const target = latest.music.cues.find(item => item.id === cueId)
-        if (target) {
-          target.candidates.push(...candidates)
-          target.selectedCandidateId = candidates[0]?.id || target.selectedCandidateId
-        }
-        return latest
-      })
-      if (!queued) {
-        setNotice({
-          kind: result.status === 'completed' ? 'ok' : 'error',
-          text: result.status === 'completed'
-            ? t('notice.minimaxCueGenerated', { title: cue.title })
-            : t('notice.minimaxCuePartial', { title: cue.title, message: result.message }),
-        })
+      if (usingLocalMusic) {
+        setNotice({ kind: 'ok', text: t(usingAceStep ? 'notice.aceStepGenerated' : 'notice.minimaxMusic3LocalGenerated', { title: cue.title }) })
+        return true
       }
-      return result.status === 'completed' || result.status === 'cancelled'
+      if (!queued) {
+        setNotice({ kind: 'ok', text: t('notice.minimaxCueGenerated', { title: cue.title }) })
+      }
+      return true
     } catch (error) {
       activity?.fail(error, 'generating_music')
       setNotice({ kind: 'error', text: t('notice.cueGenerateFailed', { title: cue.title, message: (error as Error).message }) })
