@@ -82,6 +82,8 @@ def _base_namespace(tmp_path: Path) -> dict:
         "_persist_minimax_music_job": lambda _job: None,
         "_publish_minimax_music_job": lambda _job: None,
         "_workspace_dir": lambda _workspace=None: str(tmp_path),
+        "_reserve_story_music_submission": lambda _body, _workspace: {},
+        "_load_minimax_music_job": lambda _job_id: None,
     }
 
 
