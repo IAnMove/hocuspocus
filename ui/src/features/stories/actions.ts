@@ -15,16 +15,13 @@ import {
   buildStorySongWritingRequest,
   protectedSongLyrics,
   resolveStorySongLanguage,
-  songProviderLanguageIntent,
   storySongSemanticAnchors,
 } from './songLanguage'
 import {
   directorResultDetails,
   directorRunProvenance,
-  generatedSongProvenance,
 } from './provenance'
 import {
-  buildGeneratedSongCandidate,
   buildMusicVideoProduction,
   validateMusicVideoStaging,
 } from './musicWorkflowState'
@@ -102,46 +99,8 @@ async function saveActiveStoryProjectMutation(
   projectId: string,
   mutate: (project: import('./types').StoryProject) => import('./types').StoryProject,
 ): Promise<import('./types').StoryProject> {
-  const [{ useStoryStore }, api] = await Promise.all([
-    import('./store'), import('../../api/client'),
-  ])
-  let baseline = current
-  let library: Awaited<ReturnType<typeof api.saveStoryLibrary>> | null = null
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const source = baseline.projects[projectId]
-    if (!source) throw new Error('La historia activa desapareció antes de poder guardarla.')
-    const project = mutate(source)
-    try {
-      library = await api.saveStoryLibrary(workspace, {
-        version: 2,
-        revision: baseline.libraryRevision,
-        activeId: project.id,
-        projects: { ...baseline.projects, [project.id]: project },
-      })
-      break
-    } catch (error) {
-      if (!(error instanceof api.StoryLibraryRevisionError) || attempt === 2) throw error
-      const remote = await api.fetchStoryLibrary(workspace)
-      baseline = {
-        libraryRevision: remote.revision,
-        projects: remote.projects,
-      }
-    }
-  }
-  if (!library?.projects[projectId]) throw new Error('Story Lab guardó la biblioteca sin devolver la historia editada.')
-  useStoryStore.setState({
-    workspace,
-    project: library.projects[projectId],
-    projects: library.projects,
-    libraryRevision: library.revision,
-    dirty: false,
-    hydrated: false,
-    loading: false,
-    saveError: null,
-    libraryConflicts: [],
-  })
-  await useStoryStore.getState().loadWorkspace(workspace)
-  return library.projects[projectId]
+  const { saveStoryProjectMutation } = await import('./store')
+  return saveStoryProjectMutation(workspace, current, projectId, mutate)
 }
 
 export async function configureStorySong(action: ConfigureStorySongCommand): Promise<CommandResult> {
@@ -278,8 +237,8 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
 export async function generateStorySong(action: GenerateStorySongCommand): Promise<CommandResult> {
   if (!action.confirm) throw new Error('Generar la canción requiere confirm=true.')
   const workspace = useStore.getState().activeWorkspace || 'default'
-  const [{ useStoryStore, normalizeStoryProject, storyId }, { isLocalMusicModel }, api] = await Promise.all([
-    import('./store'), import('./musicModel'), import('../../api/client'),
+  const [{ useStoryStore }, { isLocalMusicModel }, { generateStoryCueSong }] = await Promise.all([
+    import('./store'), import('./musicModel'), import('./storySongGeneration'),
   ])
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
@@ -301,105 +260,37 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
         || target.music.cues.find(item => item.kind === 'story')
       : undefined)
   if (!cue) throw new Error(`No existe la canción “${action.cueTitle || 'principal'}” en “${target.title}”.`)
-  if (!cue.style.trim()) throw new Error(`“${cue.title}” necesita un estilo musical antes de generarse.`)
-  if (!cue.instrumental && !cue.lyrics.trim()) throw new Error(`“${cue.title}” necesita letra antes de generarse.`)
   if (!isLocalMusicModel(target.music.model)) {
     throw new Error('Este contrato automatizado necesita un modelo local: ACE-Step 1.5 XL o MiniMax Music 3 local.')
   }
   if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
   useStoryStore.getState().beginProjectOperation(target.id)
   try {
-    const startedAt = new Date().toISOString()
-    // Allocate the durable candidate identity before submitting the compute
-    // job so the WAV sidecar and the Story object can carry the same ID.
-    const candidateId = storyId('song')
-    const rendered = await api.generateMusic({
-      style: compileProviderPrompt(cue.style.trim(), songProviderLanguageIntent(
-        target.languageIntent,
-        cue.lyricsLanguage || target.languageIntent.spokenLanguage || target.spokenLanguage,
-      ), { medium: 'music' }),
-      lyrics: cue.instrumental ? '[Instrumental]' : cue.lyrics,
-      instrumental: cue.instrumental,
-      duration_seconds: clampStoryMusicDuration(cue.durationSeconds, target.music.model),
-      model_type: target.music.model,
+    const generated = await generateStoryCueSong({
       workspace,
-      initiator: `Story Lab · ${target.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
-      provenance: {
-        actor: 'wizard',
-        capability: 'generate_story_song',
-        project_id: target.id,
-        cue_id: cue.id,
-        candidate_id: candidateId,
-      },
-    })
-    if (!rendered.filename || !rendered.audio_path) throw new Error('El modelo local terminó sin devolver un archivo de audio verificable.')
-    const completedAt = new Date().toISOString()
-    const taskId = rendered.task_id || undefined
-    const rootTaskId = rendered.root_task_id || taskId
-    const jobId = rendered.job_id || undefined
-    const provenance = generatedSongProvenance({
-      outputFolder: workspace,
       projectId: target.id,
       cueId: cue.id,
-      candidateId,
-      taskId,
-      rootTaskId,
-      jobId,
-      startedAt,
-      completedAt,
+      actor: 'wizard',
+      capability: 'generate_story_song',
     })
-    let version = 1
-    const project = await saveActiveStoryProjectMutation(
-      workspace,
-      useStoryStore.getState(),
-      target.id,
-      source => {
-        const latestCue = source.music.cues.find(item => item.id === cue.id)
-        if (!latestCue) throw new Error(`El cue “${cue.title}” desapareció mientras se generaba el audio.`)
-        const existingCandidate = latestCue.candidates.find(item => item.id === candidateId)
-        version = existingCandidate?.version || (latestCue.candidates.length + 1)
-        const candidate = existingCandidate || buildGeneratedSongCandidate({
-          project: source, cue: latestCue, candidateId, version,
-          filename: rendered.filename, source: api.getFileUrl(rendered.filename, workspace),
-          model: target.music.model, taskId, rootTaskId, provenance,
-        })
-        return normalizeStoryProject({
-          ...source,
-          revision: source.revision + 1,
-          music: {
-            ...source.music,
-            selectedCandidateId: candidateId,
-            cues: source.music.cues.map(item => item.id === latestCue.id ? {
-              ...item,
-              candidates: existingCandidate ? item.candidates : [...item.candidates, candidate],
-              selectedCandidateId: candidateId,
-            } : item),
-          },
-          updatedAt: new Date().toISOString(),
-        })
-      },
-    )
-    const savedCue = project.music.cues.find(item => item.id === cue.id)
-    const savedCandidate = savedCue?.candidates.find(item => item.id === candidateId)
-    if (!savedCue || !savedCandidate) {
-      throw new Error('Story Lab guardó la canción sin devolver el candidato generado.')
-    }
+    const savedCue = generated.project.music.cues.find(item => item.id === cue.id)
+    if (!savedCue) throw new Error('Story Lab guardó la canción sin devolver el cue generado.')
     return storyResult(
       workspace,
-      project,
+      generated.project,
       'music',
-      `${target.music.model === 'minimax_music3' ? 'MiniMax Music 3 local' : 'ACE-Step'} ha generado “${savedCue.title}” y la versión v${version} ha quedado seleccionada en Story Lab → Music.`,
+      `${target.music.model === 'minimax_music3' ? 'MiniMax Music 3 local' : 'ACE-Step'} ha generado “${savedCue.title}” y la versión v${generated.version} ha quedado seleccionada en Story Lab → Music.`,
       {
-        projectId: project.id,
+        projectId: generated.project.id,
         cueId: savedCue.id,
-        candidateId,
-        songVersion: version,
-        taskId,
-        rootTaskId,
-        jobId,
-        provenance: savedCandidate.provenance,
+        candidateId: generated.candidateId,
+        songVersion: generated.version,
+        taskId: generated.taskId,
+        rootTaskId: generated.rootTaskId,
+        jobId: generated.jobId,
+        provenance: generated.candidate.provenance,
         cueTitle: savedCue.title,
-        outputName: rendered.filename,
+        outputName: generated.filename,
       },
     )
   } finally {
@@ -1533,7 +1424,7 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
     action.cueId,
     action.candidateId,
   )
-  const resolvedCue = selection.effectiveStoryMusicCue(found, cue, candidate)
+  const resolvedCue = selection.effectiveStoryMusicCue(found, cue, candidate, action.cueId)
   const target = applyMusicVideoDirectVideoDefaults(found.projectType === 'music_video'
     ? found
     : { ...found, projectType: 'music_video', musicVideoGenerationMode: 'direct_video' })
@@ -1561,7 +1452,9 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
       if (!latestCue || !latestCandidate) {
         throw new Error('La canción seleccionada cambió mientras se preparaba el videoclip; vuelve a intentarlo con la versión visible en Story Lab.')
       }
-      const latestResolvedCue = selection.effectiveStoryMusicCue(latestTarget, latestCue, latestCandidate)
+      const latestResolvedCue = selection.effectiveStoryMusicCue(
+        latestTarget, latestCue, latestCandidate, action.cueId,
+      )
       const latestAdaptation = adaptations.buildMusicVideoAdaptation(latestTarget, latestResolvedCue, {
         generationMode: latestTarget.musicVideoGenerationMode,
       })

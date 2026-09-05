@@ -150,27 +150,54 @@ export function storyId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+function normalizeMusicCandidateStatus(value: unknown, source: string): StoryMusicCandidate['status'] | undefined {
+  if (value === 'pending' || value === 'ready' || value === 'failed') return value
+  return source ? 'ready' : undefined
+}
+
+function keepMusicCandidate(id: string, source: string, status: StoryMusicCandidate['status']): boolean {
+  if (!id && !source) return false
+  return Boolean(source) || status === 'pending' || status === 'failed'
+}
+
+function musicCandidateProvider(value: unknown): StoryMusicCandidate['provider'] {
+  if (value === 'local' || value === 'lyria') return value
+  return 'minimax'
+}
+
+function optionalText(value: unknown): string | undefined {
+  const result = text(value)
+  return result || undefined
+}
+
 function normalizeMusicCandidate(value: unknown, now: string): StoryMusicCandidate | null {
   if (!value || typeof value !== 'object') return null
   const candidate = value as Partial<StoryMusicCandidate>
-  if (!text(candidate.source)) return null
+  const id = text(candidate.id)
+  const source = text(candidate.source)
+  const status = normalizeMusicCandidateStatus(candidate.status, source)
+  // Incomplete preview rows without a stable id and without audio are dropped.
+  // Pending/failed rows keep their minted `song-…` id even with an empty source.
+  // Never remint an existing empty id on load; only creators mint `storyId('song')`.
+  if (!keepMusicCandidate(id, source, status)) return null
+  const version = Number(candidate.version)
   return {
-    id: text(candidate.id) || storyId('song'),
-    displayName: text(candidate.displayName) || undefined,
-    title: text(candidate.title) || undefined,
-    language: text(candidate.language) || undefined,
-    version: Number(candidate.version) > 0 ? Math.max(1, Number(candidate.version)) : undefined,
-    name: text(candidate.name, 'Story song'),
-    source: text(candidate.source),
+    id,
+    displayName: optionalText(candidate.displayName),
+    title: optionalText(candidate.title),
+    language: optionalText(candidate.language),
+    version: version > 0 ? Math.max(1, version) : undefined,
+    name: text(candidate.name, source ? 'Story song' : ''),
+    source,
     prompt: text(candidate.prompt),
     lyrics: text(candidate.lyrics),
-    provider: candidate.provider === 'local' ? 'local'
-      : candidate.provider === 'lyria' ? 'lyria' : 'minimax',
+    provider: musicCandidateProvider(candidate.provider),
     model: text(candidate.model),
     durationSeconds: Math.max(0, Number(candidate.durationSeconds) || 0),
     createdAt: text(candidate.createdAt, now),
-    taskId: text(candidate.taskId) || undefined,
-    rootTaskId: text(candidate.rootTaskId) || undefined,
+    status,
+    taskId: optionalText(candidate.taskId),
+    rootTaskId: optionalText(candidate.rootTaskId),
     provenance: normalizeStoryProvenance(candidate.provenance),
   }
 }
@@ -213,8 +240,11 @@ function normalizeMusicCue(value: unknown, index: number, now: string): StoryMus
     lyriaPrompt: text(cue.lyriaPrompt),
     instrumental: cue.instrumental === true,
     durationSeconds: Math.max(20, Math.min(360, Number(cue.durationSeconds) || 90)),
-    candidates: Array.isArray(cue.candidates)
-      ? cue.candidates.flatMap(candidate => normalizeMusicCandidate(candidate, now) || []) : [],
+    candidates: uniqueIds(
+      Array.isArray(cue.candidates)
+        ? cue.candidates.flatMap(candidate => normalizeMusicCandidate(candidate, now) || []) : [],
+      'song',
+    ),
     selectedCandidateId: text(cue.selectedCandidateId) || undefined,
   }
 }
@@ -633,9 +663,12 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       candidateCount: project.music?.candidateCount === 3 ? 3 : 2,
       cues: Array.isArray(project.music?.cues)
         ? project.music.cues.flatMap((cue, index) => normalizeMusicCue(cue, index, now) || []) : [],
-      candidates: Array.isArray(project.music?.candidates)
-        ? project.music.candidates.flatMap(candidate => normalizeMusicCandidate(candidate, now) || [])
-        : [],
+      candidates: uniqueIds(
+        Array.isArray(project.music?.candidates)
+          ? project.music.candidates.flatMap(candidate => normalizeMusicCandidate(candidate, now) || [])
+          : [],
+        'song',
+      ),
       selectedCandidateId: text(project.music?.selectedCandidateId) || undefined,
     },
     productions: Array.isArray(project.productions)

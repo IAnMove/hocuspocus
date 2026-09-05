@@ -38,6 +38,12 @@ Every command and relationship propagates opaque IDs. Names, selected labels
 and `v1`-style display versions are never used to recover an identity that was
 already returned by the previous step.
 
+Story Lab song versions follow the same rule: identity is
+`StoryMusicCandidate.id` (`song-…`), not the display `v1` / `v2` integer. The
+pending row is saved to the Story library before generate starts so a client
+close can recover the WAV from a sidecar `candidate_id`. See
+[STORY_SONG_IDENTITY.md](STORY_SONG_IDENTITY.md).
+
 ## Storage transition
 
 Existing workspace folders and `.meta.json` files remain readable. New APIs

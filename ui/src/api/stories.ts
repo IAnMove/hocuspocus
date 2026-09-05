@@ -51,6 +51,14 @@ export interface StoryMusicCandidateRequest {
   reference_audio_filename?: string
   instrumental?: boolean
   workspace?: string
+  provenance?: {
+    actor?: 'user' | 'wizard' | 'system' | 'unknown'
+    capability?: string
+    project_id?: string
+    cue_id?: string
+    candidate_id?: string
+    song_version?: string
+  }
 }
 
 export async function startStoryMusicCandidatesJob(

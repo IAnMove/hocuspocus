@@ -156,6 +156,138 @@ def patch_story_project(
         return write_story_library(workspace_dir, next_library, base_revision=expected)
 
 
+def _story_id_token(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _index_by_id(items: list[Any], token: str) -> int:
+    for index, item in enumerate(items):
+        if isinstance(item, dict) and _story_id_token(item.get("id")) == token:
+            return index
+    return -1
+
+
+def _require_music_row(project: dict[str, Any], cue_id: str, candidate_id: str) -> tuple[dict, list, int, list, int]:
+    music = dict(project.get("music") or {})
+    cues = list(music.get("cues") or [])
+    cue_index = _index_by_id(cues, cue_id)
+    if cue_index < 0:
+        raise KeyError(cue_id)
+    cue = dict(cues[cue_index])
+    candidates = list(cue.get("candidates") or [])
+    candidate_index = _index_by_id(candidates, candidate_id)
+    if candidate_index < 0:
+        raise KeyError(candidate_id)
+    return music, cues, cue_index, candidates, candidate_index
+
+
+def _apply_song_candidate_patch(
+    candidate: dict[str, Any],
+    *,
+    project_id: str,
+    cue_id: str,
+    candidate_id: str,
+    source: str,
+    filename: str,
+    status: str,
+    duration_seconds: float | int | None,
+    task_id: str | None,
+    root_task_id: str | None,
+    job_id: str | None,
+) -> dict[str, Any]:
+    patched = dict(candidate)
+    patched["id"] = candidate_id
+    patched["source"] = str(source or "")
+    patched["name"] = str(filename or patched.get("name") or "")
+    patched["status"] = status
+    if duration_seconds is not None:
+        patched["durationSeconds"] = duration_seconds
+    if task_id:
+        patched["taskId"] = task_id
+    if root_task_id:
+        patched["rootTaskId"] = root_task_id
+    provenance = dict(patched.get("provenance") or {})
+    provenance.update({
+        "projectId": project_id,
+        "cueId": cue_id,
+        "candidateId": candidate_id,
+    })
+    if job_id:
+        provenance["jobId"] = job_id
+    if task_id:
+        provenance["taskId"] = task_id
+    if root_task_id:
+        provenance["rootTaskId"] = root_task_id
+    patched["provenance"] = provenance
+    return patched
+
+
+def attach_story_song_candidate(
+    workspace_dir: str,
+    *,
+    project_id: str,
+    cue_id: str,
+    candidate_id: str,
+    source: str,
+    filename: str,
+    status: str = "ready",
+    base_revision: int,
+    duration_seconds: float | int | None = None,
+    task_id: str | None = None,
+    root_task_id: str | None = None,
+    job_id: str | None = None,
+) -> dict[str, Any]:
+    """CAS-patch one pending Story song row by project/cue/candidate IDs.
+
+    Operates only on the library file inside ``workspace_dir``. A matching
+    candidate in another folder is never visible here.
+    """
+    token_project = _story_id_token(project_id)
+    token_cue = _story_id_token(cue_id)
+    token_candidate = _story_id_token(candidate_id)
+    if not token_project or not token_cue or not token_candidate:
+        raise ValueError("Story song attach requires project, cue and candidate IDs")
+    if status not in {"pending", "ready", "failed"}:
+        raise ValueError("Story song status must be pending, ready or failed")
+    with _STORY_LIBRARY_LOCK:
+        current = read_story_library(workspace_dir)
+        expected = _base_revision(base_revision)
+        if expected != current["revision"]:
+            raise StoryLibraryRevisionConflict(expected, int(current["revision"]))
+        project = current["projects"].get(token_project)
+        if not isinstance(project, dict):
+            raise KeyError(token_project)
+        music, cues, cue_index, candidates, candidate_index = _require_music_row(
+            project, token_cue, token_candidate,
+        )
+        cue = dict(cues[cue_index])
+        candidates[candidate_index] = _apply_song_candidate_patch(
+            dict(candidates[candidate_index]),
+            project_id=token_project,
+            cue_id=token_cue,
+            candidate_id=token_candidate,
+            source=source,
+            filename=filename,
+            status=status,
+            duration_seconds=duration_seconds,
+            task_id=task_id,
+            root_task_id=root_task_id,
+            job_id=job_id,
+        )
+        cue["candidates"] = candidates
+        cue["selectedCandidateId"] = token_candidate
+        cues[cue_index] = cue
+        music["cues"] = cues
+        music["selectedCandidateId"] = token_candidate
+        next_project = dict(project)
+        next_project["music"] = music
+        return write_story_library(
+            workspace_dir,
+            {**current, "projects": {**current["projects"], token_project: next_project}},
+            base_revision=expected,
+        )
+
+
 def delete_story_project(
     workspace_dir: str,
     project_id: str,

@@ -10,6 +10,7 @@ from pathlib import Path
 from app.services.story_library import (
     MAX_STORY_PROJECTS,
     StoryLibraryRevisionConflict,
+    attach_story_song_candidate,
     normalize_story_library,
     delete_story_project,
     patch_story_project,
@@ -105,6 +106,128 @@ class TestStoryLibrary(unittest.TestCase):
             Path(story_library_path(directory)).write_text("{broken", encoding="utf-8")
             with self.assertRaises(json.JSONDecodeError):
                 read_story_library(directory)
+
+    def test_attach_story_song_candidate_patches_pending_row(self):
+        with tempfile.TemporaryDirectory() as directory:
+            initial = write_story_library(directory, {
+                "activeId": "story-a",
+                "projects": {
+                    "story-a": {
+                        "id": "story-a",
+                        "title": "Workspace A",
+                        "music": {
+                            "cues": [{
+                                "id": "cue-a",
+                                "title": "Theme",
+                                "candidates": [{
+                                    "id": "song-a",
+                                    "status": "pending",
+                                    "source": "",
+                                    "name": "",
+                                }],
+                            }],
+                        },
+                    },
+                },
+            }, base_revision=0)
+            saved = attach_story_song_candidate(
+                directory,
+                project_id="story-a",
+                cue_id="cue-a",
+                candidate_id="song-a",
+                source="/api/v1/file/theme.wav?workspace=a",
+                filename="theme.wav",
+                status="ready",
+                base_revision=initial["revision"],
+                task_id="task-1",
+            )
+            candidate = saved["projects"]["story-a"]["music"]["cues"][0]["candidates"][0]
+            self.assertEqual(saved["revision"], 2)
+            self.assertEqual(candidate["id"], "song-a")
+            self.assertEqual(candidate["status"], "ready")
+            self.assertEqual(candidate["name"], "theme.wav")
+            self.assertEqual(candidate["provenance"]["candidateId"], "song-a")
+
+    def test_attach_story_song_candidate_cas_conflict_keeps_pending_row(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = write_story_library(directory, {
+                "projects": {
+                    "story-a": {
+                        "id": "story-a",
+                        "music": {
+                            "cues": [{
+                                "id": "cue-a",
+                                "candidates": [{"id": "song-a", "status": "pending", "source": ""}],
+                            }],
+                        },
+                    },
+                },
+            }, base_revision=0)
+            attach_story_song_candidate(
+                directory,
+                project_id="story-a",
+                cue_id="cue-a",
+                candidate_id="song-a",
+                source="/api/v1/file/theme.wav",
+                filename="theme.wav",
+                base_revision=first["revision"],
+            )
+            with self.assertRaises(StoryLibraryRevisionConflict):
+                attach_story_song_candidate(
+                    directory,
+                    project_id="story-a",
+                    cue_id="cue-a",
+                    candidate_id="song-a",
+                    source="/api/v1/file/other.wav",
+                    filename="other.wav",
+                    base_revision=first["revision"],
+                )
+            candidate = read_story_library(directory)["projects"]["story-a"]["music"]["cues"][0]["candidates"][0]
+            self.assertEqual(candidate["name"], "theme.wav")
+            self.assertEqual(candidate["id"], "song-a")
+
+    def test_attach_story_song_candidate_is_isolated_by_workspace_dir(self):
+        with tempfile.TemporaryDirectory() as workspace_a, tempfile.TemporaryDirectory() as workspace_b:
+            write_story_library(workspace_a, {
+                "projects": {
+                    "story-a": {
+                        "id": "story-a",
+                        "music": {
+                            "cues": [{
+                                "id": "cue-a",
+                                "candidates": [{"id": "song-a", "status": "pending", "source": ""}],
+                            }],
+                        },
+                    },
+                },
+            }, base_revision=0)
+            write_story_library(workspace_b, {
+                "projects": {
+                    "story-b": {
+                        "id": "story-b",
+                        "music": {
+                            "cues": [{
+                                "id": "cue-b",
+                                "candidates": [{"id": "song-b", "status": "pending", "source": ""}],
+                            }],
+                        },
+                    },
+                },
+            }, base_revision=0)
+            with self.assertRaises(KeyError):
+                attach_story_song_candidate(
+                    workspace_b,
+                    project_id="story-a",
+                    cue_id="cue-a",
+                    candidate_id="song-a",
+                    source="/api/v1/file/stolen.wav",
+                    filename="stolen.wav",
+                    base_revision=1,
+                )
+            self.assertEqual(
+                read_story_library(workspace_a)["projects"]["story-a"]["music"]["cues"][0]["candidates"][0]["source"],
+                "",
+            )
 
     def test_project_limit_is_enforced(self):
         value = {

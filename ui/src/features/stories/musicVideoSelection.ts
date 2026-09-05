@@ -1,5 +1,7 @@
 import type { StoryMusicCandidate, StoryMusicCue, StoryProject } from './types'
 
+export const SYNTHETIC_STORY_SONG_CUE_ID = 'story-song'
+
 const normalizeName = (value: string): string => value
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -10,6 +12,11 @@ const normalizeName = (value: string): string => value
 export interface StoryMusicSelection {
   cue?: StoryMusicCue
   candidate: StoryMusicCandidate
+}
+
+export function isReadyStoryMusicCandidate(candidate: StoryMusicCandidate): boolean {
+  if (candidate.status === 'pending' || candidate.status === 'failed') return false
+  return Boolean((candidate.source || '').trim())
 }
 
 function candidateNames(candidate: StoryMusicCandidate): string[] {
@@ -129,33 +136,69 @@ export function resolveStoryMusicSelection(
   const candidate = resolveCandidateIdentity(
     project, pool, cue, candidateFromTitle, songName, candidateId,
   )
-  if (!candidate.source.trim()) {
-    throw new Error(`La canción “${candidate.displayName || candidate.title || candidate.name}” no tiene un archivo de audio.`)
-  }
-
-  const owningCue = cue || project.music.cues.find(item => item.candidates.some(itemCandidate => itemCandidate.id === candidate!.id))
+  assertReadyStoryMusicCandidate(candidate)
+  const owningCue = cue || project.music.cues.find(item => item.candidates.some(itemCandidate => itemCandidate.id === candidate.id))
+  assertPersistedMusicCue(project, candidate, owningCue, cueId)
   return { cue: owningCue, candidate }
+}
+
+function songLabel(candidate: StoryMusicCandidate): string {
+  return candidate.displayName || candidate.title || candidate.name || candidate.id
+}
+
+function assertReadyStoryMusicCandidate(candidate: StoryMusicCandidate): void {
+  if (isReadyStoryMusicCandidate(candidate)) return
+  const label = songLabel(candidate)
+  if (candidate.status === 'pending') {
+    throw new Error(`La canción “${label}” todavía se está generando; espera a que quede lista antes de preparar el videoclip.`)
+  }
+  if (candidate.status === 'failed') {
+    throw new Error(`La canción “${label}” falló y no se puede usar para un videoclip. Genera otra versión.`)
+  }
+  throw new Error(`La canción “${label}” no tiene un archivo de audio.`)
+}
+
+function assertPersistedMusicCue(
+  project: StoryProject,
+  candidate: StoryMusicCandidate,
+  owningCue: StoryMusicCue | undefined,
+  cueId: string,
+): void {
+  const requestedCueId = cueId.trim()
+  if (owningCue && owningCue.id !== SYNTHETIC_STORY_SONG_CUE_ID) return
+  if (requestedCueId === SYNTHETIC_STORY_SONG_CUE_ID) return
+  throw new Error(`La canción “${songLabel(candidate)}” no pertenece a un cue persistido en “${project.title}”.`)
+}
+
+function syntheticStorySongCue(project: StoryProject, candidate: StoryMusicCandidate): StoryMusicCue {
+  const lyrics = candidate.lyrics || project.music.lyrics || ''
+  return {
+    id: SYNTHETIC_STORY_SONG_CUE_ID,
+    kind: 'story',
+    targetId: project.id,
+    title: candidate.title || candidate.displayName || candidate.name,
+    purpose: project.music.brief || `Tell ${project.title} as a song-led visual story.`,
+    referenceSong: '',
+    brief: project.music.brief || '',
+    style: candidate.prompt || project.music.style || '',
+    lyrics,
+    lyriaPrompt: '',
+    instrumental: !lyrics.trim(),
+    durationSeconds: candidate.durationSeconds || project.music.targetDurationSeconds,
+    candidates: [candidate],
+    selectedCandidateId: candidate.id,
+  }
 }
 
 export function effectiveStoryMusicCue(
   project: StoryProject,
   cue: StoryMusicCue | undefined,
   candidate: StoryMusicCandidate,
+  requestedCueId = '',
 ): StoryMusicCue {
-  return cue || {
-    id: 'story-song',
-    kind: 'story',
-    targetId: project.id,
-    title: candidate.title || candidate.displayName || candidate.name,
-    purpose: project.music.brief || `Tell ${project.title} as a song-led visual story.`,
-    referenceSong: '',
-    brief: project.music.brief,
-    style: candidate.prompt || project.music.style,
-    lyrics: candidate.lyrics || project.music.lyrics,
-    lyriaPrompt: '',
-    instrumental: !(candidate.lyrics || project.music.lyrics).trim(),
-    durationSeconds: candidate.durationSeconds || project.music.targetDurationSeconds,
-    candidates: [candidate],
-    selectedCandidateId: candidate.id,
+  if (cue && cue.id !== SYNTHETIC_STORY_SONG_CUE_ID) return cue
+  if (requestedCueId.trim() !== SYNTHETIC_STORY_SONG_CUE_ID) {
+    throw new Error(`“${project.title}” no tiene un cue persistido para esta canción.`)
   }
+  return cue || syntheticStorySongCue(project, candidate)
 }
