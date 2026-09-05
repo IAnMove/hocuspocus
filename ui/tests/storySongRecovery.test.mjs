@@ -352,7 +352,7 @@ function pendingProject(overrides = {}) {
 }
 
 test('in-flight completed job rehydrates the reserved candidate by job id', async () => {
-  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongRecovery.ts')
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
   const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
   const base = createStoryProject('music_video')
   const project = normalizeStoryProject({
@@ -409,7 +409,7 @@ test('in-flight completed job rehydrates the reserved candidate by job id', asyn
 })
 
 test('in-flight job for another workspace does not write the current project', async () => {
-  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongRecovery.ts')
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
   const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
   const base = createStoryProject('music_video')
   const project = normalizeStoryProject({
@@ -461,7 +461,7 @@ test('in-flight job for another workspace does not write the current project', a
 })
 
 test('a duplicated pending row does not inherit the reserved job audio', async () => {
-  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongRecovery.ts')
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
   const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
   const base = createStoryProject('music_video')
   const project = normalizeStoryProject({
@@ -522,7 +522,7 @@ test('a duplicated pending row does not inherit the reserved job audio', async (
 })
 
 test('failed in-flight job without audio marks the reserved candidate failed', async () => {
-  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongRecovery.ts')
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
   const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
   const base = createStoryProject('music_video')
   const project = normalizeStoryProject({

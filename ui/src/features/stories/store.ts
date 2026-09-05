@@ -4,14 +4,13 @@ import { changedSections, createStoryProject, normalizeStoryProject } from './mo
 import { mergeStoryLibraries } from './library'
 import type { StoryLibraryConflict, StoryLibraryData } from './library'
 import {
-  inFlightJobIds,
   libraryHasPendingSongs,
-  recoverInFlightStorySongs,
   recoverPendingStorySongs,
   storySongOutputRefFromAsset,
   storySongOutputRefFromMetadata,
   type StorySongOutputRef,
 } from './storySongRecovery'
+import { inFlightJobIds, recoverInFlightStorySongs } from './storySongJobRecovery'
 import type { StoryProject, StoryProjectType } from './types'
 
 const LEGACY_AUTOSAVE_KEY = 'maestro-story-lab-v1'
