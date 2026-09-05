@@ -9,9 +9,9 @@ name: CI
 # are documentation only; do not use moving tags such as @v4 or @latest.
 on:
   push:
-    branches: [main, dev]
+    branches: [main, development, dev]
   pull_request:
-    branches: [main, dev]
+    branches: [main, development, dev]
   workflow_dispatch:
 
 jobs:
