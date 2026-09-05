@@ -43,7 +43,7 @@ function applyInFlightJob(
 ): StoryMusicCandidate {
   if (job.workspace && job.workspace !== workspace) return candidate
   const reserved = reservedCandidateId(job)
-  if (reserved && reserved !== candidate.id) return candidate
+  if (!reserved || reserved !== candidate.id) return candidate
   const ready = readyFromJob(candidate, job)
   if (ready) return ready
   if (job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted') {
@@ -69,20 +69,13 @@ function applyInFlightJob(
 function patchPendingWithJob(
   candidate: StoryMusicCandidate,
   jobs: Map<string, MiniMaxMusicJob>,
-  claimedAudio: Set<string>,
   workspace: string,
 ): StoryMusicCandidate {
   if (!isPendingStoryMusicCandidate(candidate)) return candidate
   const jobId = candidate.provenance?.jobId?.trim()
   const job = jobId ? jobs.get(jobId) : undefined
   if (!job) return candidate
-  const rendered = job.candidates?.[0]
-  if (rendered?.filename && rendered.source && claimedAudio.has(job.jobId)) {
-    return candidate
-  }
-  const patched = applyInFlightJob(candidate, job, workspace)
-  if (patched !== candidate && patched.status === 'ready') claimedAudio.add(job.jobId)
-  return patched
+  return applyInFlightJob(candidate, job, workspace)
 }
 
 export function recoverInFlightStorySongs(
@@ -92,18 +85,17 @@ export function recoverInFlightStorySongs(
 ): { projects: Record<string, StoryProject>; changed: boolean } {
   if (!jobs.length) return { projects, changed: false }
   const byId = new Map(jobs.map(job => [job.jobId, job]))
-  const claimedAudio = new Set<string>()
   let changed = false
   const next: Record<string, StoryProject> = {}
   Object.entries(projects).forEach(([projectId, project]) => {
     const cues = project.music.cues.map(cue => ({
       ...cue,
       candidates: cue.candidates.map(candidate => (
-        patchPendingWithJob(candidate, byId, claimedAudio, context.workspace)
+        patchPendingWithJob(candidate, byId, context.workspace)
       )),
     }))
     const globalCandidates = project.music.candidates.map(candidate => (
-      patchPendingWithJob(candidate, byId, claimedAudio, context.workspace)
+      patchPendingWithJob(candidate, byId, context.workspace)
     ))
     const reallyChanged = project.music.cues.some((cue, index) => (
       cue.candidates.some((candidate, row) => candidate !== cues[index].candidates[row])

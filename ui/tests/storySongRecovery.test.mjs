@@ -390,6 +390,7 @@ test('in-flight completed job rehydrates the reserved candidate by job id', asyn
     progress: 100,
     provider: 'minimax',
     model: 'music-3.0',
+    candidateId: 'song-job',
     candidates: [{
       filename: 'job.mp3',
       audio_path: '/tmp/job.mp3',
@@ -560,7 +561,60 @@ test('failed in-flight job without audio marks the reserved candidate failed', a
     progress: 0,
     provider: 'minimax',
     model: 'music-3.0',
+    candidateId: 'song-job',
     candidates: [],
   }], { workspace: 'lab' })
   assert.equal(recovered.projects[project.id].music.cues[0].candidates[0].status, 'failed')
+})
+
+test('a completed job without candidateId does not attach audio by walk order', async () => {
+  const { recoverInFlightStorySongs } = await import('../src/features/stories/storySongJobRecovery.ts')
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const base = createStoryProject('music_video')
+  const project = normalizeStoryProject({
+    ...base,
+    id: 'story-job',
+    music: {
+      ...base.music,
+      cues: [{
+        id: 'cue-job',
+        kind: 'story',
+        targetId: 'story-job',
+        title: 'Job',
+        purpose: '',
+        referenceSong: '',
+        brief: '',
+        style: 'folk',
+        lyrics: '[Verse]\nLa noche',
+        lyriaPrompt: '',
+        instrumental: false,
+        durationSeconds: 30,
+        candidates: [pendingProject({ id: 'song-copy' })],
+      }],
+    },
+  })
+  const recovered = recoverInFlightStorySongs({ [project.id]: project }, [{
+    jobId: 'minimax-music-abc',
+    taskId: 'task-1',
+    rootTaskId: 'task-1',
+    workspace: 'lab',
+    status: 'completed',
+    phase: 'completed',
+    message: 'done',
+    current: 1,
+    total: 1,
+    progress: 100,
+    provider: 'minimax',
+    model: 'music-3.0',
+    candidates: [{
+      filename: 'job.mp3',
+      audio_path: '/tmp/job.mp3',
+      source: '/api/v1/file/job.mp3',
+      duration_seconds: 61.5,
+      provider: 'minimax',
+      model: 'music-3.0',
+    }],
+  }], { workspace: 'lab' })
+  assert.equal(recovered.changed, false)
+  assert.equal(recovered.projects[project.id].music.cues[0].candidates[0].status, 'pending')
 })
