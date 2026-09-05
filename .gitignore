@@ -125,3 +125,7 @@ app/plugins/wan2gp-lora-multipliers-ui/
 # Python bytecode (anywhere)
 __pycache__/
 app/wgp_config.json.bak
+
+# Build-time developer architecture snapshot; regenerate from scoped source.
+/ui/public/dev/architecture/
+/scripts/graphs/story_director_audio_flow.json

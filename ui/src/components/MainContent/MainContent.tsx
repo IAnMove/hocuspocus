@@ -39,8 +39,8 @@ const RunsPanel = lazy(() => import('../../features/workspaces/WorkspacesPanel')
   .then(module => ({ default: module.RunsPanel })))
 const CharacterCreatorPanel = lazy(() => import('../../features/characters/CharacterCreatorPanel')
   .then(module => ({ default: module.CharacterCreatorPanel })))
-const AuditDevPanel = lazy(() => import('../../features/auditdev/AuditDevPanel')
-  .then(module => ({ default: module.AuditDevPanel })))
+const DeveloperToolsPanel = lazy(() => import('../../features/auditdev/DeveloperToolsPanel')
+  .then(module => ({ default: module.DeveloperToolsPanel })))
 const AssetsPanel = lazy(() => import('../../features/assets/AssetsPanel')
   .then(module => ({ default: module.AssetsPanel })))
 const ProjectsPanel = lazy(() => import('../../features/projects/ProjectsPanel')
@@ -660,7 +660,7 @@ export function MainContent() {
         ) : mediaFilter === 'auditdev' && developerMode ? (
           <div className="flex-1 overflow-hidden p-2 md:p-4">
             <div className="max-w-[1900px] mx-auto h-full">
-              <AuditDevPanel />
+              <DeveloperToolsPanel />
             </div>
           </div>
         ) : <>

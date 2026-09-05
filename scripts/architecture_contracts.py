@@ -171,6 +171,9 @@ def extract_wire_inventory() -> list[dict]:
             if path.name == "test_architecture_factory.py":
                 classification = "behavior"
                 reason = "Imports the lazy factory and checks its runtime boundary without reading launch source."
+            elif path.name == "test_architecture_graph.py":
+                classification = "architecture_rule"
+                reason = "Tests the static graph extractor against synthetic launch-source fixtures, without importing runtime."
             elif "exec(compile(" in source:
                 classification = "symbol_importable"
                 reason = "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
@@ -192,11 +195,13 @@ def extract_wire_inventory() -> list[dict]:
         if not path.is_file() or path.suffix not in {".mjs", ".ts", ".tsx"}:
             continue
         if _reads(path, r"(?:from|import).*useStore|useStore\.ts"):
+            graph_fixture = path.name == "architectureExtractor.test.mjs"
             entries.append(_wire_entry(
                 path,
                 "ui/src/stores/useStore.ts",
-                "behavior",
-                "Imports the public Zustand facade; it should survive slice extraction unchanged.",
+                "architecture_rule" if graph_fixture else "behavior",
+                "Tests compiler-AST extraction against synthetic store fixtures, not the runtime facade."
+                if graph_fixture else "Imports the public Zustand facade; it should survive slice extraction unchanged.",
             ))
     return entries
 
