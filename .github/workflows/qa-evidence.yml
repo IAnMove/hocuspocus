@@ -13,14 +13,26 @@ permissions:
 
 jobs:
   independent-qa:
-    name: Independent QA
+    name: Independent QA publisher
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Overlay publisher scripts from the PR base when they exist
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BASE_SHA:-}" ] && git cat-file -e "${BASE_SHA}:scripts/publish_qa_check.py" 2>/dev/null; then
+            git checkout "${BASE_SHA}" -- \
+              scripts/publish_qa_check.py \
+              scripts/verify_qa_provenance.py \
+              scripts/verify_qa_evidence.py
+          fi
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
@@ -37,6 +49,8 @@ jobs:
           AUTH="$(python3 -c "import base64, os; print(base64.b64encode(b'x-access-token:' + os.environ['GH_TOKEN'].encode()).decode())")"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" \
             fetch --no-tags origin "pull/${PR_NUMBER}/head:refs/remotes/origin/pr-head"
+          mkdir -p /tmp/qa-head-tree
+          git archive origin/pr-head | tar -x -C /tmp/qa-head-tree
           if git cat-file -e origin/pr-head:qa-evidence.json 2>/dev/null; then
             git show origin/pr-head:qa-evidence.json > /tmp/qa-envelope.json
           else
@@ -54,4 +68,5 @@ jobs:
             --head "${{ github.event.pull_request.head.sha || github.sha }}" \
             --base "${{ github.event.pull_request.base.sha || github.sha }}" \
             --implementer "${{ github.event.pull_request.user.login || github.actor }}" \
+            --artifact-root /tmp/qa-head-tree \
             --adapter github

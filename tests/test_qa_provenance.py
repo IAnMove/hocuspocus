@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.publish_qa_check import RecordingAdapter, publish
+from scripts.publish_qa_check import RecordingAdapter, publish, stamp_provenance
 from scripts.verify_qa_evidence import validate
 from scripts.verify_qa_provenance import verify_provenance
 
@@ -63,6 +63,30 @@ def test_format_valid_json_without_provenance_is_not_authenticated():
     assert any("missing provenance" in item for item in errors)
 
 
+def test_publisher_stamps_provenance_and_ignores_file_claims(tmp_path: Path):
+    forged = _envelope(run_id="forged-run", producer={"login": IMPL, "session_id": "x"})
+    path = tmp_path / "forged.json"
+    path.write_text(json.dumps(forged), encoding="utf-8")
+    adapter = RecordingAdapter()
+    code, _summary = publish(
+        envelope_path=path,
+        head=HEAD,
+        base=BASE,
+        implementer=IMPL,
+        repository=REPO,
+        run_id=RUN,
+        adapter=adapter,
+        artifact_root=ROOT,
+    )
+    assert code == 0
+    assert adapter.calls[0]["conclusion"] == "success"
+    stamped = stamp_provenance(
+        _evidence(), repository=REPO, run_id=RUN, head=HEAD, base=BASE,
+    )
+    assert stamped["provenance"]["run_id"] == RUN
+    assert stamped["provenance"]["producer"]["login"] == "github-actions[bot]"
+
+
 def test_valid_envelope_with_verified_provenance_passes():
     assert _errors(_envelope()) == []
 
@@ -116,9 +140,11 @@ def test_publisher_missing_envelope_is_pending_not_success(tmp_path: Path):
     assert adapter.calls[0]["conclusion"] != "success"
 
 
-def test_publisher_rejects_unauthenticated_evidence(tmp_path: Path):
-    path = tmp_path / "plain.json"
-    path.write_text(json.dumps(_evidence()), encoding="utf-8")
+def test_publisher_rejects_blocking_findings_after_stamping(tmp_path: Path):
+    path = tmp_path / "blocked.json"
+    path.write_text(json.dumps(_evidence(findings=[{
+        "severity": "blocking", "status": "open", "summary": "race",
+    }])), encoding="utf-8")
     adapter = RecordingAdapter()
     code, _summary = publish(
         envelope_path=path,
@@ -128,6 +154,7 @@ def test_publisher_rejects_unauthenticated_evidence(tmp_path: Path):
         repository=REPO,
         run_id=RUN,
         adapter=adapter,
+        artifact_root=ROOT,
     )
     assert code == 1
     assert adapter.calls[0]["conclusion"] == "failure"
@@ -145,6 +172,7 @@ def test_publisher_success_uses_adapter_not_json_role(tmp_path: Path):
         repository=REPO,
         run_id=RUN,
         adapter=adapter,
+        artifact_root=ROOT,
     )
     assert code == 0
     assert adapter.calls[0]["name"] == "Independent QA"

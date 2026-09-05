@@ -22,6 +22,36 @@ except ImportError:  # python scripts/publish_qa_check.py
     from verify_qa_provenance import load_envelope, verify_provenance
 
 CHECK_NAME = "Independent QA"
+TRUSTED_PRODUCER = "github-actions[bot]"
+
+
+def evidence_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(payload.get("evidence"), dict):
+        return payload["evidence"]
+    return payload
+
+
+def stamp_provenance(
+    evidence: dict[str, Any],
+    *,
+    repository: str,
+    run_id: str,
+    head: str,
+    base: str,
+) -> dict[str, Any]:
+    """Publisher identity comes from this Actions run, never from the file."""
+    return {
+        "evidence": evidence,
+        "provenance": {
+            "kind": "github_actions_check",
+            "repository": repository,
+            "workflow_file": ".github/workflows/qa-evidence.yml",
+            "run_id": str(run_id),
+            "head_sha": head,
+            "base_sha": base,
+            "producer": {"login": TRUSTED_PRODUCER, "session_id": str(run_id)},
+        },
+    }
 
 
 class CheckAdapter(Protocol):
@@ -114,6 +144,7 @@ def publish(
     adapter: CheckAdapter,
     risk: str = "routine",
     require_separation: bool = False,
+    artifact_root: Path | None = None,
 ) -> tuple[int, str]:
     payload, infra = load_envelope(envelope_path)
     if infra:
@@ -126,8 +157,15 @@ def publish(
         )
         return 0, infra
     assert payload is not None
+    stamped = stamp_provenance(
+        evidence_from_payload(payload),
+        repository=repository,
+        run_id=run_id,
+        head=head,
+        base=base,
+    )
     errors = verify_provenance(
-        payload,
+        stamped,
         head=head,
         base=base,
         implementer=implementer,
@@ -135,7 +173,9 @@ def publish(
         run_id=run_id,
         risk=risk,
         require_separation=require_separation,
-        artifact_exists=lambda rel: Path(rel).is_file(),
+        artifact_exists=lambda rel: (
+            ((artifact_root or Path.cwd()) / rel).is_file()
+        ),
     )
     if errors:
         summary = "QA provenance rejected:\n" + "\n".join(f"- {item}" for item in errors)
@@ -169,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--risk", default="routine")
     parser.add_argument("--require-separation", action="store_true")
     parser.add_argument("--adapter", choices=("github", "record"), default="github")
+    parser.add_argument("--artifact-root", default="")
     args = parser.parse_args(argv)
     if not args.repository or not args.run_id:
         print("repository and run-id are required", file=sys.stderr)
@@ -190,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         adapter=adapter,
         risk=args.risk,
         require_separation=args.require_separation,
+        artifact_root=Path(args.artifact_root) if args.artifact_root else None,
     )
     print(summary)
     if args.adapter == "record":

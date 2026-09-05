@@ -61,7 +61,9 @@ The GitHub check `Independent QA` is published by
 from the PR **base** tree. The check identity is that Actions job
 (`GITHUB_TOKEN` + current `GITHUB_RUN_ID`), not a role declared in JSON.
 
-A format-valid payload without provenance is rejected. Missing
-`qa-evidence.json` on HEAD is **pending** (neutral), never success. Fake
-adapter tests prove the contract only. This check is **not** required.
-Do not add it to `CI required` until an admin authorizes that separately.
+The file on HEAD is evidence only. The publisher **stamps** provenance from
+the current Actions run (`GITHUB_RUN_ID`, trusted workflow, repository,
+head/base). Claims of origin inside the JSON are ignored. Missing
+`qa-evidence.json` is **pending** (neutral check named `Independent QA`;
+the Actions job is `Independent QA publisher`). Never success. Fake adapter
+tests prove the contract only. This check is **not** required.
