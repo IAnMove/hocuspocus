@@ -98,23 +98,26 @@ jobs:
       - name: First-party LOC and complexity ratchet
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # PRs compare with the PR base. Pushes to development/main compare
+          # with the previous tip (github.event.before). Never fall back to
+          # the historical dashboard: that paints merge commits red.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          SCORE_ARGS=()
-          BASELINE_ARGS=()
-          if [ -n "${BASE_SHA:-}" ]; then
-            if ! git cat-file -e "${BASE_SHA}^{commit}"; then
-              git fetch --no-tags --depth=1 origin "${BASE_SHA}"
-            fi
-            BASE_PARENT="$(mktemp -d)"
-            BASE_DIR="${BASE_PARENT}/repo"
-            git worktree add --detach "${BASE_DIR}" "${BASE_SHA}"
-            ln -s "${GITHUB_WORKSPACE}/ui/node_modules" "${BASE_DIR}/ui/node_modules"
-            (cd "${BASE_DIR}" && python scripts/code_health.py --json) > /tmp/code-health-pr-base.json
-            BASELINE_ARGS=(--baseline /tmp/code-health-pr-base.json)
-            SCORE_ARGS=(--score-baseline /tmp/code-health-pr-base.json --score-baseline-label "PR base")
+          if [ -z "${BASE_SHA:-}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            echo "Cannot resolve code-health base: need pull_request.base.sha or push before" >&2
+            exit 2
           fi
+          if ! git cat-file -e "${BASE_SHA}^{commit}"; then
+            git fetch --no-tags --depth=1 origin "${BASE_SHA}"
+          fi
+          BASE_PARENT="$(mktemp -d)"
+          BASE_DIR="${BASE_PARENT}/repo"
+          git worktree add --detach "${BASE_DIR}" "${BASE_SHA}"
+          ln -s "${GITHUB_WORKSPACE}/ui/node_modules" "${BASE_DIR}/ui/node_modules"
+          (cd "${BASE_DIR}" && python scripts/code_health.py --json) > /tmp/code-health-pr-base.json
+          BASELINE_ARGS=(--baseline /tmp/code-health-pr-base.json)
+          SCORE_ARGS=(--score-baseline /tmp/code-health-pr-base.json --score-baseline-label "PR base")
           set +e
           python scripts/code_health.py --check --markdown --publish-pr-comment "${BASELINE_ARGS[@]}" "${SCORE_ARGS[@]}" | tee code-health.md
           STATUS=${PIPESTATUS[0]}
