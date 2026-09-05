@@ -12,6 +12,8 @@
     "workspace_id",
     "output_folder",
     "prompt_full",
+    "prompt_original",
+    "prompt_effective",
     "prompt_display",
     "model",
     "languages",
@@ -56,10 +58,9 @@
       "description": "Originating product surface (origin.tool projected onto a closed vocabulary)."
     },
     "workspace_id": {
-      "type": "string",
-      "minLength": 1,
+      "type": ["string", "null"],
       "maxLength": 240,
-      "description": "Workspace collection ID, never an absolute path."
+      "description": "Optional Workspace collection ID. Null means the attempt is not in a collection. Never an absolute path and never copied from output_folder just to satisfy the schema."
     },
     "output_folder": {
       "type": "string",
@@ -72,7 +73,12 @@
     "cue_id": { "type": ["string", "null"] },
     "candidate_id": { "type": ["string", "null"] },
     "song_version": { "type": ["string", "null"] },
-    "prompt_full": { "type": "string" },
+    "prompt_full": {
+      "type": "string",
+      "description": "Display prompt: effective text when present, otherwise original."
+    },
+    "prompt_original": { "type": "string", "description": "Prompt before transforms." },
+    "prompt_effective": { "type": "string", "description": "Prompt actually sent to the model." },
     "prompt_display": {
       "type": "string",
       "maxLength": 180,
@@ -90,7 +96,8 @@
       "required": ["parents", "derivatives"],
       "properties": {
         "parents": { "type": "array", "items": { "$ref": "#/$defs/lineageRef" } },
-        "derivatives": { "type": "array", "items": { "$ref": "#/$defs/lineageRef" } }
+        "derivatives": { "type": "array", "items": { "$ref": "#/$defs/lineageRef" } },
+        "transformations": { "type": "array", "items": { "$ref": "#/$defs/lineageRef" } }
       },
       "additionalProperties": false
     },
@@ -114,7 +121,22 @@
       },
       "additionalProperties": true
     },
-    "correlations": { "type": "object" }
+    "correlations": { "type": "object" },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "CAS write token. Persist increments it; stale expected_revision is rejected."
+    },
+    "reconciliation": {
+      "type": "object",
+      "properties": {
+        "needed": { "type": "boolean" },
+        "reason": { "type": ["string", "null"] },
+        "at": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": false,
+      "description": "Resume of running/queued does not prove a worker is alive."
+    }
   },
   "$defs": {
     "model": {
@@ -144,7 +166,9 @@
         "queued_at": { "type": ["string", "null"], "format": "date-time" },
         "started_at": { "type": ["string", "null"], "format": "date-time" },
         "completed_at": { "type": ["string", "null"], "format": "date-time" },
-        "duration_ms": { "type": ["integer", "null"], "minimum": 0 }
+        "duration_ms": { "type": ["integer", "null"], "minimum": 0, "description": "Total wall time (timing.total_ms)." },
+        "queue_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "inference_ms": { "type": ["integer", "null"], "minimum": 0 }
       },
       "additionalProperties": false
     },

@@ -1,13 +1,23 @@
 """Typed generation-record v1: one attempt to produce an asset.
 
 This module does not import FastAPI, WanGP or launch. It is a portable
-read/write projection over asset-manifest v1, generation provenance and the
-job lifecycle — not a second media store.
+read/write **projection** over asset-manifest v1, generation provenance and
+the job lifecycle — not a second media store, scheduler or catalog.
+
+Identity graph (one attempt may publish zero or more assets; do not mint a
+second Run store):
+
+    command → workflow? → run? → generation attempt → task? → asset*
 
 Identity policy (b): a retry mints a new ``generation_id`` and links the
 parent attempt in ``lineage.parents``. ``asset_id`` is reused only when the
-bytes are the same artifact. Resume of a queued/running record keeps both IDs
-and the last durable status; it never invents success.
+bytes are the same artifact. Re-reading a queued/running record does **not**
+prove a worker is alive; resume marks ``reconciliation`` and never invents
+success.
+
+``workspace_id`` is an optional Workspace **collection**. ``output_folder`` is
+the physical folder name. Missing collection stays null; it is never copied
+from ``output_folder`` to satisfy the schema.
 
 Public status is ``planned | queued | running | completed | failed |
 cancelled``. Asset-manifest ``prepared`` projects to ``planned``. Manifest
@@ -21,10 +31,8 @@ from __future__ import annotations
 
 import json
 import os
-import threading
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Mapping, Sequence, TypedDict
 
 from .asset_manifest import _iso, _milliseconds, _redact, sidecar_path
@@ -35,6 +43,8 @@ SCHEMA_NAME = "hocuspocus.generation-record"
 SCHEMA_VERSION = 1
 PROMPT_DISPLAY_MAX = 180
 ATTEMPT_IDENTITY_POLICY = "new_generation_id"
+PHYSICAL_STORE_BUCKET = "_physical"
+AUTHORITY = "projection"
 
 PRODUCTS = frozenset({
     "studio", "story_lab", "series_lab", "director", "comic", "tools",
@@ -89,10 +99,16 @@ _CORRELATION_KEYS = (
 _CANONICAL_FIELDS = (
     "schema", "schema_version", "generation_id", "asset_id", "product",
     "workspace_id", "output_folder", "project_id", "production_id", "cue_id",
-    "candidate_id", "song_version", "prompt_full", "prompt_display", "model",
-    "languages", "timestamps", "status", "lineage", "error", "retry_count",
-    "cancellation", "location", "links", "result", "provenance", "correlations",
+    "candidate_id", "song_version", "prompt_full", "prompt_original",
+    "prompt_effective", "prompt_display", "model", "languages", "timestamps",
+    "status", "lineage", "error", "retry_count", "cancellation", "location",
+    "links", "result", "provenance", "correlations", "revision",
+    "reconciliation",
 )
+_IDENTITY_KEYS = frozenset({
+    "schema", "schema_version", "generation_id", "asset_id", "workspace_id",
+})
+_MERGE_SKIP_EMPTY_LISTS = frozenset({"parents", "derivatives", "transformations"})
 
 
 class GenerationRecordError(ValueError):
@@ -119,6 +135,14 @@ class GenerationTimestamps(TypedDict, total=False):
     started_at: str | None
     completed_at: str | None
     duration_ms: int | None
+    queue_ms: int | None
+    inference_ms: int | None
+
+
+class GenerationReconciliation(TypedDict, total=False):
+    needed: bool
+    reason: str | None
+    at: str | None
 
 
 class GenerationLineageRef(TypedDict, total=False):
@@ -160,6 +184,8 @@ class GenerationRecord(TypedDict, total=False):
     candidate_id: str | None
     song_version: str | None
     prompt_full: str
+    prompt_original: str
+    prompt_effective: str
     prompt_display: str
     model: GenerationModel
     languages: GenerationLanguages
@@ -174,6 +200,8 @@ class GenerationRecord(TypedDict, total=False):
     result: dict[str, Any]
     provenance: dict[str, Any]
     correlations: dict[str, Any]
+    revision: int
+    reconciliation: GenerationReconciliation
 
 
 def _clean(value: Any) -> str | None:
@@ -229,6 +257,12 @@ def _portable_filename(value: Any) -> str | None:
 def _count(value: Any, default: int = 0) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         return default
+    return value
+
+
+def _optional_ms(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
     return value
 
 
@@ -289,8 +323,18 @@ def is_legal_transition(current: str, target: str) -> bool:
 
 
 def belongs_to_workspace(record: Mapping[str, Any], workspace_id: str) -> bool:
+    """True only when the record is a member of that Workspace collection.
+
+    A missing/blank ``workspace_id`` is not a collection. Unscoped records
+    (physical ``output_folder`` only) never belong to any collection.
+    """
     wanted = _clean(workspace_id)
-    return bool(wanted) and _clean(record.get("workspace_id")) == wanted
+    have = _clean(record.get("workspace_id"))
+    return bool(wanted) and have is not None and have == wanted
+
+
+def is_unscoped_record(record: Mapping[str, Any]) -> bool:
+    return _clean(record.get("workspace_id")) is None
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -332,15 +376,23 @@ def _timestamps_block(value: Any, *, created_fallback: str) -> dict[str, Any]:
     queued_at = _iso(raw.get("queued_at"))
     started_at = _iso(raw.get("started_at"))
     completed_at = _iso(raw.get("completed_at"))
-    duration = raw.get("duration_ms")
-    if not isinstance(duration, int) or isinstance(duration, bool) or duration < 0:
-        duration = _milliseconds(started_at or created_at, completed_at)
+    duration = _optional_ms(raw.get("duration_ms"))
+    queue_ms = _optional_ms(raw.get("queue_ms"))
+    inference_ms = _optional_ms(raw.get("inference_ms"))
+    if duration is None:
+        duration = _milliseconds(created_at, completed_at)
+    if queue_ms is None:
+        queue_ms = _milliseconds(queued_at or created_at, started_at)
+    if inference_ms is None:
+        inference_ms = _milliseconds(started_at, completed_at)
     return {
         "created_at": created_at,
         "queued_at": queued_at,
         "started_at": started_at,
         "completed_at": completed_at,
         "duration_ms": duration,
+        "queue_ms": queue_ms,
+        "inference_ms": inference_ms,
     }
 
 
@@ -371,17 +423,62 @@ def _lineage_list(values: Any) -> list[dict[str, Any]]:
     if not isinstance(values, Sequence) or isinstance(values, (str, bytes, bytearray)):
         return []
     result: list[dict[str, Any]] = []
-    seen: set[tuple[str | None, str | None]] = set()
+    seen: set[tuple[str | None, str | None, str | None]] = set()
     for value in values:
         item = _lineage_ref(value)
         if item is None:
+            item = _transformation_item(value)
+        if item is None:
             continue
-        key = (item.get("generation_id"), item.get("asset_id"))
+        key = (item.get("generation_id"), item.get("asset_id"), item.get("kind"))
         if key in seen:
             continue
         seen.add(key)
         result.append(item)
     return result
+
+
+def _transformation_item(value: Any) -> dict[str, Any] | None:
+    raw = _mapping(value)
+    if not raw:
+        return None
+    item: dict[str, Any] = {}
+    kind = _clean(_coalesce(raw.get("kind"), raw.get("op"), raw.get("role")))
+    asset_id = _require_lineage_token(_clean(_coalesce(raw.get("asset_id"), raw.get("id"))), "asset_id")
+    generation_id = _require_lineage_token(_clean(raw.get("generation_id")), "generation_id")
+    uri = None
+    if raw.get("uri"):
+        uri = _portable_filename(raw.get("uri"))
+    for key, token in (("generation_id", generation_id), ("asset_id", asset_id),
+                       ("kind", kind), ("uri", uri)):
+        if token:
+            item[key] = token
+    return item or None
+
+
+def _reconciliation_block(value: Any) -> dict[str, Any]:
+    raw = _mapping(value)
+    reason = _clean(raw.get("reason"))
+    return {
+        "needed": bool(raw.get("needed")),
+        "reason": reason,
+        "at": _iso(raw.get("at")),
+    }
+
+
+def _prompt_pair(prompt_full: Any, prompt_original: Any, prompt_effective: Any) -> tuple[str, str, str]:
+    original = str(prompt_original if prompt_original is not None else "")
+    effective = str(prompt_effective if prompt_effective is not None else "")
+    full = str(prompt_full if prompt_full is not None else "")
+    if not original and not effective:
+        original = full
+        effective = full
+    elif not original:
+        original = effective or full
+    elif not effective:
+        effective = original
+    display = effective or original or full
+    return original, effective, display
 
 
 def _error_block(value: Any) -> dict[str, Any] | None:
@@ -470,12 +567,15 @@ def build_generation_record(
     candidate_id: str | None = None,
     song_version: str | None = None,
     prompt_full: str | None = None,
+    prompt_original: str | None = None,
+    prompt_effective: str | None = None,
     model: Mapping[str, Any] | None = None,
     languages: Mapping[str, Any] | None = None,
     timestamps: Mapping[str, Any] | None = None,
     status: str = "planned",
     parents: Sequence[Mapping[str, Any]] | None = None,
     derivatives: Sequence[Mapping[str, Any]] | None = None,
+    transformations: Sequence[Mapping[str, Any]] | None = None,
     error: Mapping[str, Any] | None = None,
     retry_count: int = 0,
     cancellation: Mapping[str, Any] | None = None,
@@ -484,6 +584,8 @@ def build_generation_record(
     result: Mapping[str, Any] | None = None,
     provenance: Mapping[str, Any] | None = None,
     correlations: Mapping[str, Any] | None = None,
+    revision: int = 0,
+    reconciliation: Mapping[str, Any] | None = None,
     actor: str | None = None,
     capability: str | None = None,
     mint_ids: bool = True,
@@ -502,10 +604,12 @@ def build_generation_record(
         workspace_id=workspace_id, output_folder=output_folder,
     )
     collection = _identity_token(
-        location_ids.get("workspace_id"), "workspace_id", required=True,
+        location_ids.get("workspace_id"), "workspace_id", required=False,
     )
-    folder = _portable_filename(location_ids.get("output_folder")) or collection
-    prompt = str(prompt_full or "")
+    folder = _portable_filename(location_ids.get("output_folder"))
+    if not folder:
+        raise GenerationRecordError("output_folder is required")
+    original, effective, display = _prompt_pair(prompt_full, prompt_original, prompt_effective)
     record = {
         "schema": SCHEMA_NAME,
         "schema_version": SCHEMA_VERSION,
@@ -519,8 +623,10 @@ def build_generation_record(
         "cue_id": _clean(cue_id),
         "candidate_id": _clean(candidate_id),
         "song_version": _clean(song_version),
-        "prompt_full": prompt,
-        "prompt_display": prompt_display_text(prompt),
+        "prompt_full": display,
+        "prompt_original": original,
+        "prompt_effective": effective,
+        "prompt_display": prompt_display_text(display),
         "model": _model_block(model),
         "languages": _languages_block(languages),
         "timestamps": _timestamps_block(timestamps, created_fallback=_now_iso()),
@@ -528,6 +634,7 @@ def build_generation_record(
         "lineage": {
             "parents": _lineage_list(parents),
             "derivatives": _lineage_list(derivatives),
+            "transformations": _lineage_list(transformations),
         },
         "error": _error_block(error),
         "retry_count": _count(retry_count),
@@ -537,6 +644,8 @@ def build_generation_record(
         "result": _result_block(result),
         "provenance": _provenance_block(provenance, actor=actor, capability=capability),
         "correlations": _correlations_block(correlations),
+        "revision": _count(revision),
+        "reconciliation": _reconciliation_block(reconciliation),
     }
     if not record["links"].get("catalog_id"):
         record["links"]["catalog_id"] = resolved_asset_id
@@ -568,12 +677,15 @@ def validate_generation_record(value: Mapping[str, Any]) -> dict[str, Any]:
         candidate_id=payload.get("candidate_id"),
         song_version=payload.get("song_version"),
         prompt_full=payload.get("prompt_full"),
+        prompt_original=payload.get("prompt_original"),
+        prompt_effective=payload.get("prompt_effective"),
         model=_mapping(payload.get("model")),
         languages=_mapping(payload.get("languages")),
         timestamps=_mapping(payload.get("timestamps")),
         status=str(payload.get("status") or "planned"),
         parents=lineage.get("parents"),
         derivatives=lineage.get("derivatives"),
+        transformations=lineage.get("transformations"),
         error=_mapping(payload.get("error")) or None,
         retry_count=_count(payload.get("retry_count")),
         cancellation=_mapping(payload.get("cancellation")),
@@ -582,9 +694,11 @@ def validate_generation_record(value: Mapping[str, Any]) -> dict[str, Any]:
         result=_mapping(payload.get("result")),
         provenance=_mapping(payload.get("provenance")),
         correlations=_mapping(payload.get("correlations")),
+        revision=_count(payload.get("revision")),
+        reconciliation=_mapping(payload.get("reconciliation")),
         mint_ids=False,
     )
-    if _is_host_path(normalized["workspace_id"]):
+    if normalized.get("workspace_id") and _is_host_path(normalized["workspace_id"]):
         raise GenerationRecordError("workspace_id and output_folder must never be host paths")
     if _is_host_path(normalized["output_folder"]):
         raise GenerationRecordError("workspace_id and output_folder must never be host paths")
@@ -603,12 +717,27 @@ def _languages_from_manifest(generation: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _prompt_from_manifest(generation: Mapping[str, Any]) -> str:
+    original, effective = _prompt_pair_from_manifest(generation)
+    return effective or original
+
+
+def _prompt_pair_from_manifest(generation: Mapping[str, Any]) -> tuple[str, str]:
     prompts = _mapping(generation.get("prompts"))
-    for key in ("effective", "original", "audio", "instruction"):
+    original = str(prompts.get("original") or "")
+    effective = str(prompts.get("effective") or "")
+    fallback = ""
+    for key in ("audio", "instruction"):
         text = _clean(prompts.get(key))
         if text:
-            return text
-    return ""
+            fallback = text
+            break
+    if not original and not effective:
+        return fallback, fallback
+    if not original:
+        original = effective or fallback
+    if not effective:
+        effective = original or fallback
+    return original, effective
 
 
 def _generation_id_from_manifest(
@@ -665,6 +794,7 @@ def _project_kwargs(parts: Mapping[str, Any]) -> dict[str, Any]:
     model["configuration"] = parts["parameters"]
     model["version"] = _coalesce(model.get("revision"), model.get("version"))
     timing = parts["timing"]
+    prompt_original, prompt_effective = _prompt_pair_from_manifest(parts["generation"])
     return {
         "generation_id": _generation_id_from_manifest(technical, execution, asset_id),
         "asset_id": asset_id,
@@ -679,7 +809,9 @@ def _project_kwargs(parts: Mapping[str, Any]) -> dict[str, Any]:
         "cue_id": _coalesce(execution.get("cue_id"), provenance.get("cue_id")),
         "candidate_id": _coalesce(execution.get("candidate_id"), provenance.get("candidate_id")),
         "song_version": _coalesce(execution.get("song_version"), provenance.get("song_version")),
-        "prompt_full": _prompt_from_manifest(parts["generation"]),
+        "prompt_full": prompt_effective or prompt_original,
+        "prompt_original": prompt_original,
+        "prompt_effective": prompt_effective,
         "model": model,
         "languages": _languages_from_manifest(parts["generation"]),
         "timestamps": {
@@ -688,9 +820,12 @@ def _project_kwargs(parts: Mapping[str, Any]) -> dict[str, Any]:
             "started_at": timing.get("started_at"),
             "completed_at": timing.get("completed_at"),
             "duration_ms": _coalesce(timing.get("total_ms"), timing.get("inference_ms")),
+            "queue_ms": timing.get("queue_ms"),
+            "inference_ms": timing.get("inference_ms"),
         },
         "status": status,
         "parents": _lineage_list(parts["lineage"].get("parents")),
+        "transformations": _lineage_list(parts["lineage"].get("transformations")),
         "error": _manifest_error(execution, mapped_error),
         "location": {"filename": filename, "uri": filename, "sidecar": _sidecar_for(filename)},
         "links": {
@@ -737,7 +872,7 @@ def to_asset_manifest_patch(record: Mapping[str, Any]) -> dict[str, Any]:
     filename = location.get("filename")
     parents = [item for item in (_artifact_parent(parent) for parent in value["lineage"]["parents"]) if item]
     result_kind = _mapping(value.get("result")).get("kind")
-    return {
+    patch: dict[str, Any] = {
         "asset": {
             "id": value["asset_id"],
             "filename": filename,
@@ -762,8 +897,8 @@ def to_asset_manifest_patch(record: Mapping[str, Any]) -> dict[str, Any]:
         },
         "generation": {
             "prompts": {
-                "original": value["prompt_full"],
-                "effective": value["prompt_full"],
+                "original": value.get("prompt_original") or value["prompt_full"],
+                "effective": value.get("prompt_effective") or value["prompt_full"],
                 "language": value["languages"].get("content_language"),
             },
             "model": {
@@ -779,14 +914,30 @@ def to_asset_manifest_patch(record: Mapping[str, Any]) -> dict[str, Any]:
             "queued_at": timestamps.get("queued_at"),
             "started_at": timestamps.get("started_at"),
             "completed_at": timestamps.get("completed_at"),
+            "queue_ms": timestamps.get("queue_ms"),
+            "inference_ms": timestamps.get("inference_ms"),
             "total_ms": timestamps.get("duration_ms"),
         },
-        "lineage": {"parents": parents, "transformations": []},
         "technical": {
             "generation_id": value["generation_id"],
             "result": value.get("result"),
         },
     }
+    lineage_patch: dict[str, Any] = {}
+    if parents:
+        lineage_patch["parents"] = parents
+    transformations = [
+        item for item in (
+            _artifact_parent(raw) for raw in value["lineage"].get("transformations") or []
+        ) if item
+    ]
+    if transformations:
+        lineage_patch["transformations"] = transformations
+    if lineage_patch:
+        patch["lineage"] = lineage_patch
+    if value.get("workspace_id") is None:
+        patch["origin"].pop("workspace_id", None)
+    return patch
 
 
 def _stamp_transition(record: dict[str, Any], target: str, at: str) -> None:
@@ -797,8 +948,16 @@ def _stamp_transition(record: dict[str, Any], target: str, at: str) -> None:
         times["started_at"] = times.get("started_at") or at
     elif target in TERMINAL_STATUSES:
         times["completed_at"] = times.get("completed_at") or at
-        times["duration_ms"] = _milliseconds(
-            times.get("started_at") or times.get("created_at"),
+        times["queue_ms"] = times.get("queue_ms") or _milliseconds(
+            times.get("queued_at") or times.get("created_at"),
+            times.get("started_at"),
+        )
+        times["inference_ms"] = times.get("inference_ms") or _milliseconds(
+            times.get("started_at"),
+            times["completed_at"],
+        )
+        times["duration_ms"] = times.get("duration_ms") or _milliseconds(
+            times.get("created_at"),
             times["completed_at"],
         )
     record["timestamps"] = times
@@ -892,6 +1051,8 @@ def retry_generation(
         candidate_id=parent.get("candidate_id"),
         song_version=parent.get("song_version"),
         prompt_full=parent.get("prompt_full"),
+        prompt_original=parent.get("prompt_original"),
+        prompt_effective=parent.get("prompt_effective"),
         model=parent.get("model"),
         languages=parent.get("languages"),
         status="planned",
@@ -925,151 +1086,29 @@ def attach_derivative(parent: Mapping[str, Any], child: Mapping[str, Any]) -> di
                 "kind": "attempt",
             },
         ]),
+        "transformations": current["lineage"].get("transformations") or [],
     }
     return validate_generation_record(current)
 
 
-def resume_generation_record(record: Mapping[str, Any]) -> dict[str, Any]:
-    """Continue from the last durable status after a process restart.
-
-    Queued and running records stay queued/running. Success is never inferred.
-    """
-    current = validate_generation_record(record)
-    if current["status"] in {"queued", "running", "planned"}:
-        return current
-    return current
-
-
-def _existing_identity(path: Path) -> tuple[str | None, str | None, str | None]:
-    if not path.is_file():
-        return None, None, None
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None, None, None
-    if not isinstance(value, Mapping):
-        return None, None, None
-    return (
-        _clean(value.get("generation_id")),
-        _clean(value.get("asset_id")),
-        _clean(value.get("workspace_id")),
-    )
-
-
-def persist_generation_record(path: str | os.PathLike[str], record: Mapping[str, Any]) -> Path:
-    """Atomically replace one generation-record JSON file."""
-    normalized = validate_generation_record(record)
-    target = Path(path)
-    existing_generation_id, existing_asset_id, existing_workspace_id = _existing_identity(target)
-    if existing_generation_id and existing_generation_id != normalized["generation_id"]:
-        raise GenerationRecordError(
-            f"Refusing to replace generation identity {existing_generation_id!r}",
-        )
-    if existing_asset_id and existing_asset_id != normalized["asset_id"]:
-        raise GenerationRecordError(
-            f"Refusing to replace asset identity {existing_asset_id!r}",
-        )
-    if existing_workspace_id and existing_workspace_id != normalized["workspace_id"]:
-        raise GenerationRecordError("cross-workspace adoption is not allowed")
-    payload = _json_copy(normalized)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.parent / f".{target.name}.{uuid.uuid4().hex}.tmp"
-    try:
-        with open(temporary, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, target)
-        if hasattr(os, "O_DIRECTORY"):
-            directory_fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-    except Exception:
-        try:
-            temporary.unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise
-    return target
-
-
-def load_generation_record(
-    path: str | os.PathLike[str],
-    *,
-    workspace_id: str,
-) -> dict[str, Any]:
-    """Load one record and refuse to adopt it into a different workspace."""
-    target = Path(path)
-    try:
-        value = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise GenerationRecordError("Generation record is unreadable") from exc
-    record = validate_generation_record(value)
-    if not belongs_to_workspace(record, workspace_id):
-        raise GenerationRecordError("cross-workspace adoption is not allowed")
-    return record
-
-
-class GenerationRecordStore:
-    """Workspace-scoped JSON files with atomic replacement."""
-
-    def __init__(self, root: str | os.PathLike[str]):
-        self.root = Path(root)
-        self._lock = threading.RLock()
-
-    def _path(self, workspace_id: str, generation_id: str) -> Path:
-        collection = _identity_token(workspace_id, "workspace_id", required=True)
-        identifier = _identity_token(generation_id, "generation_id", required=True)
-        folder = (self.root / collection).resolve()
-        root = self.root.resolve()
-        if folder != root and root not in folder.parents:
-            raise GenerationRecordError("workspace path escapes the store")
-        return folder / f"{identifier}.json"
-
-    def persist(self, record: Mapping[str, Any]) -> Path:
-        normalized = validate_generation_record(record)
-        with self._lock:
-            return persist_generation_record(
-                self._path(normalized["workspace_id"], normalized["generation_id"]),
-                normalized,
-            )
-
-    def load(self, generation_id: str, *, workspace_id: str) -> dict[str, Any]:
-        with self._lock:
-            return load_generation_record(
-                self._path(workspace_id, generation_id), workspace_id=workspace_id,
-            )
-
-    def list(self, *, workspace_id: str) -> list[dict[str, Any]]:
-        collection = _identity_token(workspace_id, "workspace_id", required=True)
-        folder = self.root / collection
-        records: list[dict[str, Any]] = []
-        if not folder.is_dir():
-            return records
-        with self._lock:
-            for path in sorted(folder.glob("*.json")):
-                try:
-                    record = load_generation_record(path, workspace_id=collection)
-                except GenerationRecordError:
-                    continue
-                records.append(record)
-        records.sort(key=lambda item: str((item.get("timestamps") or {}).get("created_at") or ""))
-        return records
-
-    def resume(self, generation_id: str, *, workspace_id: str) -> dict[str, Any]:
-        return resume_generation_record(self.load(generation_id, workspace_id=workspace_id))
+from .generation_record_io import (  # noqa: E402
+    GenerationRecordStore,
+    load_generation_record,
+    merge_generation_record,
+    persist_generation_record,
+    resume_generation_record,
+)
 
 
 __all__ = [
-    "ATTEMPT_IDENTITY_POLICY", "LEGAL_TRANSITIONS", "PRODUCTS", "PROMPT_DISPLAY_MAX",
-    "SCHEMA_NAME", "SCHEMA_VERSION", "STATUSES", "TERMINAL_STATUSES",
+    "ATTEMPT_IDENTITY_POLICY", "AUTHORITY", "LEGAL_TRANSITIONS", "PHYSICAL_STORE_BUCKET",
+    "PRODUCTS", "PROMPT_DISPLAY_MAX", "SCHEMA_NAME", "SCHEMA_VERSION", "STATUSES",
+    "TERMINAL_STATUSES",
     "GenerationRecord", "GenerationRecordError", "GenerationRecordStore",
     "apply_cancel", "attach_derivative", "belongs_to_workspace",
-    "build_generation_record", "is_legal_transition", "load_generation_record",
-    "map_manifest_status", "map_product", "map_record_status_to_manifest",
+    "build_generation_record", "is_legal_transition", "is_unscoped_record",
+    "load_generation_record", "map_manifest_status", "map_product",
+    "map_record_status_to_manifest", "merge_generation_record",
     "persist_generation_record", "project_from_asset_manifest",
     "prompt_display_text", "request_cancel", "resume_generation_record",
     "retry_generation", "to_asset_manifest_patch", "transition_status",
