@@ -400,8 +400,28 @@ def test_original_and_effective_prompts_round_trip(tmp_path: Path):
     assert patch["timing"]["inference_ms"] == 3000
     assert patch["timing"]["total_ms"] == 5000
     assert patch["lineage"]["transformations"][0]["kind"] == "upscale"
+    assert patch["lineage"]["transformations"][0]["id"] == "asset_src"
+    assert "asset_id" not in patch["lineage"]["transformations"][0]
     empty_lineage = to_asset_manifest_patch(_record(generation_id="g", asset_id="a"))
     assert "lineage" not in empty_lineage
+
+
+def test_missing_duration_ms_is_total_wall_time_not_inference():
+    record = validate_generation_record(_record(
+        generation_id="gen_time",
+        asset_id="asset_time",
+        timestamps={
+            "created_at": "2026-09-01T00:00:00Z",
+            "queued_at": "2026-09-01T00:00:01Z",
+            "started_at": "2026-09-01T00:00:02Z",
+            "completed_at": "2026-09-01T00:00:05Z",
+        },
+        status="completed",
+    ))
+    assert record["timestamps"]["duration_ms"] == 5000
+    assert record["timestamps"]["inference_ms"] == 3000
+    assert record["timestamps"]["queue_ms"] == 1000
+    assert to_asset_manifest_patch(record)["timing"]["total_ms"] == 5000
 
 
 def test_cas_rejects_stale_revision(tmp_path: Path):

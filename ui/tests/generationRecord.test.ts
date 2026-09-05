@@ -187,7 +187,9 @@ test('does not invent a workspace collection from output_folder', () => {
   assert.equal('workspace_id' in (patch.origin as object), false)
   assert.equal((patch.generation as { prompts: { original: string; effective: string } }).prompts.original, 'user')
   assert.equal((patch.generation as { prompts: { original: string; effective: string } }).prompts.effective, 'model')
-  assert.equal((patch.lineage as { transformations: { kind: string }[] }).transformations[0].kind, 'upscale')
+  assert.equal((patch.lineage as { transformations: { id: string; kind: string }[] }).transformations[0].kind, 'upscale')
+  assert.equal((patch.lineage as { transformations: { id: string }[] }).transformations[0].id, 'asset_src')
+  assert.equal('asset_id' in (patch.lineage as { transformations: object[] }).transformations[0], false)
 })
 
 test('merge keeps lineage when the patch sends empty lists', () => {
@@ -196,6 +198,8 @@ test('merge keeps lineage when the patch sends empty lists', () => {
     lineage: { parents: [], derivatives: [], transformations: [] },
   })
   assert.equal(merged.prompt_full, 'updated')
+  assert.equal(merged.prompt_effective, 'updated')
+  assert.equal(merged.prompt_display, 'updated')
   assert.equal(merged.lineage.parents[0]?.asset_id, 'asset_song_1')
   const extra = mergeGenerationRecord(merged, {
     lineage: { transformations: [{ id: 'asset_fx', kind: 'grade' }] },

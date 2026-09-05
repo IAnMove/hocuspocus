@@ -421,7 +421,9 @@ export function toAssetManifestPatch(record: GenerationRecord): JsonMap {
     },
     technical: { generation_id: record.generation_id, result: record.result },
   }
-  const transformations = record.lineage.transformations || []
+  const transformations = (record.lineage.transformations || []).flatMap(item => (
+    item.asset_id ? [{ id: item.asset_id, kind: item.kind || 'other', ...(item.uri ? { uri: item.uri } : {}) }] : []
+  ))
   const lineage: JsonMap = {}
   if (parents.length) lineage.parents = parents
   if (transformations.length) lineage.transformations = transformations
@@ -435,12 +437,24 @@ export function mergeGenerationRecord(base: GenerationRecord, patch: Partial<Gen
     ? incoming.lineage as JsonMap
     : null
   const next: GenerationRecord = { ...base }
+  const skip = new Set([
+    'generation_id', 'asset_id', 'workspace_id', 'schema', 'schema_version', 'lineage',
+    'prompt_full', 'prompt_original', 'prompt_effective', 'prompt_display',
+  ])
   for (const [key, value] of Object.entries(incoming)) {
-    if (key === 'generation_id' || key === 'asset_id' || key === 'workspace_id' || key === 'schema' || key === 'schema_version' || key === 'lineage') {
-      continue
-    }
+    if (skip.has(key)) continue
     ;(next as unknown as JsonMap)[key] = value
   }
+  if (incoming.prompt_original != null) next.prompt_original = String(incoming.prompt_original)
+  if (incoming.prompt_effective != null) {
+    next.prompt_effective = String(incoming.prompt_effective)
+  } else if (incoming.prompt_full != null) {
+    next.prompt_effective = String(incoming.prompt_full)
+  }
+  if (incoming.prompt_full != null) next.prompt_full = String(incoming.prompt_full)
+  const display = next.prompt_effective || next.prompt_original || next.prompt_full
+  next.prompt_full = display
+  next.prompt_display = truncatePromptDisplay(display)
   if (lineagePatch) {
     const lineage = {
       parents: [...base.lineage.parents],

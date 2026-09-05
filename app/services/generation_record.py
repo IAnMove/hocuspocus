@@ -380,7 +380,7 @@ def _timestamps_block(value: Any, *, created_fallback: str) -> dict[str, Any]:
     queue_ms = _optional_ms(raw.get("queue_ms"))
     inference_ms = _optional_ms(raw.get("inference_ms"))
     if duration is None:
-        duration = _milliseconds(started_at or created_at, completed_at)
+        duration = _milliseconds(created_at, completed_at)
     if queue_ms is None:
         queue_ms = _milliseconds(queued_at or created_at, started_at)
     if inference_ms is None:
@@ -927,8 +927,9 @@ def to_asset_manifest_patch(record: Mapping[str, Any]) -> dict[str, Any]:
     if parents:
         lineage_patch["parents"] = parents
     transformations = [
-        dict(item) for item in value["lineage"].get("transformations") or []
-        if isinstance(item, Mapping) and item
+        item for item in (
+            _artifact_parent(raw) for raw in value["lineage"].get("transformations") or []
+        ) if item
     ]
     if transformations:
         lineage_patch["transformations"] = transformations
