@@ -28,9 +28,11 @@ Every entry is classified as behavior, an importable-symbol candidate, an
 intentional architecture rule, or fragile source inspection. New readers fail
 the fixture gate until classified and reviewed.
 
-The initial inventory contains 45 Python readers of `_launch_runtime.py`, 13
-Python readers of `useStore.ts`, and 16 UI tests importing the public store
-facade. These are measured values, not permanent targets.
+The current inventory (`tests/fixtures/architecture_wire_inventory.json` on
+`origin/main` at #137) contains **46** readers of `_launch_runtime.py` and
+**36** readers of `useStore.ts`. These are measured values, not permanent
+targets. The historical snapshot after #100 was 45 / 13 Python plus 16 UI
+facade imports; do not treat that older split as the live count.
 
 ## WanGP boundary
 

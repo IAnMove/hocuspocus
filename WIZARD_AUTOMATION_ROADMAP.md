@@ -493,6 +493,38 @@ Agent Mode complete prematurely.
 - Two-level task navigation and the embedded Wizard sidebar: landed in #104;
   keep navigation presentation separate from the factual action runner.
 
+### Post-#137 handoff (#121–#137)
+
+`main` is at merge #137 (`9ac4cacb`), which includes #135 (`a899a8cc`) and
+#138 (`3f14b0e0`). These items from the post-#120 queue are now landed and
+must not be re-opened as if pending:
+
+- Wizard conversation `409` recovery (#122).
+- Semantic song/lyrics language (#123). Quoted spans stay literal; UI locale
+  does not choose content language.
+- Series → Comics exact provenance (#124).
+- Remove background and Tools upscale (#125, #129, #133).
+- Provider-free local validation vs explicit real-media smoke (#130–#132).
+- Workflow persist pinned to the source workspace (#134).
+- Local MiniMax-Music3 (#135). ACE-Step and Music3 are selectable backends.
+- Generation-record v1 (#138). Projection over asset-manifest; not yet wired
+  into launch writers.
+- Lyrics language library (#137). Not yet wired into write-song/generate.
+  Prefix aliases still need the token follow-up.
+
+The launch/store/agentActions hotspot is free for **one** sequential PR:
+durable Story song identity (cue-by-id, version IDs, server-side candidate
+finalization). Independent PRs may proceed only when they do not edit those
+files.
+
+The next queue lives in
+[`docs/development/SLICE_QUEUE.md`](docs/development/SLICE_QUEUE.md): lyrics
+alias tokens, durable Story song identity, wire lyrics+generation-record,
+Story Music router extract, `useStore` audio slice, Story session
+controller, `agentActions` decomposition, Director `PipelineRuntime`,
+Activity/Library observability, presentation decision gate, and release
+validation.
+
 ### Post-#120 handoff (#116–#120)
 
 PRs #116 through #120 are merged into `main`, with their required CI checks
@@ -517,13 +549,9 @@ whose checks are still running:
   historical committed baseline. This score is diagnostic, not a CI blocker
   or quality certificate; the existing ratchet remains the guardrail.
 
-The next queue is deliberately ordered as: Series → Comics exact provenance;
-Wizard conversation `409` recovery; semantic song/lyrics fidelity; a second
-`useStore` generation slice; Story Lab session-controller extraction; the next
-backend domain router; typed Director `PipelineRuntime`; the presentation
-decision gate followed by visible Wizard magic; and release validation. The
-canonical packet details live in
-[`docs/development/SLICE_QUEUE.md`](docs/development/SLICE_QUEUE.md).
+The post-#120 queue items for Series → Comics, Wizard `409` recovery and
+semantic lyrics language have since landed as #124, #122 and #123. See the
+post-#134 handoff above for the live queue.
 
 ### Low-cost delegation protocol
 
@@ -554,7 +582,7 @@ chain and missing lyrics are composed into the UI in the requested language.
 The UI form, not the chat prose, is authoritative for prompts, lyrics and
 instrumental mode. #119 now binds every step to exact project, cue, candidate,
 production, task and pipeline IDs and fixes the smoke harness to select the
-requested title exactly. Resume the migration at the ordered post-#120 queue
+requested title exactly. Resume the migration at the ordered post-#134 queue
 in `docs/development/SLICE_QUEUE.md`; do not call the quality score a gate and
 do not claim a future PR or CI run is complete until it is actually complete.
 Keep Decision gate A open; visible focus/fill/sparkle choreography remains the

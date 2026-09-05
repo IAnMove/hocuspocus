@@ -15,11 +15,15 @@ Canonical sources in git:
 Working notes under `comunicaciones/` are session handoff only. They are
 gitignored and are not canonical.
 
-## Landed on main (as of #120)
+## Landed on main (as of #137)
 
-`main` points at merge #120 (`658a1c3`, 2026-09-03). The queue below records
-what is present in that tree; the numbered history is kept so earlier slice
-decisions are not rewritten.
+`main` points at merge #137 (`9ac4cacb`, 2026-09-05). That commit sits on
+#138 (`3f14b0e0`) and #135 (`a899a8cc`). The queue below records what is
+present in that tree; the numbered history is kept so earlier slice
+decisions are not rewritten. MiniMax-Music3, generation-record v1 and the
+lyrics-language library are landed. `_launch_runtime.py`, `useStore.ts` and
+`agentActions.ts` are free for **one** sequential PR: durable Story song
+identity.
 
 Asset-manifest v1 writers: Studio generate (simulated, WGP, H3, SFX), Tools
 upscale/revoice, Recast/Repaint/Outpaint, MiniMax image, Series assembly, 3D,
@@ -151,56 +155,105 @@ prepared branch or an in-progress check with an accepted change.
    complete router + services per PR (Assets, Music, Series, Comics, …),
    preserving route-table ordinals. Do not split `_launch_runtime.py` by line
    count.
-10. **Provenance applied by flow** — Studio+Wizard landed (#95), and the
-    Story song → Director handoff was hardened by #112–#114. Series+Comics
-    and the final identity checks still remain. 3D+Director already has
-    folder-vs-Workspace provenance (#89).
+10. **Provenance applied by flow** — Studio+Wizard landed (#95), Story song →
+    Director was hardened by #112–#114/#119, Series → Comics exact
+    provenance landed (#124), and generation-record v1 landed as a
+    portable projection (#138). Remaining identity work is Story music
+    versions and cue-by-id recovery after the client closes. 3D+Director
+    already has folder-vs-Workspace provenance (#89).
 
-## Next medium PRs after #120
+## Integrated slices (#121–#134)
 
-Keep these as separate, reviewable slices in this order. Each item has one
-verifiable contract and should be prepared only after the previous item's
-hotspot and CI state are known.
+These PRs are merged into `main`. Do not re-plan them.
 
-1. **Series → Comics exact provenance.** Apply the #119 exact-ID contract to
-   the remaining cross-domain handoff, preserving project, production, run,
-   task and output references; never fall back to title lookup after an ID is
-   returned.
-2. **Wizard conversation `409` recovery.** Make concurrent conversation
-   writes merge/retry safely, preserve turns across workspace changes and
-   reloads, and add a focused conflict test without hiding a real failure.
-3. **Semantic song/lyrics fidelity.** Keep the selected user language for
-   authored lyrics and preserve quoted-language spans in provider prompts;
-   add semantic assertions to the opt-in music/video smoke rather than
-   treating a valid media file as proof of content quality.
-4. **Second `useStore` generation slice.** Extract one cohesive remaining
-   generation/orchestration boundary behind the public facade, with architecture
-   coverage. Do not move all of `startGeneration` in one PR.
-5. **Story Lab session controller.** Continue extracting session/state
-   coordination from the residual `StoryLabPanel` hotspot through hooks or a
-   controller, without re-extracting existing tabs, chrome or Assets.
-6. **Next backend domain router.** Select one complete domain boundary from
-   the route inventory, move its router and services together, preserve route
-   ordinals and keep at most one pending PR on `_launch_runtime.py`.
-7. **Typed Director `PipelineRuntime`.** After the human release-order check,
-   introduce the typed runtime contract and migrate one complete function or
-   lifecycle at a time; do not split the file by line count.
-8. **Decision gate, then visible Wizard magic.** Review the presentation
-   contract (pace, focus, auto-scroll, reduced motion and interruption) before
-   expanding the Studio → Video prototype's semantic anchors, field replay and
-   sparkles to other Labs.
-9. **Release validation.** Run the safe full suite, browser Wizard flows,
-   quality-score comparison and explicitly opt-in local/provider smoke; record
-   artifact IDs and do not call a branch or CI complete while checks run.
+- **#121 — documentation after #120:** `0d5b077`.
+- **#122 — Wizard conversation `409` recovery:** `98b824a`. Concurrent
+  conversation writes merge/retry instead of silently overwriting.
+- **#123 — semantic song/lyrics language:** `c4e45d2`. Requested lyric
+  language and quoted spans are preserved; UI locale does not choose content.
+- **#124 — Series → Comics exact provenance:** `ecad72d`. Cross-domain
+  handoff keeps project/production/run/task/output IDs.
+- **#125 — remove background Tool:** `020f37e`.
+- **#126 — task cost reports:** `08e1adc`.
+- **#127 — rich PR template:** `78ed61e`.
+- **#129 — Tools image/video upscale:** `df146f2`.
+- **#130 — nightly ACE-Step smoke recipe:** `227d0e8`. Uses the local
+  ACE-Step route, not a MiniMax Music model ID.
+- **#131/#132 — local validation vs real smoke:** `94921fb` / `31c0a42`.
+  `scripts/validate_local.sh` is provider-free; real media is
+  `scripts/run_real_media_smoke.sh` with explicit confirmation.
+- **#133 — Tools upscale worker extract:** `08993d5`.
+- **#134 — Wizard workflow persist pinned to source workspace:** `247554a2`.
+
+## Integrated slices (#135–#137)
+
+These PRs are merged into `main`. Do not re-plan them.
+
+- **#135 — local MiniMax-Music3:** `a899a8cc`. ACE-Step and MiniMax-Music3
+  are selectable local backends. Wizard download, duration clamp (300s),
+  caption preservation and local generate-without-API-key landed with the
+  feature. This was the hotspot PR on `_launch_runtime.py` / `useStore.ts` /
+  `agentActions.ts`.
+- **#138 — generation-record v1:** `3f14b0e0`. Portable projection over
+  asset-manifest, provenance and job lifecycle. New modules only; wiring
+  into launch/Activity/Library is still sequential.
+- **#137 — lyrics language guard:** `9ac4cacb`. Provider-free Spanish
+  contamination checks and bounded foreign-script repair. Not yet wired
+  into write-song/generate. A follow-up must replace prefix aliases
+  (`English` starts with `es`; `en español` starts with `en`) with exact
+  aliases plus tokens longer than two letters.
+
+Open, not landed:
+
+- **Docs sync (this PR).** Refresh the queue after #135/#138/#137. Does not
+  touch launch, store or agent actions.
+
+## Next medium PRs after #137
+
+Keep these as separate, reviewable slices. Do not open a second PR on a
+hotspot already owned by an open PR.
+
+1. **Lyrics alias tokens.** `canonical_lyrics_language` must score
+   `Español de España` and `en español` as Spanish and `English` as
+   English. Library-only; no launch.
+2. **Durable Story song identity.** Cue-by-id, distinct version IDs,
+   server-side candidate finalization after the browser closes, no preview
+   fragments as final songs. **The next sequential PR on
+   `_launch_runtime.py` / Story music.** Wizard must read the open project
+   before acting.
+3. **Wire lyrics guard + generation-record** into write-song, generate and
+   Activity after identity owns the launch hotspot, or in a follow-up if
+   identity leaves those call sites untouched.
+4. **Story Music router extract.** One complete domain from
+   `_launch_runtime.py` (the four `stories/music-candidates` routes),
+   preserving ordinals. Only after identity.
+5. **Second `useStore` audio/generation slice.** Cohesive selection/family
+   boundary; do not move all of `startGeneration`.
+6. **Story Lab session controller.** Selection, load, autosave/CAS and
+   rehydration; do not re-extract tabs or production handoff.
+7. **Decompose `agentActions`.** Parser, request/context reconciliation,
+   capability execution and confirmation as separate modules.
+8. **Typed Director `PipelineRuntime`.** One complete function or lifecycle
+   at a time.
+9. **Activity/Library observability.** Latest real event, truncated prompt
+   with copy, model/duration/status, formatted extra info, audio covers.
+10. **Decision gate, then visible Wizard magic.**
+11. **Release validation.** Simulated CI vs explicit local media smoke.
 
 ## Residual risks to track separately
 
-- The real smoke produced valid H264/AAC media, but its lyrical content was
-  semantically generic. Treat that as a content-quality follow-up, not as
-  evidence that the identity/provenance chain failed.
-- Conversation `409` revision conflicts under concurrent writes remain a
-  separate concurrency investigation; do not fold them into the #119 media
-  identity acceptance claim.
+- The real smoke produced valid H264/AAC media, but lyrical content can still
+  mix languages or stay generic. Treat that as a content-quality follow-up,
+  not as evidence that the identity/provenance chain failed.
+- Closing the client during local music generation can leave a WAV without a
+  linked cue/candidate. Server-side finalization is still required.
+- #137's prefix alias treats `English` as Spanish and `en español` as
+  English until the token follow-up lands.
+- Generation-record v1 is a projection, not a second store, and is not
+  yet wired into launch writers.
+- Two local stashes remain unaudited as product work: `stash@{0}` is a CI
+  workflow addition on `test/create_e2e_test`; `stash@{1}` is Hunyuan3D/
+  model3d worker work. Do not apply or delete them without a human.
 
 ## Standing rules
 
