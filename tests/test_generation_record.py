@@ -9,6 +9,7 @@ import pytest
 from app.services.asset_manifest import build_asset_manifest
 from app.services.generation_record import (
     ATTEMPT_IDENTITY_POLICY,
+    AUTHORITY,
     PRODUCTS,
     PROMPT_DISPLAY_MAX,
     SCHEMA_NAME,
@@ -20,8 +21,10 @@ from app.services.generation_record import (
     attach_derivative,
     belongs_to_workspace,
     build_generation_record,
+    is_unscoped_record,
     load_generation_record,
     map_manifest_status,
+    merge_generation_record,
     persist_generation_record,
     project_from_asset_manifest,
     prompt_display_text,
@@ -37,6 +40,7 @@ from app.services.generation_record import (
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "docs" / "development" / "generation-record-v1.schema.json"
 MODULE_PATH = ROOT / "app" / "services" / "generation_record.py"
+IO_MODULE_PATH = ROOT / "app" / "services" / "generation_record_io.py"
 
 
 def _record(**overrides):
@@ -82,11 +86,20 @@ def test_contract_schema_and_required_fields():
     assert record["location"]["filename"] == "choir.mp4"
     assert record["location"]["sidecar"] == "choir.meta.json"
     assert ATTEMPT_IDENTITY_POLICY == "new_generation_id"
+    assert AUTHORITY == "projection"
+    assert record["prompt_original"] == record["prompt_full"]
+    assert record["prompt_effective"] == record["prompt_full"]
+    assert record["revision"] == 0
 
 
 def test_rejects_host_paths_and_missing_workspace():
-    with pytest.raises(GenerationRecordError, match="workspace_id"):
-        build_generation_record(output_folder="night-shift", prompt_full="x")
+    with pytest.raises(GenerationRecordError, match="output_folder"):
+        build_generation_record(prompt_full="x")
+    unscoped = build_generation_record(output_folder="night-shift", prompt_full="x")
+    assert unscoped["workspace_id"] is None
+    assert unscoped["output_folder"] == "night-shift"
+    assert is_unscoped_record(unscoped)
+    assert not belongs_to_workspace(unscoped, "night-shift")
     with pytest.raises(GenerationRecordError, match="never a path"):
         build_generation_record(workspace_id="/tmp/outputs", prompt_full="x")
     record = build_generation_record(
@@ -153,12 +166,17 @@ def test_resume_after_simulated_restart_keeps_running(tmp_path: Path):
         "running",
     )
     store.persist(record)
+    alive = resume_generation_record(record, worker_alive=True)
+    assert alive["status"] == "running"
+    assert alive["reconciliation"]["needed"] is False
     recovered = GenerationRecordStore(tmp_path / "records").resume(
         "gen_live", workspace_id="collection-a",
     )
     assert recovered["status"] == "running"
     assert recovered["generation_id"] == "gen_live"
     assert recovered["asset_id"] == "asset_live"
+    assert recovered["reconciliation"]["needed"] is True
+    assert recovered["reconciliation"]["reason"] == "interrupted"
     assert resume_generation_record(recovered)["status"] != "completed"
 
 
@@ -271,6 +289,8 @@ def test_project_from_asset_manifest_and_patch_round_trip(tmp_path: Path):
     assert record["project_id"] == "story_1"
     assert record["cue_id"] == "cue-1"
     assert record["prompt_full"] == "Metal fantástico"
+    assert record["prompt_original"] == "Metal fantástico"
+    assert record["prompt_effective"] == "Metal fantástico"
     assert record["languages"]["content_language"] == "es"
     assert record["model"]["configuration"]["api_key"] == "[REDACTED]"
     assert record["lineage"]["parents"][0]["asset_id"] == "asset_song_1"
@@ -279,6 +299,8 @@ def test_project_from_asset_manifest_and_patch_round_trip(tmp_path: Path):
     assert patch["asset"]["id"] == "asset_video_1"
     assert patch["origin"]["workspace_id"] == "collection-a"
     assert patch["technical"]["generation_id"] == "job-1"
+    assert patch["generation"]["prompts"]["original"] == "Metal fantástico"
+    assert patch["generation"]["prompts"]["effective"] == "Metal fantástico"
     assert "secret" not in json.dumps(patch)
 
 
@@ -308,13 +330,111 @@ def test_manifest_partial_maps_to_result_kind(tmp_path: Path):
 
 
 def test_module_does_not_import_runtime_engines():
-    tree = ast.parse(MODULE_PATH.read_text(encoding="utf-8"), filename=str(MODULE_PATH))
     imported: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            imported.add(node.module.split(".")[0])
+    for path in (MODULE_PATH, IO_MODULE_PATH):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module.split(".")[0])
     assert all("fastapi" not in name for name in imported)
     assert all("wgp" not in name for name in imported)
     assert all("launch" not in name for name in imported)
+
+
+def test_merge_empty_lists_do_not_wipe_lineage():
+    parent = _record(generation_id="gen_keep", asset_id="asset_keep")
+    child = _record(generation_id="gen_child", asset_id="asset_child")
+    base = attach_derivative(parent, child)
+    assert base["lineage"]["derivatives"][0]["generation_id"] == "gen_child"
+    merged = merge_generation_record(base, {
+        "prompt_full": "updated choir",
+        "lineage": {"parents": [], "derivatives": [], "transformations": []},
+    })
+    assert merged["prompt_full"] == "updated choir"
+    assert merged["lineage"]["derivatives"][0]["generation_id"] == "gen_child"
+    extended = merge_generation_record(merged, {
+        "lineage": {
+            "parents": [{"generation_id": "gen_src", "kind": "attempt"}],
+            "transformations": [{"kind": "upscale", "asset_id": "asset_keep"}],
+        },
+    })
+    assert extended["lineage"]["parents"][0]["generation_id"] == "gen_src"
+    assert extended["lineage"]["derivatives"][0]["generation_id"] == "gen_child"
+    assert extended["lineage"]["transformations"][0]["kind"] == "upscale"
+    again = merge_generation_record(extended, {})
+    assert again["lineage"]["parents"][0]["generation_id"] == "gen_src"
+    with pytest.raises(GenerationRecordError, match="identity"):
+        merge_generation_record(extended, {"generation_id": "gen_other"})
+
+
+def test_original_and_effective_prompts_round_trip(tmp_path: Path):
+    output = tmp_path / "choir.mp4"
+    output.write_bytes(b"video")
+    manifest = build_asset_manifest(
+        output,
+        asset_id="asset_prompts",
+        workspace_id="collection-a",
+        output_folder="night-shift",
+        tool="studio",
+        status="completed",
+        prompts={"original": "user choir", "effective": "cinematic choir, night", "language": "en"},
+        timing={"created_at": 1_700_000_000, "queued_at": 1_700_000_001,
+                "started_at": 1_700_000_002, "completed_at": 1_700_000_005,
+                "queue_ms": 1000, "inference_ms": 3000, "total_ms": 5000},
+        transformations=[{"id": "asset_src", "kind": "upscale"}],
+    )
+    record = project_from_asset_manifest(manifest)
+    assert record["prompt_original"] == "user choir"
+    assert record["prompt_effective"] == "cinematic choir, night"
+    assert record["prompt_full"] == "cinematic choir, night"
+    assert record["timestamps"]["queue_ms"] == 1000
+    assert record["timestamps"]["inference_ms"] == 3000
+    assert record["timestamps"]["duration_ms"] == 5000
+    assert record["lineage"]["transformations"][0]["asset_id"] == "asset_src"
+    patch = to_asset_manifest_patch(record)
+    assert patch["generation"]["prompts"]["original"] == "user choir"
+    assert patch["generation"]["prompts"]["effective"] == "cinematic choir, night"
+    assert patch["timing"]["queue_ms"] == 1000
+    assert patch["timing"]["inference_ms"] == 3000
+    assert patch["timing"]["total_ms"] == 5000
+    assert patch["lineage"]["transformations"][0]["kind"] == "upscale"
+    empty_lineage = to_asset_manifest_patch(_record(generation_id="g", asset_id="a"))
+    assert "lineage" not in empty_lineage
+
+
+def test_cas_rejects_stale_revision(tmp_path: Path):
+    path = tmp_path / "collection-a" / "gen_cas.json"
+    written = persist_generation_record(path, _record(generation_id="gen_cas", asset_id="asset_cas"))
+    loaded = load_generation_record(written, workspace_id="collection-a")
+    assert loaded["revision"] == 1
+    persist_generation_record(path, {**loaded, "retry_count": 1})
+    with pytest.raises(GenerationRecordError, match="stale"):
+        persist_generation_record(path, {**loaded, "retry_count": 2})
+    winner = load_generation_record(path, workspace_id="collection-a")
+    assert winner["retry_count"] == 1
+    assert winner["revision"] == 2
+    mtime = path.stat().st_mtime_ns
+    load_generation_record(path, workspace_id="collection-a")
+    assert path.stat().st_mtime_ns == mtime
+
+
+def test_unscoped_store_is_not_a_workspace_collection(tmp_path: Path):
+    store = GenerationRecordStore(tmp_path / "records")
+    record = build_generation_record(
+        generation_id="gen_loose",
+        asset_id="asset_loose",
+        output_folder="night-shift",
+        prompt_full="loose choir",
+    )
+    path = store.persist(record)
+    assert record["workspace_id"] is None
+    assert "_physical" in path.as_posix()
+    loaded = store.load("gen_loose", output_folder="night-shift")
+    assert loaded["generation_id"] == "gen_loose"
+    assert loaded["workspace_id"] is None
+    with pytest.raises(GenerationRecordError, match="cross-workspace"):
+        load_generation_record(path, workspace_id="night-shift")
+    assert store.list(workspace_id="night-shift") == []
+    assert [item["generation_id"] for item in store.list(output_folder="night-shift")] == ["gen_loose"]

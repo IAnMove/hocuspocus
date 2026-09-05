@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   ATTEMPT_IDENTITY_POLICY,
+  GENERATION_RECORD_AUTHORITY,
   GENERATION_RECORD_SCHEMA,
   PROMPT_DISPLAY_MAX,
   applyCancel,
@@ -10,11 +11,13 @@ import {
   mapAssetManifestStatus,
   mapGenerationProduct,
   mapGenerationStatusToManifest,
+  mergeGenerationRecord,
   portableFilename,
   projectFromAssetManifest,
   recordBelongsToWorkspace,
   redactSecrets,
   requestCancel,
+  resumeGenerationRecord,
   retryGeneration,
   toAssetManifestPatch,
   truncatePromptDisplay,
@@ -65,6 +68,8 @@ test('projects the generation-record contract from an asset manifest', () => {
   assert.equal(sample.lineage.parents[0]?.asset_id, 'asset_song_1')
   assert.equal(mapGenerationStatusToManifest(sample.status), 'prepared')
   assert.equal(ATTEMPT_IDENTITY_POLICY, 'new_generation_id')
+  assert.equal(GENERATION_RECORD_AUTHORITY, 'projection')
+  assert.equal(sample.prompt_original, sample.prompt_effective)
   assert.equal('title' in sample, false)
 })
 
@@ -159,4 +164,53 @@ test('records cannot be adopted across workspaces and paths stay relative', () =
   assert.equal((patch.origin as { workspace_id: string }).workspace_id, 'collection-a')
   assert.equal((patch.asset as { id: string }).id, 'asset_video_1')
   assert.equal(JSON.stringify(patch).includes('/tmp'), false)
+})
+
+test('does not invent a workspace collection from output_folder', () => {
+  const loose = projectFromAssetManifest({
+    asset: { id: 'asset_loose', filename: 'loose.mp4' },
+    origin: { tool: 'studio', output_folder: 'night-shift' },
+    execution: { status: 'queued', job_id: 'job-loose' },
+    generation: { prompts: { original: 'user', effective: 'model' }, model: {}, parameters: {}, inputs: [] },
+    lineage: { parents: [], transformations: [{ id: 'asset_src', kind: 'upscale' }] },
+    timing: { queue_ms: 10, inference_ms: 20, total_ms: 30 },
+  })
+  assert.equal(loose.workspace_id, null)
+  assert.equal(loose.output_folder, 'night-shift')
+  assert.equal(recordBelongsToWorkspace(loose, 'night-shift'), false)
+  assert.equal(loose.prompt_original, 'user')
+  assert.equal(loose.prompt_effective, 'model')
+  assert.equal(loose.prompt_full, 'model')
+  assert.equal(loose.timestamps.queue_ms, 10)
+  assert.equal(loose.lineage.transformations[0]?.asset_id, 'asset_src')
+  const patch = toAssetManifestPatch(loose)
+  assert.equal('workspace_id' in (patch.origin as object), false)
+  assert.equal((patch.generation as { prompts: { original: string; effective: string } }).prompts.original, 'user')
+  assert.equal((patch.generation as { prompts: { original: string; effective: string } }).prompts.effective, 'model')
+  assert.equal((patch.lineage as { transformations: { kind: string }[] }).transformations[0].kind, 'upscale')
+})
+
+test('merge keeps lineage when the patch sends empty lists', () => {
+  const merged = mergeGenerationRecord(sample, {
+    prompt_full: 'updated',
+    lineage: { parents: [], derivatives: [], transformations: [] },
+  })
+  assert.equal(merged.prompt_full, 'updated')
+  assert.equal(merged.lineage.parents[0]?.asset_id, 'asset_song_1')
+  const extra = mergeGenerationRecord(merged, {
+    lineage: { transformations: [{ id: 'asset_fx', kind: 'grade' }] },
+  })
+  assert.equal(extra.lineage.parents[0]?.asset_id, 'asset_song_1')
+  assert.equal(extra.lineage.transformations[0]?.kind, 'grade')
+})
+
+test('resume of running marks reconciliation without inventing success', () => {
+  const running = { ...sample, status: 'running' as const }
+  const recovered = resumeGenerationRecord(running)
+  assert.equal(recovered.status, 'running')
+  assert.equal(recovered.reconciliation.needed, true)
+  assert.equal(recovered.reconciliation.reason, 'interrupted')
+  const alive = resumeGenerationRecord(running, true)
+  assert.equal(alive.status, 'running')
+  assert.equal(alive.reconciliation.needed, false)
 })

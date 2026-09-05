@@ -7,6 +7,7 @@ export const GENERATION_RECORD_SCHEMA = 'hocuspocus.generation-record' as const
 export const GENERATION_RECORD_SCHEMA_VERSION = 1 as const
 export const PROMPT_DISPLAY_MAX = 180
 export const ATTEMPT_IDENTITY_POLICY = 'new_generation_id' as const
+export const GENERATION_RECORD_AUTHORITY = 'projection' as const
 
 export const GENERATION_PRODUCTS = [
   'studio',
@@ -91,7 +92,7 @@ export interface GenerationRecord {
   generation_id: string
   asset_id: string
   product: GenerationProduct
-  workspace_id: string
+  workspace_id: string | null
   output_folder: string
   project_id: string | null
   production_id: string | null
@@ -99,6 +100,8 @@ export interface GenerationRecord {
   candidate_id: string | null
   song_version: string | null
   prompt_full: string
+  prompt_original: string
+  prompt_effective: string
   prompt_display: string
   model: {
     provider: string | null
@@ -118,11 +121,14 @@ export interface GenerationRecord {
     started_at: string | null
     completed_at: string | null
     duration_ms: number | null
+    queue_ms: number | null
+    inference_ms: number | null
   }
   status: GenerationStatus
   lineage: {
     parents: GenerationLineageRef[]
     derivatives: GenerationLineageRef[]
+    transformations: GenerationLineageRef[]
   }
   error: { code?: string; message?: string; details?: Record<string, unknown> } | null
   retry_count: number
@@ -130,6 +136,8 @@ export interface GenerationRecord {
   location: { filename: string | null; uri: string | null; sidecar: string | null }
   links: { activity_id: string | null; catalog_id: string | null; ui_href: string | null }
   result: { kind: string | null }
+  revision: number
+  reconciliation: { needed: boolean; reason: string | null; at: string | null }
 }
 
 type JsonMap = Record<string, unknown>
@@ -235,7 +243,7 @@ export function isLegalGenerationTransition(current: GenerationStatus, target: G
 }
 
 export function recordBelongsToWorkspace(record: Pick<GenerationRecord, 'workspace_id'>, workspaceId: string): boolean {
-  return Boolean(workspaceId) && record.workspace_id === workspaceId
+  return Boolean(workspaceId) && record.workspace_id != null && record.workspace_id === workspaceId
 }
 
 function sidecarName(filename: string | null): string | null {
@@ -273,8 +281,19 @@ function lineageParents(value: unknown): GenerationLineageRef[] {
   return value.map(lineageRef).filter((item): item is GenerationLineageRef => item != null)
 }
 
-function manifestPrompt(prompts: JsonMap): string {
-  return firstText(prompts.effective, prompts.original, prompts.audio) || ''
+function manifestPromptPair(prompts: JsonMap): { original: string; effective: string } {
+  const original = firstText(prompts.original) || ''
+  const effective = firstText(prompts.effective) || ''
+  const fallback = firstText(prompts.audio, prompts.instruction) || ''
+  if (!original && !effective) return { original: fallback, effective: fallback }
+  return {
+    original: original || effective || fallback,
+    effective: effective || original || fallback,
+  }
+}
+
+function optionalMs(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
 function manifestError(execution: JsonMap, fallback: GenerationRecord['error']): GenerationRecord['error'] {
@@ -297,8 +316,11 @@ export function projectFromAssetManifest(manifest: unknown): GenerationRecord {
   const filename = portableFilename(firstText(asset.filename, asset.uri))
   const mapped = mapAssetManifestStatus(execution.status, Boolean(filename))
   const assetId = firstText(asset.id) || 'asset_unknown'
-  const workspaceId = firstText(origin.workspace_id) || 'unknown'
-  const prompt = manifestPrompt(prompts)
+  const workspaceId = firstText(origin.workspace_id)
+  const outputFolder = portableFilename(origin.output_folder) || workspaceId || ''
+  const promptPair = manifestPromptPair(prompts)
+  const display = promptPair.effective || promptPair.original
+  const lineage = asMap(value.lineage)
   return {
     schema: GENERATION_RECORD_SCHEMA,
     schema_version: GENERATION_RECORD_SCHEMA_VERSION,
@@ -306,14 +328,16 @@ export function projectFromAssetManifest(manifest: unknown): GenerationRecord {
     asset_id: assetId,
     product: mapGenerationProduct(origin.tool, origin.capability),
     workspace_id: workspaceId,
-    output_folder: portableFilename(origin.output_folder) || workspaceId,
+    output_folder: outputFolder,
     project_id: text(asMap(origin.project).id),
     production_id: text(asMap(origin.production).id),
     cue_id: text(execution.cue_id),
     candidate_id: text(execution.candidate_id),
     song_version: text(execution.song_version),
-    prompt_full: prompt,
-    prompt_display: truncatePromptDisplay(prompt),
+    prompt_full: display,
+    prompt_original: promptPair.original,
+    prompt_effective: promptPair.effective,
+    prompt_display: truncatePromptDisplay(display),
     model: {
       provider: text(model.provider),
       id: text(model.id),
@@ -331,10 +355,16 @@ export function projectFromAssetManifest(manifest: unknown): GenerationRecord {
       queued_at: text(timing.queued_at),
       started_at: text(timing.started_at),
       completed_at: text(timing.completed_at),
-      duration_ms: typeof timing.total_ms === 'number' ? timing.total_ms : null,
+      duration_ms: optionalMs(timing.total_ms),
+      queue_ms: optionalMs(timing.queue_ms),
+      inference_ms: optionalMs(timing.inference_ms),
     },
     status: mapped.status,
-    lineage: { parents: lineageParents(asMap(value.lineage).parents), derivatives: [] },
+    lineage: {
+      parents: lineageParents(lineage.parents),
+      derivatives: [],
+      transformations: lineageParents(lineage.transformations),
+    },
     error: manifestError(execution, mapped.error),
     retry_count: 0,
     cancellation: { requested: false, at: null, reason: null },
@@ -345,6 +375,8 @@ export function projectFromAssetManifest(manifest: unknown): GenerationRecord {
       ui_href: null,
     },
     result: { kind: mapped.resultKind },
+    revision: 0,
+    reconciliation: { needed: false, reason: null, at: null },
   }
 }
 
@@ -353,14 +385,14 @@ export function toAssetManifestPatch(record: GenerationRecord): JsonMap {
   const parents = record.lineage.parents.flatMap(item => (
     item.asset_id ? [{ id: item.asset_id, kind: item.kind || 'other', ...(item.uri ? { uri: item.uri } : {}) }] : []
   ))
-  return {
+  const patch: JsonMap = {
     asset: { id: record.asset_id, filename, uri: record.location.uri || filename },
     origin: {
       tool: record.product,
-      workspace_id: record.workspace_id,
       output_folder: record.output_folder,
       project: record.project_id ? { kind: 'project', id: record.project_id } : null,
       production: record.production_id ? { kind: 'production', id: record.production_id } : null,
+      ...(record.workspace_id ? { workspace_id: record.workspace_id } : {}),
     },
     execution: {
       status: mapGenerationStatusToManifest(record.status, record.result.kind),
@@ -370,7 +402,10 @@ export function toAssetManifestPatch(record: GenerationRecord): JsonMap {
       song_version: record.song_version,
     },
     generation: {
-      prompts: { original: record.prompt_full, effective: record.prompt_full },
+      prompts: {
+        original: record.prompt_original || record.prompt_full,
+        effective: record.prompt_effective || record.prompt_full,
+      },
       model: { provider: record.model.provider, id: record.model.id, revision: record.model.version },
       parameters: record.model.configuration,
       inputs: parents,
@@ -380,11 +415,59 @@ export function toAssetManifestPatch(record: GenerationRecord): JsonMap {
       queued_at: record.timestamps.queued_at,
       started_at: record.timestamps.started_at,
       completed_at: record.timestamps.completed_at,
+      queue_ms: record.timestamps.queue_ms,
+      inference_ms: record.timestamps.inference_ms,
       total_ms: record.timestamps.duration_ms,
     },
-    lineage: { parents, transformations: [] },
     technical: { generation_id: record.generation_id, result: record.result },
   }
+  const transformations = record.lineage.transformations || []
+  const lineage: JsonMap = {}
+  if (parents.length) lineage.parents = parents
+  if (transformations.length) lineage.transformations = transformations
+  if (Object.keys(lineage).length) patch.lineage = lineage
+  return patch
+}
+
+export function mergeGenerationRecord(base: GenerationRecord, patch: Partial<GenerationRecord> | JsonMap): GenerationRecord {
+  const incoming = asMap(patch)
+  const lineagePatch = incoming.lineage && typeof incoming.lineage === 'object' && !Array.isArray(incoming.lineage)
+    ? incoming.lineage as JsonMap
+    : null
+  const next: GenerationRecord = { ...base }
+  for (const [key, value] of Object.entries(incoming)) {
+    if (key === 'generation_id' || key === 'asset_id' || key === 'workspace_id' || key === 'schema' || key === 'schema_version' || key === 'lineage') {
+      continue
+    }
+    ;(next as unknown as JsonMap)[key] = value
+  }
+  if (lineagePatch) {
+    const lineage = {
+      parents: [...base.lineage.parents],
+      derivatives: [...base.lineage.derivatives],
+      transformations: [...(base.lineage.transformations || [])],
+    }
+    for (const key of ['parents', 'derivatives', 'transformations'] as const) {
+      const extra = lineagePatch[key]
+      if (!Array.isArray(extra) || extra.length === 0) continue
+      lineage[key] = [...lineage[key], ...lineageParents(extra)]
+    }
+    next.lineage = lineage
+  }
+  return next
+}
+
+export function resumeGenerationRecord(record: GenerationRecord, workerAlive = false): Pick<GenerationRecord, 'status' | 'reconciliation'> {
+  if (record.status === 'completed' || record.status === 'failed' || record.status === 'cancelled') {
+    return { status: record.status, reconciliation: record.reconciliation }
+  }
+  if ((record.status === 'queued' || record.status === 'running') && !workerAlive) {
+    return {
+      status: record.status,
+      reconciliation: { needed: true, reason: 'interrupted', at: record.reconciliation?.at ?? null },
+    }
+  }
+  return { status: record.status, reconciliation: record.reconciliation }
 }
 
 function mintAttemptId(prefix: string): string {
@@ -410,6 +493,7 @@ export function retryGeneration(record: GenerationRecord, sameArtifact = false):
         kind: 'attempt',
       }],
       derivatives: [],
+      transformations: [],
     },
   }
 }
