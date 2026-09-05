@@ -178,7 +178,7 @@ jobs:
 
   code-health-comment:
     name: Code-health PR comment
-    if: ${{ github.event_name == 'pull_request' && always() }}
+    if: ${{ github.event_name == 'pull_request' && always() && github.event.pull_request.head.repo.full_name == github.repository }}
     needs: [ui-check]
     runs-on: ubuntu-24.04
     timeout-minutes: 5

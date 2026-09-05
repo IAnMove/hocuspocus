@@ -47,6 +47,10 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertIn('pull-requests: write', comment)
         self.assertIn('GH_TOKEN', comment)
         self.assertIn('scripts/publish_pr_markdown.py', comment)
+        self.assertIn(
+            'github.event.pull_request.head.repo.full_name == github.repository',
+            comment,
+        )
         self.assertNotIn('--publish-pr-comment', text)
         self.assertIn('bash scripts/check_code_health_pr_base.sh', text)
         self.assertIn('scripts/ci_required.py', text)

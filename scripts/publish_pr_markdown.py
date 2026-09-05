@@ -68,14 +68,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     markdown = path.read_text(encoding="utf-8")
     if args.marker not in markdown:
-        print(f"refuse: {path} does not contain {args.marker}", file=sys.stderr)
-        return 1
+        print(f"WARN: refuse {path} without {args.marker}", file=sys.stderr)
+        return 0
     markdown = markdown[markdown.index(args.marker):]
     try:
         result = publish_pr_comment(markdown, marker=args.marker)
     except (OSError, RuntimeError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
         print(f"WARN: could not comment on the PR: {exc}", file=sys.stderr)
-        return 1
+        return 0
     print(result)
     return 0
 

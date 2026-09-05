@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from scripts.publish_pr_markdown import DEFAULT_MARKER, main, publish_pr_comment
@@ -10,7 +11,7 @@ from scripts.publish_pr_markdown import DEFAULT_MARKER, main, publish_pr_comment
 def test_refuses_markdown_without_marker(tmp_path: Path):
     path = tmp_path / "note.md"
     path.write_text("# no marker\n", encoding="utf-8")
-    assert main(["--file", str(path)]) == 1
+    assert main(["--file", str(path)]) == 0
 
 
 def test_missing_file_is_skip(tmp_path: Path):
@@ -75,6 +76,21 @@ def test_cli_strips_helper_logs_before_marker(tmp_path: Path, monkeypatch):
     body = json.loads(posted[0])["body"]
     assert body.startswith(DEFAULT_MARKER)
     assert "fetching missing base" not in body
+
+
+def test_api_failure_does_not_fail_the_job(tmp_path: Path, monkeypatch):
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"pull_request": {"number": 152}}), encoding="utf-8")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "IAnMove/hocuspocus")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    report = tmp_path / "code-health.md"
+    report.write_text(f"{DEFAULT_MARKER}\n## Code health\n", encoding="utf-8")
+
+    def run(*_args, **_kwargs):
+        raise subprocess.CalledProcessError(403, ["gh", "api"])
+
+    monkeypatch.setattr("scripts.publish_pr_markdown.subprocess.run", run)
+    assert main(["--file", str(report)]) == 0
 
 
 def test_skips_when_not_a_pull_request(tmp_path: Path, monkeypatch):
