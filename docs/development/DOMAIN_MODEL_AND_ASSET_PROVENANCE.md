@@ -74,6 +74,10 @@ Python helpers live in `app/services/generation_provenance.py`:
 - `resolve_generation_location` — splits the two location fields
 - `provenance_from_manifest` — read model over a canonical sidecar
 
+Lyric language is a separate contract. See
+[`LYRICS_LANGUAGE.md`](LYRICS_LANGUAGE.md): sung text keeps the requested
+language; technical prompts may be English; quoted spans stay literal.
+
 Legacy writers that only pass `workspace_id=` still store that string on both
 fields so existing readers keep working. New writers should pass
 `output_folder=` for the directory and `workspace_id=` only when a collection
