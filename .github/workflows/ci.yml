@@ -186,7 +186,12 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # Publisher runs from the PR *base* tree so untrusted head code cannot
+      # replace publish_pr_markdown.py while this job has pull-requests:write.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
       - name: Download code-health report
         continue-on-error: true
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
