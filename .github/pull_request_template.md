@@ -70,6 +70,7 @@
 - [ ] `cd ui && npm run build`
 - [ ] `git diff --check`
 - [ ] E2E/smoke checks: <!-- command + result, or N/A with reason -->
+- [ ] Validation scope: fast / `--full` / CI / real media <!-- pick one; do not claim real media from a simulation -->
 
 ## Code quality
 
@@ -84,9 +85,10 @@
 
 ## CI and review
 
-- CI: pending
-- Cursor/Bugbot: pending
-- Human review: pending
+- CI of this HEAD: pending
+- Cursor/Bugbot of this HEAD: pending
+- Independent agent review of this HEAD: pending
+- Human merge click (operational, not code review): pending
 
 <!-- Record the final state here. Do not call the PR ready while required CI or
      review is still running. Preserve all findings and their resolutions. -->
