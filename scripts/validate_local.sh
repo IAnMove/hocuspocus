@@ -1,9 +1,45 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fast, provider-free pre-push validation. Real media generation is never
-# included here; run scripts/nightly_wizard_validation.sh explicitly for that.
+# Provider-free local validation.
+# Default (no args): fast pre-push checks. Not CI-equivalent.
+# --full: CI-equivalent suite (guards, all safe pytest, UI, budget, E2E).
+# Real media generation is never included; use scripts/run_real_media_smoke.sh.
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+UI="${ROOT}/ui"
+LOG_DIR="${VALIDATE_LOCAL_LOG_DIR:-$ROOT/logs/local-validation}"
+MODE="fast"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: bash scripts/validate_local.sh [--full]
+
+  (default)  Fast pre-push checks: architecture/upscale contracts, code-health
+             ratchet vs PR base, UI tests, lint, build, simulated E2E.
+             PASS here is not CI-equivalent.
+
+  --full     CI-equivalent local validation: clean-repo/docs/brand/deps guards,
+             compileall, the full safe Python suite, ratchet, UI tests, lint,
+             types/build, bundle budget, simulated E2E.
+
+Neither mode installs packages, downloads models, uses a GPU, or calls
+external providers. Unknown arguments fail closed.
+EOF
+  exit 2
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    --full) MODE="full" ;;
+    -h|--help) usage ;;
+    *)
+      echo "[local] unknown argument: $arg" >&2
+      usage
+      ;;
+  esac
+done
+
 if [[ -n "${PYTHON:-}" && ! -x "$PYTHON" ]]; then
   PYTHON=""
 fi
@@ -18,33 +54,96 @@ if [[ -z "$PYTHON" ]]; then
   echo '[local] no usable Python interpreter found' >&2
   exit 2
 fi
-UI="${ROOT}/ui"
 
-echo '[local] Python contracts'
-"$PYTHON" -m pytest -q \
-  "$ROOT/tests/test_tools_upscale_contract.py" \
-  "$ROOT/tests/test_architecture_contracts.py"
+require_cmd() {
+  local name="$1"
+  if ! command -v "$name" >/dev/null 2>&1; then
+    echo "[local] required command not found: $name" >&2
+    exit 2
+  fi
+}
 
-echo '[local] code-health ratchet against the exact PR base'
-# GitHub compares a pull request with the current base commit, not with the
-# branch fork point. Prefer an explicitly supplied SHA (the CI contract), then
-# the fetched base ref, and only use merge-base as an offline fallback.
+require_cmd git
+require_cmd npm
+
+HEAD_SHA="${HEAD_SHA:-$(git -C "$ROOT" rev-parse --verify HEAD 2>/dev/null || true)}"
+if [[ -z "$HEAD_SHA" ]]; then
+  echo '[local] cannot resolve HEAD commit' >&2
+  exit 2
+fi
+
 BASE_SHA="${BASE_SHA:-}"
 if [[ -z "$BASE_SHA" ]]; then
   BASE_REF="${BASE_REF:-origin/main}"
   BASE_SHA="$(git -C "$ROOT" rev-parse --verify "$BASE_REF^{commit}" 2>/dev/null || true)"
 fi
 if [[ -z "$BASE_SHA" ]]; then
-  BASE_SHA="$(git -C "$ROOT" merge-base HEAD origin/main 2>/dev/null || true)"
+  echo '[local] cannot resolve code-health base: set BASE_SHA or fetch origin/main' >&2
+  echo '[local] refusing to skip the ratchet' >&2
+  exit 2
 fi
-if [[ -n "$BASE_SHA" ]]; then
-  BASE_SHA="$BASE_SHA" PYTHON="$PYTHON" "$ROOT/scripts/check_code_health_pr_base.sh" >/dev/null
+
+mkdir -p "$LOG_DIR"
+RUN_STAMP="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || echo local)"
+LOG_FILE="${LOG_DIR}/${MODE}-${RUN_STAMP}.log"
+
+log() {
+  printf '%s\n' "$*" | tee -a "$LOG_FILE"
+}
+
+run_step() {
+  local label="$1"
+  shift
+  log "[local] start: $label"
+  if ! "$@" 2>&1 | tee -a "$LOG_FILE"; then
+    log "[local] FAIL: $label"
+    log "[local] see $LOG_FILE"
+    return 1
+  fi
+  log "[local] ok: $label"
+}
+
+if [[ "$MODE" == "full" ]]; then
+  log "[local] mode=full (CI-equivalent; no GPU or providers)"
+else
+  log "[local] mode=fast (not CI-equivalent; pass --full for the complete suite)"
+fi
+log "[local] HEAD=$HEAD_SHA"
+log "[local] base=$BASE_SHA"
+log "[local] python=$PYTHON"
+
+if [[ "$MODE" == "full" ]]; then
+  run_step "clean-repo guard" "$PYTHON" "$ROOT/scripts/verify_clean_repo.py"
+  run_step "dependency contract" "$PYTHON" "$ROOT/scripts/check_dependency_contract.py"
+  run_step "documentation links" "$PYTHON" "$ROOT/scripts/check_documentation_links.py"
+  run_step "brand contract" "$PYTHON" "$ROOT/scripts/check_brand_contract.py"
+  run_step "python compileall" "$PYTHON" -m compileall -q "$ROOT/app/services" "$ROOT/app/launch.py" "$ROOT/scripts"
+  run_step "python suite" "$PYTHON" -m pytest -q "$ROOT/tests"
+else
+  run_step "python contracts (upscale + architecture)" "$PYTHON" -m pytest -q \
+    "$ROOT/tests/test_tools_upscale_contract.py" \
+    "$ROOT/tests/test_architecture_contracts.py"
 fi
 
-echo '[local] UI tests, lint and build'
-(cd "$UI" && npm test && npm run lint -- --max-warnings=0 && npm run build)
+log "[local] code-health ratchet vs $BASE_SHA"
+if ! BASE_SHA="$BASE_SHA" PYTHON="$PYTHON" HEAD_SHA="$HEAD_SHA" \
+    "$ROOT/scripts/check_code_health_pr_base.sh" | tee -a "$LOG_FILE"; then
+  log "[local] FAIL: code-health ratchet"
+  exit 1
+fi
+log "[local] ok: code-health ratchet"
 
-echo '[local] simulated browser E2E'
-(cd "$UI" && npm run test:e2e)
+run_step "ui tests" bash -lc "cd \"$UI\" && npm test"
+run_step "ui lint" bash -lc "cd \"$UI\" && npm run lint -- --max-warnings=0"
+if [[ "$MODE" == "full" ]]; then
+  run_step "ui build + budget" bash -lc "cd \"$UI\" && npm run build && npm run budget"
+else
+  run_step "ui build" bash -lc "cd \"$UI\" && npm run build"
+fi
+run_step "simulated browser e2e" bash -lc "cd \"$UI\" && npm run test:e2e"
 
-echo '[local] complete (no GPU or external provider calls)'
+if [[ "$MODE" == "full" ]]; then
+  log "[local] full checks passed (CI-equivalent; no GPU or external provider calls)"
+else
+  log "[local] fast checks passed (not CI-equivalent; run bash scripts/validate_local.sh --full)"
+fi
