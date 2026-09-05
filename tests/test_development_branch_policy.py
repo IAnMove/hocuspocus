@@ -87,6 +87,8 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         text = (ROOT / 'docs/development/AGENT_QA_POLICY.md').read_text(encoding='utf-8')
         self.assertIn('`CI required`', text)
         self.assertIn('python scripts/verify_qa_evidence.py', text)
+        self.assertIn('Do not enable auto-merge', text)
+        self.assertIn('python scripts/evaluate_merge_eligibility.py', text)
 
 
 if __name__ == '__main__':
