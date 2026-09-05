@@ -1,7 +1,8 @@
 # Independent review and QA acceptance
 
 Status: P6 validator. This is not a required GitHub check yet and does not
-enable auto-merge. Remote rulesets stay unapplied.
+enable auto-merge. Remote rulesets: `Protect main` exists without required
+CI; `development` is unprotected. See [GITHUB_PROTECTION.md](GITHUB_PROTECTION.md).
 
 The implementer produces criteria and a diff. A **different** agent session
 derives cases from those criteria and reviews the actual HEAD. The

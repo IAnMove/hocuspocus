@@ -89,6 +89,31 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertIn('python scripts/verify_qa_evidence.py', text)
         self.assertIn('Do not enable auto-merge', text)
         self.assertIn('python scripts/evaluate_merge_eligibility.py', text)
+        self.assertIn('GITHUB_PROTECTION.md', text)
+        self.assertIn('prepared', text.lower())
+
+    def test_ci_has_no_path_filters_that_skip_required_jobs(self):
+        text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        header = text.split('jobs:', 1)[0]
+        self.assertNotIn('paths:', header)
+        self.assertNotIn('paths-ignore:', header)
+        self.assertIn('if: always()', text[text.index('  ci-required:'):])
+
+    def test_write_jobs_run_publisher_scripts_from_pr_base(self):
+        ci = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        comment = ci[ci.index('  code-health-comment:'):ci.index('  ci-required:')]
+        self.assertIn('github.event.pull_request.base.sha', comment)
+        self.assertIn('persist-credentials: false', comment)
+        review = (ROOT / '.github/workflows/pr-review.yml').read_text(encoding='utf-8')
+        self.assertIn('github.event.pull_request.base.sha || github.sha', review)
+        self.assertIn('persist-credentials: false', review)
+
+    def test_protection_doc_does_not_claim_required_checks_are_active(self):
+        text = (ROOT / 'docs/development/GITHUB_PROTECTION.md').read_text(encoding='utf-8')
+        self.assertIn('prepared', text.lower())
+        self.assertIn('22330118', text)
+        self.assertIn('{ "context": "CI required" }', text)
+        self.assertIn('say **prepared**, not **protección activa**', text)
 
 
 if __name__ == '__main__':

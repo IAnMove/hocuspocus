@@ -20,9 +20,14 @@ jobs:
     name: Analyze pull request
     runs-on: ubuntu-24.04
     steps:
+      # Scripts come from the PR base (or the dispatched SHA). The head is
+      # fetched only as diff input so a PR cannot rewrite analyze_pr.py while
+      # this job holds pull-requests:write.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
@@ -35,6 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${BASE_SHA:-}" ] && [ -n "${HEAD_SHA:-}" ]; then
+            git fetch --no-tags origin "${HEAD_SHA}"
             git diff --no-color --find-renames "${BASE_SHA}...${HEAD_SHA}" > /tmp/pr.diff
           else
             git diff --no-color --find-renames "origin/${GITHUB_REF_NAME:-main}...HEAD" > /tmp/pr.diff || \
