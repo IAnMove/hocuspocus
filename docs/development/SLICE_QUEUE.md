@@ -21,6 +21,8 @@ Canonical sources in git:
 - Domain identities: `docs/development/DOMAIN_MODEL_AND_ASSET_PROVENANCE.md`
 - i18n boy scout: `docs/development/INTERNATIONALIZATION.md`
 - Architecture contracts: `docs/development/ARCHITECTURE_FOUNDATION.md`
+- Independent review/QA: `docs/development/AGENT_QA_POLICY.md` and
+  `docs/development/QA_ACCEPTANCE.md`
 - Execution baseline and 12-phase wave: `docs/development/EXECUTION_BASELINE.md`
   and `fase1.md`–`fase12.md` (repo root). Working notes under `comunicaciones/`
   are session handoff only.

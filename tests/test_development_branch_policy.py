@@ -73,6 +73,11 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertIn('if: always()', text)
         self.assertIn('needs: [guard, ui-check, ui-e2e]', text)
 
+    def test_agent_qa_policy_still_lists_ci_required(self):
+        text = (ROOT / 'docs/development/AGENT_QA_POLICY.md').read_text(encoding='utf-8')
+        self.assertIn('`CI required`', text)
+        self.assertIn('python scripts/verify_qa_evidence.py', text)
+
 
 if __name__ == '__main__':
     unittest.main()
