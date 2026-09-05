@@ -22,6 +22,21 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertIn('development', {part.strip() for part in match.group(1).split(',')})
 
+    def test_ci_ratchet_uses_pr_base_or_push_before_and_fails_closed(self):
+        text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        self.assertIn(
+            'github.event.pull_request.base.sha || github.event.before',
+            text,
+        )
+        self.assertIn(
+            'Cannot resolve code-health base: need pull_request.base.sha or push before',
+            text,
+        )
+        self.assertNotIn(
+            'BASE_SHA: ${{ github.event.pull_request.base.sha }}\n',
+            text,
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
