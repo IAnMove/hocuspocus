@@ -31722,6 +31722,25 @@ def _run_minimax_music_job(job_id: str) -> None:
     )
 
 
+def _reserve_story_music_submission(body: dict, workspace: str):
+    """Persist command/task/candidate IDs before the MiniMax worker starts."""
+    from services.music_submission import (
+        MusicSubmissionConflict,
+        MusicSubmissionError,
+        submit_music_generation,
+    )
+
+    try:
+        return submit_music_generation(
+            workspace_dir=_workspace_dir(workspace),
+            request={**body, "output_folder": workspace, "workspace": workspace},
+        )
+    except MusicSubmissionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except MusicSubmissionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
 @api.post("/api/v1/stories/music-candidates/jobs", status_code=202)
 def start_story_music_candidates_job(body: dict):
     """Start observable MiniMax Music generation and return immediately."""
@@ -31763,8 +31782,17 @@ def start_story_music_candidates_job(body: dict):
                 detail="Upload a valid reference song before generating a cover",
             )
 
-    job_id = f"minimax-music-{uuid.uuid4().hex[:12]}"
-    task_id = f"task-minimax-music-{job_id}"
+    reserved = _reserve_story_music_submission(body, workspace) or {}
+    if reserved.get("replay"):
+        existing = _load_minimax_music_job(str(reserved.get("job_id") or ""))
+        if existing:
+            public = _public_minimax_music_job(existing)
+            public["replay"] = True
+            return public
+        # Reservation survived but the MiniMax job did not: start the worker
+        # again with the reserved IDs instead of returning a dead 202.
+    job_id = str(reserved.get("job_id") or f"minimax-music-{uuid.uuid4().hex[:12]}")
+    task_id = str(reserved.get("task_id") or f"task-minimax-music-{job_id}")
     now = time.time()
     children = []
     for index in range(count):
@@ -31824,8 +31852,19 @@ def start_story_music_candidates_job(body: dict):
             "model": model,
             "reference_audio_path": reference_audio_path,
         },
+        "generationId": reserved.get("generation_id"),
+        "commandId": reserved.get("command_id"),
+        "candidateId": reserved.get("candidate_id"),
+        "idempotencyKey": reserved.get("idempotency_key"),
     }
     with _minimax_music_jobs_lock:
+        existing_live = _minimax_music_jobs.get(job_id)
+        if existing_live is not None:
+            # Same reserved job_id is already in flight (concurrent replay
+            # missed the checkpoint). Do not start a second worker.
+            public = _public_minimax_music_job(existing_live)
+            public["replay"] = True
+            return public
         _minimax_music_jobs[job_id] = job
         _persist_minimax_music_job(job)
     _publish_minimax_music_job(job)
