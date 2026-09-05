@@ -21,22 +21,23 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: ${{ github.sha }}
-      - name: Overlay publisher scripts from the PR base when they exist
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+      - name: Skip if the trusted publisher is not on the base yet
+        id: publisher
         run: |
           set -euo pipefail
-          if [ -n "${BASE_SHA:-}" ] && git cat-file -e "${BASE_SHA}:scripts/publish_qa_check.py" 2>/dev/null; then
-            git checkout "${BASE_SHA}" -- \
-              scripts/publish_qa_check.py \
-              scripts/verify_qa_provenance.py \
-              scripts/verify_qa_evidence.py
+          if [ -f scripts/publish_qa_check.py ]; then
+            echo "present=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=0" >> "$GITHUB_OUTPUT"
+            echo "Independent QA pending: publisher not on PR base yet"
           fi
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        if: steps.publisher.outputs.present == '1'
         with:
           python-version: "3.10"
       - name: Load envelope from the PR head as data
+        if: steps.publisher.outputs.present == '1'
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
@@ -57,6 +58,7 @@ jobs:
             echo "QA pending: qa-evidence.json not on HEAD" > /tmp/qa-status.txt
           fi
       - name: Publish Independent QA check from the base tree
+        if: steps.publisher.outputs.present == '1'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}

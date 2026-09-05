@@ -121,6 +121,12 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertIn('{ "context": "CI required" }', text)
         self.assertIn('say **prepared**, not **protección activa**', text)
 
+    def test_qa_publisher_checkouts_pr_base_not_merge_ref(self):
+        text = (ROOT / '.github/workflows/qa-evidence.yml').read_text(encoding='utf-8')
+        self.assertIn('github.event.pull_request.base.sha || github.sha', text)
+        self.assertNotIn('ref: ${{ github.sha }}', text)
+        self.assertIn('publisher not on PR base yet', text)
+
 
 if __name__ == '__main__':
     unittest.main()
