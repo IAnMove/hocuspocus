@@ -40,3 +40,6 @@ a key.
 `GET /api/v1/stories/music-candidates/jobs/{job_id}` remains the poll URL.
 TaskRegistry owns the task row. This module does not download models or talk
 to a GPU.
+
+Publishing reserved IDs to disk and Story is
+[MUSIC_FINALIZATION.md](MUSIC_FINALIZATION.md).

@@ -236,11 +236,13 @@ def attach_story_song_candidate(
     task_id: str | None = None,
     root_task_id: str | None = None,
     job_id: str | None = None,
+    update_selection: bool = True,
 ) -> dict[str, Any]:
     """CAS-patch one pending Story song row by project/cue/candidate IDs.
 
     Operates only on the library file inside ``workspace_dir``. A matching
-    candidate in another folder is never visible here.
+    candidate in another folder is never visible here. ``update_selection``
+    false leaves the user's current selection untouched.
     """
     token_project = _story_id_token(project_id)
     token_cue = _story_id_token(cue_id)
@@ -275,10 +277,12 @@ def attach_story_song_candidate(
             job_id=job_id,
         )
         cue["candidates"] = candidates
-        cue["selectedCandidateId"] = token_candidate
+        if update_selection:
+            cue["selectedCandidateId"] = token_candidate
         cues[cue_index] = cue
         music["cues"] = cues
-        music["selectedCandidateId"] = token_candidate
+        if update_selection:
+            music["selectedCandidateId"] = token_candidate
         next_project = dict(project)
         next_project["music"] = music
         return write_story_library(

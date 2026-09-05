@@ -31554,6 +31554,23 @@ def _finish_unstarted_music_children(job_id: str, start_index: int, message: str
         )
 
 
+def _finalize_reserved_music_attempt(workspace, generation_id, filename, cancelled) -> None:
+    token = str(generation_id or "").strip()
+    audio = str(filename or "").strip()
+    if not token or not audio:
+        return
+    try:
+        from services.music_finalization import finalize_reserved_music
+        finalize_reserved_music(
+            workspace_dir=_workspace_dir(workspace),
+            generation_id=token,
+            audio_filename=audio,
+            cancel_check=cancelled,
+        )
+    except Exception:
+        traceback.print_exc()
+
+
 def _run_minimax_music_job(job_id: str) -> None:
     from services import minimax_music_service
 
@@ -31643,6 +31660,9 @@ def _run_minimax_music_job(job_id: str) -> None:
             results.append(candidate)
             if result["filename"] not in outputs:
                 outputs.append(result["filename"])
+            _finalize_reserved_music_attempt(
+                workspace, initial.get("generationId"), result.get("filename"), cancelled,
+            )
             _minimax_music_child_update(
                 job_id, index, status="completed", phase="completed",
                 message=f"Candidate {index + 1}/{count} generated",
