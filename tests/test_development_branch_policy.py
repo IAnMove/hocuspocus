@@ -82,6 +82,8 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertIn('if: always()', text)
         self.assertIn('needs: [guard, ui-check, ui-e2e]', text)
         self.assertNotIn('code-health-comment', text.split('needs: [guard, ui-check, ui-e2e]', 1)[1][:200])
+        self.assertNotIn('independent-qa', text.split('needs: [guard, ui-check, ui-e2e]', 1)[1][:200])
+        self.assertNotIn('Independent QA', text.split('needs: [guard, ui-check, ui-e2e]', 1)[1][:400])
 
     def test_agent_qa_policy_still_lists_ci_required(self):
         text = (ROOT / 'docs/development/AGENT_QA_POLICY.md').read_text(encoding='utf-8')
@@ -118,6 +120,12 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertIn('22330118', text)
         self.assertIn('{ "context": "CI required" }', text)
         self.assertIn('say **prepared**, not **protección activa**', text)
+
+    def test_qa_publisher_checkouts_pr_base_not_merge_ref(self):
+        text = (ROOT / '.github/workflows/qa-evidence.yml').read_text(encoding='utf-8')
+        self.assertIn('github.event.pull_request.base.sha || github.sha', text)
+        self.assertNotIn('ref: ${{ github.sha }}', text)
+        self.assertIn('publisher not on PR base yet', text)
 
 
 if __name__ == '__main__':
