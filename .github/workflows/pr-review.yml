@@ -37,11 +37,16 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ -n "${BASE_SHA:-}" ] && [ -n "${HEAD_SHA:-}" ]; then
-            git fetch --no-tags origin "${HEAD_SHA}"
-            git diff --no-color --find-renames "${BASE_SHA}...${HEAD_SHA}" > /tmp/pr.diff
+          if [ -n "${BASE_SHA:-}" ] && [ -n "${PR_NUMBER:-}" ]; then
+            # refs/pull/*/head exists on the base repo for same-repo and fork
+            # PRs. Do not persist credentials; only this fetch sees the token.
+            git -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" \
+              fetch --no-tags origin "pull/${PR_NUMBER}/head:refs/remotes/origin/pr-head"
+            git diff --no-color --find-renames "${BASE_SHA}...origin/pr-head" > /tmp/pr.diff
           else
             git diff --no-color --find-renames "origin/${GITHUB_REF_NAME:-main}...HEAD" > /tmp/pr.diff || \
               git diff --no-color --find-renames HEAD > /tmp/pr.diff

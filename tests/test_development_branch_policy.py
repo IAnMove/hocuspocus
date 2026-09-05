@@ -107,6 +107,8 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         review = (ROOT / '.github/workflows/pr-review.yml').read_text(encoding='utf-8')
         self.assertIn('github.event.pull_request.base.sha || github.sha', review)
         self.assertIn('persist-credentials: false', review)
+        self.assertIn('pull/${PR_NUMBER}/head:refs/remotes/origin/pr-head', review)
+        self.assertNotIn('git fetch --no-tags origin "${HEAD_SHA}"', review)
 
     def test_protection_doc_does_not_claim_required_checks_are_active(self):
         text = (ROOT / 'docs/development/GITHUB_PROTECTION.md').read_text(encoding='utf-8')
