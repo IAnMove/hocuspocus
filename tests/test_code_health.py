@@ -178,6 +178,24 @@ def outer(a, b):
         self.assertTrue(any("product scope excluded" in item for item in failures))
         self.assertTrue(any("app/wgp.py" in item for item in failures))
 
+    def test_empty_current_product_scope_fails_closed(self):
+        summary = {
+            "production_lines": 0,
+            "complex_functions": 0,
+            "max_complexity": 0,
+        }
+        current = {"summary": summary, "product_paths": []}
+        baseline = {
+            "summary": {
+                "production_lines": 100,
+                "complex_functions": 1,
+                "max_complexity": 10,
+            },
+            "product_paths": ["app/launch.py"],
+        }
+        _, failures = code_health.compare(current, baseline)
+        self.assertTrue(any("empty" in item for item in failures))
+
     def test_quality_score_gain_does_not_hide_loc_failure(self):
         baseline = {
             "summary": {

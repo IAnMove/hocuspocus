@@ -316,14 +316,22 @@ def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
 
     baseline_paths = set(baseline.get("product_paths") or [])
     current_paths = set(current.get("product_paths") or [])
-    if baseline_paths and current_paths:
-        excluded = sorted(path for path in baseline_paths - current_paths if (ROOT / path).exists())
-        if excluded:
+    if baseline_paths:
+        if not current_paths:
             failures.append(
-                "product scope excluded still-present files: "
-                + ", ".join(excluded[:8])
-                + ("" if len(excluded) <= 8 else f" (+{len(excluded) - 8} more)")
+                "product_paths missing or empty versus a baseline that listed "
+                "product files (empty scope is not a pass)"
             )
+        else:
+            excluded = sorted(
+                path for path in baseline_paths - current_paths if (ROOT / path).exists()
+            )
+            if excluded:
+                failures.append(
+                    "product scope excluded still-present files: "
+                    + ", ".join(excluded[:8])
+                    + ("" if len(excluded) <= 8 else f" (+{len(excluded) - 8} more)")
+                )
 
     line_growth = now["production_lines"] - old["production_lines"]
     if line_growth > 0:
