@@ -1,6 +1,7 @@
 # Lyrics language contract
 
-Status: library only (2026-09-05). Wiring into write-song/generate is phase 6.
+Status: library plus enqueue guard on `submit_music_generation` (phase 6).
+Local `generateMusic` in launch is still unwired.
 
 This heuristic scores **written text**, not the audio a model later sings.
 UI locale, conversation language, content language, spoken language and the
@@ -41,5 +42,6 @@ Python and TypeScript.
 
 ## Follow-up
 
-Phase 6 wires this guard at the server enqueue boundary. Do not touch
-`_launch_runtime.py` or `StoryLabPanel` here.
+`submit_music_generation` now runs this guard before enqueue. Invalid lyrics
+return the original text plus a proposal. Do not touch `_launch_runtime.py`
+or `StoryLabPanel` to extend that wiring.

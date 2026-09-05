@@ -5,6 +5,16 @@ export const MINIMAX_MUSIC3_LOCAL_MODEL = 'minimax_music3' as const
 
 export type StoryMusicModel = StoryMusicDraft['model']
 
+export class MusicModelResolutionError extends Error {
+  readonly reasons: string[]
+
+  constructor(message: string, reasons: string[] = []) {
+    super(message)
+    this.name = 'MusicModelResolutionError'
+    this.reasons = reasons
+  }
+}
+
 export interface StoryMusicModelInventoryItem {
   model_type: string
   is_downloaded?: boolean
@@ -76,7 +86,10 @@ export function resolveStoryMusicModel(
   }
   if (installed.length === 1) return installed[0].model_type as StoryMusicModel
   if (isStoryMusicModel(selected)) return selected
-  return ACE_STEP_MUSIC_MODEL
+  throw new MusicModelResolutionError(
+    'No music model was requested, selected, or installed.',
+    ['Silent ACE-Step fallback is not allowed.'],
+  )
 }
 
 export function songWriteTarget(model: string | undefined): 'ace-step' | 'minimax' | 'minimax-music3' {
