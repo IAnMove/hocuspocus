@@ -1,8 +1,8 @@
 # Agent QA policy (minimum)
 
-Status: P0 policy plus P2 `CI required` and P6 evidence validator. Remote
-GitHub protection is **not** applied by this file. That needs a separate
-admin authorization.
+Status: P0 policy plus P2 `CI required`, P6 evidence validator, and P7
+merge-eligibility **simulation**. Remote GitHub protection is **not**
+applied by this file. That needs a separate admin authorization.
 
 ## Who reviews what
 
@@ -17,6 +17,9 @@ admin authorization.
   approval.
 
 Do not enable auto-merge during this transition.
+`python scripts/evaluate_merge_eligibility.py --snapshot …` only reports
+whether a PR **would** be eligible. It never merges. See
+[MERGE_ELIGIBILITY.md](MERGE_ELIGIBILITY.md).
 
 ## Required checks (names as of this tree)
 

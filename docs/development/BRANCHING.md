@@ -19,7 +19,9 @@ during transition, but new work must not use that ambiguous legacy name.
 4. Run relevant checks and independent technical review/QA on the actual head.
    Open PR with explicit `--base development`; do not rely on the default branch.
 5. Respect dependencies and at most one PR per hotspot. A green open PR is not a
-   merged dependency. No auto-merge is enabled by this document.
+   merged dependency. No auto-merge is enabled by this document. Simulated
+   eligibility is `python scripts/evaluate_merge_eligibility.py`; a
+   would-merge result is not a merge.
 
 Human review is functional and brief, not exhaustive code review. Agents and
 deterministic checks supply technical review/QA. A human merge click is operational

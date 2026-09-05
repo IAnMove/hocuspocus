@@ -1,0 +1,47 @@
+{
+  "$id": "https://github.com/IAnMove/hocuspocus/docs/development/merge-eligibility.schema.json",
+  "title": "HocusPocus merge eligibility snapshot v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "mode",
+    "pr",
+    "base_ref",
+    "base_sha",
+    "head_sha",
+    "expected_head_sha",
+    "mergeable",
+    "draft",
+    "checks",
+    "cursor",
+    "qa",
+    "blocking_findings",
+    "files",
+    "adapter"
+  ],
+  "properties": {
+    "schema_version": { "const": "merge-eligibility-v1" },
+    "mode": { "enum": ["simulate", "execute"] },
+    "pr": { "type": ["integer", "string"] },
+    "base_ref": { "enum": ["development", "main"] },
+    "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "expected_head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "mergeable": { "type": "boolean" },
+    "draft": { "type": "boolean" },
+    "checks": { "type": "object" },
+    "cursor": { "type": "object" },
+    "qa": { "type": "object" },
+    "blocking_findings": { "type": "array" },
+    "files": { "type": "array", "items": { "type": "string" } },
+    "adapter": {
+      "type": "object",
+      "properties": {
+        "duplicate_event": { "type": "boolean" },
+        "token_sufficient": { "type": "boolean" },
+        "can_change_protections": { "type": "boolean" }
+      }
+    }
+  }
+}
