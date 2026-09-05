@@ -10,6 +10,7 @@ import {
 import { protectUserVerbatimSegments, reconcileAgentTurnWithRequest } from '../src/features/agent/agentActions'
 import {
   clampStoryMusicDuration,
+  MusicModelResolutionError,
   resolveStoryMusicModel,
   storyMusicDurationMax,
   storyMusicGenerationReady,
@@ -24,6 +25,11 @@ test('Wizard resolves Story music models from explicit choice, selected install,
   assert.equal(resolveStoryMusicModel(undefined, 'ace_step_v1_5_xl_sft_lm_4b', inventory), 'minimax_music3')
   assert.equal(resolveStoryMusicModel(undefined, undefined, inventory), 'minimax_music3')
   assert.equal(resolveStoryMusicModel(undefined, 'ace_step_v1_5_xl_sft_lm_4b', [inventory[0]]), 'ace_step_v1_5_xl_sft_lm_4b')
+  assert.throws(
+    () => resolveStoryMusicModel(undefined, undefined, []),
+    (error: unknown) => error instanceof MusicModelResolutionError
+      && error.reasons.includes('Silent ACE-Step fallback is not allowed.'),
+  )
 })
 
 test('Story music duration and generate-readiness follow the selected backend', () => {
