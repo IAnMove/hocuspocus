@@ -42,9 +42,12 @@ OUT_OF_SCOPE_NAMES = {
     "pinokio.json",
     "install.js",
     "start.js",
+    "start_classic.js",
     "update.js",
     "reset.js",
     "torch.js",
+    "sam_install.js",
+    "rigging_install.js",
 }
 REQUIRED_TOP = (
     "schema_version",
@@ -193,15 +196,19 @@ def evaluate(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     cursor_state = str(cursor.get("state") or "").strip()
     cursor_sha = str(cursor.get("head_sha") or "").strip().lower()
-    if cursor_state != CURSOR_OK or (head and cursor_sha and cursor_sha != head):
+    if (
+        cursor_state != CURSOR_OK
+        or not SHA_RE.fullmatch(cursor_sha)
+        or cursor_sha != head
+    ):
         reasons.append(
             "Cursor must be reviewed_at_head for the current HEAD "
-            "(stale, pending, unavailable and silence do not count)"
+            "(stale, pending, unavailable, silence and missing SHA do not count)"
         )
 
     qa_status = str(qa.get("status") or "").strip()
     qa_sha = str(qa.get("tested_sha") or "").strip().lower()
-    if qa_status != "pass" or (head and qa_sha and qa_sha != head):
+    if qa_status != "pass" or not SHA_RE.fullmatch(qa_sha) or qa_sha != head:
         reasons.append("independent QA evidence must pass on the current HEAD")
 
     open_findings = [item for item in findings if str(item or "").strip()]

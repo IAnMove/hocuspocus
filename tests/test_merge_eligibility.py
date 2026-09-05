@@ -61,9 +61,16 @@ def test_missing_cursor_or_stale_head_is_not_eligible():
     pending = evaluate(_snapshot(cursor={"state": "pending", "head_sha": HEAD}))
     stale = evaluate(_snapshot(cursor={"state": "reviewed_at_head", "head_sha": "c" * 40}))
     silent = evaluate(_snapshot(cursor={"state": "unavailable", "head_sha": HEAD}))
-    for decision in (pending, stale, silent):
+    missing_sha = evaluate(_snapshot(cursor={"state": "reviewed_at_head", "head_sha": ""}))
+    for decision in (pending, stale, silent, missing_sha):
         assert decision["eligible"] is False
         assert any("Cursor must be reviewed_at_head" in item for item in decision["reasons"])
+
+
+def test_missing_qa_sha_is_not_eligible():
+    decision = evaluate(_snapshot(qa={"status": "pass", "tested_sha": ""}))
+    assert decision["eligible"] is False
+    assert any("independent QA evidence must pass" in item for item in decision["reasons"])
 
 
 def test_head_advanced_is_not_eligible():
@@ -113,9 +120,13 @@ def test_own_gate_change_is_not_eligible():
 def test_product_and_workflow_paths_are_out_of_scope():
     app = evaluate(_snapshot(files=["app/services/music_submission.py"]))
     workflow = evaluate(_snapshot(files=[".github/workflows/ci.yml"]))
-    for decision in (app, workflow):
+    classic = evaluate(_snapshot(files=["start_classic.js"]))
+    for decision in (app, workflow, classic):
         assert decision["eligible"] is False
-        assert any("out of the low-risk" in item or "workflow" in item for item in decision["reasons"])
+        assert any(
+            "out of the low-risk" in item or "launcher" in item
+            for item in decision["reasons"]
+        )
 
 
 def test_execute_mode_is_never_enabled():
