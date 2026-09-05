@@ -163,7 +163,8 @@ def test_full_never_skips_budget_failure(tmp_path: Path):
     root = _sandbox(tmp_path)
     result = _run(root, _env(tmp_path, root, BUDGET_FAIL="1"), "--full")
     assert result.returncode != 0
-    assert "FAIL: ui build + budget" in result.stdout + result.stderr
+    combined = result.stdout + result.stderr
+    assert "FAIL: ui budget" in combined or "FAIL: ui build + budget" in combined
 
 
 def test_python_contract_failure_fails_fast_mode(tmp_path: Path):

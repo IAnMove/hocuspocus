@@ -103,6 +103,13 @@ run_step() {
   log "[local] ok: $label"
 }
 
+run_ui() {
+  local label="$1"
+  shift
+  # Inherit the current PATH (nvm/Pinokio/direnv). Do not use a login shell.
+  run_step "$label" bash -c 'cd "$1" && shift && "$@"' bash "$UI" "$@"
+}
+
 if [[ "$MODE" == "full" ]]; then
   log "[local] mode=full (CI-equivalent; no GPU or providers)"
 else
@@ -133,14 +140,14 @@ if ! BASE_SHA="$BASE_SHA" PYTHON="$PYTHON" HEAD_SHA="$HEAD_SHA" \
 fi
 log "[local] ok: code-health ratchet"
 
-run_step "ui tests" bash -lc "cd \"$UI\" && npm test"
-run_step "ui lint" bash -lc "cd \"$UI\" && npm run lint -- --max-warnings=0"
+run_ui "ui tests" npm test
+run_ui "ui lint" npm run lint -- --max-warnings=0
 if [[ "$MODE" == "full" ]]; then
-  run_step "ui build + budget" bash -lc "cd \"$UI\" && npm run build && npm run budget"
+  run_ui "ui build + budget" npm run build && run_ui "ui budget" npm run budget
 else
-  run_step "ui build" bash -lc "cd \"$UI\" && npm run build"
+  run_ui "ui build" npm run build
 fi
-run_step "simulated browser e2e" bash -lc "cd \"$UI\" && npm run test:e2e"
+run_ui "simulated browser e2e" npm run test:e2e
 
 if [[ "$MODE" == "full" ]]; then
   log "[local] full checks passed (CI-equivalent; no GPU or external provider calls)"
