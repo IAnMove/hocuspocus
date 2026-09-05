@@ -1,0 +1,29 @@
+{
+  "schema_version": "qa-evidence-v1",
+  "repo": "IAnMove/hocuspocus",
+  "pr": 150,
+  "base_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "tested_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "requirement_version": "qa-evidence-v1",
+  "recorded_at": "2026-09-05T12:00:00Z",
+  "implementer": { "login": "impl-bot", "session_id": "session-impl" },
+  "reviewers": [
+    {
+      "agent": "review-bot",
+      "role": "technical_review",
+      "session_id": "session-review"
+    }
+  ],
+  "source": "independent_agent_run",
+  "cases": [
+    {
+      "id": "wrapper-fail-closed",
+      "requirement": "missing BASE_SHA fails closed",
+      "result": "pass"
+    }
+  ],
+  "findings": [],
+  "artifacts": ["tests/test_ci_required.py"],
+  "cost": { "known": true, "external_provider_calls": 0 }
+}

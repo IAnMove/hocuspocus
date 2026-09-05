@@ -1,0 +1,69 @@
+{
+  "$id": "https://github.com/IAnMove/hocuspocus/docs/development/qa-evidence.schema.json",
+  "title": "HocusPocus independent QA evidence v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "repo",
+    "pr",
+    "base_sha",
+    "head_sha",
+    "tested_sha",
+    "requirement_version",
+    "recorded_at",
+    "implementer",
+    "reviewers",
+    "source",
+    "cases",
+    "findings",
+    "artifacts",
+    "cost"
+  ],
+  "properties": {
+    "schema_version": { "const": "qa-evidence-v1" },
+    "repo": { "type": "string", "minLength": 1 },
+    "pr": { "type": ["integer", "string"] },
+    "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "tested_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "requirement_version": { "type": "string", "minLength": 1 },
+    "recorded_at": { "type": "string", "minLength": 1 },
+    "implementer": {
+      "type": "object",
+      "required": ["login", "session_id"],
+      "properties": {
+        "login": { "type": "string" },
+        "session_id": { "type": "string" }
+      }
+    },
+    "reviewers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["agent", "role", "session_id"],
+        "properties": {
+          "agent": { "type": "string" },
+          "role": { "enum": ["technical_review", "adversarial_qa"] },
+          "session_id": { "type": "string" }
+        }
+      }
+    },
+    "source": {
+      "enum": ["independent_agent_run", "coordinator_verified"]
+    },
+    "cases": { "type": "array" },
+    "findings": { "type": "array" },
+    "artifacts": { "type": "array" },
+    "cost": {
+      "type": "object",
+      "required": ["known"],
+      "properties": {
+        "known": { "type": "boolean" },
+        "external_provider_calls": { "type": "number" },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}
