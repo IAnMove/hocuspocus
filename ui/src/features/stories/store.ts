@@ -4,7 +4,9 @@ import { changedSections, createStoryProject, normalizeStoryProject } from './mo
 import { mergeStoryLibraries } from './library'
 import type { StoryLibraryConflict, StoryLibraryData } from './library'
 import {
+  inFlightJobIds,
   libraryHasPendingSongs,
+  recoverInFlightStorySongs,
   recoverPendingStorySongs,
   storySongOutputRefFromAsset,
   storySongOutputRefFromMetadata,
@@ -236,11 +238,16 @@ async function recoverHydratedLibrary(
 ): Promise<{ library: StoryLibraryData; recovered: boolean }> {
   if (!libraryHasPendingSongs(library)) return { library, recovered: false }
   try {
-    const recovered = recoverPendingStorySongs(
+    const fromFiles = recoverPendingStorySongs(
       library.projects,
       await fetchStorySongOutputRefs(workspace),
     )
-    if (!recovered.changed) return { library, recovered: false }
+    const jobIds = inFlightJobIds(fromFiles.projects)
+    const jobs = (await Promise.all(
+      jobIds.map(jobId => api.fetchStoryMusicCandidatesJob(jobId).catch(() => null)),
+    )).filter((job): job is NonNullable<typeof job> => Boolean(job))
+    const recovered = recoverInFlightStorySongs(fromFiles.projects, jobs, { workspace })
+    if (!fromFiles.changed && !recovered.changed) return { library, recovered: false }
     const projects = Object.fromEntries(
       Object.values(recovered.projects).map(project => {
         const normalized = normalizeStoryProject(project)
