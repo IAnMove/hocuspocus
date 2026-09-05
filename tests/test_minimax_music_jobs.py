@@ -82,6 +82,8 @@ def _base_namespace(tmp_path: Path) -> dict:
         "_persist_minimax_music_job": lambda _job: None,
         "_publish_minimax_music_job": lambda _job: None,
         "_workspace_dir": lambda _workspace=None: str(tmp_path),
+        "_reserve_story_music_submission": lambda _body, _workspace: {},
+        "_load_minimax_music_job": lambda _job_id: None,
     }
 
 
@@ -170,6 +172,118 @@ def test_start_returns_a_durable_job_before_provider_work(tmp_path):
         ("persist", result["jobId"]),
         ("publish", result["jobId"]),
     ]
+
+
+def test_replay_without_checkpoint_starts_the_worker(tmp_path):
+    namespace = _base_namespace(tmp_path)
+    started = []
+
+    class CaptureThread:
+        def __init__(self, *, target, args, **_kwargs):
+            self.args = args
+
+        def start(self):
+            started.append(self.args)
+
+    namespace.update({
+        "HTTPException": _HTTPException,
+        "_get_active_workspace": lambda: "default",
+        "_safe_join": lambda root, name: os.path.join(root, name),
+        "_persist_minimax_music_job": lambda _job: None,
+        "_publish_minimax_music_job": lambda _job: None,
+        "_run_minimax_music_job": lambda _job_id: None,
+        "_public_minimax_music_job": lambda job: {
+            key: value for key, value in job.items()
+            if key not in {"request", "_cancel_requested"}
+        },
+        "_load_minimax_music_job": lambda _job_id: None,
+        "_reserve_story_music_submission": lambda _body, _workspace: {
+            "replay": True,
+            "job_id": "minimax-music-abc123def456",
+            "task_id": "task-minimax-music-abc123def456",
+            "generation_id": "gen-1",
+        },
+        "threading": SimpleNamespace(Thread=CaptureThread),
+    })
+    start = _load("start_story_music_candidates_job", namespace=namespace)[
+        "start_story_music_candidates_job"
+    ]
+    result = start({
+        "prompt": "cinematic dream pop",
+        "lyrics": "[Verse]\nAcross the night",
+        "workspace": "default",
+    })
+    assert started == [("minimax-music-abc123def456",)]
+    assert result["jobId"] == "minimax-music-abc123def456"
+    assert result["status"] == "queued"
+
+
+def test_concurrent_replay_without_checkpoint_starts_one_worker(tmp_path):
+    namespace = _base_namespace(tmp_path)
+    started = []
+    started_lock = threading.Lock()
+    barrier = threading.Barrier(8)
+
+    class CaptureThread:
+        def __init__(self, *, target, args, **_kwargs):
+            self.args = args
+
+        def start(self):
+            with started_lock:
+                started.append(self.args)
+
+    namespace.update({
+        "HTTPException": _HTTPException,
+        "_get_active_workspace": lambda: "default",
+        "_safe_join": lambda root, name: os.path.join(root, name),
+        "_persist_minimax_music_job": lambda _job: None,
+        "_publish_minimax_music_job": lambda _job: None,
+        "_run_minimax_music_job": lambda _job_id: None,
+        "_public_minimax_music_job": lambda job: {
+            key: value for key, value in job.items()
+            if key not in {"request", "_cancel_requested"}
+        },
+        "_load_minimax_music_job": lambda _job_id: None,
+        "_reserve_story_music_submission": lambda _body, _workspace: {
+            "replay": True,
+            "job_id": "minimax-music-abc123def456",
+            "task_id": "task-minimax-music-abc123def456",
+            "generation_id": "gen-1",
+        },
+        "threading": SimpleNamespace(Thread=CaptureThread),
+    })
+    start = _load("start_story_music_candidates_job", namespace=namespace)[
+        "start_story_music_candidates_job"
+    ]
+    results: list[dict | None] = [None] * 8
+    errors: list[Exception] = []
+
+    def run(index: int) -> None:
+        try:
+            barrier.wait(timeout=2)
+            results[index] = start({
+                "prompt": "cinematic dream pop",
+                "lyrics": "[Verse]\nAcross the night",
+                "workspace": "default",
+            })
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=run, args=(index,))
+        for index in range(8)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert started == [("minimax-music-abc123def456",)]
+    assert all(result is not None for result in results)
+    assert {result["jobId"] for result in results} == {"minimax-music-abc123def456"}
+    assert sum(1 for result in results if result.get("replay") is True) == 7
+    assert sum(1 for result in results if result.get("replay") is not True) == 1
 
 
 def test_start_rejects_a_non_numeric_candidate_count_as_bad_input(tmp_path):
