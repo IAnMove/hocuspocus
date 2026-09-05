@@ -40,8 +40,17 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
     def test_ci_measures_without_pr_write_and_reuses_helper(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         self.assertRegex(text, r'(?m)^permissions:\n  contents: read\n')
-        self.assertIsNone(re.search(r'(?m)^ {2,}pull-requests:\s*write\s*$', text))
-        self.assertNotIn('GH_TOKEN', text)
+        ui = text[text.index('  ui-check:'):text.index('  ui-e2e:')]
+        comment = text[text.index('  code-health-comment:'):text.index('  ci-required:')]
+        self.assertNotIn('pull-requests: write', ui)
+        self.assertNotIn('GH_TOKEN', ui)
+        self.assertIn('pull-requests: write', comment)
+        self.assertIn('GH_TOKEN', comment)
+        self.assertIn('scripts/publish_pr_markdown.py', comment)
+        self.assertIn(
+            'github.event.pull_request.head.repo.full_name == github.repository',
+            comment,
+        )
         self.assertNotIn('--publish-pr-comment', text)
         self.assertIn('bash scripts/check_code_health_pr_base.sh', text)
         self.assertIn('scripts/ci_required.py', text)
@@ -72,6 +81,7 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertIn('name: CI required', text)
         self.assertIn('if: always()', text)
         self.assertIn('needs: [guard, ui-check, ui-e2e]', text)
+        self.assertNotIn('code-health-comment', text.split('needs: [guard, ui-check, ui-e2e]', 1)[1][:200])
 
     def test_agent_qa_policy_still_lists_ci_required(self):
         text = (ROOT / 'docs/development/AGENT_QA_POLICY.md').read_text(encoding='utf-8')

@@ -40,7 +40,7 @@ if [[ -z "$BASE_SHA" || "$BASE_SHA" == "$ZERO_SHA" ]]; then
   exit 2
 fi
 if ! git -C "$ROOT" cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-  echo "[code-health] fetching missing base $BASE_SHA"
+  echo "[code-health] fetching missing base $BASE_SHA" >&2
   if ! git -C "$ROOT" fetch --no-tags --depth=1 origin "$BASE_SHA"; then
     echo "[code-health] cannot fetch base SHA: $BASE_SHA" >&2
     echo "[code-health] base SHA is not a commit in this repository: $BASE_SHA" >&2
@@ -52,8 +52,8 @@ if ! git -C "$ROOT" cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
   exit 2
 fi
 
-echo "[code-health] HEAD=${HEAD_SHA:-unknown}"
-echo "[code-health] base=$BASE_SHA"
+echo "[code-health] HEAD=${HEAD_SHA:-unknown}" >&2
+echo "[code-health] base=$BASE_SHA" >&2
 
 BASE_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/hocus-health-base.XXXXXX")"
 BASE_DIR="$BASE_PARENT/repo"
@@ -63,7 +63,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! git -C "$ROOT" worktree add --detach "$BASE_DIR" "$BASE_SHA"; then
+if ! git -C "$ROOT" worktree add --detach "$BASE_DIR" "$BASE_SHA" >/dev/null; then
   echo "[code-health] failed to check out base $BASE_SHA" >&2
   exit 1
 fi
