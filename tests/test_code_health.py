@@ -1,5 +1,6 @@
 import ast
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -110,6 +111,140 @@ def outer(a, b):
         self.assertIn("new complexity hotspot", failed)
         self.assertNotIn("**Ratchet passed.**", failed)
         self.assertNotIn("**Ratchet not evaluated.**", failed)
+
+    def test_incomplete_baseline_is_not_a_pass(self):
+        current = {
+            "summary": {
+                "production_lines": 10,
+                "complex_functions": 1,
+                "max_complexity": 10,
+            },
+        }
+        warnings, failures = code_health.compare(current, {"summary": {}})
+        self.assertEqual(warnings, [])
+        self.assertTrue(any("incomplete" in item for item in failures))
+
+    def test_missing_ui_measurement_fails_closed(self):
+        summary = {
+            "production_lines": 100,
+            "complex_functions": 1,
+            "max_complexity": 10,
+        }
+        current = {
+            "summary": summary,
+            "measurement": {"ui": "missing", "python": "complete"},
+        }
+        baseline = {
+            "summary": summary,
+            "measurement": {"ui": "complete", "python": "complete"},
+        }
+        _, failures = code_health.compare(current, baseline)
+        self.assertTrue(any("not measured" in item or "disappeared" in item for item in failures))
+
+    def test_policy_change_fails_closed(self):
+        summary = {
+            "production_lines": 100,
+            "complex_functions": 1,
+            "max_complexity": 10,
+        }
+        current = {
+            "summary": summary,
+            "policy_version": "code-health-policy-v2",
+            "policy": {**code_health.POLICY, "complex_growth_budget": 99},
+        }
+        baseline = {
+            "summary": summary,
+            "policy_version": code_health.POLICY_VERSION,
+            "policy": dict(code_health.POLICY),
+        }
+        _, failures = code_health.compare(current, baseline)
+        self.assertTrue(any("policy changed" in item for item in failures))
+
+    def test_excluding_a_still_present_product_file_fails(self):
+        summary = {
+            "production_lines": 100,
+            "complex_functions": 1,
+            "max_complexity": 10,
+        }
+        current = {
+            "summary": summary,
+            "product_paths": ["app/launch.py"],
+        }
+        baseline = {
+            "summary": summary,
+            "product_paths": ["app/launch.py", "app/wgp.py"],
+        }
+        _, failures = code_health.compare(current, baseline)
+        self.assertTrue(any("product scope excluded" in item for item in failures))
+        self.assertTrue(any("app/wgp.py" in item for item in failures))
+
+    def test_empty_current_product_scope_fails_closed(self):
+        summary = {
+            "production_lines": 0,
+            "complex_functions": 0,
+            "max_complexity": 0,
+        }
+        current = {"summary": summary, "product_paths": []}
+        baseline = {
+            "summary": {
+                "production_lines": 100,
+                "complex_functions": 1,
+                "max_complexity": 10,
+            },
+            "product_paths": ["app/launch.py"],
+        }
+        _, failures = code_health.compare(current, baseline)
+        self.assertTrue(any("empty" in item for item in failures))
+
+    def test_quality_score_gain_does_not_hide_loc_failure(self):
+        baseline = {
+            "summary": {
+                "production_lines": 10_000,
+                "complex_functions": 50,
+                "max_complexity": 100,
+            },
+            "hotspots": {},
+        }
+        current = {
+            "summary": {
+                "production_lines": 20_000,
+                "complex_functions": 10,
+                "max_complexity": 40,
+            },
+            "hotspots": {},
+        }
+        _, failures = code_health.compare(current, baseline)
+        self.assertTrue(any("production LOC grew" in item for item in failures))
+
+    def test_exception_requires_full_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "exceptions.json"
+            path.write_text('[{"path": "app/foo.py", "rule": "hotspot_growth"}]\n', encoding="utf-8")
+            with self.assertRaises(RuntimeError):
+                code_health.load_exceptions(path)
+
+    def test_complete_exception_waives_matching_hotspot_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "exceptions.json"
+            path.write_text(
+                json.dumps([{
+                    "path": "app/big.py",
+                    "rule": "hotspot_growth",
+                    "reason": "cohesive extract in progress",
+                    "owner": "IAnMove",
+                    "issue": "https://github.com/IAnMove/hocuspocus/issues/1",
+                    "expires": "2099-01-01",
+                }]),
+                encoding="utf-8",
+            )
+            exceptions = code_health.load_exceptions(path)
+        warnings, failures = code_health.apply_exceptions(
+            ["hotspot app/big.py grew 900 lines; budget is 75"],
+            [],
+            exceptions,
+        )
+        self.assertEqual(failures, [])
+        self.assertTrue(any("waived hotspot_growth" in item for item in warnings))
 
     def test_line_count_reports_physical_and_non_blank_lines(self):
         with tempfile.TemporaryDirectory() as directory:
