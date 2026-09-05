@@ -113,6 +113,58 @@ test('hydrate recovers a pending song from a sidecar with matching candidate_id'
   assert.equal(candidate.taskId, 'task-9')
 })
 
+test('a failed row without audio is recovered when the sidecar exists', async () => {
+  const { recoverPendingStorySongs } = await import('../src/features/stories/storySongRecovery.ts')
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const base = createStoryProject('music_video')
+  const failedId = 'song-failed-timeout'
+  const project = normalizeStoryProject({
+    ...base,
+    id: 'story-failed',
+    music: {
+      ...base.music,
+      cues: [{
+        id: 'cue-failed',
+        kind: 'story',
+        targetId: 'story-failed',
+        title: 'Failed',
+        purpose: '',
+        referenceSong: '',
+        brief: '',
+        style: 'metal',
+        lyrics: '[Verse]\nFailed',
+        lyriaPrompt: '',
+        instrumental: false,
+        durationSeconds: 30,
+        candidates: [{
+          id: failedId,
+          status: 'failed',
+          name: '',
+          source: '',
+          prompt: 'metal',
+          lyrics: '[Verse]\nFailed',
+          provider: 'local',
+          model: 'ace_step_v1_5_xl_sft_lm_4b',
+          durationSeconds: 30,
+          createdAt: '2026-09-05T00:00:00.000Z',
+        }],
+      }],
+    },
+  })
+  const recovered = recoverPendingStorySongs({ [project.id]: project }, [{
+    candidateId: failedId,
+    filename: 'late.wav',
+    source: '/api/v1/file/late.wav',
+    projectId: project.id,
+    cueId: 'cue-failed',
+  }])
+  assert.equal(recovered.changed, true)
+  const candidate = recovered.projects[project.id].music.cues[0].candidates[0]
+  assert.equal(candidate.id, failedId)
+  assert.equal(candidate.status, 'ready')
+  assert.equal(candidate.name, 'late.wav')
+})
+
 test('recovery ignores a sidecar from another project or workspace candidate', async () => {
   const { recoverPendingStorySongs } = await import('../src/features/stories/storySongRecovery.ts')
   const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
@@ -215,14 +267,23 @@ test('loadWorkspace attaches a matching WAV after client close with no live gene
     libraryConflicts: [],
   })
   const originalFetch = globalThis.fetch
+  const putBodies = []
   t.after(() => {
     globalThis.fetch = originalFetch
     window.localStorage.removeItem(`maestro-story-library-v2:${workspace}`)
   })
-  globalThis.fetch = async input => {
+  globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
     if (url.includes('/api/v1/stories/library?')) {
       return new Response(JSON.stringify(library), { headers: { 'content-type': 'application/json' } })
+    }
+    if (url.endsWith('/api/v1/stories/library') && init.method === 'PUT') {
+      putBodies.push(JSON.parse(String(init.body)))
+      const saved = {
+        ...JSON.parse(String(init.body)).library,
+        revision: 5,
+      }
+      return new Response(JSON.stringify(saved), { headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/api/v1/assets')) {
       return new Response(JSON.stringify({
@@ -263,4 +324,12 @@ test('loadWorkspace attaches a matching WAV after client close with no live gene
   assert.equal(recovered.status, 'ready')
   assert.equal(recovered.name, 'closed.wav')
   assert.match(recovered.source, /closed\.wav/)
+  assert.equal(putBodies.length, 1)
+  assert.equal(putBodies[0].baseRevision, 4)
+  assert.equal(
+    putBodies[0].library.projects[project.id].music.cues[0].candidates[0].status,
+    'ready',
+  )
+  assert.equal(useStoryStore.getState().libraryRevision, 5)
+  assert.equal(useStoryStore.getState().dirty, false)
 })

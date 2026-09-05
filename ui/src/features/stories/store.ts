@@ -221,6 +221,15 @@ async function fetchStorySongOutputRefs(workspace: string): Promise<StorySongOut
   }
 }
 
+function writeLocalStoryLibrary(workspace: string, library: StoryLibraryData) {
+  persistLocalLibrary(
+    workspace,
+    library.projects[library.activeId],
+    library.projects,
+    library.revision,
+  )
+}
+
 async function recoverHydratedLibrary(
   workspace: string,
   library: StoryLibraryData,
@@ -248,6 +257,22 @@ async function recoverHydratedLibrary(
     }
   } catch {
     return { library, recovered: false }
+  }
+}
+
+async function commitRecoveredStoryLibrary(
+  workspace: string,
+  library: StoryLibraryData,
+  remoteSerialized: string,
+): Promise<{ library: StoryLibraryData; persisted: boolean }> {
+  try {
+    const saved = normalizeLibrary(await api.saveStoryLibrary(workspace, library)) || library
+    writeLocalStoryLibrary(workspace, saved)
+    lastPersistedLibrary.set(workspace, JSON.stringify(saved))
+    return { library: saved, persisted: true }
+  } catch {
+    lastPersistedLibrary.set(workspace, remoteSerialized)
+    return { library, persisted: false }
   }
 }
 
@@ -384,38 +409,34 @@ export const useStoryStore = create<StoryState>((set, get) => ({
         conflicts = merged.conflicts
         needsRemoteSync = merged.needsRemoteSync
       }
-      persistLocalLibrary(
-        workspace,
-        library.projects[library.activeId],
-        library.projects,
-        library.revision,
-      )
+      writeLocalStoryLibrary(workspace, library)
+      const remoteSerialized = remoteLibrary ? JSON.stringify(remoteLibrary) : ''
       const recovered = conflicts.length
         ? { library, recovered: false }
         : await recoverHydratedLibrary(workspace, library)
       library = recovered.library
-      persistLocalLibrary(
-        workspace,
-        library.projects[library.activeId],
-        library.projects,
-        library.revision,
-      )
-      // A local-newer/exclusive merge must be sent back to the server. A
-      // conflict deliberately stays unsynced until a future explicit review.
-      const remoteSerialized = remoteLibrary
-        ? JSON.stringify(remoteLibrary)
-        : JSON.stringify(library)
-      lastPersistedLibrary.set(
-        workspace,
-        needsRemoteSync && !conflicts.length && !recovered.recovered
-          ? remoteSerialized
-          : JSON.stringify(library),
-      )
+      writeLocalStoryLibrary(workspace, library)
+      // Recovery must reach the server. Caching the recovered snapshot in
+      // lastPersistedLibrary would make the autosave subscriber treat it as
+      // already persisted. A conflict still stays unsynced until review.
+      let recoveredPersisted = !recovered.recovered
+      if (recovered.recovered && !conflicts.length) {
+        const committed = await commitRecoveredStoryLibrary(workspace, library, remoteSerialized)
+        library = committed.library
+        recoveredPersisted = committed.persisted
+      } else {
+        lastPersistedLibrary.set(
+          workspace,
+          needsRemoteSync && !conflicts.length
+            ? remoteSerialized
+            : JSON.stringify(library),
+        )
+      }
       set({
         project: library.projects[library.activeId],
         projects: library.projects,
         libraryRevision: library.revision,
-        dirty: needsRemoteSync || recovered.recovered,
+        dirty: needsRemoteSync || (recovered.recovered && !recoveredPersisted),
         hydrated: true,
         loading: false,
         saveError: null,

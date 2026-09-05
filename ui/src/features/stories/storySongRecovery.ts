@@ -124,10 +124,15 @@ export function isPendingStoryMusicCandidate(candidate: StoryMusicCandidate): bo
   return candidate.status === 'pending' || (!candidate.source.trim() && candidate.status !== 'failed')
 }
 
+export function isRecoverableStoryMusicCandidate(candidate: StoryMusicCandidate): boolean {
+  if (candidate.status === 'ready' && candidate.source.trim()) return false
+  return candidate.status === 'pending' || candidate.status === 'failed' || !candidate.source.trim()
+}
+
 export function libraryHasPendingSongs(library: Pick<StoryLibraryData, 'projects'>): boolean {
   return Object.values(library.projects).some(project => (
-    project.music.cues.some(cue => cue.candidates.some(isPendingStoryMusicCandidate))
-    || project.music.candidates.some(isPendingStoryMusicCandidate)
+    project.music.cues.some(cue => cue.candidates.some(isRecoverableStoryMusicCandidate))
+    || project.music.candidates.some(isRecoverableStoryMusicCandidate)
   ))
 }
 
@@ -156,7 +161,7 @@ export function recoverPendingStorySongs(
     let projectChanged = false
     const cues = project.music.cues.map(cue => {
       const candidates = cue.candidates.map(candidate => {
-        if (!isPendingStoryMusicCandidate(candidate)) return candidate
+        if (!isRecoverableStoryMusicCandidate(candidate)) return candidate
         const output = matchingOutput(project, cue.id, candidate, outputs)
         if (!output?.source) return candidate
         projectChanged = true
@@ -172,7 +177,7 @@ export function recoverPendingStorySongs(
       return projectChanged ? { ...cue, candidates } : cue
     })
     const globalCandidates = project.music.candidates.map(candidate => {
-      if (!isPendingStoryMusicCandidate(candidate)) return candidate
+      if (!isRecoverableStoryMusicCandidate(candidate)) return candidate
       const output = matchingOutput(project, undefined, candidate, outputs)
       if (!output?.source) return candidate
       projectChanged = true

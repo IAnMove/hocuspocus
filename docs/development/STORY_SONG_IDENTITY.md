@@ -25,7 +25,9 @@ is denormalized and must never be used to recover identity.
 
 Client close during generate is recoverable because the pending row is already
 on disk. `loadWorkspace` reattaches a WAV whose sidecar/output carries the
-matching `candidate_id`.
+matching `candidate_id`, including rows marked `failed` after a client timeout
+once the sidecar exists. Recovery writes the `ready` patch to the Story
+library immediately; it must not only update the in-memory snapshot.
 
 ## Staging
 
