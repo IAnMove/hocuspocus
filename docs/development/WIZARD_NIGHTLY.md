@@ -44,7 +44,16 @@ coverage exists.
   `expected_failure` and JUnit records them as skipped—not passed.
 - `REGRESSION`: a new or unclassified failure occurred.
 - `INCOMPLETE`: a requested level is intentionally missing or was skipped.
-- `INFRASTRUCTURE FAILURE`: a timeout or runner/configuration failure occurred.
+- `INFRASTRUCTURE FAILURE`: a timeout, interruption, unreadable log, missing
+  diagnostics, or runner/configuration failure occurred. An empty job list is
+  not a pass.
+
+Classification prefers the process exit code and a structured runner summary
+(`# tests` / `ℹ tests` and `# fail` / `ℹ fail`). Fixture or mock logs that
+merely contain the word `failed` are not a suite failure. If the runner
+cannot determine the result, it reports not evaluable /
+`INFRASTRUCTURE FAILURE` and never invents `PASS`. A green CI job is not
+real media generation.
 
 Baseline matching requires both the exact test title and its expected file. A
 different failure in a baseline file is therefore a regression. Keep

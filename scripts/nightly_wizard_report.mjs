@@ -242,6 +242,52 @@ function normalizedTestFile(value) {
   return String(value || '').replace(/\\/g, '/').replace(/^.*?ui\//, '').replace(/^ui\//, '')
 }
 
+export function parseNodeTestSummary(logText) {
+  const text = String(logText || '').replace(/\u001b\[[0-9;]*m/g, '')
+  const pick = name => {
+    const match = text.match(new RegExp(`(?:^|\\n)(?:#|ℹ)\\s*${name}\\s+(\\d+)\\b`, 'i'))
+    return match ? Number(match[1]) : null
+  }
+  const tests = pick('tests')
+  const pass = pick('pass')
+  const fail = pick('fail')
+  const skipped = pick('skipped')
+  const cancelled = pick('cancelled')
+  if (tests == null && pass == null && fail == null) return null
+  return {
+    tests: tests ?? (pass ?? 0) + (fail ?? 0) + (skipped ?? 0) + (cancelled ?? 0),
+    pass: pass ?? 0,
+    fail: fail ?? 0,
+    skipped: skipped ?? 0,
+    cancelled: cancelled ?? 0,
+  }
+}
+
+export function isUnreadableLog(text) {
+  const value = String(text || '')
+  if (!value.trim()) return true
+  let controls = 0
+  let replacements = 0
+  for (const ch of value) {
+    const code = ch.codePointAt(0)
+    if (code === 0xFFFD) replacements += 1
+    else if (code === 0 || (code < 32 && code !== 9 && code !== 10 && code !== 13)) controls += 1
+  }
+  if (replacements >= 8) return true
+  return value.length >= 20 && (controls + replacements) / value.length > 0.25
+}
+
+const UNCLASSIFIED_RUNNER_FAILURE = 'unclassified test runner failure'
+
+function onlyUnclassifiedNoise(classified) {
+  return Boolean(
+    classified
+    && classified.baselineHits.length === 0
+    && classified.newFailures.length === 1
+    && classified.newFailures[0] === UNCLASSIFIED_RUNNER_FAILURE,
+  )
+}
+
 export function classifyFrontendFailures(logText, baseline) {
   const newFailures = []
   const baselineHits = []
@@ -263,13 +309,18 @@ export function classifyFrontendFailures(logText, baseline) {
     if (known) baselineHits.push(known.id)
     else newFailures.push(title.replace(/\s+\([\d.]+ms\)\s*$/, ''))
   }
-  if (!failBlocks.length && /(?:^|\n)(?:npm ERR!|Error:|not ok|failed)/im.test(logText)) {
-    newFailures.push('unclassified test runner failure')
+  const summary = parseNodeTestSummary(logText)
+  const structuredPass = Boolean(summary && summary.fail === 0)
+  // Prefer structured summaries and explicit fail blocks. The word "failed" in
+  // mock or fixture logs is not a suite failure by itself.
+  if (!failBlocks.length && !structuredPass && /(?:^|\n)(?:npm ERR!|Error:|not ok\b)/im.test(logText)) {
+    newFailures.push(UNCLASSIFIED_RUNNER_FAILURE)
   }
   return { baselineHits: [...new Set(baselineHits)], newFailures: [...new Set(newFailures)] }
 }
 
 export function deriveRunStatus(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return 'INFRASTRUCTURE FAILURE'
   if (rows.some(row => ['timeout', 'infrastructure_failure', 'configuration_error'].includes(row.classification))) return 'INFRASTRUCTURE FAILURE'
   if (rows.some(row => ['failure', 'configuration_error'].includes(row.classification))) return 'REGRESSION'
   if (rows.some(row => row.classification === 'skipped')) return 'INCOMPLETE'
@@ -277,8 +328,24 @@ export function deriveRunStatus(rows) {
   return 'PASS'
 }
 
-export function requireTestDiagnostics(outcome, label) {
+export function interpretRunnerOutcome(outcome, { label = 'tests', baseline = { failures: [] } } = {}) {
   const logText = `${outcome.stdout || ''}\n${outcome.stderr || ''}`
+  if (outcome.timedOut) {
+    return {
+      ...outcome,
+      code: outcome.code || 1,
+      classification: 'timeout',
+      reason: `${label} timed out`,
+    }
+  }
+  if (outcome.signal) {
+    return {
+      ...outcome,
+      code: outcome.code || 1,
+      classification: 'infrastructure_failure',
+      reason: `${label} was interrupted (${outcome.signal})`,
+    }
+  }
   if (/listen EPERM:[\s\S]*tsx-/i.test(logText)) {
     return {
       ...outcome,
@@ -294,7 +361,95 @@ export function requireTestDiagnostics(outcome, label) {
       reason: `${label} exited without test diagnostics`,
     }
   }
-  return outcome
+  if (isUnreadableLog(logText)) {
+    return {
+      ...outcome,
+      code: outcome.code || 1,
+      classification: 'infrastructure_failure',
+      reason: `${label} result is not evaluable`,
+    }
+  }
+
+  const summary = parseNodeTestSummary(logText)
+  const classified = classifyFrontendFailures(logText, baseline)
+  const noiseOnly = onlyUnclassifiedNoise(classified)
+  const realFailures = classified.newFailures.filter(item => item !== UNCLASSIFIED_RUNNER_FAILURE)
+  const onlyBaseline = outcome.code !== 0 && realFailures.length === 0 && classified.baselineHits.length > 0 && !noiseOnly
+
+  if (onlyBaseline) {
+    return {
+      ...outcome,
+      classification: 'expected_failure',
+      classifiedAsBaseline: true,
+      baselineMatches: classified.baselineHits,
+      reason: classified.baselineHits.join('; ') || null,
+      summary,
+      classified,
+    }
+  }
+
+  if (realFailures.length) {
+    return {
+      ...outcome,
+      code: outcome.code || 1,
+      classification: 'failure',
+      reason: realFailures.join('; '),
+      summary,
+      classified,
+    }
+  }
+
+  if (summary && summary.fail > 0) {
+    return {
+      ...outcome,
+      code: outcome.code || 1,
+      classification: 'failure',
+      reason: classified.newFailures.join('; ') || `${label} reported ${summary.fail} failed tests`,
+      summary,
+      classified,
+    }
+  }
+
+  if (summary && summary.fail === 0) {
+    if (outcome.code === 0) {
+      return {
+        ...outcome,
+        classification: 'pass',
+        reason: null,
+        summary,
+        classified,
+      }
+    }
+    return {
+      ...outcome,
+      classification: 'infrastructure_failure',
+      reason: `${label} process exited ${outcome.code} after a passing structured summary`,
+      summary,
+      classified,
+    }
+  }
+
+  if (outcome.code === 0) {
+    return {
+      ...outcome,
+      classification: 'pass',
+      reason: null,
+      summary,
+      classified,
+    }
+  }
+
+  return {
+    ...outcome,
+    classification: 'infrastructure_failure',
+    reason: `${label} exited without an evaluable test summary`,
+    summary,
+    classified,
+  }
+}
+
+export function requireTestDiagnostics(outcome, label) {
+  return interpretRunnerOutcome(outcome, { label, baseline: { failures: [] } })
 }
 
 async function main() {
@@ -378,22 +533,12 @@ async function main() {
           cwd: ui,
           logPath: path.join(outDir, 'frontend-suite.log'),
         })
-        outcome = requireTestDiagnostics(outcome, 'Full UI tests')
-        if (outcome.classification === 'infrastructure_failure') return outcome
-        const logText = `${outcome.stdout}\n${outcome.stderr}`
-        const classified = classifyFrontendFailures(logText, baseline)
-        if (outcome.code !== 0 && !classified.baselineHits.length && !classified.newFailures.length) {
-          classified.newFailures.push('frontend test process exited without diagnostics')
-        }
-        await writeFile(path.join(outDir, 'frontend-classification.json'), JSON.stringify(classified, null, 2))
-        const onlyBaseline = outcome.code !== 0 && classified.newFailures.length === 0 && classified.baselineHits.length > 0
-        return {
-          ...outcome,
-          classification: onlyBaseline ? 'expected_failure' : undefined,
-          classifiedAsBaseline: onlyBaseline,
-          baselineMatches: classified.baselineHits,
-          reason: classified.newFailures.join('; ') || null,
-        }
+        outcome = interpretRunnerOutcome(outcome, { label: 'Full UI tests', baseline })
+        await writeFile(
+          path.join(outDir, 'frontend-classification.json'),
+          JSON.stringify(outcome.classified || classifyFrontendFailures(`${outcome.stdout || ''}\n${outcome.stderr || ''}`, baseline), null, 2),
+        )
+        return outcome
       },
     })
   }
