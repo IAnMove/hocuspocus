@@ -31858,6 +31858,13 @@ def start_story_music_candidates_job(body: dict):
         "idempotencyKey": reserved.get("idempotency_key"),
     }
     with _minimax_music_jobs_lock:
+        existing_live = _minimax_music_jobs.get(job_id)
+        if existing_live is not None:
+            # Same reserved job_id is already in flight (concurrent replay
+            # missed the checkpoint). Do not start a second worker.
+            public = _public_minimax_music_job(existing_live)
+            public["replay"] = True
+            return public
         _minimax_music_jobs[job_id] = job
         _persist_minimax_music_job(job)
     _publish_minimax_music_job(job)
