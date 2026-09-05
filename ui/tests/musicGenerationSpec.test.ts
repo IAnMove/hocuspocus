@@ -59,6 +59,17 @@ test('remote compile truncates the backend prompt, not the frozen caption', () =
   assert.equal(spec.compiled.backend, 'minimax_api')
 })
 
+test('omitted duration stays null on the spec and only the compile defaults to 90', () => {
+  const spec = buildMusicGenerationSpec({
+    source: 'ui',
+    model: ACE_DEFAULT_MODEL,
+    caption: 'cinematic dream pop',
+    lyrics: '[Verse]\nLa noche canta',
+  })
+  assert.equal(spec.duration_seconds, null)
+  assert.equal(spec.compiled.duration_seconds, 90)
+})
+
 test('zero remote count uses the default of two; garbage count throws', () => {
   const zero = buildMusicGenerationSpec({
     source: 'story',

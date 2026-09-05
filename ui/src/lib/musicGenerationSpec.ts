@@ -55,7 +55,7 @@ export interface MusicGenerationSpec {
   lyrics: string
   instrumental: boolean
   count: number
-  duration_seconds: number
+  duration_seconds: number | null
   lyrics_language: string | null
   languages: {
     lyrics: string | null
@@ -217,6 +217,9 @@ export function buildMusicGenerationSpec(draft: MusicGenerationDraft): MusicGene
   const lyrics = draft.instrumental ? '' : text(draft.lyrics)
   const compiled = compileMusicRequest(entry, draft)
   const lyricsLanguage = text(draft.lyricsLanguage) || null
+  const requestedDuration = Number.isFinite(Number(draft.durationSeconds)) && Number(draft.durationSeconds) > 0
+    ? compiled.duration_seconds
+    : null
   return {
     schema: 'hocuspocus.music-generation-spec',
     guide_revision: MUSIC_GUIDE_REVISION,
@@ -228,7 +231,7 @@ export function buildMusicGenerationSpec(draft: MusicGenerationDraft): MusicGene
     lyrics,
     instrumental: Boolean(draft.instrumental),
     count: compiled.count,
-    duration_seconds: compiled.duration_seconds,
+    duration_seconds: requestedDuration,
     lyrics_language: lyricsLanguage,
     languages: {
       lyrics: lyricsLanguage,
