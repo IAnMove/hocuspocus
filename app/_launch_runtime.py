@@ -35994,6 +35994,22 @@ def _upsert_canonical_task(
         # cancellation/completion won. Canonical resume explicitly transitions
         # the registry before the next active adapter snapshot arrives.
         return existing
+    existing_metadata = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
+    incoming_metadata = fields.get("metadata") if isinstance(fields.get("metadata"), dict) else None
+    if incoming_metadata is not None:
+        merged_metadata = dict(existing_metadata)
+        for key, value in incoming_metadata.items():
+            if value is not None:
+                merged_metadata[key] = value
+        fields["metadata"] = merged_metadata
+        # Reservation owns attempt identity. Adapter snapshots must not
+        # replace workflow/title after submit_music_generation wrote them.
+        if any(
+            existing_metadata.get(key)
+            for key in ("generation_id", "candidate_id", "command_id", "idempotency_key")
+        ):
+            fields.pop("workflow", None)
+            fields.pop("title", None)
     mutable = {
         key: value for key, value in fields.items()
         if key not in {"id", "created_at"}
@@ -36328,9 +36344,16 @@ def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
             "actor": provenance.get("actor") or "unknown",
             "tool": provenance.get("tool") or adapter,
             "capability": provenance.get("capability"),
-            "command_id": command.get("command_id"),
+            "command_id": (
+                command.get("command_id")
+                or record.get("commandId")
+                or record.get("command_id")
+            ),
             "workflow_id": command.get("workflow_id"),
             "run_id": command.get("run_id"),
+            "generation_id": record.get("generationId") or record.get("generation_id"),
+            "candidate_id": record.get("candidateId") or record.get("candidate_id"),
+            "idempotency_key": record.get("idempotencyKey") or record.get("idempotency_key"),
         },
     )
 

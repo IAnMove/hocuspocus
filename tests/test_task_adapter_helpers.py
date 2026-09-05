@@ -256,3 +256,81 @@ def test_generic_adapter_preserves_service_owned_task_identity():
 
     assert captured["id"] == "task-model3d-backend-id"
     assert captured["root_id"] == "task-series-root"
+
+
+def test_generic_adapter_publishes_reserved_music_identity():
+    publish, captured = _load_publisher("_publish_generic_legacy_task")
+
+    publish({
+        "jobId": "minimax-music-abc123def456",
+        "taskId": "task-minimax-music-abc123def456",
+        "workspace": "default",
+        "status": "queued",
+        "generationId": "gen-1",
+        "commandId": "cmd-1",
+        "candidateId": "song-1",
+        "idempotencyKey": "idem-1",
+    }, "minimax-music")
+
+    assert captured["metadata"]["generation_id"] == "gen-1"
+    assert captured["metadata"]["command_id"] == "cmd-1"
+    assert captured["metadata"]["candidate_id"] == "song-1"
+    assert captured["metadata"]["idempotency_key"] == "idem-1"
+
+
+def test_upsert_keeps_reserved_task_identity():
+    existing = {
+        "id": "task-minimax-music-abc",
+        "status": "queued",
+        "workflow": "generate_story_song",
+        "title": "Story song",
+        "metadata": {
+            "generation_id": "gen-1",
+            "candidate_id": "song-1",
+            "command_id": "cmd-1",
+            "idempotency_key": "idem-1",
+        },
+    }
+    updated = {}
+
+    class Registry:
+        def get(self, _task_id):
+            return existing
+
+        def update(self, task_id, **fields):
+            updated.update(fields)
+            return {**existing, **{key: value for key, value in fields.items()
+                                   if key not in {"force", "event_type", "event_exclude_fields"}}}
+
+    namespace = {
+        "_task_registry": lambda _workspace: Registry(),
+    }
+    node = _function("_upsert_canonical_task")
+    exec(compile(ast.Module(body=[node], type_ignores=[]), str(LAUNCH_PATH), "exec"), namespace)
+
+    result = namespace["_upsert_canonical_task"](
+        "default",
+        "task-minimax-music-abc",
+        workflow="minimax-music",
+        title="MiniMax Music",
+        status="queued",
+        metadata={
+            "adapter": "minimax-music",
+            "actor": "unknown",
+            "tool": "minimax-music",
+            "capability": None,
+            "command_id": None,
+            "workflow_id": None,
+            "run_id": None,
+        },
+    )
+
+    assert "workflow" not in updated
+    assert "title" not in updated
+    assert result["workflow"] == "generate_story_song"
+    assert result["title"] == "Story song"
+    assert result["metadata"]["generation_id"] == "gen-1"
+    assert result["metadata"]["candidate_id"] == "song-1"
+    assert result["metadata"]["command_id"] == "cmd-1"
+    assert result["metadata"]["idempotency_key"] == "idem-1"
+    assert result["metadata"]["adapter"] == "minimax-music"
