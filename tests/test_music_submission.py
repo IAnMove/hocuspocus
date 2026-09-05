@@ -89,15 +89,42 @@ def test_same_key_different_spec_conflicts(tmp_path: Path):
         )
 
 
+def test_missing_idempotency_key_does_not_dedupe_repeats(tmp_path: Path):
+    first = submit_music_generation(workspace_dir=str(tmp_path), request=_request(idempotency_key=None))
+    second = submit_music_generation(workspace_dir=str(tmp_path), request=_request(idempotency_key=None))
+    assert first["job_id"] != second["job_id"]
+    assert first["replay"] is False
+    assert second["replay"] is False
+
+
 def test_explicit_retry_mints_a_new_attempt_with_lineage(tmp_path: Path):
     first = submit_music_generation(workspace_dir=str(tmp_path), request=_request())
+    with pytest.raises(MusicSubmissionConflict):
+        submit_music_generation(
+            workspace_dir=str(tmp_path),
+            request=_request(retry=True, parent_generation_id=first["generation_id"]),
+        )
     retry = submit_music_generation(
         workspace_dir=str(tmp_path),
-        request=_request(retry=True, parent_generation_id=first["generation_id"]),
+        request=_request(
+            idempotency_key="cmd-same-once:retry",
+            retry=True,
+            parent_generation_id=first["generation_id"],
+        ),
     )
     assert retry["job_id"] != first["job_id"]
     assert retry["generation_id"] != first["generation_id"]
     assert retry["intent"] == "retry"
+    replay = submit_music_generation(
+        workspace_dir=str(tmp_path),
+        request=_request(
+            idempotency_key="cmd-same-once:retry",
+            retry=True,
+            parent_generation_id=first["generation_id"],
+        ),
+    )
+    assert replay["replay"] is True
+    assert replay["job_id"] == retry["job_id"]
     assert retry["parent_generation_id"] == first["generation_id"]
 
 
@@ -180,3 +207,5 @@ def test_spec_hash_is_stable_and_ignores_transport_noise():
     assert spec_hash(first) == spec_hash(second)
     assert first["output_folder"] == "night-shift"
     assert first["workspace_id"] is None
+    omitted = spec_snapshot({k: v for k, v in _request().items() if k != "count"})
+    assert omitted["count"] == 2

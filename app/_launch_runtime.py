@@ -31789,8 +31789,8 @@ def start_story_music_candidates_job(body: dict):
             public = _public_minimax_music_job(existing)
             public["replay"] = True
             return public
-        from services.music_submission import public_music_job
-        return public_music_job(reserved)
+        # Reservation survived but the MiniMax job did not: start the worker
+        # again with the reserved IDs instead of returning a dead 202.
     job_id = str(reserved.get("job_id") or f"minimax-music-{uuid.uuid4().hex[:12]}")
     task_id = str(reserved.get("task_id") or f"task-minimax-music-{job_id}")
     now = time.time()

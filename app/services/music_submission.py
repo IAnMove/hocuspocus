@@ -78,7 +78,7 @@ def spec_snapshot(request: Mapping[str, Any]) -> dict[str, Any]:
     provenance = request.get("provenance") if isinstance(request.get("provenance"), Mapping) else {}
     model = _clean(request.get("model")) or "music-3.0"
     try:
-        count = max(1, min(3, int(request.get("count") or 1)))
+        count = max(1, min(3, int(request.get("count") or 2)))
     except (TypeError, ValueError, OverflowError) as exc:
         raise MusicSubmissionError(
             "MiniMax Music candidate count must be an integer from 1 to 3",
@@ -98,6 +98,7 @@ def spec_snapshot(request: Mapping[str, Any]) -> dict[str, Any]:
         "workspace_id": _clean(request.get("workspace_id")),
         "library_revision": request.get("library_revision", request.get("expectedVersion")),
         "reference_audio_filename": _clean(request.get("reference_audio_filename")),
+        "intent": _intent(request),
     }
 
 
@@ -235,13 +236,12 @@ def submit_music_generation(
     """Reserve durable IDs and return 202-shaped state without running inference."""
     spec = spec_snapshot(request)
     route = _validate_spec(spec)
-    intent = _intent(request)
+    intent = spec["intent"]
     digest = spec_hash(spec)
     key = _clean(request.get("idempotency_key") or request.get("idempotencyKey"))
     if not key:
-        key = digest
-    if intent in {"retry", "new_version"}:
-        key = f"{key}:{intent}:{uuid.uuid4().hex[:8]}"
+        # No key: a new attempt. Replay only happens when the caller repeats a key.
+        key = _token_id("idem")
     store = MusicSubmissionStore(workspace_dir)
     existing = store.load(key)
     if existing:
