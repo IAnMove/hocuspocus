@@ -53,7 +53,8 @@ from __future__ import annotations
 import os
 import threading
 import time
-from typing import Optional
+from contextlib import contextmanager
+from typing import Callable, Iterator, Optional
 
 # ── Layer 1: timeouts ──────────────────────────────────────────────
 
@@ -127,6 +128,61 @@ def _install_request_timeouts() -> None:
 
 _active_downloads: dict = {}
 _active_downloads_lock = threading.Lock()
+_download_cancel_context = threading.local()
+
+
+class DownloadCancelled(RuntimeError):
+    """Raised cooperatively when the owning generation is cancelled."""
+
+
+def _cancel_checks() -> tuple[Callable[[], bool], ...]:
+    checks = getattr(_download_cancel_context, "checks", ())
+    return checks if isinstance(checks, tuple) else ()
+
+
+def raise_if_download_cancelled() -> None:
+    """Stop the current download when its thread-local owner requests it.
+
+    Download ownership is thread-local so an unrelated model pre-download or
+    API import cannot be interrupted by another generation's Cancel button.
+    A broken predicate is ignored: cancellation monitoring must never turn a
+    healthy download into a failure.
+    """
+    for check in reversed(_cancel_checks()):
+        try:
+            if check():
+                raise DownloadCancelled("Model download cancelled")
+        except DownloadCancelled:
+            raise
+        except Exception:
+            continue
+
+
+@contextmanager
+def cancellable_downloads(
+    cancel_requested: Callable[[], bool],
+) -> Iterator[None]:
+    """Make byte-progress downloads in this thread cooperatively cancellable.
+
+    Hugging Face keeps its ``.incomplete`` file when this exception unwinds,
+    so selecting the model again resumes instead of restarting a multi-GB
+    transfer. Cancellation latency is bounded by the next received block (or
+    the configured read timeout if the connection itself is stalled).
+    """
+    previous = _cancel_checks()
+    _download_cancel_context.checks = (*previous, cancel_requested)
+    try:
+        raise_if_download_cancelled()
+        yield
+        raise_if_download_cancelled()
+    finally:
+        if previous:
+            _download_cancel_context.checks = previous
+        else:
+            try:
+                del _download_cancel_context.checks
+            except AttributeError:
+                pass
 
 
 def get_active_downloads() -> list:
@@ -304,6 +360,11 @@ def _install_tqdm_hook() -> None:
                 self._maestro_file_id = None
 
         def _patched_update(self, n=1):
+            # Hugging Face calls tqdm.update once per received byte block.
+            # Check before advancing the bar so close() records the transfer as
+            # incomplete and hf-hub can resume its partial file next time.
+            if getattr(self, "_maestro_file_id", None):
+                raise_if_download_cancelled()
             result = _original_update(self, n)
             try:
                 file_id = getattr(self, "_maestro_file_id", None)

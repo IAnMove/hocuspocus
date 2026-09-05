@@ -1,10 +1,11 @@
 import { ArrowLeft, X, Check, SkipForward } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 
 /**
- * Persistent banner that drives the Edit Anything → Image Mode round-trip
- * for a single boundary anchor at a time. Mounted at the top of the
- * sidebar whenever `editReturnTarget` is set.
+ * Persistent banner that drives Edit Anything/Recast/Repaint → Image Mode
+ * round-trips for one boundary anchor or reference at a time.
+ * Mounted at the top of the sidebar whenever `editReturnTarget` is set.
  *
  * Each round-trip is independent — start and end anchors are populated
  * by separate "Edit X in Image Mode" buttons in EditAnythingControls.
@@ -19,6 +20,7 @@ import { useStore } from '../../stores/useStore'
  *   - Cancel (×): same as Skip — return without applying.
  */
 export function AnchorReturnBanner() {
+  const { t } = useUiTranslation('studio')
   const target = useStore(s => s.editReturnTarget)
   const outputs = useStore(s => s.outputs)
   const apply = useStore(s => s.applyOutputAsAnchor)
@@ -27,7 +29,15 @@ export function AnchorReturnBanner() {
 
   if (!target) return null
 
-  const anchorLabel = target.anchor === 'start' ? 'Start' : 'End'
+  const isRecast = target.anchor === 'recast'
+  const isRepaint = target.anchor === 'repaint'
+  const anchorLabel = target.anchor === 'start'
+    ? t('anchor.start')
+    : target.anchor === 'end'
+      ? t('anchor.end')
+      : isRepaint
+        ? t('anchor.repaintFrame')
+        : t('anchor.recastRef')
 
   // Latest image output (newest first, type === 'image')
   const latestImage = outputs.find(o => o.type === 'image')
@@ -38,20 +48,30 @@ export function AnchorReturnBanner() {
       <div className="flex items-center gap-2 mb-1.5">
         <ArrowLeft size={12} className="text-accent-blue shrink-0" />
         <span className="text-[10px] font-semibold text-accent-blue">
-          Editing {anchorLabel} Anchor
+          {isRecast
+            ? t('anchor.editingRecast')
+            : isRepaint
+              ? t('anchor.editingRepaint')
+              : t('anchor.editingAnchor', { label: anchorLabel })}
         </span>
         <button
           onClick={cancel}
-          title="Cancel — return to Edit Anything without setting this anchor"
+          title={isRecast
+            ? t('anchor.cancelRecast')
+            : isRepaint
+              ? t('anchor.cancelRepaint')
+              : t('anchor.cancelEdit')}
           className="ml-auto p-0.5 rounded hover:bg-accent-blue/20 text-accent-blue/80 hover:text-accent-blue"
         >
           <X size={11} />
         </button>
       </div>
       <p className="text-[9px] text-text-muted leading-snug mb-2">
-        Edit the {anchorLabel.toLowerCase()} frame in Image Mode. Apply your
-        result to use it as the {anchorLabel.toLowerCase()} boundary anchor,
-        or skip to fall back to the source frame.
+        {isRecast
+          ? t('anchor.bodyRecast')
+          : isRepaint
+            ? t('anchor.bodyRepaint')
+            : t('anchor.bodyAnchor', { label: anchorLabel.toLowerCase() })}
       </p>
       <div className="flex gap-1.5">
         <button
@@ -60,20 +80,24 @@ export function AnchorReturnBanner() {
           className="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded bg-accent-blue text-white hover:bg-accent-blue/90 disabled:opacity-40 disabled:cursor-not-allowed text-[10px] transition-colors"
         >
           <Check size={11} />
-          Apply &amp; return
+          {t('anchor.applyReturn')}
         </button>
         <button
           onClick={skip}
-          title={`Skip ${anchorLabel} anchor — fall back to source frame`}
+          title={isRecast
+            ? t('anchor.skipRecast')
+            : isRepaint
+              ? t('anchor.skipRepaint')
+              : t('anchor.skipAnchor', { label: anchorLabel })}
           className="flex items-center justify-center gap-1 px-2 py-1 rounded border border-border text-text-secondary hover:bg-bg-hover text-[10px] transition-colors"
         >
           <SkipForward size={11} />
-          Skip
+          {isRecast || isRepaint ? t('anchor.returnUnchanged') : t('anchor.skip')}
         </button>
       </div>
       {!hasLatestImage && (
         <p className="text-[9px] text-text-muted mt-1.5 italic">
-          Generate an image first, then click Apply.
+          {t('anchor.needImage')}
         </p>
       )}
     </div>

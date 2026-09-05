@@ -1,0 +1,25 @@
+{
+    "model": {
+        "name": "H3 Legacy Quality — ConvRot",
+        "architecture": "minimax_h3_legacy",
+        "description": "Exact high-quality legacy route preserved in HocusPocus: isolated ComfyUI runtime, pruned INT8 ConvRot FL2VA transformer and matching Qwen3-VL 32B INT8 ConvRot encoder. Fixed at 20 steps with Turbo, cache and LoRAs disabled. Creates text or first/last-frame video with synchronized stereo audio.",
+        "minimax_h3_legacy_sidecar": true,
+        "URLs": [
+            "https://huggingface.co/Abiray/Minimax-H3-nvfp4-INT4-INT8-Convrot/resolve/37da7100b8074d621cd46a8d9c5af704b8651e11/MiniMax_H3_FL2VA_pruned_int8_convrot.safetensors"
+        ]
+    },
+    "prompt": "A man with a purple beanie, reflective aviator sunglasses, a thick black beard and mustache covered in glowing blue circuit patterns, wearing a yellow and black circuit-patterned jacket, and a green parrot with a red head on his shoulder. He looks at the camera and clearly says in English: \"PlayStation 1 style.\" Classic low-poly PS1 aesthetic, affine texture warping, heavy dithering, jagged edges. 3 second clip.",
+    "num_inference_steps": 20,
+    "video_length": 124,
+    "resolution": "960x544",
+    "guidance_scale": 1.0,
+    "flow_shift": 12.0,
+    "image_prompt_type": "",
+    "h3_model_profile": "quality",
+    "h3_reference_mode": "first_frame",
+    "h3_allow_low_memory_fallback": false,
+    "image_fit_mode": "contain",
+    "activated_loras": [],
+    "loras_multipliers": "",
+    "skip_steps_cache_type": ""
+}

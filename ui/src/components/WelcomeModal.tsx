@@ -1,24 +1,27 @@
 import { useState } from 'react'
-import { Sparkles, Download, Cpu, ShieldAlert, X } from 'lucide-react'
+import { Sparkles, Download, Cpu, X } from 'lucide-react'
+import { useUiTranslation } from '../i18n'
+import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
 
-const SEEN_KEY = 'maestro_welcome_seen_v1'
+const SEEN_KEY = 'hocuspocus_welcome_seen_v1'
 
 /**
  * WelcomeModal — a one-time first-run intro. Sets the expectations that
  * most surprise new users (model weights download on first use, not at
- * install; Director is planned by a local LLM; mature mode is an opt-in
- * in Settings). Shown once ever, tracked in localStorage.
+ * install; Director is planned by a local LLM). Shown once ever, tracked
+ * in localStorage.
  *
  * Deliberately not tied to any backend call — it's pure orientation, so
  * it can render instantly on first paint.
  */
 export function WelcomeModal() {
-  const [open, setOpen] = useState(() => localStorage.getItem(SEEN_KEY) !== '1')
+  const { t } = useUiTranslation('common')
+  const [open, setOpen] = useState(() => safeStorageGet('local', SEEN_KEY) !== '1')
 
   if (!open) return null
 
   const dismiss = () => {
-    localStorage.setItem(SEEN_KEY, '1')
+    safeStorageSet('local', SEEN_KEY, '1')
     setOpen(false)
   }
 
@@ -34,33 +37,23 @@ export function WelcomeModal() {
             <Sparkles size={22} className="text-accent-blue" />
           </div>
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-text-primary">Welcome to Maestro</h2>
+            <h2 className="text-base font-semibold text-text-primary">{t('welcome.title')}</h2>
             <p className="text-xs text-text-muted mt-0.5">
-              A local AI studio for video, images, and music — including a Director mode
-              that plans a whole music video or short film from a sentence.
+              {t('welcome.subtitle')}
             </p>
           </div>
-          <button onClick={dismiss} className="p-1 rounded text-text-muted hover:text-text-primary" aria-label="Close">
+          <button onClick={dismiss} className="p-1 rounded text-text-muted hover:text-text-primary" aria-label={t('welcome.closeAria')}>
             <X size={16} />
           </button>
         </div>
 
         {/* Points */}
         <div className="px-6 pb-2 space-y-3.5">
-          <Row icon={<Download size={16} className="text-accent-blue" />} title="Models download on first use">
-            The install set up the app, not the model weights. The first time you use a
-            given model, its files download once — often <span className="text-text-secondary">tens of GB</span> for
-            a video model — before anything appears. Later runs are fast. Watch progress
-            at the bottom-right; the very first video can take a while.
+          <Row icon={<Download size={16} className="text-accent-blue" />} title={t('welcome.modelsTitle')}>
+            {t('welcome.modelsBody')}
           </Row>
-          <Row icon={<Cpu size={16} className="text-accent-blue" />} title="Director runs on a local LLM">
-            Director mode plans your video with a local language model (Gemma 4, ~5 GB,
-            downloaded on first Director use) — nothing is sent to the cloud. You can
-            switch models, or plug in an external API, under Settings → Services.
-          </Row>
-          <Row icon={<ShieldAlert size={16} className="text-red-400" />} title="Mature mode is off by default">
-            Adult content generation is an explicit opt-in behind a disclaimer in
-            Settings → Services. Leave it off and content stays PG-13.
+          <Row icon={<Cpu size={16} className="text-accent-blue" />} title={t('welcome.directorTitle')}>
+            {t('welcome.directorBody')}
           </Row>
         </div>
 
@@ -70,7 +63,7 @@ export function WelcomeModal() {
             onClick={dismiss}
             className="px-5 py-2 text-xs bg-accent-blue text-white rounded-lg hover:bg-accent-blue-hover transition-colors font-medium"
           >
-            Get started
+            {t('welcome.enter')}
           </button>
         </div>
       </div>

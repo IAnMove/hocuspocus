@@ -1,17 +1,14 @@
 const path = require('path')
 module.exports = {
   version: "8.0",
-  title: "Maestro",
-  description: "An all-in-one, 100% local AI video, image, music & 3D studio. Its Director mode turns a single prompt into a full music video or short film — LLM-planned, shot by shot. Includes native Hunyuan3D generation alongside WanGP models. Requires an NVIDIA GPU (6GB+ VRAM).",
-  icon: "maestro_simplified_icon_alpha.png",
+  title: "HocusPocus · Creation Lab",
+  description: "A local creation studio, forked from Maestro, for directing persistent worlds across video, images, sound, comics and 3D. Includes recoverable Director pipelines and optimized MiniMax H3 generation. Requires an NVIDIA GPU (6GB+ VRAM).",
+  icon: "hocuspocus-icon.png",
   menu: async (kernel, info) => {
-    if (kernel.gpu === "amd" || kernel.platform === "darwin") {
-      return [{
-        icon: "fa-solid fa-circle-exclamation",
-        text: "Not Supported (requires NVIDIA GPU on Windows or Linux)",
-        href: "https://github.com/Blizaine/Maestro"
-      }]
-    }
+    // Do not gate this menu on kernel.gpu. Pinokio can render an app menu
+    // before its hardware inventory has populated that property, which would
+    // hide Start from supported systems. install.js retains the documented
+    // execution-time NVIDIA check for fresh installations.
     let installed = info.exists("app/env")
     let running = {
       install: info.running("install.js"),

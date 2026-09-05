@@ -17,12 +17,19 @@ import os
 from typing import Optional, Any
 
 from .schema import ProductionPlan, ShotPlan, RenderedPrompts
-from .planners import MusicVideoPlanner, ShortFilmPlanner, PodcastPlanner, ViralVideoPlanner
+from .planners import (
+    ComicMoviePlanner,
+    MusicVideoPlanner,
+    PodcastPlanner,
+    ShortFilmPlanner,
+    ViralVideoPlanner,
+)
 from .renderers import (
     LtxT2VRenderer, LtxI2VRenderer, LtxA2VRenderer,
     LtxRetakeRenderer, LtxExtendRenderer, ImageGenRenderer,
 )
 from .validators import validate_shot_plan, validate_prompt_for_mode, compress_prompt
+from .policies import apply_visual_style_lock
 
 
 # ── Feature Flags ────────────────────────────────────────────────────
@@ -63,6 +70,7 @@ _PLANNER_MAP = {
     "short_film": ShortFilmPlanner,
     "podcast": PodcastPlanner,
     "viral_video": ViralVideoPlanner,
+    "comic_movie": ComicMoviePlanner,
 }
 
 # ── Renderer Registry ───────────────────────────────────────────────
@@ -165,8 +173,10 @@ class DirectorOrchestrator:
                     if result.auto_fixes:
                         print(f"[Director] Shot {shot.shot_id} auto-fixes: {result.auto_fixes}")
 
+        duration = production_plan.total_duration_sec
+        duration_label = f"{duration:.1f}s" if isinstance(duration, (int, float)) else "unknown duration"
         print(f"[Director] Plan complete: {len(production_plan.shots)} shots, "
-              f"{production_plan.total_duration_sec:.1f}s total")
+              f"{duration_label} total")
 
         return production_plan
 
@@ -194,7 +204,28 @@ class DirectorOrchestrator:
             has_reference = True
 
         for i, shot in enumerate(plan.shots):
-            result = {}
+            metadata = dict(shot.metadata or {})
+            result = {
+                "shot_id": shot.shot_id,
+                "metadata": metadata,
+            }
+            # Preserve identity and edit decisions when film shots no longer
+            # map one-to-one to the original comic panel list.
+            for field in (
+                "source_panel_ids",
+                "source_panel_indices",
+                "primary_source_panel_id",
+                "primary_source_index",
+                "provided_image_path",
+                "renderer",
+                "fit_mode",
+                "seed",
+                "risk_tags",
+                "test_selected",
+                "motion_level",
+            ):
+                if field in metadata:
+                    result[field] = metadata[field]
 
             # Choose render mode for video
             video_mode = self._choose_video_mode(shot, plan, has_reference)
@@ -208,7 +239,14 @@ class DirectorOrchestrator:
                         # LLM may return dicts instead of strings
                         if isinstance(wp, dict):
                             wp = wp.get("prompt", wp.get("text", str(wp)))
-                        validated_windows.append(str(wp).strip())
+                        metadata = shot.metadata or {}
+                        validated_windows.append(apply_visual_style_lock(
+                            str(wp).strip(),
+                            metadata.get("canonical_visual_style") or shot.visual_style,
+                            mode=video_mode,
+                            preserve=bool(metadata.get("preserve_visual_style", False)),
+                            has_reference=has_reference,
+                        ))
                     result["video_prompt"] = "\n".join(validated_windows)
                     result["window_count"] = len(validated_windows)
                 else:
@@ -235,7 +273,18 @@ class DirectorOrchestrator:
 
             # Pass through keyframe prompts if present
             if shot.keyframe_prompts:
-                result["keyframe_prompts"] = shot.keyframe_prompts
+                metadata = shot.metadata or {}
+                result["keyframe_prompts"] = [
+                    apply_visual_style_lock(
+                        prompt.get("prompt", prompt.get("text", ""))
+                        if isinstance(prompt, dict) else prompt,
+                        metadata.get("canonical_visual_style") or shot.visual_style,
+                        mode="image",
+                        preserve=bool(metadata.get("preserve_visual_style", False)),
+                        has_reference=has_reference,
+                    )
+                    for prompt in shot.keyframe_prompts
+                ]
 
             results.append(result)
 
@@ -280,6 +329,12 @@ class DirectorOrchestrator:
             # Fallback: deterministic render from structured fields
             prompt = renderer.render(shot, plan, **context)
 
+        # I2V needs an immutable source-style anchor even when the planner has
+        # supplied its own final prompt.  Without this, anime/comic first
+        # frames can drift toward photorealism despite being image-conditioned.
+        if mode == "i2v" and isinstance(renderer, LtxI2VRenderer):
+            prompt = renderer.ensure_source_style(prompt, shot)
+
         # Validate
         if self.flags.use_prompt_validation:
             validation = validate_prompt_for_mode(prompt, mode, shot, plan)
@@ -300,6 +355,20 @@ class DirectorOrchestrator:
                       f"{compression.chars_removed} chars removed "
                       f"({compression.compression_ratio:.1%})")
             prompt = compression.compressed
+
+        # Story adaptations carry an explicit style contract in shot metadata.
+        # Re-apply it after validation/compression so no planner, remote LLM or
+        # prompt-polish pass can silently turn illustrated artwork into live
+        # action.  Direct Studio I2V remains covered by ensure_source_style()
+        # even when no Story contract exists.
+        metadata = shot.metadata or {}
+        prompt = apply_visual_style_lock(
+            prompt,
+            metadata.get("canonical_visual_style") or shot.visual_style,
+            mode=mode,
+            preserve=bool(metadata.get("preserve_visual_style", False)),
+            has_reference=bool(context.get("has_reference", False)),
+        )
 
         return prompt
 
@@ -377,9 +446,26 @@ class DirectorOrchestrator:
         result = []
         for r in rendered:
             clip = {
+                "shot_id": r.get("shot_id", ""),
                 "video_prompt": r.get("video_prompt", ""),
                 "image_prompt": r.get("image_prompt", ""),
+                "metadata": dict(r.get("metadata") or {}),
             }
+            for field in (
+                "source_panel_ids",
+                "source_panel_indices",
+                "primary_source_panel_id",
+                "primary_source_index",
+                "provided_image_path",
+                "renderer",
+                "fit_mode",
+                "seed",
+                "risk_tags",
+                "test_selected",
+                "motion_level",
+            ):
+                if field in r:
+                    clip[field] = r[field]
             if r.get("window_count", 0) > 1:
                 clip["window_count"] = r["window_count"]
                 # Preserve individual window prompts for dashboard display

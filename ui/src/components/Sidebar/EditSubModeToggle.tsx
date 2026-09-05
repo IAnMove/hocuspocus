@@ -1,16 +1,20 @@
 import { useEffect } from 'react'
+import type { ParseKeys } from 'i18next'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import type { EditSubMode } from '../../types'
 
-const ALL_SUB_MODES: { value: EditSubMode; label: string; experimental?: boolean }[] = [
-  { value: 'retake', label: 'Retake' },
-  { value: 'inpaint', label: 'Inpaint', experimental: true },
-  { value: 'outpaint', label: 'Outpaint' },
-  { value: 'restyle', label: 'Restyle', experimental: true },
-  { value: 'edit_anything', label: 'Edit Anything' },
+const ALL_SUB_MODES: { value: EditSubMode; labelKey: ParseKeys<'studio'>; experimental?: boolean }[] = [
+  { value: 'retake', labelKey: 'editSubModes.retake' },
+  { value: 'edit_anything', labelKey: 'editSubModes.editAnything' },
+  { value: 'outpaint', labelKey: 'editSubModes.outpaint' },
+  { value: 'restyle', labelKey: 'editSubModes.restyle' },
+  { value: 'recast', labelKey: 'editSubModes.recast' },
+  { value: 'inpaint', labelKey: 'editSubModes.inpaint', experimental: true },
 ]
 
 export function EditSubModeToggle() {
+  const { t } = useUiTranslation('studio')
   const editSubMode = useStore(s => s.editSubMode)
   const setEditSubMode = useStore(s => s.setEditSubMode)
   const showExperimental = useStore(s => !!s.servicesConfig?.show_experimental)
@@ -25,7 +29,7 @@ export function EditSubModeToggle() {
     : ALL_SUB_MODES.filter(m => !m.experimental)
 
   useEffect(() => {
-    if (!showExperimental && (editSubMode === 'inpaint' || editSubMode === 'restyle')) {
+    if (!showExperimental && editSubMode === 'inpaint') {
       setEditSubMode('retake')
     }
   }, [showExperimental, editSubMode, setEditSubMode])
@@ -42,7 +46,7 @@ export function EditSubModeToggle() {
               : 'text-text-secondary hover:text-text-primary'
           }`}
         >
-          {m.label}
+          {t(m.labelKey)}
         </button>
       ))}
     </div>

@@ -57,6 +57,8 @@ def test_thinking_on_first_attempt_unconstrained_retry_constrained():
     assert calls[1]["json_schema"] == SCHEMA      # retry is grammar-locked
     assert calls[1]["enable_thinking"] is False
     assert calls[1]["thinking_budget"] == 0
+    assert "not json at all ((" in calls[1]["prompt"]
+    assert "Previous malformed response to correct" in calls[1]["prompt"]
 
 
 def test_retry_gets_generic_grammar_without_schema():

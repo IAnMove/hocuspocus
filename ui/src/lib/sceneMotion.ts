@@ -47,8 +47,8 @@ export const sanitizeSceneMotion = (raw: unknown, layer: SceneLayer, options: Mo
   if (!isRecord(item)) throw new Error('JSON must contain a motion object.')
 
   const duration = finiteField(item.duration, 'motion.duration', .1, 3600)
-  const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce']
-  if (item.curve !== undefined && !curves.includes(item.curve as SceneCurve)) throw new Error('motion.curve must be linear, ease, dramatic or bounce.')
+  const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce', 'hold']
+  if (item.curve !== undefined && !curves.includes(item.curve as SceneCurve)) throw new Error('motion.curve must be linear, ease, dramatic, bounce or hold.')
   const curve = item.curve as SceneCurve | undefined ?? layer.animation.curve
   const start = motionPoint(item.start, layer.animation.start, 'motion.start')
   const end = motionPoint(item.end, layer.animation.end, 'motion.end')
@@ -62,6 +62,8 @@ export const sanitizeSceneMotion = (raw: unknown, layer: SceneLayer, options: Mo
         amount: finiteField(item.shake.amount, 'motion.shake.amount', 0, 8),
         frequency: finiteField(item.shake.frequency, 'motion.shake.frequency', .1, 30),
         seed: item.shake.seed === undefined ? 0 : finiteField(item.shake.seed, 'motion.shake.seed', -1_000_000, 1_000_000),
+        startTime: optionalFiniteField(item.shake.startTime, 0, 'motion.shake.startTime', 0, 3600),
+        endTime: optionalFiniteField(item.shake.endTime, duration, 'motion.shake.endTime', 0, 3600),
       }
     }
   }
@@ -73,12 +75,16 @@ export const sanitizeSceneMotion = (raw: unknown, layer: SceneLayer, options: Mo
       if (layer.type === 'camera' || !isRecord(item.orbit)) throw new Error('motion.orbit is only valid for visual layers.')
       const targetLayerId = typeof item.orbit.targetLayerId === 'string' ? item.orbit.targetLayerId.trim() : ''
       if (!targetLayerId || options.isValidOrbitTarget?.(targetLayerId) === false) throw new Error('motion.orbit.targetLayerId must reference a valid non-cyclic visual layer.')
+      const facing = item.orbit.facing ?? 'fixed'
+      if (facing !== 'fixed' && facing !== 'center' && facing !== 'outward') throw new Error('motion.orbit.facing must be fixed, center or outward.')
       orbit = {
         targetLayerId,
         radiusX: finiteField(item.orbit.radiusX, 'motion.orbit.radiusX', 0, 100),
         radiusY: finiteField(item.orbit.radiusY, 'motion.orbit.radiusY', 0, 100),
         turns: finiteField(item.orbit.turns, 'motion.orbit.turns', -20, 20),
         phase: finiteField(item.orbit.phase, 'motion.orbit.phase', -360, 360),
+        count: Math.round(optionalFiniteField(item.orbit.count, 1, 'motion.orbit.count', 1, 12)),
+        facing,
         centerOffsetX: optionalFiniteField(item.orbit.centerOffsetX, 0, 'motion.orbit.centerOffsetX', -100, 100),
         centerOffsetY: optionalFiniteField(item.orbit.centerOffsetY, 0, 'motion.orbit.centerOffsetY', -100, 100),
       }

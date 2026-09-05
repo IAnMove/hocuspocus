@@ -1,23 +1,33 @@
 // SAM 3.1 Segmentation Service — Install Script
 // Creates a separate Python 3.12 conda env and installs SAM 3.1 + dependencies.
-// Called by install.js and update.js.
+// Called by the Pinokio menu and update.js.
+const vendors = require("./vendor_revisions")
+const sam3 = vendors.sam3
+
 module.exports = {
   run: [
     // Step 1: Clone SAM 3 repo if not already present
     {
-      when: "{{!exists('app/services/sam/sam3')}}",
+      when: "{{!exists('" + sam3.path + "')}}",
       method: "shell.run",
       params: {
-        message: "git clone https://github.com/facebookresearch/sam3.git app/services/sam/sam3"
+        message: [
+          "git clone --depth 1 " + sam3.url + " " + sam3.path,
+          "git -C " + sam3.path + " fetch --depth 1 origin " + sam3.revision,
+          "git -C " + sam3.path + " checkout --detach " + sam3.revision
+        ]
       }
     },
-    // Step 1b: Pull latest if repo already exists
+    // Step 1b: Re-select the declared revision if repo already exists.
     {
-      when: "{{exists('app/services/sam/sam3')}}",
+      when: "{{exists('" + sam3.path + "/.git')}}",
       method: "shell.run",
       params: {
-        path: "app/services/sam/sam3",
-        message: "git pull"
+        path: sam3.path,
+        message: [
+          "git fetch --depth 1 origin " + sam3.revision,
+          "git checkout --detach " + sam3.revision
+        ]
       }
     },
     // Step 2: Install PyTorch (CUDA 12.8) in a Python 3.12 conda env
@@ -45,6 +55,13 @@ module.exports = {
           "pip install app/services/sam/sam3",
           "pip install -r app/services/sam/requirements.txt"
         ]
+      }
+    },
+    {
+      method: "fs.write",
+      params: {
+        path: sam3.marker,
+        text: "repository=" + sam3.url + "\nrevision=" + sam3.revision + "\n"
       }
     },
     // Note: SAM 3.1 model checkpoints (~1.7GB each for base + multiplex) are downloaded

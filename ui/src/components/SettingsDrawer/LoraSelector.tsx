@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X, Loader2, Globe, Sparkles, BookOpen, Info, ArrowUpCircle, RefreshCw } from 'lucide-react'
+import { Search, X, Loader2, Globe, Sparkles, BookOpen, Info, ArrowUpCircle, RefreshCw, ArrowDownAZ, Clock } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails, checkLoraUpdates } from '../../api/client'
+import { formatAge } from '../../lib/format'
 import type { LoraRecommendedWeights, LoraUpdateStatus } from '../../types'
+
+/* eslint-disable react-refresh/only-export-components -- shared picker helpers are intentionally exported. */
 
 export function LoraGuideTooltip({ guide }: { guide: string }) {
   const [show, setShow] = useState(false)
@@ -45,20 +48,91 @@ export function LoraGuideTooltip({ guide }: { guide: string }) {
   )
 }
 
+/** Per-file dates lifted from the /details response — shared shape between
+ *  the Studio and Director LoRA pickers. */
+export type LoraDates = { released?: string | null; downloaded?: string | null }
+
+/** Compact age chip for LoRA picker rows. Prefers the CivitAI release date
+ *  (answers "how new is this LoRA?"), falls back to the download/mtime date
+ *  for hand-installed files. Full dates live in the tooltip. */
+export function LoraAgeChip({ released, downloaded }: LoraDates) {
+  const age = formatAge(released || downloaded)
+  if (!age) return null
+  const tip = [
+    released ? `Released ${new Date(released).toLocaleDateString()}` : null,
+    downloaded ? `Downloaded ${new Date(downloaded).toLocaleDateString()}` : null,
+  ].filter(Boolean).join(' — ')
+  return (
+    <span className="text-[9px] text-text-muted shrink-0 tabular-nums" title={tip}>
+      {age}
+    </span>
+  )
+}
+
+// Persistence and cross-picker sync live in the store (loraPickerSort /
+// setLoraPickerSort) — per-component state would desync simultaneously
+// mounted pickers, e.g. Director's Image + Video accordions.
+export type LoraPickerSort = 'name' | 'newest'
+
+/** Order picker rows. 'name' keeps the backend's alphabetical order;
+ *  'newest' sorts by the same date the age chip shows (release date,
+ *  download/mtime fallback), newest first, dateless files last by name. */
+export function sortLoraNames(names: string[], sort: LoraPickerSort, dates: Record<string, LoraDates>): string[] {
+  if (sort !== 'newest') return names
+  const dateOf = (n: string) => {
+    const iso = dates[n]?.released || dates[n]?.downloaded
+    const t = iso ? Date.parse(iso) : NaN
+    return Number.isNaN(t) ? 0 : t
+  }
+  return [...names].sort((a, b) => dateOf(b) - dateOf(a) || a.localeCompare(b))
+}
+
+/** Two-state sort toggle shared by both pickers: A-Z <-> newest first. */
+export function LoraSortToggle({ sort, onChange }: { sort: LoraPickerSort; onChange: (s: LoraPickerSort) => void }) {
+  const newest = sort === 'newest'
+  return (
+    <button
+      onClick={() => onChange(newest ? 'name' : 'newest')}
+      className={`text-[10px] flex items-center gap-0.5 transition-colors ${
+        newest ? 'text-accent-blue hover:text-accent-blue-hover' : 'text-text-muted hover:text-accent-blue'
+      }`}
+      title={newest
+        ? 'Sorted by newest release first. Click to sort by name.'
+        : 'Sorted by name. Click to sort by newest release first.'}
+    >
+      {newest ? <Clock size={10} /> : <ArrowDownAZ size={10} />}
+      {newest ? 'New' : 'A-Z'}
+    </button>
+  )
+}
+
 export function LoraSelector() {
   const modelType = useStore(s => s.params.model_type)
+  const loraCompatibilityNote = useStore(s => s.models.find(
+    model => model.model_type === s.params.model_type,
+  )?.lora_compatibility_note)
   const activatedLoras = useStore(s => s.params.activated_loras)
   const availableLoras = useStore(s => s.availableLoras)
   const lorasLoading = useStore(s => s.lorasLoading)
   const loraWeights = useStore(s => s.loraWeights)
   const modelOptions = useStore(s => s.modelOptions)
+  const generationMode = useStore(s => s.generationMode)
+  const editSubMode = useStore(s => s.editSubMode)
   const toggleLora = useStore(s => s.toggleLora)
   const setLoraWeight = useStore(s => s.setLoraWeight)
   const loadLoras = useStore(s => s.loadLoras)
   const openBrowser = useStore(s => s.setLoraBrowserOpen)
 
   const [search, setSearch] = useState('')
-  const [showNsfw, setShowNsfw] = useState(false)
+  // Sticky across sessions (localStorage) — gated by nsfw_mode below, so a
+  // persisted "on" is inert until Mature Mode is enabled.
+  const [showNsfw, setShowNsfw] = useState(() => {
+    try { return localStorage.getItem('maestro_loras_show_nsfw') === '1' } catch { return false }
+  })
+  const setShowNsfwSticky = (v: boolean) => {
+    setShowNsfw(v)
+    try { localStorage.setItem('maestro_loras_show_nsfw', v ? '1' : '0') } catch { /* private mode */ }
+  }
   // Master gate: only honor "show NSFW LoRAs" when the user has
   // enabled NSFW mode in Settings → Services (which requires the
   // disclaimer acknowledgement). Without this gate, the NSFW filter
@@ -76,6 +150,13 @@ export function LoraSelector() {
   // backend embeds this on every /details response so we don't need to
   // fetch it separately; we just lift it into a lookup map.
   const [updateStatuses, setUpdateStatuses] = useState<Record<string, LoraUpdateStatus>>({})
+  // Per-filename release/download dates from the /details sidecar data —
+  // rendered as an age chip so similarly-named LoRAs can be told apart
+  // by how new they are.
+  const [loraDates, setLoraDates] = useState<Record<string, LoraDates>>({})
+  // Sticky list order shared with the Director picker via the store.
+  const sortMode = useStore(s => s.loraPickerSort)
+  const setSortSticky = useStore(s => s.setLoraPickerSort)
   // ISO timestamp of the last full CivitAI check, used to render
   // "checked Xm ago" next to the manual refresh button.
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null)
@@ -95,10 +176,18 @@ export function LoraSelector() {
       await checkLoraUpdates(true) // force=true: bypass 24h staleness window
       const r = await fetchLoraDetails(modelType)
       const next: Record<string, LoraUpdateStatus> = {}
+      // check-updates backfills publishedAt into sidecars that predate its
+      // capture, so this refetch is exactly when release dates appear —
+      // refresh the age-chip map too, not just update statuses.
+      const dates: Record<string, LoraDates> = {}
       for (const info of r.loras) {
         if (info.update_status) next[info.filename] = info.update_status
+        if (info.released_at || info.downloaded_at) {
+          dates[info.filename] = { released: info.released_at, downloaded: info.downloaded_at }
+        }
       }
       setUpdateStatuses(next)
+      setLoraDates(dates)
       setLastCheckedAt(r.manifest_last_check_at ?? null)
     } catch (e) {
       console.error('LoRA update check failed:', e)
@@ -129,6 +218,7 @@ export function LoraSelector() {
     <div className="flex items-center justify-between mb-1.5">
       <label className="text-[11px] text-text-muted uppercase tracking-wider">LoRAs</label>
       <div className="flex items-center gap-2">
+        <LoraSortToggle sort={sortMode} onChange={setSortSticky} />
         <button
           onClick={handleCheckUpdates}
           disabled={checking || !modelType}
@@ -143,7 +233,7 @@ export function LoraSelector() {
           Check
           {updatableCount > 0 && (
             <span
-              className="ml-0.5 px-1 rounded bg-amber-500/20 text-amber-400 text-[9px] font-medium"
+              className="ml-0.5 px-1 rounded bg-amber-500/20 text-indicator-warning text-[9px] font-medium"
               title={`${updatableCount} update${updatableCount === 1 ? '' : 's'} available`}
             >
               {updatableCount}
@@ -162,6 +252,13 @@ export function LoraSelector() {
     </div>
   )
 
+  const compatibilityNotice = loraCompatibilityNote ? (
+    <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-[10px] leading-relaxed text-text-secondary">
+      <Info size={11} className="mt-0.5 shrink-0 text-accent-blue" />
+      <span>{loraCompatibilityNote}</span>
+    </div>
+  ) : null
+
   // Load LoRA details (weight recommendations for the list, guides for activated)
   useEffect(() => {
     if (!modelType) return
@@ -179,18 +276,23 @@ export function LoraSelector() {
       const statuses: Record<string, 'exists' | 'none'> = {}
       const nsfw: Record<string, boolean> = {}
       const updates: Record<string, LoraUpdateStatus> = {}
+      const dates: Record<string, LoraDates> = {}
       for (const info of r.loras) {
         if (info.recommended_weights) recs[info.filename] = info.recommended_weights
         if (info.guide) { guides[info.filename] = info.guide; statuses[info.filename] = 'exists' }
         else if (info.has_guide) statuses[info.filename] = 'exists'
         if (info.nsfw) nsfw[info.filename] = true
         if (info.update_status) updates[info.filename] = info.update_status
+        if (info.released_at || info.downloaded_at) {
+          dates[info.filename] = { released: info.released_at, downloaded: info.downloaded_at }
+        }
       }
       setLoraWeightRecs(recs)
       setGuideTexts(prev => ({ ...prev, ...guides }))
       setGuideStatus(prev => ({ ...prev, ...statuses }))
       setNsfwFlags(nsfw)
       setUpdateStatuses(updates)
+      setLoraDates(dates)
       setLastCheckedAt(r.manifest_last_check_at ?? null)
 
       // Apply recommended defaults to LoRAs that are still at the initial 1.0 fill
@@ -231,7 +333,10 @@ export function LoraSelector() {
     }
   }
 
-  const phases = modelOptions?.guidance_max_phases ?? 1
+  // Recast owns a one-phase SCAIL-2 schedule. Showing the Wan family's
+  // generic three phase sliders produced invalid `1;1;1` multipliers.
+  const recastSinglePhase = generationMode === 'avatar' && editSubMode === 'recast'
+  const phases = recastSinglePhase ? 1 : Math.max(1, modelOptions?.guidance_max_phases ?? 1)
 
   // Load LoRAs when model changes
   useEffect(() => {
@@ -252,13 +357,13 @@ export function LoraSelector() {
   // LoRAs are always hidden (except already-activated ones — they
   // stay visible so the user can deactivate them).
   const effectiveShowNsfw = nsfwEnabled && showNsfw
-  const filtered = availableLoras.filter(name => {
+  const filtered = sortLoraNames(availableLoras.filter(name => {
     if (!displayName(name).toLowerCase().includes(search.toLowerCase())) return false
     const isActivated = activatedLoras.includes(name)
     if (!effectiveShowNsfw && !isActivated && nsfwFlags[name]) return false
     if (updatableOnly && !isActivated && updateStatuses[name] !== 'available') return false
     return true
-  })
+  }), sortMode, loraDates)
   // "X NSFW hidden" hint only meaningful when the user CAN reveal
   // them (NSFW mode enabled). Otherwise we don't hint at the existence
   // of hidden NSFW LoRAs at all.
@@ -270,6 +375,7 @@ export function LoraSelector() {
     return (
       <div>
         {loraHeader}
+        {compatibilityNotice}
         <div className="text-xs text-text-muted bg-bg-tertiary border border-border rounded-lg px-3 py-4 text-center flex items-center justify-center gap-2">
           <Loader2 size={12} className="animate-spin" />
           Loading LoRAs...
@@ -282,6 +388,7 @@ export function LoraSelector() {
     return (
       <div>
         {loraHeader}
+        {compatibilityNotice}
         <div className="text-xs text-text-muted bg-bg-tertiary border border-border rounded-lg px-3 py-4 text-center">
           No LoRAs found for this model
         </div>
@@ -292,6 +399,7 @@ export function LoraSelector() {
   return (
     <div>
       {loraHeader}
+      {compatibilityNotice}
 
       {/* Search + NSFW + Updatable toggles */}
       <div className="flex items-center gap-2 mb-2">
@@ -323,7 +431,7 @@ export function LoraSelector() {
             className="w-3 h-3 rounded border-border accent-amber-500 disabled:opacity-40"
           />
           <span className={`text-[10px] uppercase tracking-wider flex items-center gap-0.5 ${
-            updatableOnly ? 'text-amber-400' : updatableCount > 0 ? 'text-text-muted' : 'text-text-muted'
+            updatableOnly ? 'text-indicator-warning' : updatableCount > 0 ? 'text-text-muted' : 'text-text-muted'
           }`}>
             <ArrowUpCircle size={10} />
             Updates
@@ -346,7 +454,7 @@ export function LoraSelector() {
           <input
             type="checkbox"
             checked={showNsfw}
-            onChange={e => setShowNsfw(e.target.checked)}
+            onChange={e => setShowNsfwSticky(e.target.checked)}
             className="w-3 h-3 rounded border-border accent-red-500"
           />
           <span className={`text-[10px] uppercase tracking-wider ${showNsfw ? 'text-red-400' : 'text-text-muted'}`}>
@@ -378,6 +486,12 @@ export function LoraSelector() {
                 )}
               </div>
               <span className="truncate flex-1">{displayName(filename)}</span>
+              {loraDates[filename] && (
+                <LoraAgeChip
+                  released={loraDates[filename].released}
+                  downloaded={loraDates[filename].downloaded}
+                />
+              )}
               {guideTexts[filename] && (
                 <span onClick={e => e.stopPropagation()}>
                   <LoraGuideTooltip guide={guideTexts[filename]} />
@@ -402,7 +516,7 @@ export function LoraSelector() {
               {updateStatuses[filename] === 'available' && (
                 <ArrowUpCircle
                   size={11}
-                  className="text-amber-400 shrink-0"
+                  className="text-indicator-warning shrink-0"
                   aria-label="Update available"
                 />
               )}
@@ -433,7 +547,11 @@ export function LoraSelector() {
             </button>
           </div>
           {activatedLoras.map(filename => {
-            const weights = loraWeights[filename] || Array(phases).fill(1.0)
+            const storedWeights = loraWeights[filename] || [1.0]
+            const weights = Array.from(
+              { length: phases },
+              (_, i) => storedWeights[i] ?? storedWeights[storedWeights.length - 1] ?? 1.0,
+            )
             return (
               <div key={filename} className="bg-bg-tertiary border border-border rounded-lg px-2.5 py-2">
                 <div className="flex items-center justify-between mb-1.5">
@@ -445,7 +563,7 @@ export function LoraSelector() {
                     {updateStatuses[filename] === 'available' && (
                       <ArrowUpCircle
                         size={11}
-                        className="text-amber-400 shrink-0"
+                        className="text-indicator-warning shrink-0"
                         aria-label="Update available"
                       />
                     )}

@@ -1,0 +1,170 @@
+[
+  {
+    "id": "snowy-station",
+    "lang": "es",
+    "prompt": "Pon a este personaje caminando hacia la derecha por una estación nevada; cámara lateral, fondo en parallax, una farola tapa el loop y música melancólica.",
+    "expects": { "templateAnyOf": ["run-travel-parallax", "surreal-transit"], "minShots": 1, "maxShots": 2, "aspect": "landscape" }
+  },
+  {
+    "id": "explaining-plan",
+    "lang": "en",
+    "prompt": "She's explaining the plan to someone off-screen. Waist up, calm, nothing fancy.",
+    "expects": { "templateAnyOf": ["dialogue-medium-single", "profile-listen"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "realises-lost",
+    "lang": "es",
+    "prompt": "Un primer plano de su cara justo cuando se da cuenta de que ha perdido. Cinco segundos, sin movimiento de cámara.",
+    "expects": { "templateAnyOf": ["emotional-close-up", "silent-reaction"], "minShots": 1, "maxShots": 1, "aspect": "landscape", "durationHint": 5 }
+  },
+  {
+    "id": "shot-reverse",
+    "lang": "en",
+    "prompt": "Over her shoulder, we see him answer. Then flip it around for her side of the conversation.",
+    "expects": { "templateAnyOf": ["over-shoulder-dialogue", "reverse-over-shoulder"], "minShots": 2, "maxShots": 2, "aspect": "landscape" }
+  },
+  {
+    "id": "city-dawn",
+    "lang": "es",
+    "prompt": "Empieza enseñando la ciudad al amanecer, antes de que entre nadie en escena.",
+    "expects": { "templateAnyOf": ["place-establishing"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "sword-reveal",
+    "lang": "en",
+    "prompt": "The sword floats up out of the dark and turns once. Make it feel important.",
+    "expects": { "templateAnyOf": ["icon-reveal", "portal-arrival"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "vertical-line",
+    "lang": "es",
+    "prompt": "Vertical para redes: el personaje mira a cámara y suelta la frase. Cinco segundos.",
+    "expects": { "templateAnyOf": ["dialogue-medium-single", "emotional-close-up"], "minShots": 1, "maxShots": 1, "aspect": "portrait", "durationHint": 5 }
+  },
+  {
+    "id": "coin-cutaway",
+    "lang": "en",
+    "prompt": "Quick four-second cut of the coin on the table, then we're back.",
+    "expects": { "templateAnyOf": ["detail-insert", "pov-detail-glance"], "minShots": 1, "maxShots": 1, "aspect": "landscape", "durationHint": 4 }
+  },
+  {
+    "id": "young-memory",
+    "lang": "es",
+    "prompt": "Un recuerdo de ella de joven, desaturado y lento.",
+    "expects": { "templateAnyOf": ["memory-drift"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "captain-order",
+    "lang": "en",
+    "prompt": "Low angle on the captain as he gives the order. He should feel huge.",
+    "expects": { "templateAnyOf": ["low-angle-hero"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "empty-warehouse",
+    "lang": "es",
+    "prompt": "Ella sola en el almacén enorme, vista desde arriba, se siente pequeña.",
+    "expects": { "templateAnyOf": ["high-angle-isolation"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "table-wide",
+    "lang": "en",
+    "prompt": "Wide shot of both of them at the table before we cut in closer.",
+    "expects": { "templateAnyOf": ["two-shot-master"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "paper-talking",
+    "lang": "es",
+    "prompt": "Estilo recorte de papel: la cabeza habla abriendo y cerrando la boca, cámara fija.",
+    "expects": { "templateAnyOf": ["cutout-talking-head", "cutout-speaking-blink"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "paper-snap",
+    "lang": "en",
+    "prompt": "Paper cutout style. He pauses, then snaps into a shocked pose. Comedy timing.",
+    "expects": { "templateAnyOf": ["cutout-reaction-snap", "cutout-dialogue-hold"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "design-turn",
+    "lang": "es",
+    "prompt": "Enséñame el diseño del personaje girando despacio sobre fondo neutro.",
+    "expects": { "templateAnyOf": ["character-turntable"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "appears-lands",
+    "lang": "en",
+    "prompt": "He appears out of nowhere and lands in a pose.",
+    "expects": { "templateAnyOf": ["hero-arrival", "portal-arrival"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "something-wrong",
+    "lang": "es",
+    "prompt": "Algo va mal en esta habitación. Inclina el encuadre para que se note.",
+    "expects": { "templateAnyOf": ["dutch-tension"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "behind-pillar",
+    "lang": "en",
+    "prompt": "Start with her hidden behind the pillar, then reveal her as it clears.",
+    "expects": { "templateAnyOf": ["foreground-reveal"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "dream-float",
+    "lang": "es",
+    "prompt": "Una escena onírica: la cámara orbita a su alrededor mientras él flota.",
+    "expects": { "templateAnyOf": ["dream-orbit"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "window-thinking",
+    "lang": "en",
+    "prompt": "Voice-over while she stares out of the window, thinking. Leave room for the narration.",
+    "expects": { "templateAnyOf": ["inner-thought", "high-angle-isolation"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "vertical-sword-stance",
+    "lang": "es",
+    "prompt": "Vertical. Plano de acción: se le ve de medio muslo para arriba, con la espada en guardia.",
+    "expects": { "templateAnyOf": ["american-action-frame"], "minShots": 1, "maxShots": 1, "aspect": "portrait" }
+  },
+  {
+    "id": "listening-profile",
+    "lang": "en",
+    "prompt": "He's listening to someone we can't see, in profile, leaving space on the left.",
+    "expects": { "templateAnyOf": ["profile-listen"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "vertical-surprise",
+    "lang": "es",
+    "prompt": "Vertical, tres segundos: reacción de sorpresa y corte.",
+    "expects": { "templateAnyOf": ["silent-reaction", "cutout-reaction-snap"], "minShots": 1, "maxShots": 1, "aspect": "portrait", "durationHint": 3 }
+  },
+  {
+    "id": "impossible-landscape",
+    "lang": "en",
+    "prompt": "She walks across an impossible landscape, the world moving at different speeds behind and in front of her.",
+    "expects": { "templateAnyOf": ["surreal-transit", "run-travel-parallax"], "minShots": 1, "maxShots": 1, "aspect": "landscape" }
+  },
+  {
+    "id": "forest-letter",
+    "lang": "es",
+    "prompt": "Primero establece el bosque, luego un primer plano de ella escuchando, y luego el detalle de la carta en su mano.",
+    "expects": { "templateAnyOf": ["place-establishing", "emotional-close-up", "silent-reaction", "detail-insert", "pov-detail-glance"], "minShots": 3, "maxShots": 3, "aspect": "landscape" }
+  },
+  {
+    "id": "vertical-amulet",
+    "lang": "en",
+    "prompt": "Vertical, six seconds, product-style reveal of the amulet.",
+    "expects": { "templateAnyOf": ["icon-reveal", "detail-insert"], "minShots": 1, "maxShots": 1, "aspect": "portrait", "durationHint": 6 }
+  },
+  {
+    "id": "looks-around",
+    "lang": "es",
+    "prompt": "Cuatro segundos: mira alrededor y no dice nada.",
+    "expects": { "templateAnyOf": ["silent-reaction", "profile-listen"], "minShots": 1, "maxShots": 1, "aspect": "landscape", "durationHint": 4 }
+  },
+  {
+    "id": "vertical-to-camera",
+    "lang": "en",
+    "prompt": "Vertical talking head for a social clip. She speaks straight to camera for five seconds.",
+    "expects": { "templateAnyOf": ["dialogue-medium-single", "cutout-talking-head"], "minShots": 1, "maxShots": 1, "aspect": "portrait", "durationHint": 5 }
+  }
+]

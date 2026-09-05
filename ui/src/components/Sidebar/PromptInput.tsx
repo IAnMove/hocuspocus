@@ -1,23 +1,72 @@
-import { useState, useRef, useEffect } from 'react'
-import { Sparkles, Loader2, ChevronUp, Brain, PenLine } from 'lucide-react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { Sparkles, Loader2, ChevronDown, ChevronUp, Brain, PenLine, RefreshCw, History, Save, Trash2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
+import {
+  getPromptHistory, PROMPT_HISTORY_EVENT, rememberPrompt, removePromptHistoryEntry,
+  type PromptHistoryEntry,
+} from '../../lib/promptHistory'
+import { splitPromptSchedule } from '../../lib/promptScheduler'
 
-const placeholders: Record<string, string> = {
-  image: 'Describe your image...',
-  video: 'Describe your video...',
-  audio: 'Enter text to speak or describe audio...',
-  avatar: 'Describe your avatar animation...',
+
+
+function H3WindowPromptTextarea({
+  value,
+  onChange,
+  readOnly,
+  title,
+  active,
+}: {
+  value: string
+  onChange: (value: string) => void
+  readOnly: boolean
+  title: string
+  active: boolean
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const fitToContent = () => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    // scrollHeight includes padding but not the two one-pixel borders used
+    // by this border-box textarea. Include them so the final line never clips.
+    textarea.style.height = `${textarea.scrollHeight + 2}px`
+  }
+
+  useLayoutEffect(fitToContent, [value])
+  useEffect(() => {
+    window.addEventListener('resize', fitToContent)
+    return () => window.removeEventListener('resize', fitToContent)
+  }, [])
+
+  return (
+    <textarea
+      ref={textareaRef}
+      rows={1}
+      value={value}
+      onChange={event => onChange(event.target.value)}
+      readOnly={readOnly}
+      title={title}
+      className={`w-full min-h-[92px] resize-none overflow-hidden bg-bg-secondary border rounded px-2 py-1.5 text-[10px] leading-relaxed text-text-secondary focus:outline-none focus:border-accent-blue ${
+        active ? 'border-accent-blue/70 bg-accent-blue/5' : 'border-border'
+      }`}
+    />
+  )
 }
 
 function useEnhanceStatus(isEnhancing: boolean) {
   const [status, setStatus] = useState<{ phase: 'loading' | 'thinking' | 'writing' | 'idle'; chars: number }>({ phase: 'idle', chars: 0 })
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setStatus(isEnhancing
+        ? { phase: 'loading', chars: 0 }
+        : { phase: 'idle', chars: 0 })
+    })
     if (!isEnhancing) {
-      setStatus({ phase: 'idle', chars: 0 })
-      return
+      return () => window.cancelAnimationFrame(frame)
     }
-    setStatus({ phase: 'loading', chars: 0 })
     let active = true
     const poll = async () => {
       let streamStarted = false
@@ -56,16 +105,21 @@ function useEnhanceStatus(isEnhancing: boolean) {
       }
     }
     poll()
-    return () => { active = false }
+    return () => {
+      active = false
+      window.cancelAnimationFrame(frame)
+    }
   }, [isEnhancing])
 
   return status
 }
 
 export function PromptInput() {
+  const { t } = useUiTranslation('studio')
   const prompt = useStore(s => s.params.prompt)
   const setParam = useStore(s => s.setParam)
   const generationMode = useStore(s => s.generationMode)
+  const editSubMode = useStore(s => s.editSubMode)
   const enhancePrompt = useStore(s => s.enhancePrompt)
   const isEnhancing = useStore(s => s.isEnhancing)
   const durationSeconds = useStore(s => s.durationSeconds)
@@ -73,8 +127,31 @@ export function PromptInput() {
   const slidingWindowOverlap = useStore(s => s.slidingWindowOverlap)
   const modelOptions = useStore(s => s.modelOptions)
   const imageMode = useStore(s => s.params.image_mode)
+  const promptSchedulerEnabled = useStore(s => s.promptSchedulerEnabled)
+  const setPromptSchedulerEnabled = useStore(s => s.setPromptSchedulerEnabled)
+  const negativePrompt = useStore(s => s.params.negative_prompt)
+  const activeWorkspace = useStore(s => s.activeWorkspace)
+  const modelType = useStore(s => s.params.model_type)
   const [ttsMenuOpen, setTtsMenuOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [promptHistory, setPromptHistory] = useState<PromptHistoryEntry[]>([])
+  const h3WindowPlanningEnabled = useStore(s => s.params.minimax_h3_window_storyboard !== false)
+  const h3WindowPlan = useStore(s => s.h3WindowPlan)
+  const updateH3WindowPrompt = useStore(s => s.updateH3WindowPrompt)
+  const activeH3JobPhase = useStore(s => {
+    const job = s.jobs.find(item => (
+      (item.status === 'queued' || item.status === 'running')
+      && !!item.h3WindowPlan
+    ))
+    return job ? (job.phase || job.message || '') : ''
+  })
+  const activeH3JobPlanSignature = useStore(s => s.jobs.find(item => (
+    (item.status === 'queued' || item.status === 'running')
+    && !!item.h3WindowPlan
+  ))?.h3WindowPlan?.signature || '')
+  const [windowPlanOpen, setWindowPlanOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const historyRef = useRef<HTMLDivElement>(null)
 
   const isAudioOnly = modelOptions?.audio_only
   const voiceCount = useStore(s => s.ttsVoiceCount)
@@ -98,10 +175,43 @@ export function PromptInput() {
   const overlapSec = slidingWindowOverlap / fps
   const discardSec = discardFrames / fps
   const stride = slidingWindowSeconds - discardSec - overlapSec
-  const windowCount = stride > 0 && durationSeconds > slidingWindowSeconds
+  const supportsSlidingWindows = modelOptions?.sliding_window === true
+  const windowCount = supportsSlidingWindows && stride > 0 && durationSeconds > slidingWindowSeconds
     ? 1 + Math.ceil((durationSeconds - slidingWindowSeconds + discardSec) / stride)
     : 1
-  const usesWindows = generationMode === 'video' && windowCount > 1 && imageMode !== 2
+  const showPromptScheduler = generationMode === 'video' && imageMode === 0
+  const schedulerApplies = showPromptScheduler && promptSchedulerEnabled
+  const scheduledPromptCount = schedulerApplies ? splitPromptSchedule(prompt).length : 0
+  const usesWindows = generationMode === 'video' && supportsSlidingWindows && windowCount > 1 && imageMode !== 2 && !schedulerApplies
+  const usesH3WindowPlanner = (
+    usesWindows
+    && modelOptions?.sliding_window_auto_prompt_pacing === true
+    && h3WindowPlanningEnabled
+  )
+  const h3PlanIsStale = !!h3WindowPlan && (
+    h3WindowPlan.source_prompt.trim() !== prompt.trim()
+    || h3WindowPlan.window_count !== windowCount
+    || h3WindowPlan.total_frames !== Math.max(1, Math.round(durationSeconds * fps))
+    || h3WindowPlan.window_frames !== Math.max(1, Math.round(slidingWindowSeconds * fps))
+  )
+  const matchingActiveH3Phase = (
+    h3WindowPlan?.signature === activeH3JobPlanSignature
+      ? activeH3JobPhase
+      : ''
+  )
+  const activeWindowMatch = matchingActiveH3Phase.match(/Sliding Window\s+(\d+)\/(\d+)/i)
+  const activeH3Window = activeWindowMatch ? Number(activeWindowMatch[1]) : null
+  const modePlaceholder = generationMode === 'avatar' && editSubMode === 'recast'
+    ? t('prompt.placeholderRecast')
+    : generationMode === 'avatar' && editSubMode === 'restyle'
+      ? t('prompt.placeholderRestyle')
+      : t(
+        generationMode === 'image' ? 'prompt.placeholderImage'
+          : generationMode === 'video' ? 'prompt.placeholderVideo'
+            : generationMode === 'audio' ? 'prompt.placeholderAudio'
+              : generationMode === 'avatar' ? 'prompt.placeholderAvatar'
+                : 'prompt.placeholderContent',
+      )
 
   // Close TTS menu on outside click
   useEffect(() => {
@@ -113,39 +223,251 @@ export function PromptInput() {
     return () => document.removeEventListener('mousedown', handler)
   }, [ttsMenuOpen])
 
+  useEffect(() => {
+    const refresh = () => setPromptHistory(getPromptHistory(activeWorkspace))
+    refresh()
+    window.addEventListener(PROMPT_HISTORY_EVENT, refresh)
+    return () => window.removeEventListener(PROMPT_HISTORY_EVENT, refresh)
+  }, [activeWorkspace])
+
+  useEffect(() => {
+    if (!historyOpen) return
+    const handler = (event: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(event.target as Node)) {
+        setHistoryOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [historyOpen])
+
+  const saveCurrentPrompt = () => {
+    rememberPrompt({
+      prompt,
+      negativePrompt,
+      mode: generationMode,
+      model: modelType,
+      workspace: activeWorkspace,
+      source: 'manual',
+    })
+  }
+
+  const restorePrompt = (entry: PromptHistoryEntry) => {
+    setParam('prompt', entry.prompt)
+    setParam('negative_prompt', entry.negativePrompt)
+    setHistoryOpen(false)
+  }
+
+  // A server-created plan used to arrive collapsed, making the exact prompts
+  // effectively invisible once an expensive generation had started. Open a
+  // newly planned storyboard once; the user can still collapse it afterward.
+  useEffect(() => {
+    if (usesH3WindowPlanner && h3WindowPlan?.signature) {
+      const open = window.setTimeout(() => setWindowPlanOpen(true), 0)
+      return () => window.clearTimeout(open)
+    }
+    return undefined
+  }, [usesH3WindowPlanner, h3WindowPlan?.signature])
+
   // grow shrink-0: fill spare vertical space when the sidebar is roomy, but
   // never shrink below the textarea's min-height. Dropping the old
   // `flex-1 min-h-0` stops the wrapper from collapsing under the textarea
   // (which made it overflow and overlap the section below).
   return (
-    <div className="relative grow shrink-0 flex flex-col">
+    <div
+      className="relative grow shrink-0 flex flex-col"
+      data-wizard-anchor="prompt"
+      data-wizard-commit="atomic"
+    >
+      <div
+        ref={historyRef}
+        className={`absolute right-2 z-40 ${isEnhancing ? 'top-8' : 'top-2'}`}
+      >
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(value => !value)}
+          className={`rounded-md p-1.5 transition-colors ${
+            historyOpen
+              ? 'bg-accent-blue/15 text-accent-blue'
+              : 'bg-bg-secondary/80 text-text-muted hover:bg-bg-hover hover:text-text-primary'
+          }`}
+          title={t('prompt.history')}
+          aria-label={t('prompt.historyAria')}
+        >
+          <History size={14} />
+        </button>
+        {historyOpen && (
+          <div className="absolute right-0 top-full mt-1 w-[min(330px,calc(100vw-32px))] overflow-hidden rounded-lg border border-border bg-bg-secondary shadow-2xl">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+              <div>
+                <div className="text-xs font-semibold text-text-primary">{t('prompt.history')}</div>
+                <div className="text-[9px] text-text-muted">{t('prompt.newestFirst', { workspace: activeWorkspace })}</div>
+              </div>
+              <button
+                type="button"
+                disabled={!prompt.trim()}
+                onClick={saveCurrentPrompt}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-bg-hover disabled:opacity-40"
+              >
+                <Save size={11} /> {t('prompt.saveCurrent')}
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              {promptHistory.length === 0 ? (
+                <div className="px-3 py-6 text-center text-[11px] text-text-muted">
+                  {t('prompt.emptyHistory')}
+                </div>
+              ) : promptHistory.map(entry => (
+                <div key={entry.id} className="group border-b border-border/70 p-2.5 last:border-b-0 hover:bg-bg-hover">
+                  <div className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => restorePrompt(entry)}
+                      className="min-w-0 flex-1 text-left"
+                      title={t('prompt.restore')}
+                    >
+                      <span className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-relaxed text-text-primary">
+                        {entry.prompt}
+                      </span>
+                      <span className="mt-1 block truncate text-[9px] text-text-muted">
+                        {entry.source === 'manual' ? t('prompt.saved') : t('prompt.generated')}
+                        {entry.mode ? ` · ${entry.mode}` : ''}
+                        {entry.model ? ` · ${entry.model}` : ''}
+                        {' · '}
+                        {new Date(entry.createdAt).toLocaleString()}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removePromptHistoryEntry(activeWorkspace, entry.id)}
+                      className="rounded p-1 text-text-muted opacity-40 hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                      title={t('prompt.removeFromHistory')}
+                      aria-label={t('prompt.removeFromHistoryAria')}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       {/* Enhance status indicator */}
       {isEnhancing && enhanceStatus.phase !== 'idle' && (
         <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-text-muted bg-bg-tertiary/80 rounded-t-lg border border-b-0 border-border">
           {enhanceStatus.phase === 'loading' ? (
             <>
               <Loader2 size={10} className="text-text-muted animate-spin" />
-              <span>Loading LLM...</span>
+              <span>{t('prompt.loadingLlm')}</span>
             </>
           ) : enhanceStatus.phase === 'thinking' ? (
             <>
-              <Brain size={10} className="text-purple-400 animate-pulse" />
-              <span>Thinking...</span>
+              <Brain size={10} className="text-chip-purple animate-pulse" />
+              <span>{t('prompt.thinking')}</span>
             </>
           ) : (
             <>
               <PenLine size={10} className="text-accent-blue animate-pulse" />
-              <span>Writing...</span>
+              <span>{t('prompt.writing')}</span>
             </>
           )}
         </div>
       )}
+      {usesH3WindowPlanner && h3WindowPlan && (
+        <div className="mb-1.5">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-bg-tertiary/70">
+            <button
+              type="button"
+              onClick={() => setWindowPlanOpen(open => !open)}
+              className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
+              title={t('prompt.reviewWindows')}
+            >
+              {windowPlanOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+              <span className="text-[10px] font-medium text-text-secondary truncate">
+                {t('prompt.h3Exact', { count: h3WindowPlan.window_count })}
+              </span>
+              {h3PlanIsStale && (
+                <span className="text-[9px] text-amber-400">{t('prompt.needsUpdate')}</span>
+              )}
+              {h3WindowPlan.planned_by === 'deterministic_fallback' && (
+                <span className="text-[9px] text-amber-400">{t('prompt.fallback')}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => enhancePrompt()}
+              disabled={isEnhancing}
+              title={t('prompt.rebuildWindows')}
+              className="p-1 text-text-muted hover:text-accent-blue disabled:opacity-50"
+            >
+              <RefreshCw size={11} className={isEnhancing ? 'animate-spin' : ''} />
+            </button>
+          </div>
+          {windowPlanOpen && (
+            <div className="mt-2 space-y-3">
+              {h3WindowPlan.windows.map((window, index) => (
+                <div
+                  key={`${window.index}-${window.start_frame}`}
+                  className="space-y-1"
+                >
+                  <div className={`flex items-center justify-between text-[9px] ${
+                    activeH3Window === window.index ? 'text-accent-blue' : 'text-text-muted'
+                  }`}>
+                    <span>
+                      {t('prompt.windowTitle', { index: window.index, title: window.title || t('prompt.beat', { index: window.index }) })}
+                      {activeH3Window === window.index ? t('prompt.generatingNow') : ''}
+                    </span>
+                    <span>{window.start_seconds.toFixed(1)}–{window.end_seconds.toFixed(1)}s</span>
+                  </div>
+                  <H3WindowPromptTextarea
+                    value={window.prompt}
+                    onChange={value => updateH3WindowPrompt(index, value)}
+                    readOnly={!!matchingActiveH3Phase}
+                    title={matchingActiveH3Phase
+                      ? t('prompt.windowReadOnly')
+                      : t('prompt.windowEditable')}
+                    active={activeH3Window === window.index}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {showPromptScheduler && (
+        <label className={`mb-2 flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors ${
+          promptSchedulerEnabled
+            ? 'border-accent-blue/40 bg-accent-blue/10'
+            : 'border-border bg-bg-tertiary/60 hover:border-border-light'
+        }`}>
+          <input
+            type="checkbox"
+            checked={promptSchedulerEnabled}
+            onChange={event => setPromptSchedulerEnabled(event.target.checked)}
+            className="shrink-0 accent-accent-blue"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[10px] font-medium text-text-secondary">{t('prompt.scheduler')}</span>
+            <span className="block text-[9px] text-text-muted">{t('prompt.schedulerHint')}</span>
+          </span>
+          {promptSchedulerEnabled && (
+            <span className="shrink-0 rounded-full bg-accent-blue/15 px-2 py-0.5 text-[9px] font-medium text-accent-blue">
+              {t('prompt.schedulerCount', { count: scheduledPromptCount })}
+            </span>
+          )}
+        </label>
+      )}
       <textarea
         value={prompt}
         onChange={e => setParam('prompt', e.target.value)}
-        placeholder={usesWindows
-          ? `Line 1 = window 1, line 2 = window 2... (${windowCount} windows)`
-          : (placeholders[generationMode] || 'Describe your content...')}
+        placeholder={schedulerApplies
+          ? t('prompt.placeholderScheduler')
+          : usesH3WindowPlanner
+          ? t('prompt.placeholderH3Windows', { count: windowCount })
+          : usesWindows
+            ? t('prompt.placeholderWindows', { count: windowCount })
+          : modePlaceholder}
         className="w-full flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 pr-10 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue transition-colors"
         style={{ resize: 'none', minHeight: 112 }}
       />
@@ -165,8 +487,8 @@ export function PromptInput() {
                 onClick={() => enhancePrompt(defaultMode)}
                 disabled={isEnhancing}
                 title={isMultiVoice
-                  ? `Write ${voiceCount}-person dialogue (use dropdown to switch to speech)`
-                  : 'Write a speech (use dropdown to switch to dialogue)'}
+                  ? t('prompt.writeSpeechTitleMulti', { count: voiceCount })
+                  : t('prompt.writeSpeechTitleSingle')}
                 className="p-1.5 rounded-l-md text-text-muted hover:text-accent-blue hover:bg-bg-hover transition-colors disabled:opacity-50"
               >
                 {isEnhancing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
@@ -185,15 +507,15 @@ export function PromptInput() {
                   onClick={() => { setTtsMenuOpen(false); enhancePrompt('monologue') }}
                   className="w-full text-left px-3 py-2 text-[11px] text-text-secondary hover:bg-bg-hover transition-colors"
                 >
-                  Write Speech
-                  <span className="block text-[9px] text-text-muted">Single speaker, with thinking</span>
+                  {t('prompt.writeSpeech')}
+                  <span className="block text-[9px] text-text-muted">{t('prompt.writeSpeechThinking')}</span>
                 </button>
                 <button
                   onClick={() => { setTtsMenuOpen(false); enhancePrompt('monologue_fast') }}
                   className="w-full text-left px-3 py-2 text-[11px] text-text-secondary hover:bg-bg-hover transition-colors border-t border-border"
                 >
-                  Write Speech
-                  <span className="block text-[9px] text-text-muted">Single speaker, faster</span>
+                  {t('prompt.writeSpeech')}
+                  <span className="block text-[9px] text-text-muted">{t('prompt.writeSpeechFast')}</span>
                 </button>
                 {supportsDialogue && (
                   <>
@@ -201,15 +523,15 @@ export function PromptInput() {
                       onClick={() => { setTtsMenuOpen(false); enhancePrompt('dialogue') }}
                       className="w-full text-left px-3 py-2 text-[11px] text-text-secondary hover:bg-bg-hover transition-colors border-t border-border"
                     >
-                      {voiceCount >= 2 ? `Write ${voiceCount}-Person Dialogue` : 'Write Dialogue (2 speakers)'}
-                      <span className="block text-[9px] text-text-muted">With thinking — more creative</span>
+                      {voiceCount >= 2 ? t('prompt.writeDialogueCount', { count: voiceCount }) : t('prompt.writeDialogueDefault')}
+                      <span className="block text-[9px] text-text-muted">{t('prompt.dialogueThinking')}</span>
                     </button>
                     <button
                       onClick={() => { setTtsMenuOpen(false); enhancePrompt('dialogue_fast') }}
                       className="w-full text-left px-3 py-2 text-[11px] text-text-secondary hover:bg-bg-hover transition-colors border-t border-border"
                     >
-                      {voiceCount >= 2 ? `Write ${voiceCount}-Person Dialogue` : 'Write Dialogue (2 speakers)'}
-                      <span className="block text-[9px] text-text-muted">No thinking — faster</span>
+                      {voiceCount >= 2 ? t('prompt.writeDialogueCount', { count: voiceCount }) : t('prompt.writeDialogueDefault')}
+                      <span className="block text-[9px] text-text-muted">{t('prompt.dialogueFast')}</span>
                     </button>
                   </>
                 )}
@@ -220,7 +542,7 @@ export function PromptInput() {
           <button
             onClick={() => enhancePrompt()}
             disabled={isEnhancing}
-            title="Enhance prompt with AI"
+            title={t('prompt.enhance')}
             className="absolute right-2 bottom-2 p-1.5 rounded-md text-text-muted hover:text-accent-blue hover:bg-bg-hover transition-colors disabled:opacity-50"
           >
             {isEnhancing ? (

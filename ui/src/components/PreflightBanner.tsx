@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { fetchPreflight, type PreflightCheck } from '../api/client'
+import { useUiTranslation } from '../i18n'
+import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
 
 /**
  * PreflightBanner — one-time environment sanity check shown at the top
@@ -13,9 +15,10 @@ import { fetchPreflight, type PreflightCheck } from '../api/client'
  * acknowledged it, but returns next launch if the problem persists.
  */
 export function PreflightBanner() {
+  const { t } = useUiTranslation('shell')
   const [checks, setChecks] = useState<PreflightCheck[]>([])
   const [dismissed, setDismissed] = useState(
-    () => sessionStorage.getItem('maestro_preflight_dismissed') === '1'
+    () => safeStorageGet('session', 'maestro_preflight_dismissed') === '1'
   )
 
   useEffect(() => {
@@ -38,24 +41,22 @@ export function PreflightBanner() {
     }`}>
       <AlertTriangle
         size={15}
-        className={`shrink-0 mt-0.5 ${hasError ? 'text-red-400' : 'text-amber-400'}`}
+        className={`shrink-0 mt-0.5 ${hasError ? 'text-chip-red' : 'text-indicator-warning'}`}
       />
       <div className="flex-1 min-w-0 space-y-0.5">
         {checks.map(c => (
-          <div key={c.id} className={`text-[11px] leading-snug ${
-            c.level === 'error' ? 'text-red-100' : 'text-amber-100'
-          }`}>
+          <div key={c.id} className="text-[11px] leading-snug text-text-primary">
             {c.message}
           </div>
         ))}
       </div>
       <button
         onClick={() => {
-          sessionStorage.setItem('maestro_preflight_dismissed', '1')
+          safeStorageSet('session', 'maestro_preflight_dismissed', '1')
           setDismissed(true)
         }}
         className="shrink-0 p-0.5 rounded text-text-muted hover:text-text-primary transition-colors"
-        aria-label="Dismiss"
+        aria-label={t('preflight.dismiss')}
       >
         <X size={13} />
       </button>

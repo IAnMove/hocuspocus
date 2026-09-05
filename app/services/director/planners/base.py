@@ -8,6 +8,7 @@ renderer's job.
 
 from __future__ import annotations
 import json
+import logging
 import re
 import os
 from abc import ABC, abstractmethod
@@ -26,6 +27,10 @@ except ImportError:
     _HAVE_JSON_REPAIR = False
 
 from ..schema import ProductionPlan, ShotPlan
+from services.operation_logging import log_operation
+
+
+_LOGGER = logging.getLogger("loreframe.operations.planner")
 
 # Grammar fallback for the JSON-fix retry when the caller didn't provide a
 # shot schema: any JSON array of objects. llama-server compiles this to a
@@ -161,7 +166,11 @@ class BasePlanner(ABC):
             # Never let the grammar make planning WORSE than before it
             # existed — a rejecting server (old llama-server binary, odd
             # provider) drops the constraint and runs the call as-is.
-            print(f"[Planner] Grammar-constrained call failed ({e}); retrying unconstrained")
+            log_operation(
+                _LOGGER, logging.WARNING, "planner.grammar_fallback",
+                "Grammar-constrained planner call failed; retrying unconstrained",
+                error=e, planner_skill=self.skill_type, attempt=1,
+            )
             kwargs.pop("json_schema", None)
             response = gen_fn(**kwargs)
 
@@ -175,13 +184,19 @@ class BasePlanner(ABC):
         # — the fix prompt alone has been defeated in the field (Gemma 4
         # 12B looped 96K chars of pseudo-JSON straight through it).
         # Thinking goes OFF here (grammar requires it; see llm_service).
-        print("[Planner] JSON parse failed, retrying with fix prompt + JSON grammar...")
+        log_operation(
+            _LOGGER, logging.INFO, "planner.json_parse_retry",
+            "Planner JSON parse failed; retrying with repair prompt and grammar",
+            planner_skill=self.skill_type, attempt=2,
+        )
         fix_prompt = (
             "Your previous response was not valid JSON. "
-            "Please output ONLY a JSON array of objects. "
+            "Correct that response and output ONLY a JSON array of objects. "
             "No markdown fences, no explanation, no thinking tags. "
             "Just the raw JSON array starting with [ and ending with ].\n\n"
-            f"Original request:\n{user_prompt}"
+            f"Original request:\n{user_prompt}\n\n"
+            "Previous malformed response to correct:\n"
+            f"{str(response)[:24000]}"
         )
         retry_kwargs = dict(
             prompt=fix_prompt,
@@ -200,7 +215,11 @@ class BasePlanner(ABC):
         except Exception as e:
             # Same degradation contract as attempt 1: fall back to the
             # historical unconstrained retry (thinking budget restored).
-            print(f"[Planner] Grammar-constrained retry failed ({e}); retrying unconstrained")
+            log_operation(
+                _LOGGER, logging.WARNING, "planner.grammar_fallback",
+                "Grammar-constrained planner repair failed; retrying unconstrained",
+                error=e, planner_skill=self.skill_type, attempt=2,
+            )
             retry_kwargs.pop("json_schema", None)
             retry_kwargs.pop("enable_thinking", None)
             retry_kwargs["thinking_budget"] = 2048
@@ -209,7 +228,11 @@ class BasePlanner(ABC):
         if parsed2 is not None:
             return parsed2
 
-        print("[Planner] JSON parse failed on retry, returning empty list")
+        log_operation(
+            _LOGGER, logging.ERROR, "planner.json_parse_failed",
+            "Planner JSON parse failed after repair; returning an empty plan",
+            planner_skill=self.skill_type, attempts=2,
+        )
         return []
 
     def _parse_json_response(self, text: str) -> Optional[list[dict]]:
@@ -232,15 +255,28 @@ class BasePlanner(ABC):
         try:
             result = json.loads(text)
             if isinstance(result, list):
-                print(f"[Planner] JSON parse OK: {len(result)} items (direct)")
+                log_operation(
+                    _LOGGER, logging.DEBUG, "planner.json_parse_ok",
+                    "Planner JSON parsed directly",
+                    planner_skill=self.skill_type, item_count=len(result), parser="direct",
+                )
                 return result
             if isinstance(result, dict) and "shots" in result:
-                print(f"[Planner] JSON parse OK: {len(result['shots'])} items (shots key)")
+                log_operation(
+                    _LOGGER, logging.DEBUG, "planner.json_parse_ok",
+                    "Planner JSON parsed from shots key",
+                    planner_skill=self.skill_type, item_count=len(result["shots"]),
+                    parser="direct-shots",
+                )
                 return result["shots"]
             return [result]
         except json.JSONDecodeError as e:
-            print(f"[Planner] Direct JSON parse failed: {e}")
-            print(f"[Planner] Text starts with: {text[:200]!r}")
+            log_operation(
+                _LOGGER, logging.DEBUG, "planner.json_parse_attempt_failed",
+                "Direct planner JSON parse failed",
+                error=e, planner_skill=self.skill_type, parser="direct",
+                response_chars=len(text), response_preview=text[:200],
+            )
 
         # Try to find JSON array in text
         match = re.search(r'\[[\s\S]*\]', text)
@@ -248,13 +284,26 @@ class BasePlanner(ABC):
             try:
                 result = json.loads(match.group())
                 if isinstance(result, list):
-                    print(f"[Planner] JSON parse OK: {len(result)} items (regex array)")
+                    log_operation(
+                        _LOGGER, logging.DEBUG, "planner.json_parse_ok",
+                        "Planner JSON parsed from extracted array",
+                        planner_skill=self.skill_type, item_count=len(result),
+                        parser="regex-array",
+                    )
                     return result
             except json.JSONDecodeError as e:
-                print(f"[Planner] Regex array parse failed: {e}")
-                print(f"[Planner] Matched array starts with: {match.group()[:200]!r}")
+                log_operation(
+                    _LOGGER, logging.DEBUG, "planner.json_parse_attempt_failed",
+                    "Extracted planner JSON array did not parse",
+                    error=e, planner_skill=self.skill_type, parser="regex-array",
+                    response_chars=len(match.group()), response_preview=match.group()[:200],
+                )
         else:
-            print(f"[Planner] No JSON array found in {len(text)} chars")
+            log_operation(
+                _LOGGER, logging.DEBUG, "planner.json_array_missing",
+                "No JSON array found in planner response",
+                planner_skill=self.skill_type, response_chars=len(text),
+            )
 
         # Try to find JSON object
         match = re.search(r'\{[\s\S]*\}', text)
@@ -278,20 +327,48 @@ class BasePlanner(ABC):
             try:
                 result = json_repair.loads(text)
                 if isinstance(result, list):
-                    print(f"[Planner] JSON parse OK via json_repair: {len(result)} items")
+                    log_operation(
+                        _LOGGER, logging.DEBUG, "planner.json_parse_ok",
+                        "Planner JSON recovered",
+                        planner_skill=self.skill_type, item_count=len(result),
+                        parser="json-repair",
+                    )
                     return result
                 if isinstance(result, dict) and "shots" in result:
-                    print(f"[Planner] JSON parse OK via json_repair (shots key): {len(result['shots'])} items")
+                    log_operation(
+                        _LOGGER, logging.DEBUG, "planner.json_parse_ok",
+                        "Planner JSON shots recovered",
+                        planner_skill=self.skill_type, item_count=len(result["shots"]),
+                        parser="json-repair-shots",
+                    )
                     return result["shots"]
                 if isinstance(result, dict):
-                    print("[Planner] JSON parse OK via json_repair: 1 item (single object)")
+                    log_operation(
+                        _LOGGER, logging.DEBUG, "planner.json_parse_ok",
+                        "Planner JSON object recovered",
+                        planner_skill=self.skill_type, item_count=1,
+                        parser="json-repair-object",
+                    )
                     return [result]
             except Exception as e:
-                print(f"[Planner] json_repair fallback failed: {e}")
+                log_operation(
+                    _LOGGER, logging.WARNING, "planner.json_repair_failed",
+                    "Planner JSON repair fallback failed",
+                    error=e, planner_skill=self.skill_type,
+                )
         else:
-            print("[Planner] json_repair not installed — install with `pip install json_repair` to recover from LLM JSON typos")
+            log_operation(
+                _LOGGER, logging.WARNING, "planner.json_repair_unavailable",
+                "json_repair is unavailable; malformed planner output cannot be recovered",
+                planner_skill=self.skill_type,
+            )
 
-        print(f"[Planner] All JSON parse attempts failed. Text ends with: {text[-200:]!r}")
+        log_operation(
+            _LOGGER, logging.ERROR, "planner.json_parse_exhausted",
+            "All planner JSON parse attempts failed",
+            planner_skill=self.skill_type, response_chars=len(text),
+            response_tail=text[-200:],
+        )
         return None
 
     # ── Guide Loading ────────────────────────────────────────────────
@@ -304,9 +381,15 @@ class BasePlanner(ABC):
         if os.path.isfile(filepath):
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read().strip()
-            print(f"[Planner] Loaded guide: {filename} ({len(content)} chars)")
+            log_operation(
+                _LOGGER, logging.DEBUG, "planner.guide_loaded",
+                "Planner guide loaded", guide=filename, content_chars=len(content),
+            )
             return content
-        print(f"[Planner] Guide not found: {filename}")
+        log_operation(
+            _LOGGER, logging.WARNING, "planner.guide_missing",
+            "Planner guide was not found", guide=filename,
+        )
         return ""
 
     # ── Shot ID Generation ───────────────────────────────────────────

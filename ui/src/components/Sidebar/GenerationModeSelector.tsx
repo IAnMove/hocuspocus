@@ -1,22 +1,26 @@
-import { Image, Video, AudioLines, Wand2, Wrench, Box } from 'lucide-react'
+import { Image, Video, AudioLines, Wand2, Wrench, Box, Settings } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import type { GenerationMode } from '../../types'
 
-const modes: { value: GenerationMode; label: string; icon: typeof Image }[] = [
-  { value: 'image', label: 'Image', icon: Image },
-  { value: 'video', label: 'Video', icon: Video },
-  { value: 'audio', label: 'Audio', icon: AudioLines },
-  { value: 'model3d', label: '3D', icon: Box },
-  { value: 'avatar', label: 'Edit', icon: Wand2 },
-  { value: 'tools', label: 'Tools', icon: Wrench },
+const modes: { value: GenerationMode; icon: typeof Image }[] = [
+  { value: 'image', icon: Image },
+  { value: 'video', icon: Video },
+  { value: 'audio', icon: AudioLines },
+  { value: 'model3d', icon: Box },
+  { value: 'avatar', icon: Wand2 },
+  { value: 'tools', icon: Wrench },
 ]
 
 export function GenerationModeSelector() {
+  const { t } = useUiTranslation('navigation')
+  const { t: tSettings } = useUiTranslation('settings')
   const generationMode = useStore(s => s.generationMode)
   const setGenerationMode = useStore(s => s.setGenerationMode)
+  const setSettingsOpen = useStore(s => s.setSettingsOpen)
 
   return (
-    <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
+    <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border" data-wizard-anchor="mode">
       {modes.map(m => {
         const Icon = m.icon
         const active = generationMode === m.value
@@ -31,10 +35,19 @@ export function GenerationModeSelector() {
             }`}
           >
             <Icon size={14} />
-            <span>{m.label}</span>
+            <span>{t(`directModes.${m.value}`)}</span>
           </button>
         )
       })}
+      <button
+        type="button"
+        onClick={() => setSettingsOpen(true)}
+        className="flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-xs text-text-secondary transition-all hover:text-text-primary"
+        title={tSettings('title')}
+      >
+        <Settings size={14} />
+        <span>{tSettings('title')}</span>
+      </button>
     </div>
   )
 }

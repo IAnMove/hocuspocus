@@ -53,7 +53,10 @@ else:
 ## Main Entry Points
 
 - `init(...) -> WanGPSession`
-  - Creates a reusable session and eagerly loads the runtime.
+  - Creates a reusable session and eagerly loads the runtime. If HocusPocus
+    already bound WanGP, it reuses that exact instance; in a standalone Python
+    process it performs the one authorized import and binds it for all later
+    calls.
 - `WanGPSession.submit(source) -> SessionJob`
   - Starts a job from a settings dict, a manifest list, or a saved `.json` / `.zip` file.
 - `WanGPSession.submit_task(settings) -> SessionJob`
@@ -482,3 +485,354 @@ job.cancel()
 ```
 
 Cancellation is cooperative and forwards WanGP's normal abort signal to the active model. A cancelled run completes with `result.success == False` and a cancellation entry in `result.errors`.
+
+## Story Lab
+
+Story generation is checkpointed and asynchronous. Start with
+`POST /api/v1/stories/generate/start`, poll
+`GET /api/v1/stories/generate/status/{job_id}`, resume with
+`POST /api/v1/stories/generate/resume/{job_id}`, or cancel between stages with
+`POST /api/v1/stories/generate/cancel/{job_id}`. Supported scopes are `all`,
+`overview`, `world`, `characters`, `relationships`, and `structure`. Full
+generation runs overview, cast, world, relationships, and dramatic structure as
+separately validated stages; completed stages survive a later failure.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/stories/generate/start" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scope": "all",
+    "premise": "A cartographer discovers that her hand-drawn islands are becoming real.",
+    "language": "Español",
+    "genre": "Adventure",
+    "tone": "Mysterious",
+    "audience": "General",
+    "writingProvider": "maestro",
+    "project": {}
+  }'
+```
+
+External per-story overrides use the same isolated provider fields as Comic
+Director: `writingProvider`, `writingModel`, and `writingBaseUrl`. Credentials
+are read from Settings → Services and are never accepted in the request or
+embedded in the returned story.
+
+```javascript
+const job = await fetch(`${base}/api/v1/stories/generate/start`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    scope: 'characters',
+    premise: story.premise,
+    language: story.language,
+    genre: story.genre,
+    tone: story.tone,
+    audience: story.audience,
+    instruction: 'Make the rival sympathetic and give both leads distinct voices',
+    writingProvider: 'minimax',
+    writingModel: 'MiniMax-M3',
+    project: story,
+  }),
+}).then(r => r.json())
+
+let status
+do {
+  await new Promise(resolve => setTimeout(resolve, 1000))
+  status = await fetch(`${base}/api/v1/stories/generate/status/${job.jobId}`).then(r => r.json())
+} while (!['completed', 'failed', 'cancelled'].includes(status.status))
+if (status.status !== 'completed') throw new Error(status.error || status.message)
+const response = status.result
+```
+
+```python
+import time
+import requests
+
+job = requests.post(f"{base}/api/v1/stories/generate/start", json={
+    "scope": "world",
+    "premise": story["premise"],
+    "language": "English",
+    "genre": "Fantasy",
+    "tone": "Melancholic",
+    "audience": "General",
+    "writingProvider": "deepseek",
+    "writingModel": "deepseek-v4-pro",
+    "project": story,
+}).json()
+while True:
+    status = requests.get(
+        f"{base}/api/v1/stories/generate/status/{job['jobId']}"
+    ).json()
+    if status["status"] in {"completed", "failed", "cancelled"}:
+        break
+    time.sleep(1)
+result = status["result"]["result"]
+```
+
+For backward compatibility, `POST /api/v1/stories/generate` remains available
+for a single section only. Full `scope: "all"` requests must use the durable
+start/status workflow.
+
+## Comic preproduction and animatics
+
+Comic Director planning is asynchronous: start with `POST /api/v1/director/comic/plan/start`, then poll `GET /api/v1/director/comic/plan/status/{job_id}`. Existing plans can be story-edited without regenerating artwork through `POST /api/v1/director/comic/story/revise`, or lettered/translated one page at a time through `POST /api/v1/director/comic/text/page`.
+
+Story Lab adaptations may also supply `storyContext`, an editable plain-text
+bible containing the canonical plot, beats, relationships, character arcs and
+locations, plus `sourceStory: {id, revision, title}` for provenance. Comic
+Director treats this material as canon while still allowing the user to edit it
+before starting the plan. Character records and their reference asset IDs remain
+the source of truth when the writing LLM returns the plan.
+
+`POST /api/v1/comics/generate/minimax` follows MiniMax's official `image-01`
+image-to-image request shape. Send one optional `subject_reference` source; the
+backend resolves a Maestro output/upload to a base64 `image_file` and sends
+`subject_reference: [{"type": "character", "image_file": "..."}]`. MiniMax
+supports one identity reference per image request, so group panels use the first
+visually prioritised character with an available reference and describe the
+remaining cast from the locked character bible. `aspect_ratio` accepts `1:1`,
+`16:9`, `4:3`, `3:2`, `2:3`, `3:4`, `9:16`, or `21:9`.
+
+Director and Story Lab film adaptations can select the virtual image model ID
+`minimax:image-01` in their normal `image_model` field. This routes shot-frame
+generation through the same external Image-01 client while the independently
+selected video model (for example local `minimax_h3`) remains unchanged.
+Director maps its requested frame resolution to the nearest supported MiniMax
+aspect ratio, sends at most one prioritised character identity reference, and
+does not apply local image LoRAs. The credential is read only from
+Settings → Services; it is not accepted in pipeline payloads or persisted in
+output metadata.
+
+Comic recovery checkpoints are output-folder-scoped and durable. Create one with
+`POST /api/v1/comics/history`, list versions with
+`GET /api/v1/comics/history` (optionally `?comic_id=...`), and load a version
+with `GET /api/v1/comics/history/{snapshot_id}`. Identical consecutive
+snapshots are de-duplicated and the newest 40 versions per comic are retained.
+The editor creates these checkpoints automatically after editing pauses and
+before replacing the open comic.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/comics/history" \
+  -H "Content-Type: application/json" \
+  -d '{"project": {"version": 2, "id": "comic-123", "pages": [{}], "assets": {}}, "reason": "Manual checkpoint"}'
+curl "$MAESTRO_URL/api/v1/comics/history?comic_id=comic-123"
+```
+
+All three narrative endpoints accept the optional fields `writingProvider`, `writingModel`, and `writingBaseUrl`. `writingProvider` may be `maestro`, `deepseek`, `minimax`, `openai`, or `openai-compatible`. Named DeepSeek, MiniMax, and OpenAI profiles always use their fixed official API hosts; the compatible profile uses the URL and optional key explicitly saved under Settings → Services. Credentials are never accepted from, or embedded in, comic JSON. DeepSeek supports `deepseek-v4-pro` and `deepseek-v4-flash`; translation requests are always resolved to Flash in the backend even when Pro is selected for writing. MiniMax supports `MiniMax-M3`, `MiniMax-M2.7`, and `MiniMax-M2.7-highspeed` for writing and reuses the same MiniMax credential as image generation, while keeping `writingModel` independent from the comic's `imageModel`. Older comics that stored an official DeepSeek or OpenAI host as `openai-compatible` are migrated to the matching named profile.
+
+`POST /api/v1/comics/animatic` accepts ordered, uploaded lettered-panel images and queues a 1080p MP4 render. Poll the returned job with the Video Editor status endpoint.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/comics/animatic" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "comic_id": "comic-123",
+    "comic_title": "My comic",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "transition": "crossfade",
+    "transition_duration": 0.35,
+    "panels": [
+      {"source": "/api/v1/uploads/panel.png", "page_number": 1, "panel_number": 1, "duration": 3, "motion": "push-in", "script": "[Caption] Opening"}
+    ]
+  }'
+```
+
+```python
+import requests
+
+base = "http://127.0.0.1:7860"
+job = requests.post(f"{base}/api/v1/comics/animatic", json={
+    "comic_title": "My comic", "width": 1080, "height": 1920, "fps": 30,
+    "transition": "dissolve", "transition_duration": 0.35,
+    "panels": [{"source": "/api/v1/uploads/panel.png", "duration": 3, "motion": "pan-right"}],
+}).json()
+status = requests.get(f"{base}/api/v1/video-editor/export/{job['job_id']}").json()
+```
+
+```javascript
+const job = await fetch('/api/v1/comics/animatic', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ comic_title: 'My comic', width: 1920, height: 1080, fps: 30,
+    transition: 'crossfade', transition_duration: 0.35,
+    panels: [{ source: '/api/v1/uploads/panel.png', duration: 3, motion: 'pull-out' }] }),
+}).then(response => response.json());
+```
+
+## Video Editor HTTP API
+
+The React Video Editor (`ui/src/features/video-editor/`) keeps the timeline in the browser. The server only probes media, extracts frames, and queues FFmpeg exports. Strip `?workspace=` from gallery URLs before sending a `source` — `services.media_refs.parse_media_ref` does this on the server, but a filename-with-query will not resolve.
+
+Supported extensions: `.mp4`, `.webm`, `.mov`, `.mkv`, `.avi`, `.m4v`.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/video-editor/probe" \
+  -H "Content-Type: application/json" \
+  -d '{"source": "shot_a.mp4", "workspace": "default"}'
+```
+
+`POST /api/v1/video-editor/export` returns **202** and accepts 1–100 clips. Width/height must be even and in 240–3840. `fps` must be `24`, `25`, `30`, `50`, or `60`. Transition names: `none`, `crossfade`, `fade-black`, `wipe-left`, `slide-left`, `slide-right`, `circle-open`, `dissolve`, `pixelize`, `blur`, `zoom-in`, `later-clock`, `later-tropical`, `later-cinematic`. `transition_duration` is 0.05–5 seconds; `later-*` inserts a time card (duration also clamped to ≥0.5 s at render). Poll `GET /api/v1/video-editor/export/{job_id}`; cancel with `POST /api/v1/video-editor/export/{job_id}/cancel` (deferred to the next FFmpeg boundary). The completed MP4 sidecar uses Video Editor metadata contract v2: `params.video_editor.source_manifest` embeds each available source sidecar (including scene recipe, prompts, audio references and model metadata) without absolute paths. Missing or malformed legacy sidecars are recorded per clip and do not fail the export; nested editor manifests are omitted to prevent recursive growth.
+
+```python
+import requests
+
+base = "http://127.0.0.1:7860"
+job = requests.post(f"{base}/api/v1/video-editor/export", json={
+    "name": "final_cut",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "clips": [{
+        "source": "shot_a.mp4",
+        "trim_start": 0,
+        "trim_end": 4.2,
+        "fit": "fit",
+        "transition": "crossfade",
+        "transition_duration": 0.4,
+    }],
+}).json()
+status = requests.get(f"{base}/api/v1/video-editor/export/{job['job_id']}").json()
+```
+
+`POST /api/v1/video-editor/screenshot` writes a PNG (`generation_mode: "image"`) at `{source, time, name?, workspace?}`. Character Creator uses it for Hunyuan views.
+
+## Image background removal
+
+`POST /api/v1/tools/remove-background` queues a standalone image tool job. It
+uses the shared rembg U2Net adapter, never overwrites the source, and publishes
+the transparent PNG plus a canonical `.meta.json` asset manifest in the
+destination workspace. Use an exact `asset_id` from `GET /api/v1/assets?kind=image`
+whenever possible; `source` may be the exact filename, an `/api/v1/file/...`
+URL, or an absolute path already inside the selected uploads/workspace root.
+`source_workspace` is required when the source belongs to another output
+folder. Poll `GET /api/v1/status/{job_id}` and cancel with
+`POST /api/v1/cancel/{job_id}`.
+
+```bash
+curl -X POST "$HOCUSPOCUS_URL/api/v1/tools/remove-background" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "asset_id": "asset_image_123",
+    "workspace": "default",
+    "instruction": "preserve the hair edges",
+    "provenance": {"actor": "user"}
+  }'
+```
+
+The response is accepted immediately with `job_id`, canonical task IDs and
+frozen model details (`rembg-u2net`). The Activity/task record reports queued,
+running, completed, failed or cancelled state; the derived asset exposes the
+source asset ID, tool/capability, instruction, model/backend, timings and
+transparent-PNG technical metadata.
+
+## Tools upscale
+
+`POST /api/v1/tools/upscale` is one shared post-processing action for either a
+still image or a video. Send `{ "source": "image.png", "source_kind":
+"image", "asset_id": "...", "source_workspace": "...", "method":
+"flashvsr2", "workspace": "default" }` for an image, or keep the legacy
+`video_path` field with `source_kind: "video"` for a clip. Supported image
+formats are `.bmp`, `.gif`, `.jpeg`, `.jpg`, `.png`, `.tif`, `.tiff`, and
+`.webp`; supported video formats are `.avi`, `.m4v`, `.mkv`, `.mov`, `.mp4`,
+`.mpeg`, `.mpg`, `.webm`, and `.wmv`. The source must be an exact asset, upload, or
+file inside the selected workspace roots; path traversal and mismatched asset
+IDs/kinds are rejected. Images use the existing spatial upsampler in still
+mode and produce a new PNG beside the source. Videos retain the existing
+audio-preserving pipeline and produce a new video. Neither path overwrites its
+source. Poll the returned job with `GET /api/v1/status/{job_id}` and cancel it
+with `POST /api/v1/cancel/{job_id}`. Activity and the canonical asset manifest
+retain the source lineage, method, workspace, provenance, and execution mode.
+
+## Gallery mix kinds
+
+`GET /api/v1/outputs` accepts `result_kind=music_video|trailer|series_episode` (plus the existing `media_type`, `multiclip_only`, `favorites_only`, `search`, `workspace`, `limit`, `offset`). Classification lives in `services.output_result_kind` and applies only to **assembled** filenames (`multiclip`, `_mv.mp4`, `_movie.mp4`, `_rejoin_multiclip.mp4`, `_series_assembly`). Requesting `series_episode` also matches `chapter`. When `result_kind` is set, pagination is bypassed and every match is returned.
+
+`POST /api/v1/outputs/rejoin` (`{ "group_id", "audio_file"? }`) and `POST /api/v1/director/pipelines/{pid}/rejoin` concatenate generated shots. With two or more clips and no external driving audio, `services.mix_concat` holds the last frame 0.5 s and crossfades ~0.4 s; FFmpeg failure falls back to a hard concat.
+
+## Character sheet describe-refs
+
+`POST /api/v1/characters/describe-refs` uses hosted MiniMax-M3 vision (not the local LLM) and requires the MiniMax key in Settings → Services.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/characters/describe-refs" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "kind": "character",
+    "image_paths": ["subject.png"],
+    "roles": ["subject"],
+    "workspace": "default"
+  }'
+```
+
+`kind` is `character` or `object` (default `character`). `roles` are `subject`, `face`, `outfit`, `extra`, or `accessory`; missing/invalid roles become `subject` for index 0 and `extra` otherwise. Response: `{ "a_prompt", "kind" }`. `400` if `image_paths` is empty, a file is missing, or the API key is unset.
+
+## Character Kits
+
+Character Kits are reusable 2D cutout puppets. Their current HTTP routes are
+scoped to a physical output folder. The query/body field is named `workspace`
+for compatibility; it is **not** the ID of a logical Workspace collection.
+Logical collections use `/api/v1/workspace-collections` and only group project,
+asset, and Production IDs. See [`docs/character-kits/HOWUSEIT.md`](../../docs/character-kits/HOWUSEIT.md)
+for the operator workflow and [the domain contract](../../docs/development/DOMAIN_MODEL_AND_ASSET_PROVENANCE.md).
+
+Set the base URL in the examples to your running HocusPocus instance:
+
+```bash
+export HOCUSPOCUS_URL=http://127.0.0.1:7860
+```
+
+- `GET /api/v1/character-kits/library?workspace=default` — reads the normalized
+  `{output-folder}/.character-kit-library-v1.json`, or returns an empty
+  `{ "version": 1, "revision": 0, "activeId": "", "kits": {} }` when it is
+  missing.
+- `PATCH /api/v1/character-kits/library/kits/{kit_id}` — creates or replaces one
+  kit with `{ workspace, baseRevision, kit, makeActive? }`; neighbours are not
+  replaced. `makeActive` defaults to true. A stale revision returns `409` with
+  `code: character_kit_revision_conflict`, `expectedRevision`, and
+  `currentRevision`.
+- `DELETE /api/v1/character-kits/library/kits/{kit_id}` — body
+  `{ workspace, baseRevision }`; `404` if the kit is absent. Source files are
+  intentionally retained.
+- `POST /api/v1/character-kits/face-rig/cleanup` — body
+  `{ workspace, source, padding? }`, where `padding` is 0–64 (default 8). The
+  endpoint runs rembg U2Net + crop-to-alpha, writes a new PNG, and never
+  overwrites `source`. Sources must be inside uploads or the selected output
+  folder; disallowed/missing images return `400`/`404`.
+
+The output-folder token is `default` or `[A-Za-z0-9][A-Za-z0-9_-]*`. Kit mouth
+keys are `closed`, `small`, `wide`, and `round`; eye keys are `open` and
+`blink`. `blob:` sources are rejected, and the UI-only `lookNotes` field is
+stripped when the kit is normalized for persistence.
+
+```bash
+curl "$HOCUSPOCUS_URL/api/v1/character-kits/library?workspace=default"
+
+curl -X PATCH "$HOCUSPOCUS_URL/api/v1/character-kits/library/kits/luma" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workspace": "default",
+    "baseRevision": 0,
+    "kit": {
+      "version": 1, "id": "luma", "name": "Luma", "style": "cutout",
+      "base": {
+        "id": "luma-base", "name": "Luma base", "source": "luma-base.png",
+        "kind": "image", "alphaStatus": "transparent", "reviewState": "approved"
+      },
+      "poses": {}, "mouth": {}, "eyes": {},
+      "anchors": { "base": { "mouth": { "offsetX": 0, "offsetY": -18, "scale": 0.05, "rotation": 0 } } },
+      "provenance": []
+    }
+  }'
+```
+
+## Director pipeline threads
+
+These routes always use the server active output folder. They do not accept `?workspace=`.
+
+- `GET /api/v1/director/pipelines` / `GET /api/v1/director/pipelines/active` / `GET /api/v1/director/pipelines/{pid}` — list or load. `{pid}` hydrates an empty `clips` array from `clip_plans` or `planned_clips` and sets `queue_source` to `clips`, `clip_plans`, or `planned`. List accepts `limit` and `offset` (newest first); `limit=0` (the default) returns the full list, while the Workspaces tab pages 8 at a time and uses `total` for “load more”.
+- `PUT /api/v1/director/pipelines/{pid}/clips/{clip_index}/prompt` — optional `video_prompt`, `image_prompt`, `soundtrack_drive`. `true` writes an `audio_driven` / `lip_sync_critical` plan; `false` writes `music_driven` and clears `_director_dialogue_beats`. `409` while the pipeline is active.
+- `POST /api/v1/director/pipeline/{pid}/resume` and `POST /api/v1/director/pipeline/{pid}/continue` use the singular `pipeline` path.
+- Batch prompt rewrite is UI-only: loop `POST /api/v1/llm/generate` (local LLM) then PUT the chosen prompts.
+
+Operator notes: `docs/video-editor/HOWUSEIT.md`, `docs/workspaces/HOWUSEIT.md`, and `docs/character-kits/HOWUSEIT.md`.

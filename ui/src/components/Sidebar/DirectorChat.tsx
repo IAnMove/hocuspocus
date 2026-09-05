@@ -1,10 +1,21 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
-import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock } from 'lucide-react'
-import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
-import { getFileUrl } from '../../api/client'
+import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } from 'react'
+import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen, Zap } from 'lucide-react'
+import { useStore, getFamiliesForMode, getModelsForFamily, resolveResolution } from '../../stores/useStore'
+import { fetchModelOptions } from '../../api/client'
+import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
 import { DirectorSongSetup } from './DirectorSongSetup'
-import type { DirectorSkill, ShortFilmCharacter, ShortFilmPath } from '../../types'
+import { InfoTooltip } from './InfoTooltip'
+import type { DirectorPipelineType, DirectorShotImageGuidance, DirectorSkill, ModelOptions, MusicVideoTreatment, ShortFilmCharacter, ShortFilmPath } from '../../types'
+import { formatSeconds, recommendedWindowProfile } from './DurationSlider'
+import { DirectorClipImagePreview } from './DirectorClipImagePreview'
+import { DirectorPlanRecoveryCard } from './DirectorPlanRecoveryCard'
+import { useObjectUrl } from '../../lib/useObjectUrl'
+import { useUiTranslation } from '../../i18n'
+import { SpokenLanguageOptions } from '../../i18n/SpokenLanguageOptions'
+
+const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
+  .then(module => ({ default: module.ComicDirectorPanel })))
 
 // AUDIO_ACCEPT lists both audio formats AND video formats. When a video
 // file is uploaded, the backend's /api/v1/upload-audio endpoint extracts
@@ -13,6 +24,19 @@ import type { DirectorSkill, ShortFilmCharacter, ShortFilmPath } from '../../typ
 // the soundtrack analyzed without converting first.
 const AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a,.mp4,.mov,.mkv,.webm,.avi,.m4v'
 const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.bmp'
+const H3_VIDEO_ACCEPT = '.mp4,.mov,.mkv,.webm,.avi,.m4v'
+const H3_AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a'
+
+function directorWillGenerateShotImages(
+  support: 'required' | 'optional' | 'direct_references' | undefined,
+  guidance: DirectorShotImageGuidance,
+  hasVisualReferences: boolean,
+): boolean {
+  if (!support || support === 'required') return true
+  if (guidance === 'generate') return true
+  if (support === 'direct_references' || guidance === 'prompt_only') return false
+  return hasVisualReferences
+}
 
 function AudioScaleSlider() {
   const audioScale = useStore(s => s.directorAudioScale)
@@ -48,23 +72,25 @@ function formatTime(s: number): string {
 }
 
 const sectionColors: Record<string, string> = {
-  intro: 'bg-blue-500/20 text-blue-400',
-  verse: 'bg-green-500/20 text-green-400',
-  chorus: 'bg-purple-500/20 text-purple-400',
-  bridge: 'bg-yellow-500/20 text-yellow-400',
-  outro: 'bg-gray-500/20 text-gray-400',
-  instrumental: 'bg-cyan-500/20 text-cyan-400',
+  intro: 'bg-blue-500/20 text-chip-blue',
+  verse: 'bg-green-500/20 text-chip-green',
+  'pre-chorus': 'bg-pink-500/20 text-chip-pink',
+  chorus: 'bg-purple-500/20 text-chip-purple',
+  bridge: 'bg-yellow-500/20 text-chip-yellow',
+  outro: 'bg-gray-500/20 text-chip-gray',
+  instrumental: 'bg-cyan-500/20 text-chip-cyan',
   // Short film scene types
-  dialogue: 'bg-green-500/20 text-green-400',
-  action: 'bg-orange-500/20 text-orange-400',
-  opening: 'bg-blue-500/20 text-blue-400',
-  closing: 'bg-gray-500/20 text-gray-400',
-  scene: 'bg-teal-500/20 text-teal-400',
+  dialogue: 'bg-green-500/20 text-chip-green',
+  action: 'bg-orange-500/20 text-chip-orange',
+  opening: 'bg-blue-500/20 text-chip-blue',
+  closing: 'bg-gray-500/20 text-chip-gray',
+  scene: 'bg-teal-500/20 text-chip-teal',
 }
 
 const sectionBarColors: Record<string, string> = {
   intro: 'bg-blue-500',
   verse: 'bg-green-500',
+  'pre-chorus': 'bg-pink-500',
   chorus: 'bg-purple-500',
   bridge: 'bg-yellow-500',
   outro: 'bg-gray-500',
@@ -101,15 +127,29 @@ const sectionBarColors: Record<string, string> = {
  * scroll instead of bubbling up to the chat panel, so the user
  * can't scroll the chat when their cursor happens to be over a
  * prompt field.
+ *
+ * Optional `minHeight`/`maxHeight` (px) bound the growth — used by the
+ * chat composer (issue #11), which keeps its resting 2-row size when
+ * empty and stops growing at a cap. Past the cap the textarea scrolls
+ * itself, so overflow flips to `auto` there; that's fine for the
+ * composer because it sits OUTSIDE the scrollable chat panel — the
+ * wheel-capture concern above doesn't apply.
  */
-function AutoResizeTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+function AutoResizeTextarea({ minHeight, maxHeight, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  minHeight?: number
+  maxHeight?: number
+}) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [props.value])
+    let h = el.scrollHeight
+    if (minHeight) h = Math.max(h, minHeight)
+    if (maxHeight) h = Math.min(h, maxHeight)
+    el.style.height = `${h}px`
+    if (maxHeight) el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [props.value, minHeight, maxHeight])
   // Merge any incoming style with our scrollbar-hiding override.
   // OUR override comes last so it wins — wheel-capture is the whole
   // point of the component, can't let a caller silently break it.
@@ -126,7 +166,7 @@ function SectionBadge({ label }: { label: string }) {
 }
 
 function EnergyDot({ energy }: { energy: number }) {
-  const color = energy > 0.6 ? 'bg-red-400' : energy < 0.3 ? 'bg-blue-400' : 'bg-yellow-400'
+  const color = energy > 0.6 ? 'bg-chip-red' : energy < 0.3 ? 'bg-chip-blue' : 'bg-chip-yellow'
   return <span className={`inline-block w-2 h-2 rounded-full ${color}`} title={`Energy: ${(energy * 100).toFixed(0)}%`} />
 }
 
@@ -327,6 +367,7 @@ function LlmLogStage({ stage, label }: { stage: string; label: string }) {
 }
 
 export function DirectorChat() {
+  const { t } = useUiTranslation('director')
   const step = useStore(s => s.directorStep)
   const loading = useStore(s => s.directorLoading)
   // Sub-status text ("Loading transcription model (first use downloads
@@ -340,17 +381,37 @@ export function DirectorChat() {
   // mode) or already generating from a previous click (manual mode).
   const isGenerating = useStore(s => s.isGenerating)
   const error = useStore(s => s.directorError)
+  const planRecovery = useStore(s => s.directorPlanRecovery)
+  const resumePlan = useStore(s => s.directorResumePlan)
   const analysis = useStore(s => s.directorAnalysis)
   const plannedClips = useStore(s => s.directorPlannedClips)
   const energyBias = useStore(s => s.directorEnergyBias)
+  const pacingProfile = useStore(s => s.directorPacingProfile)
+  const musicVideoTreatment = useStore(s => s.directorMusicVideoTreatment)
+  const setMusicVideoTreatment = useStore(s => s.setDirectorMusicVideoTreatment)
   const clipPlans = useStore(s => s.directorClipPlans)
+  const selectedDirectorShotImageSupport = useStore(s => s.models.find(
+    model => model.model_type === (s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'),
+  )?.director?.shot_image_support)
+  const directorShotImageGuidance = useStore(s => s.directorShotImageGuidance)
+  const directorHasVisualReferences = useStore(s => Boolean(
+    s.directorReferenceImage
+    || s.directorReferenceImagePath
+    || s.directorCharacterRefs.length
+    || s.directorCharacterRefPaths.length
+    || s.directorLocationRefs.length
+    || s.directorLocationRefPaths.length
+  ))
   const sceneDescription = useStore(s => s.directorSceneDescription)
-  const audioFile = useStore(s => s.directorAudioFile)
+  const spokenLanguage = useStore(s => s.directorSpokenLanguage)
+  const setSpokenLanguage = useStore(s => s.setDirectorSpokenLanguage)
+  const audioName = useStore(s => s.directorAudioName)
   const referenceImage = useStore(s => s.directorReferenceImage)
   const clipImages = useStore(s => s.directorClipImages)
   const imageGenProgress = useStore(s => s.directorImageGenProgress)
   const uploadAndAnalyze = useStore(s => s.directorUploadAndAnalyze)
   const setEnergyBias = useStore(s => s.directorSetEnergyBias)
+  const setPacingProfile = useStore(s => s.directorSetPacingProfile)
   const confirmStructure = useStore(s => s.directorConfirmStructure)
   const setSceneDescription = useStore(s => s.directorSetSceneDescription)
   const setReferenceImage = useStore(s => s.directorSetReferenceImage)
@@ -369,8 +430,16 @@ export function DirectorChat() {
   const setAutoMode = useStore(s => s.setDirectorAutoMode)
   const seamless = useStore(s => s.directorSeamless)
   const setSeamless = useStore(s => s.setDirectorSeamless)
+  const selectedVideoSupportsSeamless = useStore(s => {
+    const selected = s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
+    const model = s.models.find(item => item.model_type === selected)
+    return model?.director
+      ? model.director.video.seamless.compatible === true
+      : true
+  })
   const skill = useStore(s => s.directorSkill)
   const setSkill = useStore(s => s.setDirectorSkill)
+  const openSkill = (next: DirectorSkill) => setSkill(next)
   const musicSource = useStore(s => s.directorMusicSource)
   const setMusicSource = useStore(s => s.setDirectorMusicSource)
   const songDescription = useStore(s => s.directorSongDescription)
@@ -391,12 +460,28 @@ export function DirectorChat() {
   const shortFilmSetTargetDuration = useStore(s => s.shortFilmSetTargetDuration)
   const shortFilmNarrative = useStore(s => s.shortFilmNarrative)
   const shortFilmSetNarrative = useStore(s => s.shortFilmSetNarrative)
+  const shortFilmVisualStyle = useStore(s => s.shortFilmVisualStyle)
+  const shortFilmSetVisualStyle = useStore(s => s.shortFilmSetVisualStyle)
+  const shortFilmPreserveVisualStyle = useStore(s => s.shortFilmPreserveVisualStyle)
+  const shortFilmSetPreserveVisualStyle = useStore(s => s.shortFilmSetPreserveVisualStyle)
+  const directorCharacterVisualStyle = useStore(s => s.directorCharacterVisualStyle)
+  const setDirectorCharacterVisualStyle = useStore(s => s.setDirectorCharacterVisualStyle)
+  const directorAllowClipText = useStore(s => s.directorAllowClipText)
+  const setDirectorAllowClipText = useStore(s => s.setDirectorAllowClipText)
   const startDirectorPipeline = useStore(s => s.startDirectorPipeline)
-  const pipelinePhase = useStore(s => s.pipelineStatus?.phase)
+  const pipelineStatus = useStore(s => s.pipelineStatus)
+  const pipelinePhase = pipelineStatus?.phase
+  const pipelineIsActive = pipelineStatus?.status === 'running'
+  const usesShotImages = directorWillGenerateShotImages(
+    selectedDirectorShotImageSupport,
+    directorShotImageGuidance,
+    directorHasVisualReferences,
+  )
 
   const isShortFilm = skill === 'short_film'
   const isStoryPath = isShortFilm && shortFilmPath === 'story'
   const isMusicVideo = !!skill && !isShortFilm
+  const isDirectVideo = musicVideoTreatment.generation_mode === 'direct_video'
   // Music Video "Generate a track" setup: the bottom chat IS the song
   // description, and Send kicks off the whole write-song → render → video chain.
   const isMvGenerate = isMusicVideo && musicSource === 'generate'
@@ -407,19 +492,13 @@ export function DirectorChat() {
   const [localBias, setLocalBias] = useState<number | null>(null)
   const [showAnalysisDetails, setShowAnalysisDetails] = useState(false)
   const sliderRef = useRef<number | null>(null)
-  const [chatInput, setChatInput] = useState('')
+  // null means "use the current story description as the untouched draft".
+  // Once the user types (including clearing the field), their explicit draft
+  // wins without needing an effect that synchronously mirrors store state.
+  const [chatInput, setChatInput] = useState<string | null>(null)
+  const resolvedChatInput = chatInput ?? (step === 'style' ? sceneDescription : '')
 
-  // Sync chatInput with store's sceneDescription when entering style step
-  useEffect(() => {
-    if (step === 'style' && sceneDescription && !chatInput) {
-      setChatInput(sceneDescription)
-    }
-  }, [step])
-
-  const refImagePreview = useMemo(
-    () => referenceImage ? URL.createObjectURL(referenceImage) : null,
-    [referenceImage]
-  )
+  const refImagePreview = useObjectUrl(referenceImage)
 
   const speakerSamples = useMemo(() => {
     const samples: Record<string, string[]> = {}
@@ -434,7 +513,7 @@ export function DirectorChat() {
       }
     }
     return samples
-  }, [analysis?.lyrics])
+  }, [analysis])
 
   const currentIndex = STEP_ORDER.indexOf(step)
   const pastStep = (s: DirectorStep) => currentIndex > STEP_ORDER.indexOf(s)
@@ -485,7 +564,7 @@ export function DirectorChat() {
   // analyze phases) and new errors pull the view down to the newest content.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [step, loading, loadingMessage, error, clipPlans.length, clipImages.length, skill])
+  }, [step, loading, loadingMessage, error, planRecovery, clipPlans.length, clipImages.length, skill])
 
   const handleChatSubmit = () => {
     // Music Video "Generate a track": the chat is the song description, and
@@ -494,8 +573,8 @@ export function DirectorChat() {
       if (songDescription.trim() && !loading) generateTrack()
       return
     }
-    if (step === 'style' && chatInput.trim()) {
-      setSceneDescription(chatInput.trim())
+    if (step === 'style' && resolvedChatInput.trim()) {
+      setSceneDescription(resolvedChatInput.trim())
       if (autoMode) {
         // Auto mode: run entire flow server-side via pipeline
         startDirectorPipeline()
@@ -533,6 +612,28 @@ export function DirectorChat() {
     ? isShortFilm ? 'Adjust scene pacing above...' : 'Adjust clip structure above...'
     : 'Reviewing...'
 
+  if (skill === 'comic') {
+    return (
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <BookOpen size={14} className="text-accent-blue" />
+            <span className="text-xs font-medium text-text-primary">Comic Director</span>
+          </div>
+          <button
+            onClick={reset}
+            className="flex items-center gap-0.5 text-[10px] text-text-muted transition-colors hover:text-text-primary"
+          >
+            <RotateCcw size={10} /> Start Over
+          </button>
+        </div>
+        <Suspense fallback={<div className="flex items-center justify-center gap-2 py-8 text-xs text-text-muted"><Loader2 size={14} className="animate-spin text-accent-blue" /> Opening Comic Director…</div>}>
+          <ComicDirectorPanel createCompleteComic />
+        </Suspense>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Message list */}
@@ -560,11 +661,11 @@ export function DirectorChat() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => useStore.getState().setDashboardOpen(true)}
+              onClick={() => useStore.getState().setMediaFilter('runs')}
               className="text-[10px] text-accent-blue hover:text-accent-blue/80 flex items-center gap-0.5 transition-colors"
-              title="Open pipeline dashboard"
+              title="Open Workspaces to inspect prompts, references and the generation queue"
             >
-              Dashboard
+              Workspaces
             </button>
             {(skill || step !== 'upload') && (
               <button
@@ -581,7 +682,7 @@ export function DirectorChat() {
         {/* Welcome message */}
         <SystemBubble>
           <p className="text-xs text-text-secondary">
-            Welcome to Maestro Director. Choose a skill to get started.
+            Welcome to HocusPocus Director. Choose a skill to get started.
           </p>
         </SystemBubble>
 
@@ -595,7 +696,7 @@ export function DirectorChat() {
 
         {/* Skill selector */}
         {!skill ? (
-          <SkillSelector onSelect={setSkill} />
+          <SkillSelector onSelect={openSkill} />
         ) : (
           <UserBubble>
             <div className="flex items-center gap-1.5 text-xs text-text-primary">
@@ -629,12 +730,12 @@ export function DirectorChat() {
         {/* Upload step — hidden for story path and before short film path is chosen */}
         {skill && (!isShortFilm || shortFilmPath === 'audio') && (atStep('upload') || atStep('analyze') || pastStep('analyze')) && (
           <>
-            {!audioFile && !pastStep('analyze') ? (
+            {!audioName && !pastStep('analyze') ? (
               <SystemBubble>
                 <p className="text-xs text-text-secondary mb-2">
                   {isShortFilm
-                    ? 'Upload a reference photo of your characters and dialogue audio to get started.'
-                    : 'Add a reference photo (optional), then upload a track or generate one.'}
+                    ? 'Upload reference images or artwork for your characters and dialogue audio to get started.'
+                    : 'Add a reference image (optional), then upload a track or generate one.'}
                 </p>
                 <div className="space-y-3">
                   <ReferenceImageUpload
@@ -643,7 +744,7 @@ export function DirectorChat() {
                     setReferenceImage={setReferenceImage}
                   />
                   {<AdditionalRefsSection />}
-                  {isShortFilm && referenceImage && (
+                  {isShortFilm && (
                     <CharacterNaming
                       characters={shortFilmCharacters}
                       setCharacters={shortFilmSetCharacters}
@@ -678,7 +779,7 @@ export function DirectorChat() {
                       handleFile={handleFile}
                       loading={loading && atStep('analyze')}
                       loadingMessage={loadingMessage}
-                      audioFile={audioFile}
+                      audioName={audioName}
                       isShortFilm={isShortFilm}
                     />
                   )}
@@ -702,7 +803,7 @@ export function DirectorChat() {
                   )}
                 </div>
               </SystemBubble>
-            ) : audioFile && (atStep('analyze') || atStep('upload')) ? (
+            ) : audioName && (atStep('analyze') || atStep('upload')) ? (
               <SystemBubble>
                 <div className="space-y-3">
                   {/* Keep the reference selections VISIBLE during analysis —
@@ -724,16 +825,16 @@ export function DirectorChat() {
                     handleFile={handleFile}
                     loading={loading}
                     loadingMessage={loadingMessage}
-                    audioFile={audioFile}
+                    audioName={audioName}
                     isShortFilm={isShortFilm}
                   />
                 </div>
               </SystemBubble>
-            ) : audioFile && pastStep('analyze') ? (
+            ) : audioName && pastStep('analyze') ? (
               <UserBubble>
                 <div className="flex items-center gap-2 text-xs text-text-primary">
                   {isShortFilm ? <Film size={12} className="text-text-muted" /> : <Music size={12} className="text-text-muted" />}
-                  <span className="truncate">{audioFile.name}</span>
+                  <span className="truncate">{audioName}</span>
                   {referenceImage && refImagePreview && (
                     <img src={refImagePreview} alt="Ref" className="w-8 h-8 object-cover rounded border border-border ml-auto" />
                   )}
@@ -750,7 +851,6 @@ export function DirectorChat() {
               analysis={analysis}
               showDetails={showAnalysisDetails}
               setShowDetails={setShowAnalysisDetails}
-              speakerMappings={speakerMappings}
               isShortFilm={isShortFilm}
             />
             {/* Allow adding/changing reference photo after analysis */}
@@ -766,13 +866,6 @@ export function DirectorChat() {
               </div>
             )}
           </SystemBubble>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="text-[11px] text-red-400 bg-red-500/10 rounded px-2 py-1.5 border border-red-500/20">
-            {error}
-          </div>
         )}
 
         {/* Structure step — hidden for story path */}
@@ -792,12 +885,15 @@ export function DirectorChat() {
                 confirmStructure={confirmStructure}
                 isActive={atStep('structure')}
                 isShortFilm={isShortFilm}
+                isMusicVideo={isMusicVideo}
+                pacingProfile={pacingProfile}
+                setPacingProfile={setPacingProfile}
               />
             </SystemBubble>
             {pastStep('structure') && (
               <UserBubble>
                 <div className="flex items-center gap-1.5 text-xs text-text-primary">
-                  <Check size={12} className="text-green-400" />
+                  <Check size={12} className="text-indicator-success" />
                   <span>{plannedClips.length} {isShortFilm ? 'scenes' : 'clips'} confirmed</span>
                   <span className="text-text-muted">({formatTime(totalClipDuration)})</span>
                 </div>
@@ -809,11 +905,20 @@ export function DirectorChat() {
         {/* Style step */}
         {(atStep('style') || pastStep('style')) && (
           <>
+            {atStep('style') && <SystemBubble>
+              <label className="block">
+                <span className="text-[10px] text-text-muted">{t('spoken.label')}</span>
+                <select className="mt-1 w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
+                  <SpokenLanguageOptions />
+                </select>
+                <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">{t('spoken.hint')}</span>
+              </label>
+            </SystemBubble>}
             {/* Story path: show reference image + characters + duration here (since no upload step) */}
             {isStoryPath && atStep('style') && (
               <SystemBubble>
                 <p className="text-xs text-text-secondary mb-2">
-                  Set up your short film. Upload a reference photo, name your characters, and set the target duration.
+                  Set up your short film. Add reference images or artwork, name your characters, and set the target duration.
                 </p>
                 <div className="space-y-3">
                   <ReferenceImageUpload
@@ -822,12 +927,10 @@ export function DirectorChat() {
                     setReferenceImage={setReferenceImage}
                   />
                   {<AdditionalRefsSection />}
-                  {referenceImage && (
-                    <CharacterNaming
-                      characters={shortFilmCharacters}
-                      setCharacters={shortFilmSetCharacters}
-                    />
-                  )}
+                  <CharacterNaming
+                    characters={shortFilmCharacters}
+                    setCharacters={shortFilmSetCharacters}
+                  />
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[10px] text-text-muted flex items-center gap-1">
@@ -863,6 +966,62 @@ export function DirectorChat() {
                       </p>
                     </div>
                   </label>
+                  <label className="flex items-start gap-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={shortFilmPreserveVisualStyle}
+                      onChange={e => shortFilmSetPreserveVisualStyle(e.target.checked)}
+                      className="mt-0.5 accent-purple-400"
+                    />
+                    <div>
+                      <span className="text-[10px] text-purple-200">Preserve Story visual style</span>
+                      <p className="text-[9px] text-text-muted leading-tight">
+                        Locks the authored medium and reference artwork across start frames, keyframes and video.
+                      </p>
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] text-text-muted">Canonical visual style</span>
+                    <AutoResizeTextarea
+                      value={shortFilmVisualStyle}
+                      onChange={e => shortFilmSetVisualStyle(e.target.value)}
+                      disabled={!shortFilmPreserveVisualStyle}
+                      rows={3}
+                      className="mt-1 w-full resize-none rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] leading-relaxed text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
+                      placeholder="e.g. 2D anime, clean cel shading, restrained linework, watercolor backgrounds"
+                    />
+                    <p className="mt-1 text-[9px] text-text-muted">
+                      Loaded from the Story world bible. You can edit it for this film without changing the master Story.
+                    </p>
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] text-text-muted">Character rendering style</span>
+                    <AutoResizeTextarea
+                      value={directorCharacterVisualStyle}
+                      onChange={e => setDirectorCharacterVisualStyle(e.target.value)}
+                      disabled={!shortFilmPreserveVisualStyle}
+                      rows={3}
+                      className="mt-1 w-full resize-none rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] leading-relaxed text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
+                      placeholder="e.g. realistic people, handmade claymation, or clean 2D anime cel shading"
+                    />
+                    <p className="mt-1 text-[9px] text-text-muted">
+                      Applied to every visible person independently from the world art direction.
+                    </p>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={directorAllowClipText}
+                      onChange={e => setDirectorAllowClipText(e.target.checked)}
+                      className="mt-0.5 accent-accent-blue"
+                    />
+                    <div>
+                      <span className="text-[10px] text-text-primary">{t('clipText.label')}</span>
+                      <p className="text-[9px] text-text-muted leading-tight">
+                        {t('clipText.hint')}
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </SystemBubble>
             )}
@@ -872,6 +1031,21 @@ export function DirectorChat() {
                   <img src={refImagePreview} alt="Ref" className="w-8 h-8 object-cover rounded border border-border" />
                   <span>{shortFilmTargetDuration}s film</span>
                 </div>
+              </UserBubble>
+            )}
+            {isMusicVideo && atStep('style') && (
+              <SystemBubble>
+                <MusicVideoTreatmentEditor
+                  treatment={musicVideoTreatment}
+                  onChange={setMusicVideoTreatment}
+                />
+              </SystemBubble>
+            )}
+            {isMusicVideo && pastStep('style') && (
+              <UserBubble>
+                <p className="text-[10px] text-text-secondary">
+                  {isDirectVideo ? t('directVideo.mode') : `${musicVideoTreatment.mode} · ${musicVideoTreatment.performer_presence}% performance · ${musicVideoTreatment.recurring_sets.length} recurring sets`}
+                </p>
               </UserBubble>
             )}
             <SystemBubble>
@@ -902,7 +1076,11 @@ export function DirectorChat() {
               <span className="text-xs text-text-muted">
                 {pipelinePhase === 'polishing_prompts'
                   ? 'Polishing prompts (3rd pass)...'
-                  : isStoryPath ? 'Planning scenes and writing prompts...' : isShortFilm ? 'Writing scene prompts...' : 'Writing image prompts...'}
+                  : isStoryPath
+                    ? `Planning scenes and writing ${usesShotImages ? 'prompts' : 'video prompts'}...`
+                    : isShortFilm
+                      ? `Writing ${usesShotImages ? 'scene prompts' : 'video prompts'}...`
+                      : `Writing ${usesShotImages ? 'image and video prompts' : 'video prompts'}...`}
               </span>
             </div>
             {pipelinePhase !== 'polishing_prompts' && <LlmThinkingStream stage="plan" />}
@@ -911,11 +1089,11 @@ export function DirectorChat() {
 
         {/* Completed planning streams stay in the chat history */}
         {(pastStep('plan') || (atStep('plan') && !loading)) && (
-          <LlmLogStage stage="plan" label={isShortFilm ? 'Scene planning' : 'Image prompts'} />
+          <LlmLogStage stage="plan" label={isShortFilm ? 'Scene planning' : usesShotImages ? 'Image and video prompts' : 'Video planning'} />
         )}
 
         {/* Review step (image prompts) */}
-        {(atStep('review') || pastStep('review')) && (
+        {usesShotImages && (atStep('review') || pastStep('review')) && (
           <SystemBubble>
             <ImagePromptsReview
               clipPlans={clipPlans}
@@ -923,7 +1101,6 @@ export function DirectorChat() {
               speakerMappings={speakerMappings}
               editClipPlan={editClipPlan}
               planPrompts={isStoryPath ? shortFilmPlanFromStory : isShortFilm ? shortFilmPlanPrompts : planPrompts}
-              planVideoPrompts={isShortFilm ? shortFilmPlanVideoPrompts : planVideoPrompts}
               generateStartImages={generateStartImages}
               loading={loading}
               isActive={atStep('review')}
@@ -933,13 +1110,12 @@ export function DirectorChat() {
         )}
 
         {/* Image generation step */}
-        {(atStep('generate_images') || pastStep('generate_images')) && (
+        {usesShotImages && (atStep('generate_images') || pastStep('generate_images')) && (
           <SystemBubble>
             <ImageGenView
               loading={loading}
               imageGenProgress={imageGenProgress}
               clipImages={clipImages}
-              planVideoPrompts={planVideoPrompts}
             />
           </SystemBubble>
         )}
@@ -982,10 +1158,29 @@ export function DirectorChat() {
               // auto generation. The label flips to "Auto Generating…"
               // when the pipeline is what's running, so it's clear
               // *why* the button is disabled.
-              isGenerating={isGenerating || pipelinePhase !== undefined}
-              isAutoGenerating={autoMode && pipelinePhase !== undefined}
+              isGenerating={isGenerating || pipelineIsActive}
+              isAutoGenerating={autoMode && pipelineIsActive}
+              generationError={error}
             />
           </SystemBubble>
+        )}
+
+        {/* Keep failures adjacent to the activity that produced them. Video
+            generation renders its error directly below the Generate status
+            control; earlier-stage failures land here, after the current step,
+            instead of appearing near the first line of the conversation. */}
+        {planRecovery && !atStep('review_video') && (
+          <DirectorPlanRecoveryCard
+            job={planRecovery}
+            loading={loading}
+            onResume={resumePlan}
+          />
+        )}
+        {error && !planRecovery && !atStep('review_video') && (
+          <div role="alert" className="text-[11px] text-red-300 bg-red-500/10 rounded px-2 py-2 border border-red-500/30 flex items-start gap-1.5">
+            <X size={12} className="mt-0.5 shrink-0" />
+            <span><strong className="font-semibold">Error:</strong> {error}</span>
+          </div>
         )}
 
         <div ref={messagesEndRef} />
@@ -996,14 +1191,20 @@ export function DirectorChat() {
         {skill && (
           <div className="space-y-2">
             <div className="flex items-center gap-4">
-              <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Each clip's end frame uses the next clip's start image for smooth transitions">
+              <label
+                className={`flex items-center gap-1.5 select-none ${selectedVideoSupportsSeamless ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                title={selectedVideoSupportsSeamless
+                  ? "Each clip's end frame uses the next clip's start image for smooth transitions"
+                  : 'The selected video model renders independent native-duration shots'}
+              >
                 <input
                   type="checkbox"
                   checked={seamless}
+                  disabled={!selectedVideoSupportsSeamless || isDirectVideo}
                   onChange={e => setSeamless(e.target.checked)}
                   className="accent-accent-blue w-3 h-3"
                 />
-                <span className="text-[10px] text-text-secondary">Seamless</span>
+                <span className={`text-[10px] ${isDirectVideo ? 'text-text-muted/50' : 'text-text-secondary'}`}>Seamless</span>
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Skip all review steps and generate automatically">
                 <input
@@ -1015,7 +1216,7 @@ export function DirectorChat() {
                 <span className={`text-[10px] ${autoMode ? 'text-red-400' : 'text-text-secondary'}`}>Auto</span>
               </label>
             </div>
-            {audioFile && (
+            {audioName && (
               <div className="flex items-center gap-2">
                 <AudioScaleSlider />
                 <div className="flex gap-2 text-[8px] text-text-muted">
@@ -1028,8 +1229,14 @@ export function DirectorChat() {
           </div>
         )}
         <div className="flex items-end gap-2">
-          <textarea
-            value={mvGenerateSetup ? songDescription : chatInput}
+          {/* Auto-grows with content (issue #11). The composer bar is the
+              last child of the panel's flex column, so extra height is
+              taken from the messages area above — the box visually
+              expands UPWARD from its bottom-anchored position. Rests at
+              2 rows (min 56px), caps at 240px (~11 lines), scrolls with
+              a visible thumb past that. */}
+          <AutoResizeTextarea
+            value={mvGenerateSetup ? songDescription : resolvedChatInput}
             onChange={e => {
               const v = e.target.value
               if (mvGenerateSetup) { setSongDescription(v); return }
@@ -1045,11 +1252,13 @@ export function DirectorChat() {
             placeholder={chatInputPlaceholder}
             disabled={!chatInputEnabled}
             rows={2}
-            className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-accent-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            minHeight={56}
+            maxHeight={240}
+            className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-accent-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed scrollbar-visible"
           />
           <button
             onClick={handleChatSubmit}
-            disabled={!chatInputEnabled || !(mvGenerateSetup ? songDescription : chatInput).trim()}
+            disabled={!chatInputEnabled || !(mvGenerateSetup ? songDescription : resolvedChatInput).trim()}
             className="p-2 rounded-lg bg-accent-blue text-white hover:bg-accent-blue-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
           >
             {loading && (step === 'style' || isMusicVideo) ? (
@@ -1065,6 +1274,124 @@ export function DirectorChat() {
 }
 
 // --- Sub-components ---
+
+function MusicVideoTreatmentEditor({
+  treatment,
+  onChange,
+}: {
+  treatment: MusicVideoTreatment
+  onChange: (partial: Partial<MusicVideoTreatment>) => void
+}) {
+  const { t } = useUiTranslation('director')
+  const inputClass = 'w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] text-text-primary focus:border-accent-blue focus:outline-none'
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary">
+          <Sparkles size={12} className="text-purple-300" /> Music-video treatment
+        </div>
+        <p className="mt-1 text-[9px] leading-relaxed text-text-muted">
+          Defines the visual grammar before shot planning. Choruses deliberately return to a signature setup instead of turning every lyric into an unrelated scene.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-bg-tertiary/60 p-2 space-y-2">
+        <label className="block text-[9px] text-text-muted">{t('directVideo.generationMode')}
+          <select
+            value={treatment.generation_mode}
+            onChange={event => onChange({ generation_mode: event.target.value as MusicVideoTreatment['generation_mode'] })}
+            className={`${inputClass} mt-1`}
+          >
+            <option value="image_guided">{t('directVideo.imageGuided')}</option>
+            <option value="direct_video">{t('directVideo.option')}</option>
+          </select>
+        </label>
+        {treatment.generation_mode === 'direct_video' && (
+          <div className="space-y-2 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 p-2">
+            <div>
+              <p className="text-[10px] font-medium text-fuchsia-200">{t('directVideo.pure')}</p>
+              <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
+                {t('directVideo.masterHint')}
+              </p>
+            </div>
+            <label className="block text-[9px] text-text-muted">{t('directVideo.masterLabel')}
+              <textarea
+                value={treatment.direct_video_master_prompt}
+                rows={8}
+                onChange={event => onChange({ direct_video_master_prompt: event.target.value })}
+                className={`${inputClass} mt-1 resize-y leading-relaxed`}
+                placeholder={t('directVideo.masterPlaceholder')}
+              />
+            </label>
+            <p className="text-[9px] leading-relaxed text-amber-200/80">
+              {t('directVideo.ignoreLoaded')}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[9px] text-text-muted">Mode
+          <select value={treatment.mode} onChange={event => onChange({ mode: event.target.value as MusicVideoTreatment['mode'] })} className={`${inputClass} mt-1`}>
+            <option value="hybrid">Hybrid</option>
+            <option value="performance">Performance</option>
+            <option value="narrative">Narrative</option>
+            <option value="abstract">Abstract / visualizer</option>
+          </select>
+        </label>
+        <label className="text-[9px] text-text-muted">Lip-sync
+          <select value={treatment.lip_sync} onChange={event => onChange({ lip_sync: event.target.value as MusicVideoTreatment['lip_sync'] })} className={`${inputClass} mt-1`}>
+            <option value="frequent">Frequent</option>
+            <option value="occasional">Occasional</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+      </div>
+
+      <label className="block text-[9px] text-text-muted">
+        <span className="flex justify-between"><span>Artist on screen</span><b className="text-text-secondary">{treatment.performer_presence}%</b></span>
+        <input type="range" min={0} max={100} step={5} value={treatment.performer_presence}
+          onChange={event => onChange({ performer_presence: Number(event.target.value) })}
+          className="mt-1 w-full accent-accent-blue" />
+      </label>
+
+      <label className="block text-[9px] text-text-muted">Recurring sets · one per line
+        <textarea value={treatment.recurring_sets.join('\n')} rows={3}
+          onChange={event => onChange({ recurring_sets: event.target.value.split('\n').map(item => item.trim()).filter(Boolean).slice(0, 5) })}
+          className={`${inputClass} mt-1 resize-none`} placeholder={'Main performance set\nStory world\nBridge contrast set'} />
+      </label>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[9px] text-text-muted">Wardrobe lock
+          <input value={treatment.wardrobe} onChange={event => onChange({ wardrobe: event.target.value })} className={`${inputClass} mt-1`} placeholder="Signature wardrobe" />
+        </label>
+        <label className="text-[9px] text-text-muted">Palette / texture
+          <input value={treatment.palette} onChange={event => onChange({ palette: event.target.value })} className={`${inputClass} mt-1`} placeholder="Cyan, amber, 35mm grain" />
+        </label>
+      </div>
+
+      <label className="block text-[9px] text-text-muted">Camera language
+        <input value={treatment.camera_language} onChange={event => onChange({ camera_language: event.target.value })} className={`${inputClass} mt-1`} />
+      </label>
+      <label className="block text-[9px] text-text-muted">Recurring visual motif
+        <input value={treatment.recurring_motif} onChange={event => onChange({ recurring_motif: event.target.value })} className={`${inputClass} mt-1`} placeholder="A mechanical seed pulses on musical accents" />
+      </label>
+      <label className="block text-[9px] text-text-muted">Chorus signature
+        <textarea value={treatment.chorus_signature} rows={2} onChange={event => onChange({ chorus_signature: event.target.value })} className={`${inputClass} mt-1 resize-none`} />
+      </label>
+
+      <label className="block text-[9px] text-text-muted">
+        <span className="flex justify-between"><span>Surrealism</span><b className="text-text-secondary">{treatment.surrealism}%</b></span>
+        <input type="range" min={0} max={100} step={5} value={treatment.surrealism}
+          onChange={event => onChange({ surrealism: Number(event.target.value) })}
+          className="mt-1 w-full accent-purple-400" />
+      </label>
+      <label className="block text-[9px] text-text-muted">Forbidden elements
+        <input value={treatment.forbidden_elements} onChange={event => onChange({ forbidden_elements: event.target.value })} className={`${inputClass} mt-1`} placeholder="No unrelated locations, no costume changes…" />
+      </label>
+    </div>
+  )
+}
 
 function CharacterNaming({
   characters, setCharacters,
@@ -1126,7 +1453,7 @@ function CharacterNaming({
         + Add character
       </button>
       <span className="text-[10px] text-text-muted block mt-1">
-        Name the people visible in the reference photo so the AI can identify them.
+        Name the characters visible in the reference image so the AI can identify them.
       </span>
     </div>
   )
@@ -1167,18 +1494,39 @@ function DirectorAspectRatioSelector() {
 
 function DirectorResolutionSelector() {
   const resolution = useStore(s => s.directorResolution)
+  const aspectRatio = useStore(s => s.directorAspectRatio)
   const setResolution = useStore(s => s.setDirectorResolution)
-  // Just the resolution labels — the previous Fast/Faster/Balanced/
-  // High Quality descriptors were inaccurate (480p was labeled "Fast"
-  // but 540p was "Faster", which is the wrong direction) and added
-  // visual noise without adding info a user couldn't infer from the
-  // resolution number itself.
-  const presets = [
-    { value: '480p' as const, label: '480p' },
-    { value: '540p' as const, label: '540p' },
-    { value: '720p' as const, label: '720p' },
-    { value: '1080p' as const, label: '1080p' },
-  ]
+  const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
+  const totalVramGb = useStore(s => s.systemStats?.gpu.vram_total_gb ?? 0)
+  const [options, setOptions] = useState<ModelOptions | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchModelOptions(videoModel)
+      .then(value => { if (!cancelled) setOptions(value) })
+      .catch(() => { if (!cancelled) setOptions(null) })
+    return () => { cancelled = true }
+  }, [videoModel])
+
+  const fallbackOrder = ['480p', '540p', '720p', '1080p'] as const
+  const modelPresetOrder = (options?.resolution_preset_order || []).filter(
+    value => value !== 'auto' && value !== '768p',
+  )
+  const presetOrder = modelPresetOrder.length > 0
+    ? modelPresetOrder
+    : [...fallbackOrder]
+  const presets = presetOrder.map(value => ({
+    value,
+    label: options?.resolution_presets?.[value]?.label || value,
+  }))
+  const resolvedResolution = resolveResolution(options, resolution, aspectRatio)
+  const recommendation = recommendedWindowProfile(
+    options?.director_memory_policy || options?.sliding_window_memory_policy,
+    resolvedResolution,
+    totalVramGb,
+  )
+  const fps = options?.fps || 24
+  const selectedConfig = options?.resolution_presets?.[resolution]
   return (
     <div>
       <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Resolution</label>
@@ -1197,6 +1545,22 @@ function DirectorResolutionSelector() {
           </button>
         ))}
       </div>
+      <div className="mt-1 text-[10px] text-text-muted">
+        {resolvedResolution}
+        {recommendation?.frames != null && totalVramGb > 0 && (
+          <> &middot; Auto max shot {formatSeconds(recommendation.frames / fps)} on {totalVramGb.toFixed(0)} GB</>
+        )}
+      </div>
+      {recommendation?.supported === false && (
+        <div className="mt-1 text-[10px] text-amber-400">
+          Auto recommends {recommendation.fallbackResolution || 'a lower resolution'} on this GPU. An Advanced manual shot-length override is experimental.
+        </div>
+      )}
+      {selectedConfig?.hint && (
+        <div className={`mt-1 text-[10px] ${selectedConfig.experimental ? 'text-amber-400' : 'text-text-muted'}`}>
+          {selectedConfig.hint}
+        </div>
+      )}
     </div>
   )
 }
@@ -1205,6 +1569,7 @@ function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) => void 
   const skills = [
     { id: 'music_video' as DirectorSkill, label: 'Music Video', desc: 'Automated music video from audio', icon: Music, active: true },
     { id: 'short_film' as DirectorSkill, label: 'Short Film', desc: 'Dialogue-driven scenes from audio', icon: Film, active: true },
+    { id: 'comic' as DirectorSkill, label: 'Comic', desc: 'Plan pages, panels, art and dialogue', icon: BookOpen, active: true },
     { id: 'music_video' as DirectorSkill, label: 'Video Podcast', desc: 'Coming Soon', icon: Mic, active: false },
     { id: 'music_video' as DirectorSkill, label: 'Viral Video', desc: 'Coming Soon', icon: Sparkles, active: false },
   ]
@@ -1259,7 +1624,7 @@ function PathChooser({ onSelect }: { onSelect: (path: ShortFilmPath) => void }) 
 }
 
 function UploadZone({
-  dragOver, setDragOver, handleDrop, handleFile, loading, loadingMessage, audioFile, isShortFilm,
+  dragOver, setDragOver, handleDrop, handleFile, loading, loadingMessage, audioName, isShortFilm,
 }: {
   dragOver: boolean
   setDragOver: (v: boolean) => void
@@ -1270,7 +1635,7 @@ function UploadZone({
    *  to the default ("Analyzing audio..." / "Transcribing dialogue...")
    *  when null. */
   loadingMessage: string | null
-  audioFile: File | null
+  audioName: string | null
   isShortFilm?: boolean
 }) {
   return (
@@ -1292,10 +1657,10 @@ function UploadZone({
             {loadingMessage || (isShortFilm ? 'Transcribing dialogue...' : 'Analyzing audio...')}
           </span>
         </div>
-      ) : audioFile ? (
+      ) : audioName ? (
         <div className="flex flex-col items-center gap-1">
           <Music size={16} className="text-text-muted" />
-          <span className="text-xs text-text-secondary truncate max-w-full">{audioFile.name}</span>
+          <span className="text-xs text-text-secondary truncate max-w-full">{audioName}</span>
         </div>
       ) : (
         <label className="cursor-pointer flex flex-col items-center gap-1.5">
@@ -1357,7 +1722,7 @@ function ReferenceImageUpload({
               />
             </label>
             <div className="flex-1 min-w-0">
-              <span className="text-[10px] text-text-muted">Reference photo</span>
+              <span className="text-[10px] text-text-muted">Reference image</span>
             </div>
             <button
               onClick={() => setReferenceImage(null)}
@@ -1370,7 +1735,7 @@ function ReferenceImageUpload({
         ) : (
           <label className="cursor-pointer flex items-center gap-2 border border-dashed border-border rounded px-2 py-1.5 hover:border-accent-blue transition-colors">
             <ImageIcon size={12} className="text-text-muted" />
-            <span className="text-[10px] text-text-muted">Add reference photo</span>
+            <span className="text-[10px] text-text-muted">Add reference image</span>
             <input
               type="file"
               accept={IMAGE_ACCEPT}
@@ -1404,7 +1769,7 @@ function ReferenceImageUpload({
               src={refImagePreview}
               alt="Reference"
               className="w-full h-24 object-cover rounded-lg border border-border hover:border-accent-blue transition-colors"
-              title="Click to change photo"
+              title="Click to change image"
             />
             <input
               type="file"
@@ -1421,7 +1786,7 @@ function ReferenceImageUpload({
             <X size={12} className="text-text-muted" />
           </button>
           <span className="absolute bottom-1.5 left-1.5 text-[9px] text-white/80 bg-black/50 px-1.5 py-0.5 rounded">
-            Reference photo &middot; click to change
+            Reference image &middot; click to change
           </span>
         </div>
       ) : (
@@ -1435,7 +1800,7 @@ function ReferenceImageUpload({
         >
           <div className="flex flex-col items-center gap-1.5">
             <ImageIcon size={20} className="text-accent-blue/60" />
-            <span className="text-xs text-text-secondary">Drop reference photo or click to upload</span>
+            <span className="text-xs text-text-secondary">Drop a reference image or artwork, or click to upload</span>
             <span className="text-[10px] text-text-muted">Creates start images for each clip</span>
           </div>
           <input
@@ -1470,6 +1835,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
   placeholder: string
 }) {
   const [dragOver, setDragOver] = useState(false)
+  const previewUrl = useObjectUrl(file)
 
   return (
     <div
@@ -1487,7 +1853,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
       }`}
     >
       <div className="relative flex-shrink-0">
-        <img src={URL.createObjectURL(file)} alt={`Ref ${index+1}`}
+        <img src={previewUrl || ''} alt={`Ref ${index+1}`}
           className="w-[60px] h-[60px] object-cover rounded border border-border pointer-events-none" />
         <button onClick={() => onRemove(index)}
           className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -1521,19 +1887,55 @@ function AdditionalRefsSection() {
   const removeLocRef = useStore(s => s.directorRemoveLocationRef)
   const setLocLabel = useStore(s => s.directorSetLocationRefLabel)
   const reorderLocRefs = useStore(s => s.directorReorderLocationRefs)
+  const referenceImage = useStore(s => s.directorReferenceImage)
+  const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
+  const h3VideoRefs = useStore(s => s.directorH3VideoRefs)
+  const h3AudioRefs = useStore(s => s.directorH3AudioRefs)
+  const addH3VideoRef = useStore(s => s.directorAddH3VideoRef)
+  const removeH3VideoRef = useStore(s => s.directorRemoveH3VideoRef)
+  const addH3AudioRef = useStore(s => s.directorAddH3AudioRef)
+  const removeH3AudioRef = useStore(s => s.directorRemoveH3AudioRef)
   const voiceRef = useStore(s => s.directorVoiceRef)
   const setVoiceRef = useStore(s => s.setDirectorVoiceRef)
   const identityScale = useStore(s => s.directorIdentityGuidanceScale)
   const setIdentityScale = useStore(s => s.setDirectorIdentityGuidanceScale)
-  const [expanded, setExpanded] = useState(charRefs.length > 0 || locRefs.length > 0 || voiceRef !== null)
+  const clipPlans = useStore(s => s.directorClipPlans)
+  const isDirectVideo = useStore(
+    s => s.directorMusicVideoTreatment.generation_mode === 'direct_video'
+  )
+  const h3ReferenceMode = useStore(s => s.savedParamsPerMode.video?.h3_reference_mode || 'first_frame')
+  const setH3ReferenceMode = useStore(s => s.setDirectorH3ReferenceMode)
+  const isH3 = videoModel.startsWith('minimax_h3')
+  const h3UserRefCount = (referenceImage ? 1 : 0) + charRefs.length + (locRefs.length ? 1 : 0) + h3VideoRefs.length + h3AudioRefs.length
+  const voiceReferenceEnabled = useStore(s => s.servicesConfig?.voice_reference_enabled ?? false)
+  const selectedVideoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
+  const supportsVoiceReference = useStore(s => (
+    s.models.find(model => model.model_type === selectedVideoModel)
+      ?.director?.supports_voice_reference ?? false
+  ))
+  const voiceReferenceMode = useStore(s => (
+    s.models.find(model => model.model_type === selectedVideoModel)
+      ?.director?.voice_reference_mode ?? 'none'
+  ))
+  const [expanded, setExpanded] = useState(
+    charRefs.length > 0 || locRefs.length > 0 || h3VideoRefs.length > 0
+      || h3AudioRefs.length > 0 || voiceRef !== null
+  )
 
   const handleFiles = useCallback((files: FileList | null, type: 'char' | 'loc') => {
     if (!files) return
     const add = type === 'char' ? addCharRef : addLocRef
-    Array.from(files).forEach(f => { if (f.type.startsWith('image/')) add(f) })
-  }, [addCharRef, addLocRef])
+    const imageCount = charRefs.length + (locRefs.length ? 1 : 0) + (referenceImage ? 1 : 0)
+    const shouldLimit = isH3 && h3ReferenceMode === 'references' && type === 'char'
+    const available = shouldLimit ? Math.max(0, Math.min(8 - imageCount, 11 - h3UserRefCount)) : files.length
+    Array.from(files).slice(0, available).forEach(f => { if (f.type.startsWith('image/')) add(f) })
+  }, [addCharRef, addLocRef, charRefs.length, locRefs.length, referenceImage, isH3, h3ReferenceMode, h3UserRefCount])
 
-  const totalRefs = charRefs.length + locRefs.length + (voiceRef ? 1 : 0)
+  const nativeVoiceReference = voiceReferenceMode === 'native_reference'
+  const showVoiceReference = supportsVoiceReference
+    && (nativeVoiceReference || voiceReferenceEnabled)
+  const totalRefs = charRefs.length + locRefs.length + h3VideoRefs.length
+    + h3AudioRefs.length + (showVoiceReference && voiceRef ? 1 : 0)
 
   return (
     <div className="mt-1">
@@ -1594,8 +1996,9 @@ function AdditionalRefsSection() {
               <p className="text-[9px] text-text-muted italic">Scene/environment reference images</p>
             )}
           </div>
-          {/* Voice Reference (ID-LoRA) — gated by Services toggle */}
-          {useStore.getState().servicesConfig?.voice_reference_enabled && <div>
+          {/* LTX uses an ID-LoRA; H3 Omni maps the sample as a native voice
+              reference in each shot's Ref2VA manifest. */}
+          {showVoiceReference && <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] text-text-secondary"><Mic size={9} className="inline mr-0.5" />Voice ref</span>
               {!voiceRef ? (
@@ -1614,17 +2017,103 @@ function AdditionalRefsSection() {
                   <Mic size={10} className="text-accent-blue shrink-0" />
                   <span className="text-[9px] text-text-secondary truncate">{voiceRef.name}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                {!nativeVoiceReference && <div className="flex items-center gap-1.5">
                   <span className="text-[9px] text-text-muted whitespace-nowrap">Identity scale</span>
                   <input type="range" min={0} max={10} step={0.5} value={identityScale}
                     onChange={e => setIdentityScale(parseFloat(e.target.value))}
                     className="flex-1 h-1 accent-accent-blue" />
                   <span className="text-[9px] text-text-muted w-5 text-right">{identityScale}</span>
-                </div>
+                </div>}
               </div>
             ) : (
-              <p className="text-[9px] text-text-muted italic">~5 sec voice sample for consistent voice across clips</p>
+              <p className="text-[9px] text-text-muted italic">
+                {nativeVoiceReference
+                  ? 'Voice sample used by H3 Omni for the primary speaking character'
+                  : '~5 sec voice sample for consistent voice across clips'}
+              </p>
             )}
+          </div>}
+          {isH3 && !isDirectVideo && <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-2 space-y-2">
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-medium text-cyan-200" htmlFor="director-h3-reference-mode">
+                  H3 conditioning
+                </label>
+                {h3ReferenceMode === 'references' && <span className="text-[9px] text-text-muted">{h3UserRefCount}/11 per shot</span>}
+              </div>
+              <select
+                id="director-h3-reference-mode"
+                value={h3ReferenceMode}
+                onChange={event => setH3ReferenceMode(event.target.value as 'first_frame' | 'references')}
+                className="mt-1 w-full rounded border border-cyan-500/25 bg-bg-tertiary px-1.5 py-1 text-[10px] text-text-primary focus:outline-none focus:border-cyan-400"
+              >
+                <option value="first_frame">FL2VA · exact generated frame</option>
+                <option value="references">Ref2VA · character, location and media refs</option>
+              </select>
+              <p className="text-[9px] text-text-muted leading-tight mt-0.5">
+                {h3ReferenceMode === 'first_frame'
+                  ? 'Only the approved generated frame is sent to H3. Character and location images above still guide frame creation, but cannot conflict with the video model.'
+                  : 'The generated shot frame plus character refs and exactly one matched location are sent. Ref2VA composes a new opening rather than preserving that frame exactly.'}
+              </p>
+            </div>
+            {h3ReferenceMode === 'references' && <><div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-text-secondary"><Film size={9} className="inline mr-0.5" />Video refs ({h3VideoRefs.length}/3)</span>
+                {h3VideoRefs.length < 3 && h3UserRefCount < 11 && <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
+                  + Add
+                  <input type="file" accept={H3_VIDEO_ACCEPT} multiple className="hidden"
+                    onChange={e => {
+                      Array.from(e.target.files || []).slice(0, Math.min(3 - h3VideoRefs.length, 11 - h3UserRefCount)).forEach(addH3VideoRef)
+                      e.target.value = ''
+                    }} />
+                </label>}
+              </div>
+              {h3VideoRefs.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="flex items-center gap-1.5 bg-bg-tertiary rounded px-1.5 py-1 mb-1">
+                  <Film size={10} className="text-cyan-300 shrink-0" />
+                  <span className="text-[9px] text-text-secondary truncate flex-1">{file.name}</span>
+                  <button onClick={() => removeH3VideoRef(index)} className="text-red-400"><X size={9} /></button>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-text-secondary"><Mic size={9} className="inline mr-0.5" />Audio refs ({h3AudioRefs.length}/3)</span>
+                {h3AudioRefs.length < 3 && h3UserRefCount < 11 && <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
+                  + Add
+                  <input type="file" accept={H3_AUDIO_ACCEPT} multiple className="hidden"
+                    onChange={e => {
+                      Array.from(e.target.files || []).slice(0, Math.min(3 - h3AudioRefs.length, 11 - h3UserRefCount)).forEach(addH3AudioRef)
+                      e.target.value = ''
+                    }} />
+                </label>}
+              </div>
+              {h3AudioRefs.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="flex items-center gap-1.5 bg-bg-tertiary rounded px-1.5 py-1 mb-1">
+                  <Mic size={10} className="text-cyan-300 shrink-0" />
+                  <span className="text-[9px] text-text-secondary truncate flex-1">{file.name}</span>
+                  <button onClick={() => removeH3AudioRef(index)} className="text-red-400"><X size={9} /></button>
+                </div>
+              ))}
+              <p className="text-[9px] text-text-muted/70">Each video/audio: 2–15 s; each category totals at most 15 s.</p>
+            </div>
+            {clipPlans.length > 0 && <div className="border-t border-cyan-500/15 pt-1.5 space-y-1">
+              <p className="text-[9px] font-medium text-cyan-200">References that will be sent per shot</p>
+              {clipPlans.map((plan, index) => {
+                const metadata = plan.metadata || {}
+                const requested = String(metadata.location_ref_label || '')
+                const match = requested
+                  ? locLabels.findIndex(label => label.trim().toLocaleLowerCase() === requested.trim().toLocaleLowerCase())
+                  : (locRefs.length === 1 ? 0 : -1)
+                const location = match >= 0 ? `${locLabels[match] || 'Location'} · ${locRefs[match]?.name || ''}` : 'No exact location match'
+                const characters = charRefs.map((file, charIndex) => charLabels[charIndex] || file.name)
+                return <div key={index} className="rounded bg-bg-tertiary px-1.5 py-1 text-[9px] leading-tight">
+                  <div className="text-text-secondary">Shot {index + 1}: generated frame</div>
+                  {characters.length > 0 && <div className="text-text-muted">Characters: {characters.join(', ')}</div>}
+                  <div className={match >= 0 ? 'text-text-muted' : 'text-amber-300'}>Location: {location}</div>
+                </div>
+              })}
+            </div>}</>}
           </div>}
         </div>
       )}
@@ -1633,12 +2122,11 @@ function AdditionalRefsSection() {
 }
 
 function AnalysisSummary({
-  analysis, showDetails, setShowDetails, speakerMappings: _speakerMappings, isShortFilm,
+  analysis, showDetails, setShowDetails, isShortFilm,
 }: {
   analysis: NonNullable<ReturnType<typeof useStore.getState>['directorAnalysis']>
   showDetails: boolean
   setShowDetails: (v: boolean | ((p: boolean) => boolean)) => void
-  speakerMappings: ReturnType<typeof useStore.getState>['directorSpeakerMappings']
   isShortFilm?: boolean
 }) {
   // Count unique speakers
@@ -1651,6 +2139,11 @@ function AnalysisSummary({
       <p className="text-xs text-text-secondary mb-1">
         {isShortFilm ? 'Transcription complete' : 'Analysis complete'}
       </p>
+      {analysis.warnings?.map((warning, index) => (
+        <p key={index} className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-300">
+          {warning}
+        </p>
+      ))}
       <button
         onClick={() => setShowDetails(v => !v)}
         className="flex items-center gap-3 text-[11px] text-text-muted w-full hover:text-text-secondary transition-colors"
@@ -1749,6 +2242,7 @@ function AnalysisSummary({
 function StructureView({
   plannedClips, energyBias, localBias, setLocalBias, sliderRef, setEnergyBias,
   loading, totalClipDuration, beatDistribution, confirmStructure, isActive, isShortFilm,
+  isMusicVideo, pacingProfile, setPacingProfile,
 }: {
   plannedClips: ReturnType<typeof useStore.getState>['directorPlannedClips']
   energyBias: number
@@ -1762,6 +2256,9 @@ function StructureView({
   confirmStructure: () => void
   isActive: boolean
   isShortFilm?: boolean
+  isMusicVideo?: boolean
+  pacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
+  setPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
 }) {
   return (
     <div className="space-y-3">
@@ -1771,7 +2268,39 @@ function StructureView({
           : 'Here\'s the clip structure based on the audio analysis. Adjust the cut speed if needed.'}
       </p>
 
-      {isActive && (
+      {isActive && isMusicVideo && (
+        <div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-[11px] uppercase tracking-wider text-text-muted">Editing rhythm</label>
+            <span className="text-[10px] text-text-muted">{plannedClips.length} generated clips</span>
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            {([
+              ['cinematic', 'Cinematic', '8–16s'],
+              ['balanced', 'Balanced', '5–8s'],
+              ['rhythmic', 'Rhythmic', '3–5s'],
+            ] as const).map(([value, label, duration]) => (
+              <button
+                key={value}
+                type="button"
+                disabled={loading}
+                onClick={() => void setPacingProfile(value)}
+                className={`rounded-md border px-1.5 py-1.5 text-center transition-colors disabled:opacity-50 ${pacingProfile === value
+                  ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
+                  : 'border-border text-text-secondary hover:border-accent-blue/50'}`}
+              >
+                <span className="block text-[10px] font-medium">{label}</span>
+                <span className="block text-[9px] text-text-muted">{duration}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-[9px] leading-relaxed text-text-muted">
+            More cuts create more start images and video generations, increasing render time and credits.
+          </p>
+        </div>
+      )}
+
+      {isActive && !isMusicVideo && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-[11px] text-text-muted uppercase tracking-wider">{isShortFilm ? 'Scene Pacing' : 'Cut Speed'}</label>
@@ -1904,6 +2433,37 @@ function StructureView({
  */
 function DirectorAdvancedAccordion() {
   const [open, setOpen] = useState(false)
+  const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
+  const videoStepsByModel = useStore(s => s.directorVideoInferenceStepsByModel)
+  const setVideoSteps = useStore(s => s.setDirectorVideoInferenceSteps)
+  const maxShotFramesByModel = useStore(s => s.directorVideoMaxShotFramesByModel)
+  const setMaxShotFrames = useStore(s => s.setDirectorVideoMaxShotFrames)
+  const turboModeByModel = useStore(s => s.directorH3TurboModeByModel)
+  const setTurboMode = useStore(s => s.setDirectorH3TurboMode)
+  const savedVideoLoras = useStore(s => s.savedLoraPerMode.video)
+  const directorSetLora = useStore(s => s.directorSetLora)
+  const directorResolution = useStore(s => s.directorResolution)
+  const directorAspectRatio = useStore(s => s.directorAspectRatio)
+  const totalVramGb = useStore(s => s.systemStats?.gpu.vram_total_gb ?? 0)
+  const [directorVideoOptions, setDirectorVideoOptions] = useState<ModelOptions | null>(null)
+  const shotImageSupport = useStore(s => s.models.find(
+    model => model.model_type === videoModel,
+  )?.director?.shot_image_support)
+  const shotImageGuidance = useStore(s => s.directorShotImageGuidance)
+  const setShotImageGuidance = useStore(s => s.setDirectorShotImageGuidance)
+  const hasVisualReferences = useStore(s => Boolean(
+    s.directorReferenceImage
+    || s.directorReferenceImagePath
+    || s.directorCharacterRefs.length
+    || s.directorCharacterRefPaths.length
+    || s.directorLocationRefs.length
+    || s.directorLocationRefPaths.length
+  ))
+  const generateShotImages = directorWillGenerateShotImages(
+    shotImageSupport,
+    shotImageGuidance,
+    hasVisualReferences,
+  )
 
   // Image post-processing
   const imgUpsampling = useStore(s => s.directorImageSpatialUpsampling)
@@ -1923,6 +2483,100 @@ function DirectorAdvancedAccordion() {
   const vidSelfRefiner = useStore(s => s.directorVideoSelfRefiner)
   const setVidSelfRefiner = useStore(s => s.setDirectorVideoSelfRefiner)
 
+  // Fetch the selected Director model's sampling contract without routing it
+  // through Studio's global modelOptions/params state. That separation is the
+  // point of this control: changing steps in either surface must not silently
+  // modify the other one.
+  useEffect(() => {
+    let cancelled = false
+    fetchModelOptions(videoModel)
+      .then(options => {
+        if (cancelled) return
+        setDirectorVideoOptions(options)
+        const rawDefault = options.default_num_inference_steps
+        if (rawDefault != null && Number.isFinite(rawDefault)) {
+          const current = useStore.getState().directorVideoInferenceStepsByModel[videoModel]
+          if (current == null) setVideoSteps(videoModel, rawDefault)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDirectorVideoOptions(null)
+      })
+    return () => { cancelled = true }
+  }, [setVideoSteps, videoModel])
+
+  const activeDirectorVideoOptions = directorVideoOptions?.model_type === videoModel
+    ? directorVideoOptions
+    : null
+  const rawDefaultVideoSteps = activeDirectorVideoOptions?.default_num_inference_steps
+  const defaultVideoSteps = rawDefaultVideoSteps == null
+    ? null
+    : Math.max(1, Math.min(50, Math.round(rawDefaultVideoSteps)))
+  const configuredVideoSteps = videoStepsByModel[videoModel]
+  const videoSteps = activeDirectorVideoOptions?.lock_inference_steps
+    ? defaultVideoSteps
+    : (configuredVideoSteps ?? defaultVideoSteps)
+  const videoStepsLocked = activeDirectorVideoOptions?.lock_inference_steps === true
+  const resolvedVideoResolution = resolveResolution(
+    activeDirectorVideoOptions,
+    directorResolution,
+    directorAspectRatio,
+  )
+  const windowRecommendation = recommendedWindowProfile(
+    activeDirectorVideoOptions?.director_memory_policy
+      || activeDirectorVideoOptions?.sliding_window_memory_policy,
+    resolvedVideoResolution,
+    totalVramGb,
+  )
+  const safeShotFrames = windowRecommendation?.frames ?? null
+  const manualMaxShotFrames = maxShotFramesByModel[videoModel] ?? null
+  const framesMinimum = activeDirectorVideoOptions?.frames_minimum ?? 1
+  const framesMaximum = activeDirectorVideoOptions?.frames_maximum ?? framesMinimum
+  const framesStep = activeDirectorVideoOptions?.frames_steps ?? 1
+  const nativeShotChoices = [124, 175, 243, 345].filter(frames => (
+    frames >= framesMinimum
+    && frames <= framesMaximum
+    && (frames - framesMinimum) % Math.max(1, framesStep) === 0
+  ))
+  const turboOption = activeDirectorVideoOptions?.minimax_h3_turbo
+  const turboSelected = Boolean(
+    turboOption
+    && turboModeByModel[videoModel] === true
+    && savedVideoLoras?.activated_loras?.includes(turboOption.filename)
+  )
+
+  const setDirectorTurbo = (checked: boolean) => {
+    if (!turboOption) return
+    const current = savedVideoLoras || {
+      activated_loras: [],
+      loras_multipliers: '',
+      loraWeights: {},
+      availableLoras: [],
+    }
+    const nextLoras = current.activated_loras.filter(
+      filename => filename !== turboOption.filename,
+    )
+    const nextWeights = { ...current.loraWeights }
+    delete nextWeights[turboOption.filename]
+    if (checked) {
+      nextLoras.push(turboOption.filename)
+      nextWeights[turboOption.filename] = [turboOption.weight]
+    }
+    const nextAvailable = current.availableLoras.includes(turboOption.filename)
+      ? current.availableLoras
+      : [...current.availableLoras, turboOption.filename]
+    const multipliers = nextLoras.map(filename => (
+      (nextWeights[filename] || [1]).map(value => value.toFixed(2)).join(';')
+    )).join(' ')
+    directorSetLora('video', nextLoras, multipliers, nextWeights, nextAvailable)
+    setTurboMode(videoModel, checked)
+    if (checked) {
+      setVideoSteps(videoModel, turboOption.steps)
+    } else if (videoSteps === turboOption.steps && defaultVideoSteps != null) {
+      setVideoSteps(videoModel, defaultVideoSteps)
+    }
+  }
+
   const upsamplingOptions = [
     { value: '', label: 'Off' },
     { value: 'lanczos1.5', label: 'Lanczos 1.5×' },
@@ -1940,8 +2594,35 @@ function DirectorAdvancedAccordion() {
       </button>
       {open && (
         <div className="px-2.5 pb-2.5 space-y-3">
+          {shotImageSupport && shotImageSupport !== 'required' && (
+            <div className="space-y-1 pt-1">
+              <label className="text-[11px] text-text-secondary block">Shot image guidance</label>
+              <select
+                value={shotImageGuidance}
+                onChange={e => setShotImageGuidance(e.target.value as DirectorShotImageGuidance)}
+                className="w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
+              >
+                <option value="auto">Auto (recommended)</option>
+                <option value="prompt_only">
+                  {shotImageSupport === 'direct_references' ? 'Direct references only' : 'Prompt only'}
+                </option>
+                <option value="generate">Generate shot images</option>
+              </select>
+              <p className="text-[10px] text-text-muted">
+                {shotImageSupport === 'direct_references'
+                  ? shotImageGuidance === 'generate'
+                    ? 'Creates a composition image for each shot before H3 uses the references.'
+                    : !hasVisualReferences
+                      ? 'Add at least one main, character, or location image, or choose generated shot images.'
+                    : 'H3 uses your character and location references directly; no image model runs.'
+                  : generateShotImages
+                    ? 'Creates start frames because visual references are present or generation was requested.'
+                    : 'H3 renders each scene directly from its video prompt.'}
+              </p>
+            </div>
+          )}
           {/* IMAGE section */}
-          <div className="space-y-2">
+          {generateShotImages && <div className="space-y-2">
             <div className="text-[10px] text-text-muted uppercase tracking-wider">Image</div>
 
             <div>
@@ -1987,11 +2668,127 @@ function DirectorAdvancedAccordion() {
                 </div>
               )}
             </div>
-          </div>
+          </div>}
 
           {/* VIDEO section */}
           <div className="space-y-2 pt-1 border-t border-border">
             <div className="text-[10px] text-text-muted uppercase tracking-wider pt-2">Video</div>
+
+            {turboOption && (
+              <div className={`rounded-lg border px-2.5 py-2 ${
+                turboSelected
+                  ? 'border-accent-blue/50 bg-accent-blue/10'
+                  : 'border-border bg-bg-tertiary/50'
+              }`}>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={turboSelected}
+                    onChange={event => setDirectorTurbo(event.target.checked)}
+                    className="accent-accent-blue"
+                  />
+                  <Zap size={12} className={turboSelected ? 'text-accent-blue' : 'text-text-muted'} />
+                  <span className="text-[11px] font-medium text-text-primary">H3 Turbo</span>
+                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-indicator-warning">
+                    Experimental
+                  </span>
+                  <InfoTooltip label="About Director H3 Turbo" text={turboOption.guide} />
+                </label>
+                <p className="mt-1 text-[10px] text-text-muted">
+                  Enables the managed LoRA at {turboOption.weight.toFixed(2)} and uses {turboOption.steps} steps. Adjust its strength under Video LoRAs.
+                </p>
+              </div>
+            )}
+
+            <div title="Applies to every newly generated Director shot and is saved with the project for later repair or regeneration.">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] text-text-secondary">Inference steps</label>
+                <div className="flex items-center gap-1.5">
+                  {!videoStepsLocked && !turboSelected && defaultVideoSteps != null && configuredVideoSteps != null
+                    && configuredVideoSteps !== defaultVideoSteps && (
+                    <button
+                      type="button"
+                      onClick={() => setVideoSteps(videoModel, defaultVideoSteps)}
+                      className="text-[9px] text-accent-blue hover:text-accent-blue/80"
+                    >
+                      Default
+                    </button>
+                  )}
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    step={1}
+                    value={videoSteps ?? ''}
+                    disabled={videoSteps == null || videoStepsLocked || turboSelected}
+                    onChange={e => {
+                      const value = Number(e.target.value)
+                      if (Number.isFinite(value)) setVideoSteps(videoModel, value)
+                    }}
+                    className="w-14 bg-bg-tertiary border border-border rounded px-1.5 py-0.5 text-[11px] text-text-primary text-center focus:outline-none focus:border-accent-blue disabled:opacity-50"
+                  />
+                </div>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={50}
+                step={1}
+                value={videoSteps ?? 1}
+                disabled={videoSteps == null || videoStepsLocked || turboSelected}
+                onChange={e => setVideoSteps(videoModel, Number(e.target.value))}
+                className="w-full disabled:opacity-50"
+              />
+              <p className="text-[10px] text-text-muted mt-0.5">
+                {turboSelected
+                  ? `H3 Turbo uses its ${turboOption?.steps ?? 6}-step recipe.`
+                  : videoStepsLocked
+                  ? 'Fixed by this model.'
+                  : videoSteps == null
+                    ? 'Loading model default...'
+                    : `Director setting for this model${defaultVideoSteps === videoSteps ? ' (default)' : ''}.`}
+              </p>
+            </div>
+
+            {(activeDirectorVideoOptions?.director_memory_policy
+              || activeDirectorVideoOptions?.sliding_window_memory_policy)
+              && nativeShotChoices.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="text-[11px] text-text-secondary">Maximum planned shot</label>
+                  <select
+                    value={manualMaxShotFrames ?? ''}
+                    onChange={event => setMaxShotFrames(
+                      videoModel,
+                      event.target.value ? Number(event.target.value) : null,
+                    )}
+                    className="bg-bg-tertiary border border-border rounded px-1.5 py-0.5 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
+                  >
+                    <option value="">Auto</option>
+                    {nativeShotChoices.map(frames => (
+                      <option key={frames} value={frames}>
+                        {formatSeconds(frames / (activeDirectorVideoOptions.fps || 24))}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className={`text-[10px] ${
+                  manualMaxShotFrames != null
+                  && safeShotFrames != null
+                  && manualMaxShotFrames > safeShotFrames
+                    ? 'text-amber-400'
+                    : 'text-text-muted'
+                }`}>
+                  {manualMaxShotFrames == null
+                    ? safeShotFrames != null
+                      ? `Auto plans at most ${formatSeconds(safeShotFrames / (activeDirectorVideoOptions.fps || 24))} per shot for ${resolvedVideoResolution} on ${totalVramGb.toFixed(0)} GB.`
+                      : `Auto derives the one-pass limit from the selected canvas and GPU.`
+                    : safeShotFrames != null && manualMaxShotFrames > safeShotFrames
+                      ? `Manual override exceeds Auto's ${formatSeconds(safeShotFrames / (activeDirectorVideoOptions.fps || 24))} recommendation and may run out of VRAM.`
+                      : `Manual native-shot limit. Director will plan dialogue and action to this duration.`}
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="text-[11px] text-text-secondary block mb-1">Upsampling</label>
@@ -2037,7 +2834,7 @@ function DirectorAdvancedAccordion() {
               )}
             </div>
 
-            <div>
+            {activeDirectorVideoOptions?.self_refiner === true && <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] text-text-secondary">Self refiner</label>
                 <span className="text-[9px] uppercase tracking-wider text-text-muted bg-bg-tertiary border border-border rounded px-1 py-px">
@@ -2056,7 +2853,7 @@ function DirectorAdvancedAccordion() {
               <p className="text-[10px] text-text-muted mt-0.5">
                 Re-passes the rendered video through the refiner. May improve detail or introduce artifacts.
               </p>
-            </div>
+            </div>}
           </div>
         </div>
       )}
@@ -2064,10 +2861,9 @@ function DirectorAdvancedAccordion() {
   )
 }
 
-/** Compact model picker for Director — same visibility rules as the Studio
- *  ModelSelector (enabledModels + Mature Mode gate), grouped by family.
- *  Changing it updates selectedModelPerMode, which the pipeline submission
- *  reads AND the LoRA accordions below re-fetch from (their modelType prop). */
+/** Compact model picker for Director. Director's automated stages have a
+ *  stricter input contract than Studio, so the backend publishes explicit
+ *  per-workflow compatibility metadata for this selector to enforce. */
 function DirectorModelPicker({ mode, value, onChange }: {
   mode: 'image' | 'video'
   value: string
@@ -2077,17 +2873,52 @@ function DirectorModelPicker({ mode, value, onChange }: {
   const families = useStore(s => s.families)
   const enabledModels = useStore(s => s.enabledModels)
   const nsfwMode = useStore(s => s.servicesConfig?.nsfw_mode ?? false)
+  const directorSkill = useStore(s => s.directorSkill)
+  const shortFilmPath = useStore(s => s.shortFilmPath)
+  const seamless = useStore(s => s.directorSeamless)
+
+  const pipelineType: DirectorPipelineType = directorSkill === 'music_video'
+    ? 'music_video'
+    : shortFilmPath === 'audio'
+      ? 'short_film_audio'
+      : 'short_film_story'
 
   const groups = useMemo(() =>
     getFamiliesForMode(mode, families).map(family => ({
       family,
       models: getModelsForFamily(family.id, models, mode)
         .filter(m => enabledModels.has(m.model_type))
-        .filter(m => !m.nsfw_only || nsfwMode),
+        .filter(m => !m.nsfw_only || nsfwMode)
+        .filter(m => mode === 'image'
+          ? m.director?.image.compatible === true
+          : m.director?.video[pipelineType].compatible === true
+            && (!seamless || m.director?.video.seamless.compatible === true)),
     })).filter(g => g.models.length > 0),
-  [mode, families, models, enabledModels, nsfwMode])
+  [mode, families, models, enabledModels, nsfwMode, pipelineType, seamless])
 
-  const known = groups.some(g => g.models.some(m => m.model_type === value))
+  const compatibleModels = useMemo(
+    () => groups.flatMap(group => group.models),
+    [groups],
+  )
+  const externalKnown = mode === 'image' && value === MINIMAX_IMAGE_API_MODEL
+  const known = externalKnown || compatibleModels.some(model => model.model_type === value)
+  const preferredId = mode === 'image' ? 'flux2_klein_9b' : 'ltx2_22B_distilled_1_1'
+  const fallback = compatibleModels.find(model => model.model_type === preferredId)
+    || compatibleModels[0]
+  const selectedValue = known ? value : (fallback?.model_type || '')
+  const selectedModel = compatibleModels.find(model => model.model_type === selectedValue)
+
+  useEffect(() => {
+    if (!known && fallback && fallback.model_type !== value) {
+      onChange(fallback.model_type)
+    }
+  }, [fallback, known, onChange, value])
+
+  const title = mode === 'image'
+    ? 'Only models that can create an establishing image and edit reference-based start frames are shown.'
+    : pipelineType === 'short_film_story'
+      ? 'Only models that can render Director-planned shots with synchronized native audio are shown.'
+      : 'Only models that can follow the uploaded soundtrack or dialogue timeline are shown.'
 
   return (
     <div className="flex items-center gap-1.5">
@@ -2095,11 +2926,20 @@ function DirectorModelPicker({ mode, value, onChange }: {
         {mode === 'image' ? 'Image' : 'Video'}
       </span>
       <select
-        value={value}
+        value={selectedValue}
         onChange={e => onChange(e.target.value)}
+        disabled={compatibleModels.length === 0 && mode !== 'image'}
+        title={title}
         className="flex-1 min-w-0 bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
       >
-        {!known && <option value={value}>{value}</option>}
+        {compatibleModels.length === 0 && mode !== 'image' && (
+          <option value="">No compatible models enabled</option>
+        )}
+        {mode === 'image' && (
+          <optgroup label="External API">
+            <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
+          </optgroup>
+        )}
         {groups.map(({ family, models: famModels }) => (
           <optgroup key={family.id} label={family.label}>
             {famModels.map(m => (
@@ -2108,6 +2948,12 @@ function DirectorModelPicker({ mode, value, onChange }: {
           </optgroup>
         ))}
       </select>
+      {selectedModel?.selector_help && (
+        <InfoTooltip
+          text={selectedModel.selector_help}
+          label={`About ${selectedModel.name}`}
+        />
+      )}
     </div>
   )
 }
@@ -2125,8 +2971,26 @@ function DirectorLoraAccordion() {
   // (flux2_klein_9b) instead of the active Studio model fixes that.
   const imageModel = useStore(s => s.selectedModelPerMode.image || 'flux2_klein_9b')
   const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
+  const shotImageSupport = useStore(s => s.models.find(
+    model => model.model_type === videoModel,
+  )?.director?.shot_image_support)
+  const shotImageGuidance = useStore(s => s.directorShotImageGuidance)
+  const hasVisualReferences = useStore(s => Boolean(
+    s.directorReferenceImage
+    || s.directorReferenceImagePath
+    || s.directorCharacterRefs.length
+    || s.directorCharacterRefPaths.length
+    || s.directorLocationRefs.length
+    || s.directorLocationRefPaths.length
+  ))
+  const generateShotImages = directorWillGenerateShotImages(
+    shotImageSupport,
+    shotImageGuidance,
+    hasVisualReferences,
+  )
   const selectDirectorImageModel = useStore(s => s.selectDirectorImageModel)
   const selectDirectorVideoModel = useStore(s => s.selectDirectorVideoModel)
+  const minimaxImageReady = useStore(s => Boolean(s.servicesConfig?.minimax_api_key_set))
   const [imageOpen, setImageOpen] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
 
@@ -2135,11 +2999,22 @@ function DirectorLoraAccordion() {
       {/* Models the pipeline will use — visible + changeable here so the
           user can verify before starting; LoRA lists below follow. */}
       <div className="space-y-1 mb-1.5">
-        <DirectorModelPicker mode="image" value={imageModel} onChange={selectDirectorImageModel} />
+        {generateShotImages && (
+          <>
+            <DirectorModelPicker mode="image" value={imageModel} onChange={selectDirectorImageModel} />
+            {imageModel === MINIMAX_IMAGE_API_MODEL && (
+              <p className={`pl-[50px] text-[9px] leading-relaxed ${minimaxImageReady ? 'text-emerald-400' : 'text-amber-300'}`}>
+                {minimaxImageReady
+                  ? 'External Image-01 API ready · no local VRAM or image LoRAs.'
+                  : 'Add the MiniMax API key in Settings → Services before generating.'}
+              </p>
+            )}
+          </>
+        )}
         <DirectorModelPicker mode="video" value={videoModel} onChange={selectDirectorVideoModel} />
       </div>
       {/* Image LoRAs */}
-      {imageModel && (
+      {generateShotImages && imageModel && imageModel !== MINIMAX_IMAGE_API_MODEL && (
         <div className="border border-border rounded-lg overflow-hidden">
           <button
             onClick={() => setImageOpen(!imageOpen)}
@@ -2282,14 +3157,13 @@ function StyleForm({
 
 function ImagePromptsReview({
   clipPlans, plannedClips, speakerMappings, editClipPlan, planPrompts,
-  planVideoPrompts: _planVideoPrompts, generateStartImages, loading, isActive, isShortFilm,
+  generateStartImages, loading, isActive, isShortFilm,
 }: {
   clipPlans: ReturnType<typeof useStore.getState>['directorClipPlans']
   plannedClips: ReturnType<typeof useStore.getState>['directorPlannedClips']
   speakerMappings: ReturnType<typeof useStore.getState>['directorSpeakerMappings']
   editClipPlan: (index: number, field: 'video_prompt' | 'image_prompt', value: string) => void
   planPrompts: () => Promise<void>
-  planVideoPrompts: () => Promise<void>
   generateStartImages: () => Promise<void>
   loading: boolean
   isActive: boolean
@@ -2364,12 +3238,11 @@ function ImagePromptsReview({
 }
 
 function ImageGenView({
-  loading, imageGenProgress, clipImages, planVideoPrompts: _planVideoPrompts2,
+  loading, imageGenProgress, clipImages,
 }: {
   loading: boolean
   imageGenProgress: ReturnType<typeof useStore.getState>['directorImageGenProgress']
   clipImages: ReturnType<typeof useStore.getState>['directorClipImages']
-  planVideoPrompts: () => Promise<void>
 }) {
   // Architecture-mismatch advisories from the backend's image-gen filter.
   // Surfacing these in chat (vs only in the console) lets the user see
@@ -2384,7 +3257,7 @@ function ImageGenView({
       {loraWarnings.length > 0 && (
         <div className="space-y-1.5">
           {loraWarnings.map((w, i) => (
-            <div key={i} className="px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-100 leading-snug whitespace-pre-line">
+            <div key={i} className="px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-text-primary leading-snug whitespace-pre-line">
               {w}
             </div>
           ))}
@@ -2436,8 +3309,8 @@ function ImageGenView({
         <div className="grid grid-cols-3 gap-1.5">
           {clipImages.map((img, i) => (
             <div key={i} className="relative">
-              <img
-                src={img.file ? URL.createObjectURL(img.file) : getFileUrl(img.filename)}
+              <DirectorClipImagePreview
+                image={img}
                 alt={`Clip ${img.clipIndex + 1}`}
                 className="w-full aspect-square object-cover rounded-lg border border-border"
               />
@@ -2464,7 +3337,7 @@ function ImageGenView({
 function VideoPromptsReview({
   clipPlans, plannedClips, clipImages, speakerMappings, editClipPlan,
   planVideoPrompts, directorGenerate, applyToClips, loading, isShortFilm,
-  isGenerating, isAutoGenerating,
+  isGenerating, isAutoGenerating, generationError,
 }: {
   clipPlans: ReturnType<typeof useStore.getState>['directorClipPlans']
   plannedClips: ReturnType<typeof useStore.getState>['directorPlannedClips']
@@ -2487,7 +3360,12 @@ function VideoPromptsReview({
    *  the user knows the system is driving itself, not waiting on
    *  them to click. */
   isAutoGenerating?: boolean
+  /** Terminal generation failure shown in place, immediately below the
+   *  status control that previously said "Auto Generating...". */
+  generationError?: string | null
 }) {
+  const { t } = useUiTranslation('director')
+  const directVideo = useStore(s => s.directorMusicVideoTreatment.generation_mode === 'direct_video')
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -2501,12 +3379,18 @@ function VideoPromptsReview({
         </button>
       </div>
 
+      {directVideo && (
+        <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-1.5 text-[9px] leading-relaxed text-fuchsia-100">
+          {t('directVideo.promptNote')}
+        </div>
+      )}
+
       {clipImages.length > 0 && (
         <div className="grid grid-cols-5 gap-1 mb-1">
           {clipImages.map((img, i) => (
             <div key={i} className="relative">
-              <img
-                src={img.file ? URL.createObjectURL(img.file) : getFileUrl(img.filename)}
+              <DirectorClipImagePreview
+                image={img}
                 alt={`Clip ${img.clipIndex + 1}`}
                 className="w-full aspect-square object-cover rounded border border-border"
               />
@@ -2564,7 +3448,19 @@ function VideoPromptsReview({
                   was already running, confusing the user.
                 * Manual mode after the user clicked Generate — guards
                   against double-submission. */}
-        {isGenerating ? (
+        {generationError ? (
+          <div className="space-y-2">
+            <button
+              disabled
+              className="w-full py-2.5 rounded-lg bg-red-500/10 border border-red-500/40 text-red-300 text-sm font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed"
+            >
+              <X size={14} /> Error
+            </button>
+            <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-[11px] leading-snug text-red-200">
+              {generationError}
+            </div>
+          </div>
+        ) : isGenerating ? (
           // Muted disabled state. opacity-60 dims the whole control
           // (including the spinner) so it reads as "not interactive"
           // even against the bright accent backgrounds Golden Hour and

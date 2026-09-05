@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Upload, X, Eye, AlertTriangle, Download } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { VideoTimelineSelector } from '../shared/VideoTimelineSelector'
 import * as api from '../../api/client'
 
 export function InpaintControls() {
+  const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoPath = useStore(s => s.editVideoPath)
   const editVideoUrl = useStore(s => s.editVideoUrl)
@@ -81,9 +83,9 @@ export function InpaintControls() {
       // another tab while this Inpaint session was open.
       refreshSamStatus()
     } catch {
-      setError('Failed to upload video')
+      setError(t('inpaint.uploadFailed'))
     }
-  }, [setEditVideo, refreshSamStatus])
+  }, [setEditVideo, refreshSamStatus, t])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -128,12 +130,12 @@ export function InpaintControls() {
           which Pinokio menu item to click. Inpaint won't work at all
           without SAM so this needs to be unmissable. */}
       {samStatus === 'not_installed' && (
-        <div className="flex items-start gap-2 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/40 rounded-lg px-3 py-2.5">
+        <div className="flex items-start gap-2 text-[11px] text-text-primary bg-amber-500/10 border border-amber-500/40 rounded-lg px-3 py-2.5">
           <Download size={14} className="shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="font-medium text-amber-200">Inpaint requires SAM 3.1 (not installed)</p>
-            <p className="text-amber-300/80">
-              {samStatusError || "Open the Pinokio menu and click 'Install Inpaint Support (SAM 3.1)' to enable inpainting. ~5 min one-time setup."}
+            <p className="font-medium text-text-primary">{t('inpaint.needSam')}</p>
+            <p className="text-text-secondary">
+              {samStatusError || t('inpaint.installHint')}
             </p>
           </div>
         </div>
@@ -143,11 +145,11 @@ export function InpaintControls() {
           than the not-installed case because the on-demand startup
           might still recover. */}
       {samStatus === 'unavailable' && editVideoPath && !editMasksPath && (
-        <div className="flex items-start gap-2 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+        <div className="flex items-start gap-2 text-[10px] text-indicator-warning bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
           <AlertTriangle size={14} className="shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium">SAM service not available</p>
-            <p className="text-amber-400/70 mt-0.5">Check SAM installation or run Preview Mask to start it on demand.</p>
+            <p className="font-medium">{t('inpaint.samUnavailable')}</p>
+            <p className="text-text-secondary mt-0.5">{t('inpaint.samRecover')}</p>
           </div>
         </div>
       )}
@@ -161,8 +163,8 @@ export function InpaintControls() {
           className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-accent-blue/50 hover:bg-bg-hover/30 transition-all"
         >
           <Upload size={24} className="mx-auto mb-2 text-text-muted" />
-          <p className="text-xs text-text-secondary">Drop a video or click to upload</p>
-          <p className="text-[9px] text-text-muted mt-1">Describe what to change — AI segments and replaces</p>
+          <p className="text-xs text-text-secondary">{t('chrome.dropVideo')}</p>
+          <p className="text-[9px] text-text-muted mt-1">{t('inpaint.dropHint')}</p>
           <input ref={fileRef} type="file" accept="video/*" className="hidden"
             onChange={e => { if (e.target.files?.[0]) handleUpload(e.target.files[0]) }} />
         </div>
@@ -177,15 +179,15 @@ export function InpaintControls() {
           {showingMask && editMaskPreview ? (
             <div>
               <div className="rounded-lg overflow-hidden bg-black aspect-video relative">
-                <img src={`data:image/png;base64,${editMaskPreview}`} alt="Mask preview"
+                <img src={`data:image/png;base64,${editMaskPreview}`} alt={t('inpaint.maskAlt')}
                   className="w-full h-full object-contain" />
                 <button onClick={() => setShowingMask(false)}
                   className="absolute bottom-2 left-2 px-2 py-1 rounded bg-black/70 text-[10px] text-white/80 hover:text-white">
-                  Show timeline
+                  {t('inpaint.showTimeline')}
                 </button>
               </div>
               {editDetectedTarget && (
-                <p className="text-[9px] text-accent-blue mt-1">SAM target: {editDetectedTarget}</p>
+                <p className="text-[9px] text-accent-blue mt-1">{t('inpaint.samTarget', { target: editDetectedTarget })}</p>
               )}
             </div>
           ) : (
@@ -201,7 +203,7 @@ export function InpaintControls() {
               {editMaskPreview && (
                 <button onClick={() => setShowingMask(true)}
                   className="text-[9px] text-accent-blue hover:text-accent-blue/80 mt-1">
-                  Show mask preview
+                  {t('inpaint.showMask')}
                 </button>
               )}
             </div>
@@ -213,13 +215,13 @@ export function InpaintControls() {
       {/* SAM Target — what to segment */}
       <div>
         <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">
-          What to select <span className="normal-case text-text-muted">(for SAM segmentation)</span>
+          {t('inpaint.what')} <span className="normal-case text-text-muted">({t('inpaint.forSam')})</span>
         </label>
         <input
           type="text"
           value={samTarget}
           onChange={e => setSamTarget(e.target.value)}
-          placeholder='e.g. "the woman", "his hands", "the sky"'
+          placeholder={t('inpaint.whatPlaceholder')}
           className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
         />
         <label className="flex items-center gap-2 mt-1.5 cursor-pointer">
@@ -227,8 +229,8 @@ export function InpaintControls() {
             checked={useStore.getState().editInvertMask}
             onChange={e => useStore.setState({ editInvertMask: e.target.checked, editMasksPath: null, editMaskPreview: null })}
             className="w-3 h-3 rounded border-border accent-accent-blue" />
-          <span className="text-[10px] text-text-secondary">Invert mask</span>
-          <span className="text-[9px] text-text-muted ml-auto">Edit everything except selection</span>
+          <span className="text-[10px] text-text-secondary">{t('inpaint.invert')}</span>
+          <span className="text-[9px] text-text-muted ml-auto">{t('inpaint.invertHint')}</span>
         </label>
       </div>
 
@@ -238,12 +240,12 @@ export function InpaintControls() {
           disabled={previewing || !editVideoPath || !samTarget.trim()}
           className="flex-1 py-1.5 rounded-lg text-[10px] font-medium border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
           <Eye size={12} />
-          {previewing ? 'Segmenting...' : 'Preview Mask'}
+          {previewing ? t('inpaint.segmenting') : t('inpaint.previewMask')}
         </button>
         {editMasksPath && (
-          <div className="flex items-center gap-1 text-[9px] text-green-400 shrink-0">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-            Cached
+          <div className="flex items-center gap-1 text-[9px] text-indicator-success shrink-0">
+            <div className="w-1.5 h-1.5 rounded-full bg-indicator-success" />
+            {t('inpaint.cached')}
           </div>
         )}
       </div>
@@ -251,13 +253,13 @@ export function InpaintControls() {
       {/* Advanced */}
       <button onClick={() => setShowAdvanced(!showAdvanced)}
         className="text-[10px] text-text-muted hover:text-text-primary transition-colors">
-        {showAdvanced ? '▾' : '▸'} Advanced
+        {showAdvanced ? '▾' : '▸'} {t('chrome.advanced')}
       </button>
       {showAdvanced && (
         <div className="space-y-3 pl-2 border-l border-border/50">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">Prompt Strength</label>
+              <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('inpaint.promptStrength')}</label>
               <span className="text-[10px] text-text-secondary">{promptStrength.toFixed(1)}</span>
             </div>
             <input
@@ -268,13 +270,12 @@ export function InpaintControls() {
               className="w-full"
             />
             <p className="text-[9px] text-text-muted mt-0.5">
-              CFG — how hard the model follows your prompt inside the masked region.
-              1.0 ≈ prompt ignored (output looks like original). 3–4 ≈ balanced. 5+ ≈ strong, may distort.
+              {t('inpaint.promptHint')}
             </p>
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">Retake Strength</label>
+              <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('inpaint.retakeStrength')}</label>
               <span className="text-[10px] text-text-secondary">{retakeStrength.toFixed(2)}</span>
             </div>
             <input
@@ -285,8 +286,7 @@ export function InpaintControls() {
               className="w-full"
             />
             <p className="text-[9px] text-text-muted mt-0.5">
-              How aggressively the masked region is re-generated. 0.1–0.4 = subtle tweak, keeps source look.
-              0.7–0.9 = full replacement with prompt content.
+              {t('inpaint.retakeHint')}
             </p>
           </div>
         </div>
@@ -296,7 +296,7 @@ export function InpaintControls() {
       {error && <div className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1.5">{error}</div>}
 
       <p className="text-[9px] text-text-muted text-center">
-        Preview Mask checks targeting. Use the prompt below for what to generate, then click Generate.
+        {t('inpaint.footer')}
       </p>
     </div>
   )

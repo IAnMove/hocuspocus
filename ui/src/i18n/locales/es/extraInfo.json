@@ -1,0 +1,71 @@
+{
+  "waitForGeneration": "Espera a que termine la generación",
+  "language": "Idioma",
+  "savedPrompts_one": "{{count}} prompt guardado",
+  "savedPrompts_other": "{{count}} prompts guardados",
+  "directorContext": "Contexto de producción de Director",
+  "intro": "Esto se escribe a partir de los prompts y las propiedades de producción ya guardados con el vídeo. El material no se vuelve a analizar.",
+  "clip": {
+    "title": "Información del clip",
+    "file": "Archivo",
+    "generated": "Generado",
+    "generationTime": "Tiempo de generación",
+    "fileSize": "Tamaño del archivo",
+    "model": "Modelo",
+    "resolution": "Resolución",
+    "frames": "Fotogramas",
+    "inferenceSteps": "Pasos de inferencia",
+    "guidance": "Guidance",
+    "seed": "Seed",
+    "jobId": "Job ID",
+    "timingBreakdown": "Desglose de tiempos",
+    "generationPrompt": "Prompt de generación",
+    "noPrompt": "No se guardó ningún prompt para este clip.",
+    "audioPrompt": "Prompt de audio",
+    "negativePrompt": "Prompt negativo",
+    "allSavedSettings": "Todos los ajustes guardados",
+    "prompt": "Prompt",
+    "allSavedMetadata": "Todos los metadatos guardados"
+  },
+  "copy": {
+    "action": "Copiar",
+    "copied": "Copiado",
+    "title": "Copiar {{label}}",
+    "clipInformation": "información del clip",
+    "generationPrompt": "prompt de generación",
+    "audioPrompt": "prompt de audio",
+    "negativePrompt": "prompt negativo",
+    "allSavedSettings": "todos los ajustes guardados",
+    "overview": "resumen",
+    "youtubeTitle": "título de YouTube",
+    "youtubeDescription": "descripción de YouTube",
+    "xPost": "publicación de x.com",
+    "allExtraInfo": "toda la Información adicional"
+  },
+  "status": {
+    "writing": "Redactando el texto para plataformas…",
+    "checking": "Comprobando Información adicional guardada…"
+  },
+  "errors": {
+    "loadFailed": "No se pudo cargar Información adicional",
+    "generateFailed": "No se pudo generar Información adicional"
+  },
+  "empty": {
+    "title": "Aún no hay texto guardado en este idioma",
+    "hint": "Genera un resumen, metadatos de YouTube y una publicación para x.com.",
+    "generate": "Generar"
+  },
+  "publishing": {
+    "heading": "Texto para publicar",
+    "overview": "De qué trata el vídeo",
+    "youtube": "YouTube",
+    "optimizedTitle": "Título optimizado · {{length}}/100",
+    "optimizedDescription": "Descripción optimizada",
+    "xPost": "X.com · {{length}}/280",
+    "xCom": "X.com"
+  },
+  "actions": {
+    "generating": "Generando…",
+    "regenerate": "Regenerar"
+  }
+}

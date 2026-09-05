@@ -1,8 +1,10 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Music, Sparkles, Loader2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 import type { GenerateParams } from '../../types'
+import { clampStoryMusicDuration, songWriteTarget } from '../../features/stories/musicModel'
 
 const TEXTAREA_BASE =
   'w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary ' +
@@ -41,13 +43,14 @@ export function AutoGrowTextarea({
 }
 
 function StyleField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useUiTranslation('studio')
   return (
     <div>
-      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Style / Music Caption</label>
+      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('music.style')}</label>
       <AutoGrowTextarea
         value={value}
         onChange={onChange}
-        placeholder="Describe it like you're briefing musicians — genre, instruments, mood, production, vocals. e.g. dreamy bedroom-pop with shimmering reverb guitars and warm analog synths, soft breathy female vocals, nostalgic and intimate, gently mid-tempo"
+        placeholder={t('music.stylePlaceholder')}
         extraClass="min-h-[3.5rem]"
       />
     </div>
@@ -55,13 +58,14 @@ function StyleField({ value, onChange }: { value: string; onChange: (v: string) 
 }
 
 function LyricsField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useUiTranslation('studio')
   return (
     <div>
-      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Lyrics</label>
+      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('music.lyrics')}</label>
       <AutoGrowTextarea
         value={value}
         onChange={onChange}
-        placeholder={'[Verse]\nYour lyrics here…\n[Chorus]\n…'}
+        placeholder={t('music.lyricsPlaceholder')}
         extraClass="min-h-[8rem] font-mono"
       />
     </div>
@@ -69,6 +73,7 @@ function LyricsField({ value, onChange }: { value: string; onChange: (v: string)
 }
 
 export function MusicControls() {
+  const { t } = useUiTranslation('studio')
   const description = useStore(s => s.musicDescription)
   const setDescription = useStore(s => s.setMusicDescription)
   const instrumental = useStore(s => s.musicInstrumental)
@@ -100,11 +105,20 @@ export function MusicControls() {
     setWriting(true)
     setWriteError(null)
     try {
-      const r = await api.writeSong({ description: description.trim(), instrumental })
+      const modelType = String(params.model_type || '')
+      const r = await api.writeSong({
+        description: description.trim(),
+        instrumental,
+        target: songWriteTarget(modelType),
+        model: modelType === 'minimax_music3' || modelType === 'music-3.0' || modelType === 'music-2.6' || modelType.startsWith('ace_step')
+          ? modelType as 'minimax_music3' | 'music-3.0' | 'music-2.6' | 'ace_step_v1_5_xl_sft_lm_4b'
+          : undefined,
+        duration_seconds: clampStoryMusicDuration(params.duration_seconds, modelType),
+      })
       if (r.style) setStyle(r.style)
       setLyrics(instrumental ? '[Instrumental]' : (r.lyrics || ''))
     } catch (e) {
-      setWriteError(e instanceof Error ? e.message : 'Song writing failed')
+      setWriteError(e instanceof Error ? e.message : t('music.writeFailed'))
     } finally {
       setWriting(false)
     }
@@ -115,7 +129,7 @@ export function MusicControls() {
       {/* Header + instrumental toggle */}
       <div className="flex items-center justify-between">
         <label className="text-[11px] text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-          <Music size={12} /> Song
+          <Music size={12} /> {t('music.song')}
         </label>
         <label className="flex items-center gap-1.5 cursor-pointer group text-[10px] text-text-secondary hover:text-text-primary transition-colors">
           <input
@@ -124,18 +138,18 @@ export function MusicControls() {
             onChange={e => toggleInstrumental(e.target.checked)}
             className="accent-accent-blue"
           />
-          Instrumental
+          {t('music.instrumental')}
         </label>
       </div>
 
       {/* Describe → let the LLM write it (optional — fields below are editable) */}
       <div className="space-y-2">
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Describe your song</label>
+          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('music.describe')}</label>
           <AutoGrowTextarea
             value={description}
             onChange={setDescription}
-            placeholder="e.g. an upbeat synthwave track about late-night city driving — nostalgic but hopeful"
+            placeholder={t('music.describePlaceholder')}
             extraClass="min-h-[4.5rem]"
           />
         </div>
@@ -149,11 +163,11 @@ export function MusicControls() {
           }`}
         >
           {writing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-          {writing ? 'Writing…' : 'Write Song'}
+          {writing ? t('music.writing') : t('music.writeSong')}
         </button>
         {writeError && <p className="text-[10px] text-red-400 leading-snug">{writeError}</p>}
         <p className="text-[10px] text-text-muted leading-snug">
-          Let the LLM write the Style{instrumental ? '' : ' + Lyrics'} from your description — or just fill them in yourself below. Either way, edit and Generate.
+          {t('music.llmHint', { lyrics: instrumental ? '' : t('music.plusLyrics') })}
         </p>
       </div>
 

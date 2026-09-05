@@ -1,0 +1,702 @@
+import { create } from 'zustand'
+import * as api from '../../api/client'
+import { changedSections, createStoryProject, normalizeStoryProject } from './model'
+import { mergeStoryLibraries } from './library'
+import type { StoryLibraryConflict, StoryLibraryData } from './library'
+import {
+  libraryHasPendingSongs,
+  recoverPendingStorySongs,
+  storySongOutputRefFromAsset,
+  storySongOutputRefFromMetadata,
+  type StorySongOutputRef,
+} from './storySongRecovery'
+import type { StoryProject, StoryProjectType } from './types'
+
+const LEGACY_AUTOSAVE_KEY = 'maestro-story-lab-v1'
+const LIBRARY_PREFIX = 'maestro-story-library-v2:'
+
+const safeWorkspace = (workspace: string): string =>
+  workspace.trim().replace(/[^a-zA-Z0-9._-]+/g, '-') || 'default'
+const libraryKey = (workspace: string): string => `${LIBRARY_PREFIX}${safeWorkspace(workspace)}`
+
+function hasPersistedLocalLibrary(workspace: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return Boolean(
+      window.localStorage.getItem(libraryKey(workspace))
+      || (workspace === 'default' && window.localStorage.getItem(LEGACY_AUTOSAVE_KEY)),
+    )
+  } catch {
+    return false
+  }
+}
+
+function normalizeLibrary(value: unknown): StoryLibraryData | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Partial<StoryLibraryData>
+  if (!raw.projects || typeof raw.projects !== 'object') return null
+  const projects = Object.fromEntries(
+    Object.values(raw.projects).map(item => {
+      const project = normalizeStoryProject(item)
+      return [project.id, project]
+    }),
+  )
+  const firstId = Object.keys(projects)[0]
+  if (!firstId) return null
+  const activeId = typeof raw.activeId === 'string' && projects[raw.activeId]
+    ? raw.activeId : firstId
+  const revision = typeof raw.revision === 'number' && Number.isInteger(raw.revision) && raw.revision >= 0
+    ? raw.revision : 0
+  return { version: 2, revision, activeId, projects }
+}
+
+function restoreLocalLibrary(workspace: string): StoryLibraryData {
+  const fallback = createStoryProject()
+  if (typeof window === 'undefined') {
+    return { version: 2, revision: 0, activeId: fallback.id, projects: { [fallback.id]: fallback } }
+  }
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(libraryKey(workspace)) || 'null')
+    const restored = normalizeLibrary(raw)
+    if (restored) return restored
+    const legacy = workspace === 'default'
+      ? JSON.parse(window.localStorage.getItem(LEGACY_AUTOSAVE_KEY) || 'null')
+      : null
+    if (legacy) {
+      const project = normalizeStoryProject(legacy)
+      return { version: 2, revision: 0, activeId: project.id, projects: { [project.id]: project } }
+    }
+  } catch {
+    // Fall through to a clean, valid library.
+  }
+  return { version: 2, revision: 0, activeId: fallback.id, projects: { [fallback.id]: fallback } }
+}
+
+function buildLibrary(
+  project: StoryProject,
+  projects: Record<string, StoryProject>,
+  revision: number,
+): StoryLibraryData {
+  return {
+    version: 2,
+    revision,
+    activeId: project.id,
+    projects: { ...projects, [project.id]: project },
+  }
+}
+
+function persistLocalLibrary(
+  workspace: string,
+  project: StoryProject,
+  projects: Record<string, StoryProject>,
+  revision: number,
+): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(
+    libraryKey(workspace),
+    JSON.stringify(buildLibrary(project, projects, revision)),
+  )
+}
+
+function freshStoryId(prefix: string, used: Set<string>): string {
+  let id = `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  while (used.has(id)) id = `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  used.add(id)
+  return id
+}
+
+/**
+ * A duplicated Story is a new document, not another view of the source.
+ * Remap every durable nested identity and the references which point at it;
+ * active visual jobs and production history deliberately do not carry over.
+ */
+function duplicateStoryProject(source: StoryProject): StoryProject {
+  const clone = structuredClone(source)
+  const used = new Set<string>([
+    clone.id,
+    ...clone.world.locations.map(item => item.id),
+    ...clone.characters.map(item => item.id),
+    ...clone.beats.map(item => item.id),
+    ...clone.relationships.map(item => item.id),
+    ...Object.keys(clone.assets),
+    ...Object.values(clone.assets).map(item => item.id),
+    ...clone.music.cues.map(item => item.id),
+    ...clone.music.cues.flatMap(item => item.candidates.map(candidate => candidate.id)),
+    ...clone.music.candidates.map(item => item.id),
+    ...clone.productions.map(item => item.id),
+  ])
+  const projectId = freshStoryId('story', used)
+  const characterIds = new Map<string, string>()
+  const assetIds = new Map<string, string>()
+
+  clone.world.locations = clone.world.locations.map(location => {
+    const id = freshStoryId('location', used)
+    return { ...location, id }
+  })
+  clone.characters = clone.characters.map(character => {
+    const id = freshStoryId('character', used)
+    characterIds.set(character.id, id)
+    return { ...character, id }
+  })
+  clone.beats = clone.beats.map(beat => ({ ...beat, id: freshStoryId('beat', used) }))
+  clone.relationships = clone.relationships.map(relationship => ({
+    ...relationship,
+    id: freshStoryId('relationship', used),
+    fromCharacterId: characterIds.get(relationship.fromCharacterId) || relationship.fromCharacterId,
+    toCharacterId: characterIds.get(relationship.toCharacterId) || relationship.toCharacterId,
+  }))
+  clone.assets = Object.fromEntries(Object.entries(clone.assets).map(([oldId, asset]) => {
+    const id = freshStoryId('asset', used)
+    assetIds.set(oldId, id)
+    return [id, { ...asset, id }]
+  }))
+  const remapAsset = (id: string) => assetIds.get(id) || id
+  clone.world.referenceAssetIds = clone.world.referenceAssetIds.map(remapAsset)
+  clone.world.locations.forEach(location => {
+    location.referenceAssetIds = location.referenceAssetIds.map(remapAsset)
+  })
+  clone.characters = clone.characters.map(character => ({
+    ...character,
+    referenceAssetIds: character.referenceAssetIds.map(remapAsset),
+    primaryReferenceAssetId: character.primaryReferenceAssetId
+      ? remapAsset(character.primaryReferenceAssetId) : undefined,
+  }))
+  Object.values(clone.assets).forEach(asset => {
+    if (asset.derivedFromAssetId) asset.derivedFromAssetId = remapAsset(asset.derivedFromAssetId)
+  })
+  clone.protagonistCharacterId = characterIds.get(clone.protagonistCharacterId) || clone.protagonistCharacterId
+  clone.music.cues = clone.music.cues.map(cue => {
+    const id = freshStoryId('music-cue', used)
+    const cueCandidateIds = new Map<string, string>()
+    const candidates = cue.candidates.map(candidate => {
+      const candidateId = freshStoryId('song', used)
+      cueCandidateIds.set(candidate.id, candidateId)
+      return { ...candidate, id: candidateId }
+    })
+    return {
+      ...cue,
+      id,
+      targetId: characterIds.get(cue.targetId) || (cue.targetId === source.id ? projectId : cue.targetId),
+      candidates,
+      selectedCandidateId: cue.selectedCandidateId
+        ? cueCandidateIds.get(cue.selectedCandidateId) : undefined,
+    }
+  })
+  const globalCandidateIds = new Map<string, string>()
+  clone.music.candidates = clone.music.candidates.map(candidate => {
+    const id = freshStoryId('song', used)
+    globalCandidateIds.set(candidate.id, id)
+    return { ...candidate, id }
+  })
+  clone.music.selectedCandidateId = clone.music.selectedCandidateId
+    ? globalCandidateIds.get(clone.music.selectedCandidateId) : undefined
+  const now = new Date().toISOString()
+  return normalizeStoryProject({
+    ...clone,
+    id: projectId,
+    protagonistCharacterId: characterIds.get(source.protagonistCharacterId) || clone.protagonistCharacterId,
+    visualJobs: {},
+    title: `${source.title} copy`,
+    revision: 1,
+    approvals: {},
+    productions: [],
+    createdAt: now,
+    updatedAt: now,
+  })
+}
+
+async function fetchStorySongOutputRefs(workspace: string): Promise<StorySongOutputRef[]> {
+  try {
+    const { assets } = await api.fetchAssets({ kind: 'audio', workspace, limit: 500 })
+    return assets.flatMap(asset => storySongOutputRefFromAsset(asset) || [])
+  } catch {
+    const { outputs } = await api.fetchOutputs(0, 0, { workspace, mediaType: 'audio' })
+    const refs: StorySongOutputRef[] = []
+    for (const output of outputs) {
+      const metadata = await api.fetchOutputMetadata(output.name, workspace).catch(() => null)
+      const ref = storySongOutputRefFromMetadata(output.name, output.url, metadata)
+      if (ref) refs.push(ref)
+    }
+    return refs
+  }
+}
+
+function writeLocalStoryLibrary(workspace: string, library: StoryLibraryData) {
+  persistLocalLibrary(
+    workspace,
+    library.projects[library.activeId],
+    library.projects,
+    library.revision,
+  )
+}
+
+async function recoverHydratedLibrary(
+  workspace: string,
+  library: StoryLibraryData,
+): Promise<{ library: StoryLibraryData; recovered: boolean }> {
+  if (!libraryHasPendingSongs(library)) return { library, recovered: false }
+  try {
+    const recovered = recoverPendingStorySongs(
+      library.projects,
+      await fetchStorySongOutputRefs(workspace),
+    )
+    if (!recovered.changed) return { library, recovered: false }
+    const projects = Object.fromEntries(
+      Object.values(recovered.projects).map(project => {
+        const normalized = normalizeStoryProject(project)
+        return [normalized.id, normalized]
+      }),
+    )
+    return {
+      library: {
+        ...library,
+        projects,
+        activeId: projects[library.activeId] ? library.activeId : (Object.keys(projects)[0] || library.activeId),
+      },
+      recovered: true,
+    }
+  } catch {
+    return { library, recovered: false }
+  }
+}
+
+async function commitRecoveredStoryLibrary(
+  workspace: string,
+  library: StoryLibraryData,
+  remoteSerialized: string,
+): Promise<{ library: StoryLibraryData; persisted: boolean }> {
+  try {
+    const saved = normalizeLibrary(await api.saveStoryLibrary(workspace, library)) || library
+    writeLocalStoryLibrary(workspace, saved)
+    lastPersistedLibrary.set(workspace, JSON.stringify(saved))
+    return { library: saved, persisted: true }
+  } catch {
+    lastPersistedLibrary.set(workspace, remoteSerialized)
+    return { library, persisted: false }
+  }
+}
+
+function touched(before: StoryProject, candidate: StoryProject): StoryProject {
+  const after = normalizeStoryProject(candidate)
+  const sections = changedSections(before, after)
+  const sectionVersions = { ...before.sectionVersions }
+  sections.forEach(section => { sectionVersions[section] += 1 })
+  return {
+    ...after,
+    revision: Math.max(1, before.revision + 1),
+    sectionVersions,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+interface StoryState {
+  workspace: string
+  project: StoryProject
+  projects: Record<string, StoryProject>
+  libraryRevision: number
+  dirty: boolean
+  hydrated: boolean
+  loading: boolean
+  saveError: string | null
+  libraryConflicts: StoryLibraryConflict[]
+  activeProjectOperations: Record<string, number>
+  resolveLibraryConflict: (id: string, resolution: 'local' | 'remote') => void
+  loadWorkspace: (workspace: string) => Promise<void>
+  setProject: (project: StoryProject) => void
+  patchProject: (patch: Partial<StoryProject>) => void
+  updateProject: (updater: (project: StoryProject) => StoryProject) => void
+  updateProjectById: (id: string, updater: (project: StoryProject) => StoryProject) => void
+  beginProjectOperation: (id: string) => void
+  endProjectOperation: (id: string) => void
+  newProject: (projectType?: StoryProjectType) => void
+  duplicateProject: (id?: string) => void
+  openProject: (id: string) => void
+  deleteProject: (id: string) => void
+}
+
+const initialWorkspace = 'default'
+const restored = restoreLocalLibrary(initialWorkspace)
+
+export const useStoryStore = create<StoryState>((set, get) => ({
+  workspace: initialWorkspace,
+  project: restored.projects[restored.activeId],
+  projects: restored.projects,
+  libraryRevision: restored.revision,
+  dirty: false,
+  hydrated: false,
+  loading: false,
+  saveError: null,
+  libraryConflicts: [],
+  activeProjectOperations: {},
+  resolveLibraryConflict: (id, resolution) => set(state => {
+    const conflict = state.libraryConflicts.find(item => item.id === id)
+    if (!conflict) return state
+    const selected = resolution === 'remote'
+      ? conflict.remoteProject
+      : conflict.localProject
+    // Give the explicit choice a fresh monotonic timestamp so the next merge
+    // cannot recreate the same equal-time conflict.
+    const project = touched(state.projects[id] || conflict.localProject, selected)
+    return {
+      project: state.project.id === id ? project : state.project,
+      projects: { ...state.projects, [id]: project },
+      libraryConflicts: state.libraryConflicts.filter(item => item.id !== id),
+      dirty: true,
+      saveError: null,
+    }
+  }),
+  loadWorkspace: async rawWorkspace => {
+    const workspace = safeWorkspace(rawWorkspace)
+    const localSnapshotExisted = hasPersistedLocalLibrary(workspace)
+    const previous = get()
+    if (workspace === previous.workspace && (previous.hydrated || previous.loading)) return
+
+    try {
+      persistLocalLibrary(previous.workspace, previous.project, previous.projects, previous.libraryRevision)
+    } catch {
+      // The visible story remains exportable even if browser storage is full.
+    }
+
+    // Flush the previous workspace before changing the active in-memory
+    // library; otherwise the debounce below could be cancelled by a fast
+    // workspace switch.
+    if (previous.hydrated && workspace !== previous.workspace && !previous.libraryConflicts.length) {
+      try {
+        const previousLibrary = buildLibrary(previous.project, previous.projects, previous.libraryRevision)
+        const savedPrevious = await api.saveStoryLibrary(previous.workspace, previousLibrary)
+        lastPersistedLibrary.set(previous.workspace, JSON.stringify(savedPrevious))
+        persistLocalLibrary(
+          previous.workspace,
+          previous.project,
+          previous.projects,
+          savedPrevious.revision,
+        )
+      } catch {
+        // Its local cache remains intact and will be retried next time.
+      }
+    }
+
+    const local = restoreLocalLibrary(workspace)
+    set({
+      workspace,
+      project: local.projects[local.activeId],
+      projects: local.projects,
+      libraryRevision: local.revision,
+      dirty: false,
+      hydrated: false,
+      loading: true,
+      saveError: null,
+      libraryConflicts: [],
+    })
+    try {
+      const remoteValue = await api.fetchStoryLibrary(workspace)
+      if (get().workspace !== workspace) return
+      const remoteLibrary = normalizeLibrary(remoteValue)
+      let library = remoteLibrary
+      let conflicts: StoryLibraryConflict[] = []
+      let needsRemoteSync = false
+      if (!library) {
+        // First-run migration: upload the existing v2/legacy browser cache.
+        library = {
+          ...local,
+          revision: Number.isInteger(remoteValue.revision) && remoteValue.revision >= 0
+            ? remoteValue.revision : 0,
+        }
+        library = normalizeLibrary(await api.saveStoryLibrary(workspace, library)) || library
+      } else if (localSnapshotExisted) {
+        const merged = mergeStoryLibraries(local, library)
+        library = merged.library
+        conflicts = merged.conflicts
+        needsRemoteSync = merged.needsRemoteSync
+      }
+      writeLocalStoryLibrary(workspace, library)
+      const remoteSerialized = remoteLibrary ? JSON.stringify(remoteLibrary) : ''
+      const recovered = conflicts.length
+        ? { library, recovered: false }
+        : await recoverHydratedLibrary(workspace, library)
+      library = recovered.library
+      writeLocalStoryLibrary(workspace, library)
+      // Recovery must reach the server. Caching the recovered snapshot in
+      // lastPersistedLibrary would make the autosave subscriber treat it as
+      // already persisted. A conflict still stays unsynced until review.
+      let recoveredPersisted = !recovered.recovered
+      if (recovered.recovered && !conflicts.length) {
+        const committed = await commitRecoveredStoryLibrary(workspace, library, remoteSerialized)
+        library = committed.library
+        recoveredPersisted = committed.persisted
+      } else {
+        lastPersistedLibrary.set(
+          workspace,
+          needsRemoteSync && !conflicts.length
+            ? remoteSerialized
+            : JSON.stringify(library),
+        )
+      }
+      set({
+        project: library.projects[library.activeId],
+        projects: library.projects,
+        libraryRevision: library.revision,
+        dirty: needsRemoteSync || (recovered.recovered && !recoveredPersisted),
+        hydrated: true,
+        loading: false,
+        saveError: null,
+        libraryConflicts: conflicts,
+      })
+      if (workspace === 'default') {
+        window.localStorage.removeItem(LEGACY_AUTOSAVE_KEY)
+      }
+    } catch (error) {
+      if (get().workspace !== workspace) return
+      set({
+        hydrated: false,
+        loading: false,
+        libraryConflicts: [],
+        saveError: error instanceof Error ? error.message : 'Story Lab storage is unavailable',
+      })
+    }
+  },
+  setProject: value => set(state => {
+    const project = normalizeStoryProject(value)
+    return {
+      project,
+      projects: { ...state.projects, [project.id]: project },
+      dirty: true,
+    }
+  }),
+  patchProject: patch => set(state => {
+    const project = touched(state.project, { ...state.project, ...patch })
+    return {
+      project,
+      projects: { ...state.projects, [project.id]: project },
+      dirty: true,
+    }
+  }),
+  updateProject: updater => set(state => {
+    const project = touched(state.project, updater(structuredClone(state.project)))
+    return {
+      project,
+      projects: { ...state.projects, [project.id]: project },
+      dirty: true,
+    }
+  }),
+  updateProjectById: (id, updater) => set(state => {
+    const source = state.projects[id]
+    if (!source) return state
+    const project = touched(source, updater(structuredClone(source)))
+    return {
+      project: state.project.id === id ? project : state.project,
+      projects: { ...state.projects, [id]: project },
+      dirty: true,
+    }
+  }),
+  beginProjectOperation: id => set(state => ({
+    activeProjectOperations: {
+      ...state.activeProjectOperations,
+      [id]: (state.activeProjectOperations[id] || 0) + 1,
+    },
+  })),
+  endProjectOperation: id => set(state => {
+    const count = state.activeProjectOperations[id] || 0
+    if (count <= 1) {
+      const activeProjectOperations = { ...state.activeProjectOperations }
+      delete activeProjectOperations[id]
+      return { activeProjectOperations }
+    }
+    return {
+      activeProjectOperations: { ...state.activeProjectOperations, [id]: count - 1 },
+    }
+  }),
+  newProject: projectType => set(state => {
+    const fresh = createStoryProject(projectType)
+    // New projects inherit the production profile. Keep the dormant explicit
+    // provider values for a later opt-out, but never copy the previous Story's
+    // inheritance mode or video override into a brand-new project.
+    const project = {
+      ...fresh,
+      provider: { ...fresh.provider, ...state.project.provider, useGlobalProfile: true },
+    }
+    return {
+      project,
+      projects: { ...state.projects, [project.id]: project },
+      dirty: true,
+    }
+  }),
+  duplicateProject: id => set(state => {
+    const sourceId = id || state.project.id
+    if (state.activeProjectOperations[sourceId]) return state
+    const source = state.projects[sourceId]
+    if (!source) return state
+    const project = duplicateStoryProject(source)
+    return {
+      project,
+      projects: { ...state.projects, [project.id]: project },
+      dirty: true,
+    }
+  }),
+  openProject: id => set(state => {
+    const project = state.projects[id]
+    return project ? { project, dirty: true } : state
+  }),
+  deleteProject: id => set(state => {
+    if (state.activeProjectOperations[id]) return state
+    if (!state.projects[id]) return state
+    const projects = { ...state.projects }
+    delete projects[id]
+    const remainingId = Object.keys(projects)[0]
+    if (remainingId) {
+      return {
+        projects,
+        project: state.project.id === id ? projects[remainingId] : state.project,
+        libraryConflicts: state.libraryConflicts.filter(item => item.id !== id),
+        dirty: true,
+      }
+    }
+    const project = createStoryProject()
+    return {
+      projects: { [project.id]: project },
+      project,
+      libraryConflicts: state.libraryConflicts.filter(item => item.id !== id),
+      dirty: true,
+    }
+  }),
+}))
+
+let saveTimer: number | undefined
+let backendSaveChain: Promise<void> = Promise.resolve()
+const lastPersistedLibrary = new Map<string, string>()
+useStoryStore.subscribe(state => {
+  if (typeof window === 'undefined') return
+  try {
+    persistLocalLibrary(state.workspace, state.project, state.projects, state.libraryRevision)
+  } catch {
+    // Storypack export remains available when browser storage is full.
+  }
+  if (!state.hydrated) return
+  if (state.libraryConflicts.length) return
+
+  const workspace = state.workspace
+  const library = buildLibrary(state.project, state.projects, state.libraryRevision)
+  const serialized = JSON.stringify(library)
+  if (lastPersistedLibrary.get(workspace) === serialized) return
+
+  window.clearTimeout(saveTimer)
+  saveTimer = window.setTimeout(() => {
+    backendSaveChain = backendSaveChain
+      .catch(() => undefined)
+      .then(async () => {
+        const saved = await api.saveStoryLibrary(workspace, library)
+        const savedSerialized = JSON.stringify(saved)
+        lastPersistedLibrary.set(workspace, savedSerialized)
+        useStoryStore.setState(current => {
+          if (current.workspace !== workspace) return {}
+          const contentUnchanged = JSON.stringify(
+            buildLibrary(current.project, current.projects, library.revision),
+          ) === serialized
+          return {
+            libraryRevision: saved.revision,
+            dirty: !contentUnchanged,
+            saveError: null,
+          }
+        })
+      })
+      .catch(async error => {
+        if (error instanceof api.StoryLibraryRevisionError) {
+          try {
+            const remoteValue = await api.fetchStoryLibrary(workspace)
+            const current = useStoryStore.getState()
+            if (current.workspace !== workspace) return
+            const remote = normalizeLibrary(remoteValue) || {
+              version: 2 as const,
+              revision: Number.isInteger(remoteValue.revision) ? remoteValue.revision : error.currentRevision,
+              activeId: '',
+              projects: {},
+            }
+            const local = buildLibrary(
+              current.project,
+              current.projects,
+              current.libraryRevision,
+            )
+            const merged = mergeStoryLibraries(local, remote)
+            // The remote snapshot is the CAS baseline. A conflict blocks
+            // autosave; a clean local-newer merge immediately retries at the
+            // newly observed revision.
+            lastPersistedLibrary.set(workspace, JSON.stringify(remote))
+            persistLocalLibrary(
+              workspace,
+              merged.library.projects[merged.library.activeId],
+              merged.library.projects,
+              merged.library.revision,
+            )
+            useStoryStore.setState({
+              project: merged.library.projects[merged.library.activeId],
+              projects: merged.library.projects,
+              libraryRevision: merged.library.revision,
+              dirty: merged.needsRemoteSync || merged.conflicts.length > 0,
+              libraryConflicts: merged.conflicts,
+              saveError: merged.conflicts.length
+                ? 'Story library changed in another tab. Review the conflict before saving.'
+                : null,
+            })
+            return
+          } catch (recoveryError) {
+            error = recoveryError
+          }
+        }
+        useStoryStore.setState(current => current.workspace === workspace
+          ? {
+              dirty: true,
+              saveError: error instanceof Error ? error.message : 'Story Lab autosave failed',
+            }
+          : {})
+      })
+  }, 750)
+})
+
+export async function saveStoryProjectMutation(
+  workspace: string,
+  current: { libraryRevision: number; projects: Record<string, StoryProject> },
+  projectId: string,
+  mutate: (project: StoryProject) => StoryProject,
+): Promise<StoryProject> {
+  let baseline = current
+  let library: Awaited<ReturnType<typeof api.saveStoryLibrary>> | null = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const source = baseline.projects[projectId]
+    if (!source) throw new Error('La historia activa desapareció antes de poder guardarla.')
+    const project = mutate(source)
+    try {
+      library = await api.saveStoryLibrary(workspace, {
+        version: 2,
+        revision: baseline.libraryRevision,
+        activeId: project.id,
+        projects: { ...baseline.projects, [project.id]: project },
+      })
+      break
+    } catch (error) {
+      if (!(error instanceof api.StoryLibraryRevisionError) || attempt === 2) throw error
+      const remote = await api.fetchStoryLibrary(workspace)
+      baseline = {
+        libraryRevision: remote.revision,
+        projects: remote.projects,
+      }
+    }
+  }
+  if (!library?.projects[projectId]) throw new Error('Story Lab guardó la biblioteca sin devolver la historia editada.')
+  useStoryStore.setState({
+    workspace,
+    project: library.projects[projectId],
+    projects: library.projects,
+    libraryRevision: library.revision,
+    dirty: false,
+    hydrated: false,
+    loading: false,
+    saveError: null,
+    libraryConflicts: [],
+  })
+  await useStoryStore.getState().loadWorkspace(workspace)
+  return useStoryStore.getState().projects[projectId] || library.projects[projectId]
+}
+
+export { createStoryProject, normalizeStoryProject, storyId } from './model'
+export { mergeStoryLibraries } from './library'
+export type { StoryLibraryConflict, StoryLibraryData } from './library'

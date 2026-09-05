@@ -1,14 +1,36 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import type { ParseKeys } from 'i18next'
+import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
+import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
-import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
+import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, fetchOutputs, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
+import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
+import { SceneRecipePanel } from './SceneRecipePanel'
+import type { SceneRecipe } from '../../lib/sceneRecipe'
+import { sceneToRecipe } from '../../lib/sceneToRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
+import { SceneLibraryDialog } from './SceneLibraryDialog'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
+import { normalizeSceneLookupName, sceneFromLibraryPayload, sceneLibraryTitle, sceneOutputMatchesName } from '../../lib/sceneLibrary'
+import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
-import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
-import type { Scene, SceneAnimationEvent, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
+import { applySceneRhythmToLayer, buildSceneRhythmMap, type SceneRhythmCueSource, type SceneRhythmProfile } from '../../lib/sceneRhythm'
+import { applyCutoutDialogue, bindCutoutFaceToPose, ensureCutoutFacePlayback, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
+import { captureCharacterFaceAnchor, characterKitAssetFromLayer, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, syncMountedCharacterKitLayers, syncSceneCharacterKits, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
+import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } from '../../lib/characterKitHandoff'
+import { rememberCharacterKitLibrary, rememberVideo3dScene } from '../../features/agent/wizardLabSession'
+import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
+import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
+import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
+import { normalizeSeamOccluder, paintSeamOccluder, seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
+import type { AudioAnalysisResult, Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
+import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
+import { CharacterKitLibraryPanel } from '../../features/characters/CharacterKitLibraryPanel'
+import type { CharacterKitEditorTab } from '../../features/characters/characterKitGuide'
+import { listenForAgentSceneControl, listenForAgentSceneRhythm, listenForAgentSceneWorkflow } from '../../features/agent/agentUiBus'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 type AnimatorLayerType = SceneLayerType
@@ -22,15 +44,23 @@ type AnimatorLayer = Omit<SceneLayer, 'type' | 'animation'> & {
 }
 type AnimatorScene = Omit<Scene, 'layers'> & { layers: AnimatorLayer[] }
 type VisualAnimatorLayer = AnimatorLayer & { type: VisualLayerType }
-type LayerState = { x: number; y: number; scale: number; opacity: number; rotation: number; z: number }
+type LayerState = { x: number; y: number; scale: number; opacity: number; rotation: number; z: number; modelYaw?: number }
 type PresetCategory = 'classic' | 'game' | 'cinematic'
 type Preset = { id: string; label: string; category: PresetCategory; start: Point; end: Point; duration: number; spin: boolean; curve: SceneCurve; requiresTarget?: boolean; preview: string; poster: string }
 type CameraPreset = { id: string; label: string; start: Point; end: Point; duration: number; curve: SceneCurve; shake?: { amount: number; frequency: number; seed?: number } }
+type PhotoMotionPreset = CameraPreset & { description: string }
 type Gesture = { id: string; mode: 'move' | 'resize' | 'orbit'; startX: number; startY: number; x: number; y: number; scale: number; rotationX: number; rotationY: number }
 type LayerEffects = Required<NonNullable<SceneLayer['effects']>>
-type ModelViewerAnimationElement = HTMLElement & { availableAnimations?: string[]; animationName?: string; currentTime: number; duration: number; pause: () => void }
+type LayerStrip = Required<Omit<NonNullable<SceneLayer['strip']>, 'seamOccluder'>> & {
+  seamOccluder: { enabled: boolean; kind: SeamOccluderKind; scale: number; opacity: number }
+}
+type Atmosphere = Required<NonNullable<SceneLayer['atmosphere']>>
+type ModelViewerAnimationElement = HTMLElement & { loaded?: boolean; availableAnimations?: string[]; animationName?: string; currentTime: number; duration: number; pause: () => void }
+type SpeechRecognizer = { lang: string; continuous: boolean; interimResults: boolean; start: () => void; stop: () => void; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null }
+type SpeechRecognizerConstructor = new () => SpeechRecognizer
 
 const makePoint = (x: number, y: number, scale: number): Point => ({ x, y, scale })
+const scene3dKey = (key: string) => key as ParseKeys<'scene3d'>
 const CAMERA_PRESETS: CameraPreset[] = [
   { id: 'camera-locked', label: 'Locked shot', start: { x: 50, y: 50, scale: 1, rotation: 0 }, end: { x: 50, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'linear' },
   { id: 'camera-pan-right', label: 'Pan right', start: { x: 35, y: 50, scale: 1, rotation: 0 }, end: { x: 65, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
@@ -39,9 +69,21 @@ const CAMERA_PRESETS: CameraPreset[] = [
   { id: 'camera-pull-out', label: 'Reveal pull-out', start: { x: 50, y: 50, scale: 1.6, rotation: 0 }, end: { x: 50, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
   { id: 'camera-crane-up', label: 'Crane up', start: { x: 50, y: 68, scale: 1.15, rotation: 0 }, end: { x: 50, y: 34, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
   { id: 'camera-dutch-drift', label: 'Dutch drift', start: { x: 44, y: 54, scale: 1.05, rotation: -6 }, end: { x: 57, y: 46, scale: 1.28, rotation: 7 }, duration: 6, curve: 'ease' },
-  { id: 'camera-handheld', label: 'Handheld', start: { x: 50, y: 50, scale: 1.08, rotation: 0 }, end: { x: 51, y: 49, scale: 1.12, rotation: .6 }, duration: 6, curve: 'ease', shake: { amount: .75, frequency: 3.2, seed: 1.7 } },
-  { id: 'camera-whip-pan', label: 'Whip pan', start: { x: 28, y: 50, scale: 1.18, rotation: -2 }, end: { x: 72, y: 50, scale: 1.05, rotation: 2 }, duration: 1.1, curve: 'dramatic', shake: { amount: .35, frequency: 7, seed: 3.1 } },
+  { id: 'camera-handheld', label: 'Handheld · shake', start: { x: 50, y: 50, scale: 1.08, rotation: 0 }, end: { x: 51, y: 49, scale: 1.12, rotation: .6 }, duration: 6, curve: 'ease', shake: { amount: .75, frequency: 3.2, seed: 1.7 } },
+  { id: 'camera-whip-pan', label: 'Whip pan · shake', start: { x: 28, y: 50, scale: 1.18, rotation: -2 }, end: { x: 72, y: 50, scale: 1.05, rotation: 2 }, duration: 1.1, curve: 'dramatic', shake: { amount: .35, frequency: 7, seed: 3.1 } },
   { id: 'camera-dolly', label: 'Dolly reveal', start: { x: 36, y: 57, scale: 1.5, rotation: -2 }, end: { x: 58, y: 46, scale: .92, rotation: 0 }, duration: 5.5, curve: 'ease' },
+]
+const PHOTO_MOTION_PRESETS: PhotoMotionPreset[] = [
+  { id: 'photo-documentary-push', label: 'Documentary push-in', description: 'A restrained slow move toward the subject.', start: { x: 50, y: 51, scale: 1.04, rotation: 0 }, end: { x: 48, y: 47, scale: 1.3, rotation: 0 }, duration: 7, curve: 'ease' },
+  { id: 'photo-ken-burns-left', label: 'Ken Burns · left', description: 'Classic archival pan from right to left.', start: { x: 43, y: 50, scale: 1.18, rotation: 0 }, end: { x: 57, y: 50, scale: 1.24, rotation: 0 }, duration: 8, curve: 'ease' },
+  { id: 'photo-ken-burns-right', label: 'Ken Burns · right', description: 'Classic archival pan from left to right.', start: { x: 57, y: 50, scale: 1.18, rotation: 0 }, end: { x: 43, y: 50, scale: 1.24, rotation: 0 }, duration: 8, curve: 'ease' },
+  { id: 'photo-portrait-rise', label: 'Portrait rise', description: 'Starts low and slowly discovers the face.', start: { x: 50, y: 58, scale: 1.12, rotation: 0 }, end: { x: 50, y: 42, scale: 1.3, rotation: 0 }, duration: 7, curve: 'ease' },
+  { id: 'photo-reveal-pullback', label: 'Reveal pull-back', description: 'Opens from a detail into the full photograph.', start: { x: 52, y: 48, scale: 1.42, rotation: 0 }, end: { x: 50, y: 50, scale: 1.06, rotation: 0 }, duration: 7, curve: 'ease' },
+  { id: 'photo-diagonal-discovery', label: 'Diagonal discovery', description: 'Elegant diagonal travel for landscapes and art.', start: { x: 42, y: 58, scale: 1.08, rotation: 0 }, end: { x: 58, y: 42, scale: 1.32, rotation: 0 }, duration: 7.5, curve: 'ease' },
+  { id: 'photo-intimate-closeup', label: 'Intimate close-up', description: 'A gentle asymmetric move for emotional beats.', start: { x: 51, y: 53, scale: 1.1, rotation: 0 }, end: { x: 46, y: 45, scale: 1.43, rotation: 0 }, duration: 8, curve: 'ease' },
+  { id: 'photo-dutch-tension', label: 'Dutch tension', description: 'Slow roll and push for mystery or conflict.', start: { x: 47, y: 53, scale: 1.12, rotation: -2.5 }, end: { x: 54, y: 47, scale: 1.34, rotation: 3 }, duration: 6.5, curve: 'ease' },
+  { id: 'photo-handheld-memory', label: 'Memory drift', description: 'Subtle smooth drift for memories and reportage.', start: { x: 50, y: 51, scale: 1.12, rotation: -.3 }, end: { x: 49, y: 48, scale: 1.22, rotation: .4 }, duration: 7, curve: 'ease' },
+  { id: 'photo-rostrum-scan', label: 'Rostrum scan', description: 'A measured top-to-bottom move for documents and maps.', start: { x: 50, y: 40, scale: 1.26, rotation: 0 }, end: { x: 50, y: 60, scale: 1.26, rotation: 0 }, duration: 8, curve: 'ease' },
 ]
 const PRESETS: Preset[] = ([
   ['turntable', 'Product turntable', 50, 50, 50, 50, .8, .8, 5, true, 'linear'], ['meteor', 'Meteor fly-by', -10, 82, 112, 18, .22, .65, 2, true, 'dramatic'], ['space-cruise', 'Spacecraft cruise', 8, 54, 92, 43, .48, .68, 5, true, 'ease'], ['hover', 'Hovering reveal', 50, 54, 50, 46, .7, .76, 4, true, 'ease'], ['landing', 'Landing', 50, -12, 50, 60, .2, .82, 4, false, 'bounce'], ['liftoff', 'Lift-off', 50, 68, 54, -15, .82, .28, 3, false, 'dramatic'], ['zoom-in', 'Hero zoom in', 50, 50, 50, 50, .18, 1.35, 3, true, 'dramatic'], ['zoom-out', 'Retreat into distance', 50, 50, 50, 50, 1.25, .18, 3, true, 'ease'], ['drift-right', 'Slow drift right', 25, 50, 75, 50, .68, .68, 6, false, 'linear'], ['drift-left', 'Slow drift left', 75, 50, 25, 50, .68, .68, 6, false, 'linear'], ['diagonal-rise', 'Diagonal rise', 20, 82, 78, 22, .38, .82, 4, true, 'ease'], ['diagonal-drop', 'Diagonal drop', 78, 16, 24, 84, .82, .35, 3, true, 'dramatic'], ['pop', 'Pop into frame', 50, 50, 50, 50, .05, .85, 1, true, 'bounce'], ['glide', 'Low glide', -8, 72, 108, 70, .4, .52, 4, false, 'ease'], ['pass-camera', 'Pass the camera', 16, 50, 90, 50, .18, 1.5, 3, true, 'dramatic'], ['vibrate', 'Nave vibrando', 49, 51, 51, 49, .72, .75, 2, false, 'bounce'], ['orbit-sweep', 'Orbit sweep', 18, 70, 86, 30, .32, .9, 5, true, 'ease'], ['center-reveal', 'Center reveal', 50, 105, 50, 52, .35, .9, 3, true, 'ease'], ['exit-frame', 'Emergency exit', 50, 50, 120, -10, .8, .25, 2, true, 'dramatic'], ['floating-logo', 'Floating logo', 50, 45, 50, 55, .72, .72, 4, true, 'ease'],
@@ -65,6 +107,60 @@ const PRESETS: Preset[] = ([
 
 const DEFAULT_COMPOSITION: NonNullable<Scene['composition']> = { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }
 const DEFAULT_EFFECTS: LayerEffects = { blur: 0, brightness: 1, contrast: 1, saturation: 1, hue: 0, glow: 0, shadow: 0, blendMode: 'normal', mask: 'none', maskRadius: 12 }
+const DEFAULT_STRIP: LayerStrip = { enabled: false, count: 5, spacing: 24, direction: 'down', speed: 18, phase: 0, seamOccluder: { enabled: false, kind: 'pole', scale: 1, opacity: .82 } }
+const ATMOSPHERE_KINDS: SceneAtmosphereKind[] = ['rain', 'snow', 'dust', 'embers', 'fog', 'smoke', 'ash', 'fireflies', 'confetti', 'bokeh', 'sparkles', 'bubbles', 'speedlines', 'leaves']
+const ATMOSPHERE_LABELS: Record<SceneAtmosphereKind, string> = {
+  rain: 'Cinematic rain',
+  snow: 'Falling snow',
+  dust: 'Floating dust',
+  embers: 'Rising embers',
+  fog: 'Rolling fog',
+  smoke: 'Drifting smoke',
+  ash: 'Falling ash',
+  fireflies: 'Fireflies',
+  confetti: 'Confetti shower',
+  bokeh: 'Dreamy bokeh',
+  sparkles: 'Magic sparkles',
+  bubbles: 'Underwater bubbles',
+  speedlines: 'Speed lines',
+  leaves: 'Falling leaves',
+}
+const ATMOSPHERE_DESCRIPTIONS: Record<SceneAtmosphereKind, string> = {
+  rain: 'Layered rain streaks with depth and wind.',
+  snow: 'Soft flakes with gentle lateral drift.',
+  dust: 'Warm motes for interiors, ruins and sunbeams.',
+  embers: 'Glowing particles rising from fire or destruction.',
+  fog: 'Large translucent banks moving across the frame.',
+  smoke: 'Soft plumes that rise and disperse with the wind.',
+  ash: 'Irregular grey fallout for burned or volcanic scenes.',
+  fireflies: 'Warm wandering lights with organic pulsing.',
+  confetti: 'Multicolour rotating pieces for celebrations.',
+  bokeh: 'Large dreamy lights with a slow cinematic drift.',
+  sparkles: 'Twinkling four-point stars for magical reveals.',
+  bubbles: 'Outlined bubbles rising through underwater shots.',
+  speedlines: 'Fast directional streaks for action and impacts.',
+  leaves: 'Rotating autumn leaves with varied warm colours.',
+}
+const ATMOSPHERE_OPACITY: Record<SceneAtmosphereKind, number> = {
+  rain: .92, snow: .95, dust: .78, embers: .92, fog: .58, smoke: .62, ash: .72,
+  fireflies: .95, confetti: 1, bokeh: .58, sparkles: .9, bubbles: .85, speedlines: .7, leaves: .95,
+}
+const ATMOSPHERE_PRESETS: Record<SceneAtmosphereKind, Atmosphere> = {
+  rain: { kind: 'rain', density: 145, speed: 1.3, size: 1.65, wind: -10, color: '#dbeafe' },
+  snow: { kind: 'snow', density: 90, speed: .42, size: 2.15, wind: 8, color: '#ffffff' },
+  dust: { kind: 'dust', density: 58, speed: .25, size: 2.5, wind: 18, color: '#fde68a' },
+  embers: { kind: 'embers', density: 68, speed: .62, size: 1.55, wind: 10, color: '#fb923c' },
+  fog: { kind: 'fog', density: 16, speed: .18, size: 1.15, wind: 28, color: '#dbeafe' },
+  smoke: { kind: 'smoke', density: 22, speed: .3, size: .85, wind: 12, color: '#cbd5e1' },
+  ash: { kind: 'ash', density: 95, speed: .34, size: 1.35, wind: 14, color: '#d1d5db' },
+  fireflies: { kind: 'fireflies', density: 38, speed: .22, size: 1.4, wind: 4, color: '#fde047' },
+  confetti: { kind: 'confetti', density: 86, speed: .72, size: 1.65, wind: 12, color: '#f472b6' },
+  bokeh: { kind: 'bokeh', density: 24, speed: .12, size: 2.8, wind: 6, color: '#f0abfc' },
+  sparkles: { kind: 'sparkles', density: 42, speed: .18, size: 1.8, wind: 4, color: '#ffffff' },
+  bubbles: { kind: 'bubbles', density: 46, speed: .45, size: 1.6, wind: 5, color: '#bae6fd' },
+  speedlines: { kind: 'speedlines', density: 72, speed: 1.65, size: 1.15, wind: 45, color: '#e0f2fe' },
+  leaves: { kind: 'leaves', density: 54, speed: .48, size: 1.8, wind: 20, color: '#f59e0b' },
+}
 const blankScene = (): AnimatorScene => ({ version: 1, name: 'Untitled scene', width: 1280, height: 720, fps: 30, duration: 5, layers: [], composition: { ...DEFAULT_COMPOSITION } })
 const AUTOSAVE_KEY = 'maestro-scene-animator-autosave-v1'
 const HISTORY_LIMIT = 80
@@ -83,6 +179,131 @@ const normalizedEffects = (value: SceneLayer['effects'] | undefined): LayerEffec
   mask: ['none', 'rounded', 'ellipse'].includes(value?.mask ?? '') ? value?.mask as SceneMask : 'none',
   maskRadius: boundedNumber(value?.maskRadius, DEFAULT_EFFECTS.maskRadius, 0, 50),
 })
+const normalizedStrip = (value: SceneLayer['strip'] | undefined): LayerStrip => ({
+  enabled: value?.enabled === true,
+  count: Math.round(boundedNumber(value?.count, DEFAULT_STRIP.count, 1, 12)),
+  spacing: boundedNumber(value?.spacing, DEFAULT_STRIP.spacing, 2, 200),
+  direction: ['up', 'down', 'left', 'right'].includes(value?.direction ?? '') ? value?.direction as LayerStrip['direction'] : DEFAULT_STRIP.direction,
+  speed: boundedNumber(value?.speed, DEFAULT_STRIP.speed, 0, 300),
+  phase: boundedNumber(value?.phase, DEFAULT_STRIP.phase, -1000, 1000),
+  seamOccluder: normalizeSeamOccluder(value?.seamOccluder),
+})
+const normalizedAtmosphere = (value: SceneLayer['atmosphere'] | undefined): Atmosphere => {
+  const kind = ATMOSPHERE_KINDS.includes(value?.kind as SceneAtmosphereKind) ? value!.kind : 'rain'
+  const preset = ATMOSPHERE_PRESETS[kind]
+  return {
+    kind,
+    density: Math.round(boundedNumber(value?.density, preset.density, 5, 240)),
+    speed: boundedNumber(value?.speed, preset.speed, .05, 4),
+    size: boundedNumber(value?.size, preset.size, .2, 8),
+    wind: boundedNumber(value?.wind, preset.wind, -100, 100),
+    color: typeof value?.color === 'string' && /^#[0-9a-f]{6}$/i.test(value.color) ? value.color : preset.color,
+  }
+}
+const particleNoise = (index: number, salt: number) => {
+  const value = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453
+  return value - Math.floor(value)
+}
+const atmosphereParticles = (atmosphere: Atmosphere, seconds: number) => Array.from({ length: atmosphere.density }, (_, index) => {
+  const phase = particleNoise(index, 1.7)
+  const baseX = particleNoise(index, 4.1) * 120 - 10
+  const baseY = particleNoise(index, 8.3) * 120 - 10
+  const depth = .35 + particleNoise(index, 11.9) * .65
+  const pulse = .35 + .65 * Math.abs(Math.sin(seconds * (1.2 + depth * 2.4) + phase * Math.PI * 2))
+  const rotation = (particleNoise(index, 15.3) * 360 + seconds * atmosphere.speed * (30 + depth * 100)) % 360
+  const rate = atmosphere.kind === 'rain' ? .55
+    : atmosphere.kind === 'snow' ? .09
+      : atmosphere.kind === 'embers' || atmosphere.kind === 'bubbles' ? .16
+        : atmosphere.kind === 'confetti' || atmosphere.kind === 'leaves' ? .12
+          : atmosphere.kind === 'ash' ? .075
+            : atmosphere.kind === 'speedlines' ? .5
+              : .045
+  const travel = ((phase + seconds * atmosphere.speed * rate * depth) % 1 + 1) % 1
+  const wind = atmosphere.wind * travel * .18
+  const shared = { size: atmosphere.size * depth, pulse, rotation, variant: Math.floor(particleNoise(index, 19.7) * 6) }
+  if (atmosphere.kind === 'embers' || atmosphere.kind === 'smoke' || atmosphere.kind === 'bubbles') return { ...shared, x: baseX + wind + Math.sin(seconds * 1.7 + index) * (atmosphere.kind === 'smoke' ? 4 : 1.8), y: 110 - travel * 120, alpha: atmosphere.kind === 'smoke' ? .12 + depth * .22 : .3 + depth * .65 }
+  if (atmosphere.kind === 'dust' || atmosphere.kind === 'fog') return { ...shared, x: ((baseX + travel * (18 + atmosphere.wind) + 10) % 120 + 120) % 120 - 10, y: baseY + Math.sin(seconds * atmosphere.speed + index * 2.1) * (atmosphere.kind === 'fog' ? 5 : 3), alpha: atmosphere.kind === 'fog' ? .1 + depth * .16 : .14 + depth * .32 }
+  if (atmosphere.kind === 'fireflies' || atmosphere.kind === 'bokeh' || atmosphere.kind === 'sparkles') return { ...shared, x: baseX + Math.sin(seconds * atmosphere.speed * 2 + index) * (2 + atmosphere.wind * .05), y: baseY + Math.cos(seconds * atmosphere.speed * 1.7 + index * 1.8) * 3, alpha: pulse * (atmosphere.kind === 'bokeh' ? .28 : .85) }
+  if (atmosphere.kind === 'speedlines') return { ...shared, x: -10 + travel * 120, y: baseY, alpha: .18 + depth * .58 }
+  return { ...shared, x: baseX + wind + (atmosphere.kind === 'snow' || atmosphere.kind === 'ash' || atmosphere.kind === 'leaves' ? Math.sin(seconds * 1.2 + index) * 2.8 : 0), y: -10 + travel * 120, alpha: atmosphere.kind === 'rain' ? .28 + depth * .55 : atmosphere.kind === 'ash' ? .18 + depth * .45 : .35 + depth * .65 }
+})
+const drawAtmosphere = (context: CanvasRenderingContext2D, atmosphere: Atmosphere, seconds: number, width: number, height: number) => {
+  const shortSide = Math.min(width, height)
+  const confettiPalette = ['#f472b6', '#60a5fa', '#facc15', '#34d399', '#c084fc', '#fb7185']
+  const leafPalette = ['#f59e0b', '#dc2626', '#84cc16', '#d97706', '#a16207', '#fbbf24']
+  for (const particle of atmosphereParticles(atmosphere, seconds)) {
+    const x = -width / 2 + width * particle.x / 100
+    const y = -height / 2 + height * particle.y / 100
+    const color = atmosphere.kind === 'confetti' ? confettiPalette[particle.variant] : atmosphere.kind === 'leaves' ? leafPalette[particle.variant] : atmosphere.color
+    context.save()
+    context.globalAlpha *= particle.alpha
+    context.fillStyle = color
+    context.strokeStyle = color
+    context.lineCap = 'round'
+    if (atmosphere.kind === 'rain') {
+      context.lineWidth = Math.max(1, shortSide * particle.size / 520)
+      context.beginPath(); context.moveTo(x, y); context.lineTo(x + atmosphere.wind * width / 1900, y + height * particle.size / 30); context.stroke()
+    } else if (atmosphere.kind === 'fog' || atmosphere.kind === 'smoke') {
+      const radius = shortSide * particle.size / (atmosphere.kind === 'fog' ? 8 : 11)
+      const gradient = context.createRadialGradient(x, y, 0, x, y, radius)
+      gradient.addColorStop(0, color)
+      gradient.addColorStop(.45, `${color}88`)
+      gradient.addColorStop(1, `${color}00`)
+      context.fillStyle = gradient
+      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
+    } else if (atmosphere.kind === 'fireflies' || atmosphere.kind === 'embers') {
+      const radius = Math.max(1, shortSide * particle.size / 420)
+      context.shadowColor = color; context.shadowBlur = radius * (atmosphere.kind === 'fireflies' ? 7 : 4)
+      context.globalAlpha *= atmosphere.kind === 'fireflies' ? particle.pulse : 1
+      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
+    } else if (atmosphere.kind === 'confetti') {
+      const unit = shortSide * particle.size / 270
+      context.translate(x, y); context.rotate(particle.rotation * Math.PI / 180)
+      context.fillRect(-unit / 2, -unit * 1.4, unit, unit * 2.8)
+    } else if (atmosphere.kind === 'bokeh') {
+      const radius = shortSide * particle.size / 42
+      context.lineWidth = Math.max(1, radius * .08)
+      context.globalAlpha *= particle.pulse
+      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
+      context.globalAlpha *= .8; context.strokeStyle = '#ffffff'; context.stroke()
+    } else if (atmosphere.kind === 'sparkles') {
+      const radius = shortSide * particle.size * particle.pulse / 135
+      context.shadowColor = color; context.shadowBlur = radius * 2
+      context.lineWidth = Math.max(1, radius * .14)
+      context.beginPath(); context.moveTo(x - radius, y); context.lineTo(x + radius, y); context.moveTo(x, y - radius); context.lineTo(x, y + radius); context.stroke()
+    } else if (atmosphere.kind === 'bubbles') {
+      const radius = shortSide * particle.size / 145
+      context.lineWidth = Math.max(1, radius * .16)
+      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.stroke()
+      context.globalAlpha *= .65; context.fillStyle = '#ffffff'; context.beginPath(); context.arc(x - radius * .32, y - radius * .3, radius * .16, 0, Math.PI * 2); context.fill()
+    } else if (atmosphere.kind === 'speedlines') {
+      const length = width * particle.size / 9
+      context.lineWidth = Math.max(1, shortSide * particle.size / 480)
+      context.beginPath(); context.moveTo(x - length, y - atmosphere.wind * height / 3500); context.lineTo(x, y); context.stroke()
+    } else if (atmosphere.kind === 'leaves') {
+      const radius = shortSide * particle.size / 180
+      context.translate(x, y); context.rotate(particle.rotation * Math.PI / 180)
+      context.beginPath(); context.ellipse(0, 0, radius, radius * .48, 0, 0, Math.PI * 2); context.fill()
+      context.strokeStyle = '#78350f'; context.lineWidth = Math.max(.5, radius * .08); context.beginPath(); context.moveTo(-radius, 0); context.lineTo(radius, 0); context.stroke()
+    } else {
+      const radius = Math.max(.8, shortSide * particle.size / (atmosphere.kind === 'dust' ? 330 : atmosphere.kind === 'ash' ? 520 : 470))
+      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
+    }
+    context.restore()
+  }
+}
+const stripOffsets = (layer: AnimatorLayer, sceneSeconds: number) => {
+  const strip = normalizedStrip(layer.strip)
+  if (!strip.enabled || strip.count <= 1) return [{ x: 0, y: 0 }]
+  const period = strip.count * strip.spacing
+  const sign = strip.direction === 'up' || strip.direction === 'left' ? -1 : 1
+  const travel = sign * (strip.phase + sceneSeconds * strip.speed)
+  const wrap = (value: number) => ((value + period / 2) % period + period) % period - period / 2
+  return Array.from({ length: strip.count }, (_, index) => {
+    const offset = wrap((index - (strip.count - 1) / 2) * strip.spacing + travel)
+    return strip.direction === 'up' || strip.direction === 'down' ? { x: 0, y: offset } : { x: offset, y: 0 }
+  })
+}
 const effectFilter = (effects: LayerEffects, pixelUnit: number) => {
   const filters = [`brightness(${effects.brightness})`, `contrast(${effects.contrast})`, `saturate(${effects.saturation})`, `hue-rotate(${effects.hue}deg)`]
   if (effects.blur > 0) filters.unshift(`blur(${(effects.blur * pixelUnit).toFixed(2)}px)`)
@@ -105,10 +326,19 @@ const applyLayerMask = (context: CanvasRenderingContext2D, effects: LayerEffects
   context.closePath(); context.clip()
 }
 const isMissing = (source: string) => source.startsWith('blob:')
-const isAnimatorLayerType = (value: unknown): value is AnimatorLayerType => value === 'model3d' || value === 'image' || value === 'video' || value === 'overlay' || value === 'camera'
+const isAnimatorLayerType = (value: unknown): value is AnimatorLayerType => value === 'model3d' || value === 'image' || value === 'video' || value === 'overlay' || value === 'effect' || value === 'camera'
 const isVisualLayer = (layer: AnimatorLayer): layer is VisualAnimatorLayer => layer.type !== 'camera'
-const findLayerElement = (root: HTMLElement | null, id: string) => Array.from(root?.querySelectorAll<HTMLElement>('[data-layer-id]') ?? []).find(element => element.dataset.layerId === id) ?? null
-const iconFor = (type: AnimatorLayerType) => type === 'camera' ? <Camera size={13} /> : type === 'model3d' ? <Box size={13} /> : type === 'video' ? <Video size={13} /> : <ImageIcon size={13} />
+const findLayerElements = (root: HTMLElement | null, id: string) => Array.from(root?.querySelectorAll<HTMLElement>('[data-layer-id]') ?? []).filter(element => element.dataset.layerId === id)
+const findLayerElement = (root: HTMLElement | null, id: string) => findLayerElements(root, id)[0] ?? null
+const modelViewerCanvas = (element: HTMLElement | null) => {
+  const root = element?.shadowRoot
+  if (!root) return null
+  const rendered = root.querySelector<HTMLCanvasElement>('#webgl-canvas')
+  if (rendered) return rendered
+  const canvases = Array.from(root.querySelectorAll<HTMLCanvasElement>('canvas'))
+  return canvases.find(canvas => canvas.getBoundingClientRect().width > 0) ?? canvases.at(-1) ?? null
+}
+const iconFor = (type: AnimatorLayerType) => type === 'camera' ? <Camera size={13} /> : type === 'effect' ? <CloudRain size={13} /> : type === 'model3d' ? <Box size={13} /> : type === 'video' ? <Video size={13} /> : <ImageIcon size={13} />
 const PARALLAX_PRESETS: Record<ParallaxPreset, number> = { background: .3, midground: .7, foreground: 1.2 }
 const RESOLUTIONS = [
   ['HD landscape', 1280, 720], ['Full HD landscape', 1920, 1080], ['4K landscape', 3840, 2160],
@@ -181,20 +411,75 @@ const reconcileLegacyKeyframeUpdate = (before: AnimatorLayer, after: AnimatorLay
   return withSceneKeyframes(after, frames, after.animation.duration) as AnimatorLayer
 }
 
-function MotionPresetCard({ preset, selected, onSelect }: { preset: Preset; selected: boolean; onSelect: () => void }) {
+const MotionPresetCard = memo(function MotionPresetCard({ preset, selected, onSelect }: { preset: Preset; scopeId: string; selected: boolean; onSelect: () => void }) {
+  const { t } = useUiTranslation('scene3d')
   const videoRef = useRef<HTMLVideoElement>(null)
   const [hovered, setHovered] = useState(false)
   const play = () => { setHovered(true); const video = videoRef.current; if (!video) return; video.currentTime = 0; void video.play().catch(() => {}) }
   const stop = () => { setHovered(false); const video = videoRef.current; if (!video) return; video.pause(); video.currentTime = 0 }
   return <button type="button" onClick={onSelect} onPointerEnter={play} onPointerLeave={stop} onFocus={play} onBlur={stop} className={`overflow-hidden rounded border text-left transition-colors ${selected ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/40' : 'border-border bg-bg-primary hover:border-accent-blue/70'}`}>
     <div className="relative aspect-video overflow-hidden bg-[#07111f]"><img src={preset.poster} alt="" className="absolute inset-0 h-full w-full object-cover" /><video ref={videoRef} src={preset.preview} poster={preset.poster} muted loop playsInline preload="metadata" className={`pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`} /></div>
-    <div className="flex min-h-9 items-center justify-between gap-1 px-1.5 py-1"><span className="line-clamp-2 text-[9px] leading-tight text-text-secondary">{preset.label}</span><span className="flex shrink-0 flex-col items-end gap-0.5">{preset.category !== 'classic' && <span className={`rounded px-1 py-0.5 text-[7px] uppercase ${preset.category === 'game' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-purple-500/15 text-purple-300'}`}>{preset.category}</span>}{preset.requiresTarget && <span className="rounded bg-accent-blue/15 px-1 py-0.5 text-[8px] text-accent-blue">2 layers</span>}</span></div>
+    <div className="flex min-h-9 items-center justify-between gap-1 px-1.5 py-1"><span className="line-clamp-2 text-[9px] leading-tight text-text-secondary">{t(scene3dKey(`motionPresets.${preset.id}`))}</span><span className="flex shrink-0 flex-col items-end gap-0.5">{preset.category !== 'classic' && <span className={`rounded px-1 py-0.5 text-[7px] uppercase ${preset.category === 'game' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-purple-500/15 text-purple-300'}`}>{t(`categories.${preset.category}`)}</span>}{preset.requiresTarget && <span className="rounded bg-accent-blue/15 px-1 py-0.5 text-[8px] text-accent-blue">{t('animator.twoLayers')}</span>}</span></div>
   </button>
+}, (previous, next) => previous.preset === next.preset && previous.scopeId === next.scopeId && previous.selected === next.selected)
+
+const PhotoMotionPresetCard = memo(function PhotoMotionPresetCard({ preset, source, selected, onSelect }: { preset: PhotoMotionPreset; source: string; scopeId: string; selected: boolean; onSelect: () => void }) {
+  const { t } = useUiTranslation('scene3d')
+  const [hovered, setHovered] = useState(false)
+  const camera = hovered ? preset.end : preset.start
+  const previewTransform = `translate(${(50 - camera.x) * .55}%, ${(50 - camera.y) * .55}%) scale(${camera.scale}) rotate(${-Number(camera.rotation ?? 0)}deg)`
+  return <button
+    type="button"
+    title={t(scene3dKey(`photoPresets.${preset.id}.description`))}
+    onClick={onSelect}
+    onPointerEnter={() => setHovered(true)}
+    onPointerLeave={() => setHovered(false)}
+    onFocus={() => setHovered(true)}
+    onBlur={() => setHovered(false)}
+    className={`overflow-hidden rounded border text-left transition-colors ${selected ? 'border-cyan-300 bg-cyan-400/10 ring-1 ring-cyan-300/40' : 'border-border bg-bg-primary hover:border-cyan-400/70'}`}
+  >
+    <div className="relative aspect-video overflow-hidden bg-[#07111f]">
+      <img
+        src={source}
+        alt=""
+        className="absolute inset-[-8%] h-[116%] w-[116%] object-cover"
+        style={{ transform: previewTransform, transition: hovered ? `transform ${Math.min(3.5, preset.duration * .5)}s ease-in-out` : 'transform 220ms ease-out' }}
+      />
+      {preset.shake && <span className="absolute right-1 top-1 rounded bg-black/55 px-1 py-0.5 text-[7px] text-cyan-100">{t('animator.organic')}</span>}
+    </div>
+    <div className="px-1.5 py-1">
+      <div className="text-[9px] leading-tight text-text-secondary">{t(scene3dKey(`photoPresets.${preset.id}.label`))}</div>
+      <div className="mt-0.5 line-clamp-2 text-[7px] leading-tight text-text-muted">{t(scene3dKey(`photoPresets.${preset.id}.description`))}</div>
+    </div>
+  </button>
+}, (previous, next) => previous.preset === next.preset && previous.source === next.source && previous.scopeId === next.scopeId && previous.selected === next.selected)
+
+function AtmospherePreview({ atmosphere, seconds, width, height, layerId }: { atmosphere: Atmosphere; seconds: number; width: number; height: number; layerId: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const pixelWidth = Math.max(1, Math.round(width))
+  const pixelHeight = Math.max(1, Math.round(height))
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) return
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    context.save()
+    context.translate(canvas.width / 2, canvas.height / 2)
+    drawAtmosphere(context, atmosphere, seconds, canvas.width, canvas.height)
+    context.restore()
+  }, [atmosphere, seconds, pixelWidth, pixelHeight])
+  return <canvas ref={canvasRef} data-layer-id={layerId} width={pixelWidth} height={pixelHeight} className="h-full w-full" />
 }
 
 export function SceneAnimatorPanel() {
+  const { t } = useUiTranslation('scene3d')
   const outputs = useStore(s => s.outputs)
   const loadOutputs = useStore(s => s.loadOutputs)
+  const workspace = useStore(s => s.activeWorkspace)
+  const setGenerationMode = useStore(s => s.setGenerationMode)
+  const setSidebarMode = useStore(s => s.setSidebarMode)
+  const setSidebarOpen = useStore(s => s.setSidebarOpen)
+  const selectedSpeechModel = useStore(s => s.selectedModelPerAudioSubMode.speech ?? 'kugelaudio_0_open')
   const [scene, setScene] = useState<AnimatorScene>(blankScene)
   const sceneRef = useRef(scene)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -202,6 +487,7 @@ export function SceneAnimatorPanel() {
   const [picker, setPicker] = useState<'model' | 'media' | null>(null)
   const [playing, setPlaying] = useState(false)
   const [recording, setRecording] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState(0)
   const [flash, setFlash] = useState<{ x: number; y: number } | null>(null)
@@ -210,10 +496,76 @@ export function SceneAnimatorPanel() {
   const [reassignId, setReassignId] = useState<string | null>(null)
   const [jsonOpen, setJsonOpen] = useState(false)
   const [selectedPresetId, setSelectedPresetId] = useState('')
+  const [narrativeTemplateId, setNarrativeTemplateId] = useState<NarrativeSceneId>('inner-thought')
+  const [narrativeHero, setNarrativeHero] = useState('')
+  const [narrativePlate, setNarrativePlate] = useState('')
+  const [narrativePlateLoopReady, setNarrativePlateLoopReady] = useState(false)
+  const [narrativeProp, setNarrativeProp] = useState('')
+  const [narrativeForeground, setNarrativeForeground] = useState('')
+  const [narrativeMood, setNarrativeMood] = useState<NonNullable<NarrativeTemplateInput['controls']>['mood']>('calm')
+  const [narrativeIntensity, setNarrativeIntensity] = useState<1 | 2 | 3>(2)
+  const [narrativeDirection, setNarrativeDirection] = useState<NonNullable<NarrativeTemplateInput['controls']>['direction']>('right')
+  const [narrativeCamera, setNarrativeCamera] = useState<NonNullable<NarrativeTemplateInput['controls']>['camera']>('restrained')
+  const [narrativePalette, setNarrativePalette] = useState<NonNullable<NarrativeTemplateInput['controls']>['palette']>('natural')
+  const [narrativeVoiceSpace, setNarrativeVoiceSpace] = useState<NonNullable<NarrativeTemplateInput['controls']>['voiceSpace']>('center')
+  const [copilotIntent, setCopilotIntent] = useState('')
+  const [copilotBusy, setCopilotBusy] = useState(false)
+  const [copilotProposal, setCopilotProposal] = useState<SceneCopilotProposal | null>(null)
+  const [copilotProposalRevision, setCopilotProposalRevision] = useState<number | null>(null)
+  const [copilotError, setCopilotError] = useState<string | null>(null)
+  const [copilotListening, setCopilotListening] = useState(false)
+  const [sceneCopilotIntent, setSceneCopilotIntent] = useState('')
+  const [sceneCopilotBusy, setSceneCopilotBusy] = useState(false)
+  const [sceneCopilotProposal, setSceneCopilotProposal] = useState<SceneCopilotProposal | null>(null)
+  const [sceneCopilotProposalRevision, setSceneCopilotProposalRevision] = useState<number | null>(null)
+  const [sceneCopilotError, setSceneCopilotError] = useState<string | null>(null)
+  const [sceneAudioPrompt, setSceneAudioPrompt] = useState('')
+  const [sceneAudioBusy, setSceneAudioBusy] = useState(false)
+  const [sceneAudioError, setSceneAudioError] = useState<string | null>(null)
+  const [rhythmTrackId, setRhythmTrackId] = useState('')
+  const [rhythmAnalysis, setRhythmAnalysis] = useState<AudioAnalysisResult | null>(null)
+  const [rhythmAnalysisTrackId, setRhythmAnalysisTrackId] = useState('')
+  const agentRhythmAnalysesRef = useRef(new Map<string, AudioAnalysisResult>())
+  const [rhythmBusy, setRhythmBusy] = useState(false)
+  const [rhythmError, setRhythmError] = useState<string | null>(null)
+  const [rhythmCueSource, setRhythmCueSource] = useState<SceneRhythmCueSource>('beats')
+  const [rhythmProfile, setRhythmProfile] = useState<SceneRhythmProfile>('pulse')
+  const [rhythmIntensity, setRhythmIntensity] = useState(.65)
+  const [cutoutDialogueText, setCutoutDialogueText] = useState('')
+  const [cutoutDialogueStart, setCutoutDialogueStart] = useState(0)
+  const [cutoutDialogueEnd, setCutoutDialogueEnd] = useState(5)
+  const [cutoutDialogueTrackId, setCutoutDialogueTrackId] = useState('')
+  const [cutoutDialogueBusy, setCutoutDialogueBusy] = useState(false)
+  const [characterKitLibrary, setCharacterKitLibrary] = useState(emptyCharacterKitLibrary)
+  const [characterKitDraft, setCharacterKitDraft] = useState<CharacterKit | null>(null)
+  const [characterKitName, setCharacterKitName] = useState('')
+  const [characterKitPoseId, setCharacterKitPoseId] = useState('base')
+  const [characterKitMouthState, setCharacterKitMouthState] = useState<CharacterMouthState>('wide')
+  const [characterKitAlphaStatus, setCharacterKitAlphaStatus] = useState<CharacterKitAlphaStatus>('transparent')
+  const [characterKitEditorTab, setCharacterKitEditorTab] = useState<CharacterKitEditorTab>('face-rig')
+  const [characterKitBusy, setCharacterKitBusy] = useState(false)
+  const [characterKitError, setCharacterKitError] = useState<string | null>(null)
+  const characterKitLibraryRef = useRef(characterKitLibrary)
+  characterKitLibraryRef.current = characterKitLibrary
+  useEffect(() => {
+    rememberCharacterKitLibrary(characterKitLibrary)
+  }, [characterKitLibrary])
+  useEffect(() => {
+    rememberVideo3dScene({
+      scene_id: scene.name || '',
+      title: scene.name || '',
+      layers: scene.layers?.length || 0,
+      state: scene.layers?.length ? 'ready' : 'empty',
+    })
+  }, [scene])
+  const [chainFromPlayhead, setChainFromPlayhead] = useState(false)
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [historyRevision, setHistoryRevision] = useState(0)
+  const historyRevisionRef = useRef(0)
   const [lastAutosaveAt, setLastAutosaveAt] = useState<number | null>(null)
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [cylinderCompareOpen, setCylinderCompareOpen] = useState(false)
   const [previewWidth, setPreviewWidth] = useState(1280)
   const [clipsByLayer, setClipsByLayer] = useState<Record<string, string[]>>({})
   const [clipDurationsByLayer, setClipDurationsByLayer] = useState<Record<string, number>>({})
@@ -221,6 +573,7 @@ export function SceneAnimatorPanel() {
   const animationRef = useRef<number | null>(null)
   const recordingAnimationRef = useRef<number | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recipeContextRef = useRef<{ prompt: string } | null>(null)
   const recordingStreamRef = useRef<MediaStream | null>(null)
   const modelInputRef = useRef<HTMLInputElement>(null)
   const mediaInputRef = useRef<HTMLInputElement>(null)
@@ -238,11 +591,37 @@ export function SceneAnimatorPanel() {
   const progressRef = useRef(progress)
   progressRef.current = progress
   const selected = scene.layers.find(layer => layer.id === selectedId) ?? null
+  const activeNarrativeId = scene.narrative?.templateId ?? narrativeTemplateId
+  const copilotSuggestions = selected ? (() => {
+    if (selected.type === 'camera') return [t('animator.suggestionCamera1'), t('animator.suggestionCamera2')]
+    if (activeNarrativeId === 'inner-thought') return [t('animator.suggestionThought1'), t('animator.suggestionThought2')]
+    if (activeNarrativeId === 'run-travel-parallax') return [t('animator.suggestionRun1'), t('animator.suggestionRun2')]
+    if (selected.type === 'model3d') return [t('animator.suggestionModel1'), t('animator.suggestionModel2')]
+    return [t('animator.suggestionDefault1'), t('animator.suggestionDefault2')]
+  })() : []
   const composition = { ...DEFAULT_COMPOSITION, ...scene.composition }
   const fps: SceneFrameRate = scene.fps === 60 ? 60 : 30
   const snapCoordinate = (value: number) => composition.snap ? Math.round(value / Math.max(1, composition.gridSize)) * Math.max(1, composition.gridSize) : value
   const generatedModels = outputs.filter(output => output.type === 'model3d' && /\.glb$/i.test(output.name))
   const generatedMedia = outputs.filter(output => output.type === 'image' || output.type === 'video')
+  const generatedAudio = outputs.filter(output => output.type === 'audio')
+  const dialogueAudioTracks = [...(scene.audioTracks ?? [])].sort((a, b) => Number(b.kind === 'speech') - Number(a.kind === 'speech'))
+  const selectedDialogueTrack = dialogueAudioTracks.find(track => track.id === cutoutDialogueTrackId)
+    ?? dialogueAudioTracks.find(track => track.kind === 'speech')
+    ?? dialogueAudioTracks[0]
+  const rhythmAudioTracks = [...(scene.audioTracks ?? [])].sort((a, b) => Number(b.kind === 'music') - Number(a.kind === 'music'))
+  const selectedRhythmTrack = rhythmAudioTracks.find(track => track.id === rhythmTrackId)
+    ?? rhythmAudioTracks.find(track => track.kind === 'music')
+    ?? rhythmAudioTracks[0]
+  const activeRhythmAnalysis = selectedRhythmTrack?.id === rhythmAnalysisTrackId ? rhythmAnalysis : null
+  const narrativeVisuals = outputs.filter(output => output.type === 'model3d' || output.type === 'image' || output.type === 'video')
+  const narrativeTemplate = getNarrativeTemplate(narrativeTemplateId)!
+  const narrativeAssetByName = (name: string) => narrativeVisuals.find(asset => asset.name === name)
+  const narrativeSuitability = (role: 'hero' | 'plate' | 'prop' | 'foreground', name: string) => {
+    const asset = narrativeAssetByName(name)
+    const type = asset?.type === 'image' || asset?.type === 'video' || asset?.type === 'model3d' ? asset.type : undefined
+    return assessNarrativeAsset(role, type, name)
+  }
   const previewShortSide = Math.min(previewWidth, previewWidth * scene.height / Math.max(1, scene.width))
   const selectedModelId = selected?.type === 'model3d' ? selected.id : null
   const selectedModelSource = selected?.type === 'model3d' ? selected.source : null
@@ -250,29 +629,32 @@ export function SceneAnimatorPanel() {
 
   const syncSceneMedia = useCallback((sceneSeconds: number) => {
     sceneRef.current.layers.filter(layer => layer.type === 'model3d').forEach(layer => {
-      const viewer = findLayerElement(canvasRef.current, layer.id) as ModelViewerAnimationElement | null
-      if (!viewer || typeof viewer.pause !== 'function') return
-      if (!layer.animation.clip) { viewer.pause(); if (Number.isFinite(viewer.currentTime)) viewer.currentTime = 0; return }
-      const applyTime = () => {
-        viewer.pause()
-        const duration = finiteNumber(viewer.duration, 0)
-        if (duration > 0) viewer.currentTime = getSceneClipTime(layer, sceneSeconds, duration)
-      }
-      if (viewer.animationName !== layer.animation.clip) { viewer.animationName = layer.animation.clip; queueMicrotask(applyTime) }
-      else applyTime()
+      findLayerElements(canvasRef.current, layer.id).forEach(element => {
+        const viewer = element as ModelViewerAnimationElement
+        if (typeof viewer.pause !== 'function') return
+        if (!layer.animation.clip) { viewer.pause(); if (Number.isFinite(viewer.currentTime)) viewer.currentTime = 0; return }
+        const applyTime = () => {
+          viewer.pause()
+          const duration = finiteNumber(viewer.duration, 0)
+          if (duration > 0) viewer.currentTime = getSceneClipTime(layer, sceneSeconds, duration)
+        }
+        if (viewer.animationName !== layer.animation.clip) { viewer.animationName = layer.animation.clip; queueMicrotask(applyTime) }
+        else applyTime()
+      })
     })
     sceneRef.current.layers.filter(layer => layer.type === 'video').forEach(layer => {
-      const video = videoRefs.current[layer.id]
-      if (!video) return
-      video.pause()
-      const duration = finiteNumber(video.duration, 0)
-      if (duration <= 0) return
-      const layerTime = sceneTimeToLayerTime(layer, sceneSeconds)
-      const finalFrame = Math.max(0, duration - 1 / fps)
-      const target = layer.animation.loop ? layerTime % duration : Math.min(finalFrame, layerTime)
-      if (Math.abs(video.currentTime - target) > 1 / (fps * 2)) {
-        try { video.currentTime = target } catch { /* Metadata can disappear while a source is being reassigned. */ }
-      }
+      findLayerElements(canvasRef.current, layer.id).forEach(element => {
+        if (!(element instanceof HTMLVideoElement)) return
+        element.pause()
+        const duration = finiteNumber(element.duration, 0)
+        if (duration <= 0) return
+        const layerTime = sceneTimeToLayerTime(layer, sceneSeconds)
+        const finalFrame = Math.max(0, duration - 1 / fps)
+        const target = layer.animation.loop ? layerTime % duration : Math.min(finalFrame, layerTime)
+        if (Math.abs(element.currentTime - target) > 1 / (fps * 2)) {
+          try { element.currentTime = target } catch { /* Metadata can disappear while a source is being reassigned. */ }
+        }
+      })
     })
   }, [fps])
 
@@ -288,14 +670,20 @@ export function SceneAnimatorPanel() {
   }, [])
   useEffect(() => {
     const layer = sceneRef.current.layers.find(item => item.id === selectedId)
+    setSelectedPresetId('')
+    setCopilotProposal(null); setCopilotError(null)
     setSelectedKeyframeId(id => id && layer && getSceneKeyframes(layer).some(frame => frame.id === id) ? id : null)
     setSelectedEventId(id => id && layer && getSceneEvents(layer).some(event => event.id === id) ? id : null)
   }, [selectedId])
   useEffect(() => {
+    // Playback and recording synchronize media in their own animation loops.
+    // Avoid seeking every GLB/video twice per frame, which can make otherwise
+    // smooth motion appear to vibrate.
+    if (playing || recording) return
     // The scene object intentionally resynchronizes clips after inspector edits.
     const frame = requestAnimationFrame(() => syncSceneMedia(progress * scene.duration))
     return () => cancelAnimationFrame(frame)
-  }, [progress, scene, syncSceneMedia])
+  }, [playing, progress, recording, scene, syncSceneMedia])
   // Rigged GLBs expose their baked clips through model-viewer's
   // availableAnimations; poll briefly after selection until the model loads.
   useEffect(() => {
@@ -319,6 +707,44 @@ export function SceneAnimatorPanel() {
     return () => { if (timer !== null) window.clearInterval(timer) }
   }, [selectedModelId, selectedModelSource, selectedModelClip, syncSceneMedia])
   useEffect(() => { void loadOutputs() }, [loadOutputs])
+  useEffect(() => {
+    let cancelled = false
+    setCharacterKitBusy(true); setCharacterKitError(null)
+    void fetchCharacterKitLibrary(workspace).then(library => {
+      if (cancelled) return
+      setCharacterKitLibrary(library)
+      const handoff = consumeFaceRigHandoff()
+      if (handoff && (handoff.workspace === workspace || workspace === 'default')) {
+        setCharacterKitDraft(kitFromFaceRigHandoff(handoff, library))
+        setCharacterKitPoseId('base')
+        setCharacterKitEditorTab('face-rig')
+        setMessage(t('animator.openedKit'))
+        return
+      }
+      const active = library.kits[library.activeId]
+      if (active) {
+        setCharacterKitDraft(structuredClone(active))
+        setCharacterKitEditorTab(active.base?.reviewState === 'approved' || Object.values(active.poses).some(pose => pose.reviewState === 'approved') ? 'face-rig' : 'kit')
+      } else {
+        setCharacterKitDraft(null)
+      }
+    }).catch(error => {
+      if (!cancelled) setCharacterKitError(error instanceof Error ? error.message : t('animator.kitLoadFailed'))
+    }).finally(() => { if (!cancelled) setCharacterKitBusy(false) })
+    return () => { cancelled = true }
+  }, [workspace, t])
+  useEffect(() => {
+    const onHandoff = () => {
+      const handoff = consumeFaceRigHandoff()
+      if (!handoff) return
+      setCharacterKitDraft(kitFromFaceRigHandoff(handoff, characterKitLibraryRef.current))
+      setCharacterKitPoseId('base')
+      setCharacterKitEditorTab('face-rig')
+      setMessage(t('animator.openedKitNote'))
+    }
+    window.addEventListener(FACE_RIG_HANDOFF_EVENT, onHandoff)
+    return () => window.removeEventListener(FACE_RIG_HANDOFF_EVENT, onHandoff)
+  }, [t])
   useEffect(() => () => {
     if (animationRef.current) cancelAnimationFrame(animationRef.current)
     if (recordingAnimationRef.current) cancelAnimationFrame(recordingAnimationRef.current)
@@ -332,13 +758,23 @@ export function SceneAnimatorPanel() {
   }, [])
 
   useEffect(() => { sceneRef.current = scene }, [scene])
+  useEffect(() => {
+    if (!Object.keys(characterKitLibrary.kits).length) return
+    const current = sceneRef.current
+    const synced = syncSceneCharacterKits(current.layers, characterKitLibrary) as AnimatorLayer[]
+    if (synced === current.layers) return
+    const next = { ...current, layers: synced }
+    sceneRef.current = next
+    setScene(next)
+  }, [characterKitLibrary])
+  useEffect(() => { historyRevisionRef.current = historyRevision }, [historyRevision])
   const replaceScene = (next: AnimatorScene) => { sceneRef.current = next; setScene(next) }
-  const updateScene = (updater: (current: AnimatorScene) => AnimatorScene) => {
+  const updateScene = useCallback((updater: (current: AnimatorScene) => AnimatorScene) => {
     const current = sceneRef.current
     let next = updater(current)
     if (next === current) return
     const removesLockedLayer = current.layers.some(layer => layer.locked && !next.layers.some(candidate => candidate.id === layer.id))
-    if (removesLockedLayer) { setMessage('Unlock the layer before deleting it.'); return }
+    if (removesLockedLayer) { setMessage(t('animator.unlockBeforeDelete')); return }
     const removedIds = new Set(current.layers.filter(layer => !next.layers.some(candidate => candidate.id === layer.id)).map(layer => layer.id))
     if (removedIds.size > 0) next = { ...next, layers: next.layers.map(layer => ({ ...layer, relationship: layer.relationship && removedIds.has(layer.relationship.targetLayerId) ? undefined : layer.relationship, animation: { ...layer.animation, orbit: layer.animation.orbit && removedIds.has(layer.animation.orbit.targetLayerId) ? undefined : layer.animation.orbit } })) }
     const now = Date.now()
@@ -351,20 +787,20 @@ export function SceneAnimatorPanel() {
     sceneRef.current = next
     setScene(next)
     setHistoryRevision(value => value + 1)
-  }
+  }, [t])
   const undoScene = () => {
     const previous = pastScenesRef.current.pop()
     if (!previous) return
     futureScenesRef.current.push(sceneRef.current)
     replaceScene(previous); lastHistoryAtRef.current = 0; setHistoryRevision(value => value + 1)
-    setSelectedId(id => id && previous.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage('Undo')
+    setSelectedId(id => id && previous.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage(t('animator.undo'))
   }
   const redoScene = () => {
     const next = futureScenesRef.current.pop()
     if (!next) return
     pastScenesRef.current.push(sceneRef.current)
     replaceScene(next); lastHistoryAtRef.current = 0; setHistoryRevision(value => value + 1)
-    setSelectedId(id => id && next.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage('Redo')
+    setSelectedId(id => id && next.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage(t('animator.redo'))
   }
   const updateLayer = (id: string, updater: (layer: AnimatorLayer) => AnimatorLayer) => updateScene(current => {
     const target = current.layers.find(layer => layer.id === id)
@@ -465,13 +901,42 @@ export function SceneAnimatorPanel() {
     })
     setSelectedId(id); setAddOpen(false); setPicker(null)
   }
+  const addAtmosphere = (kind: SceneAtmosphereKind) => {
+    const id = uid()
+    const preset = ATMOSPHERE_PRESETS[kind]
+    const opacity = ATMOSPHERE_OPACITY[kind]
+    const luminous = kind === 'embers' || kind === 'fireflies' || kind === 'bokeh' || kind === 'sparkles' || kind === 'bubbles' || kind === 'speedlines'
+    updateScene(current => {
+      const layer: AnimatorLayer = {
+        id,
+        name: ATMOSPHERE_LABELS[kind],
+        type: 'effect',
+        source: `maestro-effect:${kind}`,
+        visible: true,
+        z: Math.max(0, ...current.layers.map(item => item.z)) + 10,
+        fill: true,
+        parallax: 0,
+        atmosphere: { ...preset },
+        effects: { ...DEFAULT_EFFECTS, blendMode: luminous ? 'screen' : 'normal' },
+        transform: { x: 50, y: 50, scale: 1, opacity, rotation: 0 },
+        animation: {
+          start: { x: 50, y: 50, scale: 1, opacity, rotation: 0 },
+          end: { x: 50, y: 50, scale: 1, opacity, rotation: 0 },
+          duration: current.duration,
+          curve: 'linear',
+        },
+      }
+      return { ...current, layers: normalizeZ([...current.layers, layer]) }
+    })
+    setSelectedId(id); setAddOpen(false); setPicker(null)
+  }
   const addCamera = () => {
     const id = uid()
     updateScene(current => {
       const cameraCount = current.layers.filter(layer => layer.type === 'camera').length
       const camera: AnimatorLayer = {
         id,
-        name: `Camera ${cameraCount + 1}`,
+        name: t('animator.cameraN', { n: cameraCount + 1 }),
         type: 'camera',
         source: '',
         visible: true,
@@ -511,7 +976,7 @@ export function SceneAnimatorPanel() {
       }
       return { ...current, layers: normalizeZ([...current.layers, clone]) }
     })
-    setSelectedId(duplicateId); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage(`Duplicated ${original.name}.`)
+    setSelectedId(duplicateId); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage(t('animator.duplicated', { name: original.name }))
   }
   const addOrReassign = (type: VisualLayerType, file: File) => {
     const source = URL.createObjectURL(file)
@@ -528,7 +993,7 @@ export function SceneAnimatorPanel() {
   })
   const resizeLayer = (id: string, scale: number) => updateLayer(id, layer => ({ ...layer, transform: { ...layer.transform, scale }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, scale })) }))
   const startGesture = (event: ReactPointerEvent<HTMLElement>, layer: AnimatorLayer, mode: Gesture['mode']) => {
-    if (layer.locked) { event.preventDefault(); event.stopPropagation(); setSelectedId(layer.id); setMessage('Unlock the layer before moving it.'); return }
+    if (layer.locked) { event.preventDefault(); event.stopPropagation(); setSelectedId(layer.id); setMessage(t('animator.unlockBeforeMove')); return }
     event.preventDefault(); event.stopPropagation(); setSelectedId(layer.id)
     gestureRef.current = { id: layer.id, mode, startX: event.clientX, startY: event.clientY, x: layer.transform.x, y: layer.transform.y, scale: layer.transform.scale, rotationX: layer.transform.rotationX ?? 75, rotationY: layer.transform.rotationY ?? 0 }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -555,7 +1020,7 @@ export function SceneAnimatorPanel() {
   }
   const applyCameraTransform = (state: LayerState, layer: AnimatorLayer, time: number): LayerState => {
     const camera = activeCameraLayer()
-    if (!camera || layer.type === 'camera') return state
+    if (!camera || layer.type === 'camera' || layer.type === 'effect') return state
     const view = layerState(camera, time)
     const parallax = effectiveParallax(layer)
     const dx = state.x - 50 - (view.x - 50) * parallax
@@ -633,14 +1098,66 @@ export function SceneAnimatorPanel() {
       const timing = getSceneLayerTiming(layer)
       const elapsed = Math.max(0, sceneSeconds - timing.offset) * timing.speed
       if (sceneSeconds >= timing.offset && (timing.loop || elapsed <= timing.span)) {
-        const localElapsed = sceneTimeToLayerTime(layer, sceneSeconds) - timing.trimStart
+        const localTime = sceneTimeToLayerTime(layer, sceneSeconds)
+        const shakeStart = layer.animation.shake.startTime ?? timing.trimStart
+        const shakeEnd = layer.animation.shake.endTime ?? timing.trimEnd
+        if (localTime < shakeStart || localTime > shakeEnd) return state
+        const localElapsed = localTime - shakeStart
         const phase = localElapsed * frequency * Math.PI * 2 + (layer.animation.shake.seed ?? 0)
         state = { ...state, x: state.x + Math.sin(phase) * amount, y: state.y + Math.sin(phase * 1.37 + 1.2) * amount * .65, rotation: state.rotation + Math.sin(phase * .73 + .4) * amount * .35 }
       }
     }
     return state
   }
-  const renderedLayerState = (layer: AnimatorLayer, time = progress) => applyCameraTransform(layerState(layer, time), layer, time)
+  const renderedLayerStates = (layer: AnimatorLayer, time = progress) => {
+    const orbitCount = layer.animation.orbit ? Math.round(boundedNumber(layer.animation.orbit.count, 1, 1, 12)) : 1
+    const offsets = stripOffsets(layer, time * sceneRef.current.duration)
+    const instances: LayerState[] = []
+    for (let orbitIndex = 0; orbitIndex < orbitCount; orbitIndex += 1) {
+      const orbit = layer.animation.orbit
+      const instanceLayer = orbit && orbitCount > 1 ? { ...layer, animation: { ...layer.animation, orbit: { ...orbit, phase: orbit.phase + orbitIndex * 360 / orbitCount } } } : layer
+      let orbitState = layerState(instanceLayer, time)
+      if (layer.type === 'model3d' && layer.animation.spin) {
+        const timing = getSceneLayerTiming(layer)
+        const localSeconds = sceneTimeToLayerTime(layer, time * scene.duration) - timing.trimStart
+        orbitState = { ...orbitState, modelYaw: localSeconds * (layer.animation.rotationSpeed ?? 35) }
+      }
+      for (const offset of offsets) {
+        let state = { ...orbitState, x: orbitState.x + offset.x, y: orbitState.y + offset.y }
+        if (orbit && orbit.facing && orbit.facing !== 'fixed') {
+          const target = scene.layers.find(item => item.id === orbit.targetLayerId)
+          if (target && isVisualLayer(target)) {
+            const targetState = layerState(target, time)
+            const centerX = targetState.x + (orbit.centerOffsetX ?? 0)
+            const centerY = targetState.y + (orbit.centerOffsetY ?? 0)
+            const angle = Math.atan2((centerY - state.y) * scene.height, (centerX - state.x) * scene.width) * 180 / Math.PI
+            const facingAngle = angle + (orbit.facing === 'outward' ? 180 : 0)
+            state = layer.type === 'model3d'
+              ? { ...state, modelYaw: facingAngle }
+              : { ...state, rotation: facingAngle }
+          }
+        }
+        instances.push(applyCameraTransform(state, layer, time))
+      }
+    }
+    // Each 3D copy is a live WebGL context. orbit(12) × strip(12) = 144
+    // viewers, which locks the GPU and can freeze the host.
+    const cap = layer.type === 'model3d' ? 4 : 24
+    return instances.slice(0, cap)
+  }
+  const seamCoverStates = (layer: AnimatorLayer, time = progress) => {
+    const strip = normalizedStrip(layer.strip)
+    if (!strip.enabled || !strip.seamOccluder.enabled) return []
+    const offsets = stripOffsets({ ...layer, strip: { ...strip, phase: strip.phase + strip.spacing / 2 } }, time * sceneRef.current.duration)
+    const base = layerState(layer, time)
+    return offsets.map(offset => applyCameraTransform({
+      ...base,
+      x: base.x + offset.x,
+      y: 82,
+      scale: strip.seamOccluder.scale,
+      opacity: Math.min(1, base.opacity * strip.seamOccluder.opacity),
+    }, layer, time))
+  }
   const moveLayerZ = (id: string, direction: 1 | -1) => updateScene(current => {
     const layers = normalizeZ(current.layers)
     const moving = layers.find(layer => layer.id === id)
@@ -665,40 +1182,248 @@ export function SceneAnimatorPanel() {
   const resetSceneMedia = () => syncSceneMedia(0)
   const animate = (done?: () => void) => {
     const started = performance.now()
-    let renderedFrame = -1
     resetSceneMedia(); setPlaying(true)
     const frame = (now: number) => {
       const elapsed = Math.min(scene.duration, (now - started) / 1000)
-      const frameIndex = Math.floor(elapsed * fps)
       const finished = elapsed >= scene.duration
-      if (frameIndex !== renderedFrame || finished) {
-        renderedFrame = frameIndex
-        const next = finished ? 1 : frameIndex / fps / scene.duration
-        syncSceneMedia(next * scene.duration); setProgress(next)
-      }
+      // Preview follows the display refresh rate. The selected 30/60 FPS is an
+      // export cadence, not a reason to quantize interactive playback.
+      const next = finished ? 1 : elapsed / scene.duration
+      syncSceneMedia(next * scene.duration); setProgress(next)
       if (!finished) animationRef.current = requestAnimationFrame(frame)
       else { setPlaying(false); Object.values(videoRefs.current).forEach(video => video?.pause()); done?.() }
     }
     animationRef.current = requestAnimationFrame(frame)
   }
-  const play = () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); setProgress(0); animate() }
+  const applyCharacterKitsToScene = (library = characterKitLibraryRef.current) => {
+    const current = sceneRef.current
+    const synced = syncSceneCharacterKits(current.layers, library) as AnimatorLayer[]
+    if (synced === current.layers) return current
+    const next = { ...current, layers: synced }
+    sceneRef.current = next
+    setScene(next)
+    return next
+  }
+  const prepareFacePlayback = () => {
+    const current = applyCharacterKitsToScene()
+    const layers = ensureCutoutFacePlayback(current.layers, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
+    if (layers === current.layers) return
+    const next = { ...current, layers }
+    sceneRef.current = next
+    setScene(next)
+  }
+  const play = () => {
+    prepareFacePlayback()
+    if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    setProgress(0)
+    animate()
+  }
+  const appendPresetAtPlayhead = (layer: AnimatorLayer, preset: Pick<Preset, 'start' | 'end' | 'duration' | 'curve'> | CameraPreset) => {
+    const sceneTime = Math.round(progress * scene.duration * fps) / fps
+    const timing = getSceneLayerTiming(layer)
+    // Do not clamp to the old trim-out: a layer that already ended must hold
+    // its last pose until the requested scene frame, then continue there.
+    const localTime = timing.trimStart + Math.max(0, sceneTime - timing.offset) * timing.speed
+    const current = evaluateSceneLayer(layer, localTime)
+    const startOpacity = preset.start.opacity ?? 1
+    const endOpacity = preset.end.opacity ?? startOpacity
+    const startRotation = preset.start.rotation ?? 0
+    const endRotation = preset.end.rotation ?? startRotation
+    const endTime = localTime + preset.duration * timing.speed
+    const end: SceneKeyframe = {
+      id: uid(),
+      time: endTime,
+      x: current.x + preset.end.x - preset.start.x,
+      y: current.y + preset.end.y - preset.start.y,
+      scale: Math.max(.01, current.scale * preset.end.scale / Math.max(.01, preset.start.scale)),
+      opacity: Math.max(0, Math.min(1, current.opacity + endOpacity - startOpacity)),
+      rotation: current.rotation + endRotation - startRotation,
+      curve: preset.curve,
+    }
+    const join: SceneKeyframe = { id: uid(), time: localTime, ...current, curve: preset.curve }
+    const before = getSceneKeyframes(layer).filter(frame => frame.time < localTime - .000001)
+    const frames = [...before, join, end]
+    const duration = Math.max(layer.animation.duration, endTime)
+    return withSceneKeyframes({
+      ...layer,
+      animation: {
+        ...layer.animation,
+        loop: false,
+        trimEnd: duration,
+      },
+    }, frames, duration) as AnimatorLayer
+  }
   const applyPreset = (presetId: string) => {
     if (!selected || selected.type === 'camera' || selected.locked) return
     const preset = PRESETS.find(item => item.id === presetId)
     if (!preset) return
     const target = scene.layers.find(layer => layer.id !== selected.id && layer.type === 'model3d' && !dependencyWouldCycle(selected.id, layer.id)) ?? scene.layers.find(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id))
-    if (preset.requiresTarget && !target) { setMessage('Add a second layer before applying this relational movement.'); return }
-    updateLayer(selected.id, layer => ({ ...layer, relationship: preset.requiresTarget ? undefined : layer.relationship, animation: { start: preset.start, end: preset.end, duration: preset.duration, curve: preset.curve, events: normalizeSceneEvents(layer.animation.events, preset.duration, layer.id), spin: preset.spin, rotationSpeed: layer.animation.rotationSpeed, clip: layer.animation.clip, clipOffset: layer.animation.clipOffset, clipSpeed: layer.animation.clipSpeed, clipReverse: layer.animation.clipReverse, clipLoop: layer.animation.clipLoop, clipTrimStart: layer.animation.clipTrimStart, clipTrimEnd: layer.animation.clipTrimEnd, orbit: preset.requiresTarget && target ? { targetLayerId: target.id, radiusX: 18, radiusY: 9, turns: 2, phase: 0, centerOffsetX: 0, centerOffsetY: 0 } : undefined } }))
+    if (preset.requiresTarget && !target) { setMessage(t('animator.needSecondLayer')); return }
+    if (chainFromPlayhead && !preset.requiresTarget) {
+      const sceneTime = Math.round(progress * scene.duration * fps) / fps
+      const nextDuration = Math.max(scene.duration, sceneTime + preset.duration)
+      updateLayer(selected.id, layer => appendPresetAtPlayhead(layer, preset))
+      updateScene(current => ({ ...current, duration: Math.max(current.duration, sceneTime + preset.duration) }))
+      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${t(scene3dKey(`cameraPresets.${preset.id}`))} chained from frame ${Math.round(sceneTime * fps)} without a position jump.`)
+      return
+    }
+    updateLayer(selected.id, layer => ({ ...layer, relationship: preset.requiresTarget ? undefined : layer.relationship, animation: { start: preset.start, end: preset.end, duration: preset.duration, curve: preset.curve, events: normalizeSceneEvents(layer.animation.events, preset.duration, layer.id), spin: preset.spin, rotationSpeed: layer.animation.rotationSpeed, clip: layer.animation.clip, clipOffset: layer.animation.clipOffset, clipSpeed: layer.animation.clipSpeed, clipReverse: layer.animation.clipReverse, clipLoop: layer.animation.clipLoop, clipTrimStart: layer.animation.clipTrimStart, clipTrimEnd: layer.animation.clipTrimEnd, orbit: preset.requiresTarget && target ? { targetLayerId: target.id, radiusX: 18, radiusY: 9, turns: 2, phase: 0, count: 1, facing: 'fixed', centerOffsetX: 0, centerOffsetY: 0 } : undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
-    setMessage(preset.requiresTarget ? `Orbit target: ${target?.name}` : null); setSelectedKeyframeId(null); setProgress(0)
+    setMessage(preset.requiresTarget ? t('animator.orbitTarget', { name: target?.name }) : null); setSelectedKeyframeId(null); setProgress(0)
   }
   const applyCameraPreset = (presetId: string) => {
     if (!selected || selected.type !== 'camera' || selected.locked) return
     const preset = CAMERA_PRESETS.find(item => item.id === presetId)
     if (!preset) return
+    if (chainFromPlayhead) {
+      const sceneTime = Math.round(progress * scene.duration * fps) / fps
+      const nextDuration = Math.max(scene.duration, sceneTime + preset.duration)
+      updateLayer(selected.id, layer => {
+        const chained = appendPresetAtPlayhead(layer, preset)
+        const timing = getSceneLayerTiming(layer)
+        const startTime = timing.trimStart + Math.max(0, sceneTime - timing.offset) * timing.speed
+        return { ...chained, animation: { ...chained.animation, shake: preset.shake ? { ...preset.shake, startTime, endTime: startTime + preset.duration * timing.speed } : undefined } }
+      })
+      updateScene(current => ({ ...current, duration: Math.max(current.duration, sceneTime + preset.duration) }))
+      setProgress(sceneTime / nextDuration); setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setMessage(`${t(scene3dKey(`cameraPresets.${preset.id}`))} camera move chained from frame ${Math.round(sceneTime * fps)}.`)
+      return
+    }
     updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, events: normalizeSceneEvents(layer.animation.events, preset.duration, layer.id), duration: preset.duration, curve: preset.curve, offset: 0, speed: 1, loop: false, trimStart: 0, trimEnd: preset.duration, shake: preset.shake, orbit: undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
-    setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${preset.label} applied to ${selected.name}.`)
+    setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${t(scene3dKey(`cameraPresets.${preset.id}`))} applied to ${selected.name}.`)
+  }
+  const applyPhotoMotionPreset = (presetId: string) => {
+    if (!selected || selected.type !== 'image' || selected.locked) return
+    const preset = PHOTO_MOTION_PRESETS.find(item => item.id === presetId)
+    if (!preset) return
+    const photoId = selected.id
+    updateScene(current => {
+      const currentPhoto = current.layers.find(layer => layer.id === photoId)
+      if (!currentPhoto || currentPhoto.type !== 'image' || currentPhoto.locked) return current
+      const reusableCamera = current.layers.find(layer => layer.type === 'camera' && layer.visible && !layer.locked)
+        ?? current.layers.find(layer => layer.type === 'camera' && !layer.locked)
+      const cameraId = reusableCamera?.id ?? uid()
+      const camera: AnimatorLayer = {
+        ...(reusableCamera ?? {
+          id: cameraId,
+          name: '',
+          type: 'camera',
+          source: '',
+          visible: true,
+          z: 0,
+          transform: { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 },
+          animation: { start: makePoint(50, 50, 1), end: makePoint(50, 50, 1), duration: preset.duration, curve: preset.curve },
+        }),
+        name: `Photo camera · ${t(scene3dKey(`cameraPresets.${preset.id}`))}`,
+        visible: true,
+        relationship: undefined,
+        transform: { x: preset.start.x, y: preset.start.y, scale: preset.start.scale, opacity: 1, rotation: preset.start.rotation ?? 0 },
+        animation: {
+          start: { ...preset.start },
+          end: { ...preset.end },
+          duration: preset.duration,
+          curve: preset.curve,
+          offset: 0,
+          speed: 1,
+          loop: false,
+          trimStart: 0,
+          trimEnd: preset.duration,
+          shake: preset.shake,
+        },
+      }
+      const photo: AnimatorLayer = {
+        ...currentPhoto,
+        fill: true,
+        parallax: 1,
+        transform: { ...currentPhoto.transform, x: 50, y: 50, scale: 1.2, opacity: 1, rotation: 0 },
+        animation: {
+          ...currentPhoto.animation,
+          start: { x: 50, y: 50, scale: 1.2, opacity: 1, rotation: 0 },
+          end: { x: 50, y: 50, scale: 1.2, opacity: 1, rotation: 0 },
+          keyframes: undefined,
+          duration: preset.duration,
+          curve: 'linear',
+          offset: 0,
+          speed: 1,
+          loop: false,
+          trimStart: 0,
+          trimEnd: preset.duration,
+          orbit: undefined,
+        },
+      }
+      const remaining = normalizeZ(current.layers
+        .filter(layer => layer.id !== photoId && layer.id !== cameraId)
+        .map(layer => layer.type === 'camera' && !layer.locked ? { ...layer, visible: false } : layer))
+      return { ...current, duration: preset.duration, layers: assignZ([photo, ...remaining, camera]) }
+    })
+    setSelectedPresetId(preset.id)
+    setSelectedKeyframeId(null)
+    setSelectedEventId(null)
+    setProgress(0)
+    setMessage(`${t(scene3dKey(`cameraPresets.${preset.id}`))} prepared as a ${preset.duration}s cinematic photo shot.`)
+  }
+  const confirmPresetRemoval = () => window.confirm(t('animator.removeEffect'))
+  const removeLayerMotionPreset = () => {
+    if (!selected || selected.locked || !confirmPresetRemoval()) return
+    const point = {
+      x: selected.transform.x,
+      y: selected.transform.y,
+      scale: selected.transform.scale,
+      opacity: selected.transform.opacity,
+      rotation: selected.transform.rotation ?? 0,
+    }
+    updateLayer(selected.id, layer => ({
+      ...layer,
+      relationship: undefined,
+      animation: {
+        ...layer.animation,
+        start: { ...point },
+        end: { ...point },
+        keyframes: undefined,
+        offset: 0,
+        speed: 1,
+        loop: false,
+        trimStart: 0,
+        trimEnd: layer.animation.duration,
+        spin: false,
+        orbit: undefined,
+        shake: undefined,
+      },
+    }))
+    setSelectedPresetId('')
+    setSelectedKeyframeId(null)
+    setProgress(0)
+    setMessage(t('animator.removedMotion', { name: selected.name }))
+  }
+  const removePhotoMotionPreset = (presetId: string) => {
+    if (!selected || selected.type !== 'image' || selected.locked || !confirmPresetRemoval()) return
+    const preset = PHOTO_MOTION_PRESETS.find(item => item.id === presetId)
+    if (!preset) return
+    const photoId = selected.id
+    updateScene(current => ({
+      ...current,
+      layers: current.layers
+        .filter(layer => !(layer.type === 'camera' && layer.name === `Photo camera · ${t(scene3dKey(`cameraPresets.${preset.id}`))}`))
+        .map(layer => layer.id === photoId ? {
+          ...layer,
+          animation: {
+            ...layer.animation,
+            start: { x: layer.transform.x, y: layer.transform.y, scale: layer.transform.scale, opacity: layer.transform.opacity, rotation: layer.transform.rotation ?? 0 },
+            end: { x: layer.transform.x, y: layer.transform.y, scale: layer.transform.scale, opacity: layer.transform.opacity, rotation: layer.transform.rotation ?? 0 },
+            keyframes: undefined,
+            offset: 0,
+            speed: 1,
+            loop: false,
+            trimStart: 0,
+            trimEnd: layer.animation.duration,
+            orbit: undefined,
+          },
+        } : layer),
+    }))
+    setSelectedPresetId('')
+    setSelectedKeyframeId(null)
+    setProgress(0)
+    setMessage(t('animator.removedPreset', { preset: t(scene3dKey(`cameraPresets.${preset.id}`)), name: selected.name }))
   }
   const updateCameraTransform = (id: string, field: 'x' | 'y' | 'scale' | 'rotation', value: number) => updateLayer(id, layer => {
     if (layer.type !== 'camera') return layer
@@ -737,7 +1462,7 @@ export function SceneAnimatorPanel() {
     if (type === 'none') { updateLayer(selected.id, layer => ({ ...layer, relationship: undefined })); return }
     const existingTarget = selected.relationship && scene.layers.find(layer => layer.id === selected.relationship?.targetLayerId && isVisualLayer(layer))
     const target = existingTarget ?? scene.layers.find(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id))
-    if (!target) { setMessage('Add another visual layer before creating a relationship.'); return }
+    if (!target) { setMessage(t('animator.needVisualLayer')); return }
     const selectedState = layerState(selected, progress, new Set(), false)
     const targetState = layerState(target, progress, new Set(), false)
     const facingAngle = Math.atan2((targetState.y - selectedState.y) * scene.height, (targetState.x - selectedState.x) * scene.width) * 180 / Math.PI
@@ -755,7 +1480,7 @@ export function SceneAnimatorPanel() {
     }))
   }
   const setRelationshipTarget = (targetId: string) => {
-    if (!selected?.relationship || selected.locked || dependencyWouldCycle(selected.id, targetId)) { setMessage('That relationship would create a cycle.'); return }
+    if (!selected?.relationship || selected.locked || dependencyWouldCycle(selected.id, targetId)) { setMessage(t('animator.cycleRelationship')); return }
     const target = scene.layers.find(layer => layer.id === targetId && isVisualLayer(layer))
     if (!target) return
     const selectedState = layerState(selected, progress, new Set(), false)
@@ -765,7 +1490,7 @@ export function SceneAnimatorPanel() {
   }
   const setOrbitTarget = (targetId: string) => {
     if (!selected || !isVisualLayer(selected) || selected.locked) return
-    if (dependencyWouldCycle(selected.id, targetId)) { setMessage('That orbit would create a dependency cycle.'); return }
+    if (dependencyWouldCycle(selected.id, targetId)) { setMessage(t('animator.cycleOrbit')); return }
     updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, targetLayerId: targetId } : undefined } }))
   }
   const updateLayerEffects = (id: string, patch: Partial<LayerEffects>) => updateLayer(id, layer => ({ ...layer, effects: normalizedEffects({ ...normalizedEffects(layer.effects), ...patch }) }))
@@ -781,7 +1506,7 @@ export function SceneAnimatorPanel() {
     setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0)
   }
   const addKeyframeAtPlayhead = () => {
-    if (!selected || selected.locked) { setMessage('Unlock the layer before adding keyframes.'); return }
+    if (!selected || selected.locked) { setMessage(t('animator.unlockBeforeKeyframes')); return }
     const sceneTime = progress * scene.duration
     const time = sceneTimeToLayerTime(selected, sceneTime)
     const frames = getSceneKeyframes(selected)
@@ -792,7 +1517,7 @@ export function SceneAnimatorPanel() {
     updateLayer(selected.id, layer => withSceneKeyframes(layer, [...getSceneKeyframes(layer), keyframe], Math.max(layer.animation.duration, time)) as AnimatorLayer)
     updateScene(current => ({ ...current, duration: Math.max(current.duration, time) }))
     setSelectedKeyframeId(keyframe.id); setSelectedEventId(null)
-    setMessage(`Keyframe added at local ${time.toFixed(2)}s (scene ${sceneTime.toFixed(2)}s).`)
+    setMessage(t('animator.keyframeAdded', { local: time.toFixed(2), scene: sceneTime.toFixed(2) }))
   }
   const updateTimelineKeyframe = (keyframeId: string, patch: Partial<Omit<SceneKeyframe, 'id'>>) => {
     if (!selected || selected.locked) return
@@ -815,16 +1540,16 @@ export function SceneAnimatorPanel() {
     if (index <= 0 || index >= frames.length - 1) return
     updateLayer(selected.id, layer => withSceneKeyframes(layer, getSceneKeyframes(layer).filter(frame => frame.id !== selectedKeyframeId)) as AnimatorLayer)
     setSelectedKeyframeId(null)
-    setMessage('Keyframe deleted.')
+    setMessage(t('animator.keyframeDeleted'))
   }
   const addEventAtPlayhead = () => {
-    if (!selected || selected.locked) { setMessage('Unlock the layer before adding events.'); return }
+    if (!selected || selected.locked) { setMessage(t('animator.unlockBeforeEvents')); return }
     const sceneTime = progress * scene.duration
     const time = sceneTimeToLayerTime(selected, sceneTime)
-    const event: SceneAnimationEvent = { id: uid(), time, name: `Event ${getSceneEvents(selected).length + 1}` }
+    const event: SceneAnimationEvent = { id: uid(), time, name: t('animator.eventN', { n: getSceneEvents(selected).length + 1 }) }
     updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, events: [...getSceneEvents(layer), event].sort((a, b) => a.time - b.time) } }))
     setSelectedKeyframeId(null); setSelectedEventId(event.id)
-    setMessage(`Event added at local ${time.toFixed(2)}s (scene ${sceneTime.toFixed(2)}s).`)
+    setMessage(t('animator.eventAdded', { local: time.toFixed(2), scene: sceneTime.toFixed(2) }))
   }
   const updateTimelineEvent = (eventId: string, patch: Partial<Omit<SceneAnimationEvent, 'id'>>) => {
     if (!selected || selected.locked) return
@@ -845,7 +1570,7 @@ export function SceneAnimatorPanel() {
   const deleteTimelineEvent = () => {
     if (!selected || selected.locked || !selectedEventId) return
     updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, events: getSceneEvents(layer).filter(event => event.id !== selectedEventId) } }))
-    setSelectedEventId(null); setMessage('Animation event deleted.')
+    setSelectedEventId(null); setMessage(t('animator.eventDeleted'))
   }
   const copyTimelineKeyframes = () => {
     if (!selected) return
@@ -855,10 +1580,10 @@ export function SceneAnimatorPanel() {
     setMessage(`${getSceneKeyframes(selected).length} keyframes copied.`)
   }
   const pasteTimelineKeyframes = async () => {
-    if (!selected || selected.locked) { setMessage('Unlock the target layer before pasting keyframes.'); return }
+    if (!selected || selected.locked) { setMessage(t('animator.unlockBeforePaste')); return }
     let text = keyframeClipboardRef.current
     try { text = await navigator.clipboard?.readText() || text } catch { /* Internal clipboard remains available. */ }
-    if (!text) { setMessage('Copy keyframes first.'); return }
+    if (!text) { setMessage(t('animator.copyFirst')); return }
     try {
       const parsed = JSON.parse(text) as { keyframes?: unknown }
       const frames = normalizeSceneKeyframes(Array.isArray(parsed) ? parsed : parsed.keyframes, selected)?.map(frame => ({ ...frame, id: uid() }))
@@ -869,7 +1594,7 @@ export function SceneAnimatorPanel() {
       const effectiveEnd = timing.offset + timing.span / timing.speed
       updateScene(current => ({ ...current, duration: Math.max(current.duration, effectiveEnd) }))
       setSelectedKeyframeId(frames[0].id); setSelectedEventId(null); setProgress(timing.offset / Math.max(.1, Math.max(scene.duration, effectiveEnd))); setMessage(`${frames.length} keyframes pasted.`)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid keyframe clipboard.') }
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.invalidClipboard')) }
   }
   const exportScene = () => {
     try {
@@ -884,10 +1609,10 @@ export function SceneAnimatorPanel() {
       link.click()
       window.setTimeout(() => { link.remove(); URL.revokeObjectURL(url) }, 1500)
       const localAssets = current.layers.filter(layer => layer.type !== 'camera' && layer.source.startsWith('blob:')).length
-      setMessage(localAssets > 0 ? `Scene JSON exported. ${localAssets} local asset${localAssets === 1 ? '' : 's'} will require reassignment when imported.` : 'Scene JSON exported.')
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Scene JSON could not be exported.') }
+      setMessage(localAssets > 0 ? t('animator.jsonExportedLocal', { count: localAssets }) : t('animator.jsonExported'))
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.jsonExportFailed')) }
   }
-  const importScene = (text: string) => {
+  const importScene = (text: string, successMessage?: string): boolean => {
     try {
       const incoming = parseSceneFile(text) as AnimatorScene
       const incomingIds = incoming.layers.map((layer, index) => {
@@ -906,6 +1631,7 @@ export function SceneAnimatorPanel() {
         if (!isAnimatorLayerType((rawLayer as { type?: unknown }).type)) throw new Error(`Unsupported scene layer type: ${String((rawLayer as { type?: unknown }).type ?? 'missing')}`)
         const isCamera = rawLayer.type === 'camera'
         const isModel = rawLayer.type === 'model3d'
+        const isEffect = rawLayer.type === 'effect'
         const transform = {
           ...rawLayer.transform,
           x: finiteNumber(rawLayer.transform?.x, 50),
@@ -930,7 +1656,7 @@ export function SceneAnimatorPanel() {
           rotationOffset: Number.isFinite(rawRelationship.rotationOffset) ? rawRelationship.rotationOffset : 0,
         } as AnimatorLayer['relationship'] : undefined
         const rawShake = rawLayer.animation?.shake
-        const shake = isCamera && rawShake && Number.isFinite(rawShake.amount) && Number.isFinite(rawShake.frequency) ? { amount: Math.max(0, Math.min(8, rawShake.amount)), frequency: Math.max(.1, Math.min(30, rawShake.frequency)), seed: Number.isFinite(rawShake.seed) ? rawShake.seed : 0 } : undefined
+        const shake = isCamera && rawShake && Number.isFinite(rawShake.amount) && Number.isFinite(rawShake.frequency) ? { amount: Math.max(0, Math.min(8, rawShake.amount)), frequency: Math.max(.1, Math.min(30, rawShake.frequency)), seed: Number.isFinite(rawShake.seed) ? rawShake.seed : 0, startTime: typeof rawShake.startTime === 'number' && Number.isFinite(rawShake.startTime) ? Math.max(0, Math.min(3600, rawShake.startTime)) : undefined, endTime: typeof rawShake.endTime === 'number' && Number.isFinite(rawShake.endTime) ? Math.max(0, Math.min(3600, rawShake.endTime)) : undefined } : undefined
         const rawOrbit = rawLayer.animation?.orbit
         const orbit = !isCamera && rawOrbit && rawOrbit.targetLayerId !== rawLayer.id && incomingVisualIds.has(rawOrbit.targetLayerId) ? {
           targetLayerId: rawOrbit.targetLayerId,
@@ -938,11 +1664,13 @@ export function SceneAnimatorPanel() {
           radiusY: boundedNumber(rawOrbit.radiusY, 9, 0, 100),
           turns: boundedNumber(rawOrbit.turns, 1, -20, 20),
           phase: boundedNumber(rawOrbit.phase, 0, -360, 360),
+          count: Math.round(boundedNumber(rawOrbit.count, 1, 1, 12)),
+          facing: ['fixed', 'center', 'outward'].includes(rawOrbit.facing ?? '') ? rawOrbit.facing as 'fixed' | 'center' | 'outward' : 'fixed',
           centerOffsetX: boundedNumber(rawOrbit.centerOffsetX, 0, -100, 100),
           centerOffsetY: boundedNumber(rawOrbit.centerOffsetY, 0, -100, 100),
         } : undefined
         const duration = boundedNumber(rawLayer.animation?.duration, finiteNumber(incoming.duration, 5), .1, 3600)
-        const curve: SceneCurve = ['linear', 'ease', 'dramatic', 'bounce'].includes(rawLayer.animation?.curve ?? '') ? rawLayer.animation.curve : 'linear'
+        const curve: SceneCurve = ['linear', 'ease', 'dramatic', 'bounce', 'hold'].includes(rawLayer.animation?.curve ?? '') ? rawLayer.animation.curve : 'linear'
         const events = normalizeSceneEvents(rawLayer.animation?.events, duration, rawLayer.id)
         const clip = isModel && typeof rawLayer.animation?.clip === 'string' && rawLayer.animation.clip.trim() ? rawLayer.animation.clip.trim().slice(0, 200) : undefined
         const clipOffset = isModel ? boundedNumber(rawLayer.animation?.clipOffset, 0, 0, 3600) : undefined
@@ -955,18 +1683,21 @@ export function SceneAnimatorPanel() {
           source: isCamera ? '' : String(rawLayer.source ?? ''),
           visible,
           locked: rawLayer.locked === true,
+          faceBinding: normalizeFaceBinding(rawLayer.faceBinding),
           relationship,
           effects: isCamera ? undefined : normalizedEffects(rawLayer.effects),
+          strip: isCamera ? undefined : normalizedStrip(rawLayer.strip),
+          atmosphere: isEffect ? normalizedAtmosphere(rawLayer.atmosphere) : undefined,
           parallax: isCamera ? undefined : typeof rawLayer.parallax === 'number' && Number.isFinite(rawLayer.parallax) ? Math.max(0, Math.min(2, rawLayer.parallax)) : 1,
           transform,
           animation: { ...rawLayer.animation, start, end, keyframes: undefined, events, duration, curve, clip, clipOffset, clipSpeed, clipReverse: isModel ? rawLayer.animation?.clipReverse === true : undefined, clipLoop: isModel ? rawLayer.animation?.clipLoop !== false : undefined, clipTrimStart, clipTrimEnd, shake, orbit },
-          missingAsset: isCamera ? false : Boolean(rawLayer.missingAsset || !String(rawLayer.source ?? '').trim() || isMissing(String(rawLayer.source ?? ''))),
+          missingAsset: isCamera || isEffect ? false : Boolean(rawLayer.missingAsset || !String(rawLayer.source ?? '').trim() || isMissing(String(rawLayer.source ?? ''))),
         } as AnimatorLayer
         const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
         const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
         return keyframes ? withSceneKeyframes(timedLayer, keyframes, timedLayer.animation.duration) as AnimatorLayer : timedLayer
       }))
-      const layers = breakDependencyCycles(normalizedLayers)
+      const layers = syncSceneCharacterKits(breakDependencyCycles(normalizedLayers), characterKitLibraryRef.current) as AnimatorLayer[]
       const duration = Math.min(3600, Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed })))
       const incomingComposition = incoming.composition as Partial<NonNullable<Scene['composition']>> | undefined
       const safeAreas: NonNullable<Scene['composition']>['safeArea'][] = ['none', 'action', 'title', 'vertical', 'all']
@@ -980,21 +1711,22 @@ export function SceneAnimatorPanel() {
       const previousObjectUrls = new Set(sceneRef.current.layers.flatMap(layer => [layer.source, layer.thumbnail].filter((value): value is string => Boolean(value?.startsWith('blob:')))))
       previousObjectUrls.forEach(url => URL.revokeObjectURL(url))
       const missingAssets = layers.filter(layer => layer.type !== 'camera' && layer.missingAsset).length
-      localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(`Scene imported: ${layers.length} layer${layers.length === 1 ? '' : 's'}.${missingAssets ? ` Reassign ${missingAssets} missing asset${missingAssets === 1 ? '' : 's'}.` : ''}`); setJsonOpen(false)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
+      localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(successMessage ?? `${t('animator.imported', { count: layers.length })}${missingAssets ? t('animator.reassignMissing', { count: missingAssets }) : ''}`); setJsonOpen(false)
+      return true
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.invalidSceneJson')); return false }
   }
   const importSceneFile = async (file: File) => {
     try {
       if (file.size > 20 * 1024 * 1024) throw new Error('Scene JSON is unexpectedly large (maximum 20 MB).')
       importScene(await file.text())
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'The scene file could not be read.') }
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.sceneReadFailed')) }
   }
   const loadMotionFile = async (file: File) => {
     try {
       if (file.size > 2 * 1024 * 1024) throw new Error('Movement JSON is unexpectedly large (maximum 2 MB).')
       setMotionText((await file.text()).replace(/^\uFEFF/, '').trim())
-      setMessage(`Movement JSON loaded from ${file.name}.`)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'The movement file could not be read.') }
+      setMessage(t('animator.motionLoaded', { name: file.name }))
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.motionReadFailed')) }
   }
   useEffect(() => {
     const pending = sessionStorage.getItem(PENDING_SCENE_KEY)
@@ -1009,23 +1741,36 @@ export function SceneAnimatorPanel() {
       const parsed = JSON.parse(autosave) as Partial<AnimatorScene>
       if (parsed.version === 1 && Array.isArray(parsed.layers) && parsed.layers.length > 0) {
         importScene(autosave)
-        setMessage('Autosave restored. Local assets may need reassignment.')
+        setMessage(t('animator.autosaveRestored'))
       }
     } catch { localStorage.removeItem(AUTOSAVE_KEY) }
     // Scene restoration is intentionally a one-time mount operation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
+    if (!scene.layers.length) return
     const timer = window.setTimeout(() => {
-      try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(scene)); setLastAutosaveAt(Date.now()) } catch { setMessage('Autosave could not be written in this browser.') }
+      try {
+        localStorage.setItem(AUTOSAVE_KEY, serializeSceneFile(scene))
+        setLastAutosaveAt(Date.now())
+      } catch {
+        setMessage(t('animator.autosaveFailed'))
+      }
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [scene])
+  }, [scene, t])
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') return
+      if (!(event.ctrlKey || event.metaKey)) return
       const target = event.target as HTMLElement | null
       if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+      const key = event.key.toLowerCase()
+      if (key === 's') {
+        event.preventDefault()
+        void persistScene()
+        return
+      }
+      if (key !== 'z') return
       event.preventDefault()
       if (event.shiftKey) redoScene(); else undoScene()
     }
@@ -1034,11 +1779,18 @@ export function SceneAnimatorPanel() {
     // Rebind when history changes so keyboard state and buttons stay aligned.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyRevision])
-  const paintScene = (canvas: HTMLCanvasElement, time: number) => {
+  const paintScene = (canvas: HTMLCanvasElement, progress: number, exportModelCanvases?: Map<string, HTMLCanvasElement[]>) => {
+    const current = sceneRef.current
+    const sceneProgress = Math.max(0, Math.min(1, progress))
+    const sceneSeconds = sceneProgress * current.duration
     const context = canvas.getContext('2d')
     if (!context) return false
     context.fillStyle = '#0b1020'; context.fillRect(0, 0, canvas.width, canvas.height)
-    scene.layers.filter(layer => layer.visible && isVisualLayer(layer)).map(layer => ({ layer, state: renderedLayerState(layer, time) })).sort((a, b) => a.state.z - b.state.z).forEach(({ layer, state }) => {
+    current.layers
+      .filter(layer => layer.visible && isVisualLayer(layer))
+      .flatMap(layer => renderedLayerStates(layer, sceneProgress).map((state, instanceIndex) => ({ layer, state, instanceIndex })))
+      .sort((a, b) => a.state.z - b.state.z)
+      .forEach(({ layer, state, instanceIndex }) => {
       const effects = normalizedEffects(layer.effects)
       context.save(); context.globalAlpha = state.opacity
       context.globalCompositeOperation = effects.blendMode === 'normal' ? 'source-over' : effects.blendMode
@@ -1047,11 +1799,14 @@ export function SceneAnimatorPanel() {
       const height = canvas.height * (layer.type === 'model3d' ? .75 : 1) * state.scale
       context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100); context.rotate(state.rotation * Math.PI / 180)
       applyLayerMask(context, effects, width, height)
-      if (layer.type === 'model3d') {
-        const viewer = findLayerElement(canvasRef.current, layer.id)?.shadowRoot?.querySelector('canvas') as HTMLCanvasElement | null
+      if (layer.type === 'effect') {
+        drawAtmosphere(context, normalizedAtmosphere(layer.atmosphere), sceneSeconds, width, height)
+      } else if (layer.type === 'model3d') {
+        const viewer = exportModelCanvases?.get(layer.id)?.[instanceIndex]
+          ?? modelViewerCanvas(findLayerElements(canvasRef.current, layer.id)[instanceIndex] ?? null)
         if (viewer) context.drawImage(viewer, -width / 2, -height / 2, width, height)
       } else {
-        const media = layer.type === 'video' ? videoRefs.current[layer.id] : findLayerElement(canvasRef.current, layer.id) as HTMLImageElement | null
+        const media = findLayerElement(canvasRef.current, layer.id) as HTMLVideoElement | HTMLImageElement | null
         if (media && (media instanceof HTMLVideoElement ? media.readyState >= 2 : media.complete)) {
           const sourceWidth = media instanceof HTMLVideoElement ? media.videoWidth : media.naturalWidth
           const sourceHeight = media instanceof HTMLVideoElement ? media.videoHeight : media.naturalHeight
@@ -1065,25 +1820,45 @@ export function SceneAnimatorPanel() {
       }
       context.restore()
     })
+    current.layers
+      .filter(layer => layer.visible && isVisualLayer(layer) && normalizedStrip(layer.strip).seamOccluder.enabled)
+      .forEach(layer => {
+        const kind = normalizedStrip(layer.strip).seamOccluder.kind
+        seamCoverStates(layer, sceneProgress).forEach(state => {
+          context.save()
+          context.globalAlpha = state.opacity
+          context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100)
+          context.rotate(state.rotation * Math.PI / 180)
+          paintSeamOccluder(context, kind, canvas.width, canvas.height, normalizedStrip(layer.strip).seamOccluder.scale)
+          context.restore()
+        })
+      })
     return true
   }
-  const record = () => {
-    if (recording) return
-    if (playing) { setMessage('Wait for Preview to finish before recording.'); return }
-    if (!scene.layers.some(layer => layer.visible && isVisualLayer(layer))) { setMessage('Add a visible visual layer before recording.'); return }
-    if (!('MediaRecorder' in window)) { setMessage('This browser cannot record the scene.'); return }
-    const canvas = document.createElement('canvas'); canvas.width = scene.width; canvas.height = scene.height; const context = canvas.getContext('2d'); if (!context) return
-    if (!('filter' in context) && scene.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) { setMessage('This browser can preview layer filters but cannot capture them. Use Chromium/Chrome to record this scene.'); return }
+  // Compatibility fallback for browsers without WebCodecs. Chromium uses the
+  // deterministic MP4 path below so slow WebGL frames never change timing.
+  const recordCompatibilityWebm = (): Promise<Blob> => new Promise((resolve, reject) => {
+    if (recording) { reject(new Error('A recording is already in progress.')); return }
+    if (playing) { const error = new Error(t('animator.waitPreview')); setMessage(error.message); reject(error); return }
+    prepareFacePlayback()
+    const current = sceneRef.current
+    const currentFps: SceneFrameRate = current.fps === 60 ? 60 : 30
+    if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) { const error = new Error(t('animator.addVisibleLayer')); setMessage(error.message); reject(error); return }
+    if (!('MediaRecorder' in window)) { const error = new Error(t('animator.cannotRecord')); setMessage(error.message); reject(error); return }
+    const canvas = document.createElement('canvas'); canvas.width = current.width; canvas.height = current.height; const context = canvas.getContext('2d'); if (!context) { reject(new Error('Could not create a recording canvas.')); return }
+    if (!('filter' in context) && current.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) { const error = new Error(t('animator.filterCapture')); setMessage(error.message); reject(error); return }
     let stream: MediaStream | null = null
     let recorder: MediaRecorder | null = null
     const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'
-    const videoBitsPerSecond = Math.round(Math.max(4_000_000, Math.min(60_000_000, scene.width * scene.height * fps * .12)))
+    const videoBitsPerSecond = Math.round(Math.max(4_000_000, Math.min(60_000_000, current.width * current.height * currentFps * .12)))
     try {
-      stream = canvas.captureStream(fps)
+      stream = canvas.captureStream(currentFps)
       recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond })
     } catch (error) {
       stream?.getTracks().forEach(track => track.stop())
-      setMessage(error instanceof Error ? `Recording could not start: ${error.message}` : 'Recording could not start in this browser.')
+      const message = error instanceof Error ? t('animator.recordingStartFailedDetail', { message: error.message }) : t('animator.recordingStartFailed')
+      setMessage(message)
+      reject(new Error(message))
       return
     }
     const captureStream = stream
@@ -1104,20 +1879,27 @@ export function SceneAnimatorPanel() {
       if (failed) return
       failed = true
       const detail = error instanceof Error ? error.message : String(error || 'Unknown recorder error')
-      setMessage(`Recording failed: ${detail}`)
+      setMessage(t('animator.recordingFailed', { detail }))
       if (mediaRecorder.state !== 'inactive') {
         try { mediaRecorder.stop() } catch { clearCapture() }
       } else clearCapture()
+      reject(error instanceof Error ? error : new Error(detail))
     }
     mediaRecorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }
     mediaRecorder.onerror = event => fail((event as Event & { error?: DOMException }).error ?? new Error('MediaRecorder reported an error.'))
     mediaRecorder.onstop = () => {
       if (!failed && chunks.length > 0) {
-        const url = URL.createObjectURL(new Blob(chunks, { type: mime }))
-        const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${scene.width}x${scene.height}-${fps}fps-${Date.now()}.webm`; link.click()
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-      } else if (!failed) setMessage('Recording stopped without producing video data.')
+        const blob = new Blob(chunks, { type: mime })
+        clearCapture()
+        resolve(blob)
+        return
+      }
       clearCapture()
+      if (!failed) {
+        const error = new Error('Recording stopped without producing video data.')
+        setMessage(error.message)
+        reject(error)
+      }
     }
     mediaRecorderRef.current = mediaRecorder
     recordingStreamRef.current = captureStream
@@ -1132,9 +1914,9 @@ export function SceneAnimatorPanel() {
         if (finishing) return
         finishing = true
         try {
-          const readyProgress = Math.min(1, syncedFrame / fps / scene.duration)
+          const readyProgress = Math.min(1, syncedFrame / currentFps / current.duration)
           setProgress(readyProgress); paintScene(canvas, readyProgress)
-          syncSceneMedia(scene.duration)
+          syncSceneMedia(current.duration)
           recordingAnimationRef.current = requestAnimationFrame(() => {
             try {
               setProgress(1); paintScene(canvas, 1)
@@ -1145,30 +1927,277 @@ export function SceneAnimatorPanel() {
       }
       const frame = (now: number) => {
         try {
-          const elapsed = Math.min(scene.duration, (now - started) / 1000)
-          if (elapsed >= scene.duration) { finish(); return }
-          const desiredFrame = Math.floor(elapsed * fps)
+          const elapsed = Math.min(current.duration, (now - started) / 1000)
+          if (elapsed >= current.duration) { finish(); return }
+          const desiredFrame = Math.floor(elapsed * currentFps)
           if (desiredFrame !== syncedFrame) {
-            const readyProgress = Math.min(1, syncedFrame / fps / scene.duration)
+            const readyProgress = Math.min(1, syncedFrame / currentFps / current.duration)
             setProgress(readyProgress); paintScene(canvas, readyProgress)
             syncedFrame = desiredFrame
-            syncSceneMedia(Math.min(scene.duration, desiredFrame / fps))
+            syncSceneMedia(Math.min(current.duration, desiredFrame / currentFps))
           }
           recordingAnimationRef.current = requestAnimationFrame(frame)
         } catch (error) { fail(error) }
       }
       recordingAnimationRef.current = requestAnimationFrame(frame)
     })
+  })
+  const nextPaint = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+
+  const createExportModelStage = async (current: AnimatorScene) => {
+    const host = document.createElement('div')
+    // model-viewer renders at its CSS size. Keep a separate, almost invisible
+    // stage at the final output size instead of upscaling the small editor
+    // preview canvas into the recording.
+    host.style.cssText = 'position:fixed;left:0;top:0;z-index:-1;display:flex;flex-wrap:wrap;gap:1px;opacity:.001;pointer-events:none;contain:layout style paint;'
+    document.body.append(host)
+    const viewers = new Map<string, ModelViewerAnimationElement[]>()
+    const canvases = new Map<string, HTMLCanvasElement[]>()
+    const models = current.layers.filter((layer): layer is VisualAnimatorLayer => layer.visible && layer.type === 'model3d' && !layer.missingAsset && Boolean(layer.source))
+
+    // Image, video and procedural-effect scenes do not need the hidden WebGL
+    // stage. Waiting for two presentation frames for every encoded frame is
+    // especially expensive in a background tab, where requestAnimationFrame
+    // is throttled, and used to turn an eight-second cutaway into a multi-
+    // minute export even though there was no model-viewer to synchronize.
+    if (models.length === 0) {
+      return {
+        canvases,
+        async renderFrame() {},
+        dispose() { host.remove() },
+      }
+    }
+
+    for (const layer of models) {
+      const scales = [layer.transform.scale, layer.animation.start.scale, layer.animation.end.scale, ...getSceneKeyframes(layer).map(frame => frame.scale)]
+      const maxScale = Math.max(.01, ...scales)
+      const instanceCount = Math.max(1, renderedLayerStates(layer, 0).length)
+      const width = Math.min(4096, Math.max(64, Math.ceil(current.width * .52 * maxScale)))
+      const height = Math.min(4096, Math.max(64, Math.ceil(current.height * .75 * maxScale)))
+      const entries: ModelViewerAnimationElement[] = []
+      for (let index = 0; index < instanceCount; index += 1) {
+        const viewer = document.createElement('model-viewer') as ModelViewerAnimationElement
+        viewer.setAttribute('src', layer.source)
+        viewer.setAttribute('camera-orbit', `${layer.transform.rotationY ?? 0}deg ${layer.transform.rotationX ?? 75}deg auto`)
+        viewer.setAttribute('orientation', '0deg 0deg 0deg')
+        viewer.setAttribute('interaction-prompt', 'none')
+        viewer.setAttribute('shadow-intensity', '1')
+        viewer.setAttribute('exposure', '1')
+        viewer.style.cssText = `display:block;width:${width}px;height:${height}px;`
+        host.append(viewer)
+        entries.push(viewer)
+      }
+      viewers.set(layer.id, entries)
+    }
+
+    const deadline = Date.now() + 30000
+    while (Date.now() < deadline) {
+      let ready = true
+      for (const entries of viewers.values()) {
+        for (const viewer of entries) {
+          const canvas = modelViewerCanvas(viewer)
+          if (viewer.loaded !== true || !canvas || canvas.width < 64 || canvas.height < 64) { ready = false; break }
+        }
+        if (!ready) break
+      }
+      if (ready) break
+      await new Promise(resolve => window.setTimeout(resolve, 80))
+    }
+    for (const [id, entries] of viewers) {
+      const rendered = entries.map(viewer => modelViewerCanvas(viewer)).filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas))
+      if (rendered.length !== entries.length) {
+        host.remove()
+        throw new Error('The high-resolution 3D export stage did not paint in time.')
+      }
+      canvases.set(id, rendered)
+    }
+    await nextPaint()
+
+    return {
+      canvases,
+      async renderFrame(progress: number) {
+        for (const layer of models) {
+          const entries = viewers.get(layer.id) ?? []
+          const states = renderedLayerStates(layer, progress)
+          entries.forEach((viewer, index) => {
+            const state = states[index] ?? states[0]
+            viewer.setAttribute('orientation', `0deg ${state?.modelYaw ?? 0}deg 0deg`)
+            if (layer.animation.clip) {
+              viewer.setAttribute('animation-name', layer.animation.clip)
+              const clipTime = getSceneClipTime(layer, progress * current.duration, Math.max(.001, viewer.duration || 0))
+              viewer.currentTime = clipTime
+              viewer.pause()
+            }
+          })
+        }
+        // WebGL updates asynchronously after orientation/currentTime changes.
+        // Two presentation cycles ensure the copied canvas is the requested frame.
+        await nextPaint()
+      },
+      dispose() { host.remove() },
+    }
   }
-  const persistScene = async () => {
-    if (!scene.layers.length) { setMessage('Add at least one layer before saving.'); return }
+
+  const recordToBlob = async (): Promise<Blob> => {
+    if (recording) throw new Error('A recording is already in progress.')
+    if (playing) throw new Error(t('animator.waitPreview'))
+    prepareFacePlayback()
+    if (!('VideoEncoder' in window) || typeof VideoEncoder.isConfigSupported !== 'function') {
+      setMessage(t('animator.webcodecsFallback'))
+      return recordCompatibilityWebm()
+    }
+    const current = sceneRef.current
+    const fps: SceneFrameRate = current.fps === 60 ? 60 : 30
+    if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) throw new Error(t('animator.addVisibleLayer'))
+    const canvas = document.createElement('canvas')
+    canvas.width = current.width
+    canvas.height = current.height
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Could not create a recording canvas.')
+    if (!('filter' in context) && current.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) {
+      throw new Error('This browser cannot render the scene filters at export quality. Use Chromium/Chrome to record this scene.')
+    }
+
+    const frameDurationUs = Math.round(1_000_000 / fps)
+    const frameCount = Math.max(1, Math.round(current.duration * fps))
+    const bitrate = Math.round(Math.max(8_000_000, Math.min(80_000_000, current.width * current.height * fps * .22)))
+    const supported = await VideoEncoder.isConfigSupported({ codec: 'avc1.640028', width: current.width, height: current.height, bitrate, framerate: fps, avc: { format: 'avc' } })
+    if (!supported.supported || !supported.config) {
+      throw new Error('This browser cannot encode a deterministic H.264 MP4 at the selected resolution.')
+    }
+
+    const target = new ArrayBufferTarget()
+    const muxer = new Muxer({
+      target,
+      video: { codec: 'avc', width: current.width, height: current.height, frameRate: fps },
+      fastStart: 'in-memory',
+      firstTimestampBehavior: 'strict',
+    })
+    let encoderError: Error | null = null
+    const encoder = new VideoEncoder({
+      output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
+      error: error => { encoderError = error instanceof Error ? error : new Error(String(error)) },
+    })
+    encoder.configure(supported.config)
+    const exportStage = await createExportModelStage(current)
+    try {
+      resetSceneMedia()
+      setRecording(true)
+      setProgress(0)
+      setMessage(t('animator.renderingFrames', { count: frameCount, fps }))
+      for (let index = 0; index < frameCount; index += 1) {
+        if (encoderError) throw encoderError
+        const seconds = Math.min(current.duration, index / fps)
+        const progress = sceneProgressFromSeconds(seconds, current.duration)
+        syncSceneMedia(seconds)
+        await exportStage.renderFrame(progress)
+        if (!paintScene(canvas, progress, exportStage.canvases)) throw new Error('Could not paint export frame.')
+        const frame = new VideoFrame(canvas, { timestamp: index * frameDurationUs, duration: frameDurationUs })
+        encoder.encode(frame, { keyFrame: index % Math.max(1, fps * 2) === 0 })
+        frame.close()
+        if (encoder.encodeQueueSize > 8) await encoder.flush()
+        setProgress((index + 1) / frameCount)
+      }
+      await encoder.flush()
+      if (encoderError) throw encoderError
+      muxer.finalize()
+      return new Blob([target.buffer], { type: 'video/mp4' })
+    } finally {
+      encoder.close()
+      exportStage.dispose()
+      Object.values(videoRefs.current).forEach(video => video?.pause())
+      setRecording(false)
+    }
+  }
+
+  const publishRecording = async (blob: Blob, current: Scene) => {
+    const context = recipeContextRef.current
+    const saved = await saveSceneRecording(blob, {
+      scene: current,
+      prompt: context?.prompt ?? '',
+      // A user can change every frame-affecting field after mounting the LLM
+      // recipe. Persist the current scene as the recipe, rather than calling
+      // the stale planning JSON a reproduction of the rendered MP4.
+      recipe: sceneToRecipe(current) as unknown as Record<string, unknown>,
+      workspace,
+    })
+    await loadOutputs()
+    setMessage(t('animator.mp4Saved', { name: saved.name }))
+    return saved
+  }
+  const record = () => {
+    if (publishing) return
+    setPublishing(true)
+    setMessage(null)
+    void waitForModelViewers()
+      .then(() => recordToBlob())
+      .then(blob => publishRecording(blob, sceneRef.current))
+      .catch(error => setMessage(error instanceof Error ? error.message : t('animator.mp4Failed')))
+      .finally(() => setPublishing(false))
+  }
+  const waitForModelViewers = async () => {
+    const root = canvasRef.current
+    if (!root) return
+    const deadline = Date.now() + 25000
+    const expectedModelIds = new Set(
+      sceneRef.current.layers
+        .filter(layer => layer.type === 'model3d' && layer.visible && !layer.missingAsset && layer.source)
+        .map(layer => layer.id),
+    )
+    if (!expectedModelIds.size) return
+    while (Date.now() < deadline) {
+      const viewers = [...root.querySelectorAll<ModelViewerAnimationElement>('model-viewer')]
+      const ready = [...expectedModelIds].every(id => {
+        const matches = viewers.filter(viewer => viewer.dataset.layerId === id)
+        return matches.length > 0 && matches.every(viewer => {
+          const canvas = modelViewerCanvas(viewer)
+          return viewer.loaded === true && Boolean(canvas && canvas.width > 8 && canvas.height > 8)
+        })
+      })
+      if (ready) {
+        // `loaded` fires when the GLB is available, but model-viewer's WebGL
+        // renderer still needs a presentation cycle before its canvas can be
+        // copied into the recorder's 2D canvas. Two RAFs prevent the capture
+        // from starting with several seconds of transparent model frames.
+        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+        await new Promise(resolve => window.setTimeout(resolve, 250))
+        return
+      }
+      await new Promise(resolve => window.setTimeout(resolve, 250))
+    }
+    throw new Error('The 3D models did not paint in time. Keep the 3D Video tab visible and try again.')
+  }
+  const applyRecipeScene = async (recipe: SceneRecipe, nextScene: Scene, status: (message: string) => void, prompt: string) => {
+    recipeContextRef.current = { prompt }
+    importScene(JSON.stringify(nextScene), t('animator.recipeLoaded', { name: nextScene.name }))
+    await new Promise(resolve => window.setTimeout(resolve, 120))
+    status(t('animator.waitingModels'))
+    await waitForModelViewers()
+    if (recipe.record !== true && recipe.save !== true) {
+      status('3D models ready. Scene mounted; press Export MP4 when ready.')
+    }
+    if (recipe.record === true) {
+      status(t('animator.recordingScene'))
+      const blob = await recordToBlob()
+      status(t('animator.convertingMp4'))
+      const saved = await publishRecording(blob, nextScene)
+      status(t('animator.mp4Ready', { name: saved.name }))
+    }
+    if (recipe.save === true) {
+      status(t('animator.savingScene'))
+      await persistScene()
+    }
+  }
+  const persistScene = async (): Promise<string | null> => {
+    const current = sceneRef.current
+    if (!current.layers.length) { setMessage(t('animator.addLayerBeforeSave')); return null }
     setSaving(true); setMessage(null)
     try {
       const preview = document.createElement('canvas')
-      const previewScale = Math.min(1, 1280 / Math.max(scene.width, scene.height))
-      preview.width = Math.max(1, Math.round(scene.width * previewScale)); preview.height = Math.max(1, Math.round(scene.height * previewScale))
+      const previewScale = Math.min(1, 1280 / Math.max(current.width, current.height))
+      preview.width = Math.max(1, Math.round(current.width * previewScale)); preview.height = Math.max(1, Math.round(current.height * previewScale))
       paintScene(preview, progress)
-      const layers = await Promise.all(scene.layers.map(async layer => {
+      const layers = await Promise.all(current.layers.map(async layer => {
         if (layer.type === 'camera') return layer
         if (!layer.source.startsWith('blob:')) return layer
         const file = localFilesRef.current[layer.id]
@@ -1176,17 +2205,676 @@ export function SceneAnimatorPanel() {
         const uploaded = await uploadImage(file)
         return { ...layer, source: uploaded.url, missingAsset: false }
       }))
-      const persisted = { ...scene, layers }
-      const saved = await saveSceneOutput(persisted, preview.toDataURL('image/png'))
+      const persisted = { ...current, layers }
+      const saved = await saveSceneOutput(persisted, preview.toDataURL('image/png'), workspace)
       replaceScene(persisted); localFilesRef.current = {}; await loadOutputs()
-      setMessage(`Scene saved to Maestro as ${saved.name}`)
+      setMessage(t('animator.sceneSaved', { name: saved.name }))
+      return saved.name
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Failed to save scene.')
+      setMessage(error instanceof Error ? error.message : t('animator.saveFailed'))
+      return null
     } finally {
       setSaving(false)
     }
   }
+  const kitAssetFromSelected = () => {
+    if (!selected) throw new Error('Select an image or overlay layer first.')
+    return characterKitAssetFromLayer(selected, workspace, { alphaStatus: characterKitAlphaStatus, reviewState: 'approved' })
+  }
+  const createKitFromSelected = () => {
+    try {
+      const asset = kitAssetFromSelected()
+      const next = createCharacterKit(characterKitName || selected?.name || 'Untitled character')
+      next.base = { ...asset, kind: 'image' }
+      next.identityReference = { ...asset, id: `${asset.id}-identity`, kind: 'image' }
+      next.provenance = [{ method: 'scene-layer-assignment', sourceLayerId: selected?.id, workspace }]
+      setCharacterKitDraft(next); setCharacterKitName(''); setCharacterKitPoseId('base'); setCharacterKitError(null)
+      setMessage(t('animator.kitCreated', { name: next.name }))
+    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : t('animator.kitCreateFailed')) }
+  }
+  const assignSelectedToKit = (slot: 'base' | 'pose' | 'mouth' | 'blink') => {
+    if (!characterKitDraft) return
+    try {
+      const asset = kitAssetFromSelected()
+      const now = new Date().toISOString()
+      setCharacterKitDraft(current => {
+        if (!current) return current
+        if (slot === 'base') return { ...current, base: { ...asset, kind: 'image' }, updatedAt: now }
+        if (slot === 'pose') return { ...current, poses: { ...current.poses, [characterKitPoseId.trim() || 'pose']: { ...asset, kind: 'image' } }, updatedAt: now }
+        if (slot === 'mouth') return { ...current, mouth: { ...current.mouth, [characterKitMouthState]: { ...asset, kind: 'overlay' } }, updatedAt: now }
+        return { ...current, eyes: { ...current.eyes, blink: { ...asset, kind: 'overlay' } }, updatedAt: now }
+      })
+      setCharacterKitError(null); setMessage(t('animator.assignedSlot', { name: asset.name, slot }))
+    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : t('animator.assignFailed')) }
+  }
+  const captureKitAnchor = () => {
+    if (!characterKitDraft || !selected || !isCutoutFaceLayer(selected)) { setCharacterKitError(t('animator.selectOverlayFirst')); return }
+    const poseLayerId = selected.faceBinding?.poseLayerId ?? (selected.relationship?.type === 'parent' ? selected.relationship.targetLayerId : '')
+    const pose = scene.layers.find(layer => layer.id === poseLayerId)
+    if (!pose) { setCharacterKitError(t('animator.bindBeforeAnchor')); return }
+    const anchor = captureCharacterFaceAnchor(pose, selected)
+    const poseId = characterKitPoseId.trim() || 'base'
+    const role = selected.faceBinding?.role ?? (/eye|blink/i.test(selected.name) ? 'blink' : 'mouth')
+    setCharacterKitDraft(current => current ? {
+      ...current,
+      anchors: {
+        ...current.anchors,
+        [poseId]: role === 'blink'
+          ? { mouth: current.anchors[poseId]?.mouth ?? anchor, mouthStates: current.anchors[poseId]?.mouthStates, eyes: anchor }
+          : {
+            ...current.anchors[poseId],
+            mouth: current.anchors[poseId]?.mouth ?? anchor,
+            mouthStates: { ...current.anchors[poseId]?.mouthStates, [characterKitMouthState]: anchor },
+          },
+      },
+      updatedAt: new Date().toISOString(),
+    } : current)
+    setCharacterKitError(null); setMessage(role === 'blink' ? t('animator.capturedAnchorEye', { pose: poseId }) : t('animator.capturedAnchorMouth', { pose: poseId }))
+  }
+  const persistCharacterKitDraft = async (kit: CharacterKit, announce = false) => {
+    try {
+      const next = { ...kit, updatedAt: new Date().toISOString() }
+      const library = await saveCharacterKit(workspace, characterKitLibraryRef.current, next)
+      setCharacterKitLibrary(library)
+      const saved = library.kits[next.id]
+      if (!saved) return
+      setCharacterKitDraft(structuredClone(saved))
+      updateScene(current => {
+        const synced = syncMountedCharacterKitLayers(current.layers, saved, characterKitPoseId.trim() || 'base') as AnimatorLayer[]
+        const layers = ensureCutoutFacePlayback(synced, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
+        return { ...current, layers }
+      })
+      if (announce) setMessage(`${next.name} guardado.`)
+    } catch (error) {
+      setCharacterKitError(error instanceof Error ? error.message : t('animator.kitSaveFailed'))
+    }
+  }
+  const persistCharacterKit = async () => {
+    if (!characterKitDraft) return
+    setCharacterKitBusy(true); setCharacterKitError(null)
+    try {
+      await persistCharacterKitDraft(characterKitDraft, true)
+    } finally { setCharacterKitBusy(false) }
+  }
+  const mountCharacterKit = () => {
+    if (!characterKitDraft) return
+    try {
+      const poseId = characterKitPoseId.trim() || 'base'
+      const mounted = ensureCutoutFacePlayback(
+        mountCharacterKitLayers(characterKitDraft, poseId, undefined, scene.duration),
+        scene.duration,
+        fps,
+        [],
+        cutoutDialogueText,
+      ) as AnimatorLayer[]
+      const mountedIds = new Set(mounted.map(layer => layer.id))
+      if (scene.layers.some(layer => mountedIds.has(layer.id))) {
+        updateScene(current => {
+          const synced = syncMountedCharacterKitLayers(current.layers, characterKitDraft, poseId) as AnimatorLayer[]
+          const layers = ensureCutoutFacePlayback(synced, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
+          return { ...current, layers }
+        })
+        setMessage(`${characterKitDraft.name} ya estaba en la escena. Actualicé boca y ojos.`)
+        return
+      }
+      updateScene(current => ({ ...current, layers: normalizeZ([...current.layers, ...mounted]) }))
+      setSelectedId(mounted[0].id); setMessage(`${characterKitDraft.name} está en la escena. Preview mueve boca y parpadeo.`)
+    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : t('animator.kitMountFailed')) }
+  }
+  const removeCharacterKit = async () => {
+    if (!characterKitDraft || !window.confirm(t('animator.deleteKitConfirm', { name: characterKitDraft.name }))) return
+    setCharacterKitBusy(true); setCharacterKitError(null)
+    try {
+      const library = await deleteCharacterKit(workspace, characterKitLibrary, characterKitDraft.id)
+      setCharacterKitLibrary(library); setCharacterKitDraft(library.kits[library.activeId] ? structuredClone(library.kits[library.activeId]) : null)
+      setMessage(t('animator.kitRemoved'))
+    } catch (error) { setCharacterKitError(error instanceof Error ? error.message : t('animator.kitRemoveFailed')) }
+    finally { setCharacterKitBusy(false) }
+  }
   const numberInput = (label: string, value: number, change: (value: number) => void, min = -100, max = 200, step = 1, disabled = false) => <label className="text-[10px] text-text-muted">{label}<input type="number" min={min} max={max} step={step} value={value} disabled={disabled} onChange={event => { const next = Number(event.target.value); if (Number.isFinite(next)) change(next) }} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50" /></label>
+  const mountNarrativeTemplate = () => {
+    const asset = (name: string) => narrativeVisuals.find(item => item.name === name)
+    const hero = asset(narrativeHero)
+    const plate = asset(narrativePlate)
+    const prop = asset(narrativeProp)
+    const foreground = asset(narrativeForeground)
+    const missing = narrativeTemplate.assetSlots.find(slot => slot.required && !({ hero, plate, prop, foreground }[slot.id]))
+    if (missing) { setMessage(t('animator.chooseBeforeMount', { label: missing.label })); return }
+    const asInput = (item: typeof hero) => item ? {
+      source: item.url,
+      type: item.type === 'model3d' ? 'model3d' as const : item.type === 'video' ? 'video' as const : 'image' as const,
+      name: item.name,
+    } : undefined
+    const input: NarrativeTemplateInput = { hero: asInput(hero), plate: plate ? { ...asInput(plate)!, seamlessHorizontal: narrativePlateLoopReady } : undefined, prop: asInput(prop), foreground: asInput(foreground), width: scene.width, height: scene.height, fps, controls: { mood: narrativeMood, intensity: narrativeIntensity, direction: narrativeDirection, camera: narrativeCamera, palette: narrativePalette, voiceSpace: narrativeVoiceSpace } }
+    const next = createNarrativeScene(narrativeTemplateId, input) as AnimatorScene
+    // A template replaces the composition, not the scene's audio or its
+    // copilot history - neither of which it can produce. See carrySceneSidecars.
+    updateScene(current => carrySceneSidecars(current, next))
+    setSelectedId(next.layers.find(layer => layer.id === 'hero')?.id ?? next.layers.find(layer => layer.type !== 'camera')?.id ?? null)
+    setSelectedKeyframeId(null); setSelectedEventId(null); setSelectedPresetId(''); setProgress(0)
+    setMessage(`${narrativeTemplate.title} mounted as an editable ${next.duration}-second scene.`)
+  }
+  const sendImageToPanoramaLoop = () => {
+    if (!selected || selected.type !== 'image' || !selected.source) return
+    window.sessionStorage.setItem('hocuspocus:panorama-loop-source', JSON.stringify({ url: selected.source, name: selected.name }))
+    setGenerationMode('image'); setSidebarMode('studio'); setSidebarOpen(true)
+  }
+  const attachSceneAudio = (filename: string, name = filename, kind: 'speech' | 'music' | 'sfx' | 'audio' = 'audio', prompt?: string, model?: string) => {
+    if (!filename) return
+    updateScene(current => {
+      if ((current.audioTracks ?? []).some(track => track.filename === filename)) return current
+      return { ...current, audioTracks: [...(current.audioTracks ?? []), { id: uid(), filename, name, kind, startTime: 0, volume: 1, prompt, model }] }
+    })
+  }
+  const generateSceneSpeech = async () => {
+    const prompt = sceneAudioPrompt.trim()
+    if (!prompt) return
+    setSceneAudioBusy(true); setSceneAudioError(null)
+    try {
+      const clip = await generateSceneSpeechClip({
+        prompt,
+        model: selectedSpeechModel,
+        durationSeconds: sceneRef.current.duration,
+      })
+      attachSceneAudio(clip.filename, clip.filename.replace(/\.[^.]+$/, ''), 'speech', prompt, selectedSpeechModel)
+      setSceneAudioPrompt(''); await loadOutputs(); setMessage(t('animator.speechAttached'))
+    } catch (error) {
+      setSceneAudioError(error instanceof Error ? error.message : t('animator.speechFailed'))
+    } finally {
+      setSceneAudioBusy(false)
+    }
+  }
+  const analyzeSceneRhythm = async () => {
+    const track = selectedRhythmTrack
+    if (!track) { setRhythmError(t('animator.attachAudioFirst')); return }
+    setRhythmBusy(true); setRhythmError(null)
+    try {
+      const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
+      if (!analysis.beats.length) throw new Error('No stable beat grid was detected in this track.')
+      setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
+      setMessage(t('animator.rhythmReady', { bpm: analysis.bpm.toFixed(1), beats: analysis.beats.length, downbeats: analysis.downbeats.length }))
+    } catch (error) {
+      setRhythmAnalysis(null); setRhythmAnalysisTrackId('')
+      setRhythmError(error instanceof Error ? error.message : t('animator.rhythmFailed'))
+    } finally {
+      setRhythmBusy(false)
+    }
+  }
+  const applySceneRhythm = () => {
+    const track = selectedRhythmTrack
+    const analysis = activeRhythmAnalysis
+    if (!track || !analysis) { setRhythmError(t('animator.analyzeBeforeApply')); return }
+    if (!selected) { setRhythmError(t('animator.selectRhythmTarget')); return }
+    if (selected.locked) { setRhythmError(t('animator.unlockBeforeRhythm', { name: selected.name })); return }
+    try {
+      const map = buildSceneRhythmMap(analysis, track.startTime, scene.duration, rhythmCueSource)
+      if (!map.cues.length) throw new Error('The detected beats do not overlap the current scene duration and audio start time.')
+      const profile = selected.type === 'camera' && rhythmProfile === 'peek' ? 'camera-punch' : rhythmProfile
+      updateLayer(selected.id, layer => applySceneRhythmToLayer(layer, map, {
+        profile,
+        sceneDuration: scene.duration,
+        intensity: rhythmIntensity,
+      }) as AnimatorLayer)
+      setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(map.cues[0].time / scene.duration); setRhythmError(null)
+      setMessage(t('animator.appliedRhythm', { count: map.cues.length, source: rhythmCueSource, track: track.name, name: selected.name }))
+    } catch (error) {
+      setRhythmError(error instanceof Error ? error.message : t('animator.rhythmApplyFailed'))
+    }
+  }
+  const importSceneRef = useRef(importScene)
+  const addLayerRef = useRef(addLayer)
+  const addCameraRef = useRef(addCamera)
+  const persistSceneRef = useRef(persistScene)
+  const recordToBlobRef = useRef(recordToBlob)
+  const publishRecordingRef = useRef(publishRecording)
+  const waitForModelViewersRef = useRef(waitForModelViewers)
+  importSceneRef.current = importScene
+  addLayerRef.current = addLayer
+  addCameraRef.current = addCamera
+  persistSceneRef.current = persistScene
+  recordToBlobRef.current = recordToBlob
+  publishRecordingRef.current = publishRecording
+  waitForModelViewersRef.current = waitForModelViewers
+  useEffect(() => listenForAgentSceneWorkflow(async request => {
+    const normalize = normalizeSceneLookupName
+    const assertScene = () => {
+      const current = sceneRef.current
+      if (request.sceneName && normalize(request.sceneName) !== normalize(current.name)) {
+        throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”.`)
+      }
+      return current
+    }
+    const exactLayer = (name: string) => {
+      const matches = sceneRef.current.layers.filter(layer => normalize(layer.name) === normalize(name))
+      if (matches.length !== 1) throw new Error(matches.length ? `La capa “${name}” no es inequívoca.` : `No existe la capa “${name}”.`)
+      return matches[0]
+    }
+    const exactOutput = async (name: string, types: Array<'audio' | 'image' | 'video' | 'model3d'>) => {
+      const library = await fetchOutputs(0, 0, { workspace })
+      const matches = library.outputs.filter(output => types.includes(output.type as typeof types[number]) && normalize(output.name) === normalize(name))
+      if (matches.length !== 1) throw new Error(matches.length ? `El output “${name}” no es inequívoco.` : `No existe el output “${name}” en este workspace.`)
+      return matches[0]
+    }
+    if (request.type === 'create_3d_scene') {
+      if (!request.reset && normalize(sceneRef.current.name) === normalize(request.sceneName)) {
+        return { message: `La escena editable “${sceneRef.current.name}” ya está abierta.`, sceneId: sceneRef.current.name, layerIds: sceneRef.current.layers.map(layer => layer.id) }
+      }
+      const next = blankScene()
+      next.name = request.sceneName || 'Rhythmic scene'
+      next.duration = Math.max(1, Math.min(600, request.durationSeconds))
+      next.width = Math.max(320, Math.min(7680, Math.round(request.width)))
+      next.height = Math.max(240, Math.min(4320, Math.round(request.height)))
+      next.fps = request.fps
+      replaceScene(next); setSelectedId(null); setProgress(0)
+      return { message: `He creado la escena editable “${next.name}”.`, sceneId: next.name }
+    }
+    if (request.type === 'set_3d_scene_properties') {
+      const current = assertScene()
+      const next = {
+        ...current,
+        duration: request.durationSeconds === undefined ? current.duration : Math.max(1, Math.min(600, request.durationSeconds)),
+        width: request.width === undefined ? current.width : Math.max(320, Math.min(7680, Math.round(request.width))),
+        height: request.height === undefined ? current.height : Math.max(240, Math.min(4320, Math.round(request.height))),
+        fps: request.fps ?? current.fps,
+      }
+      replaceScene(next)
+      return { message: `He ajustado “${next.name}” a ${next.duration}s, ${next.width}×${next.height}, ${next.fps ?? 30} FPS.`, sceneId: next.name }
+    }
+    if (request.type === 'add_3d_scene_layer') {
+      assertScene()
+      const existing = sceneRef.current.layers.filter(layer => normalize(layer.name) === normalize(request.layerName))
+      if (existing.length > 1) throw new Error(`La capa “${request.layerName}” no es inequívoca.`)
+      if (existing[0]) return { message: `La capa “${request.layerName}” ya existe; reutilizo su ID estable.`, sceneId: sceneRef.current.name, layerIds: [existing[0].id] }
+      if (request.layerType === 'camera') {
+        addCameraRef.current()
+        const added = sceneRef.current.layers.at(-1)
+        if (!added) throw new Error('No se pudo crear la cámara.')
+        updateScene(current => ({ ...current, layers: current.layers.map(layer => layer.id === added.id ? { ...layer, name: request.layerName } : layer) }))
+        return { message: `He añadido la cámara “${request.layerName}”.`, sceneId: sceneRef.current.name, layerIds: [added.id] }
+      }
+      if (!request.outputName) throw new Error('Una capa visual necesita el nombre exacto de un output.')
+      const output = await exactOutput(request.outputName, [request.layerType === 'overlay' ? 'image' : request.layerType])
+      addLayerRef.current(request.layerType, output.url, request.layerName, output.thumbnail_url ?? undefined)
+      const added = sceneRef.current.layers.find(layer => normalize(layer.name) === normalize(request.layerName))
+      return { message: `He añadido “${request.layerName}” desde ${output.name}.`, sceneId: sceneRef.current.name, layerIds: added ? [added.id] : [] }
+    }
+    if (request.type === 'update_3d_scene_layer') {
+      assertScene(); const layer = exactLayer(request.layerName)
+      updateScene(current => ({ ...current, layers: current.layers.map(item => item.id === layer.id ? { ...item, visible: request.visible ?? item.visible, locked: request.locked ?? item.locked } : item) }))
+      return { message: `He actualizado la capa “${layer.name}”.`, sceneId: sceneRef.current.name, layerIds: [layer.id] }
+    }
+    if (request.type === 'remove_3d_scene_layer') {
+      assertScene(); const layer = exactLayer(request.layerName)
+      if (layer.locked) throw new Error(`Desbloquea “${layer.name}” antes de eliminarla.`)
+      updateScene(current => ({ ...current, layers: current.layers.filter(item => item.id !== layer.id) }))
+      return { message: `He eliminado la capa “${layer.name}”.`, sceneId: sceneRef.current.name, layerIds: [layer.id] }
+    }
+    if (request.type === 'attach_3d_scene_audio' || request.type === 'analyze_3d_scene_audio') {
+      assertScene()
+      const output = await exactOutput(request.audioOutputName, ['audio'])
+      let track = (sceneRef.current.audioTracks ?? []).find(item => normalize(item.filename) === normalize(output.name))
+      if (!track) {
+        track = { id: uid(), filename: output.name, name: output.name.replace(/\.[^.]+$/, ''), kind: 'music', startTime: 0, volume: 1 }
+        const attached = track
+        updateScene(current => ({ ...current, audioTracks: [...(current.audioTracks ?? []), attached] }))
+      }
+      setRhythmTrackId(track.id)
+      if (request.type === 'attach_3d_scene_audio') return { message: `He adjuntado ${output.name} a la escena.`, sceneId: sceneRef.current.name, audioTrackId: track.id, outputNames: [output.name] }
+      let analysis = agentRhythmAnalysesRef.current.get(track.id)
+      if (!analysis) {
+        analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
+        if (!analysis.beats.length) throw new Error('No se detectó una rejilla estable de beats en esta pista.')
+        agentRhythmAnalysesRef.current.set(track.id, analysis)
+      }
+      setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
+      return { message: `Ritmo listo: ${analysis.bpm.toFixed(1)} BPM y ${analysis.beats.length} beats.`, sceneId: sceneRef.current.name, audioTrackId: track.id, analysisId: track.id, bpm: analysis.bpm, beatCount: analysis.beats.length, downbeatCount: analysis.downbeats.length, rhythmGrid: { duration: analysis.duration, bpm: analysis.bpm, beats: analysis.beats.slice(0, 200), downbeats: analysis.downbeats.slice(0, 200) } }
+    }
+    if (request.type === 'apply_3d_choreography') {
+      const current = assertScene(); const layer = exactLayer(request.layerName)
+      if (layer.locked) throw new Error(`Desbloquea “${layer.name}” antes de generar keyframes.`)
+      const track = (current.audioTracks ?? []).find(item => normalize(item.filename) === normalize(request.audioOutputName) || normalize(item.name) === normalize(request.audioOutputName))
+      if (!track) throw new Error(`El audio “${request.audioOutputName}” no está adjunto a la escena.`)
+      let analysis = agentRhythmAnalysesRef.current.get(track.id)
+      if (!analysis && request.rhythmGrid) {
+        analysis = { duration: request.rhythmGrid.duration, sample_rate: 0, bpm: request.rhythmGrid.bpm, beats: request.rhythmGrid.beats, downbeats: request.rhythmGrid.downbeats, sections: [], onset_envelope: [], lyrics: null, vocals_path: null }
+        agentRhythmAnalysesRef.current.set(track.id, analysis)
+      }
+      if (!analysis) throw new Error('Analiza el audio una vez antes de aplicar la coreografía.')
+      const map = buildSceneRhythmMap(analysis, track.startTime, current.duration, request.cueSource)
+      if (!map.cues.length) throw new Error('Los beats detectados no coinciden con la duración de la escena.')
+      const profile = layer.type === 'camera' && request.profile === 'peek' ? 'camera-punch' : request.profile
+      updateScene(sceneValue => ({ ...sceneValue, layers: sceneValue.layers.map(item => item.id === layer.id ? applySceneRhythmToLayer(item, map, { profile, sceneDuration: sceneValue.duration, intensity: request.intensity }) as AnimatorLayer : item) }))
+      return { message: `He convertido ${map.cues.length} ${request.cueSource} en keyframes editables de “${layer.name}”.`, sceneId: current.name, layerIds: [layer.id], audioTrackId: track.id, analysisId: track.id }
+    }
+    if (request.type === 'save_3d_scene') {
+      assertScene(); const saved = await persistSceneRef.current()
+      if (!saved) throw new Error('No se pudo guardar la escena editable.')
+      return { message: `He guardado la escena editable como ${saved}.`, sceneId: sceneRef.current.name, outputNames: [saved] }
+    }
+    if (request.type === 'export_3d_scene') {
+      const current = assertScene()
+      if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) throw new Error('La escena necesita una capa visual visible antes de exportar.')
+      await waitForModelViewersRef.current()
+      const saved = await publishRecordingRef.current(await recordToBlobRef.current(), sceneRef.current)
+      return { message: `He publicado el MP4 como ${saved.name}.`, sceneId: current.name, outputNames: [saved.name] }
+    }
+    if (request.type === 'open_3d_scene') throw new Error('La apertura estructurada se realiza mediante el control de escenas existente.')
+    throw new Error('Operación 3D no reconocida.')
+  }), [workspace, updateScene])
+  useEffect(() => listenForAgentSceneControl(async request => {
+    const current = sceneRef.current
+    if (request.type === 'save_3d_scene') {
+      if (request.sceneName && normalizeSceneLookupName(request.sceneName) !== normalizeSceneLookupName(current.name)) {
+        throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”; no he guardado otra escena por error.`)
+      }
+      const savedName = await persistSceneRef.current()
+      if (!savedName) throw new Error('HocusPocus no pudo guardar la escena 3D abierta.')
+      return `He guardado “${current.name}” como ${savedName}. Sus capas y keyframes siguen siendo editables.`
+    }
+    if (request.type === 'export_3d_scene') {
+      if (request.sceneName && normalizeSceneLookupName(request.sceneName) !== normalizeSceneLookupName(current.name)) {
+        throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”; no he renderizado otra escena por error.`)
+      }
+      if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) {
+        throw new Error('Añade al menos una capa visual visible antes de exportar la escena 3D.')
+      }
+      setPublishing(true); setMessage(null)
+      try {
+        await waitForModelViewersRef.current()
+        const blob = await recordToBlobRef.current()
+        const saved = await publishRecordingRef.current(blob, sceneRef.current)
+        return `He terminado y publicado el MP4 de “${current.name}” en Videos como ${saved.name}.`
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : t('animator.export3dFailed'))
+        throw error
+      } finally {
+        setPublishing(false)
+      }
+    }
+
+    const library = await fetchOutputs(0, 0, { mediaType: 'scene', workspace })
+    const matches = library.outputs.filter(file => sceneOutputMatchesName(file, request.sceneName))
+    if (!matches.length) {
+      const available = library.outputs.slice(0, 8).map(file => `“${sceneLibraryTitle(file.name)}”`).join(', ')
+      throw new Error(`No existe una escena guardada llamada “${request.sceneName}” en este workspace.${available ? ` Disponibles: ${available}.` : ''}`)
+    }
+    if (matches.length > 1) throw new Error(`Hay varias escenas guardadas llamadas “${request.sceneName}”; indica el nombre completo del archivo.`)
+    const response = await fetch(matches[0].url)
+    if (!response.ok) throw new Error(`No se pudo cargar la escena guardada “${request.sceneName}”.`)
+    const next = sceneFromLibraryPayload(await response.json()) as AnimatorScene
+    const layerMatches = request.layerName
+      ? next.layers.filter(layer => normalizeSceneLookupName(layer.name) === normalizeSceneLookupName(request.layerName))
+      : []
+    if (layerMatches.length > 1) throw new Error(`La escena contiene varias capas llamadas “${request.layerName}”; renómbralas antes de seleccionarlas con el Wizard.`)
+    if (request.layerName && !layerMatches.length) throw new Error(`La escena “${next.name}” no contiene una capa llamada “${request.layerName}”.`)
+    if (!importSceneRef.current(JSON.stringify(next), `Opened ${sceneLibraryTitle(matches[0].name)}`)) {
+      throw new Error(`La escena guardada “${request.sceneName}” no se pudo abrir en Video 3D.`)
+    }
+    const target = layerMatches[0] ?? next.layers[0]
+    setSelectedId(target?.id ?? null)
+    const result = target
+      ? `He abierto “${next.name}” y seleccionado la capa “${target.name}”.`
+      : `He abierto “${next.name}”; la escena no contiene capas.`
+    setMessage(result)
+    return result
+  }), [workspace, t])
+  useEffect(() => listenForAgentSceneRhythm(async request => {
+    const normalize = normalizeSceneLookupName
+    const current = sceneRef.current
+    if (request.sceneName && normalize(request.sceneName) !== normalize(current.name)) {
+      throw new Error(`La escena abierta es “${current.name}”, no “${request.sceneName}”. Abre primero la escena correcta.`)
+    }
+    const layerMatches = request.layerName
+      ? current.layers.filter(layer => normalize(layer.name) === normalize(request.layerName))
+      : []
+    if (layerMatches.length > 1) throw new Error(`Hay varias capas llamadas “${request.layerName}”; renómbralas o selecciona una manualmente.`)
+    const eligibleLayers = current.layers.filter(layer => layer.visible)
+    const target = layerMatches[0]
+      ?? (!request.layerName && selectedId ? current.layers.find(layer => layer.id === selectedId) : undefined)
+      ?? (!request.layerName && eligibleLayers.length === 1 ? eligibleLayers[0] : undefined)
+    if (!target) throw new Error(request.layerName
+      ? `No existe la capa “${request.layerName}” en “${current.name}”.`
+      : 'Selecciona una capa inequívoca en Video 3D o indica su nombre al Wizard.')
+    if (target.locked) throw new Error(`Desbloquea “${target.name}” antes de generar keyframes rítmicos.`)
+
+    const attachedMatches = request.audioOutputName
+      ? (current.audioTracks ?? []).filter(track => normalize(track.name) === normalize(request.audioOutputName) || normalize(track.filename) === normalize(request.audioOutputName))
+      : []
+    const outputMatches = request.audioOutputName
+      ? outputs.filter(output => output.type === 'audio' && normalize(output.name) === normalize(request.audioOutputName))
+      : []
+    if (attachedMatches.length > 1 || outputMatches.length > 1) throw new Error(`El audio “${request.audioOutputName}” no es inequívoco.`)
+    let track: NonNullable<AnimatorScene['audioTracks']>[number] | undefined = attachedMatches[0]
+    if (!track && outputMatches[0]) {
+      track = { id: uid(), filename: outputMatches[0].name, name: outputMatches[0].name.replace(/\.[^.]+$/, ''), kind: 'music' as const, startTime: 0, volume: 1 }
+    }
+    if (!track && !request.audioOutputName) {
+      const tracks = current.audioTracks ?? []
+      track = tracks.find(item => item.kind === 'music') ?? (tracks.length === 1 ? tracks[0] : undefined)
+    }
+    if (!track) throw new Error(request.audioOutputName
+      ? `No existe el output de audio “${request.audioOutputName}” ni está adjunto a la escena.`
+      : 'Adjunta o indica un MP3/WAV de la galería antes de aplicar ritmo.')
+
+    setRhythmBusy(true); setRhythmError(null)
+    try {
+      const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
+      if (!analysis.beats.length) throw new Error('No se detectó una rejilla estable de beats en esta pista.')
+      const map = buildSceneRhythmMap(analysis, track.startTime, current.duration, request.cueSource)
+      if (!map.cues.length) throw new Error('Los beats detectados no coinciden con la duración actual de la escena.')
+      const profile = target.type === 'camera' && request.profile === 'peek' ? 'camera-punch' : request.profile
+      updateScene(sceneValue => ({
+        ...sceneValue,
+        audioTracks: (sceneValue.audioTracks ?? []).some(item => item.id === track!.id)
+          ? sceneValue.audioTracks : [...(sceneValue.audioTracks ?? []), track!],
+        layers: sceneValue.layers.map(layer => layer.id === target.id
+          ? applySceneRhythmToLayer(layer, map, { profile, sceneDuration: sceneValue.duration, intensity: request.intensity }) as AnimatorLayer
+          : layer),
+      }))
+      setSelectedId(target.id); setSelectedKeyframeId(null); setSelectedEventId(null)
+      setRhythmTrackId(track.id); setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
+      setRhythmCueSource(request.cueSource); setRhythmProfile(profile); setRhythmIntensity(request.intensity)
+      setProgress(map.cues[0].time / current.duration)
+      const result = `He analizado ${track.name}: ${analysis.bpm.toFixed(1)} BPM, ${analysis.beats.length} beats y ${analysis.downbeats.length} downbeats. Apliqué ${map.cues.length} ${request.cueSource} con perfil ${profile} a “${target.name}” como keyframes editables.`
+      setMessage(result)
+      return result
+    } catch (error) {
+      setRhythmError(error instanceof Error ? error.message : 'No se pudo aplicar el ritmo solicitado por el Wizard.')
+      throw error
+    } finally {
+      setRhythmBusy(false)
+    }
+  }), [outputs, selectedId, updateScene])
+  const animateCutoutDialogue = () => {
+    const text = cutoutDialogueText.trim()
+    if (!text) { setMessage(t('animator.writeDialogueFirst')); return }
+    const poseLayerId = selected?.faceBinding?.poseLayerId
+      ?? (selected?.relationship?.type === 'parent' && isCutoutFaceLayer(selected) ? selected.relationship.targetLayerId : undefined)
+      ?? (selected && selected.type !== 'camera' && selected.type !== 'effect' && !isCutoutFaceLayer(selected) ? selected.id : undefined)
+    const mouthLayers = findCutoutMouthLayers(scene.layers, poseLayerId)
+    const primary = mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round
+    if (!primary) { setMessage(t('animator.addMouthFirst')); return }
+    if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage(t('animator.unlockMouths')); return }
+    const start = Math.max(0, Math.min(scene.duration, cutoutDialogueStart))
+    const end = Math.max(start + 1 / fps, Math.min(scene.duration, cutoutDialogueEnd))
+    const plan = planCutoutDialogue(text, start, end, fps)
+    const frames = applyCutoutDialogue(mouthLayers, plan)
+    const beatId = uid()
+    const audioTrackId = selectedDialogueTrack?.id
+    updateScene(current => ({
+      ...current,
+      layers: current.layers.map(layer => frames[layer.id] ? { ...layer, animation: { ...layer.animation, keyframes: frames[layer.id], duration: current.duration, curve: 'hold' } } : layer),
+      dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.some(id => Object.keys(frames).includes(id))), { id: beatId, text, start, end, mouthLayerIds: Object.keys(frames), ...(audioTrackId ? { audioTrackId } : {}), confidence: 'known-text' }],
+    }))
+    setSelectedId(primary.id); setSelectedKeyframeId(null); setProgress(start / scene.duration)
+    setMessage(t('animator.animatedMouths', { beats: plan.visemes.length, states: Object.keys(frames).length }))
+  }
+  const animateCutoutDialogueFromAudio = async () => {
+    const poseLayerId = selected?.faceBinding?.poseLayerId
+      ?? (selected?.relationship?.type === 'parent' && isCutoutFaceLayer(selected) ? selected.relationship.targetLayerId : undefined)
+      ?? (selected && selected.type !== 'camera' && selected.type !== 'effect' && !isCutoutFaceLayer(selected) ? selected.id : undefined)
+    const mouthLayers = findCutoutMouthLayers(scene.layers, poseLayerId)
+    const primary = mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round
+    const track = selectedDialogueTrack
+    if (!primary) { setMessage(t('animator.addMouthShort')); return }
+    if (!track) { setMessage(t('animator.attachSpeechFirst')); return }
+    if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage(t('animator.unlockMouths')); return }
+    setCutoutDialogueBusy(true)
+    try {
+      const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: true, extract_vocals: true, lyrics_hint: track.prompt })
+      const segments = (analysis.lyrics ?? []).filter(segment => segment.end > segment.start && segment.start + track.startTime < scene.duration)
+      if (!segments.length) throw new Error('No spoken regions were found in this track.')
+      // Use actual word boundaries whenever Whisper provides them.  Older
+      // analyses remain valid: they fall back to one plan per segment.
+      const units = segments.flatMap(segment => segment.words?.length
+        ? segment.words.map(word => ({ text: word.text, start: word.start, end: word.end }))
+        : [{ text: segment.text, start: segment.start, end: segment.end }])
+        .filter(unit => unit.end > unit.start && unit.start + track.startTime < scene.duration)
+      const plans = units.map(unit => planCutoutDialogue(unit.text, Math.max(0, unit.start + track.startTime), Math.min(scene.duration, unit.end + track.startTime), fps))
+      const framesByLayer: Record<string, SceneKeyframe[]> = {}
+      for (const plan of plans) {
+        const next = applyCutoutDialogue(mouthLayers, plan)
+        for (const [layerId, frames] of Object.entries(next)) framesByLayer[layerId] = [...(framesByLayer[layerId] ?? []), ...frames]
+      }
+      const beatIds = plans.map(() => uid())
+      updateScene(current => ({
+        ...current,
+        layers: current.layers.map(layer => framesByLayer[layer.id] ? { ...layer, animation: { ...layer.animation, keyframes: framesByLayer[layer.id], duration: current.duration, curve: 'hold' } } : layer),
+        dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.some(id => Object.keys(framesByLayer).includes(id))), ...plans.map((plan, index) => ({ id: beatIds[index], text: units[index].text, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(framesByLayer), audioTrackId: track.id, confidence: 'aligned-audio' as const }))],
+      }))
+      setCutoutDialogueText(segments.map(segment => segment.text).join(' ')); setCutoutDialogueStart(plans[0].start); setCutoutDialogueEnd(plans.at(-1)!.end)
+      setSelectedId(primary.id); setProgress(plans[0].start / scene.duration)
+      setMessage(t('animator.detectedSpeech', { count: units.length, name: track.name }))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('animator.speechAnalyzeFailed'))
+    } finally {
+      setCutoutDialogueBusy(false)
+    }
+  }
+  const bindCutoutFace = () => {
+    if (!selected || selected.type === 'camera' || selected.type === 'effect' || isCutoutFaceLayer(selected)) {
+      setMessage(t('animator.selectPoseFirst'))
+      return
+    }
+    const next = bindCutoutFaceToPose(scene.layers, selected.id) as AnimatorLayer[]
+    const bound = next.filter(layer => layer.relationship?.type === 'parent' && layer.relationship.targetLayerId === selected.id && isCutoutFaceLayer(layer)).length
+    if (!bound) { setMessage(t('animator.addOverlaysFirst')); return }
+    updateScene(current => ({ ...current, layers: bindCutoutFaceToPose(current.layers, selected.id) as AnimatorLayer[] }))
+    setMessage(t('animator.boundOverlays', { count: bound, name: selected.name }))
+  }
+  const updateDialogueBeat = (beatId: string, patch: Partial<SceneDialogueBeat>) => {
+    updateScene(current => {
+      const previous = current.dialogueBeats ?? []
+      const beats = previous.map(beat => beat.id === beatId ? { ...beat, ...patch } : beat)
+      const clearLayerIds = previous.flatMap(beat => beat.mouthLayerIds)
+      return { ...current, dialogueBeats: beats, layers: rebuildCutoutDialogueLayers(current.layers, beats, current.fps ?? 30, current.duration, clearLayerIds) as AnimatorLayer[] }
+    })
+  }
+  const assignDialogueBeatSpeaker = (beatId: string, poseLayerId: string) => {
+    const mouths = findCutoutMouthLayers(scene.layers, poseLayerId)
+    const mouthLayerIds = Object.values(mouths).flatMap(layer => layer ? [layer.id] : []).filter((id, index, ids) => ids.indexOf(id) === index)
+    if (!mouthLayerIds.length) { setMessage(t('animator.noMouthKit')); return }
+    updateDialogueBeat(beatId, { mouthLayerIds })
+    setMessage(t('animator.dialogueAssigned', { name: scene.layers.find(layer => layer.id === poseLayerId)?.name ?? poseLayerId }))
+  }
+  const removeDialogueBeat = (beatId: string) => {
+    updateScene(current => {
+      const previous = current.dialogueBeats ?? []
+      const beats = previous.filter(beat => beat.id !== beatId)
+      const clearLayerIds = previous.flatMap(beat => beat.mouthLayerIds)
+      return { ...current, dialogueBeats: beats, layers: rebuildCutoutDialogueLayers(current.layers, beats, current.fps ?? 30, current.duration, clearLayerIds) as AnimatorLayer[] }
+    })
+  }
+  const proposeCopilotEdit = async () => {
+    if (!selected || !copilotIntent.trim()) return
+    if (selected.locked) { setCopilotError(t('animator.unlockBeforeCopilot')); return }
+    setCopilotBusy(true); setCopilotError(null); setCopilotProposal(null)
+    try {
+      const text = await generateLlmText({
+        prompt: `USER INTENT:\n${copilotIntent.trim()}`,
+        system_prompt: buildSceneCopilotSystemPrompt(sceneRef.current, selected, clipsByLayer[selected.id] ?? []),
+        max_new_tokens: 1200,
+        temperature: .1,
+        top_p: .8,
+        json_schema: SCENE_COPILOT_JSON_SCHEMA,
+      })
+      setCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, selected.id, 'layer', clipsByLayer[selected.id] ?? [])); setCopilotProposalRevision(historyRevisionRef.current)
+    } catch (error) {
+      setCopilotError(error instanceof Error ? error.message : t('animator.copilotFailed'))
+    } finally {
+      setCopilotBusy(false)
+    }
+  }
+  const applyCopilotEdit = () => {
+    if (!copilotProposal) return
+    if (copilotProposalRevision !== historyRevisionRef.current) { setCopilotProposal(null); setCopilotProposalRevision(null); setCopilotError(t('animator.sceneChanged')); return }
+    const proposal = copilotProposal
+    const selectedLayerId = selected?.id
+    updateScene(current => ({
+      ...(applySceneCopilotProposal(current, proposal) as AnimatorScene),
+      copilotAudit: [...(current.copilotAudit ?? []), {
+        id: uid(),
+        createdAt: new Date().toISOString(),
+        scope: 'layer' as const,
+        selectedLayerId,
+        intent: copilotIntent.trim(),
+        summary: proposal.summary,
+        operations: proposal.operations.map(operation => ({ ...operation })),
+        validation: 'applied' as const,
+        model: 'configured-llm',
+      }].slice(-100),
+    }))
+    setMessage(t('animator.copilotApplied', { summary: copilotProposal.summary }))
+    setCopilotProposal(null); setCopilotProposalRevision(null)
+  }
+  const proposeSceneCopilotEdit = async () => {
+    if (!sceneCopilotIntent.trim()) return
+    setSceneCopilotBusy(true); setSceneCopilotError(null); setSceneCopilotProposal(null)
+    try {
+      const text = await generateLlmText({
+        prompt: `USER INTENT:\n${sceneCopilotIntent.trim()}`,
+        system_prompt: buildSceneScopeCopilotSystemPrompt(sceneRef.current),
+        max_new_tokens: 900,
+        temperature: .1,
+        top_p: .8,
+        json_schema: SCENE_COPILOT_JSON_SCHEMA,
+      })
+      setSceneCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, undefined, 'scene')); setSceneCopilotProposalRevision(historyRevisionRef.current)
+    } catch (error) {
+      setSceneCopilotError(error instanceof Error ? error.message : t('animator.sceneCopilotFailed'))
+    } finally {
+      setSceneCopilotBusy(false)
+    }
+  }
+  const applySceneCopilotEdit = () => {
+    if (!sceneCopilotProposal) return
+    if (sceneCopilotProposalRevision !== historyRevisionRef.current) { setSceneCopilotProposal(null); setSceneCopilotProposalRevision(null); setSceneCopilotError(t('animator.sceneChanged')); return }
+    const proposal = sceneCopilotProposal
+    updateScene(current => ({
+      ...(applySceneCopilotProposal(current, proposal) as AnimatorScene),
+      copilotAudit: [...(current.copilotAudit ?? []), {
+        id: uid(), createdAt: new Date().toISOString(), scope: 'scene' as const,
+        intent: sceneCopilotIntent.trim(), summary: proposal.summary,
+        operations: proposal.operations.map(operation => ({ ...operation })), validation: 'applied' as const, model: 'configured-llm',
+      }].slice(-100),
+    }))
+    setMessage(t('animator.sceneCopilotApplied', { summary: proposal.summary }))
+    setSceneCopilotProposal(null); setSceneCopilotProposalRevision(null)
+  }
+  const dictateCopilotIntent = () => {
+    const root = window as unknown as { SpeechRecognition?: SpeechRecognizerConstructor; webkitSpeechRecognition?: SpeechRecognizerConstructor }
+    const Recognition = root.SpeechRecognition ?? root.webkitSpeechRecognition
+    if (!Recognition) { setCopilotError(t('animator.voiceUnavailable')); return }
+    const recognition = new Recognition()
+    recognition.lang = navigator.language || 'en-US'; recognition.continuous = false; recognition.interimResults = false
+    recognition.onresult = event => {
+      const transcript = Array.from(event.results).flatMap(result => Array.from(result)).map(result => result.transcript).join(' ').trim()
+      if (transcript) setCopilotIntent(current => current ? `${current} ${transcript}` : transcript)
+    }
+    recognition.onerror = () => setCopilotError(t('animator.voiceError'))
+    recognition.onend = () => setCopilotListening(false)
+    setCopilotError(null); setCopilotListening(true); recognition.start()
+  }
   const orbitPivot = (() => {
     if (!selected || !isVisualLayer(selected)) return null
     const orbit = selected?.animation.orbit
@@ -1198,23 +2886,38 @@ export function SceneAnimatorPanel() {
   const renderLayer = (layer: AnimatorLayer) => {
     if (layer.type === 'camera') return null
     const effects = normalizedEffects(layer.effects)
-    const state = renderedLayerState(layer); const common: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: `${(layer.type === 'model3d' ? 52 : 100) * state.scale}%`, height: `${(layer.type === 'model3d' ? 75 : 100) * state.scale}%`, opacity: state.opacity, zIndex: state.z, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)`, mixBlendMode: effects.blendMode }; const selection = selectedId === layer.id
+    const states = renderedLayerStates(layer)
+    const selection = selectedId === layer.id
     const effectStyle: CSSProperties = { filter: effectFilter(effects, previewShortSide / 100) }
     const previewHeight = previewWidth * scene.height / Math.max(1, scene.width)
-    const layerShortSide = Math.min(previewWidth * (layer.type === 'model3d' ? .52 : 1) * state.scale, previewHeight * (layer.type === 'model3d' ? .75 : 1) * state.scale)
-    const maskStyle: CSSProperties = { overflow: 'hidden', borderRadius: effects.mask === 'ellipse' ? '50%' : effects.mask === 'rounded' ? `${layerShortSide * effects.maskRadius / 100}px` : undefined }
     if (!layer.visible) return null
-    if (layer.missingAsset) return <button key={layer.id} onClick={() => setSelectedId(layer.id)} className={`absolute flex items-center justify-center border border-dashed border-red-400/70 bg-red-500/10 text-[10px] text-red-300 ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`} style={common}>Missing asset</button>
     const edgeMove = (event: ReactPointerEvent<HTMLElement>) => { if (layer.type !== 'model3d') return startGesture(event, layer, 'move'); const box = event.currentTarget.getBoundingClientRect(); const edge = (event.clientX - box.left) / box.width < .18 || (event.clientX - box.left) / box.width > .82 || (event.clientY - box.top) / box.height < .18 || (event.clientY - box.top) / box.height > .82; startGesture(event, layer, edge ? 'move' : 'orbit') }
-    const media = layer.type === 'model3d'
-      ? <model-viewer data-layer-id={layer.id} src={layer.source} camera-orbit={`${layer.transform.rotationY ?? 0}deg ${layer.transform.rotationX ?? 75}deg auto`} interaction-prompt="none" auto-rotate={layer.animation.spin && (playing || recording) ? true : undefined} rotation-per-second={`${layer.animation.rotationSpeed ?? 35}deg`} animation-name={layer.animation.clip || undefined} animation-crossfade-duration="0" onLoad={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} shadow-intensity="1" exposure="1" loading="eager" className="scene-animator-model pointer-events-none h-full w-full" />
-      : layer.type === 'video'
-        ? <video data-layer-id={layer.id} ref={element => { videoRefs.current[layer.id] = element }} src={layer.source} muted playsInline preload="auto" onLoadedMetadata={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} className={`h-full w-full ${layer.fill ? 'object-cover' : 'object-contain'}`} />
-        : <img data-layer-id={layer.id} src={layer.source} alt={layer.name} draggable={false} className={`h-full w-full select-none ${layer.fill ? 'object-cover' : 'object-contain'}`} />
-    return <div key={layer.id} style={common} onPointerDown={edgeMove} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture} className={`absolute touch-none cursor-grab active:cursor-grabbing ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`}><div className="h-full w-full" style={maskStyle}><div className="h-full w-full" style={effectStyle}>{media}</div></div>{selection && <button aria-label="Resize layer" onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
+    return states.map((state, index) => {
+      const common: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: `${(layer.type === 'model3d' ? 52 : 100) * state.scale}%`, height: `${(layer.type === 'model3d' ? 75 : 100) * state.scale}%`, opacity: state.opacity, zIndex: state.z, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)`, mixBlendMode: effects.blendMode }
+      const layerShortSide = Math.min(previewWidth * (layer.type === 'model3d' ? .52 : 1) * state.scale, previewHeight * (layer.type === 'model3d' ? .75 : 1) * state.scale)
+      const maskStyle: CSSProperties = { overflow: 'hidden', borderRadius: effects.mask === 'ellipse' ? '50%' : effects.mask === 'rounded' ? `${layerShortSide * effects.maskRadius / 100}px` : undefined }
+      const isPrimary = index === 0
+      if (layer.missingAsset) return isPrimary ? <button key={`${layer.id}-missing`} onClick={() => setSelectedId(layer.id)} className={`absolute flex items-center justify-center border border-dashed border-red-400/70 bg-red-500/10 text-[10px] text-red-300 ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`} style={common}>{t('animator.missingAsset')}</button> : null
+      const atmosphere = layer.type === 'effect' ? normalizedAtmosphere(layer.atmosphere) : null
+      const media = atmosphere
+        ? <AtmospherePreview atmosphere={atmosphere} seconds={progress * scene.duration} width={previewWidth} height={previewHeight} layerId={layer.id} />
+        : layer.type === 'model3d'
+        ? <model-viewer data-layer-id={layer.id} src={layer.source} orientation={`0deg ${state.modelYaw ?? 0}deg 0deg`} camera-orbit={`${layer.transform.rotationY ?? 0}deg ${layer.transform.rotationX ?? 75}deg auto`} interaction-prompt="none" animation-name={layer.animation.clip || undefined} animation-crossfade-duration="0" onLoad={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} shadow-intensity="1" exposure="1" loading="eager" className="scene-animator-model pointer-events-none h-full w-full" />
+        : layer.type === 'video'
+          ? <video data-layer-id={layer.id} ref={isPrimary ? element => { videoRefs.current[layer.id] = element } : undefined} src={layer.source} muted playsInline preload="auto" onLoadedMetadata={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} className={`h-full w-full ${layer.fill ? 'object-cover' : 'object-contain'}`} />
+          : <img data-layer-id={layer.id} src={layer.source} alt={layer.name} draggable={false} className={`h-full w-full select-none ${layer.fill ? 'object-cover' : 'object-contain'}`} />
+      return <div key={`${layer.id}-${index}`} style={common} onPointerDown={layer.type === 'effect' ? undefined : edgeMove} onPointerMove={layer.type === 'effect' ? undefined : moveGesture} onPointerUp={layer.type === 'effect' ? undefined : endGesture} onPointerCancel={layer.type === 'effect' ? undefined : endGesture} className={`absolute touch-none ${layer.type === 'effect' ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing'} ${selection && isPrimary ? 'ring-2 ring-accent-blue ring-inset' : ''}`}><div className="h-full w-full" style={maskStyle}><div className="h-full w-full" style={effectStyle}>{media}</div></div>{selection && isPrimary && layer.type !== 'effect' && <button aria-label={t('animator.resizeLayer')} onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
+    }).concat(seamCoverStates(layer).map((state, index) => {
+      const kind = normalizedStrip(layer.strip).seamOccluder.kind
+      const coverScale = normalizedStrip(layer.strip).seamOccluder.scale
+      const cover: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: `${8 * coverScale}%`, height: `${92 * coverScale}%`, opacity: state.opacity, zIndex: 18, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)`, pointerEvents: 'none' }
+      return <div key={`${layer.id}-seam-${index}`} className="absolute" style={cover}><img src={seamOccluderDataUri(kind)} alt="" draggable={false} className="h-full w-full object-contain object-bottom select-none" /></div>
+    }))
   }
   const activeCamera = activeCameraLayer()
   const selectedEffects = selected && isVisualLayer(selected) ? normalizedEffects(selected.effects) : null
+  const selectedStrip = selected && isVisualLayer(selected) ? normalizedStrip(selected.strip) : null
+  const selectedAtmosphere = selected?.type === 'effect' ? normalizedAtmosphere(selected.atmosphere) : null
   const selectedClipDuration = selected ? clipDurationsByLayer[selected.id] ?? 0 : 0
   const relationshipTargets = selected ? scene.layers.filter(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id)) : []
   const canUndo = historyRevision >= 0 && pastScenesRef.current.length > 0
@@ -1223,32 +2926,32 @@ export function SceneAnimatorPanel() {
 
   return <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-bg-tertiary xl:flex-row">
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex gap-2"><button onClick={play} disabled={!scene.layers.length || playing || recording} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording || playing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : 'Record WebM'}</button></div></div>
-      <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? `Autosaved ${new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Autosave waiting…'}</span></div>
-      <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{label}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">Frame rate{([30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{rate} FPS</button>)}</span></div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label={t('animator.sceneNameAria')} className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setLibraryOpen(true)} disabled={playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><FolderOpen size={12} /> {t('animator.openScene')}</button><button type="button" onClick={() => void persistScene()} disabled={saving || !scene.layers.length || playing || recording || publishing} className="rounded border border-accent-blue/40 bg-accent-blue/10 px-2.5 py-1.5 text-[10px] text-accent-blue flex items-center gap-1 disabled:opacity-50">{saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}{saving ? t('animator.saving') : t('animator.saveScene')}</button><button onClick={play} disabled={!scene.layers.length || playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> {t('animator.preview')}</button><button onClick={record} disabled={recording || playing || publishing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording || publishing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? t('animator.recording') : publishing ? t('animator.savingMp4') : t('animator.exportMp4')}</button></div></div>
+      <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title={t('animator.undoTitle')} className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title={t('animator.redoTitle')} className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? t('animator.autosaved', { time: new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }) : t('animator.autosaveWaiting')}</span></div>
+      <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{t(`resolutions.${label === 'HD landscape' ? 'hdLandscape' : label === 'Full HD landscape' ? 'fullHdLandscape' : label === '4K landscape' ? 'fourKLandscape' : label === 'Square' ? 'square' : label === 'HD portrait' ? 'hdPortrait' : label === 'Full HD portrait' ? 'fullHdPortrait' : 'fourKPortrait'}`)}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">{t('animator.frameRate')}{([30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{t('animator.fps', { rate })}</button>)}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary p-1.5">
-        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, showGrid: !composition.showGrid } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.showGrid ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-border text-text-muted'}`}><Grid3X3 size={10} /> Grid</button>
-        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, snap: !composition.snap } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.snap ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border text-text-muted'}`}><Magnet size={10} /> Snap</button>
-        <label className="flex items-center gap-1 text-[8px] text-text-muted">Grid %<input type="number" min={1} max={50} step={1} value={composition.gridSize} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateScene(current => ({ ...current, composition: { ...composition, gridSize: Math.max(1, Math.min(50, value)) } })) }} className="w-12 rounded border border-border bg-bg-primary px-1 py-1 text-[9px]" /></label>
-        <label className="ml-auto flex items-center gap-1 text-[8px] text-text-muted">Safe area<select value={composition.safeArea} onChange={event => updateScene(current => ({ ...current, composition: { ...composition, safeArea: event.target.value as NonNullable<Scene['composition']>['safeArea'] } }))} className="rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="none">Off</option><option value="action">Action 90%</option><option value="title">Title 80%</option><option value="vertical">9:16 social</option><option value="all">All guides</option></select></label>
-        {selected && isVisualLayer(selected) && <><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, 50, selected.transform.y, false)} title="Center horizontally" className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignHorizontalJustifyCenter size={11} /></button><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, selected.transform.x, 50, false)} title="Center vertically" className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignVerticalJustifyCenter size={11} /></button></>}
+        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, showGrid: !composition.showGrid } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.showGrid ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-border text-text-muted'}`}><Grid3X3 size={10} /> {t('animator.grid')}</button>
+        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, snap: !composition.snap } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.snap ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border text-text-muted'}`}><Magnet size={10} /> {t('animator.snap')}</button>
+        <label className="flex items-center gap-1 text-[8px] text-text-muted">{t('animator.gridPercent')}<input type="number" min={1} max={50} step={1} value={composition.gridSize} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateScene(current => ({ ...current, composition: { ...composition, gridSize: Math.max(1, Math.min(50, value)) } })) }} className="w-12 rounded border border-border bg-bg-primary px-1 py-1 text-[9px]" /></label>
+        <label className="ml-auto flex items-center gap-1 text-[8px] text-text-muted">{t('animator.safeArea')}<select value={composition.safeArea} onChange={event => updateScene(current => ({ ...current, composition: { ...composition, safeArea: event.target.value as NonNullable<Scene['composition']>['safeArea'] } }))} className="rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="none">{t('animator.safeOff')}</option><option value="action">{t('animator.safeAction')}</option><option value="title">{t('animator.safeTitle')}</option><option value="vertical">{t('animator.safeVertical')}</option><option value="all">{t('animator.safeAll')}</option></select></label>
+        {selected && isVisualLayer(selected) && <><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, 50, selected.transform.y, false)} title={t('animator.centerH')} className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignHorizontalJustifyCenter size={11} /></button><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, selected.transform.x, 50, false)} title={t('animator.centerV')} className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignVerticalJustifyCenter size={11} /></button></>}
       </div>
-      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && <button onClick={() => updateLayer(selected.id, layer => ({ ...layer, fill: !layer.fill, transform: { ...layer.transform, x: 50, y: 50, scale: 1 }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: 50, y: 50, scale: 1 })) }))} className={`mb-3 rounded border px-2 py-1 text-[10px] ${selected.fill ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.fill ? 'Fill screen enabled' : 'Fill screen'}</button>}
-      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && <button onClick={() => { sendToBack(selected.id); applyParallaxPreset(selected.id, 'background') }} className="mb-3 ml-1 rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-secondary">Use as background</button>}
+      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && selected.type !== 'effect' && <button onClick={() => updateLayer(selected.id, layer => ({ ...layer, fill: !layer.fill, transform: { ...layer.transform, x: 50, y: 50, scale: 1 }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: 50, y: 50, scale: 1 })) }))} className={`mb-3 rounded border px-2 py-1 text-[10px] ${selected.fill ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.fill ? t('animator.fillEnabled') : t('animator.fillScreen')}</button>}
+      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && selected.type !== 'effect' && <button onClick={() => { sendToBack(selected.id); applyParallaxPreset(selected.id, 'background') }} className="mb-3 ml-1 rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-secondary">{t('animator.useAsBackground')}</button>}
       <div className="flex w-full justify-center">
       <div ref={canvasRef} className="relative isolate w-full overflow-hidden rounded-lg border border-border bg-[#0b1020]" style={{ aspectRatio: `${scene.width} / ${scene.height}`, maxWidth: `${68 * scene.width / scene.height}vh` }}>
         {[...scene.layers].sort((a, b) => a.z - b.z).map(renderLayer)}
         {composition.showGrid && <div className="pointer-events-none absolute inset-0 z-[990] opacity-35" style={{ backgroundImage: 'linear-gradient(to right, rgba(125,211,252,.55) 1px, transparent 1px), linear-gradient(to bottom, rgba(125,211,252,.55) 1px, transparent 1px)', backgroundSize: `${composition.gridSize}% ${composition.gridSize}%` }} />}
-        {(composition.safeArea === 'action' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[5%] z-[991] border border-dashed border-emerald-300/80"><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-emerald-200">Action safe 90%</span></div>}
-        {(composition.safeArea === 'title' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[10%] z-[992] border border-dashed border-amber-300/80"><span className="absolute right-1 top-1 rounded bg-black/55 px-1 text-[7px] text-amber-200">Title safe 80%</span></div>}
-        {(composition.safeArea === 'vertical' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-y-0 left-1/2 z-[993] -translate-x-1/2 border-x border-dashed border-fuchsia-300/90 bg-fuchsia-400/[.03]" style={{ width: `${verticalSafeWidth}%` }}><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-fuchsia-200">9:16 social</span></div>}
+        {(composition.safeArea === 'action' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[5%] z-[991] border border-dashed border-emerald-300/80"><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-emerald-200">{t('animator.actionSafeBadge')}</span></div>}
+        {(composition.safeArea === 'title' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[10%] z-[992] border border-dashed border-amber-300/80"><span className="absolute right-1 top-1 rounded bg-black/55 px-1 text-[7px] text-amber-200">{t('animator.titleSafeBadge')}</span></div>}
+        {(composition.safeArea === 'vertical' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-y-0 left-1/2 z-[993] -translate-x-1/2 border-x border-dashed border-fuchsia-300/90 bg-fuchsia-400/[.03]" style={{ width: `${verticalSafeWidth}%` }}><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-fuchsia-200">{t('animator.verticalBadge')}</span></div>}
         {activeCamera && <div className="pointer-events-none absolute left-2 top-2 z-[997] flex items-center gap-1 rounded bg-black/55 px-1.5 py-1 text-[8px] text-cyan-200"><Camera size={10} /> {activeCamera.name}</div>}
         {orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}
         {flash && <div className="pointer-events-none absolute z-[999]" style={{ left: `${flash.x}%`, top: `${flash.y}%` }}><span className="absolute -left-6 -top-6 h-12 w-12 rounded-full border-2 border-white/90 animate-ping" /><span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-white shadow-[0_0_20px_8px_rgba(96,165,250,.9)]" /></div>}
         <div className="absolute inset-x-0 bottom-0 z-[1000] h-1 bg-black/40"><div className="h-full bg-accent-blue" style={{ width: `${progress * 100}%` }} /></div>
       </div>
       </div>
-      <p className="mt-2 text-[9px] text-text-muted">Center-drag a 3D layer to orbit it 360°; drag its outer edge to move it. Camera layers animate pan, zoom and rotation without rendering an asset. Parallax controls how strongly each visual layer follows camera pan. WebM uses the same camera transform and Z order as this preview.</p>
+      <p className="mt-2 text-[9px] text-text-muted">{t('animator.canvasHelp')}</p>
       <SceneTimeline
         layers={scene.layers}
         duration={scene.duration}
@@ -1273,78 +2976,228 @@ export function SceneAnimatorPanel() {
       />
     </section>
     <aside className="w-full shrink-0 border-t border-border bg-bg-secondary p-3 overflow-y-auto space-y-3 xl:w-[300px] xl:border-l xl:border-t-0">
-      <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> Add layer</button>{addOpen && <div className="absolute z-[1100] mt-1 w-full rounded border border-border bg-bg-primary p-1 shadow-xl space-y-1"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">Add camera</button><button onClick={() => { setPicker('model'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated 3D model</button><button onClick={() => { setAddOpen(false); modelInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import GLB</button><button onClick={() => { setPicker('media'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated image/video</button><button onClick={() => { setAddOpen(false); mediaInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import image/video</button><button onClick={() => { setAddOpen(false); overlayInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import transparent PNG/WebP</button></div>}</div>
-      {picker && <div className="rounded border border-border bg-bg-primary p-2"><div className="mb-1 flex justify-between text-[10px] text-text-muted"><span>{picker === 'model' ? 'Generated 3D models' : 'Generated images & videos'}</span><button onClick={() => setPicker(null)}><Down size={13} /></button></div><div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">{(picker === 'model' ? generatedModels : generatedMedia).map(asset => <button key={asset.name} onClick={() => addLayer(asset.type === 'model3d' ? 'model3d' : asset.type === 'video' ? 'video' : 'image', asset.url, asset.name, asset.thumbnail_url ?? undefined)} className="overflow-hidden rounded border border-border text-left hover:border-accent-blue"><div className="aspect-square bg-bg-active">{asset.thumbnail_url || asset.type === 'image' ? <img src={asset.thumbnail_url ?? asset.url} alt="" className="h-full w-full object-cover" /> : <div className="h-full flex items-center justify-center"><Video size={16} /></div>}</div><span className="block truncate px-1 py-1 text-[9px]">{asset.name}</span></button>)}</div></div>}
-      <input ref={modelInputRef} type="file" accept=".glb,model/gltf-binary" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign('model3d', file) }} /><input ref={mediaInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign(file.type.startsWith('video/') ? 'video' : 'image', file) }} /><input ref={overlayInputRef} type="file" accept="image/png,image/webp" multiple className="hidden" onChange={event => [...(event.target.files ?? [])].forEach(file => addOrReassign('overlay', file))} />
-      <div><div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">Layers</div><div className="space-y-1">{[...scene.layers].sort((a, b) => b.z - a.z).map(layer => <div key={layer.id} onClick={() => setSelectedId(layer.id)} className={`flex cursor-pointer items-center gap-1.5 rounded border p-1.5 text-[10px] ${selectedId === layer.id ? 'border-accent-blue bg-accent-blue/10' : 'border-border bg-bg-primary'}`}><div className="h-7 w-7 shrink-0 overflow-hidden rounded bg-bg-active flex items-center justify-center">{layer.thumbnail ? <img src={layer.thumbnail} alt="" className="h-full w-full object-cover" /> : iconFor(layer.type)}</div><div className="min-w-0 flex-1"><div className="truncate">{layer.name}</div><div className="text-[9px] text-text-muted">{layer.type} · z: {layer.z}{layer.missingAsset ? ' · missing asset' : ''}</div></div><button onClick={event => { event.stopPropagation(); updateLayer(layer.id, item => ({ ...item, visible: !item.visible })) }} title="Visibility">{layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}</button><div className="flex flex-col"><button title="Bring forward" onClick={event => { event.stopPropagation(); moveLayerZ(layer.id, 1) }}><ChevronUp size={12} /></button><button title="Send backward" onClick={event => { event.stopPropagation(); moveLayerZ(layer.id, -1) }}><ChevronDown size={12} /></button></div><button onClick={event => { event.stopPropagation(); updateScene(current => ({ ...current, layers: normalizeZ(current.layers.filter(item => item.id !== layer.id)) })); if (selectedId === layer.id) setSelectedId(null) }} className="text-red-400"><Trash2 size={12} /></button></div>)}</div></div>
-      {selected && <div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={() => updateLayer(selected.id, layer => ({ ...layer, locked: !layer.locked }))} className={`flex items-center justify-center gap-1 rounded border py-1.5 text-[9px] ${selected.locked ? 'border-amber-400/60 bg-amber-400/10 text-amber-200' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.locked ? <Lock size={11} /> : <Unlock size={11} />}{selected.locked ? 'Locked' : 'Lock layer'}</button><button type="button" onClick={() => duplicateLayer(selected.id)} className="flex items-center justify-center gap-1 rounded border border-border bg-bg-primary py-1.5 text-[9px] text-text-secondary"><CopyPlus size={11} /> Duplicate</button>{selected.locked && <p className="col-span-2 text-[8px] text-amber-200/80">Unlock this layer to change transforms, timing, presets or keyframes.</p>}</div>}
-      {selected?.type === 'camera' && <div className="space-y-2 border-t border-border pt-3">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">Camera inspector</span><span className={`rounded px-1.5 py-0.5 text-[8px] ${activeCamera?.id === selected.id ? 'bg-cyan-400/15 text-cyan-200' : 'bg-bg-active text-text-muted'}`}>{activeCamera?.id === selected.id ? 'Active camera' : 'Inactive'}</span></div>
-        <label className="text-[10px] text-text-muted">Name<input value={selected.name} onChange={event => updateLayer(selected.id, layer => ({ ...layer, name: event.target.value }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs" /></label>
-        <label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={selected.visible} onChange={event => setLayerVisibility(selected.id, event.target.checked)} /> Use this camera</label>
-        <div className="grid grid-cols-2 gap-1.5">
-          {numberInput('Pan X', selected.transform.x, value => updateCameraTransform(selected.id, 'x', value), -100, 200, .5)}
-          {numberInput('Pan Y', selected.transform.y, value => updateCameraTransform(selected.id, 'y', value), -100, 200, .5)}
-          {numberInput('Zoom', selected.transform.scale, value => updateCameraTransform(selected.id, 'scale', Math.max(.05, value)), .05, 5, .05)}
-          {numberInput('Rotation', selected.transform.rotation ?? 0, value => updateCameraTransform(selected.id, 'rotation', value), -360, 360, .5)}
-          {numberInput('Z / priority', selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}
+      <div className="space-y-2 rounded border border-fuchsia-400/30 bg-fuchsia-400/[.045] p-2">
+        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-100">{t('animator.narrativeTitle')}</span><span className="text-[8px] text-fuchsia-200/70">{t('animator.narrativeMeta')}</span></div>
+        <select value={narrativeTemplateId} disabled={playing || recording || publishing} onChange={event => setNarrativeTemplateId(event.target.value as NarrativeSceneId)} className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]">
+          {NARRATIVE_SCENE_TEMPLATES.map(template => <option key={template.id} value={template.id}>{template.experimental ? t('animator.experimental') : ''}{template.title}</option>)}
+        </select>
+        <div className="grid grid-cols-2 gap-1">{NARRATIVE_SCENE_TEMPLATES.map(template => <button key={template.id} type="button" disabled={playing || recording || publishing} onClick={() => setNarrativeTemplateId(template.id)} title={template.description} className={`rounded border p-1 text-left disabled:opacity-40 ${narrativeTemplateId === template.id ? 'border-fuchsia-300/70 bg-fuchsia-400/15 text-fuchsia-100' : 'border-border bg-bg-primary text-text-secondary hover:border-fuchsia-300/40'}`}><span className="block truncate text-[8px] font-medium">{template.experimental ? t('animator.experimental') : ''}{template.title}</span><span className="block text-[7px] text-text-muted">{t('animator.templateMeta', { duration: template.defaultDuration, count: template.assetSlots.filter(slot => slot.required).length })}</span></button>)}</div>
+        <p className="text-[8px] leading-relaxed text-text-muted">{narrativeTemplate.description}</p>
+        <label className="block text-[9px] text-text-muted">{t('animator.character')}<select value={narrativeHero} onChange={event => setNarrativeHero(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.chooseAsset')}</option>{narrativeVisuals.map(asset => <option key={asset.name} value={asset.name}>{asset.type === 'model3d' ? t('animator.prefix3d') : asset.type === 'video' ? t('animator.prefixVideo') : t('animator.prefixImage')}{asset.name}</option>)}</select></label>
+        {narrativeHero && <p className={`rounded border px-1.5 py-1 text-[8px] leading-relaxed ${narrativeSuitability('hero', narrativeHero).level === 'warning' ? 'border-amber-300/25 bg-amber-400/[.06] text-amber-100' : 'border-emerald-300/20 bg-emerald-400/[.04] text-emerald-100'}`}>{narrativeSuitability('hero', narrativeHero).message}</p>}
+        <label className="block text-[9px] text-text-muted">{t('animator.background')}<select value={narrativePlate} onChange={event => { setNarrativePlate(event.target.value); setNarrativePlateLoopReady(false) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.chooseAsset')}</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.type === 'video' ? t('animator.prefixVideo') : t('animator.prefixImage')}{asset.name}</option>)}</select></label>
+        {narrativePlate && narrativeSuitability('plate', narrativePlate).level !== 'ok' && <p className="rounded border border-cyan-300/20 bg-cyan-400/[.04] px-1.5 py-1 text-[8px] leading-relaxed text-cyan-100">{narrativeSuitability('plate', narrativePlate).message}</p>}
+        {narrativePlate && <label className="flex items-start gap-1.5 rounded border border-amber-300/20 bg-amber-400/[.035] p-1.5 text-[8px] leading-relaxed text-amber-100"><input type="checkbox" checked={narrativePlateLoopReady} onChange={event => setNarrativePlateLoopReady(event.target.checked)} className="mt-0.5" /> <span><strong>{t('animator.loopReady')}</strong><br />{t('animator.loopReadyHelp')}</span></label>}
+        {narrativeTemplate.assetSlots.some(slot => slot.id === 'prop') && <label className="block text-[9px] text-text-muted">{t('animator.objectPortal')}{narrativeTemplate.assetSlots.find(slot => slot.id === 'prop')?.required ? '' : t('animator.optional')}<select value={narrativeProp} onChange={event => setNarrativeProp(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.none')}</option>{narrativeVisuals.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
+        {narrativeTemplate.assetSlots.some(slot => slot.id === 'foreground') && <label className="block text-[9px] text-text-muted">{t('animator.foreground')}<select value={narrativeForeground} onChange={event => setNarrativeForeground(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.none')}</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
+        <div className="grid grid-cols-2 gap-1 text-[9px] text-text-muted">
+          {narrativeTemplate.controls.includes('mood') && <label>{t('animator.mood')}<select value={narrativeMood} onChange={event => setNarrativeMood(event.target.value as typeof narrativeMood)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="calm">{t('animator.moodCalm')}</option><option value="tense">{t('animator.moodTense')}</option><option value="dreamy">{t('animator.moodDreamy')}</option><option value="heroic">{t('animator.moodHeroic')}</option></select></label>}
+          {narrativeTemplate.controls.includes('intensity') && <label>{t('animator.intensity')}<select value={narrativeIntensity} onChange={event => setNarrativeIntensity(Number(event.target.value) as 1 | 2 | 3)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value={1}>{t('animator.intensityLow')}</option><option value={2}>{t('animator.intensityMedium')}</option><option value={3}>{t('animator.intensityHigh')}</option></select></label>}
+          {narrativeTemplate.controls.includes('direction') && <label>{t('animator.direction')}<select value={narrativeDirection} onChange={event => setNarrativeDirection(event.target.value as typeof narrativeDirection)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="right">{t('animator.right')}</option><option value="left">{t('animator.left')}</option></select></label>}
+          {narrativeTemplate.controls.includes('camera') && <label>{t('animator.camera')}<select value={narrativeCamera} onChange={event => setNarrativeCamera(event.target.value as typeof narrativeCamera)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="restrained">{t('animator.cameraRestrained')}</option><option value="push">{t('animator.cameraPush')}</option><option value="drift">{t('animator.cameraDrift')}</option></select></label>}
+          {narrativeTemplate.controls.includes('palette') && <label>{t('animator.palette')}<select value={narrativePalette} onChange={event => setNarrativePalette(event.target.value as typeof narrativePalette)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="natural">{t('animator.paletteNatural')}</option><option value="cool">{t('animator.paletteCool')}</option><option value="warm">{t('animator.paletteWarm')}</option><option value="neon">{t('animator.paletteNeon')}</option></select></label>}
+          {narrativeTemplate.controls.includes('voiceSpace') && <label>{t('animator.voiceSpace')}<select value={narrativeVoiceSpace} onChange={event => setNarrativeVoiceSpace(event.target.value as typeof narrativeVoiceSpace)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="center">{t('animator.center')}</option><option value="left">{t('animator.left')}</option><option value="right">{t('animator.right')}</option></select></label>}
         </div>
-        <div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Camera shots</span><span className="text-[9px] text-text-muted">Click to apply</span></div><div className="grid grid-cols-2 gap-1">{CAMERA_PRESETS.map(preset => <button key={preset.id} onClick={() => applyCameraPreset(preset.id)} className={`rounded border px-2 py-1.5 text-left text-[9px] ${selectedPresetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border bg-bg-primary text-text-secondary hover:border-cyan-400/60'}`}>{preset.label}</button>)}</div></div>
-        <div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] capitalize text-text-muted">{key} camera</div>{numberInput('X', selected.animation[key].x, value => updateLayerEndpoint(selected.id, key, { x: value }))}{numberInput('Y', selected.animation[key].y, value => updateLayerEndpoint(selected.id, key, { y: value }))}{numberInput('Zoom', selected.animation[key].scale, value => updateLayerEndpoint(selected.id, key, { scale: Math.max(.05, value) }), .05, 5, .05)}{numberInput('Rotation', selected.animation[key].rotation ?? selected.transform.rotation ?? 0, value => updateLayerEndpoint(selected.id, key, { rotation: value }), -360, 360, .5)}</div>)}</div>
-        <div className="grid grid-cols-2 gap-1.5">{numberInput('Duration (s)', selected.animation.duration, value => updateLayerDuration(selected.id, value), .1, 30, .05)}<label className="text-[10px] text-text-muted">All segment curves<select value={selected.animation.curve} onChange={event => updateLayerCurve(selected.id, event.target.value as SceneCurve)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">Linear</option><option value="ease">Ease</option><option value="dramatic">Dramatic</option><option value="bounce">Bounce</option></select></label></div>
-        <div className="grid grid-cols-2 gap-1.5">{numberInput('Shake amount', selected.animation.shake?.amount ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: Math.max(0, Math.min(8, value)), frequency: layer.animation.shake?.frequency ?? 3, seed: layer.animation.shake?.seed ?? 0 } } })), 0, 8, .1)}{numberInput('Shake Hz', selected.animation.shake?.frequency ?? 3, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: layer.animation.shake?.amount ?? 0, frequency: Math.max(.1, Math.min(30, value)), seed: layer.animation.shake?.seed ?? 0 } } })), .1, 30, .1)}</div>
-        <p className="text-[9px] text-text-muted">The highest visible camera is active. Its pan, zoom and rotation are applied identically to preview and WebM capture.</p>
+        <button type="button" disabled={playing || recording || publishing} onClick={mountNarrativeTemplate} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/20 disabled:opacity-40">{t('animator.mountScene')}</button>
+      </div>
+      <div className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.04] p-2">
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-cyan-100">{t('animator.instructScene')}</span><span className="text-[8px] text-cyan-200/80">{t('animator.instructSceneMeta')}</span></div>
+        <p className="text-[8px] leading-relaxed text-text-muted">{t('animator.instructSceneHelp')}</p>
+        <textarea value={sceneCopilotIntent} disabled={sceneCopilotBusy} onChange={event => setSceneCopilotIntent(event.target.value)} placeholder={t('animator.instructScenePlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <button type="button" disabled={!sceneCopilotIntent.trim() || sceneCopilotBusy} onClick={() => void proposeSceneCopilotEdit()} className="w-full rounded border border-cyan-300/50 bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-100 disabled:opacity-40">{sceneCopilotBusy ? t('animator.planningScene') : t('animator.proposeScene')}</button>
+        {sceneCopilotError && <p className="text-[8px] text-red-300">{sceneCopilotError}</p>}
+        {sceneCopilotProposal && <div className="space-y-1 rounded border border-cyan-300/25 bg-black/15 p-1.5"><p className="text-[9px] text-cyan-100">{sceneCopilotProposal.summary}</p><ul className="space-y-0.5 text-[8px] text-text-secondary">{describeSceneCopilotProposal(scene, sceneCopilotProposal).map(line => <li key={line}>• {line}</li>)}</ul><div className="flex gap-1"><button type="button" onClick={applySceneCopilotEdit} className="flex-1 rounded bg-cyan-400/20 px-1.5 py-1 text-[9px] text-cyan-100">{t('animator.apply')}</button><button type="button" onClick={() => setSceneCopilotProposal(null)} className="rounded border border-border px-1.5 py-1 text-[9px] text-text-muted">{t('animator.discard')}</button></div></div>}
+      </div>
+      <div className="space-y-1.5 rounded border border-amber-400/30 bg-amber-400/[.04] p-2">
+        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-amber-100">{t('animator.sceneAudio')}</span><span className="text-[8px] text-amber-200/75">{t('animator.sceneAudioMeta')}</span></div>
+        <p className="text-[8px] leading-relaxed text-text-muted">{t('animator.sceneAudioHelp')}</p>
+        <textarea value={sceneAudioPrompt} disabled={sceneAudioBusy || playing || recording || publishing} onChange={event => setSceneAudioPrompt(event.target.value)} placeholder={t('animator.sceneAudioPlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <button type="button" disabled={!sceneAudioPrompt.trim() || sceneAudioBusy || playing || recording || publishing} onClick={() => void generateSceneSpeech()} className="w-full rounded border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100 disabled:opacity-40">{sceneAudioBusy ? t('animator.generatingNarration') : t('animator.generateSpeech', { model: selectedSpeechModel })}</button>
+        {generatedAudio.length > 0 && <label className="block text-[9px] text-text-muted">{t('animator.attachOutput')}<select defaultValue="" onChange={event => { const output = generatedAudio.find(item => item.name === event.target.value); if (output) attachSceneAudio(output.name, output.name.replace(/\.[^.]+$/, ''), 'audio'); event.currentTarget.value = '' }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">{t('animator.chooseAudio')}</option>{generatedAudio.map(output => <option key={output.name} value={output.name}>{output.name}</option>)}</select></label>}
+        {(scene.audioTracks ?? []).length > 0 && <div className="space-y-1 rounded border border-amber-300/15 bg-black/15 p-1.5">{scene.audioTracks!.map(track => <div key={track.id} className="grid grid-cols-[1fr_44px_44px_18px] items-center gap-1 text-[8px]"><span title={track.prompt ?? track.name} className="truncate text-amber-100">{track.kind} · {track.name}</span><label className="text-text-muted">{t('animator.at')}<input aria-label={t('animator.startTrack', { name: track.name })} type="number" min="0" max={scene.duration} step="0.1" value={track.startTime} onChange={event => { const startTime = Number(event.target.value); if (Number.isFinite(startTime)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, startTime: Math.max(0, Math.min(current.duration, startTime)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><label className="text-text-muted">{t('animator.vol')}<input aria-label={t('animator.volumeTrack', { name: track.name })} type="number" min="0" max="2" step="0.1" value={track.volume} onChange={event => { const volume = Number(event.target.value); if (Number.isFinite(volume)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, volume: Math.max(0, Math.min(2, volume)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><button type="button" title={t('animator.removeTrack', { name: track.name })} onClick={() => updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).filter(item => item.id !== track.id) }))} className="mt-3 text-red-300"><Trash2 size={12} /></button></div>)}</div>}
+        {rhythmAudioTracks.length > 0 && <div className="space-y-1.5 rounded border border-violet-300/25 bg-violet-400/[.045] p-1.5">
+          <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-medium text-violet-100">{t('animator.rhythmTitle')}</span><span className="text-[7px] text-violet-200/70">{t('animator.rhythmMeta')}</span></div>
+          <label className="block text-[8px] text-text-muted">{t('animator.rhythmTrack')}<select value={selectedRhythmTrack?.id ?? ''} disabled={rhythmBusy || playing || recording || publishing} onChange={event => { setRhythmTrackId(event.target.value); setRhythmError(null) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[9px] disabled:opacity-40">{rhythmAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind} · {track.name}</option>)}</select></label>
+          <button type="button" disabled={!selectedRhythmTrack || rhythmBusy || playing || recording || publishing} onClick={() => void analyzeSceneRhythm()} className="w-full rounded border border-violet-300/45 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{rhythmBusy ? t('animator.detectingBeats') : activeRhythmAnalysis ? t('animator.analyzeAgain') : t('animator.analyzeBpm')}</button>
+          {activeRhythmAnalysis && <div className="rounded border border-violet-300/15 bg-black/15 px-1.5 py-1 text-[8px] text-violet-100">{t('animator.rhythmStats', { bpm: activeRhythmAnalysis.bpm.toFixed(1), beats: activeRhythmAnalysis.beats.length, downbeats: activeRhythmAnalysis.downbeats.length, sections: activeRhythmAnalysis.sections.length })}</div>}
+          <div className="grid grid-cols-2 gap-1">
+            <label className="text-[8px] text-text-muted">{t('animator.trigger')}<select value={rhythmCueSource} onChange={event => setRhythmCueSource(event.target.value as SceneRhythmCueSource)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="beats">{t('animator.everyBeat')}</option><option value="downbeats">{t('animator.downbeatsOnly')}</option></select></label>
+            <label className="text-[8px] text-text-muted">{t('animator.reaction')}<select value={rhythmProfile} onChange={event => setRhythmProfile(event.target.value as SceneRhythmProfile)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="pulse">{t('animator.scalePulse')}</option><option value="bounce">{t('curves.bounce')}</option><option value="peek" disabled={selected?.type === 'camera'}>{t('animator.peekOnBeat')}</option><option value="camera-punch">{t('animator.cameraPunch')}</option></select></label>
+          </div>
+          <label className="block text-[8px] text-text-muted">{t('animator.intensityPercent', { percent: Math.round(rhythmIntensity * 100) })}<input type="range" min="0" max="1" step="0.05" value={rhythmIntensity} onChange={event => setRhythmIntensity(Number(event.target.value))} className="mt-0.5 w-full accent-violet-400" /></label>
+          <button type="button" disabled={!activeRhythmAnalysis || !selected || selected.locked || rhythmBusy || playing || recording || publishing} onClick={applySceneRhythm} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{selected?.name ? t('animator.applyToLayer', { name: selected.name }) : t('animator.applyToSelected')}</button>
+          <p className="text-[7px] leading-relaxed text-text-muted">{t('animator.rhythmHelp')}</p>
+        </div>}
+        {rhythmError && <p className="text-[8px] text-red-300">{rhythmError}</p>}
+        {sceneAudioError && <p className="text-[8px] text-red-300">{sceneAudioError}</p>}
+      </div>
+      <CharacterKitLibraryPanel
+        library={characterKitLibrary}
+        draft={characterKitDraft}
+        poseId={characterKitPoseId}
+        tab={characterKitEditorTab}
+        busy={characterKitBusy}
+        error={characterKitError}
+        newName={characterKitName}
+        alphaStatus={characterKitAlphaStatus}
+        mouthState={characterKitMouthState}
+        hasSelectedLayer={Boolean(selected)}
+        selectedIsFace={Boolean(selected && isCutoutFaceLayer(selected))}
+        disabled={playing || recording || publishing}
+        onSelectKit={(kit, tab) => { setCharacterKitDraft(kit); setCharacterKitPoseId('base'); setCharacterKitEditorTab(tab); setCharacterKitError(null) }}
+        onNewNameChange={setCharacterKitName}
+        onCreateFromSelected={createKitFromSelected}
+        onDraftChange={setCharacterKitDraft}
+        onPoseIdChange={setCharacterKitPoseId}
+        onTabChange={setCharacterKitEditorTab}
+        onAlphaStatusChange={setCharacterKitAlphaStatus}
+        onMouthStateChange={setCharacterKitMouthState}
+        onAssignSelected={assignSelectedToKit}
+        onCaptureAnchor={captureKitAnchor}
+        onSave={() => void persistCharacterKit()}
+        onPutOnScene={mountCharacterKit}
+        onDelete={() => void removeCharacterKit()}
+        onCommit={kit => { setCharacterKitDraft(kit); void persistCharacterKitDraft(kit) }}
+        onClose={() => { setCharacterKitDraft(null); setCharacterKitError(null) }}
+        onStatus={setMessage}
+      />
+      <div className="space-y-1.5 rounded border border-rose-300/30 bg-rose-400/[.04] p-2">
+        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-rose-100">{t('animator.cutoutTitle')}</span><span className="text-[8px] text-rose-200/75">{t('animator.cutoutMeta')}</span></div>
+        <p className="text-[8px] leading-relaxed text-text-muted">{t('animator.cutoutHelp')}</p>
+        <button type="button" disabled={!selected || playing || recording || publishing} onClick={bindCutoutFace} className="w-full rounded border border-rose-300/30 bg-black/10 px-2 py-1 text-[9px] text-rose-100 disabled:opacity-40">{t('animator.bindFace')}</button>
+        {dialogueAudioTracks.length > 0 && <label className="block text-[8px] text-text-muted">{t('animator.voiceTrack')}<select aria-label={t('animator.voiceTrackAria')} value={selectedDialogueTrack?.id ?? ''} onChange={event => setCutoutDialogueTrackId(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[9px] text-text-secondary">{dialogueAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind === 'speech' ? t('animator.voice') : track.kind} · {track.name}</option>)}</select></label>}
+        <textarea value={cutoutDialogueText} disabled={playing || recording || publishing} onChange={event => setCutoutDialogueText(event.target.value)} placeholder={t('animator.dialoguePlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <div className="grid grid-cols-2 gap-1"><label className="text-[8px] text-text-muted">{t('animator.start')}<input aria-label={t('animator.dialogueStartAria')} type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueStart} onChange={event => setCutoutDialogueStart(Number(event.target.value) || 0)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label><label className="text-[8px] text-text-muted">{t('animator.end')}<input aria-label={t('animator.dialogueEndAria')} type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueEnd} onChange={event => setCutoutDialogueEnd(Number(event.target.value) || scene.duration)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label></div>
+        <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!cutoutDialogueText.trim() || cutoutDialogueBusy || playing || recording || publishing} onClick={animateCutoutDialogue} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{t('animator.animateFromLine')}</button><button type="button" disabled={cutoutDialogueBusy || !selectedDialogueTrack || playing || recording || publishing} onClick={() => void animateCutoutDialogueFromAudio()} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{cutoutDialogueBusy ? t('animator.analyzingSpeech') : t('animator.detectFromAudio')}</button></div>
+        {(scene.dialogueBeats ?? []).length > 0 && <div className="space-y-1 rounded border border-rose-300/15 bg-black/10 p-1.5"><div className="text-[8px] text-rose-100/80">{t('animator.beats', { count: scene.dialogueBeats!.length })}</div>{scene.dialogueBeats!.map(beat => {
+          const mouth = scene.layers.find(layer => beat.mouthLayerIds.includes(layer.id))
+          const poseLayerId = mouth?.faceBinding?.poseLayerId ?? (mouth?.relationship?.type === 'parent' ? mouth.relationship.targetLayerId : '')
+          const speakerPoses = scene.layers.filter(layer => !isCutoutFaceLayer(layer) && scene.layers.some(face => face.faceBinding?.poseLayerId === layer.id && face.faceBinding.role === 'mouth' || !face.faceBinding && face.relationship?.type === 'parent' && face.relationship.targetLayerId === layer.id && isCutoutFaceLayer(face)))
+          return <div key={beat.id} className="space-y-1 rounded border border-rose-300/15 p-1"><div className="grid grid-cols-[1fr_20px] gap-1"><input aria-label={t('animator.dialogueTextAria', { id: beat.id })} value={beat.text} onChange={event => updateDialogueBeat(beat.id, { text: event.target.value })} className="rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /><button type="button" title={t('animator.deleteBeat')} onClick={() => removeDialogueBeat(beat.id)} className="text-red-300"><Trash2 size={10} /></button></div><div className="grid grid-cols-2 gap-1"><label className="text-[7px] text-text-muted">{t('animator.speaker')}<select aria-label={t('animator.speakerAria', { id: beat.id })} value={poseLayerId} onChange={event => assignDialogueBeatSpeaker(beat.id, event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="">{t('animator.unassigned')}</option>{speakerPoses.map(layer => <option key={layer.id} value={layer.id}>{layer.name}</option>)}</select></label><label className="text-[7px] text-text-muted">{t('animator.voice')}<select aria-label={t('animator.dialogueAudioAria', { id: beat.id })} value={beat.audioTrackId ?? ''} onChange={event => updateDialogueBeat(beat.id, { audioTrackId: event.target.value || undefined })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="">{t('animator.noTrack')}</option>{dialogueAudioTracks.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}</select></label></div><div className="grid grid-cols-3 gap-1"><label className="text-[7px] text-text-muted">{t('animator.start')}<input type="number" min="0" max={scene.duration} step="0.05" value={beat.start} onChange={event => updateDialogueBeat(beat.id, { start: Math.max(0, Math.min(beat.end - 1 / fps, Number(event.target.value) || 0)) })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]" /></label><label className="text-[7px] text-text-muted">{t('animator.end')}<input type="number" min="0" max={scene.duration} step="0.05" value={beat.end} onChange={event => updateDialogueBeat(beat.id, { end: Math.max(beat.start + 1 / fps, Math.min(scene.duration, Number(event.target.value) || scene.duration)) })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]" /></label><label className="text-[7px] text-text-muted">{t('animator.timing')}<select value={beat.confidence} onChange={event => updateDialogueBeat(beat.id, { confidence: event.target.value as SceneDialogueBeat['confidence'] })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="known-text">{t('animator.known')}</option><option value="aligned-audio">{t('animator.aligned')}</option><option value="energy-fallback">{t('animator.energy')}</option></select></label></div><button type="button" onClick={() => { setSelectedId(mouth?.id ?? null); setProgress(beat.start / scene.duration) }} className="w-full text-[7px] text-rose-200/80">{t('animator.jumpToBeat', { count: beat.mouthLayerIds.length })}</button></div>
+        })}</div>}
+      </div>
+      {selected && <div className="space-y-1 rounded border border-fuchsia-400/20 bg-fuchsia-400/[.025] p-2"><div className="text-[9px] text-fuchsia-100">{t('animator.suggestions', { name: selected.name })}</div><div className="flex flex-wrap gap-1">{copilotSuggestions.map(suggestion => <button key={suggestion} type="button" disabled={copilotBusy || selected.locked} onClick={() => { setCopilotIntent(suggestion); setCopilotError(null) }} className="rounded border border-fuchsia-300/25 px-1.5 py-0.5 text-left text-[8px] text-fuchsia-100 hover:bg-fuchsia-400/10 disabled:opacity-40">{suggestion}</button>)}</div></div>}
+      <SceneRecipePanel disabled={playing || recording || publishing || saving} outputs={outputs} characterKits={characterKitLibrary} onApply={applyRecipeScene} />
+      <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> {t('animator.addLayer')}</button>{addOpen && <div className="absolute z-[1100] mt-1 max-h-[75vh] w-full space-y-1 overflow-y-auto rounded border border-border bg-bg-primary p-1 shadow-xl"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">{t('animator.addCamera')}</button><div className="px-2 pt-1 text-[8px] font-medium uppercase tracking-wider text-text-muted">{t('animator.atmospherePresets')}</div><div className="grid grid-cols-2 gap-1">{ATMOSPHERE_KINDS.map(kind => <button key={kind} onClick={() => addAtmosphere(kind)} title={`${t(`atmosphere.labels.${kind}`)} — ${t(`atmosphere.descriptions.${kind}`, { defaultValue: ATMOSPHERE_DESCRIPTIONS[kind] })}`} className="truncate rounded border border-border px-2 py-1.5 text-left text-[9px] text-purple-200 hover:border-purple-400/60 hover:bg-bg-hover">{t(`atmosphere.labels.${kind}`)}</button>)}</div><button onClick={() => { setPicker('model'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.selectGenerated3d')}</button><button onClick={() => { setAddOpen(false); modelInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importGlb')}</button><button onClick={() => { setPicker('media'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.selectGeneratedMedia')}</button><button onClick={() => { setAddOpen(false); mediaInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importMedia')}</button><button onClick={() => { setAddOpen(false); overlayInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">{t('animator.importOverlay')}</button></div>}</div>
+      {picker && <div className="rounded border border-border bg-bg-primary p-2"><div className="mb-1 flex justify-between text-[10px] text-text-muted"><span>{picker === 'model' ? t('animator.generatedModels') : t('animator.generatedMedia')}</span><button onClick={() => setPicker(null)}><Down size={13} /></button></div><div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">{(picker === 'model' ? generatedModels : generatedMedia).map(asset => <button key={asset.name} onClick={() => addLayer(asset.type === 'model3d' ? 'model3d' : asset.type === 'video' ? 'video' : 'image', asset.url, asset.name, asset.thumbnail_url ?? undefined)} className="overflow-hidden rounded border border-border text-left hover:border-accent-blue"><div className="aspect-square bg-bg-active">{asset.thumbnail_url || asset.type === 'image' ? <img src={asset.thumbnail_url ?? asset.url} alt="" className="h-full w-full object-cover" /> : <div className="h-full flex items-center justify-center"><Video size={16} /></div>}</div><span className="block truncate px-1 py-1 text-[9px]">{asset.name}</span></button>)}</div></div>}
+      <input ref={modelInputRef} type="file" accept=".glb,model/gltf-binary" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign('model3d', file) }} /><input ref={mediaInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign(file.type.startsWith('video/') ? 'video' : 'image', file) }} /><input ref={overlayInputRef} type="file" accept="image/png,image/webp" multiple className="hidden" onChange={event => [...(event.target.files ?? [])].forEach(file => addOrReassign('overlay', file))} />
+      <div><div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">{t('animator.layers')}</div><div className="space-y-1">{[...scene.layers].sort((a, b) => b.z - a.z).map(layer => <div key={layer.id} onClick={() => setSelectedId(layer.id)} className={`flex cursor-pointer items-center gap-1.5 rounded border p-1.5 text-[10px] ${selectedId === layer.id ? 'border-accent-blue bg-accent-blue/10' : 'border-border bg-bg-primary'}`}><div className="h-7 w-7 shrink-0 overflow-hidden rounded bg-bg-active flex items-center justify-center">{layer.thumbnail ? <img src={layer.thumbnail} alt="" className="h-full w-full object-cover" /> : iconFor(layer.type)}</div><div className="min-w-0 flex-1"><div className="truncate">{layer.name}</div><div className="text-[9px] text-text-muted">{t('animator.layerMeta', { type: t(`layerTypes.${layer.type}` as 'layerTypes.camera'), z: layer.z })}{layer.missingAsset ? t('animator.missingAssetSuffix') : ''}</div></div><button onClick={event => { event.stopPropagation(); updateLayer(layer.id, item => ({ ...item, visible: !item.visible })) }} title={t('animator.visibility')}>{layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}</button><div className="flex flex-col"><button title={t('animator.bringForward')} onClick={event => { event.stopPropagation(); moveLayerZ(layer.id, 1) }}><ChevronUp size={12} /></button><button title={t('animator.sendBackward')} onClick={event => { event.stopPropagation(); moveLayerZ(layer.id, -1) }}><ChevronDown size={12} /></button></div><button onClick={event => { event.stopPropagation(); updateScene(current => ({ ...current, layers: normalizeZ(current.layers.filter(item => item.id !== layer.id)) })); if (selectedId === layer.id) setSelectedId(null) }} className="text-red-400"><Trash2 size={12} /></button></div>)}</div></div>
+      {selected && <label className={`flex cursor-pointer items-center justify-between gap-2 rounded border p-2 text-[9px] ${chainFromPlayhead ? 'border-purple-300/60 bg-purple-400/10 text-purple-100' : 'border-border bg-bg-primary text-text-secondary'}`}><span><span className="block font-medium">{t('animator.chainFromPlayhead')}</span><span className="block text-[8px] text-text-muted">{t('animator.chainHelp', { frame: Math.round(progress * scene.duration * fps) })}</span></span><input type="checkbox" checked={chainFromPlayhead} onChange={event => setChainFromPlayhead(event.target.checked)} /></label>}
+      {selected && <div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={() => updateLayer(selected.id, layer => ({ ...layer, locked: !layer.locked }))} className={`flex items-center justify-center gap-1 rounded border py-1.5 text-[9px] ${selected.locked ? 'border-amber-400/60 bg-amber-400/10 text-amber-200' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.locked ? <Lock size={11} /> : <Unlock size={11} />}{selected.locked ? t('animator.locked') : t('animator.lockLayer')}</button><button type="button" onClick={() => duplicateLayer(selected.id)} className="flex items-center justify-center gap-1 rounded border border-border bg-bg-primary py-1.5 text-[9px] text-text-secondary"><CopyPlus size={11} /> {t('animator.duplicate')}</button>{selected.locked && <p className="col-span-2 text-[8px] text-amber-200/80">{t('animator.unlockHelp')}</p>}</div>}
+      {selected?.type === 'camera' && <div className="space-y-2 border-t border-border pt-3">
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{t('animator.cameraInspector')}</span><span className={`rounded px-1.5 py-0.5 text-[8px] ${activeCamera?.id === selected.id ? 'bg-cyan-400/15 text-cyan-200' : 'bg-bg-active text-text-muted'}`}>{activeCamera?.id === selected.id ? t('animator.activeCamera') : t('animator.inactive')}</span></div>
+        <label className="text-[10px] text-text-muted">{t('animator.name')}<input value={selected.name} onChange={event => updateLayer(selected.id, layer => ({ ...layer, name: event.target.value }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs" /></label>
+        <label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={selected.visible} onChange={event => setLayerVisibility(selected.id, event.target.checked)} /> {t('animator.useThisCamera')}</label>
+        <div className="grid grid-cols-2 gap-1.5">
+          {numberInput(t('animator.panX'), selected.transform.x, value => updateCameraTransform(selected.id, 'x', value), -100, 200, .5)}
+          {numberInput(t('animator.panY'), selected.transform.y, value => updateCameraTransform(selected.id, 'y', value), -100, 200, .5)}
+          {numberInput(t('animator.zoom'), selected.transform.scale, value => updateCameraTransform(selected.id, 'scale', Math.max(.05, value)), .05, 5, .05)}
+          {numberInput(t('animator.rotation'), selected.transform.rotation ?? 0, value => updateCameraTransform(selected.id, 'rotation', value), -360, 360, .5)}
+          {numberInput(t('animator.zPriority'), selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}
+        </div>
+        <div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.cameraShots')}</span><span className="text-[9px] text-text-muted">{t('animator.clickAgain')}</span></div><div className="grid grid-cols-2 gap-1">{CAMERA_PRESETS.map(preset => <button key={preset.id} onClick={() => selectedPresetId === preset.id ? removeLayerMotionPreset() : applyCameraPreset(preset.id)} className={`rounded border px-2 py-1.5 text-left text-[9px] ${selectedPresetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border bg-bg-primary text-text-secondary hover:border-cyan-400/60'}`}>{t(scene3dKey(`cameraPresets.${preset.id}`))}</button>)}</div></div>
+        <div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] capitalize text-text-muted">{t(key === 'start' ? 'animator.startCamera' : 'animator.endCamera')}</div>{numberInput(t('animator.x'), selected.animation[key].x, value => updateLayerEndpoint(selected.id, key, { x: value }))}{numberInput(t('animator.y'), selected.animation[key].y, value => updateLayerEndpoint(selected.id, key, { y: value }))}{numberInput(t('animator.zoom'), selected.animation[key].scale, value => updateLayerEndpoint(selected.id, key, { scale: Math.max(.05, value) }), .05, 5, .05)}{numberInput(t('animator.rotation'), selected.animation[key].rotation ?? selected.transform.rotation ?? 0, value => updateLayerEndpoint(selected.id, key, { rotation: value }), -360, 360, .5)}</div>)}</div>
+        <div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.duration'), selected.animation.duration, value => updateLayerDuration(selected.id, value), .1, 30, .05)}<label className="text-[10px] text-text-muted">{t('animator.allCurves')}<select value={selected.animation.curve} onChange={event => updateLayerCurve(selected.id, event.target.value as SceneCurve)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">{t('curves.linear')}</option><option value="ease">{t('curves.ease')}</option><option value="dramatic">{t('curves.dramatic')}</option><option value="bounce">{t('curves.bounce')}</option><option value="hold">{t('curves.hold')}</option></select></label></div>
+        <div className="space-y-1.5 rounded border border-border bg-bg-primary p-2">
+          <label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={Boolean(selected.animation.shake?.amount)} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: event.target.checked ? { amount: layer.animation.shake?.amount || .35, frequency: layer.animation.shake?.frequency ?? 2, seed: layer.animation.shake?.seed ?? 1 } : undefined } }))} /> {t('animator.cameraShake')}</label>
+          {Boolean(selected.animation.shake?.amount) && <div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.shakeAmount'), selected.animation.shake?.amount ?? .35, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: Math.max(.01, Math.min(8, value)), frequency: layer.animation.shake?.frequency ?? 2, seed: layer.animation.shake?.seed ?? 1 } } })), .01, 8, .05)}{numberInput(t('animator.shakeHz'), selected.animation.shake?.frequency ?? 2, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: layer.animation.shake?.amount ?? .35, frequency: Math.max(.1, Math.min(30, value)), seed: layer.animation.shake?.seed ?? 1 } } })), .1, 30, .1)}</div>}
+          <p className="text-[8px] text-text-muted">{t('animator.shakeHelp')}</p>
+        </div>
+        <p className="text-[9px] text-text-muted">{t('animator.cameraHelp')}</p>
       </div>}
+      {selected?.type === 'image' && <button type="button" onClick={sendImageToPanoramaLoop} className="w-full rounded border border-amber-300/45 bg-amber-400/10 px-2 py-1.5 text-[10px] text-amber-100">{t('animator.infiniteBackground')}</button>}
+      {selected?.type === 'image' && selected.seamlessHorizontal && <button type="button" onClick={() => setCylinderCompareOpen(value => !value)} className="w-full rounded border border-cyan-300/40 bg-cyan-400/[.06] px-2 py-1.5 text-[10px] text-cyan-100">{cylinderCompareOpen ? t('animator.hideCylinder') : t('animator.compareCylinder')}</button>}
+      {selected?.type === 'image' && !selected.seamlessHorizontal && <p className="rounded border border-cyan-300/15 bg-cyan-400/[.025] px-2 py-1.5 text-[8px] leading-relaxed text-cyan-100">{t('animator.cylinderLocked')}</p>}
+      {selected?.type === 'image' && cylinderCompareOpen && <CylinderPanoramaComparison source={selected.source} onClose={() => setCylinderCompareOpen(false)} />}
       {selected?.type !== 'camera' && <>
-      {selected ? <div className="border-t border-border pt-3 space-y-2"><div className="text-[10px] font-medium uppercase tracking-wider text-text-muted">Layer inspector</div>{selected.missingAsset && <button onClick={() => { setReassignId(selected.id); (selected.type === 'model3d' ? modelInputRef : selected.type === 'overlay' ? overlayInputRef : mediaInputRef).current?.click() }} className="w-full rounded border border-red-400/50 py-1.5 text-[10px] text-red-300">Reassign missing asset</button>}<label className="text-[10px] text-text-muted">Name<input value={selected.name} onChange={event => updateLayer(selected.id, layer => ({ ...layer, name: event.target.value }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs" /></label><div className="grid grid-cols-3 gap-1.5">{numberInput('X', selected.transform.x, value => { const delta = value - selected.transform.x; updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: value }, animation: { ...layer.animation, start: { ...layer.animation.start, x: layer.animation.start.x + delta }, end: { ...layer.animation.end, x: layer.animation.end.x + delta } } })); flashAt(value, selected.transform.y) }, -100, 200)}{numberInput('Y', selected.transform.y, value => { const delta = value - selected.transform.y; updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, y: value }, animation: { ...layer.animation, start: { ...layer.animation.start, y: layer.animation.start.y + delta }, end: { ...layer.animation.end, y: layer.animation.end.y + delta } } })); flashAt(selected.transform.x, value) }, -100, 200)}{numberInput('Z', selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}{numberInput('Scale', selected.transform.scale, value => updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, scale: value }, animation: { ...layer.animation, start: { ...layer.animation.start, scale: value }, end: { ...layer.animation.end, scale: value } } })), .05, 3, .05)}{numberInput('Opacity', selected.transform.opacity, value => updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, opacity: value }, animation: { ...layer.animation, start: { ...layer.animation.start, opacity: value }, end: { ...layer.animation.end, opacity: value } } })), 0, 1, .05)}{numberInput('Rotation', selected.transform.rotation ?? 0, value => updateLayer(selected.id, layer => { const previous = layer.transform.rotation ?? 0; const delta = value - previous; return { ...layer, transform: { ...layer.transform, rotation: value }, animation: { ...layer.animation, start: { ...layer.animation.start, rotation: layer.animation.start.rotation === undefined ? undefined : layer.animation.start.rotation + delta }, end: { ...layer.animation.end, rotation: layer.animation.end.rotation === undefined ? undefined : layer.animation.end.rotation + delta } } } }), -360, 360)} </div><label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={selected.visible} onChange={event => updateLayer(selected.id, layer => ({ ...layer, visible: event.target.checked }))} /> Visible</label><div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Motion presets</span><span className="text-[9px] text-text-muted">Hover to preview · click to apply</span></div><div className="grid max-h-[370px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{PRESETS.map(preset => <MotionPresetCard key={preset.id} preset={preset} selected={selectedPresetId === preset.id} onSelect={() => { setSelectedPresetId(preset.id); applyPreset(preset.id) }} />)}</div></div><div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] text-text-muted capitalize">{key} motion</div>{numberInput('X', selected.animation[key].x, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], x: value } } })))}{numberInput('Y', selected.animation[key].y, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], y: value } } })))}{numberInput('Scale', selected.animation[key].scale, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], scale: value } } })), .05, 3, .05)}</div>)}</div><div className="grid grid-cols-2 gap-1.5">{numberInput('Duration (s)', selected.animation.duration, value => updateLayerDuration(selected.id, value, 1), 1, 30)}<label className="text-[10px] text-text-muted">Curve<select value={selected.animation.curve} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, curve: event.target.value as SceneCurve } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">Linear</option><option value="ease">Ease</option><option value="dramatic">Dramatic</option><option value="bounce">Bounce</option></select></label></div>{selected.type === 'model3d' && <div className="grid grid-cols-2 gap-1.5"><label className="flex items-end gap-1.5 pb-1 text-[10px]"><input type="checkbox" checked={Boolean(selected.animation.spin)} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, spin: event.target.checked } }))} /> Auto spin</label>{numberInput('Spin °/sec', selected.animation.rotationSpeed ?? 35, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, rotationSpeed: value } })), 0, 720)}</div>}{selected.type === 'model3d' && (clipsByLayer[selected.id]?.length ?? 0) > 0 && <div className="space-y-2 rounded border border-emerald-400/30 bg-emerald-400/[.04] p-2"><label className="text-[10px] text-text-muted">Skeletal animation<select value={selected.animation.clip ?? ''} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clip: event.target.value || undefined, clipOffset: layer.animation.clipOffset ?? 0, clipSpeed: layer.animation.clipSpeed ?? 1, clipLoop: layer.animation.clipLoop ?? true, clipReverse: layer.animation.clipReverse ?? false, clipTrimStart: 0, clipTrimEnd: undefined } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50"><option value="">Off</option>{(clipsByLayer[selected.id] ?? []).map(clip => <option key={clip} value={clip}>{clip}</option>)}</select></label>{selected.animation.clip && <><div className="grid grid-cols-2 gap-1.5">{numberInput('Clip offset', selected.animation.clipOffset ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipOffset: value } })), 0, scene.duration, 1 / fps, selected.locked)}{numberInput('Clip speed', selected.animation.clipSpeed ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipSpeed: value } })), .05, 8, .05, selected.locked)}{numberInput('Clip trim in', selected.animation.clipTrimStart ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimStart: value, clipTrimEnd: layer.animation.clipTrimEnd !== undefined && layer.animation.clipTrimEnd <= value ? value + .001 : layer.animation.clipTrimEnd } })), 0, Math.max(0, (selectedClipDuration || 3600) - .001), 1 / fps, selected.locked)}{numberInput('Clip trim out', selected.animation.clipTrimEnd ?? selectedClipDuration, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimEnd: Math.max((layer.animation.clipTrimStart ?? 0) + .001, value) } })), .001, selectedClipDuration || 3600, 1 / fps, selected.locked)}</div><div className="flex flex-wrap gap-3 text-[9px] text-text-secondary"><label className="flex items-center gap-1"><input type="checkbox" checked={selected.animation.clipLoop !== false} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipLoop: event.target.checked } }))} /> Loop clip</label><label className="flex items-center gap-1"><input type="checkbox" checked={Boolean(selected.animation.clipReverse)} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipReverse: event.target.checked } }))} /> Reverse</label><button type="button" disabled={selected.locked} onClick={() => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimStart: 0, clipTrimEnd: undefined } }))} className="ml-auto text-[8px] text-emerald-200 disabled:opacity-40">Full clip</button></div><p className="text-[8px] text-text-muted">{selectedClipDuration > 0 ? `Clip length ${selectedClipDuration.toFixed(2)}s.` : 'Reading clip length…'} Scrub, preview and WebM use the same paused-frame sampler.</p></>}</div>}</div> : <p className="text-[10px] text-text-muted">Select a layer to edit it.</p>}
-      {selected && isVisualLayer(selected) && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Camera parallax</span><span className="text-[9px] text-text-muted">Z order unchanged</span></div>
-        <div className="grid grid-cols-3 gap-1">{(['background', 'midground', 'foreground'] as const).map(preset => <button key={preset} onClick={() => applyParallaxPreset(selected.id, preset)} className={`rounded border px-1 py-1.5 text-[8px] capitalize ${Math.abs((selected.parallax ?? 1) - PARALLAX_PRESETS[preset]) < .001 ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border text-text-muted hover:border-cyan-400/60'}`}>{preset}</button>)}</div>
-        {numberInput('Parallax strength', selected.parallax ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, parallax: Math.max(0, Math.min(2, value)) })), 0, 2, .05)}
-        <p className="text-[9px] text-text-muted">0 ignores camera pan, 1 follows it normally, and values above 1 feel closer. Zoom and camera roll still affect the full shot. Background adds 20% overscan to image/video layers; extreme moves may need more scale.</p>
+      {selected ? <div className="border-t border-border pt-3 space-y-2"><div className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{t('animator.layerInspector')}</div>{selected.missingAsset && <button onClick={() => { setReassignId(selected.id); (selected.type === 'model3d' ? modelInputRef : selected.type === 'overlay' ? overlayInputRef : mediaInputRef).current?.click() }} className="w-full rounded border border-red-400/50 py-1.5 text-[10px] text-red-300">{t('animator.reassignAsset')}</button>}<label className="text-[10px] text-text-muted">{t('animator.name')}<input value={selected.name} onChange={event => updateLayer(selected.id, layer => ({ ...layer, name: event.target.value }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs" /></label><div className="grid grid-cols-3 gap-1.5">{numberInput(t('animator.x'), selected.transform.x, value => { const delta = value - selected.transform.x; updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: value }, animation: { ...layer.animation, start: { ...layer.animation.start, x: layer.animation.start.x + delta }, end: { ...layer.animation.end, x: layer.animation.end.x + delta } } })); flashAt(value, selected.transform.y) }, -100, 200)}{numberInput(t('animator.y'), selected.transform.y, value => { const delta = value - selected.transform.y; updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, y: value }, animation: { ...layer.animation, start: { ...layer.animation.start, y: layer.animation.start.y + delta }, end: { ...layer.animation.end, y: layer.animation.end.y + delta } } })); flashAt(selected.transform.x, value) }, -100, 200)}{numberInput(t('animator.z'), selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}{numberInput(t('animator.scale'), selected.transform.scale, value => updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, scale: value }, animation: { ...layer.animation, start: { ...layer.animation.start, scale: value }, end: { ...layer.animation.end, scale: value } } })), .05, 3, .05)}{numberInput(t('animator.opacity'), selected.transform.opacity, value => updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, opacity: value }, animation: { ...layer.animation, start: { ...layer.animation.start, opacity: value }, end: { ...layer.animation.end, opacity: value } } })), 0, 1, .05)}{numberInput(t('animator.rotation'), selected.transform.rotation ?? 0, value => updateLayer(selected.id, layer => { const previous = layer.transform.rotation ?? 0; const delta = value - previous; return { ...layer, transform: { ...layer.transform, rotation: value }, animation: { ...layer.animation, start: { ...layer.animation.start, rotation: layer.animation.start.rotation === undefined ? undefined : layer.animation.start.rotation + delta }, end: { ...layer.animation.end, rotation: layer.animation.end.rotation === undefined ? undefined : layer.animation.end.rotation + delta } } } }), -360, 360)} </div><label className="flex items-center gap-1.5 text-[10px] text-text-secondary"><input type="checkbox" checked={selected.visible} onChange={event => updateLayer(selected.id, layer => ({ ...layer, visible: event.target.checked }))} /> {t('animator.visible')}</label><div className="space-y-1.5 rounded border border-fuchsia-400/30 bg-fuchsia-400/[.04] p-2"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-fuchsia-100">{t('animator.instructLayer', { name: selected.name })}</span><span className="text-[8px] text-fuchsia-200/80">{t('animator.thisItemOnly')}</span></div><p className="text-[8px] leading-relaxed text-text-muted">{t('animator.instructLayerHelp')}</p><textarea value={copilotIntent} disabled={copilotBusy || selected.locked} onChange={event => setCopilotIntent(event.target.value)} placeholder={t('animator.instructLayerPlaceholder')} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" /><button type="button" disabled={!copilotIntent.trim() || copilotBusy || selected.locked} onClick={() => void proposeCopilotEdit()} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1 text-[10px] text-fuchsia-100 disabled:opacity-40">{copilotBusy ? t('animator.planningEdit') : t('animator.proposeChanges')}</button>{copilotError && <p className="text-[8px] text-red-300">{copilotError}</p>}{copilotProposal && <div className="space-y-1 rounded border border-fuchsia-300/25 bg-black/15 p-1.5"><p className="text-[9px] text-fuchsia-100">{copilotProposal.summary}</p><ul className="space-y-0.5 text-[8px] text-text-secondary">{describeSceneCopilotProposal(scene, copilotProposal).map(line => <li key={line}>• {line}</li>)}</ul><div className="flex gap-1"><button type="button" onClick={applyCopilotEdit} className="flex-1 rounded bg-fuchsia-400/20 px-1.5 py-1 text-[9px] text-fuchsia-100">{t('animator.apply')}</button><button type="button" onClick={() => setCopilotProposal(null)} className="rounded border border-border px-1.5 py-1 text-[9px] text-text-muted">{t('animator.discard')}</button></div></div>}</div>{selected.type === 'image' && <div className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.04] p-2"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-cyan-100">{t('animator.photoMotion')}</span><span className="text-[8px] text-text-muted">{t('animator.oneClickShot')}</span></div><p className="text-[8px] text-text-muted">{t('animator.photoMotionHelp')}</p><div className="grid max-h-[390px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{PHOTO_MOTION_PRESETS.map(preset => <PhotoMotionPresetCard key={preset.id} preset={preset} source={selected.thumbnail ?? selected.source} scopeId={selected.id} selected={selectedPresetId === preset.id} onSelect={() => selectedPresetId === preset.id ? removePhotoMotionPreset(preset.id) : applyPhotoMotionPreset(preset.id)} />)}</div></div>}<div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.motionPresets')}</span><span className="text-[9px] text-text-muted">{t('animator.hoverPreview')}</span></div><div className="grid max-h-[370px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{PRESETS.map(preset => <MotionPresetCard key={preset.id} preset={preset} scopeId={selected.id} selected={selectedPresetId === preset.id} onSelect={() => { if (selectedPresetId === preset.id) removeLayerMotionPreset(); else { setSelectedPresetId(preset.id); applyPreset(preset.id) } }} />)}</div></div><div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] text-text-muted capitalize">{t(key === 'start' ? 'animator.startMotion' : 'animator.endMotion')}</div>{numberInput(t('animator.x'), selected.animation[key].x, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], x: value } } })))}{numberInput(t('animator.y'), selected.animation[key].y, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], y: value } } })))}{numberInput(t('animator.scale'), selected.animation[key].scale, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], scale: value } } })), .05, 3, .05)}</div>)}</div><div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.duration'), selected.animation.duration, value => updateLayerDuration(selected.id, value, 1), 1, 30)}<label className="text-[10px] text-text-muted">{t('animator.curve')}<select value={selected.animation.curve} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, curve: event.target.value as SceneCurve } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">{t('curves.linear')}</option><option value="ease">{t('curves.ease')}</option><option value="dramatic">{t('curves.dramatic')}</option><option value="bounce">{t('curves.bounce')}</option></select></label></div>{selected.type === 'model3d' && <div className="grid grid-cols-2 gap-1.5"><label className="flex items-end gap-1.5 pb-1 text-[10px]"><input type="checkbox" checked={Boolean(selected.animation.spin)} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, spin: event.target.checked } }))} /> {t('animator.autoSpin')}</label>{numberInput(t('animator.spinPerSec'), selected.animation.rotationSpeed ?? 35, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, rotationSpeed: value } })), 0, 720)}</div>}{selected.type === 'model3d' && (clipsByLayer[selected.id]?.length ?? 0) > 0 && <div className="space-y-2 rounded border border-emerald-400/30 bg-emerald-400/[.04] p-2"><label className="text-[10px] text-text-muted">{t('animator.skeletalAnimation')}<select value={selected.animation.clip ?? ''} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clip: event.target.value || undefined, clipOffset: layer.animation.clipOffset ?? 0, clipSpeed: layer.animation.clipSpeed ?? 1, clipLoop: layer.animation.clipLoop ?? true, clipReverse: layer.animation.clipReverse ?? false, clipTrimStart: 0, clipTrimEnd: undefined } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50"><option value="">{t('animator.off')}</option>{(clipsByLayer[selected.id] ?? []).map(clip => <option key={clip} value={clip}>{clip}</option>)}</select></label>{selected.animation.clip && <><div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.clipOffset'), selected.animation.clipOffset ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipOffset: value } })), 0, scene.duration, 1 / fps, selected.locked)}{numberInput(t('animator.clipSpeed'), selected.animation.clipSpeed ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipSpeed: value } })), .05, 8, .05, selected.locked)}{numberInput(t('animator.clipTrimIn'), selected.animation.clipTrimStart ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimStart: value, clipTrimEnd: layer.animation.clipTrimEnd !== undefined && layer.animation.clipTrimEnd <= value ? value + .001 : layer.animation.clipTrimEnd } })), 0, Math.max(0, (selectedClipDuration || 3600) - .001), 1 / fps, selected.locked)}{numberInput(t('animator.clipTrimOut'), selected.animation.clipTrimEnd ?? selectedClipDuration, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimEnd: Math.max((layer.animation.clipTrimStart ?? 0) + .001, value) } })), .001, selectedClipDuration || 3600, 1 / fps, selected.locked)}</div><div className="flex flex-wrap gap-3 text-[9px] text-text-secondary"><label className="flex items-center gap-1"><input type="checkbox" checked={selected.animation.clipLoop !== false} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipLoop: event.target.checked } }))} /> {t('animator.loopClip')}</label><label className="flex items-center gap-1"><input type="checkbox" checked={Boolean(selected.animation.clipReverse)} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipReverse: event.target.checked } }))} /> {t('animator.reverse')}</label><button type="button" disabled={selected.locked} onClick={() => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, clipTrimStart: 0, clipTrimEnd: undefined } }))} className="ml-auto text-[8px] text-emerald-200 disabled:opacity-40">{t('animator.fullClip')}</button></div><p className="text-[8px] text-text-muted">{selectedClipDuration > 0 ? t('animator.clipLength', { seconds: selectedClipDuration.toFixed(2) }) : t('animator.readingClip')} {t('animator.clipSamplerHelp')}</p></>}</div>}</div> : <p className="text-[10px] text-text-muted">{t('animator.selectLayer')}</p>}
+      {selected && <button type="button" disabled={copilotBusy || selected.locked || copilotListening} onClick={dictateCopilotIntent} className="flex w-full items-center justify-center gap-1 rounded border border-fuchsia-300/35 bg-fuchsia-400/[.04] px-2 py-1 text-[9px] text-fuchsia-100 disabled:opacity-40"><Mic size={11} />{copilotListening ? t('animator.listening') : t('animator.dictate', { name: selected.name })}</button>}
+      {selected?.type === 'effect' && selectedAtmosphere && <div className="space-y-2 rounded border border-purple-400/30 bg-purple-400/[.04] p-2">
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-purple-100">{t('animator.particles')}</span><span className="text-[8px] text-text-muted">{t('animator.previewWebm')}</span></div>
+        <p className="text-[8px] text-purple-100/70">{t(`atmosphere.descriptions.${selectedAtmosphere.kind}`)}</p>
+        <label className="text-[9px] text-text-muted">{t('animator.effect')}<select value={selectedAtmosphere.kind} disabled={selected.locked} onChange={event => { const kind = event.target.value as SceneAtmosphereKind; updateLayer(selected.id, layer => ({ ...layer, name: ATMOSPHERE_LABELS[kind], source: `maestro-effect:${kind}`, atmosphere: { ...ATMOSPHERE_PRESETS[kind] } })) }} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50">{ATMOSPHERE_KINDS.map(kind => <option key={kind} value={kind}>{t(`atmosphere.labels.${kind}`)}</option>)}</select></label>
+        <div className="grid grid-cols-2 gap-1.5">
+          {numberInput(t('animator.density'), selectedAtmosphere.density, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), density: Math.round(value) } })), 5, 240, 1, selected.locked)}
+          {numberInput(t('animator.speed'), selectedAtmosphere.speed, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), speed: value } })), .05, 4, .05, selected.locked)}
+          {numberInput(t('animator.particleSize'), selectedAtmosphere.size, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), size: value } })), .2, 8, .05, selected.locked)}
+          {numberInput(t('animator.wind'), selectedAtmosphere.wind, value => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), wind: value } })), -100, 100, 1, selected.locked)}
+        </div>
+        <label className="flex items-center justify-between gap-2 text-[9px] text-text-muted">{t('animator.particleColor')}<input type="color" value={selectedAtmosphere.color} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, atmosphere: { ...normalizedAtmosphere(layer.atmosphere), color: event.target.value } }))} className="h-7 w-12 rounded border border-border bg-bg-tertiary disabled:opacity-50" /></label>
+        <p className="text-[8px] text-text-muted">{t('animator.particlesHelp')}</p>
+      </div>}
+      {selected && isVisualLayer(selected) && selected.type !== 'effect' && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.parallax')}</span><span className="text-[9px] text-text-muted">{t('animator.zUnchanged')}</span></div>
+        <div className="grid grid-cols-3 gap-1">{(['background', 'midground', 'foreground'] as const).map(preset => <button key={preset} onClick={() => applyParallaxPreset(selected.id, preset)} className={`rounded border px-1 py-1.5 text-[8px] capitalize ${Math.abs((selected.parallax ?? 1) - PARALLAX_PRESETS[preset]) < .001 ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border text-text-muted hover:border-cyan-400/60'}`}>{t(`animator.parallax${preset[0].toUpperCase()}${preset.slice(1)}` as 'animator.parallaxBackground')}</button>)}</div>
+        {numberInput(t('animator.parallaxStrength'), selected.parallax ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, parallax: Math.max(0, Math.min(2, value)) })), 0, 2, .05)}
+        <p className="text-[9px] text-text-muted">{t('animator.parallaxHelp')}</p>
       </div>}
       {selected && selectedEffects && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Layer effects & mask</span><button type="button" disabled={selected.locked} onClick={() => updateLayer(selected.id, layer => ({ ...layer, effects: undefined }))} className="text-[8px] text-text-muted hover:text-text-primary disabled:opacity-40">Reset</button></div>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.effectsMask')}</span><button type="button" disabled={selected.locked} onClick={() => updateLayer(selected.id, layer => ({ ...layer, effects: undefined }))} className="text-[8px] text-text-muted hover:text-text-primary disabled:opacity-40">{t('animator.reset')}</button></div>
         <div className="grid grid-cols-2 gap-1.5">
-          <label className="text-[9px] text-text-muted">Blend<select value={selectedEffects.blendMode} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { blendMode: event.target.value as SceneBlendMode })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="normal">Normal</option><option value="screen">Screen</option><option value="multiply">Multiply</option><option value="overlay">Overlay</option><option value="lighten">Lighten</option><option value="darken">Darken</option></select></label>
-          <label className="text-[9px] text-text-muted">Mask<select value={selectedEffects.mask} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { mask: event.target.value as SceneMask })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="none">Rectangle</option><option value="rounded">Rounded</option><option value="ellipse">Ellipse</option></select></label>
+          <label className="text-[9px] text-text-muted">{t('animator.blend')}<select value={selectedEffects.blendMode} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { blendMode: event.target.value as SceneBlendMode })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="normal">{t('animator.blendNormal')}</option><option value="screen">{t('animator.blendScreen')}</option><option value="multiply">{t('animator.blendMultiply')}</option><option value="overlay">{t('animator.blendOverlay')}</option><option value="lighten">{t('animator.blendLighten')}</option><option value="darken">{t('animator.blendDarken')}</option></select></label>
+          <label className="text-[9px] text-text-muted">{t('animator.mask')}<select value={selectedEffects.mask} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { mask: event.target.value as SceneMask })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="none">{t('animator.maskRect')}</option><option value="rounded">{t('animator.maskRounded')}</option><option value="ellipse">{t('animator.maskEllipse')}</option></select></label>
         </div>
-        {selectedEffects.mask === 'rounded' && numberInput('Corner radius %', selectedEffects.maskRadius, value => updateLayerEffects(selected.id, { maskRadius: value }), 0, 50, 1, selected.locked)}
-        <div className="grid grid-cols-2 gap-1.5">{numberInput('Blur %', selectedEffects.blur, value => updateLayerEffects(selected.id, { blur: value }), 0, 3, .05, selected.locked)}{numberInput('Glow %', selectedEffects.glow, value => updateLayerEffects(selected.id, { glow: value }), 0, 5, .05, selected.locked)}{numberInput('Shadow %', selectedEffects.shadow, value => updateLayerEffects(selected.id, { shadow: value }), 0, 8, .1, selected.locked)}{numberInput('Brightness', selectedEffects.brightness, value => updateLayerEffects(selected.id, { brightness: value }), 0, 3, .05, selected.locked)}{numberInput('Contrast', selectedEffects.contrast, value => updateLayerEffects(selected.id, { contrast: value }), 0, 3, .05, selected.locked)}{numberInput('Saturation', selectedEffects.saturation, value => updateLayerEffects(selected.id, { saturation: value }), 0, 4, .05, selected.locked)}{numberInput('Hue °', selectedEffects.hue, value => updateLayerEffects(selected.id, { hue: value }), -180, 180, 1, selected.locked)}</div>
-        <p className="text-[8px] text-text-muted">Percent effects scale from the frame’s short side, so preview, saved thumbnail and WebM stay visually aligned. Effects are clipped to the layer box or selected mask.</p>
+        {selectedEffects.mask === 'rounded' && numberInput(t('animator.cornerRadius'), selectedEffects.maskRadius, value => updateLayerEffects(selected.id, { maskRadius: value }), 0, 50, 1, selected.locked)}
+        <div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.blur'), selectedEffects.blur, value => updateLayerEffects(selected.id, { blur: value }), 0, 3, .05, selected.locked)}{numberInput(t('animator.glow'), selectedEffects.glow, value => updateLayerEffects(selected.id, { glow: value }), 0, 5, .05, selected.locked)}{numberInput(t('animator.shadow'), selectedEffects.shadow, value => updateLayerEffects(selected.id, { shadow: value }), 0, 8, .1, selected.locked)}{numberInput(t('animator.brightness'), selectedEffects.brightness, value => updateLayerEffects(selected.id, { brightness: value }), 0, 3, .05, selected.locked)}{numberInput(t('animator.contrast'), selectedEffects.contrast, value => updateLayerEffects(selected.id, { contrast: value }), 0, 3, .05, selected.locked)}{numberInput(t('animator.saturation'), selectedEffects.saturation, value => updateLayerEffects(selected.id, { saturation: value }), 0, 4, .05, selected.locked)}{numberInput(t('animator.hue'), selectedEffects.hue, value => updateLayerEffects(selected.id, { hue: value }), -180, 180, 1, selected.locked)}</div>
+        <p className="text-[8px] text-text-muted">{t('animator.effectsHelp')}</p>
+      </div>}
+      {selected && selectedStrip && <div className="space-y-2 rounded border border-fuchsia-400/30 bg-fuchsia-400/[.04] p-2">
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-fuchsia-100">{t('animator.infiniteStrip')}</span><label className="flex items-center gap-1 text-[9px] text-text-secondary"><input type="checkbox" checked={selectedStrip.enabled} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), enabled: event.target.checked } }))} /> {t('animator.enabled')}</label></div>
+        <p className="text-[8px] text-text-muted">{t('animator.stripHelp')}</p>
+        <div className="grid grid-cols-2 gap-1.5">
+          {numberInput(t('animator.copies'), selectedStrip.count, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), count: Math.round(value) } })), 1, 12, 1, selected.locked)}
+          {numberInput(t('animator.spacing'), selectedStrip.spacing, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), spacing: value } })), 2, 200, 1, selected.locked)}
+          {numberInput(t('animator.speedPerSec'), selectedStrip.speed, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), speed: value } })), 0, 300, 1, selected.locked)}
+          {numberInput(t('animator.startPhase'), selectedStrip.phase, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), phase: value } })), -1000, 1000, 1, selected.locked)}
+        </div>
+        <label className="text-[9px] text-text-muted">{t('animator.direction')}<select value={selectedStrip.direction} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), direction: event.target.value as LayerStrip['direction'] } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="down">{t('animator.dirDown')}</option><option value="up">{t('animator.dirUp')}</option><option value="right">{t('animator.dirRight')}</option><option value="left">{t('animator.dirLeft')}</option></select></label>
+        <label className="text-[9px] text-text-muted">{t('animator.seamCover')}<select value={selectedStrip.seamOccluder.enabled ? selectedStrip.seamOccluder.kind : 'off'} disabled={selected.locked || !selectedStrip.enabled} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, enabled: event.target.value !== 'off', kind: event.target.value === 'off' ? normalizedStrip(layer.strip).seamOccluder.kind : event.target.value as SeamOccluderKind } } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="off">{t('animator.off')}</option><option value="pole">{t('animator.seamPole')}</option><option value="lamp">{t('animator.seamLamp')}</option><option value="tree">{t('animator.seamTree')}</option><option value="column">{t('animator.seamColumn')}</option></select></label>
+        {selectedStrip.seamOccluder.enabled && <><>{numberInput(t('animator.coverScale'), selectedStrip.seamOccluder.scale, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, scale: value } } })), .45, 1.8, .05, selected.locked)}</>{numberInput(t('animator.coverOpacity'), selectedStrip.seamOccluder.opacity, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, opacity: value } } })), .2, 1, .05, selected.locked)}</>}
+        <p className="text-[8px] text-text-muted">{t('animator.seamHelp')}</p>
+        {selected.type === 'model3d' && selectedStrip.count > 4 && <p className="text-[8px] text-amber-200">{t('animator.glbCap')}</p>}
       </div>}
       </>}
       {selected && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Layer relationship</span><span className="text-[8px] text-text-muted">2D scene space</span></div>
-        <label className="text-[9px] text-text-muted">Behaviour<select value={selected.relationship?.type ?? 'none'} disabled={selected.locked} onChange={event => setLayerRelationship(event.target.value as NonNullable<AnimatorLayer['relationship']>['type'] | 'none')} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="none">Independent</option>{selected.type !== 'camera' && <option value="parent">Parent / child</option>}<option value="follow">Follow layer</option>{selected.type !== 'camera' && <option value="lookAt">Look at layer</option>}</select></label>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">{t('animator.relationship')}</span><span className="text-[8px] text-text-muted">{t('animator.sceneSpace')}</span></div>
+        <label className="text-[9px] text-text-muted">{t('animator.behaviour')}<select value={selected.relationship?.type ?? 'none'} disabled={selected.locked} onChange={event => setLayerRelationship(event.target.value as NonNullable<AnimatorLayer['relationship']>['type'] | 'none')} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="none">{t('animator.independent')}</option>{selected.type !== 'camera' && <option value="parent">{t('animator.parentChild')}</option>}<option value="follow">{t('animator.followLayer')}</option>{selected.type !== 'camera' && <option value="lookAt">{t('animator.lookAtLayer')}</option>}</select></label>
         {selected.relationship && <>
-          <label className="text-[9px] text-text-muted">Target<select value={selected.relationship.targetLayerId} disabled={selected.locked} onChange={event => setRelationshipTarget(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50">{relationshipTargets.map(layer => <option key={layer.id} value={layer.id}>{layer.name} · {layer.type}</option>)}</select></label>
-          {selected.relationship.type === 'follow' && <div className="grid grid-cols-3 gap-1">{numberInput('Offset X', selected.relationship.offsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetX: value } : undefined })), -200, 200, .5)}{numberInput('Offset Y', selected.relationship.offsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetY: value } : undefined })), -200, 200, .5)}{numberInput('Strength', selected.relationship.strength ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, strength: Math.max(0, Math.min(1, value)) } : undefined })), 0, 1, .05)}</div>}
-          {selected.relationship.type === 'lookAt' && numberInput('Angle offset', selected.relationship.rotationOffset ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, rotationOffset: value } : undefined })), -360, 360, 1)}
-          <p className="text-[8px] text-text-muted">{selected.relationship.type === 'parent' ? 'Inherits the target movement, scale and rotation while preserving this layer’s own animation.' : selected.relationship.type === 'follow' ? 'Blends toward the target plus the stored offset. Camera follow keeps the subject framed.' : 'Rotates this layer so it faces the target in the current output aspect ratio.'}</p>
+          <label className="text-[9px] text-text-muted">{t('animator.target')}<select value={selected.relationship.targetLayerId} disabled={selected.locked} onChange={event => setRelationshipTarget(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50">{relationshipTargets.map(layer => <option key={layer.id} value={layer.id}>{t('animator.targetOption', { name: layer.name, type: layer.type })}</option>)}</select></label>
+          {selected.relationship.type === 'follow' && <div className="grid grid-cols-3 gap-1">{numberInput(t('animator.offsetX'), selected.relationship.offsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetX: value } : undefined })), -200, 200, .5)}{numberInput(t('animator.offsetY'), selected.relationship.offsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetY: value } : undefined })), -200, 200, .5)}{numberInput(t('animator.strength'), selected.relationship.strength ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, strength: Math.max(0, Math.min(1, value)) } : undefined })), 0, 1, .05)}</div>}
+          {selected.relationship.type === 'lookAt' && numberInput(t('animator.angleOffset'), selected.relationship.rotationOffset ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, rotationOffset: value } : undefined })), -360, 360, 1)}
+          <p className="text-[8px] text-text-muted">{selected.relationship.type === 'parent' ? t('animator.parentHelp') : selected.relationship.type === 'follow' ? t('animator.followHelp') : t('animator.lookAtHelp')}</p>
         </>}
       </div>}
       {selected && isVisualLayer(selected) && selected.animation.orbit && <div className="rounded border border-accent-blue/40 bg-accent-blue/10 p-2 space-y-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-accent-blue">Relational orbit</span><button onClick={() => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: undefined } }))} className="text-[9px] text-text-muted hover:text-red-400">Remove</button></div>
-        <label className="text-[10px] text-text-muted">Orbit around<select value={selected.animation.orbit.targetLayerId} disabled={selected.locked} onChange={event => setOrbitTarget(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50">{scene.layers.filter(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id)).map(layer => <option key={layer.id} value={layer.id}>{layer.name} · {layer.type}</option>)}</select></label>
-        <div className="grid grid-cols-2 gap-1.5">{numberInput('Horizontal radius', selected.animation.orbit.radiusX, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusX: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput('Vertical radius', selected.animation.orbit.radiusY, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusY: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput('Center offset X', selected.animation.orbit.centerOffsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetX: value } : undefined } })), -100, 100, .5)}{numberInput('Center offset Y', selected.animation.orbit.centerOffsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetY: value } : undefined } })), -100, 100, .5)}{numberInput('Turns', selected.animation.orbit.turns, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, turns: value } : undefined } })), -20, 20, .25)}{numberInput('Start phase °', selected.animation.orbit.phase, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, phase: value } : undefined } })), -360, 360, 5)}</div>
-        <p className="text-[9px] text-text-muted">The cyan cross marks the exact orbit center. Use center offsets when an asymmetric GLB's visual center differs from its layer box. Negative turns reverse direction.</p>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-accent-blue">{t('animator.orbit')}</span><button onClick={() => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: undefined } }))} className="text-[9px] text-text-muted hover:text-red-400">{t('animator.remove')}</button></div>
+        <label className="text-[10px] text-text-muted">{t('animator.orbitAround')}<select value={selected.animation.orbit.targetLayerId} disabled={selected.locked} onChange={event => setOrbitTarget(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50">{scene.layers.filter(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id)).map(layer => <option key={layer.id} value={layer.id}>{t('animator.targetOption', { name: layer.name, type: layer.type })}</option>)}</select></label>
+        <div className="grid grid-cols-2 gap-1.5">{numberInput(t('animator.radiusX'), selected.animation.orbit.radiusX, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusX: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput(t('animator.radiusY'), selected.animation.orbit.radiusY, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusY: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput(t('animator.orbitCopies'), selected.animation.orbit.count ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, count: Math.round(value) } : undefined } })), 1, 12, 1)}{numberInput(t('animator.turns'), selected.animation.orbit.turns, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, turns: value } : undefined } })), -20, 20, .25)}{numberInput(t('animator.centerOffsetX'), selected.animation.orbit.centerOffsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetX: value } : undefined } })), -100, 100, .5)}{numberInput(t('animator.centerOffsetY'), selected.animation.orbit.centerOffsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetY: value } : undefined } })), -100, 100, .5)}{numberInput(t('animator.startPhaseDeg'), selected.animation.orbit.phase, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, phase: value } : undefined } })), -360, 360, 5)}<label className="text-[10px] text-text-muted">{t('animator.facing')}<select value={selected.animation.orbit.facing ?? 'fixed'} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, facing: event.target.value as NonNullable<NonNullable<AnimatorLayer['animation']['orbit']>['facing']> } : undefined } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50"><option value="fixed">{t('animator.facingFixed')}</option><option value="center">{t('animator.facingCenter')}</option><option value="outward">{t('animator.facingOutward')}</option></select></label></div>
+        <p className="text-[9px] text-text-muted">{t('animator.orbitHelp')}</p>
       </div>}
       <div className="border-t border-border pt-3 space-y-2">
         <div className="grid grid-cols-2 gap-1.5">
-          <button disabled={!selected} onClick={() => selected && navigator.clipboard.writeText(JSON.stringify({ version: 1, motion: motion(selected) }, null, 2)).then(() => setMessage('Movement JSON copied.'))} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1 disabled:opacity-40"><Copy size={11} /> Copy movement</button>
-          <button onClick={() => void persistScene()} disabled={saving || !scene.layers.length} className="rounded bg-accent-blue py-1.5 text-[10px] text-white flex justify-center gap-1 disabled:opacity-40">{saving ? <Loader2 size={11} className="animate-spin" /> : <Film size={11} />} {saving ? 'Saving…' : 'Save scene'}</button>
+          <button disabled={!selected} onClick={() => selected && navigator.clipboard.writeText(JSON.stringify({ version: 1, motion: motion(selected) }, null, 2)).then(() => setMessage(t('animator.movementCopied')))} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1 disabled:opacity-40"><Copy size={11} /> {t('animator.copyMovement')}</button>
+          <button onClick={() => void persistScene()} disabled={saving || !scene.layers.length} className="rounded bg-accent-blue py-1.5 text-[10px] text-white flex justify-center gap-1 disabled:opacity-40">{saving ? <Loader2 size={11} className="animate-spin" /> : <Film size={11} />} {saving ? t('animator.saving') : t('animator.saveScene')}</button>
         </div>
         <div className="grid grid-cols-2 gap-1.5">
-          <button onClick={exportScene} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><Download size={11} /> Export scene</button>
-          <button onClick={() => sceneInputRef.current?.click()} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> Import scene</button>
+          <button onClick={exportScene} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><Download size={11} /> {t('animator.exportScene')}</button>
+          <button onClick={() => setLibraryOpen(true)} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FolderOpen size={11} /> {t('animator.openScene')}</button>
         </div>
         <input ref={sceneInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void importSceneFile(file) }} />
-        <button onClick={() => setJsonOpen(value => !value)} className="w-full rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> {jsonOpen ? 'Close movement JSON' : 'Movement JSON tools'}</button>
-        {jsonOpen && <div className="space-y-1.5"><textarea value={motionText} onChange={event => setMotionText(event.target.value)} placeholder="Paste movement JSON" rows={4} className="w-full rounded border border-border bg-bg-primary p-1.5 text-[9px] font-mono" /><div className="flex gap-1.5"><button disabled={!selected || !motionText.trim()} onClick={() => { try { applyMotion(JSON.parse(motionText.replace(/^\uFEFF/, '').trim())); setMessage('Movement applied to selected layer.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid motion JSON.') } }} className="rounded bg-accent-blue px-2 py-1 text-[10px] text-white disabled:opacity-40">Apply movement</button><button onClick={() => motionInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">Load movement file</button></div><input ref={motionInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void loadMotionFile(file) }} /></div>}
-        <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">Return only valid Maestro Scene Animator motion JSON.{`\n`}Use start/end x and y from 0 to 100, start/end scale,{`\n`}duration in seconds, curve as linear/ease/dramatic/bounce,{`\n`}and optional spin plus rotationSpeed. For multi-step motion, add keyframes with id, time, x, y, scale, opacity, rotation and curve. Optional events use id, local time, name and a plain-text payload.{`\n`}Do not include Markdown or explanations.{`\n\n`}{'{"version":1,"motion":{"start":{"x":10,"y":70,"scale":0.2},"end":{"x":90,"y":30,"scale":0.8},"duration":3,"curve":"dramatic","spin":true,"rotationSpeed":240}}'}</div>
+        <button onClick={() => setJsonOpen(value => !value)} className="w-full rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> {jsonOpen ? t('animator.closeJson') : t('animator.jsonTools')}</button>
+        {jsonOpen && <div className="space-y-1.5"><textarea value={motionText} onChange={event => setMotionText(event.target.value)} placeholder={t('animator.pasteJson')} rows={4} className="w-full rounded border border-border bg-bg-primary p-1.5 text-[9px] font-mono" /><div className="flex gap-1.5"><button disabled={!selected || !motionText.trim()} onClick={() => { try { applyMotion(JSON.parse(motionText.replace(/^\uFEFF/, '').trim())); setMessage(t('animator.movementApplied')) } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.invalidMotionJson')) } }} className="rounded bg-accent-blue px-2 py-1 text-[10px] text-white disabled:opacity-40">{t('animator.applyMovement')}</button><button onClick={() => motionInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">{t('animator.loadMovement')}</button></div><input ref={motionInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void loadMotionFile(file) }} /></div>}
+        <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">Return only valid HocusPocus Scene Animator motion JSON.{`\n`}Use start/end x and y from 0 to 100, start/end scale,{`\n`}duration in seconds, curve as linear/ease/dramatic/bounce,{`\n`}and optional spin plus rotationSpeed. For multi-step motion, add keyframes with id, time, x, y, scale, opacity, rotation and curve. Optional events use id, local time, name and a plain-text payload.{`\n`}Do not include Markdown or explanations.{`\n\n`}{'{"version":1,"motion":{"start":{"x":10,"y":70,"scale":0.2},"end":{"x":90,"y":30,"scale":0.8},"duration":3,"curve":"dramatic","spin":true,"rotationSpeed":240}}'}</div>
       </div>
       {message && <p className="text-[10px] text-text-secondary">{message}</p>}
     </aside>
+    <SceneLibraryDialog
+      open={libraryOpen}
+      workspace={workspace}
+      onClose={() => setLibraryOpen(false)}
+      onPickFile={() => { setLibraryOpen(false); sceneInputRef.current?.click() }}
+      onOpenScene={(next, label) => {
+        importScene(JSON.stringify(next), t('animator.openedLabel', { label }))
+        setLibraryOpen(false)
+      }}
+    />
   </div>
 }

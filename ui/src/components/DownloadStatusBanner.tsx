@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Download, AlertTriangle } from 'lucide-react'
 import { fetchActiveDownloads, type ActiveDownload } from '../api/client'
+import { useSerializedPoll } from '../hooks/useSerializedPoll'
+import { useUiTranslation } from '../i18n'
 
 /**
  * DownloadStatusBanner — fixed-position overlay shown while
@@ -13,9 +15,9 @@ import { fetchActiveDownloads, type ActiveDownload } from '../api/client'
  *
  * Polling is unconditional (vs gated on "is a job running") because
  * model downloads can fire from several paths in Maestro: job
- * submission, model selection, etc. Polling
- * is cheap (a 2s GET every 2s) and only ever returns data when the
- * banner needs to be visible.
+ * submission, model selection, etc. One GET at a time; the next tick
+ * waits for the previous response so a slow Lab cannot stack pending
+ * /downloads/active calls.
  *
  * Pairs with services/safe_download.py — that module patches HF
  * downloads to detect mid-stream stalls and recover automatically.
@@ -23,28 +25,21 @@ import { fetchActiveDownloads, type ActiveDownload } from '../api/client'
  * of the previous "frozen progress bar in console" UX.
  */
 export function DownloadStatusBanner() {
+  const { t } = useUiTranslation('shell')
   const [downloads, setDownloads] = useState<ActiveDownload[]>([])
 
-  useEffect(() => {
-    let cancelled = false
-
-    const tick = async () => {
+  useSerializedPoll({
+    intervalMs: 2000,
+    poll: async (signal) => {
       try {
-        const result = await fetchActiveDownloads()
-        if (!cancelled) setDownloads(result.downloads)
-      } catch {
-        // Endpoint not available (older backend) or transient — ignore
-        if (!cancelled) setDownloads([])
+        return (await fetchActiveDownloads(signal)).downloads
+      } catch (reason) {
+        if (reason instanceof DOMException && reason.name === 'AbortError') throw reason
+        return [] as ActiveDownload[]
       }
-    }
-
-    tick()
-    const interval = setInterval(tick, 2000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [])
+    },
+    onValue: setDownloads,
+  })
 
   if (downloads.length === 0) return null
 
@@ -81,8 +76,8 @@ export function DownloadStatusBanner() {
         {incomplete && (
           <div className="px-4 py-2 bg-red-500/15 border-b border-red-500/30 flex items-center gap-2">
             <AlertTriangle size={14} className="text-red-400 shrink-0" />
-            <div className="text-xs font-medium text-red-100">
-              A download was interrupted — re-run to finish it
+            <div className="text-xs font-medium text-text-primary">
+              {t('download.interrupted')}
             </div>
           </div>
         )}
@@ -90,9 +85,9 @@ export function DownloadStatusBanner() {
             tint over the solid backdrop, same pattern as OomRecoveryBanner. */}
         {stalled && !incomplete && (
           <div className="px-4 py-2 bg-amber-500/15 border-b border-amber-500/30 flex items-center gap-2">
-            <AlertTriangle size={14} className="text-amber-400 shrink-0" />
-            <div className="text-xs font-medium text-amber-100">
-              Download is slow — waiting for retry
+            <AlertTriangle size={14} className="text-indicator-warning shrink-0" />
+            <div className="text-xs font-medium text-text-primary">
+              {t('download.slow')}
             </div>
           </div>
         )}
@@ -106,18 +101,18 @@ export function DownloadStatusBanner() {
               {!stalled && (
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-xs font-medium text-text-primary truncate">
-                    Downloading model files
+                    {t('download.title')}
                   </div>
                   {downloads.length > 1 && (
                     <div className="text-[10px] text-text-muted shrink-0">
-                      {downloads.length} files
+                      {t('download.files', { count: downloads.length })}
                     </div>
                   )}
                 </div>
               )}
               {stalled && downloads.length > 1 && (
                 <div className="text-[10px] text-text-muted text-right -mt-0.5 mb-0.5">
-                  {downloads.length} files
+                  {t('download.files', { count: downloads.length })}
                 </div>
               )}
               <div className="text-[10px] text-text-muted truncate" title={featured.filename}>
@@ -126,9 +121,7 @@ export function DownloadStatusBanner() {
               <DownloadProgressBar download={featured} stalled={!!stalled} />
               {stalled && (
                 <div className="text-[11px] text-text-secondary mt-1.5 leading-snug">
-                  No progress for {Math.round(featured.seconds_since_progress)}s.
-                  The download will resume from where it left off as soon as
-                  the connection recovers — no action needed from you.
+                  {t('download.noProgress', { seconds: Math.round(featured.seconds_since_progress) })}
                 </div>
               )}
             </div>
@@ -162,7 +155,7 @@ function DownloadProgressBar({
       <div className="h-1 rounded-full bg-bg-tertiary overflow-hidden">
         <div
           className={`h-full transition-all duration-500 ${
-            stalled ? 'bg-amber-400/60' : 'bg-accent-blue'
+            stalled ? 'bg-indicator-warning' : 'bg-accent-blue'
           }`}
           style={{ width: pct !== null ? `${pct}%` : '15%' }}
         />
@@ -176,7 +169,7 @@ function DownloadProgressBar({
         </span>
         {pct !== null && (
           <span className={`text-[10px] tabular-nums ${
-            stalled ? 'text-amber-300' : 'text-text-secondary'
+            stalled ? 'text-indicator-warning' : 'text-text-secondary'
           }`}>
             {pct}%
           </span>

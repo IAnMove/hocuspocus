@@ -1,0 +1,52 @@
+{
+  "intro": {
+    "aria": "HocusPocus se está iniciando",
+    "tagline": "Forja historias. Da forma a mundos.",
+    "body": "El estudio local para imaginar, dirigir y convertir mundos en imágenes, vídeo, sonido y 3D.",
+    "skip": "Saltar"
+  },
+  "lan": {
+    "title": "Acceso LAN de HocusPocus",
+    "checking": "Comprobando este dispositivo…",
+    "unreachable": "HocusPocus no pudo alcanzar su servidor local.",
+    "statusFailed": "Falló la petición de estado ({{status}})",
+    "invalidToken": "Ese token de acceso LAN no es válido.",
+    "loginRejected": "El servidor rechazó el acceso ({{status}}).",
+    "hint": "Introduce el token de sesión que aparece en el terminal de arranque de Pinokio. Solo hace falta una vez por sesión del navegador.",
+    "httpWarning": "Esta página LAN usa HTTP sin cifrar. Introduce el token solo en una red de confianza.",
+    "tokenLabel": "Token de acceso LAN",
+    "unlock": "Desbloquear esta sesión"
+  },
+  "preflight": {
+    "dismiss": "Descartar"
+  },
+  "oom": {
+    "title": "Sin VRAM",
+    "generationFailed": "La generación falló.",
+    "directorFailed": "El pipeline de Director falló.",
+    "directorFailedClip": "El pipeline de Director falló en el clip {{current}} de {{total}}.",
+    "vramHint": "Tu GPU tiene {{vram}} GB de VRAM.",
+    "applied": "El margen de VRAM bajó a {{value}} — vuelve a lanzar la generación",
+    "lowerBody": "Baja el margen de VRAM de {{current}} a {{suggested}} para reservar más memoria en picos de generación (vídeos largos, decodificación VAE). Unas ~5 % más lento por generación.",
+    "lowerAction": "Bajar a {{value}} y guardar",
+    "applying": "Aplicando…",
+    "afterApply": "Después de aplicar, vuelve a lanzar la generación: usará el nuevo margen al cargar el modelo.",
+    "atFloor": "El margen de VRAM ya está en {{value}} (el mínimo seguro). Bajarlo más no ayuda. Prueba una variante más pequeña (p. ej. INT8 o GGUF), reduce la resolución o acorta el vídeo.",
+    "showDetails": "Mostrar detalles del error",
+    "dismiss": "Descartar",
+    "dismissTitle": "Descartar"
+  },
+  "download": {
+    "interrupted": "Una descarga se interrumpió — relánzala para terminarla",
+    "slow": "La descarga va lenta — esperando reintento",
+    "title": "Descargando archivos de modelo",
+    "files": "{{count}} archivos",
+    "noProgress": "Sin progreso durante {{seconds}} s. La descarga se reanudará donde se quedó en cuanto vuelva la conexión: no tienes que hacer nada."
+  },
+  "execution": {
+    "banner": "modo {{mode}} · {{workspace}}",
+    "title": "Modo {{mode}} bloqueado al arranque · workspace aislado {{workspace}} · proveedores de pago {{paid}}",
+    "allowed": "permitidos",
+    "blocked": "bloqueados"
+  }
+}

@@ -2,13 +2,15 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+const apiTarget = process.env.HOCUSPOCUS_API_TARGET || 'http://127.0.0.1:7860'
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 3000,
     proxy: {
-      '/api': 'http://127.0.0.1:7860',
-      '/classic': 'http://127.0.0.1:7860',
+      '/api': apiTarget,
+      '/classic': apiTarget,
     },
   },
   // Strip console.* and debugger statements from the production bundle.
@@ -20,5 +22,18 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (
+            id.includes('node_modules/i18next')
+            || id.includes('node_modules/react-i18next')
+            || id.includes('/src/i18n/')
+          ) {
+            return 'i18n'
+          }
+        },
+      },
+    },
   },
 })

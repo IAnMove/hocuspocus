@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "job": {
+    "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-21-19h43m32s_seed875519062_[Estrofa]El Consejo lee el pull request, mil comentarios, cero mergeAnakin pide write access, le n.wav",
+    "filename": "2026-08-21-19h43m32s_seed875519062_[Estrofa]El Consejo lee el pull request, mil comentarios, cero mergeAnakin pide write access, le n.wav",
+    "style": "tragicomic space opera, git tragedy, choir and distorted bass, Spanish lyrics, no rap, no trap, no pop, no concert stage",
+    "lyrics": "[Estrofa]\nEl Consejo lee el pull request, mil comentarios, cero merge\nAnakin pide write access, le niegan el rango de master\nel CI está verde, la guerra hecha, el PR aprobado con nits\nMace Windu: request changes. Palpatine: te doy root\n\n[Estribillo]\nLe negaron el merge a main\ny Palpatine le dio producción\nsin codeowners, sin review, sin staging\nasí se nace al lado oscuro\n\n[Estrofa]\nObi-Wan hace force-push, Mustafar es el repo en llamas\nel historial reescrito, la rama de Anakin ya no existe\nyo he sido tu hermano, yo he reescrito tu main\nel Lado Oscuro es un rebase que nadie pidió\n\n[Estribillo]\nLe negaron el merge a main\ny Palpatine le dio producción\nsin codeowners, sin review, sin staging\nasí se nace al lado oscuro"
+  },
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-21-19h43m32s_seed875519062_[Estrofa]El Consejo lee el pull request, mil comentarios, cero mergeAnakin pide write access, le n.wav"
+}

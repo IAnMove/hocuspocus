@@ -42,6 +42,19 @@ logger = logging.getLogger(__name__)
 # for the active analyze call.
 _PROGRESS_LOCK = threading.Lock()
 _PROGRESS = {"step": "", "detail": ""}
+_PROGRESS_CONTEXT = threading.local()
+
+
+def set_progress_callback(callback) -> None:
+    """Attach a progress listener to the current analysis worker thread."""
+    _PROGRESS_CONTEXT.callback = callback
+
+
+def clear_progress() -> None:
+    """Clear the legacy global status without invoking a worker callback."""
+    with _PROGRESS_LOCK:
+        _PROGRESS["step"] = ""
+        _PROGRESS["detail"] = ""
 
 
 def _set_progress(step: str, detail: str = "") -> None:
@@ -49,6 +62,9 @@ def _set_progress(step: str, detail: str = "") -> None:
     with _PROGRESS_LOCK:
         _PROGRESS["step"] = step
         _PROGRESS["detail"] = detail
+    callback = getattr(_PROGRESS_CONTEXT, "callback", None)
+    if callback is not None:
+        callback(step, detail)
     if step:
         print(f"[AudioAnalysis][progress] {step}{(': ' + detail) if detail else ''}")
 
@@ -76,11 +92,20 @@ class Section:
     energy: float
 
 @dataclass
+class LyricWord:
+    """A word aligned to the source audio, independent of Whisper's API."""
+    start: float
+    end: float
+    text: str
+
+
+@dataclass
 class LyricSegment:
     start: float
     end: float
     text: str
     speaker: Optional[str] = None
+    words: Optional[List[LyricWord]] = None
 
 @dataclass
 class AudioAnalysis:
@@ -93,6 +118,7 @@ class AudioAnalysis:
     onset_envelope: List[float]
     lyrics: Optional[List[LyricSegment]] = None
     vocals_path: Optional[str] = None
+    warnings: Optional[List[str]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +319,9 @@ def _transcribe(audio_path: str, lyrics_hint: Optional[str] = None) -> List[Lyri
     segments, info = model.transcribe(
         audio_path,
         beam_size=5,
-        word_timestamps=False,
+        # Segment timing can span a whole sentence.  The cutout animator uses
+        # these word boundaries to make mouth beats at real speech points.
+        word_timestamps=True,
         language=None,
         vad_filter=True,
         initial_prompt=initial_prompt,
@@ -303,10 +331,16 @@ def _transcribe(audio_path: str, lyrics_hint: Optional[str] = None) -> List[Lyri
     for seg in segments:
         text = seg.text.strip()
         if text:
+            words = [
+                LyricWord(start=round(word.start, 3), end=round(word.end, 3), text=word.word.strip())
+                for word in (seg.words or [])
+                if word.start is not None and word.end is not None and word.end > word.start and word.word.strip()
+            ]
             lyrics.append(LyricSegment(
                 start=round(seg.start, 3),
                 end=round(seg.end, 3),
                 text=text,
+                words=words or None,
             ))
     return lyrics
 
@@ -322,9 +356,43 @@ def unload_whisper():
 # ---------------------------------------------------------------------------
 
 _diarizer_pipe = None
+_diarizer_profile: Optional[str] = None  # profile the cached pipeline is instantiated with
+
+# Clustering hyperparameters per content type. The embedding model was
+# trained on SPEECH — singing voice drifts far more (pitch, vibrato,
+# effects, backing vocals), so the speech-tuned profile shatters one
+# singer into many "speakers" (observed: 6 on a solo track). The music
+# profile requires sustained singing per cluster (pyannote's default 12
+# instead of the AI-dialogue-tuned 6) and merges more aggressively.
+#
+# Threshold 0.85 chosen from a grid sweep over 7 real ACE-Step outputs
+# (0.82 / 0.85 / 0.88 × min_cluster 12 / 18): at 0.82 a male-rapper +
+# female-singer duet read as 3 (her verse/chorus deliveries split); at
+# 0.85 every solo track reads 1 and every two-voice track reads 2; at
+# 0.88 the duet's rapper and singer MERGE to 1. 0.85 is the midpoint of
+# the safe window. min_cluster_size 12 vs 18 changed nothing — the
+# threshold is the only active lever on this content.
+_DIARIZER_PROFILES = {
+    "speech": {
+        "clustering": {
+            "method": "centroid",
+            "min_cluster_size": 6,
+            "threshold": 0.7045654963945799,
+        },
+        "segmentation": {"min_duration_off": 0.0},
+    },
+    "music": {
+        "clustering": {
+            "method": "centroid",
+            "min_cluster_size": 12,
+            "threshold": 0.85,
+        },
+        "segmentation": {"min_duration_off": 0.0},
+    },
+}
 
 
-def get_diarizer_pipeline():
+def get_diarizer_pipeline(profile: str = "speech"):
     """Load (or return cached) pyannote 3.1 diarization pipeline.
 
     Public so postprocessing modules (voice_clone.py) can reuse the
@@ -360,10 +428,19 @@ def get_diarizer_pipeline():
 
     Module-level cache via _diarizer_pipe means second+ calls in the
     same process are free, shared between audio_analysis._diarize
-    and voice_clone.
+    and voice_clone. `profile` selects the clustering hyperparameters
+    (see _DIARIZER_PROFILES) — a cached pipeline is re-instantiated in
+    place when a different profile is requested (cheap: instantiate()
+    only sets hyperparameters, no model reload).
     """
-    global _diarizer_pipe
+    global _diarizer_pipe, _diarizer_profile
     if _diarizer_pipe is not None:
+        if profile != _diarizer_profile:
+            try:
+                _diarizer_pipe.instantiate(_DIARIZER_PROFILES[profile])
+                _diarizer_profile = profile
+            except Exception as e:
+                print(f"[Diarization] Profile switch to '{profile}' failed (keeping '{_diarizer_profile}'): {e}")
         return _diarizer_pipe
 
     try:
@@ -387,15 +464,49 @@ def get_diarizer_pipeline():
     torch.load = _safe_load
 
     try:
-        # ── Path 1: manual assembly from local .bin files ──────────
-        # The Maestro install ships these .bin files (and Music Video
-        # mode references them too via speakers_separator.py). Resolve
-        # via absolute path from this module's location, since CWD
-        # isn't guaranteed to be the app/ folder at every entry point.
+        # ── Path 0: fetch the ungated .bin files when missing ───────
+        # These are the same two checkpoints wgp's shared-model download
+        # provides (DeepBeepMeep/Wan2.1, pyannote/ subfolder — an ungated
+        # mirror of the pyannote 3.1 models). That shared download only
+        # runs when a generation model loads, so a fresh install that
+        # reaches audio analysis first (e.g. Director on an uploaded
+        # song) has no local files, no HF cache, and — without an
+        # HF_TOKEN for the gated upstream repo — diarization silently
+        # skipped. Fetch the two files directly so first use just works.
         embedding_path = os.path.join(_app_root, "ckpts", "pyannote",
                                        "pyannote_model_wespeaker-voxceleb-resnet34-LM.bin")
         segmentation_path = os.path.join(_app_root, "ckpts", "pyannote",
                                           "pytorch_model_segmentation-3.0.bin")
+        if not (os.path.isfile(embedding_path) and os.path.isfile(segmentation_path)):
+            try:
+                import shutil
+                import tempfile
+                from huggingface_hub import hf_hub_download
+                target_dir = os.path.join(_app_root, "ckpts", "pyannote")
+                os.makedirs(target_dir, exist_ok=True)
+                for fname in ("pyannote_model_wespeaker-voxceleb-resnet34-LM.bin",
+                              "pytorch_model_segmentation-3.0.bin"):
+                    dest = os.path.join(target_dir, fname)
+                    if os.path.isfile(dest):
+                        continue
+                    print(f"[Diarization] Downloading {fname} (ungated mirror, first use)...")
+                    tmp_dir = tempfile.mkdtemp(prefix="pyannote_dl_")
+                    try:
+                        got = hf_hub_download(repo_id="DeepBeepMeep/Wan2.1", filename=fname,
+                                              subfolder="pyannote", local_dir=tmp_dir)
+                        shutil.move(got, dest)
+                    finally:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+                print("[Diarization] Checkpoints downloaded")
+            except Exception as e:
+                print(f"[Diarization] Auto-download failed (trying other load paths): {e}")
+
+        # ── Path 1: manual assembly from local .bin files ──────────
+        # wgp's shared-model download (or Path 0 above) provides these
+        # .bin files; Music Video mode references them too via
+        # speakers_separator.py. Resolve via absolute path from this
+        # module's location, since CWD isn't guaranteed to be the app/
+        # folder at every entry point.
         if os.path.isfile(embedding_path) and os.path.isfile(segmentation_path):
             try:
                 from pyannote.audio import Model
@@ -408,30 +519,14 @@ def get_diarizer_pipeline():
                     embedding=embedding_model,
                     clustering="AgglomerativeClustering",
                 )
-                # Hyperparameters: start from pyannote 3.1's HF config.yaml
-                # values, with two adjustments tuned for AI-generated speech
-                # (LTX-2, Wan, Multitalk) which tends to have shorter
-                # utterances and slightly lower SNR than the pyannote test
-                # corpus:
-                #   - min_cluster_size: 12 → 6. Lets shorter speech bursts
-                #     (a single line of dialogue without sustained
-                #     conversation) form a valid cluster. Default 12 means
-                #     ~6+ seconds of speech-per-speaker required.
-                #   - clustering threshold: 0.7045 unchanged (default).
-                pipeline.instantiate({
-                    "clustering": {
-                        "method": "centroid",
-                        "min_cluster_size": 6,
-                        "threshold": 0.7045654963945799,
-                    },
-                    "segmentation": {
-                        "min_duration_off": 0.0,
-                    },
-                })
+                # Hyperparameters come from the requested profile — see
+                # _DIARIZER_PROFILES for the speech vs music rationale.
+                pipeline.instantiate(_DIARIZER_PROFILES[profile])
                 if device == "cuda":
                     pipeline.to(torch.device(device))
                 _diarizer_pipe = pipeline
-                print(f"[Diarization] Pipeline loaded from local .bin files on {device}")
+                _diarizer_profile = profile
+                print(f"[Diarization] Pipeline loaded from local .bin files on {device} (profile: {profile})")
                 return _diarizer_pipe
             except Exception as e:
                 print(f"[Diarization] Manual assembly failed, falling back: {e}")
@@ -447,14 +542,30 @@ def get_diarizer_pipeline():
         )
         local_config = os.path.join(local_model_dir, "config.yaml")
         hf_token = os.environ.get("HF_TOKEN", "")
+
+        # Apply the requested profile to a from_pretrained pipeline (it
+        # arrives instantiated with the HF config defaults). Guarded so an
+        # instantiate hiccup degrades to defaults instead of losing the
+        # loaded pipeline; _diarizer_profile stays None so the next call
+        # retries the switch.
+        def _apply_profile(pipe):
+            global _diarizer_profile
+            try:
+                pipe.instantiate(_DIARIZER_PROFILES[profile])
+                _diarizer_profile = profile
+            except Exception as e:
+                _diarizer_profile = None
+                print(f"[Diarization] Profile instantiate failed (using model defaults): {e}")
+            return pipe
+
         if os.path.isfile(local_config):
             hf_home = os.path.join(_project_root, "cache", "HF_HOME")
             os.environ.setdefault("HF_HOME", os.path.normpath(hf_home))
             try:
                 print(f"[Diarization] Loading from HF_HOME cache on {device}...")
-                _diarizer_pipe = PyannotePipeline.from_pretrained(
+                _diarizer_pipe = _apply_profile(PyannotePipeline.from_pretrained(
                     "pyannote/speaker-diarization-3.1",
-                ).to(torch.device(device))
+                ).to(torch.device(device)))
                 print("[Diarization] Pipeline loaded from HF_HOME cache")
                 return _diarizer_pipe
             except Exception as e:
@@ -464,10 +575,10 @@ def get_diarizer_pipeline():
         if hf_token:
             try:
                 print(f"[Diarization] Downloading from HuggingFace on {device}...")
-                _diarizer_pipe = PyannotePipeline.from_pretrained(
+                _diarizer_pipe = _apply_profile(PyannotePipeline.from_pretrained(
                     "pyannote/speaker-diarization-3.1",
                     use_auth_token=hf_token,
-                ).to(torch.device(device))
+                ).to(torch.device(device)))
                 print("[Diarization] Pipeline downloaded + loaded")
                 return _diarizer_pipe
             except Exception as e:
@@ -491,72 +602,30 @@ def _diarize(audio_path: str, lyrics: List[LyricSegment]) -> List[LyricSegment]:
 
     Uses temporal overlap to assign the dominant speaker to each segment.
     Runs on CUDA if available, offloads immediately after to free VRAM.
-    """
-    global _diarizer_pipe
 
+    Model loading goes through get_diarizer_pipeline() — this function
+    used to carry its own legacy loader that only knew the HF-clone and
+    gated-token paths, so fresh installs (no local clone, no HF_TOKEN)
+    silently skipped diarization even though the shared loader can
+    assemble the pipeline from ungated .bin files (auto-downloaded on
+    first use).
+    """
     try:
         import torch
         import numpy as np
         import pandas as pd
-        from pyannote.audio import Pipeline as PyannotePipeline  # noqa: F401 — kept for import-error early exit symmetry
     except ImportError as e:
         print(f"[Diarization] Skipped (missing dependency): {e}")
         return lyrics
 
-    _base = os.path.dirname(os.path.abspath(__file__))
-    _project_root = os.path.normpath(os.path.join(_base, "..", ".."))
-    # Local clone of pyannote/speaker-diarization-3.1
-    local_model_dir = os.path.join(
-        _project_root, "cache", "HF_HOME", "hub", "speaker-diarization-3.1"
-    )
-    # Sub-models cache (segmentation-3.0, wespeaker) downloads here
-    cache_dir = os.path.join(_base, "..", "ckpts", "diarization")
-    os.makedirs(cache_dir, exist_ok=True)
-
-    hf_token = os.environ.get("HF_TOKEN", "")
-
-    # Determine model source: prefer local clone, fall back to HuggingFace
-    local_config = os.path.join(local_model_dir, "config.yaml")
-    if os.path.isfile(local_config):
-        model_source = local_model_dir
-    elif hf_token:
-        model_source = "pyannote/speaker-diarization-3.1"
-    else:
-        print(
-            "[Diarization] Skipped — no local model and no HF_TOKEN set.\n"
-            "  To enable: clone pyannote/speaker-diarization-3.1 to\n"
-            f"  {local_model_dir}\n"
-            "  or set HF_TOKEN env var."
-        )
-        return lyrics
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Music profile: this function's only production caller is the song
+    # analysis flow. voice_clone loads the speech profile via the same
+    # shared loader (a cached pipeline switches profiles in place).
+    pipe = get_diarizer_pipeline(profile="music")
+    if pipe is None:
+        return lyrics  # loader already printed the reason
 
     try:
-        # Load pipeline (cached after first run)
-        if _diarizer_pipe is None:
-            # PyTorch 2.6+ defaults weights_only=True which breaks pyannote's
-            # pickle-based checkpoints. Temporarily patch torch.load.
-            _orig_torch_load = torch.load
-            def _safe_load(*args, **kwargs):
-                kwargs["weights_only"] = False
-                return _orig_torch_load(*args, **kwargs)
-            torch.load = _safe_load
-
-            # Point HF cache to our local directory so sub-models are found
-            hf_home = os.path.join(_project_root, "cache", "HF_HOME")
-            os.environ.setdefault("HF_HOME", os.path.normpath(hf_home))
-
-            try:
-                print(f"[Diarization] Loading pyannote pipeline on {device}...")
-                _diarizer_pipe = PyannotePipeline.from_pretrained(
-                    "pyannote/speaker-diarization-3.1",
-                    use_auth_token=hf_token or None,
-                ).to(torch.device(device))
-                print("[Diarization] Pipeline loaded")
-            finally:
-                torch.load = _orig_torch_load
-
         # Load audio at 16kHz mono via ffmpeg
         import subprocess
         cmd = [
@@ -572,7 +641,10 @@ def _diarize(audio_path: str, lyrics: List[LyricSegment]) -> List[LyricSegment]:
         }
 
         print("[Diarization] Running speaker diarization...")
-        segments = _diarizer_pipe(audio_data)
+        # Hard cap as a backstop on top of the music profile's clustering:
+        # songs have 1-3 vocalists; anything beyond that is the embedding
+        # model mistaking a register/effect change for a new person.
+        segments = pipe(audio_data, min_speakers=1, max_speakers=3)
 
         # Build DataFrame of speaker segments
         diarize_df = pd.DataFrame(
@@ -614,10 +686,11 @@ def _diarize(audio_path: str, lyrics: List[LyricSegment]) -> List[LyricSegment]:
 
 def unload_diarizer():
     """Free the diarization pipeline and reclaim VRAM."""
-    global _diarizer_pipe
+    global _diarizer_pipe, _diarizer_profile
     if _diarizer_pipe is not None:
         del _diarizer_pipe
         _diarizer_pipe = None
+    _diarizer_profile = None
     try:
         import torch
         if torch.cuda.is_available():
@@ -684,6 +757,7 @@ def analyze(
         downbeats=[round(d, 3) for d in downbeats],
         sections=sections,
         onset_envelope=onset_envelope,
+        warnings=[],
     )
 
     if transcribe:
@@ -725,20 +799,46 @@ def analyze(
             # Run speaker diarization on the original mix (needs both voices)
             if result.lyrics:
                 # _diarize loads pyannote on first call (~100MB cached).
-                _set_progress("loading_diarization_model", "Loading speaker-diarization model (first use downloads ~100MB)")
+                _set_progress("loading_diarization_model", "Loading speaker-diarization model (first use downloads ~30MB)")
                 _set_progress("identifying_speakers", "Identifying speakers")
                 result.lyrics = _diarize(audio_path, result.lyrics)
-                unload_diarizer()  # Free VRAM immediately
-            unload_whisper()  # Free Whisper VRAM before LLM loads
+                if not any(segment.speaker for segment in result.lyrics):
+                    result.warnings.append(
+                        "Speaker identification is unavailable; continuing without singer labels."
+                    )
         except ImportError as e:
             print(f"[AudioAnalysis] Transcription skipped (faster-whisper not installed): {e}")
         except Exception as e:
             print(f"[AudioAnalysis] Transcription failed, continuing without lyrics: {e}")
+        finally:
+            # Whisper and pyannote are both optional, lazy-loaded GPU models.
+            # Always drop them before the next pipeline phase, including when
+            # transcription degrades after an error or the progress callback
+            # aborts the worker because the job was cancelled.  Keep the two
+            # cleanups independent so a secondary cleanup failure cannot keep
+            # the other model resident or mask the original analysis outcome.
+            try:
+                unload_diarizer()
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Could not fully unload the diarization model: %s",
+                    cleanup_error,
+                    exc_info=True,
+                )
+            try:
+                unload_whisper()
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Could not fully unload the transcription model: %s",
+                    cleanup_error,
+                    exc_info=True,
+                )
 
     _set_progress("finalizing", "Finalizing")
     print(f"[AudioAnalysis] Done: {bpm:.1f} BPM, {len(beats)} beats, {len(sections)} sections")
     # Clear progress so subsequent /status polls don't show stale state.
     _set_progress("", "")
+    _PROGRESS_CONTEXT.callback = None
     return asdict(result)
 
 
@@ -860,6 +960,7 @@ MIN_CLIP_SECONDS = 8.0   # don't create clips shorter than this
 def plan_clip_structure(
     analysis: dict,
     energy_bias: int = 0,
+    pacing_profile: Optional[str] = None,
     fps: int = 16,
     frames_steps: int = 4,
     frames_minimum: int = 5,
@@ -867,31 +968,56 @@ def plan_clip_structure(
 ) -> List[dict]:
     """Plan variable-duration clips aligned to beat positions.
 
-    Strategy: maximise clip duration (up to MAX_CLIP_SECONDS) to minimise
-    clip count.  For each section, compute the fewest clips needed, then
-    divide evenly and snap boundaries to the nearest beat.  Speaker changes
-    can split a clip only when both halves remain >= MIN_CLIP_SECONDS.
+    The legacy strategy maximises clip duration. Music-video pacing profiles
+    instead target an intentional editing rhythm while retaining beat-aligned
+    boundaries: cinematic (8–16s), balanced (5–8s), rhythmic (3–5s).
 
     *energy_bias* shifts the preference: negative = longer clips,
     positive = shorter clips (adjusts MAX by ±2s per unit).
 
     Returns a list of clip dicts with ``beat_count`` and ``duration_frames``.
     """
-    bpm = analysis.get("bpm", 120.0)
+    try:
+        bpm = float(analysis.get("bpm", 120.0))
+    except (TypeError, ValueError):
+        bpm = 120.0
+    if not math.isfinite(bpm) or bpm <= 0:
+        logger.warning("Invalid BPM %r while planning clips; using 120 BPM", analysis.get("bpm"))
+        bpm = 120.0
     beat_duration = 60.0 / bpm
     beats = analysis.get("beats", [])
     beat_times = sorted(b["time"] if isinstance(b, dict) else b.time for b in beats)
     sections = analysis.get("sections", [])
-    song_duration = total_duration or analysis.get("duration", 180.0)
+    raw_song_duration = total_duration if total_duration is not None else analysis.get("duration", 180.0)
+    try:
+        song_duration = float(raw_song_duration)
+    except (TypeError, ValueError):
+        song_duration = 180.0
+    if not math.isfinite(song_duration) or song_duration <= 0:
+        logger.warning("Invalid song duration %r while planning clips; using 180 seconds", raw_song_duration)
+        song_duration = 180.0
 
     if not beat_times:
         beat_times = [i * beat_duration for i in range(int(song_duration / beat_duration) + 1)]
 
-    # energy_bias shifts the max clip length: -2 → 26s, 0 → 22s, +2 → 18s
-    effective_max = max(MIN_CLIP_SECONDS + 2, MAX_CLIP_SECONDS - (energy_bias + 2) * 2)
+    pacing_profiles = {
+        "cinematic": {"min": 8.0, "target": 12.0, "max": 16.0},
+        "balanced": {"min": 5.0, "target": 6.5, "max": 8.0},
+        "rhythmic": {"min": 3.0, "target": 4.0, "max": 5.0},
+    }
+    profile = pacing_profiles.get(pacing_profile or "")
+    if profile:
+        effective_max = profile["max"]
+        preferred_duration = profile["target"]
+        requested_min = profile["min"]
+    else:
+        # energy_bias shifts the max clip length: -2 → 26s, 0 → 22s, +2 → 18s
+        effective_max = max(MIN_CLIP_SECONDS + 2, MAX_CLIP_SECONDS - (energy_bias + 2) * 2)
+        preferred_duration = effective_max
+        requested_min = MIN_CLIP_SECONDS
 
     min_duration_from_frames = frames_minimum / fps
-    min_clip_duration = max(MIN_CLIP_SECONDS, min_duration_from_frames)
+    min_clip_duration = max(requested_min, min_duration_from_frames)
 
     def _find_nearest_beat(target_time: float) -> float:
         if not beat_times:
@@ -931,6 +1057,14 @@ def plan_clip_structure(
             section_spans.append((s_start, min(s_end, song_duration), label, energy))
     if not section_spans:
         section_spans = [(0.0, song_duration, "verse", 0.5)]
+    if profile:
+        # Music-video presets target a whole-song shot rhythm. Planning each
+        # detected section independently over-splits tracks with many short
+        # sections (e.g. five 18s sections became ten "cinematic" clips).
+        # Labels/energy are still sampled from the underlying section at each
+        # clip midpoint below.
+        average_energy = sum(span[3] for span in section_spans) / len(section_spans)
+        section_spans = [(0.0, song_duration, "verse", average_energy)]
 
     # ── Plan clips per section ───────────────────────────────────────
     clips: list = []
@@ -941,16 +1075,21 @@ def plan_clip_structure(
             continue  # section too short for even one clip — skip
 
         # How many clips do we need for this section?
-        # Allow up to 5% over effective_max as a single clip rather than
-        # splitting into two clips that are each ~50% of max
-        overshoot_tolerance = effective_max * 1.05
-        if sec_duration <= overshoot_tolerance:
-            num_clips = 1
+        if profile:
+            minimum_count = max(1, int(math.ceil(sec_duration / effective_max)))
+            maximum_count = max(1, int(math.floor(sec_duration / min_clip_duration)))
+            desired_count = max(1, int(round(sec_duration / preferred_duration)))
+            num_clips = max(minimum_count, min(desired_count, maximum_count))
         else:
-            num_clips = max(1, int(math.ceil(sec_duration / effective_max)))
-            # If splitting makes clips less than 75% of max, use fewer clips
-            while num_clips > 1 and (sec_duration / num_clips) < effective_max * 0.75:
-                num_clips -= 1
+            # Allow up to 5% over effective_max as a single clip rather than
+            # splitting into two clips that are each ~50% of max.
+            overshoot_tolerance = effective_max * 1.05
+            if sec_duration <= overshoot_tolerance:
+                num_clips = 1
+            else:
+                num_clips = max(1, int(math.ceil(sec_duration / effective_max)))
+                while num_clips > 1 and (sec_duration / num_clips) < effective_max * 0.75:
+                    num_clips -= 1
         target_clip_len = sec_duration / num_clips
 
         # Build evenly-spaced cut points within the section, snap to beats
@@ -1003,7 +1142,10 @@ def plan_clip_structure(
                 continue
 
             actual_beats = max(1, round(clip_duration_s / beat_duration))
-            energy_desc = "high energy" if sec_energy > 0.6 else ("low energy" if sec_energy < 0.3 else "moderate energy")
+            clip_label, clip_energy, _section_end = _section_at((clip_start + clip_end) / 2)
+            if not profile:
+                clip_label, clip_energy = sec_label, sec_energy
+            energy_desc = "high energy" if clip_energy > 0.6 else ("low energy" if clip_energy < 0.3 else "moderate energy")
 
             # Find dominant speaker in this clip
             clip_speaker = None
@@ -1022,9 +1164,9 @@ def plan_clip_structure(
                 "start": round(clip_start, 3),
                 "end": round(clip_end, 3),
                 "beat_count": actual_beats,
-                "section_label": sec_label,
-                "energy": round(sec_energy, 3),
-                "suggested_prompt_hint": f"{sec_label}, {energy_desc}",
+                "section_label": clip_label,
+                "energy": round(clip_energy, 3),
+                "suggested_prompt_hint": f"{clip_label}, {energy_desc}",
                 "duration_frames": _snap_to_valid_frames(clip_duration_s, fps, frames_steps, frames_minimum),
                 "dominant_speaker": clip_speaker,
             })
@@ -1048,7 +1190,7 @@ def plan_clip_structure(
 # LLM-assisted section relabeling
 # ---------------------------------------------------------------------------
 
-_VALID_LABELS = {"intro", "verse", "chorus", "bridge", "outro", "instrumental"}
+_VALID_LABELS = {"intro", "verse", "pre-chorus", "chorus", "bridge", "outro", "instrumental"}
 
 
 def classify_sections_with_lyrics(

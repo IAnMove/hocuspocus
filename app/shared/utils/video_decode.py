@@ -72,6 +72,51 @@ def _resolve_media_binary(binary_name: str):
     return shutil.which(binary_name + (".exe" if os.name == "nt" else "")) or shutil.which(binary_name)
 
 
+def _probe_packet_timing(ffprobe_path, video_path):
+    """Recover timing from containers whose header omits duration/frame rate.
+
+    Chromium's MediaRecorder commonly writes WebM files with valid packet PTS
+    but without duration, frame count or average frame rate metadata. Its
+    1000/1 ``r_frame_rate`` is the WebM time base, not the recorded frame rate.
+    """
+    command = [
+        ffprobe_path,
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-count_frames",
+        "-show_entries", "stream=nb_read_frames:packet=pts_time,dts_time",
+        "-of", "json",
+        video_path,
+    ]
+    probe = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="ignore", check=False)
+    if probe.returncode != 0:
+        return 0.0, 0, 0.0
+    try:
+        data = json.loads(probe.stdout)
+    except json.JSONDecodeError:
+        return 0.0, 0, 0.0
+    timestamps = []
+    for packet in data.get("packets") or []:
+        value = packet.get("pts_time", packet.get("dts_time"))
+        try:
+            timestamp = float(value)
+        except (TypeError, ValueError):
+            continue
+        if timestamp >= 0:
+            timestamps.append(timestamp)
+    streams = data.get("streams") or []
+    try:
+        frame_count = int((streams[0] if streams else {}).get("nb_read_frames") or 0)
+    except (TypeError, ValueError):
+        frame_count = 0
+    frame_count = frame_count or len(timestamps)
+    if len(timestamps) < 2:
+        return 0.0, frame_count, 0.0
+    duration = max(timestamps) - min(timestamps)
+    fps = (frame_count - 1) / duration if duration > 0 and frame_count > 1 else 0.0
+    return duration, frame_count, fps
+
+
 @lru_cache(maxsize=128)
 def probe_video_stream_metadata(video_path):
     video_path = os.fspath(video_path)
@@ -101,7 +146,8 @@ def probe_video_stream_metadata(video_path):
         display_width = max(2, (int(width * sar) // 2) * 2)
     elif dar is not None and dar > 0:
         display_width = max(2, (int(height * dar) // 2) * 2)
-    fps_float = _parse_media_ratio(stream.get("avg_frame_rate"), 0.0) or _parse_media_ratio(stream.get("r_frame_rate"), 0.0) or 0.0
+    average_fps = _parse_media_ratio(stream.get("avg_frame_rate"), 0.0) or 0.0
+    fps_float = average_fps or _parse_media_ratio(stream.get("r_frame_rate"), 0.0) or 0.0
     duration = stream.get("duration") or (probe_data.get("format") or {}).get("duration") or 0.0
     try:
         duration = float(duration)
@@ -111,6 +157,18 @@ def probe_video_stream_metadata(video_path):
         frame_count = int(stream.get("nb_frames"))
     except (TypeError, ValueError):
         frame_count = int(round(duration * fps_float)) if duration > 0 and fps_float > 0 else 0
+    # WebM MediaRecorder output may expose r_frame_rate=1000/1 even though that
+    # value is merely its millisecond time base. Recover the variable frame
+    # rate and duration from packet timestamps when the container header lacks
+    # trustworthy timing.
+    if duration <= 0 or frame_count <= 0 or (average_fps <= 0 and fps_float >= 240):
+        packet_duration, packet_frames, packet_fps = _probe_packet_timing(ffprobe_path, video_path)
+        if packet_duration > 0:
+            duration = packet_duration
+        if packet_frames > 0:
+            frame_count = packet_frames
+        if packet_fps > 0:
+            fps_float = packet_fps
     side_data = stream.get("side_data_list") or []
     color_transfer = str(stream.get("color_transfer") or "").lower()
     color_primaries = str(stream.get("color_primaries") or "").lower()

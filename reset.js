@@ -12,6 +12,9 @@ module.exports = {
     { method: "fs.rm", params: { path: "app/services/hunyuan3d/env" } },
     { method: "fs.rm", params: { path: "app/services/hunyuan3d/vendor" } },
     { method: "fs.rm", params: { path: "app/ckpts/model3d" } },
+    // MiniMax H3 isolated ComfyUI runtime and lazily-downloaded checkpoints
+    { method: "fs.rm", params: { path: "app/services/minimax_h3/env" } },
+    { method: "fs.rm", params: { path: "app/services/minimax_h3/vendor" } },
     // UI build artifacts
     { method: "fs.rm", params: { path: "ui/node_modules" } },
     { method: "fs.rm", params: { path: "ui/dist" } }

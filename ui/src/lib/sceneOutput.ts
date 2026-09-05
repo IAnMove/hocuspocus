@@ -7,7 +7,7 @@ export async function stageSceneForEditor(file: OutputFile): Promise<Scene> {
   if (!response.ok) throw new Error('Could not load the saved scene')
   const scene = await response.json() as Scene
   if (scene.version !== 1 || !Array.isArray(scene.layers)) {
-    throw new Error('The selected output is not a valid Maestro scene')
+    throw new Error('The selected output is not a valid HocusPocus scene')
   }
   sessionStorage.setItem(PENDING_SCENE_KEY, JSON.stringify(scene))
   return scene

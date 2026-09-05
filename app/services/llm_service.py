@@ -7,18 +7,24 @@ Runs on CPU by default to avoid VRAM conflicts with WanGP.
 
 import os
 import gc
+import json
+import re
 import time
 import subprocess
 import threading
 import logging
 import requests
+from contextlib import contextmanager
+from functools import wraps
 from typing import Optional
+from . import debug_trace
+from .debug_trace import trace_llm_call
 
 logger = logging.getLogger(__name__)
 
 # Singleton state
 _process: Optional[subprocess.Popen] = None
-_lock = threading.Lock()
+_lock = threading.RLock()
 _model_id: str = ""
 _device: str = ""
 _server_port: int = 0
@@ -34,10 +40,10 @@ import collections as _collections
 _server_log: "_collections.deque[str]" = _collections.deque(maxlen=200)
 _log_reader: Optional[threading.Thread] = None
 
-# Provider state: "local" | "remote" | "openai" | "anthropic"
+# Provider state: "local" | "remote" | "ollama" | "openai" | "anthropic" | "minimax" | "grok"
 _provider: str = "local"
 _remote_url: str = ""       # Base URL for remote/OpenAI-compatible servers
-_api_key: str = ""           # API key for OpenAI/Anthropic
+_api_key: str = ""           # API key for OpenAI/Anthropic/MiniMax/Grok
 
 # Auto-unload idle timer
 _idle_timer: Optional[threading.Timer] = None
@@ -47,6 +53,99 @@ _idle_timeout: float = 60.0  # seconds before auto-unload
 _stream_buffer: str = ""
 _stream_done: bool = True
 _stream_lock = threading.Lock()
+
+# Per-workflow LLM observability. Director planning runs many LLM calls in a
+# worker thread, so the HTTP request itself cannot stream useful progress to
+# the footer. A tracking scope lets nested calls accumulate provider-reported
+# token usage while the Director endpoint publishes shot-level progress.
+_activity_tracking_lock = threading.Lock()
+_activity_tracking: dict[str, dict] = {}
+_activity_tracking_context = threading.local()
+
+
+def begin_activity_tracking(activity_id: str, **state) -> None:
+    if not activity_id:
+        return
+    with _activity_tracking_lock:
+        cutoff = time.time() - (6 * 60 * 60)
+        for stale_id in [
+            key for key, value in _activity_tracking.items()
+            if float(value.get("updated_at") or 0) < cutoff
+        ]:
+            _activity_tracking.pop(stale_id, None)
+        _activity_tracking[activity_id] = {
+            "id": activity_id,
+            "status": "running",
+            "phase": "planning",
+            "current": 0,
+            "total": 0,
+            "detail": "",
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+            "updated_at": time.time(),
+            **state,
+        }
+
+
+def update_activity_tracking(activity_id: str, **state) -> None:
+    if not activity_id:
+        return
+    with _activity_tracking_lock:
+        current = _activity_tracking.setdefault(activity_id, {"id": activity_id, "usage": {}})
+        current.update(state)
+        current["updated_at"] = time.time()
+
+
+def get_activity_tracking(activity_id: str) -> dict:
+    with _activity_tracking_lock:
+        return dict(_activity_tracking.get(activity_id) or {})
+
+
+def run_with_activity_tracking(activity_id: str, callback):
+    previous = getattr(_activity_tracking_context, "activity_id", "")
+    _activity_tracking_context.activity_id = activity_id
+    try:
+        with debug_trace.context_scope(activity_id=activity_id):
+            return callback()
+    finally:
+        _activity_tracking_context.activity_id = previous
+
+
+def _record_activity_usage(usage: dict) -> None:
+    debug_trace.trace_llm_usage(usage)
+    activity_id = getattr(_activity_tracking_context, "activity_id", "")
+    if not activity_id or not isinstance(usage, dict) or not usage:
+        return
+    prompt = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+    completion = usage.get("completion_tokens", usage.get("output_tokens", 0))
+    try:
+        prompt = int(prompt or 0)
+        completion = int(completion or 0)
+        total = int(usage.get("total_tokens") or (prompt + completion))
+    except (TypeError, ValueError):
+        return
+    with _activity_tracking_lock:
+        state = _activity_tracking.get(activity_id)
+        if not state:
+            return
+        totals = state.setdefault("usage", {})
+        totals["prompt_tokens"] = int(totals.get("prompt_tokens") or 0) + prompt
+        totals["completion_tokens"] = int(totals.get("completion_tokens") or 0) + completion
+        totals["total_tokens"] = int(totals.get("total_tokens") or 0) + total
+        totals["calls"] = int(totals.get("calls") or 0) + 1
+        state["updated_at"] = time.time()
+
+
+def _record_activity_stream(text: str, done: bool) -> None:
+    activity_id = getattr(_activity_tracking_context, "activity_id", "")
+    if not activity_id:
+        return
+    with _activity_tracking_lock:
+        state = _activity_tracking.get(activity_id)
+        if not state:
+            return
+        state["stream_text"] = str(text or "")[-4000:]
+        state["stream_done"] = bool(done)
+        state["updated_at"] = time.time()
 
 # Last call state — for pipeline dashboard capture. The user prompt is
 # captured alongside the system prompt so the Director Dashboard can
@@ -532,7 +631,7 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
 
     For local provider, returns the curated built-in catalog
     (_PUBLIC_MODEL_ORDER). For remote/openai, queries the server's
-    /v1/models endpoint. For anthropic, returns a curated Claude list.
+    /v1/models endpoint. Anthropic and MiniMax use curated API catalogs.
     """
     local_models = [
         {
@@ -547,25 +646,52 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
 
     remote_models: list[dict] = []
 
-    # Query remote OpenAI-compatible server (LM Studio, etc.)
-    if provider in ("remote", "openai") and remote_url:
+    from .provider_profile import (
+        GROK_MODELS,
+        canonicalize_remote_url,
+        looks_like_ollama,
+        ollama_tags_url,
+        openai_models_url,
+    )
+
+    # Query remote OpenAI-compatible server (LM Studio, Ollama, etc.)
+    if provider in ("remote", "openai", "ollama", "grok") and remote_url:
         try:
             headers = {}
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
-            url = remote_url.rstrip("/")
-            resp = requests.get(f"{url}/v1/models", headers=headers, timeout=10)
-            if resp.ok:
-                data = resp.json()
-                for m in data.get("data", []):
-                    mid = m.get("id", "")
-                    if mid:
-                        remote_models.append({
-                            "id": mid,
-                            "label": f"{mid} (Remote)" if provider == "remote" else f"{mid} (OpenAI)",
-                            "size_hint": provider,
-                            "provider": provider,
-                        })
+            origin = canonicalize_remote_url(remote_url)
+            listed = []
+            if provider == "ollama" or looks_like_ollama(origin):
+                try:
+                    tags = requests.get(ollama_tags_url(origin), timeout=10)
+                    if tags.ok:
+                        for entry in (tags.json() or {}).get("models", []):
+                            mid = str(entry.get("name") or entry.get("model") or "").strip()
+                            if mid:
+                                listed.append(mid)
+                except Exception as e:
+                    print(f"[LLM] Ollama /api/tags failed at {origin}: {e}")
+            if not listed:
+                resp = requests.get(openai_models_url(origin), headers=headers, timeout=10)
+                if resp.ok:
+                    data = resp.json()
+                    for m in data.get("data", []):
+                        mid = m.get("id", "")
+                        if mid:
+                            listed.append(mid)
+            suffix = {
+                "ollama": "Ollama",
+                "openai": "OpenAI",
+                "grok": "Grok",
+            }.get(provider, "Remote")
+            for mid in listed:
+                remote_models.append({
+                    "id": mid,
+                    "label": f"{mid} ({suffix})",
+                    "size_hint": provider,
+                    "provider": provider,
+                })
         except Exception as e:
             print(f"[LLM] Failed to query remote models at {remote_url}: {e}")
 
@@ -576,7 +702,38 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
             {"id": "claude-haiku-4-5-20251001", "label": "Claude Haiku 4.5", "size_hint": "anthropic", "provider": "anthropic"},
         ])
 
+    if provider == "minimax":
+        remote_models.extend([
+            {"id": "MiniMax-M3", "label": "MiniMax M3", "size_hint": "MiniMax API", "provider": "minimax"},
+            {"id": "MiniMax-M2.7", "label": "MiniMax M2.7", "size_hint": "MiniMax API", "provider": "minimax"},
+            {"id": "MiniMax-M2.7-highspeed", "label": "MiniMax M2.7 Highspeed", "size_hint": "MiniMax API", "provider": "minimax"},
+        ])
+
+    if provider == "grok" and not remote_models:
+        remote_models.extend([
+            {"id": model_id, "label": f"{model_id} (Grok)", "size_hint": "grok", "provider": "grok"}
+            for model_id in GROK_MODELS
+        ])
+
     return local_models + remote_models
+
+
+MINIMAX_CHAT_MODELS = frozenset({
+    "MiniMax-M3",
+    "MiniMax-M2.7",
+    "MiniMax-M2.7-highspeed",
+})
+
+
+def normalize_minimax_chat_routing(
+    model_id: str,
+    provider: str,
+    remote_url: str = "",
+) -> tuple[str, str]:
+    """MiniMax chat ids are hosted API models, never local GGUF files."""
+    if str(model_id or "").strip() in MINIMAX_CHAT_MODELS:
+        return "minimax", str(remote_url or "").strip() or "https://api.minimax.io"
+    return str(provider or "local"), str(remote_url or "")
 
 
 def _find_free_port() -> int:
@@ -593,15 +750,37 @@ def get_model_dir() -> str:
 
 
 def _server_url() -> str:
-    if _provider in ("remote", "openai") and _remote_url:
-        return _remote_url.rstrip("/")
+    from .provider_profile import canonicalize_remote_url
+    if _provider in ("remote", "ollama", "openai", "minimax", "grok") and _remote_url:
+        return canonicalize_remote_url(_remote_url)
+    if _provider == "minimax":
+        return "https://api.minimax.io"
+    if _provider == "grok":
+        return "https://api.x.ai"
     return f"http://127.0.0.1:{_server_port}"
+
+
+def _is_ollama_remote() -> bool:
+    """Best-effort detection for Ollama's OpenAI-compatible endpoint."""
+    from .provider_profile import looks_like_ollama
+    if _provider == "ollama":
+        return True
+    if _provider != "remote":
+        return False
+    return looks_like_ollama(_remote_url)
+
+
+def _is_deepseek_remote() -> bool:
+    """Detect DeepSeek when it is configured through the OpenAI-compatible provider."""
+    if _provider not in ("remote", "openai"):
+        return False
+    return "deepseek.com" in (_remote_url or "").lower()
 
 
 def _api_headers() -> dict:
     """Build headers for API calls (adds auth for remote providers)."""
     headers = {"Content-Type": "application/json"}
-    if _provider in ("remote", "openai", "anthropic") and _api_key:
+    if _provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok") and _api_key:
         if _provider == "anthropic":
             headers["x-api-key"] = _api_key
             headers["anthropic-version"] = "2023-06-01"
@@ -818,7 +997,7 @@ def _prepare_thinking(system_prompt: str, enable_thinking: Optional[bool], think
 
 
 def is_loaded() -> bool:
-    if _provider in ("remote", "openai", "anthropic"):
+    if _provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok"):
         return bool(_model_id)
     return _process is not None and _process.poll() is None
 
@@ -829,6 +1008,7 @@ def get_status() -> dict:
         "model_id": _model_id or None,
         "device": _device if is_loaded() else None,
         "provider": _provider,
+        "remote_url": _remote_url if _provider in ("remote", "ollama", "openai", "minimax", "grok") else "",
     }
 
 
@@ -1049,12 +1229,33 @@ def _ensure_llama_server(bin_dir: str) -> None:
             else:  # tar.gz
                 with tarfile.open(archive_path, "r:gz") as t:
                     for member in t.getmembers():
-                        if not member.isfile():
-                            continue
                         flat_name = os.path.basename(member.name)
                         if not flat_name:
                             continue
                         target = os.path.join(bin_dir, flat_name)
+                        # SONAME entries (libllama.so.0 -> libllama.so.0.0.10252)
+                        # ship as symlinks. Skipping them leaves only the fully
+                        # versioned files on disk, and llama-server then dies at
+                        # startup with "libllama-common.so.0: cannot open shared
+                        # object file" (exit 127). Recreate them; the link target
+                        # is a bare filename, so it survives the flattening above.
+                        if member.issym() or member.islnk():
+                            link_target = os.path.basename(member.linkname)
+                            if not link_target:
+                                continue
+                            try:
+                                if os.path.lexists(target):
+                                    os.remove(target)
+                                os.symlink(link_target, target)
+                            except (OSError, NotImplementedError):
+                                # Filesystems/platforms without symlink support:
+                                # fall back to a copy of the real file.
+                                real = os.path.join(bin_dir, link_target)
+                                if os.path.isfile(real):
+                                    shutil.copyfile(real, target)
+                            continue
+                        if not member.isfile():
+                            continue
                         src = t.extractfile(member)
                         if src is None:
                             continue
@@ -1076,7 +1277,57 @@ def _ensure_llama_server(bin_dir: str) -> None:
             f"Downloaded llama.cpp release but {exe_name} not found in {bin_dir} "
             f"after extraction. Tried: {asset_urls}"
         )
+    # Runs on every call, not just after a download: installs extracted before
+    # the symlink fix above are already on disk missing their SONAMEs, and the
+    # download is skipped once the binary exists — so they would stay broken
+    # forever without a repair pass here. Idempotent and cheap.
+    _repair_soname_links(bin_dir)
     print(f"[LLM] llama-server installed to {exe_path}")
+
+
+_SOVERSION_RE = _re.compile(r"^(?P<base>.+\.so)\.(?P<version>\d+(?:\.\d+)*)$")
+
+
+def _repair_soname_links(bin_dir: str) -> None:
+    """Recreate missing `libfoo.so.N` links next to `libfoo.so.N.M.P`.
+
+    The loader resolves the SONAME recorded in the binary (e.g.
+    `libllama-common.so.0`), not the fully versioned filename, so without these
+    llama-server exits 127 before printing anything useful.
+    """
+    import shutil
+
+    try:
+        entries = os.listdir(bin_dir)
+    except OSError:
+        return
+    created = []
+    for filename in entries:
+        match = _SOVERSION_RE.match(filename)
+        if match is None or not os.path.isfile(os.path.join(bin_dir, filename)):
+            continue
+        base = match.group("base")
+        parts = match.group("version").split(".")
+        # libfoo.so.0.0.10252 -> libfoo.so.0.0, libfoo.so.0, libfoo.so
+        for count in range(len(parts) - 1, -1, -1):
+            suffix = ".".join(parts[:count])
+            link_path = os.path.join(bin_dir, f"{base}.{suffix}" if suffix else base)
+            if os.path.lexists(link_path):
+                continue
+            try:
+                os.symlink(filename, link_path)
+                created.append(os.path.basename(link_path))
+            except (OSError, NotImplementedError):
+                # Windows without developer mode: copy instead. Costs disk but
+                # keeps the loader happy.
+                try:
+                    shutil.copyfile(os.path.join(bin_dir, filename), link_path)
+                    created.append(os.path.basename(link_path))
+                except OSError:
+                    pass
+    if created:
+        print(f"[LLM] Restored {len(created)} missing shared-library links: {', '.join(sorted(created)[:6])}"
+              + (" ..." if len(created) > 6 else ""))
 
 
 def _get_server_exe() -> str:
@@ -1094,6 +1345,59 @@ def _get_server_exe() -> str:
     return os.path.join(bin_dir, "llama-server")
 
 
+def _scheduled_llm_load(function):
+    """Serialize local model loading on the same lane used for inference."""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        model_id = kwargs.get("model_id", args[0] if len(args) > 0 else "")
+        device = kwargs.get("device", args[1] if len(args) > 1 else "cpu")
+        force_reload = kwargs.get("force_reload", args[2] if len(args) > 2 else False)
+        provider = kwargs.get("provider", args[3] if len(args) > 3 else "local")
+        remote_url = kwargs.get("remote_url", args[4] if len(args) > 4 else "")
+        api_key = kwargs.get("api_key", args[5] if len(args) > 5 else "")
+        provider, remote_url = normalize_minimax_chat_routing(
+            str(model_id or ""),
+            str(provider or "local"),
+            str(remote_url or ""),
+        )
+        if str(provider or "local").lower() in {
+            "remote", "openai", "anthropic", "minimax",
+        }:
+            return function(
+                model_id=model_id,
+                device=device,
+                force_reload=force_reload,
+                provider=provider,
+                remote_url=remote_url,
+                api_key=api_key,
+            )
+        from . import resource_scheduler
+        lane = resource_scheduler.llm_lane(
+            str(provider or "local"),
+            base_url=str(remote_url or ""),
+            device=str(device or "cpu"),
+        )
+        task_id = f"llm-load-{threading.get_ident()}-{time.time_ns()}"
+        cancelled = _current_task_cancel_callback()
+        try:
+            with resource_scheduler.coordinator.acquire(
+                lane,
+                task_id=task_id,
+                description=f"Local LLM load · {model_id or 'default'}",
+                cancelled=cancelled,
+            ):
+                with _cancelable_singleton_lock(
+                    cancelled,
+                    task_id=task_id,
+                    operation="loading the local LLM",
+                ):
+                    return function(*args, **kwargs)
+        except resource_scheduler.ResourceAcquireCancelled as exc:
+            raise InterruptedError(str(exc)) from exc
+    return wrapped
+
+
+@_scheduled_llm_load
 def load_model(
     model_id: str = "",
     device: str = "cpu",
@@ -1103,21 +1407,34 @@ def load_model(
     api_key: str = "",
 ) -> None:
     """Load an LLM model. Supports local (llama-server), remote (OpenAI-compatible),
-    OpenAI API, and Anthropic API providers.
+    OpenAI API, Anthropic API, and MiniMax API providers.
 
     Args:
         model_id: Model ID (HF repo for local, model name for remote/API)
         device: "cpu" or "cuda" (local only)
         force_reload: If True, restart even if already running
-        provider: "local" | "remote" | "openai" | "anthropic"
+        provider: "local" | "remote" | "ollama" | "openai" | "anthropic" | "minimax" | "grok"
         remote_url: Base URL for remote/openai servers (e.g. http://192.168.1.100:1234)
-        api_key: API key for openai/anthropic providers
+        api_key: API key for public API providers
     """
     global _process, _model_id, _device, _server_port, _vision_available
     global _provider, _remote_url, _api_key
 
+    from .provider_profile import alias_text_provider, canonicalize_remote_url, default_url_for_provider
+
+    provider, remote_url = normalize_minimax_chat_routing(
+        str(model_id or ""),
+        str(provider or "local"),
+        str(remote_url or ""),
+    )
+    provider = alias_text_provider(provider, remote_url)
+    remote_url = default_url_for_provider(provider, remote_url)
+    if provider == "minimax" and not str(remote_url or "").strip():
+        remote_url = "https://api.minimax.io"
+    remote_url = canonicalize_remote_url(remote_url)
+
     # Handle remote/API providers — no subprocess needed
-    if provider in ("remote", "openai", "anthropic"):
+    if provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok"):
         with _lock:
             if is_loaded() and _model_id == model_id and _provider == provider and not force_reload:
                 return
@@ -1134,11 +1451,12 @@ def load_model(
         return
 
     repo_id = model_id or DEFAULT_HF_REPO
-    _provider = "local"
-    _remote_url = ""
-    _api_key = ""
-
     with _lock:
+        # Keep every singleton routing mutation under the same lock used by
+        # scheduled requests when they validate their routing snapshot.
+        _provider = "local"
+        _remote_url = ""
+        _api_key = ""
         if is_loaded() and _model_id == repo_id and not force_reload:
             return
 
@@ -1212,6 +1530,18 @@ def load_model(
 
         if mmproj_path:
             cmd += ["--mmproj", mmproj_path]
+            # Force ONE image per encode batch. llama-server's
+            # clip_image_batch_encode sizes its output buffer for a single
+            # image, but the mtmd batcher groups same-processed-shape images
+            # from one request into one batch — two identically-sized images
+            # (e.g. Director's start-frame references, both 432x768) then
+            # abort the server ("Output buffer size mismatch", build 9632)
+            # and the client sees a bare connection reset. A cap of 1 token
+            # per batch means every image always exceeds it and is encoded
+            # alone (the batcher always admits at least one image).
+            # Verified against the exact crashing request.
+            if "--mtmd-batch-max-tokens" not in extra_flags:
+                cmd += ["--mtmd-batch-max-tokens", "1"]
 
         if device == "cuda":
             # Use -ngl from extra_flags if present, otherwise default to all layers
@@ -1328,16 +1658,47 @@ def _start_log_reader(proc: subprocess.Popen) -> None:
 
     Prevents the OS pipe from filling (which deadlocks the server) and
     keeps a rolling tail for crash diagnosis. The thread ends on its own
-    when the pipe closes (i.e. the process exits)."""
+    when the pipe closes (i.e. the process exits).
+
+    Also mirrors every line to logs/llm/llama-server.log (fresh file per
+    server launch) — the in-memory tail dies with the process, and a
+    server crash mid-request is exactly the moment a postmortem needs
+    the full output."""
     global _log_reader
     _server_log.clear()
+    log_path = None
+    try:
+        log_dir = os.path.join(_BASE_DIR, "..", "..", "logs", "llm")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "llama-server.log")
+    except Exception:
+        pass
 
     def _drain():
+        log_file = None
+        if log_path:
+            try:
+                log_file = open(log_path, "w", encoding="utf-8", errors="replace")
+            except Exception:
+                log_file = None
         try:
             for raw in iter(proc.stdout.readline, b""):
-                _server_log.append(raw.decode(errors="replace").rstrip("\n"))
+                line = raw.decode(errors="replace").rstrip("\n")
+                _server_log.append(line)
+                if log_file:
+                    try:
+                        log_file.write(line + "\n")
+                        log_file.flush()
+                    except Exception:
+                        log_file = None
         except Exception:
             pass
+        finally:
+            if log_file:
+                try:
+                    log_file.close()
+                except Exception:
+                    pass
 
     _log_reader = threading.Thread(target=_drain, name="llama-log-reader", daemon=True)
     _log_reader.start()
@@ -1357,23 +1718,58 @@ def _diagnose_llm_request_failure(exc: Exception) -> "RuntimeError":
     the pipeline error the user sees names the real cause.
     """
     proc = _process
+    if _provider == "local" and proc is not None:
+        # A reset socket usually means the subprocess is mid-death; poll()
+        # can race the actual exit by a moment. Give it a beat to finish
+        # dying so a crash is reported as a crash (with the server's last
+        # words) instead of a generic connection error.
+        try:
+            proc.wait(timeout=3)
+        except Exception:
+            pass
     if _provider == "local" and proc is not None and proc.poll() is not None:
         code = proc.returncode
-        tail = _server_log_tail()
+        tail = _server_log_tail(40)
         _unload_inner()  # reset singleton so the next call relaunches cleanly
+        # Only use OOM wording when the server log actually shows an OOM —
+        # services/oom_detect.py substring-matches "out of memory" on error
+        # text, so speculative OOM wording here made every server crash pop
+        # the "lower VRAM headroom?" recovery banner even when the GPU was
+        # nearly empty (e.g. the clip.cpp image-batch abort).
+        tail_l = tail.lower()
+        if any(s in tail_l for s in ("out of memory", "cudamalloc", "erralloc", "alloc failed")):
+            cause = "The GPU ran out of memory mid-request (e.g. a video/image model was still resident)."
+        else:
+            cause = "This is an internal llama-server failure; see its last output below."
         return RuntimeError(
-            f"The local LLM server (llama-server) exited unexpectedly "
-            f"(code {code}) while generating. This usually means the model "
-            f"ran out of VRAM/RAM at load, or the GGUF is incompatible with "
-            f"the installed llama-server build. Last server output:\n{tail}"
+            f"The local LLM server (llama-server) crashed while generating "
+            f"(exit code {code}). {cause} "
+            f"Full log: logs/llm/llama-server.log. "
+            f"Last server output:\n{tail}"
         )
     if _provider == "local" and proc is None:
         return RuntimeError(
             "The local LLM server is not running. It may have been unloaded "
             "or failed to start — retry, or check the Services settings."
         )
-    # Server still alive (or a remote provider) — a real network/timeout issue.
-    return RuntimeError(f"LLM request failed: {exc}")
+    # Server still alive (or a remote provider) — retain response details when
+    # available, and include local server output for CUDA/process diagnostics.
+    response = getattr(exc, "response", None)
+    response_detail = ""
+    if response is not None:
+        try:
+            body = response.text.strip()
+            if body:
+                response_detail = f" — server response: {body[:1000]}"
+        except Exception:
+            pass
+    if _provider == "local":
+        tail = _server_log_tail(15)
+        return RuntimeError(
+            f"LLM request failed: {exc}{response_detail}"
+            f"\nRecent llama-server output:\n{tail}"
+        )
+    return RuntimeError(f"LLM request failed: {exc}{response_detail}")
 
 
 def _unload_inner():
@@ -1420,7 +1816,10 @@ def _image_to_data_url(image_path: str, max_size: int = 768) -> Optional[str]:
         if max(w, h) > max_size:
             scale = max_size / max(w, h)
             img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-            print(f"[LLM] Resized image for LLM: {w}x{h} → {img.size[0]}x{img.size[1]}")
+            # ASCII arrow on purpose: a cp1252 console (plain cmd, some CI
+            # shells) can't encode U+2192 and the print would crash the
+            # whole vision request mid-flight.
+            print(f"[LLM] Resized image for LLM: {w}x{h} -> {img.size[0]}x{img.size[1]}")
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
         data = base64.b64encode(buf.getvalue()).decode("ascii")
@@ -1436,6 +1835,222 @@ def _image_to_data_url(image_path: str, max_size: int = 768) -> Optional[str]:
         return f"data:{mime};base64,{data}"
 
 
+def _current_task_cancel_callback():
+    """Return a cheap cancellation probe for the active canonical task."""
+    try:
+        from .task_manager import current_task_cancellation_token
+        token = current_task_cancellation_token()
+        if token is not None:
+            return token.is_cancelled
+        from .task_manager import current_task_context, get_task_registry
+        context = current_task_context()
+        parent_task_id = str(context.get("task_id") or "")
+        workspace_dir = str(context.get("workspace_dir") or "")
+        if not parent_task_id or not workspace_dir:
+            return None
+        operation_registry = get_task_registry(workspace_dir)
+    except Exception:
+        return None
+
+    def cancelled() -> bool:
+        try:
+            parent = operation_registry.get(parent_task_id)
+        except Exception:
+            return False
+        return bool(
+            parent and (
+                parent.get("status") in {"cancelled", "interrupted"}
+                or parent.get("phase") == "cancelling"
+            )
+        )
+
+    return cancelled
+
+
+class LLMRequestCancelled(InterruptedError):
+    """Raised when one job's active provider request is cancelled."""
+
+    def __init__(self, provider: str, *, abort_supported: bool) -> None:
+        self.provider = str(provider or "LLM")
+        self.abort_supported = bool(abort_supported)
+        capability = "aborted" if self.abort_supported else "could not be aborted"
+        super().__init__(
+            f"{self.provider} request cancelled ({capability}); "
+            "completed stages remain recoverable"
+        )
+
+
+def _resolve_cancellation_token(token=None):
+    """Use an explicit token or resolve the current canonical task token."""
+    if token is not None:
+        return token
+    try:
+        from .task_manager import current_task_cancellation_token
+        return current_task_cancellation_token()
+    except Exception:
+        return None
+
+
+def _token_cancelled(token) -> bool:
+    if token is None:
+        return False
+    try:
+        probe = getattr(token, "is_cancelled", None)
+        if callable(probe):
+            return bool(probe())
+        probe = getattr(token, "is_set", None)
+        if callable(probe):
+            return bool(probe())
+    except Exception:
+        return False
+    return False
+
+
+def _watch_response_for_cancellation(response, token, provider: str):
+    """Close one response when its job token fires, without touching others."""
+    if token is None:
+        return None
+    close = getattr(response, "close", None)
+    abort_supported = callable(close)
+    stopped = threading.Event()
+    state = {"abort_supported": abort_supported, "cancelled": False}
+
+    def watch() -> None:
+        while not stopped.wait(0.05):
+            if not _token_cancelled(token):
+                continue
+            state["cancelled"] = True
+            if abort_supported:
+                try:
+                    close()
+                except Exception:
+                    state["abort_supported"] = False
+            return
+
+    watcher = threading.Thread(
+        target=watch,
+        name=f"llm-cancel-{str(provider or 'provider').lower()[:16]}",
+        daemon=True,
+    )
+    watcher.start()
+    return stopped, watcher, state
+
+
+def _stop_response_cancellation_watcher(watcher) -> None:
+    if watcher is None:
+        return
+    stopped, thread, _state = watcher
+    stopped.set()
+    if thread is not threading.current_thread():
+        thread.join(timeout=0.25)
+
+
+def _raise_if_token_cancelled(token, provider: str, *, abort_supported: bool = True) -> None:
+    if _token_cancelled(token):
+        raise LLMRequestCancelled(provider, abort_supported=abort_supported)
+
+
+@contextmanager
+def _cancelable_singleton_lock(
+    cancelled=None,
+    *,
+    task_id: str = "llm",
+    operation: str = "using the LLM",
+):
+    """Acquire the mutable singleton lock without making cancel wait forever."""
+    acquired = False
+    try:
+        if cancelled is None:
+            _lock.acquire()
+            acquired = True
+        else:
+            while True:
+                if cancelled():
+                    from .resource_scheduler import ResourceAcquireCancelled
+                    raise ResourceAcquireCancelled(
+                        f"Task {task_id} was cancelled while {operation}"
+                    )
+                if _lock.acquire(timeout=0.1):
+                    acquired = True
+                    break
+        yield
+    finally:
+        if acquired:
+            _lock.release()
+
+
+def _singleton_routing_snapshot(cancelled=None) -> tuple:
+    """Read all globals a singleton completion uses while holding its lock."""
+    with _cancelable_singleton_lock(
+        cancelled,
+        operation="waiting for the LLM configuration",
+    ):
+        return (
+            _provider,
+            _remote_url,
+            _model_id,
+            _device,
+            _api_key,
+            _vision_available,
+        )
+
+
+def _scheduled_llm_request(function):
+    """Acquire the concrete local/remote LLM lane for singleton requests."""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        from . import resource_scheduler
+        cancelled = _current_task_cancel_callback()
+        try:
+            while True:
+                routing = _singleton_routing_snapshot(cancelled)
+                provider, remote_url, model_id, device, _key, _vision = routing
+                provider = str(provider or "local")
+                lane = resource_scheduler.llm_lane(
+                    provider,
+                    base_url=(remote_url if provider != "local" else ""),
+                    device=device or "cpu",
+                )
+                task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
+                # The GPU hand-off hook identifies an intentional CUDA LLM
+                # owner by this prefix. A generic label made it unload the
+                # very model this request was about to use.
+                owner_label = (
+                    "Local LLM" if provider == "local" else "Remote LLM"
+                )
+                with resource_scheduler.coordinator.acquire(
+                    lane,
+                    task_id=task_id,
+                    description=f"{owner_label} completion · {model_id or 'default'}",
+                    cancelled=cancelled,
+                ):
+                    # The provider may have changed while this request waited
+                    # for its physical lane. Revalidate under the singleton
+                    # lock; if it moved, release the stale lane and retry. The
+                    # lock then prevents load/unload from mutating routing or
+                    # killing llama-server during the active HTTP request.
+                    with _cancelable_singleton_lock(
+                        cancelled,
+                        task_id=task_id,
+                        operation="waiting to start the LLM request",
+                    ):
+                        if routing != (
+                            _provider,
+                            _remote_url,
+                            _model_id,
+                            _device,
+                            _api_key,
+                            _vision_available,
+                        ):
+                            continue
+                        return function(*args, **kwargs)
+        except resource_scheduler.ResourceAcquireCancelled as exc:
+            raise InterruptedError(str(exc)) from exc
+    return wrapped
+
+
+@trace_llm_call("generate", context=lambda: {"provider": _provider, "model_id": _model_id})
+@_scheduled_llm_request
 def generate(
     prompt: str,
     system_prompt: str = "",
@@ -1450,6 +2065,7 @@ def generate(
     presence_penalty: float = 0.0,
     stop: Optional[list[str]] = None,
     json_schema: Optional[dict] = None,
+    cancellation_token=None,
 ) -> str:
     """Generate text via llama-server's OpenAI-compatible chat endpoint.
 
@@ -1470,6 +2086,30 @@ def generate(
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
 
+    # MiniMax M-series completions use max_completion_tokens, reasoning_split
+    # and a provider-specific thinking switch. The generic request below uses
+    # max_tokens and can let M3 consume the entire recipe budget as hidden
+    # reasoning, returning an empty content field. Reuse the hardened
+    # compatible-provider path, which also retries one confirmed empty
+    # response with a larger bounded budget.
+    if _provider in ("minimax", "grok"):
+        return generate_openai_compatible(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model_id=_model_id,
+            base_url=_remote_url or (
+                "https://api.minimax.io" if _provider == "minimax" else "https://api.x.ai"
+            ),
+            api_key=_api_key,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            json_schema=json_schema,
+            image_paths=image_paths,
+        )
+
     # Cancel idle timer during active request — prevents auto-unload mid-generation.
     # Timer is reset at the END of the request (after response is received).
     _cancel_idle_timer()
@@ -1484,6 +2124,29 @@ def generate(
     if json_schema is not None:
         enable_thinking = False
         thinking_budget = 0
+        # Providers without a dependable schema envelope still need the exact
+        # contract in context. Local llama-server and Ollama receive the
+        # schema as a token-level grammar below. OpenAI/DeepSeek use JSON
+        # object mode because this API accepts schemas with optional fields,
+        # while their strict dialect may reject those before generation.
+        # MiniMax, Anthropic and unknown compatible servers get the same
+        # compact prompt copy plus local validation/repair at the caller.
+        prompt_needs_schema = (
+            _provider != "local"
+            and not _is_ollama_remote()
+        )
+        if prompt_needs_schema:
+            compact_schema = json.dumps(
+                json_schema,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            system_prompt = (
+                f"{system_prompt.rstrip()}\n\n"
+                "Return exactly one JSON value matching this schema. "
+                "Do not wrap it in markdown:\n"
+                f"{compact_schema}"
+            ).strip()
 
     # Per-model thinking mode (Gemma vs Qwen)
     system_prompt, enable_thinking, thinking_budget = _prepare_thinking(system_prompt, enable_thinking, thinking_budget)
@@ -1495,7 +2158,7 @@ def generate(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and _vision_available:
+    if image_paths and (_vision_available or _provider in ("remote", "ollama", "openai", "minimax", "grok")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -1514,6 +2177,11 @@ def generate(
         "max_tokens": total_tokens,
         "cache_prompt": False,  # Disable prompt caching — system prompt changes between calls (LoRA hints, etc.)
     }
+    # llama-server hosts one model and does not require this field, while
+    # OpenAI-compatible remote servers such as Ollama require the selected
+    # model name on every chat completion request.
+    if _provider in ("remote", "ollama", "openai", "minimax", "grok"):
+        payload["model"] = _model_id
     # Per-model sampling defaults (e.g. Gemma 4 wants temp=1.0, top_k=64)
     temperature, top_p = _apply_model_defaults(temperature, top_p, payload)
     payload["temperature"] = max(temperature, 0.01)
@@ -1557,12 +2225,42 @@ def generate(
     if json_schema is not None:
         if _provider == "local":
             payload["response_format"] = {"type": "json_object", "schema": json_schema}
+        elif _is_ollama_remote():
+            # Ollama supports JSON Schema through the OpenAI-compatible
+            # response_format field.  Previously remote providers always
+            # degraded to unconstrained text, so a single stray comma from
+            # Qwen could invalidate a comic plan after minutes of work.
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "maestro_response",
+                    "strict": True,
+                    "schema": json_schema,
+                },
+            }
+            print("[LLM] Ollama structured output enabled")
+        elif _is_deepseek_remote():
+            # DeepSeek currently supports JSON Object mode rather than the
+            # OpenAI JSON-Schema envelope. The Comic Director prompt already
+            # names JSON explicitly and local validation/repair enforces the
+            # detailed schema after generation.
+            payload["response_format"] = {"type": "json_object"}
+            print("[LLM] DeepSeek JSON output enabled")
+        elif _provider == "openai":
+            payload["response_format"] = {"type": "json_object"}
         else:
             print(f"[LLM] json_schema requested but provider={_provider} — sending unconstrained (grammar is local llama-server only)")
 
-    if _provider == "anthropic":
-        return _generate_anthropic(messages, total_tokens, max(temperature, 0.01), top_p)
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, _provider)
 
+    if _provider == "anthropic":
+        return _generate_anthropic(
+            messages, total_tokens, max(temperature, 0.01), top_p,
+            cancellation_token=cancellation_token,
+        )
+
+    response_watcher = None
     try:
         resp = requests.post(
             f"{_server_url()}/v1/chat/completions",
@@ -1571,17 +2269,37 @@ def generate(
             # (connect, read): fail fast if the server socket is gone;
             # allow a long read for actual generation.
             timeout=(10, 600),
+            stream=bool(cancellation_token),
         )
         resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, _provider,
+        )
+        _raise_if_token_cancelled(
+            cancellation_token, _provider,
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
+        data = resp.json()
+        _raise_if_token_cancelled(
+            cancellation_token, _provider,
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
     except requests.exceptions.RequestException as e:
+        if _token_cancelled(cancellation_token):
+            _raise_if_token_cancelled(
+                cancellation_token, _provider,
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
         # A dead subprocess surfaces here as a ConnectionError; translate it
         # into an actionable error naming the real cause (see the helper).
         raise _diagnose_llm_request_failure(e) from e
-    data = resp.json()
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     raw_content = data["choices"][0]["message"]["content"] or ""
     finish_reason = data["choices"][0].get("finish_reason", "unknown")
     usage = data.get("usage", {})
+    _record_activity_usage(usage)
     prompt_tokens = usage.get("prompt_tokens", "?")
     completion_tokens = usage.get("completion_tokens", "?")
     print(f"[LLM] Response: {completion_tokens} tokens generated (prompt={prompt_tokens}, finish={finish_reason})")
@@ -1601,12 +2319,399 @@ def generate(
     return content.strip()
 
 
+def _minimax_compatible_json_schema(value):
+    """Adapt valid JSON Schema features that MiniMax's API rejects.
+
+    MiniMax structured output currently accepts numeric fields, but its
+    schema validator treats ``enum`` values as strings.  Preserve the
+    caller's original schema for local validation while relaxing numeric
+    enums to their bounded numeric range in the provider envelope.
+    """
+    if isinstance(value, list):
+        return [_minimax_compatible_json_schema(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    normalized = {
+        key: _minimax_compatible_json_schema(item)
+        for key, item in value.items()
+    }
+    enum_values = normalized.get("enum")
+    if (
+        isinstance(enum_values, list)
+        and enum_values
+        and all(
+            isinstance(item, (int, float)) and not isinstance(item, bool)
+            for item in enum_values
+        )
+    ):
+        normalized.pop("enum", None)
+        normalized["type"] = (
+            "integer"
+            if all(isinstance(item, int) for item in enum_values)
+            else "number"
+        )
+        normalized["minimum"] = min(enum_values)
+        normalized["maximum"] = max(enum_values)
+    return normalized
+
+
+@trace_llm_call("generate_openai_compatible")
+def generate_openai_compatible(
+    *,
+    prompt: str,
+    system_prompt: str = "",
+    model_id: str,
+    base_url: str,
+    api_key: str,
+    max_new_tokens: int = 256,
+    temperature: float = 0.2,
+    top_p: float = 0.9,
+    frequency_penalty: float = 0.0,
+    presence_penalty: float = 0.0,
+    json_schema: Optional[dict] = None,
+    image_paths: Optional[list[str]] = None,
+    cancellation_token=None,
+) -> str:
+    """Run one isolated OpenAI-compatible text request.
+
+    Unlike :func:`load_model`, this helper never mutates Maestro's singleton
+    provider or unloads the local llama-server.  It is intended for scoped
+    overrides such as asking DeepSeek to revise one comic while keeping the
+    application's normal internal LLM active.
+    """
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    model_id = (model_id or "").strip()
+    base_url = (base_url or "").strip().rstrip("/")
+    if not model_id:
+        raise RuntimeError("An OpenAI-compatible model name is required")
+    if not base_url.startswith(("http://", "https://")):
+        raise RuntimeError("The OpenAI-compatible base URL must start with http:// or https://")
+    is_deepseek = "deepseek.com" in base_url.lower()
+    is_minimax = "minimax.io" in base_url.lower()
+    is_grok = "api.x.ai" in base_url.lower()
+    is_ollama = "11434" in base_url or "ollama" in base_url.lower()
+    provider_schema = (
+        _minimax_compatible_json_schema(json_schema)
+        if is_minimax and json_schema is not None
+        else json_schema
+    )
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    if provider_schema is not None:
+        compact_schema = json.dumps(
+            provider_schema,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        messages.append({
+            "role": "system",
+            "content": (
+                "Return only valid JSON matching this JSON Schema. "
+                f"Do not wrap it in markdown:\n{compact_schema}"
+            ),
+        })
+    if image_paths:
+        content_parts = []
+        for image_path in image_paths:
+            data_url = _image_to_data_url(image_path)
+            if data_url:
+                content_parts.append({"type": "image_url", "image_url": {"url": data_url}})
+        content_parts.append({"type": "text", "text": prompt})
+        messages.append({"role": "user", "content": content_parts})
+    else:
+        messages.append({"role": "user", "content": prompt})
+    payload = {
+        "model": model_id,
+        "messages": messages,
+        "temperature": max(temperature, 0.01),
+        "top_p": top_p,
+    }
+    if is_minimax:
+        # MiniMax's current OpenAI-compatible API deprecates max_tokens.
+        # M-series models spend part of this budget on reasoning, so a short
+        # structured response needs more headroom than its visible JSON.
+        payload["max_completion_tokens"] = max(max_new_tokens, 4096)
+        payload["temperature"] = 1.0
+        payload["reasoning_split"] = True
+        # M3 supports disabling thinking; comic planning benefits more from a
+        # complete schema-valid answer than from a long hidden chain of thought.
+        if model_id == "MiniMax-M3":
+            payload["thinking"] = {"type": "disabled"}
+    else:
+        payload["max_tokens"] = max_new_tokens
+    if frequency_penalty > 0:
+        payload["frequency_penalty"] = frequency_penalty
+    if presence_penalty > 0:
+        payload["presence_penalty"] = presence_penalty
+    if provider_schema is not None:
+        schema_root = str(provider_schema.get("type") or "") if isinstance(provider_schema, dict) else ""
+        if is_deepseek and schema_root == "object":
+            payload["response_format"] = {"type": "json_object"}
+        elif is_ollama or not is_deepseek:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "maestro_response",
+                    "strict": True,
+                    "schema": provider_schema,
+                },
+            }
+
+    from .provider_profile import openai_chat_completions_url
+    endpoint = openai_chat_completions_url(base_url)
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    # DeepSeek's JSON mode can occasionally return an empty content field.
+    # MiniMax reasoning models can likewise spend their first completion budget
+    # entirely on hidden reasoning, even for a short plain-text task such as
+    # lyric translation. Retry only a confirmed successful HTTP response with
+    # empty content; never retry timeouts or transport failures.
+    provider_name = (
+        "MiniMax" if is_minimax
+        else "DeepSeek" if is_deepseek
+        else "Grok" if is_grok
+        else "Ollama" if is_ollama
+        else "OpenAI-compatible provider"
+    )
+    attempts = 2 if is_minimax or (json_schema is not None and is_deepseek) else 1
+    from . import resource_scheduler
+    request_lane = resource_scheduler.remote_lane(model_id, base_url)
+    operation_registry = None
+    operation_id = ""
+    parent_task_id = ""
+    try:
+        from .task_manager import current_task_context, get_task_registry, new_task_id
+        task_context = current_task_context()
+        parent_task_id = task_context.get("task_id", "")
+        workspace_dir = task_context.get("workspace_dir", "")
+        if parent_task_id and workspace_dir:
+            operation_registry = get_task_registry(workspace_dir)
+            parent_task = operation_registry.get(parent_task_id)
+            if parent_task:
+                operation_id = new_task_id("llm-call")
+                operation_registry.create(
+                    id=operation_id, root_id=parent_task["root_id"], parent_id=parent_task_id,
+                    workspace=parent_task.get("workspace") or "default",
+                    kind="llm-call", workflow=parent_task.get("workflow") or "llm",
+                    title=f"{model_id} completion", status="waiting_resource",
+                    phase="waiting_resource", message=f"Waiting to call {provider_name}",
+                    provider=provider_name, model=model_id, server_origin=base_url,
+                    resource_requirements=[request_lane.key], attempt=1, max_attempts=attempts,
+                    cancelable=False, recoverable=False,
+                    metadata={"operation": "generate_openai_compatible"},
+                )
+    except Exception as exc:
+        logger.debug("Could not publish LLM child operation: %s", exc)
+
+    def finish_operation(status: str, message: str, usage: Optional[dict] = None, error: str = "") -> None:
+        if not operation_registry or not operation_id:
+            return
+        normalized = usage or {}
+        prompt_count = int(normalized.get("prompt_tokens", normalized.get("input_tokens", 0)) or 0)
+        completion_count = int(normalized.get("completion_tokens", normalized.get("output_tokens", 0)) or 0)
+        total_count = int(normalized.get("total_tokens") or prompt_count + completion_count)
+        try:
+            operation_registry.update(
+                operation_id, status=status, phase=status, message=message,
+                token_usage={"prompt": prompt_count, "completion": completion_count,
+                             "total": total_count, "calls": 1},
+                error=({"message": error, "retryable": True} if error else None),
+                event_type=f"operation.{status}", force=True,
+            )
+            parent = operation_registry.get(parent_task_id)
+            if parent and total_count:
+                previous = parent.get("token_usage") or {}
+                operation_registry.update(
+                    parent_task_id,
+                    token_usage={
+                        "prompt": int(previous.get("prompt") or 0) + prompt_count,
+                        "completion": int(previous.get("completion") or 0) + completion_count,
+                        "total": int(previous.get("total") or 0) + total_count,
+                        "calls": int(previous.get("calls") or 0) + 1,
+                    },
+                    event_type="task.tokens",
+                )
+        except Exception as exc:
+            logger.debug("Could not finish LLM child operation: %s", exc)
+
+    for content_attempt in range(attempts):
+        request_payload = dict(payload)
+        response_watcher = None
+        if is_minimax and content_attempt > 0:
+            request_payload["max_completion_tokens"] = max(
+                int(request_payload["max_completion_tokens"]) * 2,
+                8192,
+            )
+        try:
+            task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
+
+            def request_cancelled() -> bool:
+                if not operation_registry:
+                    return False
+                operation = operation_registry.get(operation_id) if operation_id else None
+                parent = operation_registry.get(parent_task_id) if parent_task_id else None
+                return any(
+                    task and task.get("status") in {"cancelled", "interrupted"}
+                    for task in (operation, parent)
+                )
+
+            with resource_scheduler.coordinator.acquire(
+                request_lane,
+                task_id=task_id,
+                description=f"{model_id} completion",
+                cancelled=request_cancelled,
+            ):
+                if operation_registry and operation_id:
+                    operation_registry.update(
+                        operation_id, status="running", phase="requesting",
+                        message=f"Calling {provider_name} · attempt {content_attempt + 1}/{attempts}",
+                        attempt=content_attempt + 1,
+                        acquired_resources=[request_lane.key],
+                        event_type="operation.started", force=True,
+                    )
+                _raise_if_token_cancelled(cancellation_token, provider_name)
+                response = requests.post(
+                    endpoint,
+                    json=request_payload,
+                    headers=headers,
+                    timeout=(10, 600),
+                    stream=bool(cancellation_token),
+                )
+                response_watcher = _watch_response_for_cancellation(
+                    response, cancellation_token, provider_name,
+                )
+                _raise_if_token_cancelled(
+                    cancellation_token,
+                    provider_name,
+                    abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+                )
+                # Some otherwise-compatible APIs do not implement OpenAI's
+                # structured response envelope. Retry once without it; Maestro
+                # still validates and repairs the returned JSON locally.
+                if response.status_code in (400, 422) and "response_format" in request_payload:
+                    _stop_response_cancellation_watcher(response_watcher)
+                    response_watcher = None
+                    try:
+                        response.close()
+                    except Exception:
+                        pass
+                    fallback_payload = dict(request_payload)
+                    fallback_payload.pop("response_format", None)
+                    response = requests.post(
+                        endpoint,
+                        json=fallback_payload,
+                        headers=headers,
+                        timeout=(10, 600),
+                        stream=bool(cancellation_token),
+                    )
+                    response_watcher = _watch_response_for_cancellation(
+                        response, cancellation_token, provider_name,
+                    )
+                response.raise_for_status()
+                _raise_if_token_cancelled(
+                    cancellation_token,
+                    provider_name,
+                    abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+                )
+        except LLMRequestCancelled as exc:
+            _stop_response_cancellation_watcher(response_watcher)
+            finish_operation(
+                "cancelled",
+                "Provider request cancelled",
+                error=str(exc),
+            )
+            raise
+        except resource_scheduler.ResourceAcquireCancelled as exc:
+            _stop_response_cancellation_watcher(response_watcher)
+            finish_operation("cancelled", "Provider call cancelled before it started")
+            raise InterruptedError(str(exc)) from exc
+        except requests.exceptions.RequestException as exc:
+            abort_supported = bool(
+                response_watcher and response_watcher[2].get("abort_supported")
+            )
+            _stop_response_cancellation_watcher(response_watcher)
+            if _token_cancelled(cancellation_token):
+                raise LLMRequestCancelled(
+                    provider_name,
+                    abort_supported=abort_supported,
+                ) from exc
+            detail = ""
+            if getattr(exc, "response", None) is not None:
+                detail = str(exc.response.text or "")[:500]
+            suffix = f": {detail}" if detail else ""
+            finish_operation("failed", "Provider request failed", error=f"OpenAI-compatible request failed{suffix}")
+            raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
+
+        try:
+            _raise_if_token_cancelled(
+                cancellation_token,
+                provider_name,
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
+            response_data = response.json()
+            base_response = response_data.get("base_resp") or {}
+            if base_response.get("status_code") not in (None, 0):
+                detail = str(base_response.get("status_msg") or "MiniMax returned an error")
+                finish_operation("failed", "Provider returned an error", error=detail)
+                raise RuntimeError(detail)
+            choice = response_data["choices"][0]
+            message = choice["message"]
+            content = _strip_thinking_tags(str(message.get("content") or "")).strip()
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            abort_supported = bool(
+                response_watcher and response_watcher[2].get("abort_supported")
+            )
+            _stop_response_cancellation_watcher(response_watcher)
+            response_watcher = None
+            if _token_cancelled(cancellation_token):
+                raise LLMRequestCancelled(
+                    provider_name,
+                    abort_supported=abort_supported,
+                ) from exc
+            finish_operation("failed", "Provider response was invalid", error="OpenAI-compatible provider returned an invalid response")
+            raise RuntimeError("OpenAI-compatible provider returned an invalid response") from exc
+        if content:
+            _stop_response_cancellation_watcher(response_watcher)
+            response_watcher = None
+            response_usage = response_data.get("usage") or {}
+            _record_activity_usage(response_usage)
+            finish_operation("completed", "Provider response received and parsed", response_usage)
+            return content
+        usage = response_data.get("usage") or {}
+        token_details = usage.get("completion_tokens_details") or {}
+        logger.warning(
+            "%s returned empty content for %s (finish=%s, completion_tokens=%s, "
+            "reasoning_tokens=%s)%s",
+            provider_name,
+            model_id,
+            choice.get("finish_reason", "unknown"),
+            usage.get("completion_tokens", "unknown"),
+            token_details.get("reasoning_tokens", "unknown"),
+            "; retrying once with more output headroom" if content_attempt + 1 < attempts else "",
+        )
+        if content_attempt + 1 < attempts:
+            _stop_response_cancellation_watcher(response_watcher)
+            response_watcher = None
+            time.sleep(0.4)
+    _stop_response_cancellation_watcher(response_watcher)
+    finish_operation("failed", "Provider returned empty content", error=f"{provider_name} returned empty content")
+    raise RuntimeError(
+        f"{provider_name} returned empty content after {attempts} "
+        f"{'attempts' if attempts != 1 else 'attempt'}"
+    )
+
+
 def get_stream_status() -> dict:
     """Return current streaming state for polling."""
     with _stream_lock:
         return {"text": _stream_buffer, "done": _stream_done}
 
 
+@trace_llm_call("generate_streaming", context=lambda: {"provider": _provider, "model_id": _model_id})
+@_scheduled_llm_request
 def generate_streaming(
     prompt: str,
     system_prompt: str = "",
@@ -1620,6 +2725,7 @@ def generate_streaming(
     frequency_penalty: float = 0.0,
     presence_penalty: float = 0.0,
     json_schema: Optional[dict] = None,
+    cancellation_token=None,
 ) -> str:
     """Generate text using SSE streaming, populating the stream buffer in real-time.
 
@@ -1637,8 +2743,47 @@ def generate_streaming(
     global _stream_buffer, _stream_done, _last_system_prompt, _last_user_prompt, _last_thinking_text
     import re as _re
 
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, _provider)
+
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
+
+    # MiniMax/Grok streaming used the generic max_tokens payload and could
+    # return empty content. Reuse the hardened non-streaming path and publish
+    # the finished text into the stream buffer so the Director dashboard still
+    # sees a response.
+    if _provider in ("minimax", "grok"):
+        with _stream_lock:
+            _stream_buffer = ""
+            _stream_done = False
+        try:
+            result = generate_openai_compatible(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                model_id=_model_id,
+                base_url=_remote_url or (
+                    "https://api.minimax.io" if _provider == "minimax" else "https://api.x.ai"
+                ),
+                api_key=_api_key,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                json_schema=json_schema,
+                image_paths=image_paths,
+                cancellation_token=cancellation_token,
+            )
+            with _stream_lock:
+                _stream_buffer = result
+                _stream_done = True
+            _record_activity_stream(result, True)
+            return result
+        except Exception:
+            with _stream_lock:
+                _stream_done = True
+            raise
 
     # Grammar-constrained JSON mode requires thinking OFF — same rationale
     # as the matching block in generate(): the grammar masks sampling from
@@ -1665,13 +2810,14 @@ def generate_streaming(
     with _stream_lock:
         _stream_buffer = ""
         _stream_done = False
+    _record_activity_stream("", False)
 
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and _vision_available:
+    if image_paths and (_vision_available or _provider in ("remote", "ollama", "openai", "minimax", "grok")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -1691,6 +2837,8 @@ def generate_streaming(
         "stream": True,
         "cache_prompt": False,  # Disable prompt caching — system prompt changes between calls
     }
+    if _provider in ("remote", "ollama", "openai", "minimax", "grok"):
+        payload["model"] = _model_id
     # Apply caller's penalty values FIRST so they're in the payload
     # before _apply_model_defaults runs. The registry-defaults pass below
     # then overrides them when the active model has tuned values
@@ -1730,6 +2878,19 @@ def generate_streaming(
     if json_schema is not None:
         if _provider == "local":
             payload["response_format"] = {"type": "json_object", "schema": json_schema}
+        elif _is_ollama_remote():
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "maestro_response",
+                    "strict": True,
+                    "schema": json_schema,
+                },
+            }
+            print("[LLM] Ollama structured streaming output enabled")
+        elif _is_deepseek_remote():
+            payload["response_format"] = {"type": "json_object"}
+            print("[LLM] DeepSeek JSON streaming output enabled")
         else:
             print(f"[LLM] json_schema requested but provider={_provider} — sending unconstrained (grammar is local llama-server only)")
 
@@ -1767,11 +2928,16 @@ def generate_streaming(
         pass
 
     if _provider == "anthropic":
-        return _generate_streaming_anthropic(messages, total_tokens, max(temperature, 0.01), top_p)
+        return _generate_streaming_anthropic(
+            messages, total_tokens, max(temperature, 0.01), top_p,
+            cancellation_token=cancellation_token,
+        )
 
     raw_content = ""
     reasoning_content = ""
+    stream_usage = {}
     in_reasoning = False
+    response_watcher = None
     try:
         resp = requests.post(
             f"{_server_url()}/v1/chat/completions",
@@ -1781,9 +2947,21 @@ def generate_streaming(
             stream=True,
         )
         resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, _provider,
+        )
+        # Ollama commonly serves SSE as ``text/event-stream`` without an
+        # explicit charset. requests then falls back to ISO-8859-1, turning
+        # UTF-8 Spanish such as "océano" into "ocÃ©ano". SSE JSON is UTF-8
+        # by specification, so force the correct decoder before iter_lines.
+        resp.encoding = "utf-8"
 
         import json as _json_mod
         for line in resp.iter_lines(decode_unicode=True):
+            _raise_if_token_cancelled(
+                cancellation_token, _provider,
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
             if not line or not line.startswith("data: "):
                 continue
             data_str = line[6:]  # strip "data: "
@@ -1791,6 +2969,8 @@ def generate_streaming(
                 break
             try:
                 chunk = _json_mod.loads(data_str)
+                if chunk.get("usage"):
+                    stream_usage = chunk["usage"]
                 delta = chunk.get("choices", [{}])[0].get("delta", {})
 
                 # With --jinja, Qwen3.5 may send reasoning via separate field
@@ -1802,6 +2982,7 @@ def generate_streaming(
                     # Show reasoning in the stream buffer wrapped in <think> tags
                     with _stream_lock:
                         _stream_buffer = f"<think>{reasoning_content}</think>"
+                    _record_activity_stream(f"<think>{reasoning_content}</think>", False)
 
                 token = delta.get("content", "")
                 if token:
@@ -1813,19 +2994,38 @@ def generate_streaming(
                     display += raw_content
                     with _stream_lock:
                         _stream_buffer = display
+                    _record_activity_stream(display, False)
             except Exception:
                 continue
+        _raise_if_token_cancelled(
+            cancellation_token,
+            _provider,
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
 
+    except LLMRequestCancelled:
+        with _stream_lock:
+            _stream_done = True
+        raise
     except requests.exceptions.RequestException as e:
         # Server socket died mid-stream (common: subprocess crash). Surface
         # the real cause so the Director run reports it instead of hanging.
         with _stream_lock:
             _stream_done = True
+        if _token_cancelled(cancellation_token):
+            raise LLMRequestCancelled(
+                _provider,
+                abort_supported=bool(
+                    response_watcher and response_watcher[2].get("abort_supported")
+                ),
+            ) from e
         raise _diagnose_llm_request_failure(e) from e
     except Exception:
         with _stream_lock:
             _stream_done = True
         raise
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     # Capture thinking text for the pipeline dashboard. Two sources:
     #   1. reasoning_content — populated by chat templates that emit
@@ -1857,11 +3057,20 @@ def generate_streaming(
         _stream_buffer = full_raw  # keep full raw for the UI to show thinking
         _stream_done = True
 
+    _record_activity_stream(full_raw, True)
+    _record_activity_usage(stream_usage)
     _reset_idle_timer()
     return content.strip()
 
 
-def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top_p: float) -> str:
+def _generate_anthropic(
+    messages: list,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    *,
+    cancellation_token=None,
+) -> str:
     """Non-streaming generation via Anthropic Messages API."""
     import re as _re
     # Anthropic uses system as a top-level param, not in messages
@@ -1883,14 +3092,39 @@ def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top
     if system_text:
         payload["system"] = system_text
 
-    resp = requests.post(
-        "https://api.anthropic.com/v1/messages",
-        json=payload,
-        headers=_api_headers(),
-        timeout=600,
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, "Anthropic")
+    response_watcher = None
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            json=payload,
+            headers=_api_headers(),
+            timeout=600,
+            stream=bool(cancellation_token),
+        )
+        resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, "Anthropic",
+        )
+        _raise_if_token_cancelled(
+            cancellation_token, "Anthropic",
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
+        data = resp.json()
+        _raise_if_token_cancelled(
+            cancellation_token, "Anthropic",
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
+    except requests.exceptions.RequestException:
+        if _token_cancelled(cancellation_token):
+            _raise_if_token_cancelled(
+                cancellation_token, "Anthropic",
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
+        raise
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     # Anthropic response: {"content": [{"type": "text", "text": "..."}], ...}
     raw_content = ""
@@ -1899,6 +3133,7 @@ def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top
             raw_content += block.get("text", "")
 
     usage = data.get("usage", {})
+    _record_activity_usage(usage)
     print(f"[LLM/Anthropic] Response: {usage.get('output_tokens', '?')} tokens (prompt={usage.get('input_tokens', '?')})")
 
     content = _strip_thinking_tags(raw_content)
@@ -1906,7 +3141,14 @@ def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top
     return content.strip()
 
 
-def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: float, top_p: float) -> str:
+def _generate_streaming_anthropic(
+    messages: list,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    *,
+    cancellation_token=None,
+) -> str:
     """Streaming generation via Anthropic Messages API with SSE."""
     global _stream_buffer, _stream_done
     import re as _re
@@ -1931,6 +3173,10 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
         payload["system"] = system_text
 
     raw_content = ""
+    stream_usage = {}
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, "Anthropic")
+    response_watcher = None
     try:
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -1940,9 +3186,17 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
             stream=True,
         )
         resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, "Anthropic",
+        )
 
         import json
         for line in resp.iter_lines():
+            _raise_if_token_cancelled(
+                cancellation_token,
+                "Anthropic",
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
             if not line:
                 continue
             line_str = line.decode("utf-8", errors="replace")
@@ -1957,6 +3211,10 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
                 continue
 
             event_type = event.get("type", "")
+            if event_type == "message_start":
+                stream_usage.update((event.get("message") or {}).get("usage") or {})
+            elif event_type == "message_delta":
+                stream_usage.update(event.get("usage") or {})
             if event_type == "content_block_delta":
                 delta = event.get("delta", {})
                 if delta.get("type") == "text_delta":
@@ -1964,13 +3222,35 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
                     raw_content += text
                     with _stream_lock:
                         _stream_buffer = raw_content
+                    _record_activity_stream(raw_content, False)
 
+    except LLMRequestCancelled:
+        with _stream_lock:
+            _stream_done = True
+        raise
+    except requests.exceptions.RequestException as e:
+        if _token_cancelled(cancellation_token):
+            with _stream_lock:
+                _stream_done = True
+            raise LLMRequestCancelled(
+                "Anthropic",
+                abort_supported=bool(
+                    response_watcher and response_watcher[2].get("abort_supported")
+                ),
+            ) from e
+        print(f"[LLM/Anthropic] Streaming error: {e}")
+        with _stream_lock:
+            _stream_buffer = raw_content or f"Error: {e}"
+            _stream_done = True
+        return ""
     except Exception as e:
         print(f"[LLM/Anthropic] Streaming error: {e}")
         with _stream_lock:
             _stream_buffer = raw_content or f"Error: {e}"
             _stream_done = True
         return ""
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     content = _strip_thinking_tags(raw_content)
 
@@ -1978,6 +3258,8 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
         _stream_buffer = raw_content
         _stream_done = True
 
+    _record_activity_stream(raw_content, True)
+    _record_activity_usage(stream_usage)
     _reset_idle_timer()
     return content.strip()
 
@@ -2044,7 +3326,18 @@ def enhance_prompt(
     tts_voice_count: int = 2,
     lora_system_hint: str = "",
     raw_enhancer_mode: bool = False,
+    reference_context: Optional[str] = None,
 ) -> str:
+    is_h3_ref2va = (
+        mode in ("video", "avatar")
+        and (model_type or "").lower().startswith("minimax_h3_ref2va")
+    )
+    is_h3_context_ir = (
+        mode in ("video", "avatar")
+        and (model_type or "").lower().startswith("minimax_h3")
+        and not is_h3_ref2va
+    )
+    is_h3_structured = is_h3_context_ir or is_h3_ref2va
     # If caller provides a system prompt override, use it directly (e.g., Director third-pass)
     if system_override:
         # Do NOT append the full model-specific enhance guide — the override is self-contained.
@@ -2182,13 +3475,13 @@ def enhance_prompt(
 
         # Look up model-specific enhancer prompts (Scenema, Kugel, Qwen3-TTS,
         # Index-TTS2, Chatterbox, IndexTTS2 all set these on their model_def).
-        # Lazy import keeps llm_service.py importable in environments where
-        # wgp.py is unavailable (e.g. lightweight tooling, tests).
+        # The bound catalog is read at call time so llm_service stays importable
+        # in lightweight tooling and tests that never bootstrap WanGP.
         model_specific_monologue = None
         model_specific_dialogue = None
         if model_type:
             try:
-                from wgp import get_model_def
+                from services.generation import get_model_def
                 md = get_model_def(model_type)
                 if md:
                     model_specific_monologue = md.get("text_prompt_enhancer_instructions")
@@ -2252,7 +3545,11 @@ def enhance_prompt(
     # who anyone is). Appended for video so EVERY path gets it: per-model guides
     # (Sulphur, 10Eros) that don't include the generic LTX video guide, plus the
     # generic guide itself. Mirrors the Director-mode character-reference rule.
-    if mode in ("video", "avatar"):
+    # H3's guide already carries its own identity, pacing, and silence rules.
+    # The generic appendix says to remove all character names and to write one
+    # paragraph per sliding window, both of which conflict with H3's
+    # knowledge-aware Context-IR format and single native timeline.
+    if mode in ("video", "avatar") and not is_h3_structured:
         from services.guide_loader import load_guide as _load_vid_guide
         vid_block = _load_vid_guide("enhance", "video_shared")
         if vid_block:
@@ -2264,11 +3561,20 @@ def enhance_prompt(
 
     # Add image context
     if image_paths:
-        if mode == "image":
+        if is_h3_ref2va:
+            user_prompt = (
+                "I have attached the image references from an ordered MiniMax H3 Omni-reference request. "
+                "Use what you can see together with the exact label map below; references are identity/style/motion "
+                "evidence and are not automatically an opening frame.\n\n"
+                f"{reference_context or 'Use the supplied ordered reference labels.'}\n\n{user_prompt}"
+            )
+        elif mode == "image":
             user_prompt = f"I have attached a reference image. Enhance this prompt based on what you see in the image:\n\n{user_prompt}"
         else:
             user_prompt = f"I have attached a start frame image. Enhance this video prompt to match what you see in the image and describe what should happen:\n\n{user_prompt}"
         print(f"[Enhance] Sending {len(image_paths)} image(s) to vision LLM")
+    elif is_h3_ref2va and reference_context:
+        user_prompt = f"Ordered Omni-reference label map:\n{reference_context}\n\n{user_prompt}"
 
     # Inject LoRA hints into system prompt (NOT user prompt) so LLM treats them as instructions
     if lora_system_hint:
@@ -2280,17 +3586,60 @@ def enhance_prompt(
             '\n\nSTRUCTURAL RULES for image prompts:'
             '\n- If the prompt starts with "create new scene", keep that prefix.'
             '\n- If the prompt ends with "Use original reference images" or similar, keep that suffix.'
-            '\n- ALWAYS end the prompt with: "Preserve character identity, attire, and body attributes from the reference image."'
+            '\n- ALWAYS end the prompt with: "Preserve character identity, attire, body attributes, and the art style of the reference image."'
             '\n- NEVER include LoRA names or filenames in the output.'
         )
 
-    # Reinforce output constraint — prevents verbose models from adding explanations
-    system += "\n\nCRITICAL: Output ONLY the enhanced prompt text. No headers, no labels, no markdown, no explanation, no \"Enhancement Logic\", no \"Edit Prompt:\". No LoRA filenames (.safetensors). Just the raw prompt text."
+    # Reinforce the output constraint. MiniMax H3 is intentionally different:
+    # its field labels and <d> blocks are part of the model input, not prose
+    # headers to strip. The generic "no labels" rule previously contradicted
+    # the H3 guide and encouraged ordinary quote-mark dialogue.
+    if is_h3_ref2va:
+        system += (
+            "\n\nCRITICAL MINIMAX H3 REF2VA OUTPUT CONTRACT: Output ONLY the six required fields, "
+            "in order: subject_definitions:, summary:, retention_analysis:, detailed_description:, "
+            "overall_soundscape:, and non_diegetic_music:. Use only the supplied <Picture n>, <Video n>, "
+            "and <Audio n> labels. These labels and fields are model syntax, not explanatory headings. "
+            "Every VOICE REFERENCE must be bound inside subject_definitions to its matching <Subject n> "
+            "and stable (S1), (S2), etc. speaker ID. Spoken lines require that same ID and <d>[Language] literal "
+            "words</d>. No markdown, "
+            "explanation, filenames, or LoRA names."
+        )
+    elif is_h3_context_ir:
+        system += (
+            "\n\nCRITICAL MINIMAX H3 OUTPUT CONTRACT: Output ONLY the structured "
+            "H3 prompt, with the exact field labels "
+            "integrated_multimodal_description:, overall_soundscape:, and "
+            "non_diegetic_music:. These labels are required model syntax, not "
+            "explanatory headers. Every spoken line must have a stable (S1), "
+            "(S2), etc. speaker ID and use <d>[Language] literal words</d>. "
+            "When the user requests a discussion without supplying lines, write "
+            "short meaningful dialogue that fits the supplied Duration. Once the "
+            "last line ends, continue with visible action only. Do not describe "
+            "sound or silence. overall_soundscape and non_diegetic_music are N/A. "
+            "No markdown, explanation, or LoRA filenames."
+        )
+    else:
+        system += "\n\nCRITICAL: Output ONLY the enhanced prompt text. No headers, no labels, no markdown, no explanation, no \"Enhancement Logic\", no \"Edit Prompt:\". No LoRA filenames (.safetensors). Just the raw prompt text."
+
+    if is_h3_structured:
+        dialogue_requirement = _build_h3_dialogue_requirement(prompt, duration_seconds)
+        if dialogue_requirement:
+            # Keep this adjacent to the output contract so a long vision guide
+            # cannot demote literal dialogue into a vague "speaks" action.
+            system += f"\n\n{dialogue_requirement}"
 
     # Scale max tokens for multi-window video prompts
     effective_max_tokens = max_new_tokens
     if window_count and window_count > 1:
         effective_max_tokens = max(max_new_tokens, window_count * 300 + 256)
+    if is_h3_ref2va:
+        effective_max_tokens = max(effective_max_tokens, 1200)
+    elif is_h3_context_ir:
+        # Leave enough room for the three required fields plus a compact timed
+        # dialogue. Most H3 prompts finish well below this ceiling, but 512 can
+        # truncate a vision-assisted 15-second rewrite before its sound fields.
+        effective_max_tokens = max(effective_max_tokens, 768)
 
     # TTS: thinking mode for creative dialogue, disabled for fast mode
     is_tts = bool(tts_enhance_mode)
@@ -2309,19 +3658,564 @@ def enhance_prompt(
         presence_penalty=0.1,   # encourage variety
     )
 
-    # Post-process: strip any markdown headers, labels, or explanation the model added
+    # Post-process ordinary prose aggressively, but preserve H3's required field
+    # labels and media tags. The old substring-loop cleaner could truncate a
+    # valid Context-IR response at its first repeated <Picture>/<Audio> mapping.
     if result:
-        result = _clean_enhance_output(result)
+        result = _clean_enhance_output(result, preserve_structure=is_h3_structured)
+
+    structure_is_valid = (
+        _has_complete_h3_ref2va_structure(result)
+        if is_h3_ref2va
+        else _has_complete_h3_context_structure(result)
+    ) if is_h3_structured else True
+    dialogue_is_valid = _h3_dialogue_contract_satisfied(prompt, result) if is_h3_structured else True
+    timed_silence_is_valid = (
+        _h3_timed_silence_contract_satisfied(prompt, result, duration_seconds)
+        if is_h3_structured
+        else True
+    )
+    voice_binding_is_valid = (
+        _h3_voice_binding_contract_satisfied(result, reference_context)
+        if is_h3_ref2va
+        else True
+    )
+
+    # Small local LLMs can either repeat the first Ref2VA mapping or summarize
+    # quoted dialogue as the word "speaks". Retry malformed H3 output once with
+    # the immutable dialogue contract adjacent to the shape constraint.
+    if is_h3_structured and not (
+        structure_is_valid
+        and dialogue_is_valid
+        and timed_silence_is_valid
+        and voice_binding_is_valid
+    ):
+        failures = []
+        if not structure_is_valid:
+            failures.append("structure")
+        if not dialogue_is_valid:
+            failures.append("dialogue")
+        if not timed_silence_is_valid:
+            failures.append("timed silence")
+        if not voice_binding_is_valid:
+            failures.append("voice binding")
+        print(f"[Enhance] Invalid MiniMax H3 {'/'.join(failures)}; retrying once.")
+        field_requirement = (
+            "Emit each of the six required field labels exactly once, in order."
+            if is_h3_ref2va
+            else "Emit each of the three required field labels exactly once, in order."
+        )
+        retry = generate(
+            prompt=user_prompt,
+            system_prompt=(
+                system
+                + f"\n\nRETRY REQUIREMENT: Be concise. {field_requirement} "
+                "Do not repeat a subject definition or reference mapping. Never replace a requested "
+                "spoken line with the words 'speaks', 'talks', or 'dialogue'; write the actual <d> block."
+            ),
+            max_new_tokens=effective_max_tokens,
+            temperature=min(float(temperature), 0.35),
+            image_paths=image_paths,
+            enable_thinking=False,
+            thinking_budget=4096,
+            frequency_penalty=0.6,
+            presence_penalty=0.15,
+        )
+        retry = _clean_enhance_output(retry, preserve_structure=True) if retry else ""
+        retry_structure_is_valid = (
+            _has_complete_h3_ref2va_structure(retry)
+            if is_h3_ref2va
+            else _has_complete_h3_context_structure(retry)
+        )
+        retry_dialogue_is_valid = _h3_dialogue_contract_satisfied(prompt, retry)
+        retry_timed_silence_is_valid = _h3_timed_silence_contract_satisfied(
+            prompt,
+            retry,
+            duration_seconds,
+        )
+        retry_voice_binding_is_valid = (
+            _h3_voice_binding_contract_satisfied(retry, reference_context)
+            if is_h3_ref2va
+            else True
+        )
+        if (
+            retry_structure_is_valid
+            and retry_dialogue_is_valid
+            and retry_timed_silence_is_valid
+            and retry_voice_binding_is_valid
+        ):
+            result = retry
+        else:
+            print("[Enhance] H3 retry was incomplete; using deterministic structured fallback.")
+            result = (
+                _build_h3_ref2va_tagged_fallback(
+                    prompt,
+                    reference_context,
+                    duration_seconds=duration_seconds,
+                )
+                if is_h3_ref2va
+                else _build_h3_context_fallback(
+                    prompt,
+                    has_start_image=bool(image_paths),
+                    duration_seconds=duration_seconds,
+                )
+            )
+
+    # If two full rewrites still summarize a vague request as "they discuss",
+    # ask the local LLM for only the missing exchange. This rare focused pass is
+    # cheaper and more reliable than accepting a prompt that makes H3 improvise.
+    if (
+        is_h3_structured
+        and _h3_requests_speech(prompt)
+        and not _extract_h3_quoted_dialogue(prompt)
+        and not _h3_dialogue_contract_satisfied(prompt, result)
+    ):
+        word_budget = max(4, int(duration_seconds or 8))
+        print("[Enhance] H3 discussion still has no dialogue; generating a focused exchange.")
+        dialogue_fragment = generate(
+            prompt=(
+                f"Duration: {duration_seconds or 8} seconds. Total dialogue budget: at most "
+                f"{word_budget} spoken words. Request: {prompt}"
+            ),
+            system_prompt=(
+                "Write only the concise dialogue requested by the user. Output one to three lines in "
+                "the exact form 'Speaker description (S1): <d>[English] Literal words.</d>', using "
+                "stable sequential speaker IDs. Communicate the requested topic. No narration, "
+                "markdown, quotation marks, headings, or dialogue beyond the word budget."
+            ),
+            max_new_tokens=min(320, effective_max_tokens),
+            temperature=min(float(temperature), 0.5),
+            image_paths=None,
+            enable_thinking=False,
+            thinking_budget=2048,
+            frequency_penalty=0.4,
+            presence_penalty=0.1,
+        )
+        dialogue_fragment = (
+            _clean_enhance_output(dialogue_fragment, preserve_structure=True)
+            if dialogue_fragment
+            else ""
+        )
+        if _extract_h3_dialogue_blocks(dialogue_fragment):
+            result = _inject_h3_generated_dialogue(
+                result,
+                dialogue_fragment,
+                ref2va=is_h3_ref2va,
+            )
+        else:
+            print("[Enhance] Focused H3 dialogue pass returned no valid <d> block.")
+
+    # Explicit user dialogue is immutable. Even if both LLM attempts omit it,
+    # compile every quoted line into H3 syntax before returning the prompt.
+    if is_h3_structured and not _h3_dialogue_contract_satisfied(prompt, result):
+        result = _inject_missing_h3_dialogue(result, prompt, ref2va=is_h3_ref2va)
+    if is_h3_structured:
+        result = _strip_h3_untagged_dialogue_duplicates(result, prompt)
+        result = _enforce_h3_soundscape_silence(result, prompt)
+        result = _enforce_h3_music_request(result, prompt, reference_context)
+        try:
+            from services.director.h3_dialogue import apply_h3_no_sound_description
+        except ImportError:
+            from app.services.director.h3_dialogue import apply_h3_no_sound_description
+        result = apply_h3_no_sound_description(result)
     return result
 
 
-def _clean_enhance_output(text: str) -> str:
+_H3_REF2VA_FIELDS = (
+    "subject_definitions",
+    "summary",
+    "retention_analysis",
+    "detailed_description",
+    "overall_soundscape",
+    "non_diegetic_music",
+)
+_H3_CONTEXT_FIELDS = (
+    "integrated_multimodal_description",
+    "overall_soundscape",
+    "non_diegetic_music",
+)
+
+
+def _extract_h3_quoted_dialogue(text: str) -> list[str]:
+    """Extract explicit straight- or curly-quoted speech in source order."""
+    import re
+    matches = []
+    for match in re.finditer(r'"([^"\r\n]{1,500})"|“([^”\r\n]{1,500})”', str(text or "")):
+        value = (match.group(1) or match.group(2) or "").strip()
+        if value:
+            matches.append(value)
+    return matches
+
+
+def _h3_requests_speech(text: str) -> bool:
+    import re
+    return bool(
+        _extract_h3_quoted_dialogue(text)
+        or re.search(
+            r"\b(?:say|says|speak|speaks|talk|talks|discuss|discusses|discussion|"
+            r"argue|argues|announce|announces|ask|asks|reply|replies|tell|tells|"
+            r"conversation|dialogue)\b",
+            str(text or ""),
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _extract_h3_dialogue_blocks(text: str) -> list[str]:
+    import re
+    return [
+        match.strip()
+        for match in re.findall(
+            r"<d>\s*\[[^\]]+\]\s*(.*?)\s*</d>",
+            str(text or ""),
+            flags=re.DOTALL,
+        )
+        if match.strip()
+    ]
+
+
+def _h3_dialogue_schedule(prompt: str, duration_seconds: Optional[float]) -> tuple[float, float, float]:
+    """Choose an early bounded speech interval and leave useful silent action around it."""
+    duration = max(2.0, float(duration_seconds or 8.0))
+    quotes = _extract_h3_quoted_dialogue(prompt)
+    if quotes:
+        word_count = sum(len(line.split()) for line in quotes)
+    else:
+        # Vague discussion requests still need room for reactions and action.
+        word_count = max(4, int(duration))
+    speech_duration = max(1.0, word_count / 2.0)
+    speech_duration = min(speech_duration, max(1.0, duration * 0.55))
+    start = max(0.5, duration * 0.2)
+    start = min(start, max(0.25, duration - speech_duration - 0.75))
+    end = min(duration - 0.25, start + speech_duration)
+    return duration, start, end
+
+
+def _build_h3_timed_silence_clause(prompt: str, duration_seconds: Optional[float]) -> str:
+    # Temporary: do not inject silence or sound instructions. H3 performs them.
+    return ""
+
+
+def _build_h3_dialogue_requirement(
+    prompt: str,
+    duration_seconds: Optional[float] = None,
+) -> str:
+    quotes = _extract_h3_quoted_dialogue(prompt)
+    timed_clause = _build_h3_timed_silence_clause(prompt, duration_seconds)
+    if quotes:
+        required = "\n".join(
+            f"- REQUIRED VERBATIM: <d>[English] {line}</d>" for line in quotes
+        )
+        return (
+            "IMMUTABLE H3 DIALOGUE CONTRACT: The user supplied the spoken lines below. "
+            "Every line must appear verbatim inside a <d> block in the output; do not summarize, "
+            "paraphrase, censor, omit, or add speech. Give each line a stable (S1), (S2), etc. "
+            f"speaker outside its tag. Never repeat these words as ordinary quoted text in summary "
+            f"or any other field.\n{required}\n{timed_clause}"
+        )
+    if _h3_requests_speech(prompt):
+        return (
+            "MANDATORY H3 DIALOGUE CONTRACT: The user explicitly requests speech but supplied no "
+            "script. Write concise, meaningful dialogue that communicates the requested subject, "
+            "using stable speaker IDs and one or more <d>[English] literal words</d> blocks. "
+            "Writing only 'speaks', 'talks', or 'they discuss' makes the output invalid. "
+            f"{timed_clause}"
+        )
+    return ""
+
+
+def _h3_dialogue_contract_satisfied(prompt: str, result: str) -> bool:
+    import re
+    quotes = _extract_h3_quoted_dialogue(prompt)
+    blocks = _extract_h3_dialogue_blocks(result)
+    has_speaker_id = bool(re.search(r"\(S\d+\)", str(result or "")))
+    if quotes:
+        return has_speaker_id and all(line in blocks for line in quotes)
+    if _h3_requests_speech(prompt):
+        return has_speaker_id and bool(blocks)
+    return True
+
+
+def _h3_timed_silence_contract_satisfied(
+    prompt: str,
+    result: str,
+    duration_seconds: Optional[float],
+) -> bool:
+    """Silence prose is no longer required; H3 performs those notes as speech."""
+    return True
+
+
+def _h3_voice_binding_contract_satisfied(
+    result: str,
+    reference_context: Optional[str],
+) -> bool:
+    """Require every Omni voice reference inside the subject/speaker mapping."""
+    import re
+    voice_labels = re.findall(
+        r"(?mi)^(<Audio\s+\d+>).*?intent=VOICE REFERENCE.*$",
+        str(reference_context or ""),
+    )
+    if not voice_labels:
+        return True
+    match = re.search(
+        r"(?ms)^\s*subject_definitions\s*:(.*?)(?=^\s*summary\s*:)",
+        str(result or ""),
+    )
+    if not match:
+        return False
+    definitions = match.group(1)
+    return all(label in definitions for label in voice_labels) and bool(
+        re.search(r"\(S\d+\)", definitions)
+    )
+
+
+def _has_complete_h3_ref2va_structure(text: str) -> bool:
+    """Return true only for one complete, ordered six-field Ref2VA prompt."""
+    if not text:
+        return False
+    import re
+    positions = []
+    for field in _H3_REF2VA_FIELDS:
+        matches = list(re.finditer(rf"(?mi)^\s*{re.escape(field)}\s*:", text))
+        if len(matches) != 1:
+            return False
+        positions.append(matches[0].start())
+    return positions == sorted(positions)
+
+
+def _has_complete_h3_context_structure(text: str) -> bool:
+    """Return true only for one complete, ordered three-field H3 prompt."""
+    if not text:
+        return False
+    import re
+    positions = []
+    for field in _H3_CONTEXT_FIELDS:
+        matches = list(re.finditer(rf"(?mi)^\s*{re.escape(field)}\s*:", text))
+        if len(matches) != 1:
+            return False
+        positions.append(matches[0].start())
+    return positions == sorted(positions)
+
+
+def _compile_h3_explicit_dialogue(prompt: str) -> str:
+    """Replace user quotation marks with literal H3 dialogue blocks."""
+    import re
+    counter = 0
+
+    def replace(match):
+        nonlocal counter
+        counter += 1
+        value = (match.group(1) or match.group(2) or "").strip()
+        return f"(S{counter}) <d>[English] {value}</d>"
+
+    return re.sub(
+        r'"([^"\r\n]{1,500})"|“([^”\r\n]{1,500})”',
+        replace,
+        str(prompt or ""),
+    )
+
+
+def _inject_missing_h3_dialogue(result: str, prompt: str, *, ref2va: bool) -> str:
+    """Deterministically append omitted literal dialogue to the correct H3 field."""
+    quotes = _extract_h3_quoted_dialogue(prompt)
+    if not quotes:
+        return result
+    existing = set(_extract_h3_dialogue_blocks(result))
+    missing = [line for line in quotes if line not in existing]
+    if not missing:
+        return result
+    additions = " ".join(
+        f"The intended speaker (S{index}) says exactly once: <d>[English] {line}</d>."
+        for index, line in enumerate(missing, start=1)
+    )
+    field = "detailed_description" if ref2va else "integrated_multimodal_description"
+    next_field = "overall_soundscape"
+    import re
+    pattern = re.compile(
+        rf"(?ms)(^\s*{re.escape(field)}\s*:.*?)(?=^\s*{re.escape(next_field)}\s*:)",
+    )
+    if pattern.search(result or ""):
+        return pattern.sub(
+            lambda match: match.group(1).rstrip() + " " + additions + "\n",
+            result,
+            count=1,
+        )
+    return f"{result or ''}\n{field}: {additions}".strip()
+
+
+def _inject_h3_generated_dialogue(result: str, fragment: str, *, ref2va: bool) -> str:
+    """Insert a focused generated exchange while discarding non-dialogue prose."""
+    valid_lines = [
+        line.strip()
+        for line in str(fragment or "").splitlines()
+        if "<d>" in line and "</d>" in line
+    ][:3]
+    if not valid_lines:
+        return result
+    addition = (
+        " The complete requested exchange is: "
+        + " ".join(valid_lines)
+    )
+    field = "detailed_description" if ref2va else "integrated_multimodal_description"
+    import re
+    pattern = re.compile(
+        rf"(?ms)(^\s*{re.escape(field)}\s*:.*?)(?=^\s*overall_soundscape\s*:)",
+    )
+    if pattern.search(result or ""):
+        return pattern.sub(
+            lambda match: match.group(1).rstrip() + addition + "\n",
+            result,
+            count=1,
+        )
+    return f"{result or ''}\n{field}:{addition}".strip()
+
+
+def _strip_h3_untagged_dialogue_duplicates(result: str, prompt: str) -> str:
+    """Remove summary/narration copies of dialogue that already belongs in <d>."""
+    source_lines = _extract_h3_quoted_dialogue(prompt)
+    if not source_lines:
+        return result
+    import re
+
+    def normalized(value: str) -> str:
+        return " ".join(value.strip().rstrip(".,!?;:").casefold().split())
+
+    source_values = {normalized(line) for line in source_lines}
+    protected: list[str] = []
+
+    def stash(match):
+        protected.append(match.group(0))
+        return f"@@MAESTRO_H3_DIALOGUE_{len(protected) - 1}@@"
+
+    text = re.sub(r"<d>.*?</d>", stash, str(result or ""), flags=re.DOTALL)
+
+    def replace_quote(match):
+        value = match.group(1) or match.group(2) or ""
+        return "the scripted line" if normalized(value) in source_values else match.group(0)
+
+    text = re.sub(
+        r'"([^"\r\n]{1,500})"|\u201c([^\u201d\r\n]{1,500})\u201d',
+        replace_quote,
+        text,
+    )
+    for index, block in enumerate(protected):
+        text = text.replace(f"@@MAESTRO_H3_DIALOGUE_{index}@@", block)
+    return text
+
+
+def _enforce_h3_soundscape_silence(result: str, prompt: str) -> str:
+    """Temporary: never describe sound. Keep the required label; value is N/A."""
+    import re
+    return re.sub(
+        r"(?ms)^\s*overall_soundscape\s*:.*?(?=^\s*non_diegetic_music\s*:)",
+        "overall_soundscape: N/A\n",
+        str(result or ""),
+        count=1,
+    )
+
+
+def _enforce_h3_music_request(
+    result: str,
+    prompt: str,
+    reference_context: Optional[str],
+) -> str:
+    """Do not turn visual words such as 'cinematic' into an invented score."""
+    import re
+    requests_music = bool(
+        re.search(
+            r"(?i)\b(?:music|song|score|soundtrack|orchestra|orchestral|instrumental|melody|theme)\b",
+            str(prompt or ""),
+        )
+    )
+    mapped_music = bool(
+        re.search(
+            r"(?i)(?:AUDIO REUSE / PERFORMANCE DRIVER|Sound / music style|intent=AUDIO REFERENCE)",
+            str(reference_context or ""),
+        )
+    )
+    if requests_music or mapped_music:
+        return result
+    return re.sub(
+        r"(?ms)^\s*non_diegetic_music\s*:.*\Z",
+        "non_diegetic_music: N/A",
+        str(result or ""),
+    )
+
+
+def _build_h3_ref2va_tagged_fallback(
+    prompt: str,
+    reference_context: Optional[str],
+    *,
+    duration_seconds: Optional[float] = None,
+) -> str:
+    """Create a deterministic six-field fallback when the local LLM loops."""
+    raw_mapping = reference_context or "Use the supplied ordered references according to their roles."
+    mapping = " ".join(raw_mapping.split())
+    import re
+    picture_labels = re.findall(r"<Picture\s+\d+>", raw_mapping)
+    voice_labels = re.findall(
+        r"(?mi)^(<Audio\s+\d+>).*?intent=VOICE REFERENCE.*$",
+        raw_mapping,
+    )
+    subject_bindings = []
+    for index, picture_label in enumerate(picture_labels, start=1):
+        subject_bindings.append(
+            f"<Subject {index}> (S{index}) takes visual identity from {picture_label}."
+        )
+    for index, audio_label in enumerate(voice_labels, start=1):
+        subject_index = min(index, max(1, len(picture_labels)))
+        subject_bindings.append(
+            f"{audio_label} is the voice-timbre reference for <Subject {subject_index}> (S{subject_index})."
+        )
+    subject_mapping = " ".join(subject_bindings + [mapping])
+    request = _compile_h3_explicit_dialogue(prompt)
+    return (
+        f"subject_definitions: {subject_mapping}\n"
+        "summary: A finished video matching the requested action, identity, setting, and explicitly "
+        "tagged dialogue.\n"
+        f"retention_analysis: Preserve the mapped identity, motion, and audio roles exactly: {mapping}\n"
+        f"detailed_description: The finished target video follows this request: {request} "
+        "Reference pictures provide identity and appearance only, never their original background, "
+        "framing, pose, or an opening still.\n"
+        "overall_soundscape: N/A\n"
+        "non_diegetic_music: N/A"
+    )
+
+
+def _build_h3_context_fallback(
+    prompt: str,
+    *,
+    has_start_image: bool,
+    duration_seconds: Optional[float] = None,
+) -> str:
+    """Create a deterministic three-field fallback for ordinary H3 Base."""
+    alignment = (
+        "For the target video, at 0.00 seconds into the target video, <Picture 1> "
+        "(from [Shot 1]) is fully referenced.\n\n"
+        if has_start_image
+        else ""
+    )
+    request = _compile_h3_explicit_dialogue(prompt)
+    return (
+        f"{alignment}integrated_multimodal_description: [Shot 1] {request}\n\n"
+        "overall_soundscape: N/A\n\n"
+        "non_diegetic_music: N/A"
+    )
+
+
+def _clean_enhance_output(text: str, preserve_structure: bool = False) -> str:
     """Strip markdown formatting, headers, explanation, and repetition loops from enhance output."""
     import re
     # Remove markdown bold/headers
-    text = re.sub(r'\*\*.*?\*\*:?\s*', '', text)
+    if preserve_structure:
+        text = text.replace('**', '')
+    else:
+        text = re.sub(r'\*\*.*?\*\*:?\s*', '', text)
     # Remove markdown headers
-    text = re.sub(r'^#{1,4}\s+.*$', '', text, flags=re.MULTILINE)
+    if preserve_structure:
+        text = re.sub(r'^\s*#{1,4}\s*', '', text, flags=re.MULTILINE)
+    else:
+        text = re.sub(r'^#{1,4}\s+.*$', '', text, flags=re.MULTILINE)
     # Remove horizontal rules
     text = re.sub(r'^---+\s*$', '', text, flags=re.MULTILINE)
     # Remove common label prefixes the model adds
@@ -2333,8 +4227,14 @@ def _clean_enhance_output(text: str) -> str:
     # Collapse excessive blank lines
     text = re.sub(r'\n{3,}', '\n\n', text)
 
-    # Detect and truncate repetition loops: if any 20+ char substring repeats 3+ times, keep only the first occurrence
+    # H3 Context-IR legitimately repeats subject and reference labels across
+    # sections. Structure validation/retry handles malformed H3 output without
+    # destroying those mappings.
     cleaned = text.strip()
+    if preserve_structure:
+        return cleaned
+
+    # Detect and truncate repetition loops: if any 20+ char substring repeats 3+ times, keep only the first occurrence
     for chunk_len in range(30, 15, -1):
         if len(cleaned) < chunk_len * 3:
             continue
@@ -2354,16 +4254,16 @@ def describe_image(
     prompt: str = "Describe this image in detail for use as a video generation prompt.",
     max_new_tokens: int = 256,
 ) -> str:
-    """Describe an image. Vision support requires multimodal GGUF (future)."""
+    """Describe an image with the loaded LLM when it accepts vision input."""
     if not os.path.isfile(image_path):
         raise FileNotFoundError(f"Image not found: {image_path}")
 
-    basename = os.path.basename(image_path)
     return generate(
-        prompt=f"The user has an image file named '{basename}'. {prompt}",
+        prompt=prompt,
         system_prompt="You are a helpful assistant that generates creative, detailed video prompts.",
         max_new_tokens=max_new_tokens,
         temperature=0.4,
+        image_paths=[image_path],
     )
 
 
@@ -2594,15 +4494,15 @@ def plan_angle_prompts(
 # Song section classification via LLM
 # ---------------------------------------------------------------------------
 
-_VALID_SECTION_LABELS = {"intro", "verse", "chorus", "bridge", "outro", "instrumental"}
+_VALID_SECTION_LABELS = {"intro", "verse", "pre-chorus", "chorus", "bridge", "outro", "instrumental"}
 
 # Label normalization: maps common LLM output keywords to valid labels.
 # Checked in order — "pre-chorus"/"pre chorus" must match before "chorus".
 _LABEL_MAP = [
     ("intro", "intro"),
     ("outro", "outro"),
-    ("pre-chorus", "bridge"),
-    ("pre chorus", "bridge"),
+    ("pre-chorus", "pre-chorus"),
+    ("pre chorus", "pre-chorus"),
     ("bridge", "bridge"),
     ("hook", "chorus"),
     ("chorus", "chorus"),
@@ -3090,6 +4990,48 @@ def _map_labels_to_sections(sections: list, structure: list) -> list:
     return labels
 
 
+def structure_from_tagged_lyrics(lyrics_text: str, duration: float) -> list:
+    """Turn editable [Verse]/[Chorus]/… lyrics into approximate timestamps.
+
+    Generated Story songs already carry authoritative section tags. Using
+    those tags is more reliable than asking Whisper and a second LLM to infer
+    the same structure from sung audio. Section lengths are apportioned by
+    lyric word count; instrumental/empty sections retain a small time weight.
+    """
+    if not lyrics_text or not duration:
+        return []
+    supported = re.compile(
+        r"^\s*\[(Intro|Verse(?:\s+\d+)?|Pre[- ]?Chorus|Chorus|Bridge|Outro|Inst(?:rumental)?|Solo)\]\s*$",
+        re.IGNORECASE,
+    )
+    parsed: list[dict] = []
+    current: dict | None = None
+    for raw_line in lyrics_text.splitlines():
+        match = supported.match(raw_line)
+        if match:
+            display = match.group(1).strip()
+            current = {"display_label": display, "label": _normalize_label(display), "words": 0}
+            parsed.append(current)
+            continue
+        if current is not None:
+            current["words"] += len(re.findall(r"\b[\wÀ-ÿ']+\b", raw_line))
+    if not parsed:
+        return []
+
+    weights = [max(0.5, float(section["words"])) for section in parsed]
+    total_weight = sum(weights) or float(len(weights))
+    elapsed = 0.0
+    structure = []
+    for section, weight in zip(parsed, weights):
+        structure.append({
+            "label": section["label"],
+            "display_label": section["display_label"],
+            "start": round(elapsed, 3),
+        })
+        elapsed += duration * (weight / total_weight)
+    return structure
+
+
 def classify_song_sections(
     sections: list,
     lyrics: list,
@@ -3173,6 +5115,7 @@ def classify_song_sections(
         system_prompt=system_prompt,
         max_new_tokens=400,
         temperature=0.2,
+        enable_thinking=False,
     )
 
     print(f"[LLM] Raw classification output:\n{raw}")
@@ -3368,6 +5311,8 @@ def plan_clip_prompts_and_images(
     speaker_mappings: Optional[dict] = None,
     prompt_type: str = "both",
     existing_image_prompts: Optional[list] = None,
+    video_model: str = "",
+    music_video_treatment: Optional[dict] = None,
 ) -> list:
     """Generate per-clip prompts.  Supports three modes via *prompt_type*:
 
@@ -3462,7 +5407,11 @@ def plan_clip_prompts_and_images(
             return content
         return ""
 
-    video_guide = _load_guide("LTX-2_PROMPTING_GUIDE_Embedded_Audio.MD")
+    is_ltx = str(video_model or "").lower().startswith(("ltx2", "ltxv"))
+    video_guide = _load_guide(
+        "LTX-2_PROMPTING_GUIDE_Embedded_Audio.MD"
+        if is_ltx else "director/music_video_treatment_rules.md"
+    )
     image_guide = _load_guide("QWEN IMAGE EDIT PROMPTING GUIDE.md")
 
     guide_sections = ""
@@ -3500,10 +5449,26 @@ def plan_clip_prompts_and_images(
     )
 
     # Shared rules for all music video modes
+    try:
+        from services.director.planners.music_video import normalize_music_video_treatment
+        normalized_treatment = normalize_music_video_treatment(music_video_treatment)
+    except Exception:
+        normalized_treatment = music_video_treatment or {}
+    treatment_text = json.dumps(normalized_treatment, ensure_ascii=False)
     shared_rules = (
         "- Use the Scene Concept as your PRIMARY guide for locations, outfits, "
         "props, and activities.\n"
+        "- LOCATIONS ARE BINDING: if the Scene Concept names a specific location "
+        "or setting, EVERY clip stays in that location unless the Scene Concept "
+        "itself calls for a move. Do NOT invent new locations for visual variety — "
+        "vary the camera angle, framing, distance, and lighting instead.\n"
+        "- Do NOT add subjects, creatures, or objects the Scene Concept and "
+        "reference photos don't contain. Any examples in these instructions "
+        "show FORMAT only — never copy their content into prompts.\n"
         "- Use the lyrics to inspire mood and visual metaphors, NOT literal text.\n"
+        "- Follow this editable treatment: " + treatment_text + "\n"
+        "- Use controlled recurrence: return to the same chorus set and motif; "
+        "vary coverage inside it instead of inventing an unrelated world.\n"
         "- If a clip says 'Performer:', that person must appear.\n"
         f"{char_rule}\n"
         "- Do NOT put lyrics or spoken words in prompts.\n"
@@ -3539,6 +5504,12 @@ def plan_clip_prompts_and_images(
                 f"{shared_rules}"
                 "- Use a mix of shot types (close-ups, wide shots, over-shoulder, etc.) "
                 "where appropriate — but continuity between consecutive clips is fine when it fits.\n"
+                "- The PERFORMER IS the person/character in the reference photo. Anchor them "
+                "explicitly in EVERY prompt ('the [descriptor] from the reference image') — "
+                "describing them loosely as a new character makes the image model invent a "
+                "different-looking one.\n"
+                "- NO motion blur, speed lines, or long-exposure effects — the image is a sharp "
+                "still frame; motion belongs to the video prompt.\n"
                 "- Focus on WHAT TO CHANGE from the reference. Do not re-describe things that stay the same.\n"
                 "- Do NOT start with 'Edit the provided image' — just describe the changes.\n"
                 "- Do NOT use preservation meta-language ('preserve', 'maintain', 'keep unchanged').\n"
@@ -3554,7 +5525,7 @@ def plan_clip_prompts_and_images(
                 "RULES:\n"
                 f"{shared_rules}"
                 "- Vary shots creatively — mix close-ups, wide shots, different angles.\n"
-                "- Consecutive clips should feel visually DIFFERENT.\n"
+                "- Consecutive clips need distinct coverage, but recurring sets, wardrobe and motifs stay recognizable.\n"
                 "- Instrumental clips can use establishing shots, environment details, "
                 "or abstract visuals.\n"
                 f"{guide_sections}\n"
@@ -3594,6 +5565,8 @@ def plan_clip_prompts_and_images(
             "show the room without them. Focus on WHAT TO CHANGE from reference. "
             "Describe POSES as static states (standing, seated, leaning). "
             "No motion verbs (walking, running, reaching, heaving, turning). "
+            "No motion blur, speed lines, or long-exposure effects — the frame is sharp. "
+            "Anchor the performer as 'the [descriptor] from the reference image'. "
             "NEVER use names. Actions belong ONLY in V, never in I.\n"
         ) if has_image else (
             "- I (image): the FIRST FRAME BEFORE action begins — a frozen still photograph. "
@@ -3621,7 +5594,7 @@ def plan_clip_prompts_and_images(
             f"{shared_rules}"
             "- YOU choose camera angles, movements, and shot composition.\n"
             "- Vary shots creatively — mix close-ups, wide shots, tracking shots, etc.\n"
-            "- Consecutive clips should feel visually DIFFERENT.\n"
+            "- Consecutive clips need distinct coverage, but recurring sets, wardrobe and motifs stay recognizable.\n"
             "- Instrumental clips can use establishing shots, environment details, "
             "or abstract visuals.\n"
             "- Do NOT start I prompts with 'Edit the provided image'.\n"
@@ -3842,6 +5815,10 @@ def plan_short_film_prompts(
     lyrics: Optional[list] = None,
     max_new_tokens: int = 512,
     reference_image_path: Optional[str] = None,
+    character_ref_paths: Optional[list] = None,
+    character_ref_labels: Optional[list] = None,
+    location_ref_paths: Optional[list] = None,
+    location_ref_labels: Optional[list] = None,
     speaker_mappings: Optional[dict] = None,
     characters: Optional[list] = None,
     prompt_type: str = "both",
@@ -3869,7 +5846,22 @@ def plan_short_film_prompts(
             if info.get("name"):
                 speaker_names[spk_id] = info["name"]
 
-    has_image = reference_image_path and os.path.isfile(reference_image_path)
+    reference_images = []
+    reference_labels = []
+    if reference_image_path and os.path.isfile(reference_image_path):
+        reference_images.append(reference_image_path)
+    for paths, labels in (
+        (character_ref_paths or [], character_ref_labels or []),
+        (location_ref_paths or [], location_ref_labels or []),
+    ):
+        for index, path in enumerate(paths):
+            if not path or not os.path.isfile(path):
+                continue
+            reference_images.append(path)
+            reference_labels.append(
+                labels[index] if index < len(labels) else ""
+            )
+    has_image = bool(reference_images)
 
     # ── Character context for system prompt ──────────────────────
     char_context = ""
@@ -3882,11 +5874,20 @@ def plan_short_film_prompts(
                 char_lines.append(f"  - {name}" + (f": {desc}" if desc else ""))
         if char_lines:
             char_context = "Characters:\n" + "\n".join(char_lines) + "\n\n"
+    if reference_labels:
+        char_context += (
+            "Additional reference images, in attachment order after the main image: "
+            + "; ".join(
+                f"{index + 1}. {label or 'unlabelled reference'}"
+                for index, label in enumerate(reference_labels)
+            )
+            + "\n\n"
+        )
 
     # ── Build system prompt ──────────────────────────────────────
     photo_line = (
-        "You are given a REFERENCE PHOTO showing the characters. "
-        "Use it to identify the people, their appearance, clothing, and setting.\n"
+        "You are given one or more VISUAL REFERENCES for characters and locations. "
+        "Use them to preserve appearance, clothing, setting, and visual continuity.\n"
     ) if has_image else ""
 
     char_rule = (
@@ -3933,6 +5934,7 @@ def plan_short_film_prompts(
                 "appropriate — but continuity between consecutive scenes is fine when it fits.\n"
                 "- Focus on WHAT TO CHANGE from the reference. Do not re-describe things that stay the same.\n"
                 "- When setting changes to a new location, describe the new setting AND re-describe characters by appearance.\n"
+                "- Stay faithful to each scene's scripted location — do NOT relocate a scene or invent new places for visual variety.\n"
                 "- Match the mood and tone of the dialogue for that scene.\n"
                 f"{char_rule}\n"
                 "- Do NOT start with 'Edit the provided image'.\n"
@@ -3992,6 +5994,8 @@ def plan_short_film_prompts(
             "show the room without them. Focus on WHAT TO CHANGE from reference. "
             "Describe POSES as static states (standing, seated, leaning). "
             "No motion verbs (walking, running, reaching, heaving, turning). "
+            "No motion blur, speed lines, or long-exposure effects — the frame is sharp. "
+            "Anchor the performer as 'the [descriptor] from the reference image'. "
             "NEVER use names. Actions belong ONLY in V, never in I.\n"
         ) if has_image else (
             "- I (image): the FIRST FRAME BEFORE action begins — a frozen still photograph. "
@@ -4041,7 +6045,7 @@ def plan_short_film_prompts(
             "Format: '1V. prompt' then '1I. prompt'. Output ONLY numbered prompts."
         )
 
-    batch_images = [reference_image_path] if has_image else None
+    batch_images = reference_images or None
 
     print(f"[LLM] Short film prompts: prompt_type={prompt_type}, {len(clips)} clips")
 
@@ -4159,6 +6163,10 @@ def plan_short_film_from_story(
     story_description: str,
     characters: Optional[list] = None,
     reference_image_path: Optional[str] = None,
+    character_ref_paths: Optional[list] = None,
+    character_ref_labels: Optional[list] = None,
+    location_ref_paths: Optional[list] = None,
+    location_ref_labels: Optional[list] = None,
     target_duration: int = 30,
     target_scenes: Optional[int] = None,
     narrative_mode: bool = True,
@@ -4166,6 +6174,10 @@ def plan_short_film_from_story(
     frames_steps: int = 4,
     frames_minimum: int = 5,
     max_new_tokens: int = 1024,
+    visual_style: str = "",
+    preserve_visual_style: bool = False,
+    character_visual_style: str = "",
+    allow_clip_text: bool = False,
 ) -> dict:
     """Plan a short film scene structure from a story description.
 
@@ -4186,7 +6198,38 @@ def plan_short_film_from_story(
         # ~15 seconds per scene, cap at 30 scenes
         target_scenes = max(2, min(30, target_duration // 15))
 
-    has_image = reference_image_path and os.path.isfile(reference_image_path)
+    reference_images = []
+    reference_labels = []
+    if reference_image_path and os.path.isfile(reference_image_path):
+        reference_images.append(reference_image_path)
+    for paths, labels in (
+        (character_ref_paths or [], character_ref_labels or []),
+        (location_ref_paths or [], location_ref_labels or []),
+    ):
+        for index, path in enumerate(paths):
+            if not path or not os.path.isfile(path):
+                continue
+            reference_images.append(path)
+            reference_labels.append(
+                labels[index] if index < len(labels) else ""
+            )
+    has_image = bool(reference_images)
+    from services.director.policies import (
+        build_character_visual_style_contract,
+        build_visible_text_contract,
+        build_visual_style_contract,
+        enforce_visual_style_on_clip_plans,
+    )
+    style_contract = build_visual_style_contract(
+        visual_style,
+        preserve=preserve_visual_style,
+        has_reference=has_image,
+    )
+    character_style_contract = build_character_visual_style_contract(
+        character_visual_style,
+        preserve=preserve_visual_style,
+    )
+    visible_text_contract = build_visible_text_contract(allow_clip_text)
 
     # ── Character context ─────────────────────────────────────────
     char_context = ""
@@ -4199,10 +6242,19 @@ def plan_short_film_from_story(
                 char_lines.append(f"  - {name}" + (f": {desc}" if desc else ""))
         if char_lines:
             char_context = "Characters:\n" + "\n".join(char_lines) + "\n\n"
+    if reference_labels:
+        char_context += (
+            "Additional reference images, in attachment order after the main image: "
+            + "; ".join(
+                f"{index + 1}. {label or 'unlabelled reference'}"
+                for index, label in enumerate(reference_labels)
+            )
+            + "\n\n"
+        )
 
     photo_line = (
-        "You are given a REFERENCE PHOTO showing the characters. "
-        "Use it to identify the people, their appearance, clothing, and setting.\n"
+        "You are given one or more VISUAL REFERENCES for characters and locations. "
+        "Use them to preserve appearance, clothing, setting, and visual continuity.\n"
     ) if has_image else ""
 
     char_rule = (
@@ -4245,7 +6297,7 @@ def plan_short_film_from_story(
         "Actions belong ONLY in video_prompt, never in image_prompt. "
         "NEVER use character names or meta-instructions.\n"
     ) if has_image else (
-        "- image_prompt: the FIRST FRAME BEFORE action begins — a frozen still photograph. "
+        "- image_prompt: the FIRST FRAME BEFORE action begins — a frozen still image. "
         "Show the INITIAL STATE: if clothing will be removed, it's still on; if someone enters, "
         "the room is empty. Describe static poses only (standing, seated, leaning). "
         "No motion verbs (walking, running, reaching, heaving, turning). "
@@ -4288,6 +6340,9 @@ def plan_short_film_from_story(
 
     system_prompt = (
         f"{role_section}"
+        f"{style_contract}\n\n"
+        f"{character_style_contract}\n\n"
+        f"{visible_text_contract}\n\n"
         f"Break the concept into scenes within {target_duration} seconds total. "
         f"YOU decide how many scenes based on the story — let pacing dictate the cuts.\n"
         "For each scene, write a video_prompt and image_prompt.\n\n"
@@ -4348,6 +6403,9 @@ def plan_short_film_from_story(
         "stay the same.\n"
         "- When setting changes to a new location, describe the new setting AND "
         "re-describe which characters are present by clothing/appearance.\n"
+        "- If the user's concept pins the story to a specific location, every scene "
+        "stays in that location — do NOT relocate scenes or invent new places for "
+        "visual variety.\n"
         "- When setting stays the same, you can keep the same framing or adjust it — "
         "only mention characters whose positions change.\n"
         "- NEVER use character names — describe people by clothing/appearance only, "
@@ -4390,7 +6448,7 @@ def plan_short_film_from_story(
 
     user_prompt = f"Story Concept: {story_description}"
 
-    batch_images = [reference_image_path] if has_image else None
+    batch_images = reference_images or None
 
     print(f"[LLM] Planning short film from story: {target_scenes} scenes, {target_duration}s")
     print(f"[LLM] Story: {story_description}")
@@ -4602,4 +6660,12 @@ def plan_short_film_from_story(
 
         current_time += scene_dur
 
+    clip_plans = enforce_visual_style_on_clip_plans(
+        clip_plans,
+        visual_style,
+        preserve=preserve_visual_style,
+        has_reference=has_image,
+        character_visual_style=character_visual_style,
+        allow_clip_text=allow_clip_text,
+    )
     return {"clips": clips, "clip_plans": clip_plans}

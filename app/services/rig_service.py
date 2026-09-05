@@ -22,6 +22,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from . import resource_scheduler
+from .asset_manifest import publish_generation_sidecar_best_effort
+
 SERVICE_DIR = Path(__file__).resolve().parent / "hunyuan3d"
 ENV_DIR = SERVICE_DIR / "env"
 INSTALL_MARKER = ENV_DIR / ".maestro_hunyuan3d_v1.installed"
@@ -147,9 +150,15 @@ DEFAULT_RIG_PROFILE = "prop"
 _jobs: dict[str, dict[str, Any]] = {}
 _processes: dict[str, subprocess.Popen] = {}
 _lock = threading.RLock()
-_rig_slot = threading.Semaphore(1)
 
 _TERMINAL_STATES = {"completed", "failed", "cancelled"}
+_ACTIVE_JOB_STATES = frozenset({
+    "queued",
+    "waiting",
+    "waiting_resource",
+    "running",
+    "cancelling",
+})
 _MAX_FINISHED_JOBS = 20
 _FINISHED_JOB_TTL_SECONDS = 3600
 _MAX_ACTIVE_JOBS = 4
@@ -173,19 +182,43 @@ def installation_status() -> dict[str, Any]:
     installed = bool(python_path and INSTALL_MARKER.is_file() and WORKER_PATH.is_file())
     return {
         "installed": installed,
-        "install_hint": None if installed else "Run Maestro's standard Install or Update action (the rig worker shares the Hunyuan3D runtime).",
+        "install_hint": None if installed else "Run HocusPocus Lab's standard Install or Update action (the rig worker shares the Hunyuan3D runtime).",
     }
 
 
 UNIRIG_REPO = "VAST-AI/UniRig"
+UNIRIG_REQUIRED_CHECKPOINTS = (
+    Path("skeleton/articulation-xl_quantization_256/model.ckpt"),
+    Path("skin/articulation-xl/model.ckpt"),
+)
+_MIN_UNIRIG_CHECKPOINT_BYTES = 1024 * 1024
+
+
+def _is_complete_unirig_snapshot(snapshot: Path) -> bool:
+    """Reject partial snapshots, dangling links, and placeholder files."""
+    return all(
+        checkpoint.is_file() and checkpoint.stat().st_size >= _MIN_UNIRIG_CHECKPOINT_BYTES
+        for relative_path in UNIRIG_REQUIRED_CHECKPOINTS
+        for checkpoint in (snapshot / relative_path,)
+    )
 
 
 def is_unirig_downloaded() -> bool:
-    """Whether the UniRig weights snapshot is cached locally."""
+    """Whether a complete UniRig weights snapshot is cached locally.
+
+    An interrupted download leaves a snapshot directory with only some of
+    the files, so require the checkpoints of both model families that
+    inference actually loads (skeleton prediction + skinning).
+    """
     repo_cache = HF_CACHE_DIR / "hub" / f"models--{UNIRIG_REPO.replace('/', '--')}" / "snapshots"
     if not repo_cache.is_dir():
         return False
-    return any(path.is_dir() for path in repo_cache.iterdir())
+    for snapshot in repo_cache.iterdir():
+        if not snapshot.is_dir():
+            continue
+        if _is_complete_unirig_snapshot(snapshot):
+            return True
+    return False
 
 
 def delete_unirig_cache() -> list[str]:
@@ -197,18 +230,48 @@ def delete_unirig_cache() -> list[str]:
     return [UNIRIG_REPO]
 
 
+def has_active_jobs(engine: str | None = None) -> bool:
+    """Return whether a rig job for ``engine`` can still be using resources.
+
+    Waiting, queued and running work is active. A registered subprocess also
+    remains active while cancellation unwinds, which lets cache-deletion
+    endpoints avoid racing a UniRig worker.
+    Passing no engine checks every rig job.
+    """
+    requested_engine = str(engine).strip().lower() if engine is not None else None
+    with _lock:
+        for job_id, job in _jobs.items():
+            job_engine = str(
+                job.get("engine")
+                or (job.get("request") or {}).get("engine")
+                or "procedural"
+            ).strip().lower()
+            if requested_engine is not None and job_engine != requested_engine:
+                continue
+            if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES:
+                return True
+            if job_id in _processes:
+                return True
+    return False
+
+
+def has_active_unirig_jobs() -> bool:
+    """Return whether deleting the shared UniRig weights would be unsafe."""
+    return has_active_jobs("unirig")
+
+
 def unirig_installation_status() -> dict[str, Any]:
     python_path = _unirig_python_path()
     installed = bool(python_path and RIGGING_MARKER.is_file() and UNIRIG_WORKER_PATH.is_file() and UNIRIG_VENDOR_DIR.is_dir())
     return {
         "installed": installed,
-        "install_hint": None if installed else "Open the Maestro item in Pinokio and run 'Install AI Rigging (UniRig)'. Needs an NVIDIA GPU with 8GB+ VRAM; weights (~2GB) download on first use.",
+        "install_hint": None if installed else "Open HocusPocus Lab in Pinokio and run 'Install AI Rigging (UniRig)'. Needs an NVIDIA GPU with 8GB+ VRAM; weights (~2GB) download on first use.",
     }
 
 
 def capabilities() -> dict[str, Any]:
     with _lock:
-        active = sum(1 for job in _jobs.values() if job["status"] in {"queued", "running"})
+        active = sum(1 for job in _jobs.values() if job["status"] in _ACTIVE_JOB_STATES)
     status = installation_status()
     unirig_status = unirig_installation_status()
     return {
@@ -237,7 +300,25 @@ def capabilities() -> dict[str, Any]:
 
 
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in job.items() if key not in {"request", "process"}}
+    return {
+        key: value
+        for key, value in job.items()
+        if key not in {"request", "process", "cancel_requested"}
+    }
+
+
+def _canonical_task_id(job_id: str) -> str:
+    """Return the durable task identity used by the canonical task adapter."""
+    return f"task-rig-{job_id}"
+
+
+def _physical_output_folder(value: Any) -> str | None:
+    """Physical output-folder name; never an absolute host path or a Workspace id."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    name = os.path.basename(text.replace("\\", "/"))
+    return name or None
 
 
 def _prune_finished_jobs_locked() -> None:
@@ -252,7 +333,13 @@ def _prune_finished_jobs_locked() -> None:
             _jobs.pop(job_id, None)
 
 
-def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dict[str, Any]:
+def start_job(
+    *,
+    body: dict[str, Any],
+    source_path: str,
+    output_dir: str,
+    workspace: str = "default",
+) -> dict[str, Any]:
     # Each engine has its own runtime; gate on the one actually requested.
     if str(body.get("engine") or "procedural") != "unirig":
         runtime = installation_status()
@@ -261,7 +348,7 @@ def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dic
 
     with _lock:
         _prune_finished_jobs_locked()
-        active = sum(1 for job in _jobs.values() if job["status"] in {"queued", "running"})
+        active = sum(1 for job in _jobs.values() if job["status"] in _ACTIVE_JOB_STATES)
     if active >= _MAX_ACTIVE_JOBS:
         raise ValueError("Too many queued rig jobs; wait for the current ones to finish or cancel them")
 
@@ -328,6 +415,7 @@ def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dic
 
     request_data = {
         "engine": engine,
+        "workspace": str(workspace or "default"),
         "source": os.path.abspath(source_path),
         "rig_profile": rig_profile,
         "animations": [str(item) for item in animations],
@@ -336,8 +424,11 @@ def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dic
         "weight_falloff": weight_falloff,
     }
     job_id = uuid.uuid4().hex
+    task_id = _canonical_task_id(job_id)
     job = {
         "job_id": job_id,
+        "task_id": task_id,
+        "root_task_id": task_id,
         "status": "queued",
         "progress": 0.0,
         "phase": "queued",
@@ -346,8 +437,9 @@ def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dic
         "filename": None,
         "url": None,
         "engine": engine,
+        "workspace": str(workspace or "default"),
         "rig_profile": rig_profile,
-        "spine_joints": spine_joints,
+        **({"spine_joints": spine_joints} if engine == "procedural" else {}),
         "axis_mode": axis_mode,
         "weight_falloff": weight_falloff,
         "source_file": os.path.basename(source_path),
@@ -362,34 +454,139 @@ def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dic
     return initial_response
 
 
-def _update_job(job_id: str, **updates: Any) -> None:
+def _update_job(job_id: str, **updates: Any) -> bool:
     with _lock:
         job = _jobs.get(job_id)
         if not job:
-            return
+            return False
+        # Cancellation is absorbing. In particular, late worker events must
+        # never turn a cancelling/cancelled rig back into a running job.
+        if (
+            job.get("status") in _TERMINAL_STATES
+            or job.get("status") == "cancelling"
+            or job.get("cancel_requested")
+        ):
+            return False
         job.update(updates)
         job["updated_at"] = time.time()
         if job["status"] in _TERMINAL_STATES:
             job.pop("request", None)
+        return True
+
+
+def _settle_cancelled_job(job_id: str) -> bool:
+    """Publish terminal cancellation after the worker has released its lane."""
+    with _lock:
+        job = _jobs.get(job_id)
+        if (
+            not job
+            or job.get("status") in _TERMINAL_STATES
+            or not (
+                job.get("cancel_requested")
+                or job.get("status") == "cancelling"
+            )
+        ):
+            return False
+        job.update({
+            "status": "cancelled",
+            "phase": "cancelled",
+            "message": "Rig job cancelled",
+            "updated_at": time.time(),
+        })
+        job.pop("request", None)
+        return True
 
 
 def _run_job(job_id: str, output_dir: str) -> None:
-    _rig_slot.acquire()
-    try:
+    def cancelled() -> bool:
         with _lock:
-            if _jobs.get(job_id, {}).get("status") == "cancelled":
+            job = _jobs.get(job_id, {})
+            return bool(job.get("cancel_requested")) or job.get("status") in {
+                "cancelling",
+                "cancelled",
+            }
+
+    with _lock:
+        request_data = (_jobs.get(job_id, {}).get("request") or {}).copy()
+    if not request_data or cancelled():
+        return
+    is_unirig = request_data.get("engine") == "unirig"
+    lane = (
+        resource_scheduler.local_gpu_lane(0)
+        if is_unirig else resource_scheduler.cpu_lane("rig")
+    )
+    _update_job(
+        job_id,
+        phase="waiting_resource",
+        message=("Waiting for local GPU 0" if is_unirig else "Waiting for rig CPU worker"),
+    )
+    try:
+        with resource_scheduler.coordinator.acquire(
+            lane,
+            task_id=_canonical_task_id(job_id),
+            description=("UniRig AI rigging" if is_unirig else "Procedural rigging"),
+            cancelled=cancelled,
+        ):
+            if cancelled():
                 return
-        _run_job_serialized(job_id, output_dir)
+            _run_job_serialized(job_id, output_dir)
+    except resource_scheduler.ResourceAcquireCancelled:
+        return
     finally:
-        _rig_slot.release()
+        # This runs after the coordinator context exits, so `cancelled` means
+        # the CPU/GPU lane and subprocess have both reached a safe boundary.
+        _settle_cancelled_job(job_id)
 
 
 def _cleanup_partial_output(output_path: Path) -> None:
-    for stale in (output_path, output_path.with_suffix(".preview.png")):
+    for stale in (
+        output_path,
+        output_path.with_suffix(".preview.png"),
+        output_path.with_suffix(".meta.json"),
+    ):
         try:
             stale.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def _spawn_worker_if_active(
+    job_id: str,
+    command: list[str],
+    *,
+    cwd: str,
+    env: dict[str, str],
+    message: str,
+) -> subprocess.Popen | None:
+    """Atomically transition an active rig job and register its subprocess."""
+    with _lock:
+        job = _jobs.get(job_id)
+        if (
+            not job
+            or job.get("status") not in {"queued", "waiting", "waiting_resource"}
+            or job.get("cancel_requested")
+            or not job.get("request")
+            or job_id in _processes
+        ):
+            return None
+        job.update({
+            "status": "running",
+            "phase": "starting",
+            "message": message,
+            "progress": 0.02,
+            "updated_at": time.time(),
+        })
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        _processes[job_id] = process
+        return process
 
 
 def _run_job_serialized(job_id: str, output_dir: str) -> None:
@@ -450,19 +647,18 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     env.update({"PYTHONUNBUFFERED": "1"})
     lines: list[str] = []
     result_summary: dict[str, Any] = {}
+    generation_committed = False
     try:
-        _update_job(job_id, status="running", phase="starting", message="Starting rig worker", progress=0.02)
-        process = subprocess.Popen(
+        process = _spawn_worker_if_active(
+            job_id,
             command,
             cwd=str(worker_cwd),
             env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
+            message="Starting rig worker",
         )
-        with _lock:
-            _processes[job_id] = process
+        if process is None:
+            _cleanup_partial_output(output_path)
+            return
         try:
             pid_path.write_text(str(process.pid), encoding="utf-8")
         except OSError:
@@ -515,8 +711,10 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
 
         exit_code = process.wait()
         with _lock:
-            status = _jobs.get(job_id, {}).get("status")
-        if status == "cancelled":
+            current_job = _jobs.get(job_id, {})
+            status = current_job.get("status")
+            cancellation_pending = bool(current_job.get("cancel_requested"))
+        if cancellation_pending or status in {"cancelling", "cancelled"}:
             _cleanup_partial_output(output_path)
             return
         if timeout_reason:
@@ -525,30 +723,41 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             detail = "\n".join(lines[-15:]) or f"Rig worker exited with code {exit_code}"
             raise RuntimeError(detail[-4000:])
 
-        sidecar = output_path.with_suffix(".meta.json")
-        sidecar.write_text(
-            json.dumps(
-                {
-                    "generation_mode": "model3d",
-                    "mode": "model3d",
-                    "job_id": job_id,
-                    "created_at": time.time(),
-                    "params": {
-                        "model_type": f"rig-{request_data['engine']}",
-                        "rigged": True,
-                        "rig_engine": request_data["engine"],
-                        "rig_profile": request_data.get("rig_profile", DEFAULT_RIG_PROFILE),
-                        "source_file": source.name,
-                        "animations": result_summary.get("animations") or request_data["animations"],
-                        "spine_joints": result_summary.get("joints", request_data["spine_joints"]),
-                        "axis_mode": result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
-                        "weight_falloff": result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
-                        "prompt": f"Rigged from {source.name}",
-                    },
+        # The rigged GLB is on disk. Sidecar/status failures must not delete it.
+        generation_committed = True
+        rig_metrics = (
+            {
+                "joint_count": result_summary.get("joint_count", 0),
+                "animation_chain_joints": result_summary.get("animation_chain_joints", 0),
+            }
+            if engine == "unirig"
+            else {"spine_joints": result_summary.get("joints", request_data["spine_joints"])}
+        )
+        publish_generation_sidecar_best_effort(
+            output_path,
+            {
+                "generation_mode": "model3d",
+                "mode": "model3d",
+                "job_id": job_id,
+                "task_id": _canonical_task_id(job_id),
+                "root_task_id": _canonical_task_id(job_id),
+                "created_at": time.time(),
+                "params": {
+                    "model_type": f"rig-{request_data['engine']}",
+                    "provider": "local",
+                    "rigged": True,
+                    "rig_engine": request_data["engine"],
+                    "rig_profile": request_data.get("rig_profile", DEFAULT_RIG_PROFILE),
+                    "source_file": source.name,
+                    "animations": result_summary.get("animations") or request_data["animations"],
+                    **rig_metrics,
+                    "axis_mode": result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
+                    "weight_falloff": result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
+                    "prompt": f"Rigged from {source.name}",
                 },
-                indent=2,
-            ),
-            encoding="utf-8",
+            },
+            output_folder=_physical_output_folder(current_job.get("workspace")),
+            tool="rig",
         )
         # Reuse the source's gallery preview for the rigged copy.
         source_preview = source.with_suffix(".preview.png")
@@ -568,7 +777,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             size=output_path.stat().st_size,
             animations=result_summary.get("animations") or request_data["animations"],
             rig_profile=result_summary.get("rig_profile", request_data.get("rig_profile", DEFAULT_RIG_PROFILE)),
-            spine_joints=result_summary.get("joints", request_data["spine_joints"]),
+            **rig_metrics,
             axis_mode=result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
             weight_falloff=result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
         )
@@ -577,10 +786,18 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             cancelled = _jobs.get(job_id, {}).get("status") == "cancelled"
         if not cancelled:
             _update_job(job_id, status="failed", phase="failed", message="Rigging failed", error=str(exc))
-        _cleanup_partial_output(output_path)
+        if not generation_committed:
+            _cleanup_partial_output(output_path)
     finally:
         with _lock:
             _processes.pop(job_id, None)
+            current_job = _jobs.get(job_id, {})
+            cancellation_pending = (
+                bool(current_job.get("cancel_requested"))
+                or current_job.get("status") in {"cancelling", "cancelled"}
+            )
+        if cancellation_pending:
+            _cleanup_partial_output(output_path)
         for stale_path in (request_path, pid_path):
             try:
                 stale_path.unlink(missing_ok=True)
@@ -602,25 +819,41 @@ def cancel_job(job_id: str) -> dict[str, Any] | None:
             return None
         if job["status"] in _TERMINAL_STATES:
             return _public_job(dict(job))
-        job.update({
-            "status": "cancelled",
-            "phase": "cancelled",
-            "message": "Rig job cancelled",
-            "updated_at": time.time(),
-        })
-        job.pop("request", None)
+        spawned = process is not None
+        if spawned:
+            job.update({
+                "cancel_requested": True,
+                "phase": "cancelling",
+                "message": "Stopping the rig worker at a safe boundary",
+                "updated_at": time.time(),
+            })
+        else:
+            job.update({
+                "status": "cancelled",
+                "cancel_requested": True,
+                "phase": "cancelled",
+                "message": "Rig job cancelled",
+                "updated_at": time.time(),
+            })
+            job.pop("request", None)
     if process and process.poll() is None:
-        process.terminate()
+        try:
+            process.terminate()
+        except OSError:
+            pass
         try:
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
-            process.kill()
+            try:
+                process.kill()
+            except OSError:
+                pass
     return get_job(job_id)
 
 
 def cancel_all_jobs() -> int:
     with _lock:
-        active_ids = [job_id for job_id, job in _jobs.items() if job["status"] in {"queued", "running"}]
+        active_ids = [job_id for job_id, job in _jobs.items() if job["status"] in _ACTIVE_JOB_STATES]
     for job_id in active_ids:
         cancel_job(job_id)
     return len(active_ids)

@@ -1,0 +1,960 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maestro.local/schemas/series-library-v1.schema.json",
+  "title": "Maestro Series Library v1",
+  "type": "object",
+  "required": ["schema", "version", "workspaceId", "seriesOrder", "seriesById"],
+  "properties": {
+    "schema": { "const": "series-library" },
+    "version": { "const": 1 },
+    "workspaceId": { "$ref": "#/$defs/id" },
+    "seriesOrder": { "$ref": "#/$defs/idArray" },
+    "seriesById": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/seriesProject" }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "idArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/id" },
+      "uniqueItems": true
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "canonFact": {
+      "type": "object",
+      "required": ["id", "description", "status"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "description": { "type": "string" },
+        "sourceEpisodeId": { "type": ["string", "null"] },
+        "status": {
+          "enum": ["draft", "proposed", "approved", "rejected", "retired"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "canonEvent": {
+      "type": "object",
+      "required": ["id", "description", "status", "occurredAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "description": { "type": "string" },
+        "sourceEpisodeId": { "type": ["string", "null"] },
+        "status": {
+          "enum": ["draft", "proposed", "approved", "rejected", "retired"]
+        },
+        "occurredAt": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "seriesArc": {
+      "type": "object",
+      "required": ["id", "title", "description", "status"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "enum": ["planned", "active", "resolved", "abandoned"] }
+      },
+      "additionalProperties": true
+    },
+    "seriesCanon": {
+      "type": "object",
+      "required": [
+        "worldSummary",
+        "immutableRules",
+        "currentFacts",
+        "forbiddenChanges",
+        "themes",
+        "longArcs",
+        "timeline",
+        "revision"
+      ],
+      "properties": {
+        "worldSummary": { "type": "string" },
+        "immutableRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/canonFact" }
+        },
+        "currentFacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/canonFact" }
+        },
+        "forbiddenChanges": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "themes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "longArcs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/seriesArc" }
+        },
+        "timeline": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/canonEvent" }
+        },
+        "revision": { "type": "integer", "minimum": 0 },
+        "approval": { "enum": ["draft", "approved"] },
+        "approvedAt": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "wardrobeVariant": {
+      "type": "object",
+      "required": ["id", "label", "description", "referenceAssetIds"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "referenceAssetIds": { "$ref": "#/$defs/idArray" }
+      },
+      "additionalProperties": true
+    },
+    "voiceProfile": {
+      "type": "object",
+      "required": [
+        "provider",
+        "language",
+        "pronunciationDictionary",
+        "pace",
+        "pitch",
+        "emotionalDefaults",
+        "consentSourceNote"
+      ],
+      "properties": {
+        "provider": { "type": "string" },
+        "voiceId": { "type": "string" },
+        "voiceDesignId": { "type": "string" },
+        "language": { "type": "string" },
+        "pronunciationDictionary": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "pace": { "type": "number" },
+        "pitch": { "type": "number" },
+        "emotionalDefaults": { "type": "string" },
+        "approvedSampleAssetId": { "type": "string" },
+        "consentSourceNote": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "seriesCharacter": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "aliases",
+        "role",
+        "personality",
+        "desire",
+        "need",
+        "flaw",
+        "longArc",
+        "voiceAndDialogue",
+        "appearance",
+        "identityLock",
+        "wardrobeVariants",
+        "referenceAssetIds",
+        "currentState",
+        "approval"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string" },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "role": { "type": "string" },
+        "personality": { "type": "string" },
+        "desire": { "type": "string" },
+        "need": { "type": "string" },
+        "flaw": { "type": "string" },
+        "longArc": { "type": "string" },
+        "voiceAndDialogue": { "type": "string" },
+        "appearance": { "type": "string" },
+        "identityLock": { "type": "string" },
+        "defaultWardrobeVariantId": { "type": "string" },
+        "wardrobeVariants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/wardrobeVariant" }
+        },
+        "referenceAssetIds": { "$ref": "#/$defs/idArray" },
+        "primaryReferenceAssetId": { "type": "string" },
+        "voiceProfile": { "$ref": "#/$defs/voiceProfile" },
+        "currentState": { "type": "object" },
+        "approval": { "enum": ["draft", "approved"] }
+      },
+      "additionalProperties": true
+    },
+    "visualVariant": {
+      "type": "object",
+      "required": ["id", "label", "description", "referenceAssetIds"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "referenceAssetIds": { "$ref": "#/$defs/idArray" }
+      },
+      "additionalProperties": true
+    },
+    "seriesLocation": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "purpose",
+        "description",
+        "referenceAssetIds",
+        "variants",
+        "currentState",
+        "approval"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string" },
+        "purpose": { "type": "string" },
+        "description": { "type": "string" },
+        "referenceAssetIds": { "$ref": "#/$defs/idArray" },
+        "variants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/visualVariant" }
+        },
+        "currentState": { "type": "object" },
+        "approval": { "enum": ["draft", "approved"] }
+      },
+      "additionalProperties": true
+    },
+    "seriesProp": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "description",
+        "ownerCharacterId",
+        "referenceAssetIds",
+        "variants",
+        "currentState",
+        "approval"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string" },
+        "kind": { "enum": ["prop", "vehicle"] },
+        "description": { "type": "string" },
+        "ownerCharacterId": { "type": ["string", "null"] },
+        "referenceAssetIds": { "$ref": "#/$defs/idArray" },
+        "variants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/visualVariant" }
+        },
+        "currentState": { "type": "object" },
+        "approval": { "enum": ["draft", "approved"] }
+      },
+      "additionalProperties": true
+    },
+    "seriesRelationship": {
+      "type": "object",
+      "required": [
+        "id",
+        "fromCharacterId",
+        "toCharacterId",
+        "label",
+        "dynamic",
+        "evolution"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "fromCharacterId": { "$ref": "#/$defs/id" },
+        "toCharacterId": { "$ref": "#/$defs/id" },
+        "label": { "type": "string" },
+        "dynamic": { "type": "string" },
+        "evolution": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "seriesSeason": {
+      "type": "object",
+      "required": [
+        "id",
+        "number",
+        "title",
+        "premise",
+        "arc",
+        "episodeOrder",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "number": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "premise": { "type": "string" },
+        "arc": { "type": "string" },
+        "episodeOrder": { "$ref": "#/$defs/idArray" },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "updatedAt": { "$ref": "#/$defs/timestamp" }
+      },
+      "additionalProperties": true
+    },
+    "sceneBeat": {
+      "type": "object",
+      "required": ["id", "kind", "summary"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["action", "dialogue", "reaction", "transition"] },
+        "summary": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "dialogueBeat": {
+      "type": "object",
+      "required": ["id", "characterId", "text", "emotion"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "characterId": { "$ref": "#/$defs/id" },
+        "text": { "type": "string" },
+        "emotion": { "type": "string" },
+        "delivery": { "type": "string" },
+        "physicalCue": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "episodeScene": {
+      "type": "object",
+      "required": [
+        "id",
+        "order",
+        "locationId",
+        "time",
+        "participatingCharacterIds",
+        "purpose",
+        "entryState",
+        "exitState",
+        "beats",
+        "dialogue"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "order": { "type": "integer", "minimum": 0 },
+        "locationId": { "$ref": "#/$defs/id" },
+        "locationVariantId": { "type": "string" },
+        "time": { "type": "string" },
+        "participatingCharacterIds": { "$ref": "#/$defs/idArray" },
+        "purpose": { "type": "string" },
+        "entryState": { "type": "string" },
+        "exitState": { "type": "string" },
+        "beats": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sceneBeat" }
+        },
+        "dialogue": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dialogueBeat" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "episodeCanonSnapshot": {
+      "type": "object",
+      "required": [
+        "revision",
+        "worldSummary",
+        "immutableRules",
+        "currentFacts",
+        "characterStates",
+        "relationshipStates",
+        "locationStates",
+        "propStates",
+        "sourceMode",
+        "masterUniversePrompt",
+        "rightsNote",
+        "visualStyle",
+        "characterVisualStyle",
+        "cameraLanguage",
+        "allowClipText",
+        "provider",
+        "capabilitySnapshot",
+        "approvedReferenceAssetIds"
+      ],
+      "properties": {
+        "revision": { "type": "integer", "minimum": 0 },
+        "worldSummary": { "type": "string" },
+        "immutableRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/canonFact" }
+        },
+        "currentFacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/canonFact" }
+        },
+        "characterStates": { "type": "object" },
+        "relationshipStates": { "type": "object" },
+        "locationStates": { "type": "object" },
+        "propStates": { "type": "object" },
+        "sourceMode": { "enum": ["original", "known_universe_experimental", "hybrid"] },
+        "masterUniversePrompt": { "type": "string" },
+        "rightsNote": { "type": "string" },
+        "visualStyle": { "type": "string" },
+        "characterVisualStyle": { "type": "string" },
+        "cameraLanguage": { "type": "string" },
+        "allowClipText": { "type": "boolean" },
+        "provider": { "$ref": "#/$defs/seriesProviderSettings" },
+        "capabilitySnapshot": { "$ref": "#/$defs/capabilitySnapshot" },
+        "approvedReferenceAssetIds": { "$ref": "#/$defs/idArray" }
+        ,"characters": { "type": "array", "items": { "$ref": "#/$defs/seriesCharacter" } }
+        ,"relationships": { "type": "array", "items": { "$ref": "#/$defs/seriesRelationship" } }
+        ,"locations": { "type": "array", "items": { "$ref": "#/$defs/seriesLocation" } }
+        ,"props": { "type": "array", "items": { "$ref": "#/$defs/seriesProp" } }
+        ,"assets": { "type": "object", "additionalProperties": { "$ref": "#/$defs/seriesAsset" } }
+      },
+      "additionalProperties": true
+    },
+    "canonDeltaFactItem": {
+      "type": "object",
+      "required": ["id", "description", "status", "decision"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "description": { "type": "string" },
+        "sourceEpisodeId": { "$ref": "#/$defs/id" },
+        "status": { "enum": ["draft", "proposed", "approved", "rejected", "retired"] },
+        "decision": { "enum": ["pending", "accepted", "rejected"] },
+        "decidedAt": { "$ref": "#/$defs/timestamp" }
+      },
+      "additionalProperties": true
+    },
+    "canonDeltaRetireItem": {
+      "type": "object",
+      "required": ["factId", "decision"],
+      "properties": {
+        "factId": { "$ref": "#/$defs/id" },
+        "decision": { "enum": ["pending", "accepted", "rejected"] },
+        "decidedAt": { "$ref": "#/$defs/timestamp" }
+      },
+      "additionalProperties": true
+    },
+    "canonDelta": {
+      "type": "object",
+      "required": ["baseRevision", "sourceEpisodeId", "add", "change", "retire"],
+      "properties": {
+        "baseRevision": { "type": "integer", "minimum": 0 },
+        "sourceEpisodeId": { "$ref": "#/$defs/id" },
+        "add": { "type": "array", "items": { "$ref": "#/$defs/canonDeltaFactItem" } },
+        "change": { "type": "array", "items": { "$ref": "#/$defs/canonDeltaFactItem" } },
+        "retire": { "type": "array", "items": { "$ref": "#/$defs/canonDeltaRetireItem" } }
+      },
+      "additionalProperties": true
+    },
+    "shotReferencePolicy": {
+      "type": "object",
+      "required": ["mode", "manualIncludeAssetIds", "manualExcludeAssetIds"],
+      "properties": {
+        "mode": { "enum": ["automatic", "manual"] },
+        "manualIncludeAssetIds": { "$ref": "#/$defs/idArray" },
+        "manualExcludeAssetIds": { "$ref": "#/$defs/idArray" },
+        "maxReferencesOverride": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "selectedReference": {
+      "type": "object",
+      "required": [
+        "assetId",
+        "entityType",
+        "entityId",
+        "referenceRole",
+        "mediaType",
+        "priority",
+        "reason"
+      ],
+      "properties": {
+        "assetId": { "$ref": "#/$defs/id" },
+        "entityType": { "enum": ["continuity", "character", "location", "prop", "style", "motion"] },
+        "entityId": { "$ref": "#/$defs/id" },
+        "variantId": { "type": "string" },
+        "referenceRole": { "type": "string" },
+        "mediaType": { "enum": ["image", "video", "audio"] },
+        "priority": { "type": "integer", "minimum": 1 },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "omittedReference": {
+      "type": "object",
+      "required": ["assetId", "entityType", "entityId", "referenceRole", "mediaType", "reason"],
+      "properties": {
+        "assetId": { "$ref": "#/$defs/id" },
+        "entityType": { "enum": ["continuity", "character", "location", "prop", "style", "motion"] },
+        "entityId": { "$ref": "#/$defs/id" },
+        "variantId": { "type": "string" },
+        "referenceRole": { "type": "string" },
+        "mediaType": { "enum": ["image", "video", "audio"] },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "shotReferenceManifest": {
+      "type": "object",
+      "required": [
+        "strategy",
+        "selected",
+        "omitted",
+        "warnings",
+        "errors",
+        "firstFrameRole",
+        "capabilitySnapshot"
+      ],
+      "properties": {
+        "strategy": {
+          "enum": ["direct", "first_frame", "references", "first_last"]
+        },
+        "selected": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectedReference" }
+        },
+        "omitted": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/omittedReference" }
+        },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "firstFrameRole": { "enum": ["none", "exact", "visual_reference"] },
+        "capabilitySnapshot": { "$ref": "#/$defs/capabilitySnapshot" }
+      },
+      "additionalProperties": true
+    },
+    "shotRenderAttempt": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "prompt",
+        "negativePrompt",
+        "model",
+        "referenceManifest",
+        "seed",
+        "settings",
+        "startTimeSeconds",
+        "endTimeSeconds",
+        "createdAt",
+        "elapsedMs",
+        "outputAssetIds",
+        "retryCount"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "status": { "enum": ["queued", "running", "completed", "failed", "cancelled"] },
+        "prompt": { "type": "string" },
+        "negativePrompt": { "type": "string" },
+        "model": { "type": "string" },
+        "referenceManifest": { "$ref": "#/$defs/shotReferenceManifest" },
+        "seed": { "type": ["integer", "null"] },
+        "settings": { "type": "object" },
+        "startTimeSeconds": { "type": "number", "minimum": 0 },
+        "endTimeSeconds": { "type": "number", "minimum": 0 },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "submittedAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": { "$ref": "#/$defs/timestamp" },
+        "elapsedMs": { "type": "integer", "minimum": 0 },
+        "requestPayloadHash": { "type": "string" },
+        "providerTaskId": { "type": "string" },
+        "outputAssetIds": { "$ref": "#/$defs/idArray" },
+        "error": { "type": "string" },
+        "retryCount": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "episodeShot": {
+      "type": "object",
+      "required": [
+        "id",
+        "sceneId",
+        "order",
+        "durationSeconds",
+        "framing",
+        "camera",
+        "action",
+        "dialogueBeats",
+        "visibleCharacterIds",
+        "speakingCharacterIds",
+        "wardrobeByCharacterId",
+        "propIds",
+        "emotionalStateByCharacterId",
+        "renderStrategy",
+        "referencePolicy",
+        "prompt",
+        "negativePrompt",
+        "attempts"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "sceneId": { "$ref": "#/$defs/id" },
+        "order": { "type": "integer", "minimum": 0 },
+        "durationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "framing": { "type": "string" },
+        "camera": { "type": "string" },
+        "action": { "type": "string" },
+        "dialogueBeats": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dialogueBeat" }
+        },
+        "visibleCharacterIds": { "$ref": "#/$defs/idArray" },
+        "speakingCharacterIds": { "$ref": "#/$defs/idArray" },
+        "primarySpeakerId": { "type": "string" },
+        "locationId": { "type": "string" },
+        "locationVariantId": { "type": "string" },
+        "wardrobeByCharacterId": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "propIds": { "$ref": "#/$defs/idArray" },
+        "emotionalStateByCharacterId": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "continuityFromShotId": { "type": "string" },
+        "renderStrategy": {
+          "enum": ["auto", "direct", "first_frame", "references", "first_last"]
+        },
+        "referencePolicy": { "$ref": "#/$defs/shotReferencePolicy" },
+        "prompt": { "type": "string" },
+        "negativePrompt": { "type": "string" },
+        "referenceManifest": { "$ref": "#/$defs/shotReferenceManifest" },
+        "attempts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/shotRenderAttempt" }
+        },
+        "approvedAttemptId": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "seriesEpisode": {
+      "type": "object",
+      "required": [
+        "id",
+        "seasonId",
+        "number",
+        "title",
+        "premise",
+        "logline",
+        "targetDurationSeconds",
+        "status",
+        "canonRevisionAtCreation",
+        "canonSnapshot",
+        "outline",
+        "script",
+        "shots",
+        "proposedCanonDelta",
+        "productionIds",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "seasonId": { "$ref": "#/$defs/id" },
+        "number": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "premise": { "type": "string" },
+        "logline": { "type": "string" },
+        "targetDurationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "status": {
+          "enum": ["idea", "outline", "script", "shot_plan", "rendering", "review", "complete"]
+        },
+        "canonRevisionAtCreation": { "type": "integer", "minimum": 0 },
+        "canonSnapshot": { "$ref": "#/$defs/episodeCanonSnapshot" },
+        "outline": { "type": "object" },
+        "script": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/episodeScene" }
+        },
+        "shots": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/episodeShot" }
+        },
+        "proposedCanonDelta": { "$ref": "#/$defs/canonDelta" },
+        "productionIds": { "$ref": "#/$defs/idArray" },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "updatedAt": { "$ref": "#/$defs/timestamp" }
+      },
+      "additionalProperties": true
+    },
+    "seriesAsset": {
+      "type": "object",
+      "required": [
+        "id",
+        "workspaceId",
+        "kind",
+        "uri",
+        "ownerType",
+        "ownerId",
+        "isDerivedThumbnail",
+        "metadata"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "workspaceId": { "$ref": "#/$defs/id" },
+        "kind": {
+          "enum": ["image", "audio", "video", "character", "location", "prop", "other"]
+        },
+        "uri": {
+          "type": "string",
+          "description": "Workspace-contained assets/ or outputs/ path, or an explicitly permitted HTTPS URL. Base64/data URIs and traversal are forbidden.",
+          "not": { "pattern": "(^|/)\\.\\.(/|$)|^data:" },
+          "oneOf": [
+            { "pattern": "^(assets|outputs)/[A-Za-z0-9._/-]+$" },
+            { "pattern": "^https://" }
+          ]
+        },
+        "ownerType": { "enum": ["series", "character", "location", "prop", "episode", "shot", "attempt"] },
+        "ownerId": { "$ref": "#/$defs/id" },
+        "sourceAssetId": { "type": "string" },
+        "isDerivedThumbnail": { "type": "boolean" },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "seriesProviderSettings": {
+      "type": "object",
+      "required": [
+        "writingProvider",
+        "writingModel",
+        "imageProvider",
+        "imageModel",
+        "videoModel",
+        "videoSettings"
+      ],
+      "properties": {
+        "writingProvider": { "type": "string" },
+        "writingModel": { "type": "string" },
+        "writingBaseUrl": { "type": "string" },
+        "imageProvider": { "type": "string" },
+        "imageModel": { "type": "string" },
+        "videoModel": { "type": "string" },
+        "videoSettings": { "type": "object" },
+        "videoCapabilities": { "$ref": "#/$defs/capabilitySnapshot" }
+      },
+      "additionalProperties": true
+    },
+    "seriesProject": {
+      "type": "object",
+      "required": [
+        "version",
+        "id",
+        "revision",
+        "title",
+        "logline",
+        "premise",
+        "format",
+        "defaultEpisodeDurationSeconds",
+        "language",
+        "genre",
+        "tone",
+        "audience",
+        "visualStyle",
+        "characterVisualStyle",
+        "cameraLanguage",
+        "allowClipText",
+        "sourceMode",
+        "masterUniversePrompt",
+        "rightsNote",
+        "bestEffortLipSyncAcknowledged",
+        "importSource",
+        "canon",
+        "characters",
+        "relationships",
+        "locations",
+        "props",
+        "seasons",
+        "episodesById",
+        "assets",
+        "provider",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "revision": { "type": "integer", "minimum": 0 },
+        "title": { "type": "string" },
+        "logline": { "type": "string" },
+        "premise": { "type": "string" },
+        "format": { "enum": ["serial", "episodic", "hybrid"] },
+        "defaultEpisodeDurationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "language": { "type": "string" },
+        "genre": { "type": "string" },
+        "tone": { "type": "string" },
+        "audience": { "type": "string" },
+        "visualStyle": { "type": "string" },
+        "characterVisualStyle": { "type": "string" },
+        "cameraLanguage": { "type": "string" },
+        "allowClipText": { "type": "boolean" },
+        "sourceMode": { "enum": ["original", "known_universe_experimental", "hybrid"] },
+        "masterUniversePrompt": { "type": "string" },
+        "rightsNote": { "type": "string" },
+        "bestEffortLipSyncAcknowledged": { "type": "boolean" },
+        "importSource": { "$ref": "#/$defs/importSource" },
+        "canon": { "$ref": "#/$defs/seriesCanon" },
+        "characters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/seriesCharacter" }
+        },
+        "relationships": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/seriesRelationship" }
+        },
+        "locations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/seriesLocation" }
+        },
+        "props": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/seriesProp" }
+        },
+        "seasons": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/seriesSeason" }
+        },
+        "episodesById": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/seriesEpisode" }
+        },
+        "assets": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/seriesAsset" }
+        },
+        "provider": { "$ref": "#/$defs/seriesProviderSettings" },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "updatedAt": { "$ref": "#/$defs/timestamp" }
+      },
+      "additionalProperties": true
+    },
+    "capabilitySnapshot": {
+      "type": "object",
+      "required": [
+        "model",
+        "family",
+        "version",
+        "limits",
+        "supportsFirstFrame",
+        "supportsFirstLast",
+        "supportsContinuation",
+        "supportsNativeAudio"
+      ],
+      "properties": {
+        "model": { "type": "string" },
+        "family": { "type": "string" },
+        "version": { "type": "string" },
+        "limits": {
+          "type": "object",
+          "required": ["image", "video", "audio", "total"],
+          "properties": {
+            "image": { "type": "integer", "minimum": 0 },
+            "video": { "type": "integer", "minimum": 0 },
+            "audio": { "type": "integer", "minimum": 0 },
+            "total": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": true
+        },
+        "supportsFirstFrame": { "type": "boolean" },
+        "supportsFirstLast": { "type": "boolean" },
+        "supportsContinuation": { "type": "boolean" },
+        "supportsNativeAudio": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "importSource": {
+      "type": "object",
+      "required": [
+        "kind",
+        "sourceWorkspaceId",
+        "sourceStoryId",
+        "importedAt",
+        "historicalProductionIds",
+        "migrationNotes"
+      ],
+      "properties": {
+        "kind": { "enum": ["story_import", "original"] },
+        "sourceWorkspaceId": { "type": ["string", "null"] },
+        "sourceStoryId": { "type": ["string", "null"] },
+        "importedAt": { "$ref": "#/$defs/timestamp" },
+        "historicalProductionIds": { "$ref": "#/$defs/idArray" },
+        "migrationNotes": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "jobCheckpoint": {
+      "type": "object",
+      "description": "Durable server-side checkpoint contract; this object is stored outside the Series library.",
+      "required": [
+        "jobId",
+        "workspaceId",
+        "seriesId",
+        "episodeId",
+        "requestPayloadHash",
+        "model",
+        "settings",
+        "state",
+        "outputAssetIds",
+        "retryCount",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "jobId": { "$ref": "#/$defs/id" },
+        "workspaceId": { "$ref": "#/$defs/id" },
+        "seriesId": { "$ref": "#/$defs/id" },
+        "episodeId": { "$ref": "#/$defs/id" },
+        "shotId": { "type": "string" },
+        "attemptId": { "type": "string" },
+        "requestPayloadHash": { "type": "string" },
+        "model": { "type": "string" },
+        "settings": { "type": "object" },
+        "referenceManifest": { "$ref": "#/$defs/shotReferenceManifest" },
+        "providerTaskId": { "type": "string" },
+        "state": { "enum": ["queued", "running", "completed", "failed", "cancelled"] },
+        "outputAssetIds": { "$ref": "#/$defs/idArray" },
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "error": { "type": "string" },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "submittedAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": { "$ref": "#/$defs/timestamp" },
+        "updatedAt": { "$ref": "#/$defs/timestamp" },
+        "elapsedMs": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "planningJob": {
+      "description": "Server-side episode planning checkpoint, outside the Series library.",
+      "allOf": [
+        { "$ref": "#/$defs/jobCheckpoint" },
+        {
+          "type": "object",
+          "required": ["completedStages"],
+          "properties": {
+            "completedStages": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "renderQueueItem": {
+      "description": "Server-side shot render checkpoint, outside the Series library.",
+      "allOf": [
+        { "$ref": "#/$defs/jobCheckpoint" },
+        {
+          "type": "object",
+          "required": ["shotId", "attemptId", "referenceManifest"]
+        }
+      ]
+    }
+  }
+}

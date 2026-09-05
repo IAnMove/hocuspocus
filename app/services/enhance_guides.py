@@ -13,6 +13,11 @@ _GUIDES_DIR = os.path.join(os.path.dirname(__file__), "llm_guides", "enhance")
 # Map architecture prefixes to guide files
 # Values can be a string (single guide) or a tuple (with_images_guide, without_images_guide)
 _ARCHITECTURE_MAP = {
+    # MiniMax H3 joint native-audio video models
+    "minimax_h3_ref2va": "minimax_h3_ref2va_video.md",
+    "minimax_h3_legacy": "minimax_h3_video.md",
+    "minimax_h3": "minimax_h3_video.md",
+
     # LTX-2 video models
     "ltx2": "ltx2_video.md",
     "ltxv": "ltx2_video.md",
@@ -92,12 +97,11 @@ def get_enhance_guide(model_type: str, generation_mode: str, has_images: bool = 
         Guide text for the LLM system prompt.
     """
     # 1. Per-model overrides via model_def.
-    # Lazy-import wgp + the shared loader because enhance_guides.py is
-    # imported early during server startup, before wgp's full model
-    # definitions are populated. Lazy keeps the import cheap.
+    # Read the bound WanGP catalog at call time: this module is imported
+    # during startup, before launch has populated model definitions.
     inline_delta = ""
     try:
-        from wgp import get_model_def
+        from services.generation import get_model_def
         md = get_model_def(model_type)
         if md:
             # 1a. Full-guide FILE override — a complete, standalone enhancer
@@ -123,7 +127,7 @@ def get_enhance_guide(model_type: str, generation_mode: str, has_images: bool = 
             inline = md.get("enhance_guide_text")
             if isinstance(inline, str) and inline.strip():
                 inline_delta = inline.strip()
-    except Exception as e:
+    except (Exception, SystemExit) as e:
         # Don't let a model_def lookup failure prevent the enhancer
         # from running — fall through to architecture mapping.
         print(f"[Enhance] Per-model guide lookup failed for {model_type}: {e}")

@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -23,14 +24,112 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 V2_ROOT = HERE / "vendor" / "Hunyuan3D-2"
 V21_ROOT = HERE / "vendor" / "Hunyuan3D-2.1"
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(V2_ROOT))
 sys.path.insert(0, str(V21_ROOT))
 sys.path.insert(0, str(V21_ROOT / "hy3dshape"))
 sys.path.insert(0, str(V21_ROOT / "hy3dpaint"))
 
+# Texturing or exporting a multi-million-face mesh can pin CPU/RAM and lock
+# the GPU driver long enough that the host looks frozen. Cap before those
+# stages so a high octree setting cannot take the machine down.
+_MAX_TEXTURE_FACES = 200_000
+_MAX_EXPORT_FACES = 400_000
+
 
 def event(phase: str, progress: float, message: str) -> None:
     print("MAESTRO_EVENT " + json.dumps({"phase": phase, "progress": progress, "message": message}), flush=True)
+
+
+def release_cuda() -> None:
+    """Drop orphaned GPU tensors between Hunyuan stages.
+
+    rembg / text-to-image / shape / paint each load a large network. If the
+    previous one is still resident, the next load swaps into system RAM and
+    the machine appears hung.
+    """
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            if hasattr(torch.cuda, "ipc_collect"):
+                torch.cuda.ipc_collect()
+    except Exception:
+        pass
+
+
+class Heartbeat:
+    """Emit progress while a CUDA call prints no newlines.
+
+    Hunyuan's tqdm uses ``\\r``, so the parent job watchdog sees silence and
+    may kill the worker mid-kernel — that is a common way to wedge the GPU
+    driver. A newline heartbeat keeps the job alive and the UI moving.
+    """
+
+    def __init__(self, phase: str, progress: float, message: str, interval: float = 20.0):
+        self.phase = phase
+        self.progress = progress
+        self.message = message
+        self.interval = interval
+        self._stop = threading.Event()
+        self._started = 0.0
+        self._thread = threading.Thread(target=self._run, name="hy3d-heartbeat", daemon=True)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval):
+            elapsed = int(time.time() - self._started)
+            event(self.phase, self.progress, f"{self.message} ({elapsed}s elapsed)")
+
+    def __enter__(self) -> Heartbeat:
+        self._started = time.time()
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=2)
+
+
+def mesh_face_count(mesh: Any) -> int:
+    faces = getattr(mesh, "faces", None)
+    try:
+        return int(len(faces))
+    except TypeError:
+        return 0
+
+
+def reduce_faces(mesh: Any, max_faces: int) -> Any:
+    event("simplify", 0.66, f"Reducing mesh to {max_faces} faces to avoid a GPU/RAM hang")
+    try:
+        from hy3dgen.shapegen import DegenerateFaceRemover, FaceReducer, FloaterRemover
+        mesh = FloaterRemover()(mesh)
+        mesh = DegenerateFaceRemover()(mesh)
+        return FaceReducer()(mesh, max_facenum=max_faces)
+    except Exception as exc:
+        print(f"Mesh simplification skipped: {exc}", flush=True)
+        return mesh
+
+
+def guard_mesh_complexity(mesh: Any, settings: dict[str, Any], *, for_texture: bool) -> Any:
+    hang_limit = _MAX_TEXTURE_FACES if for_texture else _MAX_EXPORT_FACES
+    target = hang_limit
+    if settings.get("reduce_face"):
+        target = min(hang_limit, int(settings.get("target_face_num") or hang_limit))
+    count = mesh_face_count(mesh)
+    if count <= target:
+        return mesh
+    reduced = reduce_faces(mesh, target)
+    remaining = mesh_face_count(reduced)
+    # reduce_faces is best-effort and returns the original mesh on error.
+    # Texturing/exporting a mesh still over the hang cap is how the host
+    # freezes; fail the job instead of proceeding with the dense mesh.
+    if remaining > hang_limit:
+        raise RuntimeError(
+            f"Mesh has {remaining} faces after simplification (limit {hang_limit}). "
+            "Lower octree resolution and retry to avoid freezing the host."
+        )
+    return reduced
 
 
 def supported_call(callable_obj, **kwargs):
@@ -49,42 +148,72 @@ def load_pil(path: str):
     return Image.open(path).convert("RGBA")
 
 
-def make_text_image(prompt: str, output_dir: Path, device: str) -> tuple[Any, str]:
-    event("text_to_image", 0.08, "Loading HunyuanDiT text-to-image conditioner")
-    from huggingface_hub import hf_hub_download
-    from hy3dgen.text2image import HunyuanDiTPipeline
-
-    repo_id = "Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled"
-    pipeline = None
-    for attempt in range(1, 4):
-        try:
-            # Resolve the public manifest before Diffusers loads the snapshot.
-            # This seeds the revision cache and avoids the misleading generic
-            # "model_index.json is missing" wrapper on metadata failures.
-            hf_hub_download(repo_id, "model_index.json", token=False)
-            pipeline = HunyuanDiTPipeline(
-                repo_id,
-                device=device,
-            )
-            break
-        except OSError:
-            if attempt == 3:
-                raise
-            delay = attempt * 5
-            event("text_to_image", 0.08, f"Hugging Face metadata unavailable; retrying in {delay}s ({attempt}/3)")
-            time.sleep(delay)
-    assert pipeline is not None
-    image = pipeline(prompt)
-    path = output_dir / "text_condition.png"
-    image.save(path)
-    del pipeline
-    gc.collect()
+def _minimax_api_key() -> str:
+    env_key = str(os.environ.get("MINIMAX_API_KEY") or "").strip()
+    if env_key:
+        return env_key
+    config_path = HERE.parents[1] / "wgp_config.json"
     try:
-        import torch
-        torch.cuda.empty_cache()
-    except Exception:
-        pass
-    return image.convert("RGBA"), str(path)
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        services = data.get("services") or {}
+        return str(
+            services.get("minimax_image_api_key")
+            or services.get("minimax_api_key")
+            or ""
+        ).strip()
+    except (OSError, ValueError, TypeError):
+        return ""
+
+
+def make_text_image(prompt: str, output_dir: Path, device: str) -> tuple[Any, str]:
+    """Create the Hunyuan conditioner still without loading HunyuanDiT.
+
+    HunyuanDiT is a second multi-GB GPU model. The local snapshot was truncated
+    (MetadataIncompleteBuffer) and loading it froze the machine for minutes.
+    MiniMax Image-01 produces the white-background still instead.
+    """
+    del device
+    event("text_to_image", 0.08, "Generating a MiniMax reference still (HunyuanDiT is disabled)")
+    api_key = _minimax_api_key()
+    if not api_key:
+        raise RuntimeError(
+            "HunyuanDiT is disabled because it hangs the GPU and its weights were truncated. "
+            "Set the MiniMax API key in Settings → Services, or pass a reference image."
+        )
+    import base64
+    import requests
+
+    suffix = ", white background, centered 3D object, studio product shot, no people, no text"
+    full_prompt = prompt if "white background" in prompt.lower() else f"{prompt}{suffix}"
+    full_prompt = " ".join(full_prompt.split())[:1400]
+    response = requests.post(
+        "https://api.minimax.io/v1/image_generation",
+        json={
+            "model": "image-01",
+            "prompt": full_prompt,
+            "aspect_ratio": "1:1",
+            "response_format": "base64",
+            "n": 1,
+            "prompt_optimizer": False,
+        },
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        timeout=(15, 300),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    status = (payload.get("base_resp") or {}).get("status_code", 0)
+    if status not in (0, None):
+        raise RuntimeError((payload.get("base_resp") or {}).get("status_msg") or "MiniMax image failed")
+    encoded = (payload.get("data") or {}).get("image_base64") or []
+    if not encoded:
+        raise RuntimeError("MiniMax returned no reference image")
+    image_bytes = base64.b64decode(encoded[0])
+    path = output_dir / "text_condition.png"
+    path.write_bytes(image_bytes)
+    from PIL import Image
+    image = Image.open(path).convert("RGBA")
+    image.save(path)
+    return image, str(path)
 
 
 def prepare_images(request: dict[str, Any], engine: str, temp_dir: Path):
@@ -105,7 +234,11 @@ def prepare_images(request: dict[str, Any], engine: str, temp_dir: Path):
         else:
             from hy3dgen.rembg import BackgroundRemover
         remover = BackgroundRemover()
-        images = {name: remover(image) for name, image in images.items()}
+        try:
+            images = {name: remover(image) for name, image in images.items()}
+        finally:
+            del remover
+            release_cuda()
 
     for name, image in images.items():
         normalized_path = temp_dir / f"{name}.png"
@@ -119,17 +252,36 @@ def load_v2_pipeline(model: dict[str, Any], settings: dict[str, Any]):
     from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
 
     event("loading_model", 0.24, f"Loading {model['label']}")
-    try:
-        pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-            model["repo"],
-            subfolder=model["subfolder"],
-            use_safetensors=True,
-            device="cuda",
-        )
-    except TypeError:
-        pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"], subfolder=model["subfolder"])
-    configure_pipeline(pipeline, settings)
-    return pipeline
+    last_error: Exception | None = None
+    for attempt in range(1, 6):
+        try:
+            with Heartbeat("loading_model", 0.24, f"Loading {model['label']}"):
+                try:
+                    pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+                        model["repo"],
+                        subfolder=model["subfolder"],
+                        use_safetensors=True,
+                        device="cuda",
+                    )
+                except TypeError:
+                    pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+                        model["repo"], subfolder=model["subfolder"]
+                    )
+            configure_pipeline(pipeline, settings)
+            return pipeline
+        except Exception as exc:
+            last_error = exc
+            text = str(exc)
+            retryable = any(token in text for token in (
+                "IncompleteRead", "ChunkedEncodingError", "MetadataIncompleteBuffer",
+                "Connection broken", "Connection reset",
+            ))
+            if not retryable or attempt == 5:
+                raise
+            delay = attempt * 8
+            event("loading_model", 0.24, f"Hugging Face download dropped; retrying in {delay}s ({attempt}/5)")
+            time.sleep(delay)
+    raise last_error or RuntimeError("Failed to load Hunyuan3D")
 
 
 def load_v21_pipeline(model: dict[str, Any], settings: dict[str, Any]):
@@ -141,7 +293,11 @@ def load_v21_pipeline(model: dict[str, Any], settings: dict[str, Any]):
     from hy3dshape import Hunyuan3DDiTFlowMatchingPipeline
 
     event("loading_model", 0.24, f"Loading {model['label']}")
-    pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"])
+    with Heartbeat("loading_model", 0.24, f"Loading {model['label']}"):
+        try:
+            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"], device="cuda")
+        except TypeError:
+            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"])
     configure_pipeline(pipeline, settings)
     return pipeline
 
@@ -197,27 +353,38 @@ def generate_mesh(request: dict[str, Any], images: dict[str, Any]):
     }
     event("shape", 0.38, "Generating 3D geometry")
     started = time.time()
-    result = supported_call(pipeline, **call_kwargs)
+    with Heartbeat("shape", 0.38, "Generating 3D geometry"):
+        result = supported_call(pipeline, **call_kwargs)
     mesh = result[0] if isinstance(result, (list, tuple)) else result
     print(f"Shape generation completed in {time.time() - started:.2f}s", flush=True)
     del pipeline
-    gc.collect()
-    torch.cuda.empty_cache()
+    release_cuda()
     return mesh
 
 
 def simplify_mesh(mesh, settings: dict[str, Any]):
     if not settings.get("reduce_face"):
         return mesh
-    event("simplify", 0.68, f"Reducing mesh to {settings['target_face_num']} faces")
-    try:
-        from hy3dgen.shapegen import FloaterRemover, DegenerateFaceRemover, FaceReducer
-        mesh = FloaterRemover()(mesh)
-        mesh = DegenerateFaceRemover()(mesh)
-        return FaceReducer()(mesh, max_facenum=settings["target_face_num"])
-    except Exception as exc:
-        print(f"Mesh simplification skipped: {exc}", flush=True)
-        return mesh
+    return reduce_faces(mesh, settings["target_face_num"])
+
+
+def load_retexture_mesh(source_path: str):
+    """Load a static GLB without mutating the user's original asset."""
+    from pygltflib import GLTF2
+    import trimesh
+
+    source = Path(source_path)
+    gltf = GLTF2().load(str(source))
+    if gltf.skins or gltf.animations:
+        raise ValueError(
+            "Retexturing rigged or animated GLBs is not supported because Hunyuan Paint "
+            "rebuilds UVs and would discard the rig. Retexture the static base model, then rig the new copy."
+        )
+    loaded = trimesh.load(str(source), force="scene", process=False)
+    mesh = loaded.dump(concatenate=True) if isinstance(loaded, trimesh.Scene) else loaded
+    if not isinstance(mesh, trimesh.Trimesh) or mesh.vertices.size == 0 or mesh.faces.size == 0:
+        raise ValueError("The source GLB does not contain a usable triangle mesh")
+    return mesh
 
 
 def texture_v2(mesh, image, settings: dict[str, Any]):
@@ -229,14 +396,22 @@ def texture_v2(mesh, image, settings: dict[str, Any]):
         paint = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2", subfolder=subfolder)
     except TypeError:
         paint = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2")
-    if settings.get("cpu_offload") and hasattr(paint, "enable_model_cpu_offload"):
-        paint.enable_model_cpu_offload()
+    if settings.get("cpu_offload"):
+        # Hunyuan Paint 2.0's custom multiview pipeline leaves its learned
+        # prompt tensor on CPU when Diffusers offload hooks are enabled. That
+        # produces a deterministic CPU/CUDA mismatch during denoising. Keep
+        # Paint resident on CUDA; the short-lived worker still releases all
+        # VRAM immediately after export.
+        print("Hunyuan Paint 2.0 CPU offload skipped to keep custom tensors on one device", flush=True)
     event("texture", 0.8, "Generating texture maps")
     try:
-        textured = paint(mesh, image=image)
+        with Heartbeat("texture", 0.8, "Generating texture maps"):
+            textured = paint(mesh, image=image)
     except TypeError:
-        textured = paint(mesh, image)
+        with Heartbeat("texture", 0.8, "Generating texture maps"):
+            textured = paint(mesh, image)
     del paint
+    release_cuda()
     return textured
 
 
@@ -255,12 +430,13 @@ def texture_v21(mesh, source_image_path: str, settings: dict[str, Any], temp_dir
     paint = Hunyuan3DPaintPipeline(config)
     obj_path = temp_dir / "pbr_textured.obj"
     event("texture", 0.8, "Generating PBR material maps")
-    textured_obj = paint(
-        mesh_path=str(initial_mesh),
-        image_path=source_image_path,
-        output_mesh_path=str(obj_path),
-        save_glb=False,
-    )
+    with Heartbeat("texture", 0.8, "Generating PBR material maps"):
+        textured_obj = paint(
+            mesh_path=str(initial_mesh),
+            image_path=source_image_path,
+            output_mesh_path=str(obj_path),
+            save_glb=False,
+        )
     textured_obj = Path(textured_obj or obj_path)
     glb_path = output_path if output_path.suffix.lower() == ".glb" else temp_dir / "pbr_textured.glb"
     textures = {
@@ -270,6 +446,7 @@ def texture_v21(mesh, source_image_path: str, settings: dict[str, Any], temp_dir
     }
     create_glb_with_pbr_materials(str(textured_obj), textures, str(glb_path))
     del paint
+    release_cuda()
     if output_path.suffix.lower() != ".glb":
         import trimesh
         converted = trimesh.load(glb_path, force="scene")
@@ -283,20 +460,33 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    try:
+        import torch
+        torch.set_grad_enabled(False)
+    except Exception:
+        pass
+
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
     output_path = Path(args.output).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     model = request["model"]
     settings = request["settings"]
+    operation = request.get("operation") or "generate"
 
     with tempfile.TemporaryDirectory(prefix="maestro_hy3d_") as temp_name:
         temp_dir = Path(temp_name)
         event("preparing", 0.04, "Preparing Hunyuan3D inputs")
         images, source_image_path = prepare_images(request, model["engine"], temp_dir)
-        mesh = generate_mesh(request, images)
-        mesh = simplify_mesh(mesh, settings)
+        if operation == "retexture":
+            event("source_mesh", 0.26, "Loading the source GLB as a clean static mesh")
+            mesh = load_retexture_mesh(request["source_mesh"])
+        else:
+            mesh = generate_mesh(request, images)
+            mesh = simplify_mesh(mesh, settings)
 
         texture_mode = settings["texture_mode"]
+        mesh = guard_mesh_complexity(mesh, settings, for_texture=texture_mode != "none")
         if texture_mode == "pbr":
             texture_v21(mesh, source_image_path, settings, temp_dir, output_path)
         else:

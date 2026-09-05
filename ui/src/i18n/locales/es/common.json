@@ -1,0 +1,61 @@
+{
+  "language": {
+    "name": "Spanish",
+    "nativeName": "Español"
+  },
+  "actions": {
+    "close": "Cerrar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "reload": "Recargar",
+    "create": "Crear",
+    "search": "Buscar",
+    "discard": "Descartar",
+    "delete": "Eliminar",
+    "refresh": "Actualizar",
+    "loadMore": "Cargar más",
+    "resume": "Reanudar",
+    "retry": "Reintentar",
+    "generate": "Generar",
+    "add": "Añadir",
+    "remove": "Quitar",
+    "apply": "Aplicar",
+    "import": "Importar",
+    "export": "Exportar",
+    "open": "Abrir",
+    "copy": "Copiar",
+    "duplicate": "Duplicar",
+    "confirm": "Confirmar",
+    "edit": "Editar",
+    "download": "Descargar"
+  },
+  "fields": {
+    "name": "Nombre",
+    "description": "Descripción"
+  },
+  "status": {
+    "running": "En marcha",
+    "loading": "Cargando…",
+    "queued": "En cola",
+    "completed": "Completado",
+    "failed": "Fallido",
+    "cancelled": "Cancelado"
+  },
+  "count": {
+    "item_one": "{{count}} elemento",
+    "item_other": "{{count}} elementos"
+  },
+  "sample": {
+    "named": "{{name}}"
+  },
+  "welcome": {
+    "title": "Novedades de HocusPocus",
+    "subtitle": "Tu estudio local de IA para vídeo, imágenes, audio y 3D. Estas son las claves para arrancar bien una producción.",
+    "modelsTitle": "Los modelos se descargan en el primer uso",
+    "modelsBody": "La instalación preparó la app, no los pesos del modelo. La primera vez que usas un modelo, sus archivos se descargan una vez — a menudo decenas de GB para un modelo de vídeo — antes de que aparezca nada. Las siguientes veces son rápidas. Mira el progreso abajo a la derecha; el primer vídeo puede tardar.",
+    "directorTitle": "Director usa un LLM local",
+    "directorBody": "El modo Director planifica el vídeo con un modelo de lenguaje local (Gemma 4, ~5 GB, se descarga en el primer uso de Director): no se envía nada a la nube. Puedes cambiar de modelo, o conectar una API externa, en Ajustes → Servicios.",
+    "enter": "Entrar al estudio",
+    "closeAria": "Cerrar"
+  }
+}

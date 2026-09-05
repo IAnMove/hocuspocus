@@ -1,111 +1,58 @@
-import { useRef, useCallback, useState, useEffect, useMemo, type JSX } from 'react'
-import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked } from 'lucide-react'
+import { lazy, Suspense, useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo, type JSX } from 'react'
+import { Film, Play, Square, Loader2, X, BookMarked, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { TabFilter } from './TabFilter'
 import { ThumbnailGallery } from './ThumbnailGallery'
 import { MediaFeedItem } from './MediaFeedItem'
-import { SceneAnimatorPanel } from '../Sidebar/SceneAnimatorPanel'
-import { RigAnimatePanel } from '../Sidebar/RigAnimatePanel'
 import { useStore } from '../../stores/useStore'
+import { jobFitsGalleryFilter } from '../../lib/galleryListQuery'
 import type { GenerationJob } from '../../types'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
+import {
+  clearVideoEditorReplacementTarget,
+  readVideoEditorReplacementTarget,
+} from '../../features/video-editor/replacementHandoff'
+import {
+  clearDirectorClipReplacementTarget,
+  readDirectorClipReplacementTarget,
+} from '../../features/stories/directorClipHandoff'
+import { useUiTranslation } from '../../i18n'
+import {
+  estimatedMediaFeedItemHeight,
+  mediaFeedMaxPreviewHeight,
+} from './mediaFeedSizing'
 
-function WorkspaceSelector() {
-  const workspaces = useStore(s => s.workspaces)
-  const activeWorkspace = useStore(s => s.activeWorkspace)
-  const switchWorkspace = useStore(s => s.switchWorkspace)
-  const createWorkspace = useStore(s => s.createWorkspace)
-  const [open, setOpen] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const dropdownRef = useRef<HTMLDivElement>(null)
+const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
+  .then(module => ({ default: module.SceneAnimatorPanel })))
+const RigAnimatePanel = lazy(() => import('../Sidebar/RigAnimatePanel')
+  .then(module => ({ default: module.RigAnimatePanel })))
+const ComicEditorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
+  .then(module => ({ default: module.ComicEditorPanel })))
+const VideoEditorPanel = lazy(() => import('../../features/video-editor/VideoEditorPanel')
+  .then(module => ({ default: module.VideoEditorPanel })))
+const StoryLabPanel = lazy(() => import('../../features/stories/StoryLabPanel')
+  .then(module => ({ default: module.StoryLabPanel })))
+const SeriesLabPanel = lazy(() => import('../../features/series/SeriesLabPanel')
+  .then(module => ({ default: module.SeriesLabPanel })))
+const StyleSheetPanel = lazy(() => import('../../features/styles/StyleSheetPanel')
+  .then(module => ({ default: module.StyleSheetPanel })))
+const RunsPanel = lazy(() => import('../../features/workspaces/WorkspacesPanel')
+  .then(module => ({ default: module.RunsPanel })))
+const CharacterCreatorPanel = lazy(() => import('../../features/characters/CharacterCreatorPanel')
+  .then(module => ({ default: module.CharacterCreatorPanel })))
+const AuditDevPanel = lazy(() => import('../../features/auditdev/AuditDevPanel')
+  .then(module => ({ default: module.AuditDevPanel })))
+const AssetsPanel = lazy(() => import('../../features/assets/AssetsPanel')
+  .then(module => ({ default: module.AssetsPanel })))
+const ProjectsPanel = lazy(() => import('../../features/projects/ProjectsPanel')
+  .then(module => ({ default: module.ProjectsPanel })))
+const WorkspaceCollectionsPanel = lazy(() => import('../../features/workspaceCollections/WorkspaceCollectionsPanel')
+  .then(module => ({ default: module.WorkspaceCollectionsPanel })))
 
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false)
-        setCreating(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  const handleCreate = async () => {
-    const name = newName.trim().replace(/\s+/g, '-')
-    if (!name) return
-    try {
-      await createWorkspace(name)
-      setNewName('')
-      setCreating(false)
-      setOpen(false)
-    } catch {
-      // error logged in store
-    }
-  }
-
+function PanelLoadingFallback() {
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors border border-border"
-        title="Switch workspace"
-      >
-        <FolderOpen size={12} />
-        <span className="max-w-[120px] truncate">{activeWorkspace}</span>
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-1 w-56 bg-bg-secondary border border-border rounded-lg shadow-lg z-50 overflow-hidden">
-          <div className="px-2 py-1.5 border-b border-border">
-            <span className="text-[10px] text-text-muted uppercase tracking-wider">Workspaces</span>
-          </div>
-          <div className="max-h-[200px] overflow-y-auto">
-            {workspaces.map(ws => (
-              <button
-                key={ws.name}
-                onClick={() => { switchWorkspace(ws.name); setOpen(false) }}
-                className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-bg-hover transition-colors ${
-                  ws.name === activeWorkspace ? 'text-accent-blue' : 'text-text-secondary'
-                }`}
-              >
-                <span className="truncate">{ws.name}</span>
-                {ws.name === activeWorkspace && <Check size={12} />}
-              </button>
-            ))}
-          </div>
-          <div className="border-t border-border p-2">
-            {creating ? (
-              <div className="flex gap-1.5">
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                  placeholder="workspace-name"
-                  className="flex-1 bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
-                  autoFocus
-                />
-                <button
-                  onClick={handleCreate}
-                  disabled={!newName.trim()}
-                  className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue-hover disabled:opacity-50"
-                >
-                  Create
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setCreating(true)}
-                className="w-full text-left px-1 py-1 text-xs text-accent-blue hover:text-accent-blue-hover flex items-center gap-1"
-              >
-                <Plus size={12} /> New Workspace
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+    <div className="flex flex-1 items-center justify-center text-text-muted">
+      <Loader2 size={22} className="animate-spin text-accent-blue" />
+      <span className="ml-2 text-xs">Opening workspace…</span>
     </div>
   )
 }
@@ -113,9 +60,6 @@ function WorkspaceSelector() {
 // How many items to render beyond the viewport in each direction
 const OVERSCAN = 5
 // Info bar height + border/padding
-const INFO_BAR_HEIGHT = 48
-// aspect-video = 56.25% of width (16:9)
-const ASPECT_RATIO = 0.5625
 // Gap between items (tailwind space-y-3 = 12px)
 const GAP = 12
 
@@ -129,6 +73,20 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
   const phase = stripTimeSuffix(job.phase || job.message)
   const isFailed = job.status === 'failed' || job.status === 'cancelled'
   const errorText = job.error || job.message || (job.status === 'cancelled' ? 'Cancelled' : 'Generation failed')
+  const completedPanelTimings = (job.taskTimings ?? [])
+    .filter(item => typeof item.total_seconds === 'number')
+    .slice(-4)
+  const [showH3Prompts, setShowH3Prompts] = useState(false)
+  const h3WindowMatch = (job.phase || job.message || '').match(/Sliding Window\s+(\d+)\/(\d+)/i)
+  const activeH3Window = h3WindowMatch ? Number(h3WindowMatch[1]) : 1
+  const activeH3PlanWindow = job.h3WindowPlan?.windows.find(
+    window => window.index === activeH3Window,
+  ) || job.h3WindowPlan?.windows[0]
+
+  useEffect(() => {
+    const reset = window.setTimeout(() => setShowH3Prompts(false), 0)
+    return () => window.clearTimeout(reset)
+  }, [job.h3WindowPlan?.signature])
 
   return (
     <div className={`rounded-xl border overflow-hidden ${
@@ -139,7 +97,7 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
         {isFailed && (
           <button
             onClick={onDismiss}
-            className="absolute top-2 right-2 p-1.5 rounded-full bg-black/40 text-white/80 hover:bg-red-600 hover:text-white transition-colors z-10"
+            className="absolute top-2 right-2 p-1.5 rounded-full bg-bg-active text-text-secondary hover:bg-red-600 hover:text-white transition-colors z-10"
             title="Dismiss"
           >
             <X size={14} />
@@ -159,6 +117,15 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
               <p className="text-[10px] text-text-muted mt-0.5">
                 Step {job.step}/{job.totalSteps}
               </p>
+            )}
+            {!isFailed && completedPanelTimings.length > 0 && (
+              <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
+                {completedPanelTimings.map(item => (
+                  <span key={`${item.panel_no}-${item.status}`}>
+                    Viñeta {item.panel_no}: {item.total_seconds!.toFixed(1)}s
+                  </span>
+                ))}
+              </div>
             )}
             {isFailed && (
               <p className="text-[11px] text-text-secondary mt-2 max-h-24 overflow-y-auto px-2 leading-relaxed whitespace-pre-wrap break-words">
@@ -182,6 +149,52 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
           )}
         </div>
       </div>
+
+      {job.h3WindowPlan && activeH3PlanWindow && (
+        <div className="border-t border-border bg-bg-secondary/60 px-3 py-2">
+          <div className="flex items-center justify-between gap-2 text-[10px] text-text-muted">
+            <span className="font-medium text-text-secondary">
+              Exact H3 prompt · Window {activeH3PlanWindow.index}/{job.h3WindowPlan.window_count}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowH3Prompts(open => !open)}
+              className="flex items-center gap-1 text-accent-blue hover:text-accent-blue/80"
+            >
+              {showH3Prompts ? 'Hide all' : 'View all'}
+              {showH3Prompts ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] leading-relaxed text-text-muted line-clamp-3 whitespace-pre-wrap break-words">
+            {activeH3PlanWindow.prompt}
+          </p>
+          {showH3Prompts && (
+            <div className="mt-2 max-h-80 overflow-y-auto space-y-2 border-t border-border pt-2">
+              {job.h3WindowPlan.windows.map(window => (
+                <div
+                  key={`${window.index}-${window.start_frame}`}
+                  className={`rounded-md border p-2 ${
+                    window.index === activeH3Window
+                      ? 'border-accent-blue/70 bg-accent-blue/5'
+                      : 'border-border bg-bg-tertiary/60'
+                  }`}
+                >
+                  <div className="mb-1 flex items-center justify-between text-[9px] text-text-muted">
+                    <span>
+                      Window {window.index}: {window.title || `Beat ${window.index}`}
+                      {window.index === activeH3Window ? ' · Generating now' : ''}
+                    </span>
+                    <span>{window.start_seconds.toFixed(1)}–{window.end_seconds.toFixed(1)}s</span>
+                  </div>
+                  <pre className="whitespace-pre-wrap break-words font-sans text-[10px] leading-relaxed text-text-secondary">
+                    {window.prompt}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bottom bar */}
       <div className="px-3 py-2 min-h-[40px] flex items-center justify-between">
@@ -272,18 +285,27 @@ function PipelinePlaceholder() {
 }
 
 export function MainContent() {
+  const { t: tActivity } = useUiTranslation('activity')
   const outputs = useStore(s => s.filteredOutputs())
-  const outputsTotal = useStore(s => s.outputsTotal)
   const outputsLoading = useStore(s => s.outputsLoading)
   const jobs = useStore(s => s.jobs)
   const generationMode = useStore(s => s.generationMode)
   const stopGeneration = useStore(s => s.stopGeneration)
   const dismissJob = useStore(s => s.dismissJob)
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
+  const selectedOutput = useStore(s => s.selectedOutput)
   const setMediaFilter = useStore(s => s.setMediaFilter)
+  const mediaFilter = useStore(s => s.mediaFilter)
+  const developerMode = useStore(s => s.developerMode)
+  const setGalleryFeedAtTop = useStore(s => s.setGalleryFeedAtTop)
+  const visibleJobs = jobs.filter(job => jobFitsGalleryFilter(job, mediaFilter))
+
+  useEffect(() => {
+    if (mediaFilter === 'auditdev' && !developerMode) setMediaFilter('all')
+  }, [developerMode, mediaFilter, setMediaFilter])
 
   const feedRef = useRef<HTMLDivElement>(null)
-  const [activeIndex, setActiveIndex] = useState(0)
+  const activeIndex = selectedOutput
   const isUserScrolling = useRef(false)
   const scrollTargetIndex = useRef<number | null>(null)
 
@@ -291,38 +313,75 @@ export function MainContent() {
   const [scrollTop, setScrollTop] = useState(0)
   const [containerHeight, setContainerHeight] = useState(800)
   const [containerWidth, setContainerWidth] = useState(800)
-  const measuredHeights = useRef<Map<number, number>>(new Map())
+  const measuredHeights = useRef<Map<string, number>>(new Map())
+  const jobsAnchorRef = useRef<HTMLDivElement>(null)
+  const [placeholderTotalHeight, setPlaceholderTotalHeight] = useState(0)
+  const prevPlaceholderHeight = useRef(0)
+  const prevOutputNames = useRef<string[]>([])
 
   // Dynamic estimated item height based on actual container width
-  const estimatedItemHeight = Math.round(containerWidth * ASPECT_RATIO) + INFO_BAR_HEIGHT
+  const maxMediaHeight = mediaFeedMaxPreviewHeight(containerHeight)
+  const estimatedItemHeight = estimatedMediaFeedItemHeight(containerWidth, containerHeight)
 
-  // Total height of all job placeholders at top
-  const placeholderTotalHeight = jobs.length > 0
-    ? jobs.length * estimatedItemHeight + (jobs.length - 1) * GAP + GAP
-    : 0
-
-  // Measure container on mount and resize; clear stale heights on width change
+  // Measure container on mount and resize; clear stale heights whenever either
+  // dimension changes because the viewport cap also makes item height depend
+  // on the available vertical space.
   useEffect(() => {
     const el = feedRef.current
     if (!el) return
     let prevWidth = 0
+    let prevHeight = 0
     const ro = new ResizeObserver((entries) => {
       const rect = entries[0].contentRect
-      setContainerHeight(rect.height)
+      const newHeight = rect.height
+      setContainerHeight(newHeight)
       const newWidth = rect.width
       setContainerWidth(newWidth)
-      if (prevWidth && Math.abs(newWidth - prevWidth) > 2) {
+      if (
+        (prevWidth && Math.abs(newWidth - prevWidth) > 2)
+        || (prevHeight && Math.abs(newHeight - prevHeight) > 2)
+      ) {
         measuredHeights.current.clear()
       }
       prevWidth = newWidth
+      prevHeight = newHeight
     })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
 
+  useLayoutEffect(() => {
+    const el = jobsAnchorRef.current
+    if (!el) {
+      setPlaceholderTotalHeight(0)
+      return
+    }
+    const update = () => setPlaceholderTotalHeight(el.offsetHeight)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [visibleJobs.length])
+
+  useLayoutEffect(() => {
+    const el = feedRef.current
+    const previous = prevPlaceholderHeight.current
+    prevPlaceholderHeight.current = placeholderTotalHeight
+    if (!el || previous === 0) return
+    const delta = placeholderTotalHeight - previous
+    if (delta === 0 || el.scrollTop <= 24) return
+    el.scrollTop += delta
+    setScrollTop(el.scrollTop)
+  }, [placeholderTotalHeight])
+
   const getItemHeight = useCallback((index: number) => {
-    return measuredHeights.current.get(index) ?? estimatedItemHeight
-  }, [estimatedItemHeight])
+    const name = outputs[index]?.name
+    if (name) {
+      const measured = measuredHeights.current.get(name)
+      if (measured) return measured
+    }
+    return estimatedItemHeight
+  }, [estimatedItemHeight, outputs])
 
   const { startIndex, endIndex, totalHeight, itemOffsets } = useMemo(() => {
     const count = outputs.length
@@ -358,16 +417,17 @@ export function MainContent() {
 
   const [, setMeasureEpoch] = useState(0)
   const handleItemMeasured = useCallback((index: number, height: number) => {
-    const prev = measuredHeights.current.get(index)
+    const name = outputs[index]?.name
+    if (!name) return
+    const prev = measuredHeights.current.get(name)
     if (prev !== height) {
-      measuredHeights.current.set(index, height)
+      measuredHeights.current.set(name, height)
       setMeasureEpoch(e => e + 1)
     }
-  }, [])
+  }, [outputs])
 
   const handleItemVisible = useCallback((index: number) => {
     if (scrollTargetIndex.current !== null) return
-    setActiveIndex(index)
     if (isUserScrolling.current) {
       setSelectedOutput(index)
     }
@@ -382,7 +442,6 @@ export function MainContent() {
       return
     }
     setSelectedOutput(index)
-    setActiveIndex(index)
     scrollTargetIndex.current = index
     isUserScrolling.current = false
     const feedEl = feedRef.current
@@ -462,6 +521,7 @@ export function MainContent() {
     const el = feedRef.current
     if (!el) return
     setScrollTop(el.scrollTop)
+    setGalleryFeedAtTop(el.scrollTop <= 24)
     if (scrollTargetIndex.current === null) {
       isUserScrolling.current = true
     }
@@ -474,11 +534,25 @@ export function MainContent() {
         store.loadMoreOutputs().finally(() => { loadingMore.current = false })
       }
     }
-  }, [])
+  }, [setGalleryFeedAtTop])
 
-  useEffect(() => {
-    measuredHeights.current.clear()
-  }, [outputs.length])
+  useLayoutEffect(() => {
+    const el = feedRef.current
+    const previous = prevOutputNames.current
+    const names = outputs.map(file => file.name)
+    prevOutputNames.current = names
+    if (!el || previous.length === 0) return
+    let prepended = 0
+    for (const name of names) {
+      if (previous.includes(name)) break
+      prepended += 1
+    }
+    if (prepended === 0 || el.scrollTop <= 24) return
+    let extra = 0
+    for (let index = 0; index < prepended; index += 1) extra += getItemHeight(index) + GAP
+    el.scrollTop += extra
+    setScrollTop(el.scrollTop)
+  }, [outputs, getItemHeight])
 
   const visibleItems = useMemo(() => {
     const items: JSX.Element[] = []
@@ -493,6 +567,7 @@ export function MainContent() {
           isActive={activeIndex === i}
           onVisible={handleItemVisible}
           onMeasured={handleItemMeasured}
+          maxMediaHeight={maxMediaHeight}
           style={{
             position: 'absolute',
             top: itemOffsets[i],
@@ -503,29 +578,32 @@ export function MainContent() {
       )
     }
     return items
-  }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets])
-  const mediaFilter = useStore(s => s.mediaFilter)
+  }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets, maxMediaHeight])
+  const [replacementTarget, setReplacementTarget] = useState(readVideoEditorReplacementTarget)
+  const [directorReplacementTarget, setDirectorReplacementTarget] = useState(readDirectorClipReplacementTarget)
+
+  useEffect(() => {
+    setReplacementTarget(mediaFilter !== 'videoeditor' ? readVideoEditorReplacementTarget() : null)
+    setDirectorReplacementTarget(mediaFilter !== 'stories' ? readDirectorClipReplacementTarget() : null)
+  }, [mediaFilter])
 
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Top bar */}
-      <div className="px-2 md:px-6 py-2 md:py-3 border-b border-border flex items-center justify-between gap-2">
+      <div className="border-b border-border px-2 py-2 md:px-6 md:py-3">
         <TabFilter />
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="text-[10px] md:text-xs text-text-muted hidden md:block">
-            {mediaFilter === 'scene3d' ? '3D Video editor'
-              : mediaFilter === 'animate3d' ? 'Rig & Animate'
-              : outputsTotal > outputs.length
-              ? `${outputs.length} / ${outputsTotal} items`
-              : `${outputs.length} ${outputs.length === 1 ? 'item' : 'items'}`}
-          </div>
-          <WorkspaceSelector />
-        </div>
       </div>
 
       {/* Content area: feed + thumbnails */}
       <div className="flex-1 flex flex-row gap-0 overflow-hidden relative">
-        {mediaFilter === 'scene3d' ? (
+        <Suspense fallback={<PanelLoadingFallback />}>
+        {mediaFilter === 'assets' ? (
+          <AssetsPanel />
+        ) : mediaFilter === 'projects' ? (
+          <ProjectsPanel />
+        ) : mediaFilter === 'workspaces' ? (
+          <WorkspaceCollectionsPanel />
+        ) : mediaFilter === 'scene3d' ? (
           <div className="flex-1 overflow-y-auto p-4 md:p-8">
             <div className="max-w-[1600px] mx-auto">
               <SceneAnimatorPanel />
@@ -537,6 +615,54 @@ export function MainContent() {
               <RigAnimatePanel />
             </div>
           </div>
+        ) : mediaFilter === 'stories' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <StoryLabPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'series' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <SeriesLabPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'runs' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <RunsPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'characters' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <CharacterCreatorPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'styles' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <StyleSheetPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'comics' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <ComicEditorPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'videoeditor' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <VideoEditorPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'auditdev' && developerMode ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <AuditDevPanel />
+            </div>
+          </div>
         ) : <>
         {/* Scrollable media feed */}
         <div
@@ -545,9 +671,45 @@ export function MainContent() {
           onScroll={handleFeedScroll}
         >
           {/* Pipeline + Job placeholders at top (not virtualized — small count) */}
-          <div className="space-y-3 mb-3">
+          <div ref={jobsAnchorRef} className="space-y-3 mb-3">
+            {replacementTarget && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                <Film size={14} className="shrink-0" />
+                <span className="min-w-0 flex-1">
+                  {tActivity('montage.redoingEditorSlot', { n: replacementTarget.clipIndex + 1, name: replacementTarget.originalName })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearVideoEditorReplacementTarget()
+                    setReplacementTarget(null)
+                  }}
+                  className="rounded border border-emerald-400/30 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-500/20"
+                >
+                  {tActivity('montage.cancelReplacement')}
+                </button>
+              </div>
+            )}
+            {directorReplacementTarget && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-100">
+                <RefreshCw size={14} className="shrink-0" />
+                <span className="min-w-0 flex-1">
+                  {tActivity('montage.redoingAssemblyClip', { n: directorReplacementTarget.clipIndex + 1 })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearDirectorClipReplacementTarget()
+                    setDirectorReplacementTarget(null)
+                  }}
+                  className="rounded border border-violet-400/30 px-2 py-1 text-[10px] text-violet-100 hover:bg-violet-500/20"
+                >
+                  {tActivity('montage.cancelReplacement')}
+                </button>
+              </div>
+            )}
             <PipelinePlaceholder />
-            {jobs.map((j, i) => (
+            {visibleJobs.map((j, i) => (
               <JobPlaceholder
                 key={j.id || `pending-${i}`}
                 job={j}
@@ -583,12 +745,23 @@ export function MainContent() {
               to a first generation and sets the one expectation that most
               surprises new users: the first run of each model downloads
               its weights (tens of GB) before anything appears. */}
-          {!outputsLoading && outputs.length === 0 && jobs.length === 0 && (() => {
-            const noun = generationMode === 'image' ? 'images'
+          {!outputsLoading && outputs.length === 0 && visibleJobs.length === 0 && (() => {
+            const noun = mediaFilter === 'images' ? 'images'
+              : mediaFilter === 'audio' ? 'audio'
+              : mediaFilter === 'model3d' ? '3D models'
+              : mediaFilter === 'scenes' ? 'compositor scenes'
+              : mediaFilter === 'trailers' ? 'trailers'
+              : mediaFilter === 'videoclips' ? 'music videos'
+              : mediaFilter === 'series_episodes' ? 'chapters'
+              : generationMode === 'image' ? 'images'
               : generationMode === 'audio' ? 'audio'
               : generationMode === 'model3d' ? '3D assets' : 'videos'
-            const example = generationMode === 'model3d'
-              ? 'Open the 3D section and generate a Hunyuan3D asset.'
+            const example = mediaFilter === 'model3d'
+              ? 'Open Character Creator or the 3D sidebar and generate a Hunyuan3D asset.'
+              : mediaFilter === 'scenes'
+              ? 'Save a scene from the 3D Video compositor.'
+              : mediaFilter === 'trailers'
+              ? 'Assemble a trailer in Story Lab so it is tagged as a trailer mix.'
               : generationMode === 'image'
               ? 'a neon city street at night, cinematic'
               : generationMode === 'audio'
@@ -629,6 +802,7 @@ export function MainContent() {
           onThumbnailClick={handleThumbnailClick}
         />
         </>}
+        </Suspense>
       </div>
     </main>
   )

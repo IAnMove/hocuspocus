@@ -1,0 +1,4 @@
+file '/home/ina/pinokio/api/Maestro-next.git/app/outputs/minimax_h3_5c1c6cb2.mp4'
+file '/home/ina/pinokio/api/Maestro-next.git/app/outputs/minimax_h3_8184265d.mp4'
+file '/home/ina/pinokio/api/Maestro-next.git/app/outputs/minimax_h3_0593d99d.mp4'
+file '/home/ina/pinokio/api/Maestro-next.git/app/outputs/minimax_h3_713afac9.mp4'

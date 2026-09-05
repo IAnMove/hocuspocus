@@ -1,7 +1,9 @@
 import { X } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { SystemSettingsPanel } from './SystemSettingsPanel'
 import { ServicesSettingsPanel } from './ServicesSettingsPanel'
+import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
 
 /**
  * Settings drawer — global panel for hardware/perf and external-service
@@ -25,14 +27,15 @@ import { ServicesSettingsPanel } from './ServicesSettingsPanel'
  * the chat sidebar where the work is happening.
  */
 export function SettingsDrawer() {
+  const { t } = useUiTranslation('settings')
   const settingsOpen = useStore(s => s.settingsOpen)
   const setSettingsOpen = useStore(s => s.setSettingsOpen)
   const settingsTab = useStore(s => s.settingsTab)
   const setSettingsTab = useStore(s => s.setSettingsTab)
 
   const tabs = [
-    { id: 'performance' as const, label: 'Performance' },
-    { id: 'integrations' as const, label: 'Integrations' },
+    { id: 'performance' as const, label: t('tabs.performance') },
+    { id: 'integrations' as const, label: t('tabs.integrations') },
   ]
 
   return (
@@ -46,14 +49,16 @@ export function SettingsDrawer() {
       )}
 
       {/* Drawer */}
-      <div className={`fixed top-0 left-0 h-full w-full md:w-[420px] bg-bg-secondary border-r border-border z-50 transform transition-transform duration-300 ease-in-out ${
-        settingsOpen ? 'translate-x-0' : '-translate-x-full'
+      <div className={`fixed top-0 right-0 h-full w-full md:w-[420px] bg-bg-secondary border-l border-border z-50 transform transition-transform duration-300 ease-in-out ${
+        settingsOpen ? 'translate-x-0' : 'translate-x-full'
       }`}>
         {/* Header */}
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-          <h2 className="font-semibold text-sm">Settings</h2>
+          <h2 className="font-semibold text-sm">{t('title')}</h2>
           <button
+            type="button"
             onClick={() => setSettingsOpen(false)}
+            aria-label={t('close')}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
           >
             <X size={16} />
@@ -62,12 +67,20 @@ export function SettingsDrawer() {
 
         {/* Tab Bar */}
         <div className="px-5 pt-3">
-          <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
+          <HorizontalScrollTabs
+            activeKey={settingsTab}
+            ariaLabel={t('sections')}
+            viewportClassName="flex bg-bg-tertiary rounded-lg p-0.5 border border-border"
+          >
             {tabs.map(tab => (
               <button
                 key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={settingsTab === tab.id}
+                data-scroll-key={tab.id}
                 onClick={() => setSettingsTab(tab.id)}
-                className={`flex-1 text-xs py-1.5 rounded-md transition-all ${
+                className={`min-w-32 flex-1 text-xs py-1.5 rounded-md transition-all ${
                   settingsTab === tab.id
                     ? 'bg-bg-active text-text-primary'
                     : 'text-text-secondary hover:text-text-primary'
@@ -76,7 +89,7 @@ export function SettingsDrawer() {
                 {tab.label}
               </button>
             ))}
-          </div>
+          </HorizontalScrollTabs>
         </div>
 
         {/* Content */}

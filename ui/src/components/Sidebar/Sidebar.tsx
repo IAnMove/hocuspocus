@@ -1,9 +1,9 @@
-import { Settings, X, Globe, BookMarked } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
-import { GenerationModeSelector } from './GenerationModeSelector'
-import { ImageUpload } from './ImageUpload'
 import { InputsPanel } from './InputsPanel'
+import { OmniReferenceSection } from './OmniReferenceSection'
 import { PromptInput } from './PromptInput'
 import { ImageRefSection } from './ImageRefSection'
 import { AudioModeSection } from './AudioModeSection'
@@ -17,29 +17,39 @@ import { AdvancedSettings } from './AdvancedSettings'
 import { GenerateButton } from './GenerateButton'
 import { ModelSelector } from './ModelSelector'
 import { MultiClipEditor } from './MultiClipEditor'
-import { DirectorChat } from './DirectorChat'
 import { EditSubModeToggle } from './EditSubModeToggle'
 import { RestyleControls } from './RestyleControls'
 import { InpaintControls } from './InpaintControls'
 import { OutpaintControls } from './OutpaintControls'
 import { RetakeControls } from './RetakeControls'
 import { EditAnythingControls } from './EditAnythingControls'
+import { RecastControls } from './RecastControls'
 import { BlendControls } from './BlendControls'
 import { AnchorReturnBanner } from './AnchorReturnBanner'
 import { VoiceRefSection } from './VoiceRefSection'
 import { ToolsPanel } from './ToolsPanel'
 import { Hunyuan3DPanel } from './Hunyuan3DPanel'
 import { HardwareStatusBar } from './HardwareStatusBar'
+import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
+import { PanoramaLoopPanel } from './PanoramaLoopPanel'
+import { BrandIdentity } from '../BrandIdentity'
+import { DirectorChat } from './DirectorChat'
+import { useUiTranslation } from '../../i18n'
 
 export function Sidebar() {
-  const toggleSettings = useStore(s => s.toggleSettings)
+  const { t } = useUiTranslation('navigation')
+  const [toolsCollapsed, setToolsCollapsed] = useState(() =>
+    window.localStorage.getItem('hocuspocus-tools-sidebar-collapsed') === 'true')
   const generationMode = useStore(s => s.generationMode)
   const imageMode = useStore(s => s.params.image_mode)
   const modelOptions = useStore(s => s.modelOptions)
   const sidebarOpen = useStore(s => s.sidebarOpen)
+  const appVersion = useStore(s => s.systemConfig?.app_version)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
-  const sidebarMode = useStore(s => s.sidebarMode)
   const setSidebarMode = useStore(s => s.setSidebarMode)
+  const sidebarMode = useStore(s => s.sidebarMode)
+  const setSettingsOpen = useStore(s => s.setSettingsOpen)
+  const setDashboardOpen = useStore(s => s.setDashboardOpen)
   const editSubMode = useStore(s => s.editSubMode)
   const modelType = useStore(s => s.params.model_type)
   const openLoraBrowser = useStore(s => s.setLoraBrowserOpen)
@@ -52,46 +62,66 @@ export function Sidebar() {
   const audioSubMode = useStore(s => s.audioSubMode)
   const isEdit = generationMode === 'avatar'
   const isTools = generationMode === 'tools'
+  const isDirector = sidebarMode === 'director'
   const isRetake = isEdit && editSubMode === 'retake'
   const isRestyle = isEdit && editSubMode === 'restyle'
   const isInpaint = isEdit && editSubMode === 'inpaint'
   const isOutpaint = isEdit && editSubMode === 'outpaint'
   const isEditAnything = isEdit && editSubMode === 'edit_anything'
-  const isMultiClip = isVideo && imageMode === 2
-  const isContinue = isVideo && imageMode === 3
-  const isBlend = isVideo && imageMode === 4
-  const isDirector = sidebarMode === 'director'
+  const isRecast = isEdit && editSubMode === 'recast'
+  const isOmniReference = isVideo && modelOptions?.omni_reference === true
+  const isMultiClip = isVideo && !isOmniReference && imageMode === 2
+  const isContinue = isVideo && !isOmniReference && imageMode === 3
+  const isBlend = isVideo && !isOmniReference && imageMode === 4
   const isI2vOnly = modelOptions?.i2v_class && !modelOptions?.t2v_class
+  const directModeLabel = {
+    image: t('directModes.image'),
+    video: t('directModes.video'),
+    audio: t('directModes.audio'),
+    model3d: t('directModes.model3d'),
+    avatar: t('directModes.avatar'),
+    tools: t('directModes.tools'),
+  }[generationMode]
+  const panelTitle = isDirector ? t('panel.director') : `${t('panel.directGeneration')} · ${directModeLabel}`
+  const previousToolContext = useRef(`${generationMode}:${editSubMode}`)
+  const setToolsSidebarCollapsed = (collapsed: boolean) => {
+    setToolsCollapsed(collapsed)
+    window.localStorage.setItem('hocuspocus-tools-sidebar-collapsed', String(collapsed))
+  }
 
-  const modeToggle = (size: 'sm' | 'md') => (
-    <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
-      <button
-        onClick={() => setSidebarMode('director')}
-        className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
-          // bg-toggle-active is flat accent-blue in the default theme
-          // (preserves the original blue pill) and a red→orange sunset
-          // gradient in Golden Hour. shadow-accent-glow is empty in
-          // default and a warm bloom in Golden Hour.
-          isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
-        }`}
-      >
-        Director
-      </button>
-      <button
-        onClick={() => setSidebarMode('studio')}
-        className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
-          // Studio active intentionally uses bg-toggle-active too so the
-          // currently-active mode reads with the same prominence in
-          // Golden Hour as the reference render. Default theme: flat
-          // accent-blue (was bg-bg-active dark elevation — small change
-          // that brings the two buttons into visual parity).
-          !isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
-        }`}
-      >
-        Studio
-      </button>
-    </div>
-  )
+  useEffect(() => {
+    const openStudio = () => {
+      setSidebarMode('studio')
+      setToolsSidebarCollapsed(false)
+      setSidebarOpen(true)
+    }
+    const openSettings = () => {
+      setDashboardOpen(false)
+      setSidebarOpen(false)
+      setSettingsOpen(true)
+    }
+    const openDirector = () => {
+      setSidebarMode('director')
+      setToolsSidebarCollapsed(false)
+      setSidebarOpen(true)
+    }
+    window.addEventListener('hocuspocus:studio-open', openStudio)
+    window.addEventListener('hocuspocus:settings-open', openSettings)
+    window.addEventListener('maestro:director-open', openDirector)
+    return () => {
+      window.removeEventListener('hocuspocus:studio-open', openStudio)
+      window.removeEventListener('hocuspocus:settings-open', openSettings)
+      window.removeEventListener('maestro:director-open', openDirector)
+    }
+  // The event bridge deliberately tracks stable Zustand actions only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const context = `${generationMode}:${editSubMode}`
+    if (context !== previousToolContext.current) setToolsSidebarCollapsed(false)
+    previousToolContext.current = context
+  }, [editSubMode, generationMode])
 
   // Edit mode sub-controls based on sub-mode
   const editControls = (
@@ -117,8 +147,6 @@ export function Sidebar() {
       {isRestyle && (
         <>
           <RestyleControls />
-          <DurationSlider />
-          <ImageUpload />
           <PromptInput />
         </>
       )}
@@ -128,14 +156,19 @@ export function Sidebar() {
           <PromptInput />
         </>
       )}
+      {isRecast && (
+        <>
+          <RecastControls />
+          <PromptInput />
+        </>
+      )}
     </>
   )
 
   const studioControls = (
     <>
-      {/* Edit Anything → Image Mode round-trip banner. Visible whenever
-          the user is in the middle of editing boundary anchors via the
-          Image Mode workflow; null otherwise. */}
+      {/* Edit Anything/Recast → Image Mode round-trip banner. Visible while
+          a boundary anchor or Recast reference is being edited; null otherwise. */}
       <AnchorReturnBanner />
 
       {/* [&>*]:shrink-0 — keep every section at its natural height and let
@@ -143,8 +176,6 @@ export function Sidebar() {
           added + hardware bar expanded), instead of letting flex-shrink
           crush sections into each other. */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 min-h-0 [&>*]:shrink-0">
-        <GenerationModeSelector />
-
         {/* Tools mode: standalone post-processing (upscale / revoice) on any
             existing clip. Renders in place of the generation controls. */}
         {isTools ? <ToolsPanel /> : isModel3d ? <Hunyuan3DPanel /> : (
@@ -154,28 +185,31 @@ export function Sidebar() {
         {isEdit && editControls}
 
         {/* Video mode */}
-        {isVideo && <ModeToggle />}
+        {isVideo && !isOmniReference && <ModeToggle />}
         {/* Blend mode manages its own duration (overlap_sec) and its own
             start/end anchors — so the generic Duration slider and
             start/end ImageUpload don't apply there. */}
         {isVideo && !isBlend && <DurationSlider />}
+        {isVideo && <MiniMaxH3TurboToggle />}
         {/* Frames (image_mode 0) AND Extend (image_mode 3) both use the unified
             InputsPanel. In Extend mode its first tile is the source video to
             continue from; otherwise it's the start frame. */}
-        {isVideo && !isMultiClip && !isBlend && (
+        {isVideo && !isOmniReference && !isMultiClip && !isBlend && (
           <div>
             {isI2vOnly && !isContinue && (
-              <div className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5 mb-2">
+              <div className="text-[10px] text-indicator-warning bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5 mb-2">
                 This model requires a start image to generate video.
               </div>
             )}
             <InputsPanel />
           </div>
         )}
+        {isOmniReference && <OmniReferenceSection />}
         {isBlend && <BlendControls />}
 
         {/* Image mode: reference images */}
         {isImage && modelOptions?.image_ref_choices && <ImageRefSection />}
+        {isImage && <PanoramaLoopPanel />}
 
         {/* Video/Image mode: audio controls (soundtrack, control video, etc.).
             In Frames mode (video, image_mode 0) the unified InputsPanel routes
@@ -195,7 +229,7 @@ export function Sidebar() {
 
         {/* Video: reference images below prompt. In Frames mode the InputsPanel
             renders them as ordered tiles instead. */}
-        {isVideo && imageMode !== 0 && imageMode !== 3 && modelOptions?.image_ref_choices && <ImageRefSection />}
+        {isVideo && !isOmniReference && imageMode !== 0 && imageMode !== 3 && modelOptions?.image_ref_choices && <ImageRefSection />}
 
         {/* Voice Reference (ID-LoRA) — gated by Settings → Services
             toggle (`voice_reference_enabled`). VoiceRefSection internally
@@ -203,7 +237,7 @@ export function Sidebar() {
             mode (basic, multi-clip, continue, blend) — it's the same
             generation path that consumes `directorVoiceRef` server-side.
             Director mode renders its own copy in DirectorChat. */}
-        {isVideo && !isDirector && imageMode !== 0 && imageMode !== 3 && <VoiceRefSection />}
+        {isVideo && !isOmniReference && imageMode !== 0 && imageMode !== 3 && <VoiceRefSection />}
         </>
         )}
       </div>
@@ -222,13 +256,15 @@ export function Sidebar() {
           >
             <BookMarked size={14} />
           </button>
-          <button
-            onClick={() => openLoraBrowser(true, modelType)}
-            className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
-            title="Browse LoRAs on CivitAI"
-          >
-            <Globe size={14} />
-          </button>
+          {!isOutpaint && (
+            <button
+              onClick={() => openLoraBrowser(true, modelType)}
+              className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
+              title="Browse LoRAs on CivitAI"
+            >
+              <Globe size={14} />
+            </button>
+          )}
           <div className="flex-1 min-w-0">
             <ModelSelector />
           </div>
@@ -256,14 +292,8 @@ export function Sidebar() {
         }`}>
           {/* Header */}
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-accent-blue flex items-center justify-center text-white font-bold text-sm">
-                M
-              </div>
-              <span className="font-semibold text-sm">Maestro</span>
-            </div>
+            <BrandIdentity appVersion={appVersion} />
             <div className="flex items-center gap-1.5">
-              {modeToggle('sm')}
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
@@ -279,25 +309,39 @@ export function Sidebar() {
     )
   }
 
+  if (toolsCollapsed) {
+    return (
+      <aside className="w-11 h-full bg-bg-secondary border-r border-border flex flex-col items-center shrink-0">
+        <button
+          onClick={() => setToolsSidebarCollapsed(false)}
+          className="m-1.5 p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
+          title="Expand Studio tools"
+          aria-label="Expand Studio tools"
+        >
+          <PanelLeftOpen size={17} />
+        </button>
+        <span className="mt-2 text-[10px] uppercase tracking-[0.2em] text-text-muted [writing-mode:vertical-rl]">
+          {panelTitle}
+        </span>
+      </aside>
+    )
+  }
+
   // Desktop: static sidebar
   return (
     <aside className="w-[420px] h-full bg-bg-secondary border-r border-border flex flex-col shrink-0">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <BrandIdentity appVersion={appVersion} />
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-accent-blue flex items-center justify-center text-white font-bold text-sm">
-            M
-          </div>
-          <span className="font-semibold text-sm">Maestro</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {modeToggle('md')}
+          <span className="text-xs font-medium text-text-secondary">{panelTitle}</span>
           <button
-            onClick={toggleSettings}
+            onClick={() => setToolsSidebarCollapsed(true)}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-            title="Settings"
+            title="Collapse Studio tools"
+            aria-label="Collapse Studio tools"
           >
-            <Settings size={16} />
+            <PanelLeftClose size={16} />
           </button>
         </div>
       </div>

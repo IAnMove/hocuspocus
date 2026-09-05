@@ -1,0 +1,132 @@
+[
+  {
+    "role": "joke",
+    "series": "Juego de Tronos",
+    "who": "Tyrion Lannister, copa de vino, sala de piedra, luz de antorcha",
+    "speaker": "Tyrion",
+    "joke": "Un Lannister entra en una taberna. Primero se paga. Un Lannister siempre paga sus deudas. El chiste, a plazos. Bebo y sé cosas.",
+    "seconds": 14,
+    "style": "Fantasía cinematográfica húmeda, antorchas, no rapero.",
+    "soundscape": "Sala de piedra. Fuego de hogar. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "Sherlock",
+    "who": "Sherlock Holmes, abrigo largo, Baker Street, niebla",
+    "speaker": "Sherlock",
+    "joke": "Llaman a la puerta. Deduzco que no es el cartero: el cartero no espera un aplauso. El chiste sois vosotros por seguir escuchando. Elemental.",
+    "seconds": 10,
+    "style": "Drama británico, niebla, encuadre vertical.",
+    "soundscape": "Calle húmeda. Un paso lejano. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "House",
+    "who": "Gregory House, bastón, bata, pasillo de hospital",
+    "speaker": "House",
+    "joke": "No es lupus. Es un chiste. ¿Cuál es la diferencia entre Dios y yo? Dios no se cree House. Todo el mundo miente. Sobre todo quien acaba de reírse.",
+    "seconds": 10,
+    "style": "Drama médico, pasillo frío, encuadre vertical.",
+    "soundscape": "Hospital en calma. Un monitor lejano. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "Breaking Bad",
+    "who": "Walter White, calvo, gafas, desierto de Albuquerque al atardecer",
+    "speaker": "Walter White",
+    "joke": "¿Qué hace un átomo cuando pierde un electrón? Quedarse positivo. Me llamo Heisenberg. El que llama no ríe. La química es fácil. El plan, no.",
+    "seconds": 14,
+    "style": "Cine desértico, ocres, no fotorealismo 3D brillante.",
+    "soundscape": "Viento seco. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "The Big Bang Theory",
+    "who": "Sheldon Cooper, camiseta a rayas, sofá del piso, pizarra atrás",
+    "speaker": "Sheldon",
+    "joke": "Knock knock. ¿Quién es? La ineficiencia. He estudiado cuarenta y siete variantes de este chiste. Esta es la peor. Bazinga.",
+    "seconds": 10,
+    "style": "Sitcom de plató, luz plana, encuadre vertical.",
+    "soundscape": "Piso en silencio. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "Better Call Saul",
+    "who": "Saul Goodman, traje a rayas, oficina con constitución americana",
+    "speaker": "Saul",
+    "joke": "Mejor llama a Saul. Un abogado entra al cielo. San Pedro pregunta: ¿tiene cita? Objetamos el silencio. Mi cliente quiere reír, no pensar. Caso cerrado, o al menos aplazado.",
+    "seconds": 10,
+    "style": "Cómic legal de Albuquerque, neones baratos.",
+    "soundscape": "Oficina de abogados. Aire acondicionado. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "Ted Lasso",
+    "who": "Ted Lasso, bigote, chaleco, vestuario del Richmond",
+    "speaker": "Ted",
+    "joke": "Sé curioso. Un entrenador entra al bar y pide agua. El camarero: ¿solo agua? A veces lo simple gana. Believe. Si no te ha gustado, eso también es parte del juego.",
+    "seconds": 10,
+    "style": "Comedia deportiva cálida, vestuario, encuadre vertical.",
+    "soundscape": "Vestuario vacío. Una pelota lejana. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "Wednesday",
+    "who": "Wednesday Addams, trenzas, uniforme de Nevermore, mirada fija",
+    "speaker": "Wednesday",
+    "joke": "¿Qué le dice una tumba a otra? Nos vemos cuando nos abran. Sonreí por dentro. Murió. Si te has reído, avísame para decepcionarme.",
+    "seconds": 14,
+    "style": "Gótico de instituto, blanco y negro con un acento de color, no live action brillante.",
+    "soundscape": "Claustro quieto. Un cuervo lejano. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "Brooklyn Nine-Nine",
+    "who": "Jake Peralta, placa, comisaría, sonrisa de detective",
+    "speaker": "Jake",
+    "joke": "Cool cool cool. ¿Por qué el policía se llevó el lápiz? Porque era un testigo. Nine-nine. El punchline iba esposado y se le escapó por la puerta de atrás.",
+    "seconds": 10,
+    "style": "Sitcom policial colorida, encuadre vertical.",
+    "soundscape": "Comisaría en calma. Teléfono lejano. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "The Witcher",
+    "who": "Geralt de Rivia, pelo blanco, armadura de cuero, posada medieval",
+    "speaker": "Geralt",
+    "joke": "Hmm. Un brujo entra en una posada. El posadero pregunta: ¿monstruo o cliente? Sí. El chiste era el peaje. Hmm.",
+    "seconds": 10,
+    "style": "Fantasía sucia de posada, no videoclip moderno.",
+    "soundscape": "Posada. Leño en el fuego. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "Doctor Who",
+    "who": "El Doctor, abrigo largo, TARDIS azul al fondo, encuadre vertical",
+    "speaker": "El Doctor",
+    "joke": "La TARDIS es más grande por dentro. Como este chiste. Entro al bar en tres años a la vez. ¿Van juntos? Somos uno. El tiempo es relativo. La cuenta, no.",
+    "seconds": 14,
+    "style": "Ciencia ficción británica, TARDIS, no fotorealismo 3D.",
+    "soundscape": "Zumbido lejano de TARDIS. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "Parks and Recreation",
+    "who": "Ron Swanson, bigote, oficina de parques, café enorme",
+    "speaker": "Ron Swanson",
+    "joke": "Hay dos tipos de chistes: los cortos y los que deberían ser cortos. Un gobierno pide impuestos. El camarero soy yo. No hay. Carne, whisky, silencio.",
+    "seconds": 14,
+    "style": "Comedia americana seca, oficina municipal, encuadre vertical.",
+    "soundscape": "Oficina vacía. Reloj. Solo su voz."
+  },
+  {
+    "role": "joke",
+    "series": "Seinfeld",
+    "who": "Jerry Seinfeld, chaqueta, escenario de stand-up, micro",
+    "speaker": "Jerry",
+    "joke": "¿Qué hay con los vecinos? El ruido es el hobby del edificio. Este chiste también paga comunidad. Los diez segundos ya se han ido a por el correo.",
+    "seconds": 14,
+    "style": "Stand-up ochentero, foco, encuadre vertical.",
+    "soundscape": "Local de comedia en silencio. Solo su voz."
+  }
+]

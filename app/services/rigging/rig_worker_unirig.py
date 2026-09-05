@@ -97,7 +97,7 @@ def main() -> None:
     if not source.is_file():
         raise RuntimeError(f"Source model not found: {source}")
     if not VENDOR_DIR.is_dir():
-        raise RuntimeError("UniRig is not installed; run 'Install AI Rigging (UniRig)' from the Maestro menu")
+        raise RuntimeError("UniRig is not installed; run 'Install AI Rigging (UniRig)' from the HocusPocus Lab menu")
     clip_ids = list(request.get("animations") or list(procedural_rig.CLIPS))
     seed = int(request.get("seed") or 12345)
 
@@ -106,6 +106,14 @@ def main() -> None:
         skeleton_fbx = temp_dir / "skeleton.fbx"
         skin_fbx = temp_dir / "skin.fbx"
         merged_glb = temp_dir / "merged.glb"
+
+        # Re-rigging always starts from the base geometry: a previously
+        # rigged source would otherwise carry its old skin and clips through
+        # UniRig's merge step into the new output.
+        clean_source = temp_dir / "base.glb"
+        if procedural_rig.strip_rig_to_file(str(source), str(clean_source)):
+            event("preparing", 0.05, "Removed the previous rig; re-rigging the base mesh")
+            source = clean_source
 
         event("skeleton", 0.1, "Predicting skeleton (first run downloads UniRig weights)")
         run_unirig("generate_skeleton.sh", ["--input", str(source), "--output", str(skeleton_fbx), "--seed", str(seed)])
@@ -122,6 +130,8 @@ def main() -> None:
         summary = procedural_rig.bake_clips_onto_existing_rig(str(merged_glb), str(output_path), clip_ids, progress=event)
 
     require_rigged_glb(output_path, "animated output", [procedural_rig.CLIPS[clip_id] for clip_id in clip_ids])
+    summary["joint_count"] = summary.pop("joints", 0)
+    summary["animation_chain_joints"] = summary.pop("chain_length", 0)
     print("MAESTRO_RESULT " + json.dumps(summary), flush=True)
     event("completed", 1.0, "AI-rigged model saved")
 

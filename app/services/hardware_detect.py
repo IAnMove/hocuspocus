@@ -27,6 +27,20 @@ from typing import Optional
 import psutil
 
 
+def _classify_vram_tier(cuda_available: bool, vram_gb: float) -> str:
+    """Classify measured GiB while recognizing nominal 24 GB cards."""
+    if not cuda_available:
+        return "none"
+    # A nominal 24 GB card such as the RTX 4090 can report roughly
+    # 23.5-23.8 GiB after firmware/driver reservations. Requiring a literal
+    # 24.0 misclassifies it and selects an offload-heavy profile.
+    if vram_gb >= 23:
+        return "high"
+    if vram_gb >= 12:
+        return "low"
+    return "tight"
+
+
 def _detect_gpu() -> dict:
     """Detect GPU specs. Returns CUDA-only fields; safe to call without CUDA.
 
@@ -166,7 +180,7 @@ def detect_hardware() -> dict:
       supports_flash: bool      — flash attention usable
       supports_triton: bool     — triton compiler available
       ram_tier: str             — "high" (≥64GB) | "low" (32-63GB) | "very_low" (<32GB)
-      vram_tier: str            — "high" (≥24GB) | "low" (12-23GB) | "tight" (<12GB) | "none" (no CUDA)
+      vram_tier: str            — "high" (nominal 24GB+) | "low" (12-23GB) | "tight" (<12GB) | "none" (no CUDA)
     """
     gpu = _detect_gpu()
     kernels = _detect_kernel_support(gpu["gpu_capability_tuple"])
@@ -185,15 +199,10 @@ def detect_hardware() -> dict:
     else:
         ram_tier = "very_low"
 
-    vram_gb = gpu["gpu_vram_gb"]
-    if not gpu["cuda_available"]:
-        vram_tier = "none"
-    elif vram_gb >= 24:
-        vram_tier = "high"
-    elif vram_gb >= 12:
-        vram_tier = "low"
-    else:
-        vram_tier = "tight"
+    vram_tier = _classify_vram_tier(
+        gpu["cuda_available"],
+        gpu["gpu_vram_gb"],
+    )
 
     out = {
         "cuda_available": gpu["cuda_available"],

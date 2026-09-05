@@ -27,6 +27,21 @@ Maestro is a Pinokio app, so the easiest dev loop is:
    Pinokio's **Update** flow does this automatically; during active dev you can
    run it yourself.
 
+## PR review agent
+
+Every pull request gets an automatic heuristic review from
+`.github/workflows/pr-review.yml` (script: `scripts/analyze_pr.py`). It
+comments risk, clean-repo leaks, secrets, local-first regressions, and
+whether tests/UI rebuilds are missing. Re-run it locally:
+
+```bash
+python scripts/analyze_pr.py --base origin/main
+```
+
+This is the in-repo stand-in for Cursor Automations / Bugbot. Those cloud
+agents require Cursor usage-based billing (a payment method) even with
+SuperGrok Heavy / complimentary Ultra; this workflow does not.
+
 ## Before you open a PR
 
 CI runs three checks on every PR — please run them locally first:
@@ -41,6 +56,28 @@ python -m compileall -q app/services app/launch.py scripts
 # 3. UI type-check + build
 cd ui && npm run build
 ```
+
+The canonical backend test command is run from the repository root, so the
+`pytest.ini` `pythonpath` setting resolves imports from `app/` consistently:
+
+```bash
+app/env/bin/python -m pytest -q
+```
+
+## Task cost report
+
+Every pull request and delegated coding task must include a short cost report.
+Record measurements before finishing the work, and use `N/A` when a tool does
+not expose them; never invent token counts. The canonical template and the
+definitions of each field are in
+[`docs/development/TASK_COST_REPORT.md`](docs/development/TASK_COST_REPORT.md).
+
+The report belongs in the PR description (or in its final handoff comment) and
+must distinguish simulated tests from live provider calls. Unit tests and
+simulated E2E tests normally cost **0 external LLM tokens**. Live Wizard/LLM
+calls must include the provider-reported prompt, completion and total tokens
+when available. Media generation count and elapsed time should be recorded as
+well.
 
 ### The clean-repo guard
 

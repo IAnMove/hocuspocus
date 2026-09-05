@@ -4,18 +4,64 @@ export interface ModelFamily {
   order: number
 }
 
+export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story'
+export type DirectorShotImageGuidance = 'auto' | 'prompt_only' | 'generate'
+export type DirectorShotImagePolicy = 'generate' | 'prompt_only' | 'direct_references'
+
+export interface DirectorCapabilityResult {
+  compatible: boolean
+  reason: string
+}
+
+export interface DirectorModelCompatibility {
+  image: DirectorCapabilityResult
+  video: Record<DirectorPipelineType | 'seamless', DirectorCapabilityResult>
+  supports_audio_input: boolean
+  generates_audio: boolean
+  supports_voice_reference: boolean
+  voice_reference_mode?: 'none' | 'id_lora' | 'native_reference'
+  video_strategy?: 'rolling_window' | 'bounded_start_end' | 'omni_reference'
+  audio_input_mode?: 'none' | 'generic_audio_guide' | 'reference_manifest' | 'timeline_remux'
+  reference_mode?: 'none' | 'start_frame' | 'start_end' | 'omni_manifest'
+  shot_image_support?: 'required' | 'optional' | 'direct_references'
+  supports_endpoint_continuity?: boolean
+  clip_min_frames?: number | null
+  clip_max_frames?: number | null
+  clip_frame_step?: number | null
+  max_image_refs: number | null
+}
+
+/** Hardware/runtime guidance shown next to a model, never used as a hard gate. */
+export interface ModelResourceRequirements {
+  storage_gb?: number
+  vram_gb?: number
+  ram_gb?: number
+  platform?: string
+  backend?: string
+  tier?: 'stable' | 'experimental' | 'remote'
+  note?: string
+}
+
 export interface ModelDef {
   model_type: string
   name: string
+  description?: string
+  selector_help?: string
+  lora_compatibility_note?: string
   family: string
   architecture: string
+  resource_requirements?: ModelResourceRequirements
   is_i2v: boolean
   is_t2v: boolean
   guidance_max_phases: number
   fps: number
   supports_end_frame?: boolean
+  /** Legacy broad flag: accepts input audio OR generates output audio. */
   supports_audio?: boolean
+  supports_audio_input?: boolean
+  generates_audio?: boolean
   supports_ref_images?: boolean
+  director?: DirectorModelCompatibility
   is_downloaded?: boolean
   // True when this model is only available with Mature Mode enabled.
   // Backend always returns the entry; UI filters it out when
@@ -56,16 +102,40 @@ export interface GenerateParams {
   multi_prompts_gen_type?: number
   sliding_window_size?: number
   sliding_window_overlap?: number
+  /** Explicitly honor a manually locked window above the model's VRAM-aware recommendation. */
+  sliding_window_memory_override?: boolean
+  /** Optional model-specific transformer step cache. */
+  skip_steps_cache_type?: '' | 'first_block'
+  /** First Block Cache residual-change threshold. */
+  skip_steps_multiplier?: number
+  /** Percentage of denoising steps to run before caching may begin. */
+  skip_steps_start_step_perc?: number
   guidance_phases?: number
   video_prompt_type?: string
   audio_prompt_type?: string
   image_prompt_type?: string
   input_video_strength?: number
+  /** Keep an I2V start image's medium and rendering style in the motion prompt. */
+  preserve_source_style?: boolean
+  /** Fit without distortion (black matte) or explicitly crop to the video canvas. */
+  image_fit_mode?: 'contain' | 'source' | 'crop'
   flow_shift?: number
   audio_guide?: string
   audio_scale?: number
   video_guide?: string
   image_refs?: string[]
+  /** MiniMax H3 Ref2VA video references (their embedded audio is paired automatically). */
+  h3_ref_videos?: string[]
+  /** MiniMax H3 Ref2VA standalone audio references. */
+  h3_ref_audios?: string[]
+  h3_audio_shift?: number
+  /** Sound direction written into MiniMax H3's overall_soundscape field. */
+  h3_audio_prompt?: string
+  h3_ref_image_size?: 'match' | 'max'
+  /** Explicit H3 conditioning contract: exact start frame or omni references. */
+  h3_reference_mode?: 'first_frame' | 'references'
+  /** Quantized MiniMax H3 checkpoint pair; quality/INT8 is recommended for RTX 4090. */
+  h3_model_profile?: 'balanced' | 'quality' | 'low_memory'
   frames_positions?: string
   injection_strength?: number
   settings_version?: number
@@ -73,6 +143,7 @@ export interface GenerateParams {
   stage2_steps?: number
   generation_mode?: string
   per_clip_frames?: number[]
+  per_clip_keyframes?: string[][]
   remove_background_images_ref?: number
   // TTS-specific
   audio_guide2?: string
@@ -121,6 +192,65 @@ export interface GenerateParams {
   tts_comp_release?: number
   tts_comp_makeup?: number
   tts_voice_count?: number
+  // MiniMax H3 Ref2VA ordered Omni-reference manifest.
+  minimax_h3_references?: MiniMaxH3Reference[]
+  minimax_h3_reference_detail?: 'match' | 'max'
+  minimax_h3_text_encoder?: 'nvfp4_awq' | 'gguf_q2_k' | 'gguf_q4_k_m' | 'int8' | 'bf16'
+  /** One-click managed H3 Turbo recipe for Full or Pruned H3. */
+  minimax_h3_turbo_mode?: boolean
+  /** Automatically expand one long H3 concept into window-local prompts. */
+  minimax_h3_window_storyboard?: boolean
+  /** Compiled Context-IR prompts, one per continuation pass. */
+  h3_window_prompts?: string[]
+  h3_window_plan_signature?: string
+  h3_window_plan?: H3WindowPlan
+}
+
+export type MiniMaxH3ReferenceType = 'image' | 'video' | 'audio'
+export type MiniMaxH3AudioIntent = 'voice' | 'drive' | 'style'
+
+export interface MiniMaxH3Reference {
+  id: string
+  type: MiniMaxH3ReferenceType
+  path: string
+  filename: string
+  url?: string
+  role?: string
+  audio_intent?: MiniMaxH3AudioIntent
+  include_audio?: boolean
+  has_audio?: boolean
+  audio_path?: string
+  audio_filename?: string
+  audio_duration_seconds?: number | null
+  duration_seconds?: number | null
+}
+
+export interface H3WindowPlanWindow {
+  index: number
+  title: string
+  start_frame: number
+  end_frame: number
+  start_seconds: number
+  end_seconds: number
+  opening_state: string
+  closing_state: string
+  prompt: string
+}
+
+export interface H3WindowPlan {
+  source_prompt: string
+  signature: string
+  planned_by: 'llm' | 'deterministic_fallback' | 'not_needed'
+  total_frames: number
+  window_frames: number
+  effective_window_frames?: number
+  window_count: number
+  resolution: string
+  model_type: string
+  subject_continuity?: string
+  setting_continuity?: string
+  windows: H3WindowPlanWindow[]
+  window_prompts: string[]
 }
 
 /** OOM (out-of-VRAM) failure metadata. Set on jobs and pipelines that
@@ -140,9 +270,51 @@ export interface OomInfo {
   message: string
 }
 
+/** Frozen, non-sensitive recipe reported by the backend for an active job.
+ * It intentionally excludes prompts and local media paths. */
+export interface GenerationDetails {
+  model_type?: string
+  model_name?: string
+  generation_mode?: string
+  resolution?: string
+  seed?: number | string
+  steps?: number
+  guidance?: number
+  frames?: number
+  duration_seconds?: number
+  dialogue_words?: number
+  dialogue_syllables?: number
+  dialogue_seconds_per_syllable?: number
+  dialogue_duration_calculated?: number
+  dialogue_duration_minimum_limited?: boolean
+  repeat?: number
+  profile?: string
+  flow_shift?: number
+  audio_shift?: number
+  turbo?: boolean
+  cache?: boolean
+  cache_type?: string
+  lora_count?: number
+  loras?: string[]
+  clip_count?: number
+  text_provider?: string
+  text_model?: string
+  image_model_type?: string
+  image_model_name?: string
+  image_resolution?: string
+  image_steps?: number
+  video_model_type?: string
+  video_model_name?: string
+  video_resolution?: string
+  video_steps?: number
+}
+
 export interface GenerationJob {
   id: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  /** Canonical Activity identity; distinct from the backend polling job id. */
+  taskId?: string
+  rootTaskId?: string
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   progress: number
   step: number
   totalSteps: number
@@ -150,14 +322,33 @@ export interface GenerationJob {
   message: string
   outputFiles: string[]
   error: string | null
+  createdAt?: number
+  /** Active processing start; intentionally absent while only queued. */
+  startedAt?: number
+  finishedAt?: number
+  queuePosition?: number | null
+  taskTimings?: GenerationTaskTiming[]
   /** Present only on failed jobs that look like CUDA OOMs (see OomInfo). */
   oomInfo?: OomInfo | null
+  /** Exact prompts assigned to an in-flight H3 sliding-window generation. */
+  h3WindowPlan?: H3WindowPlan | null
+  /** Exact submitted model/settings summary, safe to show in activity UI. */
+  generationDetails?: GenerationDetails
+}
+
+export interface GenerationTaskTiming {
+  panel_no: number
+  panel_total: number
+  prompt_preview: string
+  status: 'running' | 'completed' | 'failed' | 'skipped'
+  total_seconds?: number
+  phase_timings: Array<{ phase: string; seconds: number }>
 }
 
 export interface OutputFile {
   name: string
   url: string
-  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene'
+  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene' | 'comic'
   mode: GenerationMode | 'model3d' | null
   /** Edit sub-mode tag from the .meta.json sidecar params (set by the
    *  retake/inpaint/outpaint/restyle/edit_anything endpoints). The gallery's
@@ -167,12 +358,41 @@ export interface OutputFile {
   favorite: boolean
   size: number
   created_at: number
+  /** Unix timestamp for when generation and output publication finished. */
+  completed_at?: number
+  /** Metadata is exact; file is a best-effort fallback for legacy/imports. */
+  completion_time_source?: 'metadata' | 'file'
   /** Static preview for 3D output cards; never a live model viewer. */
   thumbnail_url?: string | null
+  /** Assembled production result, never a component clip. */
+  result_kind?: VideoResultKind | null
 }
 
-export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'camera'
-export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
+export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'
+export type SceneFaceBindingRole = 'mouth' | 'blink' | 'eyes'
+export type SceneFaceBindingState = 'closed' | 'small' | 'wide' | 'round' | 'blink' | 'open'
+/** Optional semantic metadata for a cutout facial overlay. */
+export interface SceneFaceBinding {
+  poseLayerId: string
+  role: SceneFaceBindingRole
+  state?: SceneFaceBindingState
+}
+export type SceneAtmosphereKind =
+  | 'rain'
+  | 'snow'
+  | 'dust'
+  | 'embers'
+  | 'fog'
+  | 'smoke'
+  | 'ash'
+  | 'fireflies'
+  | 'confetti'
+  | 'bokeh'
+  | 'sparkles'
+  | 'bubbles'
+  | 'speedlines'
+  | 'leaves'
+export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce' | 'hold'
 export type SceneFrameRate = 30 | 60
 export type SceneBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken'
 export type SceneMask = 'none' | 'rounded' | 'ellipse'
@@ -213,10 +433,25 @@ export interface SceneLayer {
   missingAsset?: boolean
   /** Image/video is cropped to cover the complete scene frame. */
   fill?: boolean
+  /** Deterministic full-frame procedural particles, shared by preview,
+   * scene JSON and browser capture. Only used by effect layers. */
+  atmosphere?: {
+    kind: SceneAtmosphereKind
+    density: number
+    speed: number
+    size: number
+    wind: number
+    color: string
+  }
   /** Camera-pan multiplier: 0 ignores camera pan, 1 follows it normally,
    *  and values above 1 create foreground parallax. Camera zoom/roll still
    *  affect every visual layer. Ignored by camera layers. */
   parallax?: number
+  /** Author-confirmed horizontal continuity. Enables safe loop/cylinder tools;
+   * this is never inferred from an arbitrary filename at export time. */
+  seamlessHorizontal?: boolean
+  /** Optional semantic link for a mouth/blink overlay and its character pose. */
+  faceBinding?: SceneFaceBinding
   relationship?: {
     type: 'parent' | 'follow' | 'lookAt'
     targetLayerId: string
@@ -237,6 +472,27 @@ export interface SceneLayer {
     blendMode?: SceneBlendMode
     mask?: SceneMask
     maskRadius?: number
+  }
+  /** Repeats this visual layer along one axis and scrolls the copies in a
+   * seamless loop. Useful for music-video strips, cascades and tiled props. */
+  strip?: {
+    enabled: boolean
+    count: number
+    spacing: number
+    direction: 'up' | 'down' | 'left' | 'right'
+    /** Scene-percent units travelled per second. */
+    speed: number
+    /** Initial offset along the selected axis, in scene percent. */
+    phase?: number
+    /** Foreground silhouette locked to each tile join so a looping plate never shows its seam. */
+    seamOccluder?: {
+      enabled: boolean
+      kind: 'pole' | 'lamp' | 'tree' | 'column'
+      /** Relative size of the foreground cover. Defaults to 1. */
+      scale?: number
+      /** Allows a cover to blend with a photographed plate instead of reading as a black card. */
+      opacity?: number
+    }
   }
   transform: {
     x: number
@@ -272,6 +528,9 @@ export interface SceneLayer {
       amount: number
       frequency: number
       seed?: number
+      /** Optional local-time window used when a shake preset is chained. */
+      startTime?: number
+      endTime?: number
     }
     spin?: boolean
     rotationSpeed?: number
@@ -291,6 +550,10 @@ export interface SceneLayer {
       radiusY: number
       turns: number
       phase: number
+      /** Number of evenly-spaced instances travelling around the target. */
+      count?: number
+      /** Keeps the original angle or points each instance toward/away from the target. */
+      facing?: 'fixed' | 'center' | 'outward'
       /** Fine adjustment from the target layer's visual center, in scene percent. */
       centerOffsetX?: number
       centerOffsetY?: number
@@ -307,20 +570,100 @@ export interface Scene {
   fps?: SceneFrameRate
   duration: number
   layers: SceneLayer[]
+  /** Real generated/imported audio assets mixed into the exported scene MP4. */
+  audioTracks?: Array<{
+    id: string
+    filename: string
+    name: string
+    kind: 'speech' | 'music' | 'sfx' | 'audio'
+    startTime: number
+    volume: number
+    prompt?: string
+    model?: string
+  }>
+  /** Authored limited-animation dialogue. Mouth layers remain ordinary layers
+   * whose opacity keyframes are generated from these editable beat records. */
+  dialogueBeats?: Array<{
+    id: string
+    text: string
+    start: number
+    end: number
+    mouthLayerIds: string[]
+    audioTrackId?: string
+    /** How the timing was obtained: authored bounds, speech alignment, or an
+     * approximate voice-activity envelope when no transcript is available. */
+    confidence: 'known-text' | 'aligned-audio' | 'energy-fallback'
+  }>
   composition?: {
     showGrid: boolean
     gridSize: number
     snap: boolean
     safeArea: 'none' | 'action' | 'title' | 'vertical' | 'all'
   }
+  /** Durable, serializable record of copilot edits. Kept with the scene so
+   * save/export can retain the exact human intent and applied operations. */
+  copilotAudit?: Array<{
+    id: string
+    createdAt: string
+    scope: 'layer' | 'scene'
+    selectedLayerId?: string
+    intent: string
+    summary: string
+    operations: Array<Record<string, unknown>>
+    validation: 'applied'
+    model?: string
+  }>
+  /** Template provenance remains with an editable scene and its exported MP4 metadata. */
+  narrative?: {
+    templateId: string
+    controls: Record<string, string | number | boolean | undefined>
+    /** Gallery metadata copied from the selected template at mount time. */
+    category?: string
+    visualIntent?: string
+    referenceMotion?: string
+    evaluationCues?: string[]
+    /** The exact existing assets assigned when the template was mounted. */
+    assets?: Array<{ slot: string; source: string; name?: string; type?: SceneLayerType }>
+    /** Deterministic human-readable direction used to compile this template. */
+    prompt?: string
+  }
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
-export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
-export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
+export type VideoResultKind = 'music_video' | 'trailer' | 'series_episode' | 'chapter'
+export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces' | 'characters' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
+export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
+export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
+export type ScailResolutionProfile = '480p' | '512p' | '704p'
+/** Backward-compatible name for saved Recast/API callers. */
+export type RecastResolutionProfile = ScailResolutionProfile
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
-export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything'
+export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything' | 'recast'
 export type AudioSubMode = 'speech' | 'music' | 'sfx' | 'mixer'
+
+export interface RecastReferenceAsset {
+  file: File | null
+  path: string
+  url: string
+}
+
+export interface RecastCharacterMapping {
+  id: string
+  target: string
+  refFile: File | null
+  refPath: string
+  refUrl: string
+  additionalRefs: RecastReferenceAsset[]
+  referenceAlignedToSource: boolean
+}
+
+/** Optional SCAIL-2 Repaint correspondence. The source phrase is tracked
+ * through the control video and the target phrase is segmented in the edited
+ * first frame; both receive the same stable semantic color. */
+export interface RepaintRegionMapping {
+  id: string
+  source: string
+  target: string
+}
 
 export interface ChoiceConfig {
   selection?: string[]
@@ -332,15 +675,35 @@ export interface ChoiceConfig {
   letters_filter?: string
 }
 
+export interface SlidingWindowMemoryPolicy {
+  checkpoint?: 'full' | 'pruned'
+  manual_override?: boolean
+  auto_resolution_pixels?: Record<string, number>
+  resolution_bands: Array<{
+    min_pixels: number
+    vram_tiers: Array<{
+      max_vram_gb?: number
+      frames: number | null
+      fallback_resolution?: string
+    }>
+  }>
+}
+
 export interface ModelOptions {
   model_type: string
   architecture: string
   guidance_max_phases: number
   lock_guidance_phases: boolean
   sliding_window: boolean
+  video_continuation?: boolean
   motion_amplitude: boolean
   flow_shift: boolean
   tea_cache: boolean
+  first_block_cache?: boolean
+  skip_steps_multiplier_choices?: [string, number][] | null
+  skip_steps_multiplier_label?: string
+  default_skip_steps_multiplier?: number
+  default_skip_steps_start_step_perc?: number
   returns_audio: boolean
   any_audio_prompt: boolean
   audio_scale_name: string
@@ -351,15 +714,72 @@ export interface ModelOptions {
   t2v_class: boolean
   image_outputs: boolean
   supports_end_frame: boolean
+  /** Which conditioning letters the model accepts: T(ext), S(tart), E(nd), V(ideo), L(ast). */
+  image_prompt_types_allowed?: string
+  video_guide_label?: string | null
+  omni_reference?: boolean
+  omni_reference_limits?: {
+    image: number
+    video: number
+    audio: number
+    total: number
+  } | null
+  omni_reference_detail_choices?: [string, 'match' | 'max'][] | null
+  omni_reference_detail_default?: 'match' | 'max'
+  minimax_h3_text_encoder_choices?: {
+    value: string
+    label: string
+    size_hint: string
+    recommended?: boolean
+  }[] | null
+  minimax_h3_text_encoder_default?: string
+  minimax_h3_turbo?: {
+    filename: string
+    label: string
+    experimental: boolean
+    steps: number
+    weight: number
+    guide: string
+  } | null
+  minimax_h3_runtime_advisory?: {
+    level: 'warning' | 'info'
+    title: string
+    message: string
+    reasons: Array<{
+      code: 'triton_unavailable' | 'system_ram_low' | string
+      message: string
+    }>
+    recommended_model_type?: string
+    recommended_turbo?: boolean
+    estimated_pipeline_ram_gb?: number
+    minimum_system_ram_gb?: number
+    detected_ram_gb?: number | null
+    supports_triton?: boolean | null
+    blocking: boolean
+  } | null
+  resolution_presets?: Partial<Record<ResolutionPreset, {
+    label: string
+    experimental?: boolean
+    hint?: string
+    values: Partial<Record<AspectRatio, string>>
+  }>> | null
+  resolution_preset_order?: ResolutionPreset[] | null
+  supports_auto_aspect?: boolean
   guide_preprocessing: ChoiceConfig | null
   guide_custom_choices: ChoiceConfig | null
   image_ref_choices: ChoiceConfig | null
   audio_prompt_type_sources: ChoiceConfig | null
   background_removal_label: string | null
+  max_image_refs?: number | null
   sample_solvers: [string, string][] | null
   self_refiner: boolean
   self_refiner_max_plans: number
   sliding_window_defaults: Record<string, number> | null
+  sliding_window_auto_prompt_pacing?: boolean
+  sliding_window_memory_policy?: SlidingWindowMemoryPolicy | null
+  /** Native one-pass policy used by Director. Omni publishes this without
+   * exposing Studio sliding-window controls. */
+  director_memory_policy?: SlidingWindowMemoryPolicy | null
   // LTX-2 Dev pipeline capabilities (guidance controls in Advanced Settings)
   perturbation?: boolean
   reference_pipeline?: boolean
@@ -369,7 +789,17 @@ export interface ModelOptions {
   fps: number
   frames_minimum: number
   frames_steps: number
+  frames_maximum?: number | null
   default_num_inference_steps: number | null
+  /** Model's preferred flow shift, applied on model selection. Distinct from
+   *  the `flow_shift` boolean above, which only says whether to show the
+   *  control. */
+  default_flow_shift?: number | null
+  /** The model's declared temporal grid (mirrors align_model_frame_count).
+   *  modulus 0 means the model declares none and frame counts are left alone. */
+  frame_alignment_modulus?: number
+  frame_alignment_remainder?: number
+  frame_alignment_mode?: string
   default_guidance_scale: number | null
   hide_resolution_presets: boolean
   input_video_strength_label: string
@@ -380,9 +810,13 @@ export interface ModelOptions {
   pause_between_sentences: boolean
   temperature_enabled: boolean
   custom_settings_def: { id: string; label: string; name: string; type: string }[] | null
+  h3_reference_inputs?: boolean
 }
 
 export interface SystemConfig {
+  // HocusPocus release version (repo-root VERSION file), shown next to the
+  // app title. Optional: older backends don't send it.
+  app_version?: string
   attention_mode: string
   transformer_quantization: string
   vae_config: number
@@ -396,6 +830,33 @@ export interface SystemConfig {
   prompt_enhancer_quantization: string
   attention_modes_available: string[]
   vram_safety_coefficient: number
+  // Linked model folders (absolute paths outside the Maestro install,
+  // e.g. an existing Wan2GP install's ckpts). Searched read-only for
+  // already-downloaded checkpoints; new downloads always go to Maestro's
+  // own ckpts folder.
+  model_folders: string[]
+  /** Boot-only acceptance policy. Never mutable from the browser. */
+  execution_mode?: 'real' | 'plan' | 'simulate'
+  execution_workspace?: string
+  execution_allow_paid?: boolean
+  execution_simulation_step_delay?: number
+}
+
+export interface ModelFolderCandidate {
+  app: string
+  path: string
+  files: number
+  folders: number
+  size_gb: number
+  linked: boolean
+}
+
+export interface OutputGenerationTimings {
+  total_time_sec?: number | null
+  prompt_generation_time_sec?: number | null
+  image_generation_time_sec?: number | null
+  video_generation_time_sec?: number | null
+  assembly_time_sec?: number | null
 }
 
 export interface OutputMetadata {
@@ -403,8 +864,67 @@ export interface OutputMetadata {
   params: Record<string, unknown> | null
   upload_filenames?: Record<string, string>
   job_id?: string
+  task_id?: string | null
+  root_task_id?: string | null
   generation_time?: number
+  generation_timings?: OutputGenerationTimings
+  director_pipeline_id?: string
   created_at?: number
+  completed_at?: number
+  finished_at?: number
+}
+
+export interface VideoExtraInfo {
+  overview: string
+  youtube: {
+    title: string
+    description: string
+  }
+  x: {
+    post: string
+  }
+  language: string
+  language_label: string
+  source_fingerprint: string
+  prompt_count: number
+  director_context: boolean
+  generated_at?: number
+}
+
+export interface VideoClipInfo {
+  name: string
+  created_at: number | null
+  file_modified_at: number | null
+  file_size_bytes: number
+  job_id: string
+  generation_mode: string
+  model_type: string
+  resolution: string
+  seed: string | number | null
+  video_length_frames: string | number | null
+  num_inference_steps: string | number | null
+  guidance_scale: string | number | null
+  generation_time_sec: number | null
+  generation_timings: OutputGenerationTimings
+  prompt: string
+  negative_prompt: string
+  audio_prompt: string
+  saved_metadata: Record<string, unknown>
+}
+
+export interface VideoExtraInfoStatus {
+  available: boolean
+  language: string
+  language_label: string
+  data: VideoExtraInfo | null
+  prompt_count: number
+  director_context: boolean
+  clip: VideoClipInfo
+}
+
+export interface MultiClipKeyframe {
+  file: File | null
+  path: string | null
 }
 
 export interface MultiClip {
@@ -414,9 +934,57 @@ export interface MultiClip {
   endImage: File | null
   endImagePath: string | null
   durationFrames?: number
+  keyframes: MultiClipKeyframe[]
 }
 
 export type SettingsTab = 'performance' | 'integrations'
+
+export type TextProvider =
+  | 'local'
+  | 'remote'
+  | 'ollama'
+  | 'openai'
+  | 'anthropic'
+  | 'deepseek'
+  | 'minimax'
+  | 'grok'
+  | 'openai-compatible'
+
+export interface ProductionProfile {
+  version: 1
+  text: {
+    provider: TextProvider
+    model: string
+    base_url?: string
+  }
+  image: {
+    provider: 'maestro' | 'local' | 'minimax'
+    model: string
+  }
+  music: {
+    provider: 'maestro' | 'local' | 'minimax'
+    model: string
+  }
+  model3d: {
+    provider: 'local' | 'hunyuan' | 'meshy' | 'hi3d'
+    model: string
+  }
+  video: {
+    provider: 'maestro' | 'local'
+    model: string
+    settings: {
+      profile: string
+      steps: number
+      flowShift: number
+      audioShift: number
+      turbo: boolean
+      cache: boolean
+      loras: string[]
+      resolution: ResolutionPreset
+      aspectRatio: AspectRatio
+    }
+  }
+}
 
 export interface ServicesConfig {
   llm_model_id: string
@@ -429,12 +997,34 @@ export interface ServicesConfig {
   google_api_key_set: boolean
   openai_api_key: string
   openai_api_key_set: boolean
+  deepseek_api_key: string
+  deepseek_api_key_set: boolean
+  compatible_api_key: string
+  compatible_api_key_set: boolean
+  compatible_base_url: string
   anthropic_api_key: string
   anthropic_api_key_set: boolean
+  minimax_api_key: string
+  minimax_api_key_set: boolean
+  minimax_llm_api_key: string
+  minimax_llm_api_key_set: boolean
+  minimax_image_api_key: string
+  minimax_image_api_key_set: boolean
+  minimax_music_api_key: string
+  minimax_music_api_key_set: boolean
+  grok_api_key: string
+  grok_api_key_set: boolean
+  meshy_api_key: string
+  meshy_api_key_set: boolean
+  hi3d_api_key: string
+  hi3d_api_key_set: boolean
   use_director_v2: boolean
   nsfw_mode: boolean
   nsfw_accepted_at: string | null
   director_prompt_polish: 'off' | 'full_guide' | 'light_guide' | 'third_pass'
+  workflow_parallelism_enabled: boolean
+  debug_trace_enabled: boolean
+  debug_trace_log_path: string
   civitai_api_key: string
   civitai_api_key_set: boolean
   voice_reference_enabled: boolean
@@ -443,8 +1033,11 @@ export interface ServicesConfig {
    *  (default), the Services panel hides Director v2 engine, Voice
    *  Reference, external API keys (Google/OpenAI/Anthropic), and the
    *  Studio prompt enhancer config; the Edit mode picker hides
-   *  Inpaint and Restyle. Flipping this on surfaces all of them. */
+   *  Inpaint. Flipping this on surfaces all of them. */
   show_experimental: boolean
+  /** Storage Manager opt-in: allow removing duplicate files FROM linked
+   *  installs (Recycle Bin only). Default off — informed consent. */
+  storage_allow_linked_removal?: boolean
   /** Performance auto-tune master switch. When true (default for fresh
    *  installs), Settings → System Performance shows a single auto card
    *  with detected hardware + recommended profile, and the underlying
@@ -554,6 +1147,9 @@ export interface CivitAIModelVersion {
   images: CivitAIImage[]
   description?: string
   localArch?: string | null
+  /** Version release date from CivitAI — persisted into the download
+   *  sidecar so My LoRAs can sort by newest release. */
+  publishedAt?: string
 }
 
 export interface CivitAIFile {
@@ -587,6 +1183,11 @@ export interface CivitAIDownload {
   bytes_downloaded: number
   bytes_total: number
   error: string | null
+  /** Unix timestamps (seconds) supplied by the download registry. */
+  started_at: number | null
+  completed_at: number | null
+  /** Present after a downloaded checkpoint is registered as a model. */
+  model_type?: string | null
   // Non-fatal warnings raised after the download finished — most
   // commonly the architecture-mismatch warning when a Klein-4B-trained
   // LoRA lands in flux2_klein_9b/ or vice versa. UI shows these inline
@@ -616,6 +1217,8 @@ export interface LoraInfo {
   preview_url: string | null
   civitai_model_id: number | null
   recommended_weights: LoraRecommendedWeights | null
+  /** Managed choices may be listed before their first-use download. */
+  managed?: boolean
   has_guide: boolean
   guide?: string | null
   /** NSFW flag from the .civitai.json sidecar (or inferred from filename/tags).
@@ -627,6 +1230,13 @@ export interface LoraInfo {
    *  at a glance which LoRAs they've corrected vs which are using CivitAI's
    *  raw flag. */
   nsfw_overridden?: boolean
+  /** ISO timestamp of when the file was downloaded — sidecar `downloadedAt`
+   *  when present, else the weight file's mtime. Shown as an age chip in
+   *  the Studio/Director LoRA pickers. */
+  downloaded_at?: string | null
+  /** ISO timestamp of the CivitAI version's publish date (sidecar
+   *  `publishedAt`). Null for HF/hand-installed LoRAs without sidecar data. */
+  released_at?: string | null
   /** Stable identifier that survives version updates.
    *  Format: `civitai:{modelId}` when sidecar has a CivitAI modelId,
    *  otherwise `local:{filename}`. Use this as the persistence key for
@@ -677,12 +1287,16 @@ export interface SystemStats {
   /** Generation model currently resident in VRAM (WGP/mmgp). `loaded`
    *  distinguishes "actually in memory now" from "last/selected type". */
   model: { name: string | null; model_type: string | null; loaded: boolean }
+  /** Changes when Maestro restarts or a different React build is deployed.
+   *  The client uses it to avoid running a stale bundle indefinitely. */
+  runtime?: { instance_id: string; ui_build_id: string }
 }
 
 export interface LlmModelOption {
   id: string
   label: string
   size_hint: string
+  provider?: string
 }
 
 export interface AudioBeat {
@@ -702,6 +1316,8 @@ export interface LyricSegment {
   end: number
   text: string
   speaker?: string | null
+  /** Word-level alignment when the transcription engine supplies it. */
+  words?: Array<{ start: number; end: number; text: string }> | null
 }
 
 export interface SongStructureEntry {
@@ -720,6 +1336,7 @@ export interface AudioAnalysisResult {
   onset_envelope: number[]
   lyrics: LyricSegment[] | null
   vocals_path: string | null
+  warnings?: string[] | null
   song_structure?: SongStructureEntry[] | null
 }
 
@@ -746,6 +1363,33 @@ export interface SpeakerMapping {
 export interface ClipPlan {
   video_prompt: string
   image_prompt: string
+  window_prompts?: Array<string | { prompt?: string; text?: string }>
+  h3_segment_prompts?: string[]
+  metadata?: Record<string, unknown>
+}
+
+export type MusicVideoMode = 'performance' | 'narrative' | 'hybrid' | 'abstract'
+export type MusicVideoLipSync = 'frequent' | 'occasional' | 'none'
+export type MusicVideoGenerationMode = 'image_guided' | 'direct_video'
+
+export const LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT = 'A scene from the 1981 adult animated science fiction anthology film Heavy Metal, professional color grading, in the exact visual style and aesthetics of the 1981 film Heavy Metal. In the distinctive painted animation style of Heavy Metal 1981: painterly textures, grainy film texture, dark saturated colors, strong contrast, rough ink contours, airbrushed highlights and the classic heavy metal fantasy / sci-fi atmosphere of the 1981 film. World vocabulary: alien warriors, industrial spacecraft, decadent neon cities, monsters and alien deserts under red or purple skies. Never anime, clean digital art, modern 3D CGI or photorealistic live action.'
+
+export const DEFAULT_DIRECT_VIDEO_MASTER_PROMPT = 'Maintain one coherent visual language across every clip. Keep recurring characters, materials, palette, lighting and rendering technique consistent. Do not introduce another medium or visual style unless it is explicitly requested.'
+
+export interface MusicVideoTreatment {
+  generation_mode: MusicVideoGenerationMode
+  direct_video_master_prompt: string
+  mode: MusicVideoMode
+  performer_presence: number
+  lip_sync: MusicVideoLipSync
+  recurring_sets: string[]
+  wardrobe: string
+  palette: string
+  camera_language: string
+  recurring_motif: string
+  chorus_signature: string
+  surrealism: number
+  forbidden_elements: string
 }
 
 /** Partial plan returned from single-phase LLM calls */
@@ -756,8 +1400,9 @@ export interface PartialClipPlan {
 
 export interface DirectorClipImage {
   clipIndex: number
+  shotId?: string
   prompt: string
-  file: File
+  file: File | null
   filename: string
 }
 
@@ -768,7 +1413,14 @@ export interface DirectorImageGenProgress {
   status: 'generating' | 'polling' | 'downloading' | 'done' | 'error'
 }
 
-export type DirectorSkill = 'music_video' | 'short_film' | 'podcast' | 'viral_video'
+// `comic` is the UI workflow selector; `comic_movie` is the canonical
+// Director V2 planner value returned by the backend.
+export const DIRECTOR_SKILLS = ['music_video', 'short_film', 'podcast', 'viral_video', 'comic', 'comic_movie'] as const
+export type DirectorSkill = typeof DIRECTOR_SKILLS[number]
+
+export function isDirectorSkill(value: unknown): value is DirectorSkill {
+  return typeof value === 'string' && (DIRECTOR_SKILLS as readonly string[]).includes(value)
+}
 export type ShortFilmPath = 'audio' | 'story'
 
 export interface ShortFilmCharacter {
@@ -858,7 +1510,7 @@ export interface ShotPlan {
   ending_beat: string
   constraints?: string[]
   continuity_refs?: string[]
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface CharacterProfile {
@@ -879,16 +1531,207 @@ export interface ProductionPlan {
   continuity_notes?: string[]
 }
 
+export interface DirectorV2PlanRequest {
+  skill_type: DirectorSkill
+  activity_id?: string
+  workspace?: string
+  plan_job_id?: string
+  scene_description?: string
+  story_description?: string
+  clips?: unknown[]
+  lyrics?: unknown[]
+  bpm?: number
+  reference_image_path?: string
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
+  speaker_mappings?: Record<string, unknown>
+  characters?: Array<{ name: string; description: string }>
+  audio_path?: string
+  target_duration?: number
+  target_scenes?: number
+  narrative_mode?: boolean
+  fps?: number
+  frames_steps?: number
+  frames_minimum?: number
+  concept?: string
+  visual_style?: string
+  preserve_visual_style?: boolean
+  character_visual_style?: string
+  allow_clip_text?: boolean
+  platform?: string
+  style?: string
+  prompt_type?: string
+  image_model?: string
+  video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
+  seamless?: boolean
+  multishot_lora_mode?: boolean
+  music_video_treatment?: MusicVideoTreatment
+  director_flags?: Record<string, boolean>
+}
+
+export interface DirectorV2PlanProgress {
+  id: string
+  status: 'running' | 'completed' | 'failed'
+  phase: string
+  current: number
+  total: number
+  detail: string
+  stream_text?: string
+  stream_done?: boolean
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    calls?: number
+  }
+}
+
 export interface DirectorV2PlanResponse {
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
   production_plan: ProductionPlan
   skill_type: DirectorSkill
+  plan_job_id?: string
+}
+
+export interface DirectorV2PlanJob {
+  jobId: string
+  workspace: string
+  skillType: DirectorSkill
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  phase: string
+  message: string
+  total: number
+  completedIndices: number[]
+  missingIndices: number[]
+  completedBatches: Array<{ indices: number[]; completedAt: number }>
+  activeBatch: number[]
+  calls: number
+  usage: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    calls?: number
+  }
+  error?: string | null
+  result?: DirectorV2PlanResponse | null
+  createdAt: number
+  updatedAt: number
+  finishedAt?: number | null
+}
+
+export interface DirectorV2PlanFailureDetail {
+  code: 'director_plan_incomplete'
+  message: string
+  job: DirectorV2PlanJob
+  resume: {
+    action: 'resume_missing'
+    method: 'POST'
+    path: string
+  }
+  imagesQueued: false
+}
+
+/** Runtime boundary for durable Director job snapshots returned on failures. */
+export function isDirectorV2PlanJob(value: unknown): value is DirectorV2PlanJob {
+  if (!value || typeof value !== 'object') return false
+  const job = value as Record<string, unknown>
+  const statuses = ['queued', 'running', 'completed', 'failed', 'cancelled']
+  const isNumberArray = (items: unknown): items is number[] => (
+    Array.isArray(items) && items.every(item => Number.isInteger(item))
+  )
+  return typeof job.jobId === 'string'
+    && typeof job.workspace === 'string'
+    && isDirectorSkill(job.skillType)
+    && typeof job.status === 'string'
+    && statuses.includes(job.status)
+    && typeof job.phase === 'string'
+    && typeof job.message === 'string'
+    && typeof job.total === 'number'
+    && isNumberArray(job.completedIndices)
+    && isNumberArray(job.missingIndices)
+    && Array.isArray(job.completedBatches)
+    && isNumberArray(job.activeBatch)
+    && typeof job.calls === 'number'
+    && !!job.usage
+    && typeof job.usage === 'object'
+    && typeof job.createdAt === 'number'
+    && typeof job.updatedAt === 'number'
+}
+
+/** Runtime boundary for the structured partial-plan failure contract. */
+export function isDirectorV2PlanFailureDetail(value: unknown): value is DirectorV2PlanFailureDetail {
+  if (!value || typeof value !== 'object') return false
+  const detail = value as Record<string, unknown>
+  const resume = detail.resume as Record<string, unknown> | undefined
+  return detail.code === 'director_plan_incomplete'
+    && typeof detail.message === 'string'
+    && isDirectorV2PlanJob(detail.job)
+    && !!resume
+    && resume.action === 'resume_missing'
+    && resume.method === 'POST'
+    && typeof resume.path === 'string'
+    && detail.imagesQueued === false
+}
+
+/** Runtime boundary for the Director v2 response returned by the backend. */
+export function isDirectorV2PlanResponse(value: unknown): value is DirectorV2PlanResponse {
+  if (!value || typeof value !== 'object') return false
+  const response = value as Record<string, unknown>
+  const productionPlan = response.production_plan
+  if (!productionPlan || typeof productionPlan !== 'object') return false
+  const plan = productionPlan as Record<string, unknown>
+  return isDirectorSkill(response.skill_type)
+    && isDirectorSkill(plan.skill_type)
+    && Array.isArray(response.clip_plans)
+    && response.clip_plans.every(clip => {
+      if (!clip || typeof clip !== 'object') return false
+      const item = clip as Record<string, unknown>
+      return typeof item.video_prompt === 'string' && typeof item.image_prompt === 'string'
+    })
+    && Array.isArray(plan.shots)
+    && (response.plan_job_id === undefined || typeof response.plan_job_id === 'string')
 }
 
 // ── Director Pipeline Dashboard ──────────────────────────────────────────
 
+export interface PipelineVideoAttempt {
+  id: string
+  filename: string
+  created_at: number
+  seed?: number | null
+  prompt?: string
+  model_type?: string
+  resolution?: string
+  video_length?: number | null
+  source?: 'original' | 'regenerated' | 'studio' | 'recovered' | string
+}
+
+export interface PlannedDirectorClip {
+  start?: number
+  end?: number
+  duration_sec?: number
+  duration_frames?: number
+  section_label?: string
+  suggested_prompt_hint?: string
+  _director_h3_source_prompt?: string
+  _director_audio_plan?: Record<string, unknown>
+  _director_dialogue_beats?: Array<Record<string, unknown>>
+  _director_subjects_on_screen?: Array<Record<string, unknown>>
+  _director_duration_sec?: number
+  _director_h3_prompt_mode?: string
+  _director_project_context?: string
+  [key: string]: unknown
+}
+
 export interface PipelineClipState {
   index: number
+  shot_id?: string
+  seed?: number
+  duration_seconds?: number
   planned_clip: PlannedClip | null
   image_prompt: string
   video_prompt: string
@@ -902,14 +1745,56 @@ export interface PipelineClipState {
   start_image_filename: string | null
   keyframe_filenames: string[]
   video_filename: string | null
+  video_attempts?: PipelineVideoAttempt[]
+  /** Explicit user choice. Legacy checkpoints use video_filename implicitly. */
+  selected_video_filename?: string | null
+  video_stale?: boolean
   tag: 'good' | 'needs_work' | null
   image_gen_time_sec: number | null
   video_gen_time_sec: number | null
+  h3_references?: H3ShotReferenceManifest | null
+  h3_segment_prompts?: string[]
+  h3_segments?: H3SegmentState[]
+  h3_prompt_validation?: 'optimized' | 'deterministic_fallback' | 'direct_video_contract' | null
+  _director_h3_source_prompt?: string
+  _director_audio_plan?: Record<string, unknown>
+  _director_dialogue_beats?: Array<Record<string, unknown>>
+  _director_subjects_on_screen?: Array<Record<string, unknown>>
+  _director_h3_prompt_mode?: string
+}
+
+export interface H3SegmentState {
+  index: number
+  filename: string
+  prompt: string
+  frames: number
+  seed: number
+  reference_mode: 'first_frame' | 'references' | 'direct_video'
+  start_image_filename?: string
+  stale?: boolean
+  created_at?: number
+  updated_at?: number
+}
+
+export interface H3ShotReferenceManifest {
+  shot_index: number
+  mode: 'first_frame' | 'references' | 'direct_video'
+  shot_frame: string
+  image_references: string[]
+  location_reference: string
+  location_label: string
+  requested_location_label?: string
+  video_references: string[]
+  audio_references: string[]
+  note: string
+  warnings?: string[]
+  continuity_mode?: 'identity_safe_hybrid' | 'direct_text_to_video'
 }
 
 export interface PipelineLlmPass {
   pass: string
   system_prompt: string
+  user_prompt?: string
   response_text: string
   thinking_text: string | null
 }
@@ -924,32 +1809,94 @@ export interface PipelineLlmLog {
   planning_time_sec: number
 }
 
+export type PipelineRepairStatus =
+  | 'queued'
+  | 'running'
+  | 'cancelling'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted'
+
+export interface PipelineRepairState {
+  operation_id: string
+  status: PipelineRepairStatus
+  phase: 'queued' | 'images' | 'videos' | 'rejoin' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  current: number
+  total: number
+  clip_index: number | null
+  message: string
+  error: string | null
+  cancel_requested?: boolean
+  started_at: number
+  updated_at: number
+  completed_at: number | null
+  result_filename: string | null
+}
+
 export interface SavedPipelineState {
   version: number
   pipeline_id: string
   created_at: number
   completed_at: number | null
   status: string
+  phase?: string
+  error?: string | null
   pipeline_type: string
+  generation_mode?: 'image_guided' | 'direct_video'
+  direct_video_master_prompt?: string
+  comic_id?: string | null
+  workspace?: string
+  preview_clips?: Array<Record<string, unknown>>
   scene_description: string
   reference_image_path: string | null
   auto_mode: boolean
   seamless: boolean
   image_model: string
   video_model: string
+  video_params?: Record<string, unknown>
+  h3_reference_manifest?: H3ShotReferenceManifest[]
+  h3_prompt_validation?: {
+    status: 'optimized' | 'deterministic_fallback' | 'direct_video_contract'
+    segments?: number
+    error?: string
+  } | null
+  /** Effective saved behavior. Missing on legacy projects, which require images. */
+  shot_image_policy?: DirectorShotImagePolicy
+  shot_image_guidance?: DirectorShotImageGuidance
   llm_log: PipelineLlmLog | null
   clips: PipelineClipState[]
+  planned_clips?: PlannedDirectorClip[]
+  clip_plans?: Array<Record<string, unknown>>
+  character_ref_paths?: string[]
+  location_ref_paths?: string[]
+  image_loras?: Record<string, unknown>
+  video_loras?: Record<string, unknown>
+  queue_source?: 'clips' | 'clip_plans' | 'planned'
   output_files: string[]
+  final_output_filename?: string
+  prompt_generation_time_sec?: number | null
+  image_generation_time_sec?: number | null
+  video_generation_time_sec?: number | null
+  assembly_time_sec?: number | null
+  assembly_count?: number
+  assembled_at?: number | null
   total_time_sec: number | null
+  repair?: PipelineRepairState | null
 }
 
 export interface PipelineListItem {
   id: string
   status: string
+  phase?: string
   pipeline_type: string
+  generation_mode?: 'image_guided' | 'direct_video'
+  comic_id?: string | null
   created_at: number
   clip_count: number
   output_count: number
   scene_description: string
   workspace: string
+  error?: string | null
+  repair_status?: PipelineRepairStatus | null
 }

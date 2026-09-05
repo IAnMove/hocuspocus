@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, BookMarked, Trash2, Upload, Play, Loader2, AlertTriangle, Download, ExternalLink, Layers } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import type { RecipeCard, RecipeLora } from '../../api/client'
 import * as api from '../../api/client'
@@ -11,6 +12,8 @@ import * as api from '../../api/client'
  * overlay so the user lands on a ready-to-generate Studio.
  */
 export function RecipesOverlay() {
+  const { t } = useUiTranslation('activity')
+  const { t: tCommon } = useUiTranslation('common')
   const open = useStore(s => s.recipesOpen)
   const setOpen = useStore(s => s.setRecipesOpen)
   const recipes = useStore(s => s.recipes)
@@ -41,7 +44,7 @@ export function RecipesOverlay() {
         setOpen(false)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to apply recipe')
+      setError(e instanceof Error ? e.message : t('recipes.applyFailed'))
     } finally {
       setApplying(null)
     }
@@ -63,7 +66,7 @@ export function RecipesOverlay() {
         await api.importRecipe(JSON.parse(text))
         loadRecipes()
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Import failed')
+        setError(e instanceof Error ? e.message : t('recipes.importFailed'))
       }
     }
     input.click()
@@ -74,14 +77,14 @@ export function RecipesOverlay() {
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex items-center gap-2 shrink-0">
         <BookMarked size={16} className="text-accent-blue shrink-0" />
-        <h1 className="text-sm font-semibold text-text-primary">Recipes</h1>
-        <span className="text-[11px] text-text-muted">one-click presets — pick a look, tweak the prompt, generate</span>
+        <h1 className="text-sm font-semibold text-text-primary">{t('recipes.title')}</h1>
+        <span className="text-[11px] text-text-muted">{t('recipes.subtitle')}</span>
         <div className="flex-1" />
         <button
           onClick={handleImport}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] bg-bg-tertiary border border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-border-light transition-colors"
         >
-          <Upload size={12} /> Import
+          <Upload size={12} /> {tCommon('actions.import')}
         </button>
         <button onClick={() => setOpen(false)}
           className="p-1.5 rounded-lg bg-bg-secondary hover:bg-bg-hover transition-colors border border-border">
@@ -93,11 +96,10 @@ export function RecipesOverlay() {
       {missing && (
         <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/30">
           <div className="flex items-start gap-2">
-            <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-            <div className="flex-1 text-[11px] text-amber-100">
+            <AlertTriangle size={14} className="text-indicator-warning shrink-0 mt-0.5" />
+            <div className="flex-1 text-[11px] text-text-primary">
               <div className="font-medium mb-1">
-                Applied — but this recipe uses {missing.loras.length} LoRA
-                {missing.loras.length > 1 ? 's' : ''} you don't have installed:
+                {t('recipes.missingTitle', { count: missing.loras.length })}
               </div>
               <div className="space-y-1">
                 {missing.loras.map(l => (
@@ -105,23 +107,23 @@ export function RecipesOverlay() {
                 ))}
               </div>
               {!civitaiKeySet && missing.loras.some(l => l.source_url) && (
-                <div className="mt-1.5 text-[10px] text-amber-200/80 leading-snug">
-                  Auto-download needs a free CivitAI API key.{' '}
-                  <button onClick={openCivitaiKeySettings} className="underline hover:text-amber-100">Add one in Settings</button>
-                  {' '}— then click Download. Or use each “Open source” link to grab it manually.
+                <div className="mt-1.5 text-[10px] text-text-secondary leading-snug">
+                  {t('recipes.needCivitaiKey')}{' '}
+                  <button onClick={openCivitaiKeySettings} className="underline hover:text-text-primary">{t('recipes.addInSettings')}</button>
+                  {' '}{t('recipes.thenDownload')}
                 </div>
               )}
-              <div className="mt-1.5 text-[10px] text-amber-200/60">
-                The recipe is applied and ready — you just need the LoRA before you Generate.
+              <div className="mt-1.5 text-[10px] text-text-secondary">
+                {t('recipes.readyNeedLora')}
               </div>
             </div>
             <button onClick={() => { setMissing(null); setOpen(false) }}
-              className="text-[10px] text-amber-200/80 hover:text-amber-100 shrink-0">Dismiss</button>
+              className="text-[10px] text-text-secondary hover:text-text-primary shrink-0">{t('recipes.dismiss')}</button>
           </div>
         </div>
       )}
       {error && (
-        <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/30 text-[11px] text-red-300">{error}</div>
+        <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/30 text-[11px] text-chip-red">{error}</div>
       )}
 
       {/* Grid */}
@@ -133,8 +135,7 @@ export function RecipesOverlay() {
         ) : recipes.length === 0 ? (
           <div className="flex flex-col items-center justify-center min-h-[300px] gap-3 text-text-muted text-center">
             <BookMarked size={28} />
-            <p className="text-sm max-w-xs">No recipes yet. Generate something you like, then use
-              “Save as Recipe” on it — or Import a recipe file.</p>
+            <p className="text-sm max-w-xs">{t('recipes.empty')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
@@ -157,6 +158,7 @@ export function RecipesOverlay() {
 function RecipeGridCard({ card, applying, onApply, onDelete }: {
   card: RecipeCard; applying: boolean; onApply: () => void; onDelete?: () => void
 }) {
+  const { t } = useUiTranslation('activity')
   return (
     <div className="group relative rounded-xl border border-border bg-bg-secondary overflow-hidden hover:border-accent-blue/60 transition-colors flex flex-col">
       {/* Thumbnail */}
@@ -174,7 +176,7 @@ function RecipeGridCard({ card, applying, onApply, onDelete }: {
             : <Play size={22} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />}
         </div>
         {card.nsfw && (
-          <span className="absolute top-1.5 left-1.5 text-[8px] uppercase tracking-wide bg-red-500/80 text-white rounded px-1 py-0.5">Mature</span>
+          <span className="absolute top-1.5 left-1.5 text-[8px] uppercase tracking-wide bg-red-500/80 text-white rounded px-1 py-0.5">{t('recipes.matureBadge')}</span>
         )}
       </button>
 
@@ -183,7 +185,7 @@ function RecipeGridCard({ card, applying, onApply, onDelete }: {
         <div className="flex items-start justify-between gap-1.5">
           <div className="text-xs font-medium text-text-primary leading-tight">{card.name}</div>
           {onDelete && (
-            <button onClick={onDelete} title="Delete recipe"
+            <button onClick={onDelete} title={t('recipes.deleteTitle')}
               className="shrink-0 p-0.5 rounded text-text-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
               <Trash2 size={12} />
             </button>
@@ -204,6 +206,8 @@ function RecipeGridCard({ card, applying, onApply, onDelete }: {
 }
 
 function MissingLoraRow({ lora, modelType, civitaiKeySet }: { lora: RecipeLora; modelType: string; civitaiKeySet: boolean }) {
+  const { t } = useUiTranslation('activity')
+  const { t: tCommon } = useUiTranslation('common')
   const downloadRecipeLora = useStore(s => s.downloadRecipeLora)
   const [state, setState] = useState<'idle' | 'downloading' | 'done' | 'error'>('idle')
 
@@ -222,28 +226,28 @@ function MissingLoraRow({ lora, modelType, civitaiKeySet }: { lora: RecipeLora; 
   const sourceLink = lora.source_url ? (
     <a href={lora.source_url} target="_blank" rel="noreferrer"
       className="flex items-center gap-0.5 text-accent-blue hover:text-accent-blue-hover shrink-0">
-      <ExternalLink size={10} /> Open source
+      <ExternalLink size={10} /> {t('recipes.openSource')}
     </a>
   ) : (
-    <span className="text-amber-200/50 shrink-0">install manually</span>
+    <span className="text-text-secondary shrink-0">{t('recipes.installManually')}</span>
   )
 
   return (
     <div className="flex items-center gap-2">
-      <span className="font-mono text-amber-200/90 truncate">{lora.filename}</span>
-      {lora.size_mb ? <span className="text-amber-200/50 shrink-0">~{Math.round(lora.size_mb)} MB</span> : null}
+      <span className="font-mono text-text-secondary truncate">{lora.filename}</span>
+      {lora.size_mb ? <span className="text-text-secondary shrink-0">~{Math.round(lora.size_mb)} MB</span> : null}
       {/* In-app auto-download needs a CivitAI key. With a key → offer Download;
           without → skip the button (it would just fail) and show the source
           link so the user can grab it manually. */}
       {lora.source_url && civitaiKeySet && state === 'idle' && (
         <button onClick={handleDownload}
           className="flex items-center gap-0.5 text-accent-blue hover:text-accent-blue-hover shrink-0">
-          <Download size={10} /> Download
+          <Download size={10} /> {tCommon('actions.download')}
         </button>
       )}
       {lora.source_url && !civitaiKeySet && state === 'idle' && sourceLink}
-      {state === 'downloading' && <Loader2 size={10} className="animate-spin text-amber-200 shrink-0" />}
-      {state === 'done' && <span className="text-green-400 shrink-0">started ↓ (see download bar)</span>}
+      {state === 'downloading' && <Loader2 size={10} className="animate-spin text-indicator-warning shrink-0" />}
+      {state === 'done' && <span className="text-indicator-success shrink-0">{t('recipes.downloadStarted')}</span>}
       {state === 'error' && sourceLink}
       {!lora.source_url && state === 'idle' && sourceLink}
     </div>

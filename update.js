@@ -1,12 +1,40 @@
+const vendors = require("./vendor_revisions")
+const hunyuan3d2 = vendors.hunyuan3d2
+const hunyuan3d21 = vendors.hunyuan3d21
+const sam3 = vendors.sam3
+const unirig = vendors.unirig
+
 module.exports = {
   run: [{
-    // Pull the latest launcher + app code (single monorepo, so this one
-    // pull covers both `ui/` and `app/`). The next step inspects this
-    // output: an unchanged Maestro skips its main dependency/UI rebuild,
-    // but still reaches the bundled-runtime maintenance section.
+    // Never let Update merge around uncommitted work. shell.run returns the
+    // porcelain output as input.stdout; the next documented jump either stops
+    // with a recoverable message or proceeds to a fast-forward-only pull.
+    // The single Maestro repository contains both `ui/` and `app/`, so one
+    // clean-tree check protects the complete launcher and application.
     method: "shell.run",
     params: {
-      message: "git pull"
+      message: "git status --porcelain"
+    }
+  }, {
+    method: "jump",
+    params: {
+      id: "{{/(?:^|\\r?\\n)[ MADRCU?!]{2} /.test(input.stdout) ? 'dirty' : 'pull'}}"
+    }
+  }, {
+    id: "dirty",
+    method: "log",
+    params: {
+      raw: "Update stopped safely: HocusPocus has uncommitted changes. Commit or stash them before updating; no files were changed."
+    },
+    next: null
+  }, {
+    id: "pull",
+    method: "shell.run",
+    params: {
+      env: {
+        LC_ALL: "C"
+      },
+      message: "git pull --ff-only"
     }
   }, {
     // Branch on the git pull output (captured here as input.stdout — a
@@ -21,13 +49,20 @@ module.exports = {
     // never a wrongly-skipped rebuild.
     method: "jump",
     params: {
-      id: "{{/already up[- ]to[- ]date/i.test(input.stdout) && exists('app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1') && exists('app/postprocessing/seedvc/__init__.py') ? 'uptodate' : 'build'}}"
+      id: "{{/(?:fatal:|error:|aborting|no tracking information|specify which branch)/i.test(input.stdout) ? 'pull_failed' : (/already up[- ]to[- ]date/i.test(input.stdout) && exists('app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed') && exists('" + hunyuan3d2.marker + "') && exists('" + hunyuan3d21.marker + "') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1') && ((!exists('app/services/sam/env') && !exists('" + sam3.path + "')) || exists('" + sam3.marker + "')) && ((!exists('app/services/rigging/env') && !exists('" + unirig.path + "')) || (exists('app/services/rigging/env/.maestro_rigging_v1.installed') && exists('" + unirig.marker + "'))) && exists('app/services/minimax_h3/env/.maestro_minimax_h3_v2.installed') && exists('app/services/minimax_h3/vendor/ComfyUI/main.py') && exists('app/postprocessing/seedvc/__init__.py') ? 'uptodate' : 'build')}}"
     }
+  }, {
+    id: "pull_failed",
+    method: "log",
+    params: {
+      raw: "Update stopped safely because Git could not fast-forward the current branch. Configure its upstream or resolve the Git error shown above; dependencies were not changed."
+    },
+    next: null
   }, {
     id: "uptodate",
     method: "log",
     params: {
-      raw: "Already up to date. Maestro and its bundled runtimes are installed."
+      raw: "Already up to date. HocusPocus and its bundled runtimes are installed."
     },
     next: null
   }, {
@@ -47,7 +82,7 @@ module.exports = {
     params: {
       venv: "env",
       path: "app",
-      message: "uv pip install -r requirements.txt"
+      message: "uv pip install -r requirements.txt --index-strategy unsafe-best-match"
     }
   }, {
     // Skip torch.js when the marker file written by torch.js's last
@@ -93,7 +128,7 @@ module.exports = {
     params: {
       path: "ui",
       message: [
-        "npm install",
+        "npm ci",
         "npm run build"
       ]
     }
@@ -115,6 +150,51 @@ module.exports = {
       uri: "sam_install.js"
     }
   },
+  {
+    when: "{{exists('app/services/rigging/env')}}",
+    method: "script.start",
+    params: {
+      uri: "rigging_install.js"
+    }
+  },
+  // Existing installations that predate MiniMax H3 reach this section through
+  // the normal build path. The weights remain lazy downloads.
+  {
+    when: "{{!exists('app/services/minimax_h3/vendor/ComfyUI/main.py')}}",
+    method: "shell.run",
+    params: {
+      message: [
+        "git clone --depth 1 --branch minimax_h3 https://github.com/kijai/ComfyUI app/services/minimax_h3/vendor/ComfyUI",
+        "git -C app/services/minimax_h3/vendor/ComfyUI fetch --depth 1 origin e2ab36d933356bc8cd6ecb39c655fe8be75af4e5",
+        "git -C app/services/minimax_h3/vendor/ComfyUI checkout e2ab36d933356bc8cd6ecb39c655fe8be75af4e5"
+      ]
+    }
+  }, {
+    when: "{{exists('app/services/minimax_h3/vendor/ComfyUI/.git')}}",
+    method: "shell.run",
+    params: {
+      path: "app/services/minimax_h3/vendor/ComfyUI",
+      message: [
+        "git fetch --depth 1 origin e2ab36d933356bc8cd6ecb39c655fe8be75af4e5",
+        "git checkout e2ab36d933356bc8cd6ecb39c655fe8be75af4e5"
+      ]
+    }
+  }, {
+    method: "shell.run",
+    params: {
+      conda: { path: "app/services/minimax_h3/env", python: "3.11" },
+      message: [
+        "uv pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu130",
+        "uv pip install -r app/services/minimax_h3/vendor/ComfyUI/requirements.txt"
+      ]
+    }
+  }, {
+    method: "fs.write",
+    params: {
+      path: "app/services/minimax_h3/env/.maestro_minimax_h3_v2.installed",
+      text: "e2ab36d933356bc8cd6ecb39c655fe8be75af4e5 torch-2.10.0-cu130"
+    }
+  },
   // Existing installations that predate native 3D reach this section through
   // the normal full update path. Model weights remain lazy downloads.
   {
@@ -124,30 +204,44 @@ module.exports = {
       message: "git clone --depth 1 --branch v1.0.0 https://github.com/Blizaine/maestro-seedvc app/postprocessing/seedvc"
     }
   }, {
-    when: "{{!exists('app/services/hunyuan3d/vendor/Hunyuan3D-2')}}",
+    when: "{{!exists('" + hunyuan3d2.path + "')}}",
     method: "shell.run",
     params: {
-      message: "git clone --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2 app/services/hunyuan3d/vendor/Hunyuan3D-2"
+      message: [
+        "git clone --depth 1 " + hunyuan3d2.url + " " + hunyuan3d2.path,
+        "git -C " + hunyuan3d2.path + " fetch --depth 1 origin " + hunyuan3d2.revision,
+        "git -C " + hunyuan3d2.path + " checkout --detach " + hunyuan3d2.revision
+      ]
     }
   }, {
-    when: "{{exists('app/services/hunyuan3d/vendor/Hunyuan3D-2/.git')}}",
+    when: "{{exists('" + hunyuan3d2.path + "/.git')}}",
     method: "shell.run",
     params: {
-      path: "app/services/hunyuan3d/vendor/Hunyuan3D-2",
-      message: "git pull --ff-only"
+      path: hunyuan3d2.path,
+      message: [
+        "git fetch --depth 1 origin " + hunyuan3d2.revision,
+        "git checkout --detach " + hunyuan3d2.revision
+      ]
     }
   }, {
-    when: "{{!exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1')}}",
+    when: "{{!exists('" + hunyuan3d21.path + "')}}",
     method: "shell.run",
     params: {
-      message: "git clone --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1 app/services/hunyuan3d/vendor/Hunyuan3D-2.1"
+      message: [
+        "git clone --depth 1 " + hunyuan3d21.url + " " + hunyuan3d21.path,
+        "git -C " + hunyuan3d21.path + " fetch --depth 1 origin " + hunyuan3d21.revision,
+        "git -C " + hunyuan3d21.path + " checkout --detach " + hunyuan3d21.revision
+      ]
     }
   }, {
-    when: "{{exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1/.git')}}",
+    when: "{{exists('" + hunyuan3d21.path + "/.git')}}",
     method: "shell.run",
     params: {
-      path: "app/services/hunyuan3d/vendor/Hunyuan3D-2.1",
-      message: "git pull --ff-only"
+      path: hunyuan3d21.path,
+      message: [
+        "git fetch --depth 1 origin " + hunyuan3d21.revision,
+        "git checkout --detach " + hunyuan3d21.revision
+      ]
     }
   }, {
     method: "shell.run",
@@ -217,8 +311,26 @@ module.exports = {
   }, {
     method: "fs.write",
     params: {
-      path: "app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed",
-      text: "ok"
+      path: hunyuan3d2.marker,
+      text: "repository=" + hunyuan3d2.url + "\nrevision=" + hunyuan3d2.revision + "\n"
+    }
+  }, {
+    method: "fs.write",
+    params: {
+      path: hunyuan3d21.marker,
+      text: "repository=" + hunyuan3d21.url + "\nrevision=" + hunyuan3d21.revision + "\n"
+    }
+  }, {
+    method: "fs.write",
+    params: {
+      path: hunyuan3d2.marker,
+      text: "repository=" + hunyuan3d2.url + "\nrevision=" + hunyuan3d2.revision + "\n"
+    }
+  }, {
+    method: "fs.write",
+    params: {
+      path: hunyuan3d21.marker,
+      text: "repository=" + hunyuan3d21.url + "\nrevision=" + hunyuan3d21.revision + "\n"
     }
   }]
 }

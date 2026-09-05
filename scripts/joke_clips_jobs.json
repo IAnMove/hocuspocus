@@ -1,0 +1,17 @@
+[
+  {"index": 1, "series": "The Office", "joke": "Eso es lo que ella dijo. Y también Recursos Humanos.", "job_id": "01f7a55c", "status": "queued"},
+  {"index": 2, "series": "Friends", "joke": "¿Cómo estáis? ¿Cómo estáis? ¿Cómo estáis? Yo no sé cómo estáis.", "job_id": "e1d69855", "status": "queued"},
+  {"index": 3, "series": "Breaking Bad", "joke": "No soy un chiste. Soy el que llama. Vale, era un chiste malo.", "job_id": "329f5564", "status": "queued"},
+  {"index": 4, "series": "Stranger Things", "joke": "El Upside Down no da tanto miedo como mi peinado.", "job_id": "98700610", "status": "queued"},
+  {"index": 5, "series": "Juego de Tronos", "joke": "Bebo y sé cosas. Hoy sé que este chiste es corto.", "job_id": "837f4539", "status": "queued"},
+  {"index": 6, "series": "Los Simpson", "joke": "¡D'oh! Espera. El chiste era la dieta.", "job_id": "d0678b56", "status": "queued"},
+  {"index": 7, "series": "Seinfeld", "joke": "¿Qué hay con los silencios? Nadie habla y todos esperan un aplauso.", "job_id": "410deca2", "status": "queued"},
+  {"index": 8, "series": "Sherlock", "joke": "Elemental. El chiste sois vosotros por seguir escuchando.", "job_id": "bf055c5c", "status": "queued"},
+  {"index": 9, "series": "The Mandalorian", "joke": "Este es el camino. El otro camino tenía el punchline.", "job_id": "2a394bac", "status": "queued"},
+  {"index": 10, "series": "Dark", "joke": "No es un chiste. Es un bucle. Vuelve en treinta y tres años.", "job_id": "68d22728", "status": "queued"},
+  {"index": 11, "series": "The Big Bang Theory", "joke": "Bazinga. He estudiado cuarenta y siete variantes. Esta es la peor.", "job_id": "9dccaa83", "status": "queued"},
+  {"index": 12, "series": "Better Call Saul", "joke": "Mejor llama a Saul. No para el chiste: para denunciarlo.", "job_id": "7d7a2243", "status": "queued"},
+  {"index": 13, "series": "House", "joke": "Todo el mundo miente. Sobre todo quien dice que esto es gracioso.", "job_id": "e14c3105", "status": "queued"},
+  {"index": 14, "series": "The Witcher", "joke": "Hmm. Eso era el chiste.", "job_id": "1bbbdee0", "status": "queued"},
+  {"index": 15, "series": "Black Mirror", "joke": "Dale like. El chiste ya te está mirando.", "job_id": "e8e8508a", "status": "queued"}
+]

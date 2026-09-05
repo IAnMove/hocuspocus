@@ -1,9 +1,13 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Upload, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 
 export function ImageRefSection() {
+  const { t } = useUiTranslation('studio')
+  const { t: tCommon } = useUiTranslation('common')
   const modelOptions = useStore(s => s.modelOptions)
+  const imageMode = useStore(s => Number(s.params.image_mode ?? 1))
   const imageRefs = useStore(s => s.imageRefs)
   const imageRefType = useStore(s => s.imageRefType)
   const removeBackgroundRefs = useStore(s => s.removeBackgroundRefs)
@@ -14,33 +18,41 @@ export function ImageRefSection() {
   const setRemoveBackgroundRefs = useStore(s => s.setRemoveBackgroundRefs)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
-  if (!modelOptions?.image_ref_choices) return null
+  const config = modelOptions?.image_ref_choices
+  const bgLabel = modelOptions?.background_removal_label
+  // max_image_refs is the model's total conditioning-image budget. In Edit
+  // mode the uploaded source already consumes one slot.
+  const configuredMaxRefs = modelOptions?.max_image_refs ?? null
+  const maxRefs = configuredMaxRefs == null ? null : Math.max(0, configuredMaxRefs - (imageMode === 2 ? 1 : 0))
+  const canAddMore = maxRefs == null || imageRefs.length < maxRefs
 
-  const config = modelOptions.image_ref_choices
-  const bgLabel = modelOptions.background_removal_label
+  const addFiles = useCallback((files: File[]) => {
+    const room = maxRefs == null ? files.length : Math.max(0, maxRefs - imageRefs.length)
+    files.slice(0, room).forEach(addImageRef)
+  }, [addImageRef, imageRefs.length, maxRefs])
 
   // Determine available modes from choices
-  const hasLandscapeMode = config.choices?.some(([, v]: [string, string]) => v.includes('K')) ?? false
-  const hasPeopleMode = config.choices?.some(([, v]: [string, string]) => v === 'I') ?? false
+  const hasLandscapeMode = config?.choices?.some(([, v]: [string, string]) => v.includes('K')) ?? false
+  const hasPeopleMode = config?.choices?.some(([, v]: [string, string]) => v === 'I') ?? false
   const defaultRefType = hasLandscapeMode ? 'KI' : hasPeopleMode ? 'I' : ''
 
   // Auto-set ref type when images are added/removed
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    if (!config) return
     if (imageRefs.length > 0 && imageRefType === '') {
       setImageRefType(defaultRefType)
     } else if (imageRefs.length === 0 && imageRefType !== '') {
       setImageRefType('')
     }
-  }, [imageRefs.length])
+  }, [config, defaultRefType, imageRefs.length, imageRefType, setImageRefType])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     // If it's a reorder drag (has our index data), ignore — handled by item onDrop
     if (e.dataTransfer.getData('ref-index')) return
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
-    files.forEach(addImageRef)
-  }, [addImageRef])
+    addFiles(files)
+  }, [addFiles])
 
   const handleFileSelect = useCallback(() => {
     const input = document.createElement('input')
@@ -49,15 +61,17 @@ export function ImageRefSection() {
     input.multiple = true
     input.onchange = () => {
       const files = Array.from(input.files || [])
-      files.forEach(addImageRef)
+      addFiles(files)
     }
     input.click()
-  }, [addImageRef])
+  }, [addFiles])
+
+  if (!config) return null
 
   return (
     <div className="space-y-2">
       <label className="text-[11px] text-text-muted uppercase tracking-wider block">
-        Reference Images
+        {t('imageRef.title')}
       </label>
 
       {/* Thumbnails + add button in a unified row */}
@@ -89,12 +103,12 @@ export function ImageRefSection() {
           >
             <img
               src={URL.createObjectURL(file)}
-              alt={`Ref ${i + 1}`}
+              alt={t('inputs.refAlt', { n: i + 1 })}
               className="w-full h-full object-cover pointer-events-none"
             />
             {i === 0 && imageRefs.length > 1 && hasLandscapeMode && imageRefType === 'KI' && (
               <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white text-center py-0.5">
-                Main
+                {t('imageRef.main')}
               </div>
             )}
             {/* Position number */}
@@ -111,16 +125,24 @@ export function ImageRefSection() {
         ))}
 
         {/* Add button / drop zone */}
-        <div
-          className="w-[90px] h-[90px] border border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-0.5 cursor-pointer hover:border-border-light transition-colors"
-          onDrop={handleDrop}
-          onDragOver={e => e.preventDefault()}
-          onClick={handleFileSelect}
-        >
-          <Upload size={14} className="text-text-muted" />
-          <span className="text-[8px] text-text-muted">Add</span>
-        </div>
+        {canAddMore && (
+          <div
+            className="w-[90px] h-[90px] border border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-0.5 cursor-pointer hover:border-border-light transition-colors"
+            onDrop={handleDrop}
+            onDragOver={e => e.preventDefault()}
+            onClick={handleFileSelect}
+          >
+            <Upload size={14} className="text-text-muted" />
+            <span className="text-[8px] text-text-muted">{tCommon('actions.add')}</span>
+          </div>
+        )}
       </div>
+
+      {maxRefs != null && (
+        <p className="text-[9px] text-text-muted">
+          {t('imageRef.max', { count: maxRefs })}
+        </p>
+      )}
 
       {/* Focus mode toggle — only when images present and model supports both modes */}
       {imageRefs.length > 0 && hasLandscapeMode && hasPeopleMode && (
@@ -133,7 +155,7 @@ export function ImageRefSection() {
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
-            Subject / Landscape
+            {t('inputs.subjectLandscape')}
           </button>
           <button
             onClick={() => setImageRefType('I')}
@@ -143,7 +165,7 @@ export function ImageRefSection() {
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
-            People / Objects
+            {t('inputs.peopleObjects')}
           </button>
         </div>
       )}
@@ -151,7 +173,7 @@ export function ImageRefSection() {
       {/* Hint text */}
       {imageRefs.length > 0 && hasLandscapeMode && imageRefType === 'KI' && (
         <p className="text-[10px] text-text-muted">
-          First image is the main subject/landscape. Additional images are people/objects to inject. Drag to reorder.
+          {t('imageRef.hint')}
         </p>
       )}
 

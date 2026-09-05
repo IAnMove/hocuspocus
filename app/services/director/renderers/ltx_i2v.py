@@ -18,8 +18,49 @@ from .base import BaseRenderer
 class LtxI2VRenderer(BaseRenderer):
     mode = "i2v"
 
+    @staticmethod
+    def ensure_source_style(prompt: str, shot: ShotPlan) -> str:
+        """Anchor every I2V prompt to the supplied first frame.
+
+        Planner-written prompts are normally preferred over this renderer's
+        deterministic draft.  That meant a planner could describe the motion
+        perfectly while omitting the one instruction that matters most for
+        illustrated/comic inputs: do not reinterpret the medium.  Keep this
+        deterministic so it also protects prompts written by remote LLMs.
+        """
+        prompt = str(prompt or "").strip()
+        metadata = getattr(shot, "metadata", None) or {}
+        if metadata.get("motion_only_prompt"):
+            # The approved clean keyframe already defines appearance. Repeating
+            # it in text can contradict the actual pixels and cause a scene
+            # replacement, so comic-film prompts describe changes only.
+            return prompt
+        lower = prompt.lower()
+        anchors = []
+        if "exact first frame" not in lower:
+            anchors.append("Use the supplied image as the exact first frame.")
+        if not any(term in lower for term in (
+            "preserve its visual medium",
+            "preserve the visual medium",
+            "do not restyle",
+            "never restyle",
+        )):
+            anchors.append(
+                "Preserve its visual medium, palette, linework, shading and "
+                "character design throughout; do not restyle it or turn an "
+                "illustrated source photorealistic."
+            )
+        if shot.visual_style and shot.visual_style.lower() not in lower:
+            anchors.append(f"Style direction: {shot.visual_style.strip()}")
+        return " ".join([*anchors, prompt]).strip()
+
     def _refinement_system_prompt(self, shot: ShotPlan, **context) -> str:
-        return "Rewrite into 2-4 sentences, present tense. Describe ONLY what changes from the start image — motion, expressions, camera shifts. Keep short. Output ONLY the prompt."
+        return (
+            "Rewrite into 2-4 sentences, present tense. Preserve the exact "
+            "visual medium and style of the supplied first frame. Describe "
+            "ONLY what changes — motion, expressions and camera shifts. "
+            "Keep short. Output ONLY the prompt."
+        )
 
     def render(
         self,
