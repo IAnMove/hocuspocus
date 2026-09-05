@@ -512,18 +512,14 @@ must not be re-opened as if pending:
 - Lyrics language library (#137). Not yet wired into write-song/generate.
   Prefix aliases still need the token follow-up.
 
-The launch/store/agentActions hotspot is free for **one** sequential PR:
-durable Story song identity (cue-by-id, version IDs, server-side candidate
-finalization). Independent PRs may proceed only when they do not edit those
-files.
+`_launch_runtime.py` is currently free: #140 (Story pending candidate) does
+not edit it. Server-side music finalization is phase 5 and remains the next
+sequential launch PR. Independent PRs may proceed only when they do not edit
+shared hotspots.
 
-The next queue lives in
-[`docs/development/SLICE_QUEUE.md`](docs/development/SLICE_QUEUE.md): lyrics
-alias tokens, durable Story song identity, wire lyrics+generation-record,
-Story Music router extract, `useStore` audio slice, Story session
-controller, `agentActions` decomposition, Director `PipelineRuntime`,
-Activity/Library observability, presentation decision gate, and release
-validation.
+The next queue is the 12-phase wave in
+[`docs/development/EXECUTION_BASELINE.md`](docs/development/EXECUTION_BASELINE.md)
+and `fase1.md`–`fase12.md`. Every graph arrow requires a merge, not an open PR.
 
 ### Post-#120 handoff (#116–#120)
 

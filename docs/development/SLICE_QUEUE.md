@@ -11,6 +11,9 @@ Canonical sources in git:
 - Domain identities: `docs/development/DOMAIN_MODEL_AND_ASSET_PROVENANCE.md`
 - i18n boy scout: `docs/development/INTERNATIONALIZATION.md`
 - Architecture contracts: `docs/development/ARCHITECTURE_FOUNDATION.md`
+- Execution baseline and 12-phase wave: `docs/development/EXECUTION_BASELINE.md`
+  and `fase1.md`–`fase12.md` (repo root). Working notes under `comunicaciones/`
+  are session handoff only.
 
 Working notes under `comunicaciones/` are session handoff only. They are
 gitignored and are not canonical.
@@ -203,42 +206,36 @@ These PRs are merged into `main`. Do not re-plan them.
   (`English` starts with `es`; `en español` starts with `en`) with exact
   aliases plus tokens longer than two letters.
 
-Open, not landed:
+Open, not landed (verify CI/Cursor on the current head; do not infer merge):
 
-- **Docs sync (this PR).** Refresh the queue after #135/#138/#137. Does not
-  touch launch, store or agent actions.
+- **#136 — this PR.** Execution baseline, phase graph and phase files.
+- **#139 — lyrics alias tokens** (`a6b7b0ff`). Covers F2.3 prefixes only.
+- **#140 — Story pending candidate** (`dc63eb5b`). Client persist-before-generate.
+  Does not touch `_launch_runtime.py`. Server finalization is phase 5.
 
 ## Next medium PRs after #137
 
-Keep these as separate, reviewable slices. Do not open a second PR on a
-hotspot already owned by an open PR.
+Keep these as separate, reviewable slices. Each `faseN.md` is the packet.
+Do not open a slice whose graph arrow is not **merged**.
 
-1. **Lyrics alias tokens.** `canonical_lyrics_language` must score
-   `Español de España` and `en español` as Spanish and `English` as
-   English. Library-only; no launch.
-2. **Durable Story song identity.** Cue-by-id, distinct version IDs,
-   server-side candidate finalization after the browser closes, no preview
-   fragments as final songs. **The next sequential PR on
-   `_launch_runtime.py` / Story music.** Wizard must read the open project
-   before acting.
-3. **Wire lyrics guard + generation-record** into write-song, generate and
-   Activity after identity owns the launch hotspot, or in a follow-up if
-   identity leaves those call sites untouched.
-4. **Story Music router extract.** One complete domain from
-   `_launch_runtime.py` (the four `stories/music-candidates` routes),
-   preserving ordinals. Only after identity.
-5. **Second `useStore` audio/generation slice.** Cohesive selection/family
-   boundary; do not move all of `startGeneration`.
-6. **Story Lab session controller.** Selection, load, autosave/CAS and
-   rehydration; do not re-extract tabs or production handoff.
-7. **Decompose `agentActions`.** Parser, request/context reconciliation,
-   capability execution and confirmation as separate modules.
-8. **Typed Director `PipelineRuntime`.** One complete function or lifecycle
-   at a time.
-9. **Activity/Library observability.** Latest real event, truncated prompt
-   with copy, model/duration/status, formatted extra info, audio covers.
-10. **Decision gate, then visible Wizard magic.**
-11. **Release validation.** Simulated CI vs explicit local media smoke.
+1. **Phase 1 (this PR)** — execution baseline. Unlock 2 and 3 after merge.
+2. **Phase 2** — continue #139: unevaluable languages, exact protected spans,
+   no destructive default. Library only.
+3. **Phase 3** — generation-record authority (projection, CAS, no producers).
+4. **Phase 4** — idempotent music submit; sole sequential `_launch_runtime.py`
+   owner until it merges.
+5. **Phase 5** — server-side music finalization (after 4).
+6. **Phase 6** — music spec/catalog (after 2 and 4).
+7. **Phase 7** — async client rehydration (after 5 and 6).
+8. **Phase 8** — Wizard workflow concurrency (after 4).
+9. **Phase 9** — Story Music router extract (after 5).
+10. **Phase 10** — Story session controller (after 7).
+11. **Phase 11** — Studio music `useStore` slice (after 6 and 7).
+12. **Phase 12** — visible traceability (after 3 and 7).
+
+Graph (merge required on every arrow): `1 → {2,3}`; `3 → 4 → 5`;
+`{2,4} → 6`; `{5,6} → 7`; `4 → 8`; `5 → 9`; `7 → 10`; `{6,7} → 11`;
+`{3,7} → 12`. Details in `docs/development/EXECUTION_BASELINE.md`.
 
 ## Residual risks to track separately
 
@@ -248,7 +245,7 @@ hotspot already owned by an open PR.
 - Closing the client during local music generation can leave a WAV without a
   linked cue/candidate. Server-side finalization is still required.
 - #137's prefix alias treats `English` as Spanish and `en español` as
-  English until the token follow-up lands.
+  English until #139 (or phase 2) lands.
 - Generation-record v1 is a projection, not a second store, and is not
   yet wired into launch writers.
 - Two local stashes remain unaudited as product work: `stash@{0}` is a CI
