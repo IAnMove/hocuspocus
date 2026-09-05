@@ -214,6 +214,47 @@ class MusicSubmissionStore:
                 raise
             return payload
 
+    def get_by_generation_id(self, generation_id: str) -> dict[str, Any] | None:
+        token = str(generation_id or "").strip()
+        if not token or not self.root.is_dir():
+            return None
+        for path in sorted(self.root.glob("*.json")):
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(value, dict) and str(value.get("generation_id") or "") == token:
+                return dict(value)
+        return None
+
+    def replace(self, record: Mapping[str, Any]) -> dict[str, Any]:
+        """Overwrite an existing reservation with the same spec hash."""
+        key = str(record["idempotency_key"])
+        path = self._path(key)
+        payload = json.loads(json.dumps(record, ensure_ascii=False))
+        with _STORE_LOCK:
+            existing = self.load(key)
+            if existing is None:
+                raise MusicSubmissionError(f"Unknown music reservation {key}", 404)
+            if existing.get("spec_hash") != payload.get("spec_hash"):
+                raise MusicSubmissionConflict()
+            self.root.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                with open(temporary, "w", encoding="utf-8") as handle:
+                    json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+                    handle.write("\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, path)
+            except Exception:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise
+            return payload
+
 
 def _intent(request: Mapping[str, Any]) -> str:
     raw = (_clean(request.get("intent")) or "retransmit").casefold()
