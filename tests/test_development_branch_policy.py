@@ -45,6 +45,13 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertNotIn('--publish-pr-comment', text)
         self.assertIn('bash scripts/check_code_health_pr_base.sh', text)
         self.assertIn('scripts/ci_required.py', text)
+        self.assertIn('STATUS=${PIPESTATUS[0]}', text)
+        helper_at = text.index('bash scripts/check_code_health_pr_base.sh')
+        summary_at = text.index('GITHUB_STEP_SUMMARY', helper_at)
+        status_at = text.index('STATUS=${PIPESTATUS[0]}', helper_at)
+        exit_at = text.index('exit "$STATUS"', helper_at)
+        self.assertLess(status_at, summary_at)
+        self.assertLess(summary_at, exit_at)
 
     def test_ci_cancels_only_superseded_pull_requests(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')

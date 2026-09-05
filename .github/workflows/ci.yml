@@ -116,10 +116,14 @@ jobs:
             echo "Cannot resolve code-health base: need pull_request.base.sha or push before" >&2
             exit 2
           fi
+          set +e
           bash scripts/check_code_health_pr_base.sh | tee code-health.md
-          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s code-health.md ]; then
             cat code-health.md >> "$GITHUB_STEP_SUMMARY"
           fi
+          exit "$STATUS"
       - name: Upload code-health report
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
