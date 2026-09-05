@@ -142,10 +142,9 @@ log "[local] ok: code-health ratchet"
 
 run_ui "ui tests" npm test
 run_ui "ui lint" npm run lint -- --max-warnings=0
+run_ui "ui build" npm run build
 if [[ "$MODE" == "full" ]]; then
-  run_ui "ui build + budget" npm run build && run_ui "ui budget" npm run budget
-else
-  run_ui "ui build" npm run build
+  run_ui "ui budget" npm run budget
 fi
 run_ui "simulated browser e2e" npm run test:e2e
 

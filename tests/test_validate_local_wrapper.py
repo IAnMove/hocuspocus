@@ -62,6 +62,10 @@ if [[ " $* " == *" budget "* && "${BUDGET_FAIL:-0}" == "1" ]]; then
   echo "budget exceeded" >&2
   exit 1
 fi
+if [[ " $* " == *" build "* && "${BUILD_FAIL:-0}" == "1" ]]; then
+  echo "build failed" >&2
+  exit 1
+fi
 exit 0
 """)
     _write_exec(bin_dir / "git", """#!/usr/bin/env bash
@@ -157,6 +161,15 @@ def test_full_mode_runs_required_checks_including_budget(tmp_path: Path):
     ):
         assert token in invoked
     assert "full checks passed (CI-equivalent" in log
+
+
+def test_full_stops_before_e2e_when_build_fails(tmp_path: Path):
+    root = _sandbox(tmp_path)
+    result = _run(root, _env(tmp_path, root, BUILD_FAIL="1"), "--full")
+    assert result.returncode != 0
+    assert "FAIL: ui build" in result.stdout + result.stderr
+    assert "npm run test:e2e" not in _invocations(tmp_path)
+    assert "full checks passed" not in result.stdout
 
 
 def test_full_never_skips_budget_failure(tmp_path: Path):
