@@ -1,11 +1,10 @@
 # Lyrics language contract
 
-Status: library only (2026-09-05). MiniMax-Music3 (#135) is on `main`; wiring
-the guard into write-song/generate remains a follow-up so this PR stays
-outside `_launch_runtime.py`.
+Status: library only (2026-09-05). Wiring into write-song/generate is phase 6.
 
-User conversation language, authored lyric language and the provider-facing
-technical prompt are three different decisions:
+This heuristic scores **written text**, not the audio a model later sings.
+UI locale, conversation language, content language, spoken language and the
+technical prompt are different decisions:
 
 - the user may speak any language;
 - the technical style/caption may be generated in English when the model
@@ -14,34 +13,32 @@ technical prompt are three different decisions:
   language the user asked for.
 
 English structural tags such as `[Verse]` and `[Chorus]` are allowed.
-Quoted segments registered on `LanguageIntent.verbatimSegments` are kept
-character-for-character and are not scored as contamination.
 
-## API
+## Verdicts
 
-Python: `app/services/lyrics_language.py`
+`valid` | `invalid` | `unevaluable`
 
-- `validate_lyrics_language(lyrics, lyrics_language, protected_segments=..., instrumental=...)`
-- `repair_lyrics_language(...)` — strips unrequested Han/Arabic/Cyrillic/Hangul/Kana runs; never translates English into Spanish
-- `assert_lyrics_language(...)` — raises if the lyric still mismatches
+`ok` is true only for `valid`. An unrecognized or unsupported language
+(French, Estonian, …) is **unevaluable**, never a silent pass. An empty
+vocal lyric is **invalid**. Instrumental empty/`[instrumental]` is valid.
 
-TypeScript: `ui/src/lib/lyricsLanguageGuard.ts` (same rules for Wizard tests).
+Only `es` and `en` are scored. Aliases are exact folded keys, then BCP-47
+prefix, then tokens longer than two letters. Never `startsWith("es")`.
 
-`canonical_lyrics_language` / `canonicalLyricsLanguage` resolve Story Lab
-spoken-language names without prefix traps:
+## Repair
 
-1. exact folded aliases (`es`, `espanol`, `spanish`, `en`, `english`, …);
-2. BCP-47 prefixes via the token before `-` (`es-MX`, `en-US`);
-3. tokens longer than two letters so `Español de España` is Spanish and
-   `en español` is Spanish, while `en` and `English` stay English.
+`repair_lyrics_language` / `repairLyricsLanguage` never overwrite the
+original. They return `proposal` and `proposal_diffs`. Stripping foreign
+scripts must not turn a vocal lyric into a valid empty song.
+`assert_lyrics_language(..., repair=False)` is the default.
 
-Do not use `startswith("es")` / `startswith("en")`: `English` starts with
-`es`, and `en español` starts with `en`.
+Required verbatim spans (`protected_segments`) must appear **exactly**,
+including newlines. Missing spans are invalid.
 
-A valid WAV is not proof of language fidelity. CI runs these tests without
-GPU. Real smoke should call the same guard after a local song is written.
+Shared corpus: `tests/fixtures/lyrics_language_corpus.json`, executed by
+Python and TypeScript.
 
 ## Follow-up
 
-Call the guard from Story Lab generate and `/api/v1/llm/write-song`. Do not
-silently replace user-authored Spanish lines.
+Phase 6 wires this guard at the server enqueue boundary. Do not touch
+`_launch_runtime.py` or `StoryLabPanel` here.

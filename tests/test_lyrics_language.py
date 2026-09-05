@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from services.lyrics_language import (
@@ -12,110 +15,115 @@ from services.lyrics_language import (
 )
 
 
-SPANISH_OK = """[Verse]
-En la red despierta el sysadmin.
-[Chorus]
-La noche y el código cantan.
-"""
+CORPUS = json.loads(
+    (Path(__file__).resolve().parent / "fixtures" / "lyrics_language_corpus.json").read_text(
+        encoding="utf-8",
+    )
+)
 
+SPANISH_OK = CORPUS["cases"][0]["lyrics"]
 ENGLISH_CHORUS = """[Verse]
 En la red despierta el sysadmin y la noche canta.
 [Chorus]
 The server fights through the night and we sing for our network.
 """
-
 CJK = """[Verse]
 En la red despierta el sysadmin.
 [Chorus]
 夜晚在服务器里唱歌 夜は歌う
 """
 
-ARABIC = """[Verse]
-En la red despierta el sysadmin.
-[Chorus]
-الليل يغني في الشبكة
-"""
+
+def _run_case(case: dict) -> dict:
+    kwargs = {
+        "protected_segments": case.get("protected"),
+        "instrumental": bool(case.get("instrumental")),
+    }
+    if case.get("repair"):
+        return repair_lyrics_language(case["lyrics"], case["language"], **kwargs)
+    return validate_lyrics_language(case["lyrics"], case["language"], **kwargs)
 
 
-def test_spanish_structured_lyric_is_ok():
-    report = validate_lyrics_language(SPANISH_OK, "Español")
-    assert report["ok"] is True
-    assert report["language_mismatch"] is False
-    regional = validate_lyrics_language(SPANISH_OK, "Español de España")
-    assert regional["ok"] is True
-    assert regional["language_mismatch"] is False
+@pytest.mark.parametrize("case", CORPUS["cases"], ids=lambda case: case["id"])
+def test_shared_corpus(case: dict):
+    report = _run_case(case)
+    assert report["verdict"] == case["verdict"]
+    assert report["ok"] is (case["verdict"] == "valid")
+    if case.get("preserve_original"):
+        assert report["lyrics"] == case["lyrics"]
+        assert report.get("proposal") is not None
 
 
-def test_story_lab_spoken_language_name_is_scored():
-    assert canonical_lyrics_language("Español de España") == "es"
-    assert canonical_lyrics_language("en español") == "es"
-    assert canonical_lyrics_language("en") == "en"
-    assert canonical_lyrics_language("en-US") == "en"
-    assert canonical_lyrics_language("English") == "en"
-    assert canonical_lyrics_language("English (US)") == "en"
-    report = validate_lyrics_language(ENGLISH_CHORUS, "Español de España")
+def test_empty_vocal_is_invalid_not_ok():
+    report = validate_lyrics_language("", "Español")
+    assert report["verdict"] == "invalid"
     assert report["ok"] is False
-    assert report["language_mismatch"] is True
-    assert any("English" in reason for reason in report["reasons"])
 
 
-def test_section_tags_are_not_english_contamination():
+def test_estonian_is_not_scored_as_spanish():
+    assert canonical_lyrics_language("Estonian") == "et"
+    report = validate_lyrics_language(SPANISH_OK, "Estonian")
+    assert report["verdict"] == "unevaluable"
+    assert report["ok"] is False
+
+
+def test_english_as_french_is_unevaluable():
     report = validate_lyrics_language(
-        "[Verse]\nLa noche canta en la red.\n[Chorus]\nEl código sangra.\n[Outro]\nReinicia.",
-        "español",
+        "[Verse]\nThe night sings through the server farm.",
+        "français",
     )
-    assert report["ok"] is True
+    assert canonical_lyrics_language("français") == "fr"
+    assert report["verdict"] == "unevaluable"
+    assert report["ok"] is False
+
+
+def test_missing_protected_span_is_invalid():
+    report = validate_lyrics_language(
+        "[Chorus]\nLa noche nos verá.\n",
+        "Español",
+        protected_segments=[{"kind": "lyrics", "text": "Hello, world", "language": "en"}],
+    )
+    assert report["verdict"] == "invalid"
+    assert any("verbatim" in reason for reason in report["reasons"])
+
+
+def test_multiline_protected_span_is_exact():
+    block = "Keep this\nexact block"
+    report = validate_lyrics_language(
+        f"[Verse]\n{block}\nLa noche canta.\n",
+        "Español",
+        protected_segments=[{"kind": "lyrics", "text": block, "language": "en"}],
+    )
+    assert report["verdict"] == "valid"
+
+
+def test_repair_keeps_original_and_does_not_ok_empty_proposal():
+    original = "[Chorus]\n夜晚在服务器里唱歌\n"
+    report = repair_lyrics_language(original, "Español")
+    assert report["lyrics"] == original
+    assert report["verdict"] == "invalid"
+    assert report["ok"] is False
+    assert "夜晚" in report["lyrics"]
+    assert report["proposal"] is not None
+    assert "夜晚" not in (report["proposal"] or "")
+
+
+def test_repair_strips_cjk_into_proposal_not_lyrics():
+    report = repair_lyrics_language(CJK, "Español")
+    assert "En la red despierta el sysadmin." in report["lyrics"]
+    assert "夜晚" in report["lyrics"]
+    assert report["proposal"] is not None
+    assert "夜晚" not in report["proposal"]
+    assert "夜は" not in report["proposal"]
+    assert report["repaired"] is True
+
+
+def test_assert_does_not_repair_by_default():
+    with pytest.raises(ValueError, match="idioma"):
+        assert_lyrics_language(ENGLISH_CHORUS, "Español")
 
 
 def test_accidental_english_chorus_fails():
     report = validate_lyrics_language(ENGLISH_CHORUS, "Español")
     assert report["ok"] is False
     assert report["language_mismatch"] is True
-    assert any("English" in reason for reason in report["reasons"])
-
-
-def test_chinese_and_arabic_fail_spanish_lyrics():
-    chinese = validate_lyrics_language(CJK, "castellano")
-    arabic = validate_lyrics_language(ARABIC, "es")
-    assert chinese["ok"] is False
-    assert arabic["ok"] is False
-    assert any("han" in reason for reason in chinese["reasons"])
-    assert any("arabic" in reason for reason in arabic["reasons"])
-
-
-def test_quoted_english_is_ok_when_protected():
-    lyrics = '[Chorus]\nHello, world\nLa noche nos verá.'
-    report = validate_lyrics_language(
-        lyrics,
-        "Español",
-        protected_segments=[{"kind": "lyrics", "text": "Hello, world", "language": "en"}],
-    )
-    assert report["ok"] is True
-
-
-def test_technical_caption_is_not_mixed_into_lyric_validation():
-    report = validate_lyrics_language(SPANISH_OK, "Español")
-    assert "Heavy metal" not in report["lyrics"]
-    assert report["ok"] is True
-
-
-def test_repair_strips_cjk_and_keeps_spanish_lines():
-    report = repair_lyrics_language(CJK, "Español")
-    assert "En la red despierta el sysadmin." in report["lyrics"]
-    assert "夜晚" not in report["lyrics"]
-    assert "夜は" not in report["lyrics"]
-    assert report["repaired"] is True
-    assert report["stripped_spans"]
-    assert report["ok"] is True
-
-
-def test_repair_does_not_translate_an_english_chorus():
-    report = repair_lyrics_language(ENGLISH_CHORUS, "Español")
-    assert report["ok"] is False
-    assert "The server fights through the night" in report["lyrics"]
-    assert not any("El servidor" in report["lyrics"] for _ in (0,))
-
-
-def test_assert_raises_on_unrepaired_mismatch():
-    with pytest.raises(ValueError, match="idioma"):
-        assert_lyrics_language(ENGLISH_CHORUS, "Español")

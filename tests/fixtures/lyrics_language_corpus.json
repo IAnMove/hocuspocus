@@ -1,0 +1,78 @@
+{
+  "supported_scored_languages": ["es", "en"],
+  "cases": [
+    {
+      "id": "spanish-structured",
+      "lyrics": "[Verse]\nEn la red despierta el sysadmin.\n[Chorus]\nLa noche y el código cantan.\n",
+      "language": "Español",
+      "verdict": "valid"
+    },
+    {
+      "id": "empty-vocal",
+      "lyrics": "",
+      "language": "Español",
+      "instrumental": false,
+      "verdict": "invalid"
+    },
+    {
+      "id": "english-requested-as-french",
+      "lyrics": "[Verse]\nThe night sings through the server farm.\n[Chorus]\nWe fight for our network.\n",
+      "language": "français",
+      "verdict": "unevaluable"
+    },
+    {
+      "id": "missing-protected-literal",
+      "lyrics": "[Chorus]\nLa noche nos verá.\n",
+      "language": "Español",
+      "protected": [{"kind": "lyrics", "text": "Hello, world", "language": "en"}],
+      "verdict": "invalid"
+    },
+    {
+      "id": "multiline-protected-present",
+      "lyrics": "[Verse]\nKeep this\nexact block\nLa noche canta.\n",
+      "language": "Español",
+      "protected": [{"kind": "lyrics", "text": "Keep this\nexact block", "language": "en"}],
+      "verdict": "valid"
+    },
+    {
+      "id": "cjk-only-repair-must-not-ok-empty",
+      "lyrics": "[Chorus]\n夜晚在服务器里唱歌\n",
+      "language": "Español",
+      "repair": true,
+      "verdict": "invalid",
+      "preserve_original": true
+    },
+    {
+      "id": "estonian-is-not-spanish",
+      "lyrics": "[Verse]\nEn la red despierta el sysadmin.\n[Chorus]\nLa noche y el código cantan.\n",
+      "language": "Estonian",
+      "verdict": "unevaluable"
+    },
+    {
+      "id": "instrumental-empty",
+      "lyrics": "",
+      "language": "Español",
+      "instrumental": true,
+      "verdict": "valid"
+    },
+    {
+      "id": "verse-tags-not-english",
+      "lyrics": "[Verse]\nLa noche canta en la red.\n[Chorus]\nEl código sangra.\n",
+      "language": "español",
+      "verdict": "valid"
+    },
+    {
+      "id": "authorized-english-quote",
+      "lyrics": "[Chorus]\nHello, world\nLa noche nos verá.\n",
+      "language": "Español",
+      "protected": [{"kind": "lyrics", "text": "Hello, world", "language": "en"}],
+      "verdict": "valid"
+    },
+    {
+      "id": "proper-name-sysadmin",
+      "lyrics": "[Verse]\nEl sysadmin reinicia la noche.\n[Chorus]\nLa red sigue viva.\n",
+      "language": "es",
+      "verdict": "valid"
+    }
+  ]
+}
