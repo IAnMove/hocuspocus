@@ -130,6 +130,24 @@ test('structured node:test summary is preferred over mock failed text', () => {
   assert.deepEqual(parseNodeTestSummary('# tests 2\n# pass 2\n# fail 0\n'), {
     tests: 2, pass: 2, fail: 0, skipped: 0, cancelled: 0,
   })
+  assert.deepEqual(parseNodeTestSummary('ℹ tests 2\nℹ pass 2\nℹ fail 0\n'), {
+    tests: 2, pass: 2, fail: 0, skipped: 0, cancelled: 0,
+  })
+  const specReporter = interpretRunnerOutcome({
+    code: 0,
+    stdout: [
+      '✔ example (1ms)',
+      'mock HTTP 500: generation failed',
+      'ℹ tests 1',
+      'ℹ pass 1',
+      'ℹ fail 0',
+    ].join('\n'),
+    stderr: '',
+    timedOut: false,
+    signal: null,
+  }, { label: 'UI' })
+  assert.equal(specReporter.classification, 'pass')
+  assert.equal(specReporter.summary.fail, 0)
   const passed = interpretRunnerOutcome({
     code: 0,
     stdout: [

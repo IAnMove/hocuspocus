@@ -243,9 +243,9 @@ function normalizedTestFile(value) {
 }
 
 export function parseNodeTestSummary(logText) {
-  const text = String(logText || '')
+  const text = String(logText || '').replace(/\u001b\[[0-9;]*m/g, '')
   const pick = name => {
-    const match = text.match(new RegExp(`(?:^|\\n)# ${name}\\s+(\\d+)\\b`, 'i'))
+    const match = text.match(new RegExp(`(?:^|\\n)(?:#|ℹ)\\s*${name}\\s+(\\d+)\\b`, 'i'))
     return match ? Number(match[1]) : null
   }
   const tests = pick('tests')

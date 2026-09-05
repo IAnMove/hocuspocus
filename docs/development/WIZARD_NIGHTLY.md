@@ -49,10 +49,11 @@ coverage exists.
   not a pass.
 
 Classification prefers the process exit code and a structured runner summary
-(`# tests` / `# fail`). Fixture or mock logs that merely contain the word
-`failed` are not a suite failure. If the runner cannot determine the result,
-it reports not evaluable / `INFRASTRUCTURE FAILURE` and never invents
-`PASS`. A green CI job is not real media generation.
+(`# tests` / `ℹ tests` and `# fail` / `ℹ fail`). Fixture or mock logs that
+merely contain the word `failed` are not a suite failure. If the runner
+cannot determine the result, it reports not evaluable /
+`INFRASTRUCTURE FAILURE` and never invents `PASS`. A green CI job is not
+real media generation.
 
 Baseline matching requires both the exact test title and its expected file. A
 different failure in a baseline file is therefore a regression. Keep
