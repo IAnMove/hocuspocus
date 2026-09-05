@@ -43,8 +43,10 @@ jobs:
           set -euo pipefail
           if [ -n "${BASE_SHA:-}" ] && [ -n "${PR_NUMBER:-}" ]; then
             # refs/pull/*/head exists on the base repo for same-repo and fork
-            # PRs. Do not persist credentials; only this fetch sees the token.
-            git -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" \
+            # PRs. GitHub git-over-HTTPS wants basic x-access-token, not Bearer.
+            # The header is one-shot via git -c; credentials are not persisted.
+            AUTH="$(python3 -c "import base64, os; print(base64.b64encode(b'x-access-token:' + os.environ['GH_TOKEN'].encode()).decode())")"
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" \
               fetch --no-tags origin "pull/${PR_NUMBER}/head:refs/remotes/origin/pr-head"
             git diff --no-color --find-renames "${BASE_SHA}...origin/pr-head" > /tmp/pr.diff
           else
