@@ -82,6 +82,8 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertIn('if: always()', text)
         self.assertIn('needs: [guard, ui-check, ui-e2e]', text)
         self.assertNotIn('code-health-comment', text.split('needs: [guard, ui-check, ui-e2e]', 1)[1][:200])
+        self.assertNotIn('independent-qa', text.split('needs: [guard, ui-check, ui-e2e]', 1)[1][:200])
+        self.assertNotIn('Independent QA', text.split('needs: [guard, ui-check, ui-e2e]', 1)[1][:400])
 
     def test_agent_qa_policy_still_lists_ci_required(self):
         text = (ROOT / 'docs/development/AGENT_QA_POLICY.md').read_text(encoding='utf-8')

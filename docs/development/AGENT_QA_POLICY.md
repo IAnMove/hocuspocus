@@ -40,9 +40,11 @@ Do not require human approval reviews that will not be performed. Do not
 treat Analyze pull request as a required technical review.
 
 Independent review uses
-`python scripts/verify_qa_evidence.py` and
-[QA_ACCEPTANCE.md](QA_ACCEPTANCE.md). That validator is **not** a required
-GitHub check yet.
+`python scripts/verify_qa_evidence.py` (format/policy) plus
+`python scripts/verify_qa_provenance.py` (origin). The publisher
+`scripts/publish_qa_check.py` posts the `Independent QA` check from the
+PR base. That check is **not** required and must not be added to
+`CI required` in this PR. See [QA_ACCEPTANCE.md](QA_ACCEPTANCE.md).
 
 ## Remote configuration (inspected 2026-09-05)
 

@@ -56,6 +56,12 @@ Repair loops stay at two automatic attempts. After that, return a
 reproducible block; do not ask a human to finish the technical dispute by
 reading the whole diff.
 
-The GitHub check that would publish this result is **not** required and has
-no write token in this PR. A later authorized adapter may attach a check to
-the tested SHA only after the publisher identity is proven.
+The GitHub check `Independent QA` is published by
+`.github/workflows/qa-evidence.yml` using `scripts/publish_qa_check.py`
+from the PR **base** tree. The check identity is that Actions job
+(`GITHUB_TOKEN` + current `GITHUB_RUN_ID`), not a role declared in JSON.
+
+A format-valid payload without provenance is rejected. Missing
+`qa-evidence.json` on HEAD is **pending** (neutral), never success. Fake
+adapter tests prove the contract only. This check is **not** required.
+Do not add it to `CI required` until an admin authorizes that separately.
