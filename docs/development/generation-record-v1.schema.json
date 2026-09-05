@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hocuspocus.local/schemas/generation-record-v1.schema.json",
+  "title": "HocusPocus Generation Record",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "generation_id",
+    "asset_id",
+    "product",
+    "workspace_id",
+    "output_folder",
+    "prompt_full",
+    "prompt_display",
+    "model",
+    "languages",
+    "timestamps",
+    "status",
+    "lineage",
+    "retry_count",
+    "cancellation",
+    "location",
+    "links"
+  ],
+  "properties": {
+    "schema": { "const": "hocuspocus.generation-record" },
+    "schema_version": { "const": 1 },
+    "generation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "Stable attempt ID. Never recycled. A retry mints a new ID."
+    },
+    "asset_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "Stable artifact ID. Matches asset-manifest asset.id when published. Reused only when the bytes are the same artifact."
+    },
+    "product": {
+      "enum": [
+        "studio",
+        "story_lab",
+        "series_lab",
+        "director",
+        "comic",
+        "tools",
+        "wizard",
+        "video_editor",
+        "video_3d",
+        "character_kit",
+        "system",
+        "unknown"
+      ],
+      "description": "Originating product surface (origin.tool projected onto a closed vocabulary)."
+    },
+    "workspace_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "Workspace collection ID, never an absolute path."
+    },
+    "output_folder": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "Physical output-folder name, never an absolute path."
+    },
+    "project_id": { "type": ["string", "null"] },
+    "production_id": { "type": ["string", "null"] },
+    "cue_id": { "type": ["string", "null"] },
+    "candidate_id": { "type": ["string", "null"] },
+    "song_version": { "type": ["string", "null"] },
+    "prompt_full": { "type": "string" },
+    "prompt_display": {
+      "type": "string",
+      "maxLength": 180,
+      "description": "Truncated prompt for lists. Secrets are not stored here."
+    },
+    "model": { "$ref": "#/$defs/model" },
+    "languages": { "$ref": "#/$defs/languages" },
+    "timestamps": { "$ref": "#/$defs/timestamps" },
+    "status": {
+      "enum": ["planned", "queued", "running", "completed", "failed", "cancelled"],
+      "description": "Asset-manifest prepared maps to planned. Manifest partial is result.kind, not a seventh status."
+    },
+    "lineage": {
+      "type": "object",
+      "required": ["parents", "derivatives"],
+      "properties": {
+        "parents": { "type": "array", "items": { "$ref": "#/$defs/lineageRef" } },
+        "derivatives": { "type": "array", "items": { "$ref": "#/$defs/lineageRef" } }
+      },
+      "additionalProperties": false
+    },
+    "error": { "anyOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }] },
+    "retry_count": { "type": "integer", "minimum": 0 },
+    "cancellation": { "$ref": "#/$defs/cancellation" },
+    "location": { "$ref": "#/$defs/location" },
+    "links": { "$ref": "#/$defs/links" },
+    "result": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "actor": { "enum": ["user", "wizard", "system", "unknown"] },
+        "capability": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "correlations": { "type": "object" }
+  },
+  "$defs": {
+    "model": {
+      "type": "object",
+      "properties": {
+        "provider": { "type": ["string", "null"] },
+        "id": { "type": ["string", "null"] },
+        "version": { "type": ["string", "null"] },
+        "configuration": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "languages": {
+      "type": "object",
+      "properties": {
+        "conversation_language": { "type": ["string", "null"] },
+        "content_language": { "type": ["string", "null"] },
+        "spoken_language": { "type": ["string", "null"] },
+        "technical_prompt_language": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "timestamps": {
+      "type": "object",
+      "properties": {
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "queued_at": { "type": ["string", "null"], "format": "date-time" },
+        "started_at": { "type": ["string", "null"], "format": "date-time" },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" },
+        "duration_ms": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "lineageRef": {
+      "type": "object",
+      "properties": {
+        "generation_id": { "type": "string", "minLength": 1 },
+        "asset_id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string" },
+        "uri": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "cancellation": {
+      "type": "object",
+      "required": ["requested"],
+      "properties": {
+        "requested": { "type": "boolean" },
+        "at": { "type": ["string", "null"], "format": "date-time" },
+        "reason": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "filename": { "type": ["string", "null"] },
+        "uri": { "type": ["string", "null"], "description": "Canonical relative filename, never a host absolute path." },
+        "sidecar": { "type": ["string", "null"], "description": "Relative metadata JSON filename such as clip.meta.json." }
+      },
+      "additionalProperties": false
+    },
+    "links": {
+      "type": "object",
+      "properties": {
+        "activity_id": { "type": ["string", "null"] },
+        "catalog_id": { "type": ["string", "null"], "description": "Library / asset catalog id." },
+        "ui_href": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
