@@ -220,3 +220,31 @@ def test_two_generations_of_the_same_cue_keep_distinct_rows(tmp_path: Path):
 def test_unknown_generation_fails_closed(tmp_path: Path):
     with pytest.raises(MusicFinalizationError, match="Unknown"):
         finalize_reserved_music(workspace_dir=str(tmp_path), generation_id="gen-missing")
+
+
+def test_non_wav_keeps_worker_reported_duration(tmp_path: Path):
+    _library(tmp_path)
+    reserved = _submit(tmp_path)
+    audio = tmp_path / "opening.mp3"
+    audio.write_bytes(b"ID3" + b"\x00" * 32)
+    published = finalize_reserved_music(
+        workspace_dir=str(tmp_path),
+        generation_id=reserved["generation_id"],
+        audio_path=audio,
+        reported_duration_seconds=61.5,
+    )
+    assert published["publication"]["measured_duration_seconds"] == 61.5
+    cue = read_story_library(str(tmp_path))["projects"]["story-1"]["music"]["cues"][0]
+    assert cue["candidates"][0]["durationSeconds"] == 61.5
+
+
+def test_wav_measurement_wins_over_reported_duration(tmp_path: Path):
+    _library(tmp_path)
+    reserved = _submit(tmp_path)
+    published = finalize_reserved_music(
+        workspace_dir=str(tmp_path),
+        generation_id=reserved["generation_id"],
+        audio_path=_wav(tmp_path / "opening.wav"),
+        reported_duration_seconds=99,
+    )
+    assert published["publication"]["measured_duration_seconds"] == 0.25

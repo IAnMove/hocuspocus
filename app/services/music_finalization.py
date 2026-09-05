@@ -49,6 +49,16 @@ def _measure_wav_seconds(path: Path) -> float | None:
         return None
 
 
+def _coerce_duration(value: Any) -> float | None:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0:
+        return None
+    return round(seconds, 3)
+
+
 def _publication(record: Mapping[str, Any]) -> dict[str, Any]:
     value = record.get("publication")
     return dict(value) if isinstance(value, Mapping) else {}
@@ -110,6 +120,7 @@ def _stage_bytes(
     audio_path: str | os.PathLike[str] | None,
     audio_filename: str | None,
     cancel_check: Callable[[], bool] | None,
+    reported_duration_seconds: float | None = None,
 ) -> tuple[dict[str, Any], Path]:
     spec = record.get("spec") if isinstance(record.get("spec"), Mapping) else {}
     publication = _publication(record)
@@ -125,6 +136,10 @@ def _stage_bytes(
     if not destination.is_file():
         raise MusicFinalizationError(f"Audio bytes are missing: {filename}", 409)
     measured = _measure_wav_seconds(destination)
+    if measured is None:
+        measured = _coerce_duration(reported_duration_seconds)
+        if measured is None:
+            measured = _coerce_duration(publication.get("measured_duration_seconds"))
     publication.update({
         "stage": "bytes",
         "audio_filename": filename,
@@ -251,6 +266,7 @@ def finalize_reserved_music(
     audio_filename: str | None = None,
     cancel_check: Callable[[], bool] | None = None,
     fail_after: str | None = None,
+    reported_duration_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Publish reserved IDs to disk + Story. Safe to repeat."""
     store = MusicSubmissionStore(workspace_dir)
@@ -272,6 +288,7 @@ def finalize_reserved_music(
         audio_path=audio_path,
         audio_filename=audio_filename,
         cancel_check=cancel_check,
+        reported_duration_seconds=reported_duration_seconds,
     )
     if fail_after == "bytes":
         raise MusicFinalizationError("injected failure after bytes", 500)

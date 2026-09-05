@@ -84,6 +84,7 @@ def _base_namespace(tmp_path: Path) -> dict:
         "_workspace_dir": lambda _workspace=None: str(tmp_path),
         "_reserve_story_music_submission": lambda _body, _workspace: {},
         "_load_minimax_music_job": lambda _job_id: None,
+        "_finalize_reserved_music_attempt": lambda *_args, **_kwargs: None,
     }
 
 
@@ -122,6 +123,7 @@ def _job(job_id: str, count: int = 2) -> dict:
         "createdAt": now,
         "updatedAt": now,
         "_cancel_requested": False,
+        "generationId": f"gen-{job_id}",
         "request": {
             "prompt": "cinematic dream pop",
             "lyrics": "[Verse]\nAcross the night",
@@ -328,6 +330,12 @@ def test_worker_runs_one_correlated_provider_operation_per_candidate(
     job_id = "minimax-music-123456abcdef"
     namespace["_minimax_music_jobs"][job_id] = _job(job_id, 2)
     calls = []
+    finalized = []
+    namespace["_finalize_reserved_music_attempt"] = (
+        lambda workspace, generation_id, filename, cancelled, duration=None: finalized.append(
+            (generation_id, filename, duration)
+        )
+    )
 
     def generate(**kwargs):
         calls.append(kwargs)
@@ -354,6 +362,10 @@ def test_worker_runs_one_correlated_provider_operation_per_candidate(
         child["taskId"] for child in completed["children"]
     ]
     assert all(child["status"] == "completed" for child in completed["children"])
+    assert finalized == [
+        (f"gen-{job_id}", "candidate-1.mp3", 60),
+        (f"gen-{job_id}", "candidate-2.mp3", 60),
+    ]
 
 
 def test_cancellation_during_provider_call_preserves_returned_audio_and_stops_queue(
@@ -397,6 +409,41 @@ def test_cancellation_during_provider_call_preserves_returned_audio_and_stops_qu
     assert len(calls) == 1
     assert cancelled["children"][0]["status"] == "completed"
     assert cancelled["children"][1]["status"] == "cancelled"
+
+
+def test_worker_keeps_generated_audio_when_finalization_raises(tmp_path, monkeypatch):
+    namespace = _base_namespace(tmp_path)
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("publish failed")
+
+    namespace["_finalize_reserved_music_attempt"] = boom
+    _load(
+        "_minimax_music_job_update",
+        "_minimax_music_child_update",
+        "_minimax_music_claim_candidate",
+        "_finish_unstarted_music_children",
+        "_run_minimax_music_job",
+        namespace=namespace,
+    )
+    job_id = "minimax-music-publishfail"
+    namespace["_minimax_music_jobs"][job_id] = _job(job_id, 1)
+
+    def generate(**kwargs):
+        return [{
+            "filename": "kept.mp3",
+            "audio_path": str(tmp_path / "kept.mp3"),
+            "duration_seconds": 48,
+            "provider": "minimax",
+            "model": "music-3.0",
+            "task_id": kwargs["task_id"],
+            "root_task_id": kwargs["root_task_id"],
+        }]
+
+    monkeypatch.setattr(minimax_music_service, "generate_candidates", generate)
+    namespace["_run_minimax_music_job"](job_id)
+    completed = namespace["_minimax_music_jobs"][job_id]
+    assert completed["status"] == "completed"
+    assert [item["filename"] for item in completed["candidates"]] == ["kept.mp3"]
 
 
 def test_cancelled_waiter_cannot_regress_to_running_or_claim_provider(tmp_path):

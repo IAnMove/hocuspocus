@@ -8,8 +8,10 @@ the reserved `generation_id` and already-produced audio bytes.
 
 ## Stages
 
-1. `bytes` — audio file is in the workspace. Measured duration is stored
-   separately from any requested duration.
+1. `bytes` — audio file is in the workspace. Duration is stored separately
+   from any requested length. WAV is measured from frames. Non-WAV (MiniMax
+   MP3) keeps the worker-reported `duration_seconds` when headers are not
+   WAV.
 2. `manifest` — asset sidecar + generation record projection.
 3. `candidate` — Story library row for the reserved candidate ID.
 
