@@ -278,8 +278,16 @@ def _language_guard(
     lyrics_language: str,
     *,
     instrumental: bool,
+    cover: bool = False,
     protected_segments: Sequence[Mapping[str, Any]] | None,
 ) -> dict[str, Any]:
+    if cover and not str(lyrics or "").strip():
+        return {
+            "ok": True,
+            "verdict": "valid",
+            "reasons": [],
+            "language_mismatch": False,
+        }
     report = validate_lyrics_language(
         lyrics,
         lyrics_language,
@@ -296,10 +304,22 @@ def _language_guard(
 
 def _count_for(request: Mapping[str, Any], entry: Mapping[str, Any]) -> int:
     default = 2 if entry["route"] == "remote_minimax" else 1
+    raw = request.get("count")
+    if raw in (None, ""):
+        return default
     try:
-        return _clamp(_int(request.get("count"), default), 1, int(entry["count_max"]))
+        value = int(raw)
     except (TypeError, ValueError, OverflowError) as exc:
-        raise MusicModelError("Music candidate count must be an integer") from exc
+        raise MusicModelError(
+            f"Music candidate count must be an integer from 1 to {entry['count_max']}",
+        ) from exc
+    if value == 0:
+        return default
+    if value < 1:
+        raise MusicModelError(
+            f"Music candidate count must be an integer from 1 to {entry['count_max']}",
+        )
+    return _clamp(value, 1, int(entry["count_max"]))
 
 
 def _lyrics_language_for(request: Mapping[str, Any]) -> str:
@@ -329,11 +349,17 @@ def freeze_music_spec(request: Mapping[str, Any]) -> dict[str, Any]:
     caption = _clean(request.get("prompt") or request.get("caption"))
     lyrics = str(request.get("lyrics") or "").strip()
     instrumental = bool(request.get("instrumental"))
-    duration = _clamp(
-        _int(request.get("duration_seconds"), 90),
-        int(entry["duration_min"]),
-        int(entry["duration_max"]),
-    )
+    raw_duration = request.get("duration_seconds")
+    if raw_duration in (None, ""):
+        duration = _clamp(90, int(entry["duration_min"]), int(entry["duration_max"]))
+        requested_duration = None
+    else:
+        duration = _clamp(
+            _int(raw_duration, 90),
+            int(entry["duration_min"]),
+            int(entry["duration_max"]),
+        )
+        requested_duration = duration
     count = _count_for(request, entry)
     reference = _clean(request.get("reference_audio_filename")) or None
     compiled = compile_backend_request(
@@ -346,9 +372,11 @@ def freeze_music_spec(request: Mapping[str, Any]) -> dict[str, Any]:
         reference_audio_filename=reference,
     )
     lyrics_language = _lyrics_language_for(request)
+    cover = bool(entry.get("cover"))
     guard = _language_guard(
         lyrics, lyrics_language,
         instrumental=instrumental,
+        cover=cover,
         protected_segments=_protected_segments(request),
     )
     return {
@@ -356,12 +384,12 @@ def freeze_music_spec(request: Mapping[str, Any]) -> dict[str, Any]:
         "guide_revision": GUIDE_REVISION,
         "model": entry["id"],
         "route": entry["route"],
-        "mode": mode_for(entry, instrumental=instrumental, cover=bool(entry.get("cover"))),
+        "mode": mode_for(entry, instrumental=instrumental, cover=cover),
         "prompt": caption,
         "lyrics": lyrics,
         "instrumental": instrumental,
         "count": count,
-        "duration_seconds": duration,
+        "duration_seconds": requested_duration,
         "lyrics_language": lyrics_language or None,
         "languages": {
             "lyrics": lyrics_language or None,

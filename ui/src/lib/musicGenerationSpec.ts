@@ -92,6 +92,16 @@ function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value))
 }
 
+function parseCount(raw: unknown, defaultValue: number, max: number): number {
+  if (raw === undefined || raw === null || raw === '') return defaultValue
+  const numeric = typeof raw === 'number' ? raw : Number(raw)
+  if (numeric === 0) return defaultValue
+  if (!Number.isInteger(numeric)) {
+    throw new Error('Music candidate count must be an integer')
+  }
+  return clamp(numeric, 1, max)
+}
+
 export function catalogEntry(model: string | undefined): MusicModelProfile | null {
   const token = text(model)
   if (!token) return null
@@ -183,7 +193,7 @@ export function compileMusicRequest(entry: MusicModelProfile, draft: MusicGenera
     entry.durationMin,
     entry.durationMax,
   )
-  const count = clamp(Math.trunc(Number(draft.count) || (entry.route === 'remote_minimax' ? 2 : 1)), 1, entry.countMax)
+  const count = parseCount(draft.count, entry.route === 'remote_minimax' ? 2 : 1, entry.countMax)
   return {
     backend: entry.backend,
     model: entry.id,

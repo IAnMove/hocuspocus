@@ -59,6 +59,24 @@ test('remote compile truncates the backend prompt, not the frozen caption', () =
   assert.equal(spec.compiled.backend, 'minimax_api')
 })
 
+test('zero remote count uses the default of two; garbage count throws', () => {
+  const zero = buildMusicGenerationSpec({
+    source: 'story',
+    model: 'music-3.0',
+    caption: 'cinematic dream pop',
+    lyrics: '[Verse]\nLa noche canta',
+    count: 0,
+  })
+  assert.equal(zero.count, 2)
+  assert.throws(() => buildMusicGenerationSpec({
+    source: 'story',
+    model: 'music-3.0',
+    caption: 'cinematic dream pop',
+    lyrics: '[Verse]\nLa noche canta',
+    count: Number.NaN,
+  }))
+})
+
 test('inspect distinguishes known community ports from available backends', () => {
   const community = inspectMusicModel('minimax_music3_gguf')
   assert.equal(community.known, true)

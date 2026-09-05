@@ -153,6 +153,51 @@ def test_spec_snapshot_keeps_local_caption_and_adds_folder():
     assert spec["compiled"]["truncated_prompt"] is False
 
 
+def test_omitted_duration_is_not_a_requested_duration():
+    spec = freeze_music_spec({
+        "model": ACE_DEFAULT,
+        "prompt": "cinematic dream pop",
+        "lyrics": "[Verse]\nLa noche canta",
+    })
+    assert spec["duration_seconds"] is None
+    assert spec["compiled"]["duration_seconds"] == 90
+
+
+def test_cover_without_lyrics_enqueues_when_reference_is_present(tmp_path):
+    record = submit_music_generation(
+        workspace_dir=str(tmp_path),
+        request={
+            "prompt": "cover this folk song",
+            "lyrics": "",
+            "model": "music-cover",
+            "count": 1,
+            "output_folder": "night-shift",
+            "reference_audio_filename": "source.mp3",
+            "idempotency_key": "cmd-cover",
+        },
+    )
+    assert record["spec"]["mode"] == "cover"
+    assert record["spec"]["language_guard"]["verdict"] == "valid"
+    assert record["replay"] is False
+
+
+def test_invalid_count_is_rejected_and_zero_uses_remote_default():
+    with pytest.raises(MusicModelError, match="integer"):
+        freeze_music_spec({
+            "model": "music-3.0",
+            "prompt": "cinematic dream pop",
+            "lyrics": "[Verse]\nLa noche canta",
+            "count": "many",
+        })
+    spec = freeze_music_spec({
+        "model": "music-3.0",
+        "prompt": "cinematic dream pop",
+        "lyrics": "[Verse]\nLa noche canta",
+        "count": 0,
+    })
+    assert spec["count"] == 2
+
+
 def test_compile_backend_request_does_not_fallback_to_ace():
     entry = require_catalog_entry("music-3.0")
     compiled = compile_backend_request(
