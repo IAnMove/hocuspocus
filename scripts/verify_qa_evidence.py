@@ -122,6 +122,8 @@ def validate(
         errors.append("implementer.login does not match --implementer")
     if not impl_login:
         errors.append("implementer.login is required")
+    if not impl_session:
+        errors.append("implementer.session_id is required")
 
     source = str(evidence.get("source") or "").strip()
     if source in FORBIDDEN_INDEPENDENT_SOURCES:
@@ -204,7 +206,7 @@ def validate(
         errors.append("artifacts must be an array")
 
     cost = _as_dict(evidence.get("cost"), "cost", errors)
-    if cost:
+    if "cost" in evidence:
         if "known" not in cost:
             errors.append("cost.known is required (true or false; never invent counts)")
         if cost.get("known") is False and not str(cost.get("note") or "").strip():

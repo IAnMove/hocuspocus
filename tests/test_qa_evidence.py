@@ -172,6 +172,18 @@ def test_unknown_cost_needs_a_note():
     assert any("cost.note" in item for item in errors)
 
 
+def test_empty_cost_object_still_requires_known():
+    errors = _errors(_valid(cost={}))
+    assert any("cost.known" in item for item in errors)
+
+
+def test_missing_implementer_session_fails_separation():
+    payload = _valid()
+    payload["implementer"] = {"login": "impl-bot", "session_id": ""}
+    errors = _errors(payload, require_separation=True)
+    assert any("implementer.session_id" in item for item in errors)
+
+
 def test_cli_accepts_valid_fixture():
     completed = subprocess.run(
         [
