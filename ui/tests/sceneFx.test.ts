@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { FX_CATALOG, parseSceneFx } from '../src/features/sceneFx/types'
 import { parseWorldSfx, worldSfxAudioCues, WORLD_SFX_KINDS } from '../src/features/sceneFx/world'
-import { worldSfxDepthDocument, worldSfxDuelDocument, worldSfxMixedDocument } from '../src/features/sceneFx/worldDemo'
+import { applyWorldSfxDemo, worldSfxDepthDocument, worldSfxDuelDocument, worldSfxMixedDocument } from '../src/features/sceneFx/worldDemo'
 import { fxSamples } from '../src/features/sceneFx/audio'
 import { adoptPreparedSceneDocument, isFxShowcaseDocument, sceneHasAuthoredContent, withFxShowcase } from '../src/features/sceneFx/showcase'
 import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document'
@@ -52,6 +52,21 @@ test('anime showcase preserves the scene and supports oriented energy beams', ()
   assert.equal(rotated[0].rotation, -45)
   assert.equal(parseScene3DDocument({ ...next, sfx: rotated })?.sfx?.[0].rotation, -45)
   assert.equal(source.sfx, undefined)
+})
+
+test('world SFX demos keep authored speakers and append cues instead of replacing the stage', () => {
+  const current = createDefaultScene3DDocument()
+  current.slots[0].sourceUrl = '/api/v1/file/hero.glb?workspace=client-a'
+  current.worldSfx = parseWorldSfx([{ id: 'portal-1', kind: 'portal', start: 0, end: 4, position: { x: 0, y: 1.2, z: -1.5 } }])
+  const adopted = applyWorldSfxDemo(current, 'duel')
+  assert.equal(adopted.mode, 'retain')
+  assert.equal(adopted.document.slots, current.slots)
+  assert.equal(adopted.document.slots[0].sourceUrl, '/api/v1/file/hero.glb?workspace=client-a')
+  assert.equal(adopted.document.worldSfx?.some(cue => cue.id === 'portal-1'), true)
+  assert.equal(adopted.document.worldSfx?.some(cue => cue.kind === 'energy_beam'), true)
+  const empty = applyWorldSfxDemo(createDefaultScene3DDocument(), 'depth')
+  assert.equal(empty.mode, 'replace')
+  assert.equal(empty.document.worldSfx?.[0].id, 'demo-portal')
 })
 
 test('world SFX stay in meters and do not rewrite screen overlays', () => {

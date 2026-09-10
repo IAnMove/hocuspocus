@@ -76,7 +76,7 @@
   "animeShowcase": "Aplicar demo magia y anime",
   "retroShowcase": "Aplicar demo consolas retro y VHS",
   "worldTitle": "SFX en el mundo 3D",
-  "worldHelp": "Estos efectos ocupan una posición en metros. La cámara puede orbitarlos y un objeto opaco puede taparlos. Los overlays de pantalla siguen en 2D.",
+  "worldHelp": "Estos efectos ocupan una posición en metros. La cámara puede orbitarlos y un objeto opaco puede taparlos. Los overlays de pantalla siguen en 2D. Las demos añaden sus cues a la escena abierta; un escenario vacío carga la cámara y el decorado de muestra.",
   "worldScale": "Tamaño (m)",
   "worldPosition": "Posición (m)",
   "worldRotation": "Rotación (°)",
