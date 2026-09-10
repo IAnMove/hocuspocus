@@ -76,7 +76,7 @@
   "animeShowcase": "Apply magic and anime demo",
   "retroShowcase": "Apply retro consoles and VHS demo",
   "worldTitle": "World SFX (3D)",
-  "worldHelp": "These effects sit in the scene in meters. The camera can orbit them and opaque objects can hide them. Screen overlays above stay 2D.",
+  "worldHelp": "These effects sit in the scene in meters. The camera can orbit them and opaque objects can hide them. Screen overlays above stay 2D. Demos add their cues to the open scene; an empty stage loads the sample camera and dressing.",
   "worldScale": "Size (m)",
   "worldPosition": "Position (m)",
   "worldRotation": "Rotation (°)",

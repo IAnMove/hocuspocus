@@ -9,7 +9,7 @@ import { SceneFxOverlay } from '../sceneFx/SceneFxOverlay'
 import { adoptPreparedSceneDocument, withFxShowcase } from '../sceneFx/showcase'
 import { WorldSfxControls } from '../sceneFx/WorldSfxControls'
 import { worldSfxAudioCues } from '../sceneFx/world'
-import { worldSfxDemoDocument } from '../sceneFx/worldDemo'
+import { applyWorldSfxDemo } from '../sceneFx/worldDemo'
 import { WORLD_SFX_SELECT_PREFIX } from './transformGizmo'
 import { Scene3DMotionControls } from './Scene3DMotionControls'
 import { Scene3DSpeakerControls } from './speech/Scene3DSpeakerControls'
@@ -376,14 +376,11 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         onChange={worldSfx => applyScene(current => ({ ...current, worldSfx }))}
         onDemo={id => {
           if (!canMutateWorld3DScene(exportingRef.current)) return
-          const demo = worldSfxDemoDocument(id)
-          const keptUrls = new Set(demo.slots.map(slot => slot.sourceUrl))
-          for (const slot of sceneDoc.slots) if (!keptUrls.has(slot.sourceUrl)) revokeIfBlob(slot.sourceUrl)
-          setCatalogs(current => retainSlotClipCatalogs(sceneDoc.slots, demo.slots, current))
-          bumpGeneration()
-          setPlaying(false); setFrame(0); applyScene(demo)
-          setSelectedId(demo.slots[0]?.id ?? 'subject_1')
-          setSelectedWorldSfxId(demo.worldSfx?.[0]?.id)
+          const adopted = applyWorldSfxDemo(sceneDoc, id)
+          if (adopted.mode === 'replace') adoptMountedScene(adopted.document)
+          else applyScene(adopted.document)
+          setPlaying(false); setFrame(0)
+          setSelectedWorldSfxId(adopted.document.worldSfx?.[adopted.mode === 'replace' ? 0 : (sceneDoc.worldSfx?.length ?? 0)]?.id)
         }} />
       <KineticTextControls cues={sceneDoc.texts} duration={sceneDoc.duration} disabled={editingLocked} onChange={texts => applyScene(current => ({ ...current, texts }))} />
       <Scene3DTransport playing={playing} disabled={exporting} seconds={seconds} duration={sceneDoc.duration} speed={speed}
