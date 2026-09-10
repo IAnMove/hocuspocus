@@ -42,6 +42,7 @@ export function attachScreenPlane(root: Object3D, screen: MediaScreen): Mesh {
     new MeshBasicMaterial({ color: 0x10202c, toneMapped: false, side: DoubleSide }),
   )
   mesh.name = SCREEN_PLANE_NAME
+  mesh.userData.hocusGeneratedScreenPlane = true
   const [x, y, z] = screenPlaneOffset(screen)
   mesh.position.set(x, y, z)
   mesh.rotation.set(screen.pitch ?? 0, screen.yaw ?? 0, screen.roll ?? 0)
@@ -63,4 +64,9 @@ export function detachScreenPlane(root: Object3D, expected = attachedPlanes.get(
 
 export function screenUsesPlane(screen: MediaScreen, standalone: boolean) {
   return !standalone && screen.mode === 'plane'
+}
+
+/** Runtime plane only — a GLB mesh that happens to reuse the generated name stays in speech catalogs. */
+export function isGeneratedScreenPlane(object: Object3D) {
+  return object.userData.hocusGeneratedScreenPlane === true
 }
