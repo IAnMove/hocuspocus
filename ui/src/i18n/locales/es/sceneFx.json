@@ -200,5 +200,8 @@
     "start": "Inicio del vídeo (s)",
     "speed": "Velocidad",
     "loop": "Repetir vídeo"
-  }
+  },
+  "pickerSearch": "Buscar efectos",
+  "pickerSearchHelp": "Fuego, lluvia, portal…",
+  "pickerEmpty": "Ningún efecto coincide con esa búsqueda."
 }

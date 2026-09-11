@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { createUploadSession } from '../asset-picker/upload'
 import { WORLD_BEAM_KINDS, WORLD_SFX_KINDS, createWorldSfx, parseWorldSfx, type WorldSfx, type WorldSfxKind } from './world'
 import type { WorldSfxDemoId } from './worldDemo'
 import { PortalPlaybackControls, WorldSfxMotionControls } from './WorldSfxMotionControls'
+import { WorldSfxThumb } from './WorldSfxThumb'
 
 export function WorldSfxControls({ cues = [], duration, selectedId, disabled, onChange, onSelect, onDemo }: {
   cues?: WorldSfx[]
@@ -22,6 +23,15 @@ export function WorldSfxControls({ cues = [], duration, selectedId, disabled, on
     cuesRef.current = cues
   }, [cues])
   useEffect(() => () => upload.current.abort(), [])
+  const [query, setQuery] = useState('')
+  const kinds = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return WORLD_SFX_KINDS.filter(kind => {
+      if (!needle) return true
+      const label = t(`presets.${kind}` as 'presets.explosion').toLowerCase()
+      return kind.includes(needle) || label.includes(needle)
+    }) as WorldSfxKind[]
+  }, [query, t])
   const update = (id: string, patch: Partial<WorldSfx>) => onChange(parseWorldSfx(cues.map(cue => cue.id === id ? { ...cue, ...patch } : cue)))
   const assignPortalMedia = (id: string, file?: File) => {
     if (!file) return
@@ -90,9 +100,20 @@ export function WorldSfxControls({ cues = [], duration, selectedId, disabled, on
         <WorldSfxMotionControls cue={cue} onChange={patch => update(cue.id, patch)} />
         <button type="button" onClick={() => onChange(cues.filter(item => item.id !== cue.id))} className="min-h-9 text-xs text-red-300">{t('remove')}</button>
       </div>)}
-      <div className="flex flex-wrap gap-2">
-        {WORLD_SFX_KINDS.map(kind => <button key={kind} type="button" disabled={cues.length >= 160} onClick={() => onChange([...cues, createWorldSfx(kind as WorldSfxKind, duration, cues.map(cue => cue.id))])} className="min-h-10 rounded border border-violet-400/40 px-3 text-xs">{t('addWorld')} · {t(`presets.${kind}` as 'presets.explosion')}</button>)}
+      <label className="block text-xs">{t('pickerSearch')}
+        <input value={query} onChange={event => setQuery(event.target.value)} placeholder={t('pickerSearchHelp')}
+          className="mt-1 min-h-9 w-full rounded border border-border bg-bg-tertiary px-2" />
+      </label>
+      <div className="grid max-h-[28rem] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-4" data-testid="world-sfx-picker">
+        {kinds.map(kind => <button key={kind} type="button" disabled={cues.length >= 160}
+          data-testid={`world-sfx-add-${kind}`}
+          onClick={() => onChange([...cues, createWorldSfx(kind, duration, cues.map(cue => cue.id))])}
+          className="overflow-hidden rounded-lg border border-violet-400/40 bg-bg-secondary text-left disabled:opacity-50">
+          <WorldSfxThumb kind={kind} />
+          <span className="block px-2 py-1.5 text-xs font-medium text-text-primary">{t(`presets.${kind}` as 'presets.explosion')}</span>
+        </button>)}
       </div>
+      {kinds.length === 0 && <p className="text-xs text-text-muted">{t('pickerEmpty')}</p>}
     </fieldset>
   </details>
   </div>
