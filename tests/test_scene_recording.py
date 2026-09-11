@@ -6,6 +6,26 @@ import pytest
 from app.services import scene_recording
 
 
+def test_canonical_scene_fps_keeps_24_30_and_60():
+    assert scene_recording.canonical_scene_fps(24) == 24
+    assert scene_recording.canonical_scene_fps(30) == 30
+    assert scene_recording.canonical_scene_fps(60) == 60
+    assert scene_recording.canonical_scene_fps(25) == 30
+    assert scene_recording.canonical_scene_fps("24") == 24
+    assert scene_recording.canonical_scene_fps(None) == 30
+
+
+def test_command_keeps_authored_24fps_instead_of_coercing_to_30():
+    command = scene_recording.build_scene_recording_command(
+        "capture.webm",
+        "scene.mp4",
+        fps=24,
+        duration=10,
+    )
+    assert "fps=24,scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1" in command
+    assert command[command.index("-frames:v") + 1] == "240"
+
+
 def test_command_finalizes_browser_webm_as_compatible_mp4():
     command = scene_recording.build_scene_recording_command(
         "capture.webm",
