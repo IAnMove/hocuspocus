@@ -1299,6 +1299,48 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertIn("workspace=client-a", first["url"])
         self.assertNotEqual(first["name"], "Harbour Shot.webm")
 
+    def test_scene_recording_keeps_authored_24fps(self):
+        from services import core_scene_recording
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            source = Path("outputs", "capture.webm")
+            source.write_bytes(b"webm")
+            seen = []
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                Path(dest).write_bytes(b"mp4-bytes")
+                seen.append({"fps": fps, "duration": duration})
+
+            scene = {
+                "version": 1,
+                "name": "Film Cadence",
+                "width": 720,
+                "height": 1280,
+                "fps": 24,
+                "duration": 5,
+                "layers": [],
+            }
+            with patch("services.core_scene_recording.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.core_scene_recording.publish_generation_sidecar",
+            ):
+                saved = core_scene_recording.finalize_scene_recording(
+                    source_path=str(source),
+                    output_dir=str(Path("outputs")),
+                    scene=scene,
+                    recipe={"engine": "world3d"},
+                    prompt="",
+                    embedded_audio=True,
+                    extra_audio_path=None,
+                    workspace="default",
+                )
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(seen[0]["fps"], 24)
+        self.assertEqual(seen[0]["duration"], 5)
+        self.assertTrue(saved["name"].endswith(".mp4"))
+
     def test_scene_recording_reads_workspace_from_metadata_not_a_form_field(self):
         from services import core_scene_recording
 

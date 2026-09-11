@@ -17,7 +17,11 @@ from urllib.parse import quote
 
 from services import core_workspace as core
 from services.asset_manifest import publish_generation_sidecar
-from services.scene_recording import SceneRecordingTranscodeError, transcode_scene_recording
+from services.scene_recording import (
+    SceneRecordingTranscodeError,
+    canonical_scene_fps,
+    transcode_scene_recording,
+)
 from services.upload_stream import UploadTooLargeError, stream_upload_file
 
 MAX_RECORDING_BYTES = 500 * 1024 * 1024
@@ -97,7 +101,7 @@ def finalize_scene_recording(
         audio_tracks.append({"path": extra_audio_path, "start_time": 0, "volume": 1})
     output_name = recording_output_name(scene)
     output_path = os.path.join(output_dir, output_name)
-    fps = 60 if scene.get("fps") == 60 else 30
+    fps = canonical_scene_fps(scene.get("fps"))
     begun = started_at if started_at is not None else time.time()
     transcode_scene_recording(
         source_path,

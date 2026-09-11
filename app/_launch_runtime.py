@@ -26647,6 +26647,7 @@ async def save_scene_recording(
     """
     from services.scene_recording import (
         SceneRecordingTranscodeError,
+        canonical_scene_fps,
         transcode_scene_recording,
     )
 
@@ -26717,7 +26718,7 @@ async def save_scene_recording(
     output_path = os.path.join(out_dir, output_name)
     upload_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-recording.webm")
     upload_audio_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-audio.wav")
-    fps = 60 if scene.get("fps") == 60 else 30
+    fps = canonical_scene_fps(scene.get("fps"))
     started_at = time.time()
 
     try:
