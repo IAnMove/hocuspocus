@@ -200,5 +200,8 @@
     "start": "Video start (s)",
     "speed": "Speed",
     "loop": "Loop video"
-  }
+  },
+  "pickerSearch": "Search effects",
+  "pickerSearchHelp": "Fire, rain, portal…",
+  "pickerEmpty": "No effects match that search."
 }
