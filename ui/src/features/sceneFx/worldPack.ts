@@ -5,6 +5,7 @@ import {
 import { energyMaterial, ENERGY_NOISE, shieldMaterial, softSparkMaterial, type SparkStyle } from './energyShaders'
 import { fxRandom } from './types'
 import type { WorldSfxKind } from './world'
+import { PACKED_BY_ID, type PackedRecipe } from './packedRecipes'
 
 function sheet(kind: Parameters<typeof energyMaterial>[0], color: string, w: number, h = w, billboard = false) {
   return new Mesh(new PlaneGeometry(w, h), energyMaterial(kind, color, billboard))
@@ -158,7 +159,24 @@ function mediaPortal(color: string) {
   return root
 }
 
+function buildRecipe(recipe: PackedRecipe, color: string) {
+  const root = new Group()
+  for (const item of recipe.sheets ?? []) {
+    const mesh = sheet(item.s, color, item.w, item.h, item.bb !== false)
+    mesh.position.set(item.x ?? 0, item.y ?? 0, item.z ?? 0)
+    if (item.rx) mesh.rotation.x = item.rx
+    mesh.userData.seedOffset = item.seed ?? 0
+    if (item.kind) mesh.userData.kind = item.kind
+    root.add(mesh)
+  }
+  if (recipe.dome) root.add(new Mesh(new SphereGeometry(1, 32, 24), shieldMaterial(color)))
+  if (recipe.pts) root.add(volumePoints(recipe.pts.c || color, recipe.pts.m, recipe.pts.n, recipe.pts.sp, recipe.pts.ht, recipe.pts.sz))
+  return root
+}
+
 export function buildPackedEffect(kind: WorldSfxKind, color: string): Group | null {
+  const recipe = PACKED_BY_ID[kind]
+  if (recipe) return buildRecipe(recipe, color)
   switch (kind) {
     case 'fire': return fire(color)
     case 'rain': return weather('rain', color)

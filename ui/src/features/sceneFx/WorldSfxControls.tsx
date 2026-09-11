@@ -50,7 +50,7 @@ export function WorldSfxControls({ cues = [], duration, selectedId, disabled, on
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="min-h-9 rounded border border-border px-2 text-xs" onClick={() => onSelect(cue.id)}>{t('select')}</button>
           <label>{t('effect')}<select value={cue.kind} onChange={e => update(cue.id, { kind: e.target.value as WorldSfxKind, color: undefined })} className="ml-2 rounded border border-border bg-bg-tertiary p-2">
-            {WORLD_SFX_KINDS.map(kind => <option key={kind} value={kind}>{t(`presets.${kind}`)}</option>)}
+            {WORLD_SFX_KINDS.map(kind => <option key={kind} value={kind}>{t(`presets.${kind}` as 'presets.explosion')}</option>)}
           </select></label>
           <label>{t('color')}<input type="color" value={cue.color} onChange={e => update(cue.id, { color: e.target.value })} /></label>
           <label><input type="checkbox" checked={cue.sound} onChange={e => update(cue.id, { sound: e.target.checked })} /> {t('sound')}</label>
@@ -91,7 +91,7 @@ export function WorldSfxControls({ cues = [], duration, selectedId, disabled, on
         <button type="button" onClick={() => onChange(cues.filter(item => item.id !== cue.id))} className="min-h-9 text-xs text-red-300">{t('remove')}</button>
       </div>)}
       <div className="flex flex-wrap gap-2">
-        {WORLD_SFX_KINDS.map(kind => <button key={kind} type="button" disabled={cues.length >= 64} onClick={() => onChange([...cues, createWorldSfx(kind, duration, cues.map(cue => cue.id))])} className="min-h-10 rounded border border-violet-400/40 px-3 text-xs">{t('addWorld')} · {t(`presets.${kind}`)}</button>)}
+        {WORLD_SFX_KINDS.map(kind => <button key={kind} type="button" disabled={cues.length >= 160} onClick={() => onChange([...cues, createWorldSfx(kind as WorldSfxKind, duration, cues.map(cue => cue.id))])} className="min-h-10 rounded border border-violet-400/40 px-3 text-xs">{t('addWorld')} · {t(`presets.${kind}` as 'presets.explosion')}</button>)}
       </div>
     </fieldset>
   </details>
