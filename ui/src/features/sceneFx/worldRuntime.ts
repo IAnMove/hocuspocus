@@ -142,6 +142,16 @@ function animateMaterials(child: Mesh | Points, cue: WorldSfx, local: number, sp
   }
 }
 
+function packedParticleOffset(kind: string, x: number, y: number, z: number, seconds: number, index: number): [number, number, number] | undefined {
+  if (kind === 'sink') return [x + Math.sin(seconds * .35 + index) * .1, ((y - seconds * .26) % 3 + 3) % 3, z]
+  if (kind === 'dart') return [x, ((y - seconds * 2.5) % 3.4 + 3.4) % 3.4, z]
+  if (kind === 'orbit') {
+    const spin = seconds * 1.25, cos = Math.cos(spin), sin = Math.sin(spin)
+    return [x * cos - z * sin, y + Math.sin(seconds * 2 + index) * .08, x * sin + z * cos]
+  }
+  return undefined
+}
+
 function animateParticles(child: Points, cue: WorldSfx, local: number, span: number) {
   const geometry = child.geometry
   const base = geometry.getAttribute('base')
@@ -149,6 +159,8 @@ function animateParticles(child: Points, cue: WorldSfx, local: number, span: num
   if (!base || !position) return
   for (let i = 0; i < position.count; i++) {
     const bx = base.getX(i), by = base.getY(i), bz = base.getZ(i)
+    const packed = packedParticleOffset(child.userData.kind, bx, by, bz, local, i)
+    if (packed) { position.setXYZ(i, ...packed); continue }
     if (child.userData.kind === 'rise' || child.userData.kind === 'shockdust') {
       const climb = (local * (0.35 + cue.intensity * 0.25) + fxRandom(cue.seed, i) * 1.2) % 1.4
       position.setXYZ(i, bx * (1 + (child.userData.kind === 'shockdust' ? local * 0.4 : 0)), climb, bz * (1 + (child.userData.kind === 'shockdust' ? local * 0.4 : 0)))

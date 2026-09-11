@@ -1,8 +1,9 @@
 import catalog from '../../../../app/shared/scene_effects.json' with { type: 'json' }
 import { parseSceneFx, type SceneFx } from './types'
 import { parseWorldMotion, parsePortalPlayback, type WorldSfxKeyframe, type PortalPlayback } from './worldMotion'
+import { PACKED_FX, type PackedRecipe } from './packedRecipes'
 
-export const WORLD_SFX_KINDS = [
+const CORE_WORLD_SFX_KINDS = [
   'portal', 'magic_circle', 'summoning_gate',
   'lightning', 'energy_beam', 'laser',
   'energy_orb', 'anime_aura', 'arcane_missiles', 'shockwave',
@@ -10,7 +11,8 @@ export const WORLD_SFX_KINDS = [
   'fire', 'rain', 'snow', 'fog', 'shield', 'tornado', 'splash', 'dust', 'ice_burst', 'black_hole',
   'media_portal',
 ] as const
-export type WorldSfxKind = (typeof WORLD_SFX_KINDS)[number]
+export const WORLD_SFX_KINDS = [...CORE_WORLD_SFX_KINDS, ...PACKED_FX.map(item => item.id)] as readonly string[]
+export type WorldSfxKind = (typeof CORE_WORLD_SFX_KINDS)[number] | PackedRecipe['id']
 export const WORLD_BEAM_KINDS = new Set<WorldSfxKind>(['lightning', 'energy_beam', 'laser', 'arcane_missiles'])
 
 export type WorldVec3 = { x: number; y: number; z: number }
@@ -43,7 +45,10 @@ export type WorldSfx = {
   mediaPlayback?: PortalPlayback
 }
 
-const PRESETS = Object.fromEntries(catalog.map(item => [item.id, item]))
+const PRESETS = Object.fromEntries([
+  ...catalog.map(item => [item.id, item]),
+  ...PACKED_FX.map(item => [item.id, { id: item.id, color: item.color, sound: item.sound, collection: 'world' }]),
+])
 const WORLD_DEFAULTS: Partial<Record<WorldSfxKind, { y: number; scale: number }>> = {
   magic_circle: { y: 0.02, scale: 1.4 },
   shockwave: { y: 0.02, scale: 1.4 },
@@ -127,7 +132,7 @@ function parseAnchor(raw: WorldSfxAnchor | undefined): WorldSfxAnchor | undefine
 export function parseWorldSfx(raw: unknown): WorldSfx[] {
   if (!Array.isArray(raw)) return []
   const ids = new Set<string>()
-  return raw.slice(0, 64).flatMap((value: Partial<WorldSfx> | null, index) => {
+  return raw.slice(0, 160).flatMap((value: Partial<WorldSfx> | null, index) => {
     if (!value || !isWorldSfxKind(value.kind) || !PRESETS[value.kind]) return []
     const start = number(value.start, 0, 0, 600)
     const end = number(value.end, start + 2, 0, 600)
@@ -162,10 +167,16 @@ export function parseWorldSfx(raw: unknown): WorldSfx[] {
   })
 }
 
+const SOUND_OVERLAY: Record<string, string> = {
+  crackle: 'sparks', wind: 'smoke', impact: 'explosion', rain: 'rain', pop: 'bubbles',
+  chime: 'stars', rise: 'portal', whoosh: 'speedlines', scan: 'scanline', laser: 'laser',
+  magic: 'magic_circle', power: 'energy_orb', thunder: 'lightning', slash: 'sword_slash',
+}
+
 export function worldSfxAudioCues(cues: readonly WorldSfx[] | undefined): SceneFx[] {
   return parseSceneFx((cues ?? []).map(cue => ({
     id: cue.id,
-    kind: cue.kind,
+    kind: catalog.some(item => item.id === cue.kind) ? cue.kind : SOUND_OVERLAY[PRESETS[cue.kind]?.sound] ?? 'sparks',
     start: cue.start,
     end: cue.end,
     intensity: cue.intensity,
@@ -194,7 +205,7 @@ export function createWorldSfx(kind: WorldSfxKind, duration: number, taken: Iter
 }
 
 export const WORLD_SFX_SCHEMA = {
-  type: 'array', maxItems: 64, items: {
+  type: 'array', maxItems: 160, items: {
     type: 'object', additionalProperties: false,
     properties: {
       id: { type: 'string', maxLength: 160 },
