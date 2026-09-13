@@ -128,7 +128,12 @@
     "closed": "Cerrada",
     "small": "Pequeña",
     "wide": "Abierta",
-    "round": "Redonda"
+    "round": "Redonda",
+    "pressed": "M/B/P · cerrada con presión",
+    "medium": "E · apertura media",
+    "pucker": "U/W · fruncida",
+    "bite": "F/V · dientes sobre labio",
+    "tongue": "L · lengua elevada"
   },
   "alpha": {
     "transparent": "Transparente",
@@ -221,7 +226,12 @@
       "wide": "Abierta",
       "round": "Redonda",
       "open-eyes": "Ojos",
-      "blink": "Cerrar ojos"
+      "blink": "Cerrar ojos",
+      "pressed": "M/B/P · cerrada con presión",
+      "medium": "E · apertura media",
+      "pucker": "U/W · fruncida",
+      "bite": "F/V · dientes sobre labio",
+      "tongue": "L · lengua elevada"
     },
     "promptUsed": "Prompt usado para {{name}}",
     "cleaningCutout": "Limpiando recorte…",
@@ -316,7 +326,7 @@
       "mouthTooLow": "En un recorte de cuerpo entero las bocas suelen quedar por encima del pecho. Mueve Abajo/Arriba hasta tapar los labios y luego bloquea las bocas."
     },
     "existingMouths": "Bocas existentes",
-    "packHint": "Elige un estilo, revisa sus cuatro formas y aplica el pack al personaje. Las bocas quedan pendientes hasta que las revises.",
+    "packHint": "Elige un estilo, revisa sus posiciones de boca y aplica el pack al personaje. Las bocas quedan pendientes hasta que las revises.",
     "packsUnavailable": "No hay packs de bocas disponibles. Recarga el taller para volver a cargar el catálogo.",
     "stepPlace": "1. Cubre y borra la boca original",
     "stepChoose": "2. Elige bocas existentes o genera unas nuevas",
@@ -329,7 +339,12 @@
     "playSample": "Reproducir frase de muestra incluida",
     "stopSample": "Detener muestra",
     "sampleHint": "Frase grabada en inglés con tiempos de boca, incluida en la app. Usa tus bocas sin generar audio ni cambiar la voz guardada del personaje.",
-    "sampleUnavailable": "No se ha podido cargar la muestra incluida."
+    "sampleUnavailable": "No se ha podido cargar la muestra incluida.",
+    "downloadPack": "Descargar este estilo",
+    "downloadCollection": "Descargar los 20 estilos nuevos",
+    "downloading": "Preparando descarga…",
+    "phoneticPositions": "Posiciones fonéticas adicionales",
+    "restHint": "Al guardar, la boca de reposo se incorpora a la imagen reutilizable del personaje. También se usará cuando escuche o no tenga diálogo."
   },
   "facePatch": {
     "title": "Parche raster de sustitución de boca",
@@ -346,7 +361,7 @@
     "wipedPending": "Hay una nueva imagen sin boca lista. Revisa y aprueba la pose antes de montarla.",
     "disabled": {
       "external": "La edición de parches faciales está desactivada.",
-      "eyes": "Los parches de sustitución raster solo se aplican a los estados de boca cerrada, pequeña, abierta o redonda. Los ojos se gestionan aparte.",
+      "eyes": "Los parches de sustitución raster solo se aplican a los estados de boca. Los ojos se gestionan aparte.",
       "pose": "Aprueba esta pose base antes de preparar un parche facial.",
       "rotation": "Devuelve la caja de la boca a 0° antes de preparar un parche facial."
     },

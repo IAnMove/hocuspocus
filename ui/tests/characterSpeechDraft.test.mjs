@@ -75,6 +75,15 @@ function sampleKit() {
   return kit
 }
 
+test('nine-mouth kits and their resting composite survive the scoped recovery draft', () => {
+  const kit = sampleKit()
+  for (const state of ['pressed', 'medium', 'pucker', 'bite', 'tongue']) kit.mouth[state] = asset(state)
+  kit.restPose = { asset: asset('rest', 'pending', '/rest.png', 'image'), fingerprint: 'saved-base-and-mouth' }
+  writeSpeechDraft('extended', { baseRevision: 7, kit }, kit.id)
+  assert.deepEqual(readSpeechDraft('extended', kit.id)?.kit, kit)
+  clearSpeechDraft('extended', kit.id)
+})
+
 function resetStorage() {
   dom.window.sessionStorage.clear()
   for (const workspace of ['default', 'workspace-a', 'workspace-b', 'malformed', 'blob', 'oversized', 'quota']) {

@@ -1,6 +1,8 @@
 import type { Scene, SceneFaceBinding, SceneFaceBindingState, SceneKeyframe, SceneLayer } from '../types'
+import { CHARACTER_MOUTH_STATES, MOUTH_STATE_FALLBACK, type CharacterMouthState } from './characterMouthStates'
+import { planPhoneticCutoutDialogue } from './cutoutPhonetic'
 
-export type CutoutViseme = 'closed' | 'small' | 'wide' | 'round'
+export type CutoutViseme = CharacterMouthState
 
 export type CutoutDialoguePlan = {
   start: number
@@ -8,13 +10,7 @@ export type CutoutDialoguePlan = {
   visemes: Array<{ start: number; end: number; state: CutoutViseme }>
 }
 
-export type CutoutMouthLayers = {
-  open?: SceneLayer
-  closed?: SceneLayer
-  small?: SceneLayer
-  wide?: SceneLayer
-  round?: SceneLayer
-}
+export type CutoutMouthLayers = Partial<Record<CutoutViseme | 'open', SceneLayer>>
 
 export type SceneDialogueBeat = NonNullable<Scene['dialogueBeats']>[number]
 
@@ -24,7 +20,7 @@ const isMouthState = (layer: SceneLayer, state: CutoutViseme | 'open') => {
   return label.includes('mouth') && new RegExp(`(?:mouth[ _-]*${state}|${state}[ _-]*mouth)`, 'i').test(label)
 }
 
-const FACE_STATES: SceneFaceBindingState[] = ['closed', 'small', 'wide', 'round', 'blink', 'open']
+const FACE_STATES: SceneFaceBindingState[] = [...CHARACTER_MOUTH_STATES, 'blink', 'open']
 
 /** Parse the additive facial metadata while keeping malformed imported data inert. */
 export function normalizeFaceBinding(value: unknown): SceneFaceBinding | undefined {
@@ -63,7 +59,7 @@ export function findCutoutMouthLayers(layers: SceneLayer[], poseLayerId?: string
     || !layer.faceBinding && layer.relationship?.type === 'parent' && isCutoutFaceLayer(layer))
   const candidates = scoped.length ? scoped : poseLayerId && hasAssignedMouthKit ? [] : visual
   const find = (state: CutoutViseme | 'open') => candidates.find(layer => bindingState(layer, state)) ?? candidates.find(layer => isMouthState(layer, state))
-  return { open: find('open'), closed: find('closed'), small: find('small'), wide: find('wide'), round: find('round') }
+  return { open: find('open'), ...Object.fromEntries(CHARACTER_MOUTH_STATES.map(state => [state, find(state)])) }
 }
 
 export function isCutoutFaceLayer(layer: SceneLayer): boolean {
@@ -281,7 +277,7 @@ export function rebuildCutoutDialogueLayers(
   for (const beat of beats) {
     const last = groups.at(-1)
     const sameMouths = last && last[0].mouthLayerIds.join('\0') === beat.mouthLayerIds.join('\0')
-    const alignedRun = beat.confidence === 'aligned-audio' && last?.[0].confidence === 'aligned-audio'
+    const alignedRun = !beat.lipSync && !last?.[0].lipSync && beat.confidence === 'aligned-audio' && last?.[0].confidence === 'aligned-audio'
     if (sameMouths && alignedRun) last.push(beat)
     else groups.push([beat])
   }
@@ -292,14 +288,14 @@ export function rebuildCutoutDialogueLayers(
     if (!(mouthLayers.open ?? mouthLayers.small ?? mouthLayers.wide ?? mouthLayers.round)) continue
     const units = normalizeAlignedCutoutUnits(group, 0, duration)
     if (!units.length) continue
-    const plan = group[0].confidence === 'aligned-audio'
+    const plan = planPhoneticCutoutDialogue(group[0], duration) ?? (group[0].confidence === 'aligned-audio' && !group[0].lipSync
       ? planAlignedCutoutDialogue(units, fps)
       : planCutoutDialogue(
         group[0].text,
         Math.max(0, Math.min(duration, group[0].start)),
         Math.max(group[0].start + 1 / Math.max(1, fps), Math.min(duration, group[0].end)),
         fps,
-      )
+      ))
     if (plan.start >= duration) continue
     const generated = applyCutoutDialogue(mouthLayers, plan)
     for (const [layerId, frames] of Object.entries(generated)) {
@@ -326,7 +322,8 @@ export function applyCutoutDialogue(layers: CutoutMouthLayers, plan: CutoutDialo
   const participants = [...new Set(Object.values(layers).filter((layer): layer is SceneLayer => Boolean(layer)))]
   const framesByLayer = Object.fromEntries(participants.map(layer => [layer.id, [] as SceneKeyframe[]]))
   for (const beat of plan.visemes) {
-    const active = beat.state === 'closed' ? layers.closed : layers[beat.state] ?? speakingFallback
+    const fallback = MOUTH_STATE_FALLBACK[beat.state]
+    const active = layers[beat.state] ?? (fallback === 'closed' ? layers.closed : layers[fallback] ?? speakingFallback)
     for (const layer of participants) framesByLayer[layer.id].push(pointFor(layer, beat.start, Number(layer === active)))
   }
   // Keyframe arrays need a terminal pose even when the final beat began before

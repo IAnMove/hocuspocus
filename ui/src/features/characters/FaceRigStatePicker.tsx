@@ -1,6 +1,7 @@
 import { useUiTranslation } from '../../i18n'
 import type { CharacterKit } from '../../lib/characterKit'
 import { isFaceRigEyeState, type CharacterKitFaceRigState } from '../../lib/characterKitFaceRig'
+import { CHARACTER_MOUTH_STATES } from '../../lib/characterMouthStates'
 
 export function FaceRigStatePicker({ kit, selected, disabled, onSelect }: {
   kit: CharacterKit; selected: CharacterKitFaceRigState; disabled: boolean; onSelect: (state: CharacterKitFaceRigState) => void
@@ -16,6 +17,9 @@ export function FaceRigStatePicker({ kit, selected, disabled, onSelect }: {
   }
   return <>
     <div className="grid grid-cols-4 gap-2">{(['closed', 'small', 'wide', 'round'] as const).map(choice)}</div>
+    {CHARACTER_MOUTH_STATES.slice(4).some(state => kit.mouth[state]) && <div aria-label={t('faceRig.phoneticPositions')} className="grid grid-cols-3 gap-2">
+      {CHARACTER_MOUTH_STATES.slice(4).filter(state => kit.mouth[state]).map(choice)}
+    </div>}
     <details className="rounded border border-border p-3" onToggle={event => {
       if (!event.currentTarget.open && isFaceRigEyeState(selected)) onSelect('wide')
     }}>

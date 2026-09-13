@@ -1,4 +1,5 @@
 import { planCutoutDialogue } from './cutoutDialogue'
+import { CHARACTER_MOUTH_STATES } from './characterMouthStates'
 import {
   DEFAULT_CHARACTER_BLINK_ANCHOR,
   DEFAULT_CHARACTER_MOUTH_ANCHOR,
@@ -9,7 +10,7 @@ import {
   type CharacterMouthState,
 } from './characterKit'
 
-export const CHARACTER_FACE_RIG_STATES = ['closed', 'small', 'wide', 'round', 'open-eyes', 'blink'] as const
+export const CHARACTER_FACE_RIG_STATES = [...CHARACTER_MOUTH_STATES, 'open-eyes', 'blink'] as const
 export type CharacterKitFaceRigState = typeof CHARACTER_FACE_RIG_STATES[number]
 
 export function facePatchControls(kit: CharacterKit, asset: CharacterKitAsset | undefined, disabled: boolean | undefined, busy: unknown) {
@@ -275,6 +276,7 @@ export function lockFaceRigMouthPlacement(
     small: nextAnchor,
     wide: nextAnchor,
     round: nextAnchor,
+    pressed: nextAnchor, medium: nextAnchor, pucker: nextAnchor, bite: nextAnchor, tongue: nextAnchor,
   }
   return {
     ...kit,
@@ -501,6 +503,7 @@ export interface FaceRigMouthPresetPack {
   style?: string
   notes?: string
   states: Partial<Record<CharacterMouthState, { file: string }>>
+  collection?: string
 }
 
 /** Attach a reusable viseme pack as pending overlays. Does not approve placement. */
@@ -510,8 +513,8 @@ export function applyFaceRigMouthPreset(
   workspace?: string,
 ): CharacterKit {
   if (!pack.id.trim()) throw new Error('Choose a mouth style pack first.')
-  let next = kit
-  for (const state of FACE_RIG_MOUTH_STATES) {
+  let next = { ...kit, mouth: {} } as CharacterKit
+  for (const state of CHARACTER_MOUTH_STATES) {
     const file = pack.states[state]?.file
     if (!file) continue
     const source = `${FACE_RIG_PRESET_ROOT}/${file.replace(/^\/+/, '')}`
@@ -531,7 +534,7 @@ export function applyFaceRigMouthPreset(
       methodHint: 'character-kit-face-rig-preset',
     })
   }
-  if (next === kit) throw new Error(`Pack “${pack.label}” has no closed/small/wide/round overlays.`)
+  if (!Object.keys(next.mouth).length) throw new Error(`Pack “${pack.label}” has no closed/small/wide/round overlays.`)
   return next
 }
 export const FACE_RIG_DIALOGUE_MIN_SECONDS = 2

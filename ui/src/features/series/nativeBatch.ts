@@ -10,7 +10,8 @@ import { openAgentSeriesReviewView, openAgentSeriesSection, requestAgentSceneWor
 import type { SeriesEpisode, SeriesProject } from './types'
 import type { CharacterKitLibrary } from '../../lib/characterKit'
 import type { CharacterKitReviewPolicy } from '../../lib/characterKitReview'
-import { applySeriesLipSync, seriesLipSyncFingerprint, seriesLipSyncIssues, seriesSpeakerKit } from './nativeLipSync'
+import { applySeriesLipSync, seriesLipSyncFingerprint, seriesLipSyncIssues, seriesRestKit } from './nativeLipSync'
+import { analyzeNativeSpeech } from './nativeSpeechAnalysis'
 import { latestNativeTake } from './nativeTake'
 import { nativeGenerationPlan, type NativeGenerationMode } from './nativeGenerationPlan'
 import { seriesAssetUrl } from './referenceImages'
@@ -27,7 +28,7 @@ function source(workspace: string, seriesId: string, episodeId: string) {
   return { series, episode }
 }
 
-async function cleanShotCharacters(workspace: string, seriesId: string, episodeId: string, shotId: string, kits: CharacterKitLibrary) {
+async function cleanShotCharacters(workspace: string, seriesId: string, episodeId: string, shotId: string, kits: CharacterKitLibrary, policy: CharacterKitReviewPolicy) {
   const { series, episode } = source(workspace, seriesId, episodeId)
   const shot = episode.shots.find(item => item.id === shotId)!
   const refs = seriesShotReferences(series, episode, shot)
@@ -36,7 +37,7 @@ async function cleanShotCharacters(workspace: string, seriesId: string, episodeI
   for (const person of refs.people) {
     useSeriesNativeBatch.setState({ phase: 'cleaning' })
     const current = source(workspace, seriesId, episodeId).series
-    const kit = shot.dialogueBeats.some(beat => beat.characterId === person.id) ? seriesSpeakerKit(workspace, current, person.id, kits) : undefined
+    const kit = seriesRestKit(workspace, current, person.id, kits, policy)
     if (kit?.base?.alphaStatus === 'transparent') { bodySources[person.id] = kit.base.source; continue }
     const variant = kit?.base ? { sourceKey: JSON.stringify([kit.id, kit.base.id, kit.base.source]),
       sourceUrl: /^(https?:|\/)/.test(kit.base.source) ? kit.base.source : api.getFileUrl(kit.base.source, workspace) } : undefined
@@ -52,13 +53,15 @@ async function renderNativeShot(workspace: string, seriesId: string, episodeId: 
   const kits = await api.fetchCharacterKitLibrary(workspace)
   const before = source(workspace, seriesId, episodeId)
   assertLipSyncReady(workspace, before.series, [before.episode.shots.find(item => item.id === shotId)!], kits, policy)
-  const bodySources = await cleanShotCharacters(workspace, seriesId, episodeId, shotId, kits)
+  const bodySources = await cleanShotCharacters(workspace, seriesId, episodeId, shotId, kits, policy)
   const { series, episode } = source(workspace, seriesId, episodeId)
   const shot = episode.shots.find(item => item.id === shotId)!
   useSeriesNativeBatch.setState({ phase: 'voices' })
   const prepared = mode !== 'missing' && latestNativeTake(series, shot)
     ? await updateSavedLipSync(workspace, series, episode, shot, kits, bodySources)
     : await prepareNativeDraft(workspace, series, episode, shot, kits, bodySources, policy)
+  useSeriesNativeBatch.setState({ phase: 'analyzing' })
+  prepared.scene = await analyzeNativeSpeech(prepared.scene, workspace, series.language)
   source(workspace, seriesId, episodeId)
   useSeriesStore.getState().updateEpisode(episodeId, current => ({ ...current,
     shots: current.shots.map(item => item.id === shotId ? { ...item, durationSeconds: prepared.shot.durationSeconds } : item) }))

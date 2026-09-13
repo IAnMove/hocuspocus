@@ -1,6 +1,7 @@
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from './safeStorage'
 import { validateFacePatchMetadata } from './characterFacePatch'
 import type { CharacterKit, CharacterKitAsset } from './characterKit'
+import { CHARACTER_MOUTH_STATES } from './characterMouthStates'
 
 const STORAGE_PREFIX = 'hocuspocus-character-speech-draft-v1'
 const PAYLOAD_VERSION = 1
@@ -16,7 +17,7 @@ const ID_PATTERN = new RegExp(`^[A-Za-z0-9][A-Za-z0-9._-]{0,${MAX_KIT_ID_LENGTH 
 const STYLES = new Set<CharacterKit['style']>(['cutout', 'children-illustration', 'anime-2d'])
 const REVIEW_STATES = new Set<CharacterKitAsset['reviewState']>(['pending', 'approved', 'rejected'])
 const ALPHA_STATES = new Set<CharacterKitAsset['alphaStatus']>(['unknown', 'transparent', 'opaque'])
-const MOUTH_STATES = new Set(['closed', 'small', 'wide', 'round'])
+const MOUTH_STATES = new Set<string>(CHARACTER_MOUTH_STATES)
 const EYE_STATES = new Set(['open', 'blink'])
 
 export type CharacterSpeechDraft = {
@@ -135,6 +136,7 @@ function validateKit(value: unknown): asserts value is CharacterKit {
   if (Object.hasOwn(value, 'identityReference') && value.identityReference !== undefined) {
     validateAsset(value.identityReference, 'Character Kit identity reference')
   }
+  if (value.restPose !== undefined) validateRestPose(value.restPose)
   if (!isRecord(value.poses) || Object.keys(value.poses).length > MAX_POSES) throw new Error('Character Kit poses are invalid.')
   for (const [poseId, asset] of Object.entries(value.poses)) {
     if (!isIdentifier(poseId)) throw new Error('Character Kit pose id is invalid.')
@@ -150,6 +152,11 @@ function validateKit(value: unknown): asserts value is CharacterKit {
   validateOptionalString(value.lookNotes, MAX_PROMPT_LENGTH, 'Character Kit look notes')
   validateOptionalString(value.createdAt, MAX_ASSET_NAME_LENGTH, 'Character Kit createdAt')
   validateOptionalString(value.updatedAt, MAX_ASSET_NAME_LENGTH, 'Character Kit updatedAt')
+}
+
+function validateRestPose(value: unknown): void {
+  if (!isRecord(value) || !isBoundedString(value.fingerprint, 8000, true)) throw new Error('Character resting pose is invalid.')
+  validateAsset(value.asset, 'Character resting pose')
 }
 
 function serializedByteLength(value: string): number {

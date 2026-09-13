@@ -4,6 +4,7 @@ import { mountCharacterKitLayers } from '../../lib/characterKit'
 import { speechPreparationReadiness } from '../../lib/characterSpeechPreparation'
 import { usableCharacterAsset, type CharacterKitReviewPolicy } from '../../lib/characterKitReview'
 import { rebuildCutoutDialogueLayers } from '../../lib/cutoutDialogue'
+import { isFacePatchCompatible } from '../../lib/characterFacePatch'
 import type { SeriesProject, SeriesShot } from './types'
 
 export function seriesSpeakerKit(workspace: string, series: SeriesProject, characterId: string, library: CharacterKitLibrary) {
@@ -14,6 +15,14 @@ export function seriesSpeakerKit(workspace: string, series: SeriesProject, chara
 function hasMouthPlacement(kit?: CharacterKit) {
   const anchor = kit?.anchors.base?.mouth
   return anchor && Object.values(anchor).every(Number.isFinite) && anchor.scale > 0
+}
+
+/** A listener only needs the saved rest pose, not four approved speech drawings. */
+export function seriesRestKit(workspace: string, series: SeriesProject, id: string, library: CharacterKitLibrary,
+  policy: CharacterKitReviewPolicy) {
+  const kit = seriesSpeakerKit(workspace, series, id, library)
+  return kit && usableCharacterAsset(kit.base, policy) && usableCharacterAsset(kit.mouth.closed, policy)
+    && hasMouthPlacement(kit) && isFacePatchCompatible(kit.mouth.closed, 'base', kit.base?.source) ? kit : undefined
 }
 
 export function visibleSeriesSpeakers(shot: SeriesShot) {
@@ -43,8 +52,8 @@ export function seriesLipSyncIssues(workspace: string, series: SeriesProject, sh
 
 /** Only rendering inputs matter; saving unrelated voice/description fields does not stale a take. */
 export function seriesLipSyncFingerprint(workspace: string, series: SeriesProject, shot: SeriesShot, library: CharacterKitLibrary) {
-  const speakers = visibleSeriesSpeakers(shot).sort()
-  return JSON.stringify([2, shot.dialogueBeats, speakers, speakers.map(id => {
+  const speakers = [...shot.visibleCharacterIds].sort()
+  return JSON.stringify([3, shot.dialogueBeats, speakers, speakers.map(id => {
     const kit = seriesSpeakerKit(workspace, series, id, library)
     return [id, kit?.id, kit?.base, kit?.mouth, kit?.anchors.base]
   })])
@@ -55,10 +64,10 @@ export function applySeriesLipSync(scene: Scene, workspace: string, series: Seri
   library: CharacterKitLibrary, bodySources: Record<string, string> = {}, policy: CharacterKitReviewPolicy = 'approved'): Scene {
   const issues = seriesLipSyncIssues(workspace, series, [shot], library, policy)
   if (issues.length) throw new Error(`Lip sync: ${issues.map(issue => `${issue.name} (${issue.reason})`).join(', ')}`)
-  const speakers = new Set(shot.dialogueBeats.map(beat => beat.characterId))
-  let layers = scene.layers.filter(layer => !(layer.faceBinding?.role === 'mouth' && speakers.has(layer.faceBinding.poseLayerId)))
+  const mountedIds = shot.visibleCharacterIds.filter(id => seriesRestKit(workspace, series, id, library, policy))
+  let layers = scene.layers.filter(layer => !(layer.faceBinding?.role === 'mouth' && mountedIds.includes(layer.faceBinding.poseLayerId)))
   const mouths = new Map<string, string[]>()
-  for (const id of visibleSeriesSpeakers(shot)) {
+  for (const id of mountedIds) {
     const body = layers.find(layer => layer.id === id)
     if (!body || body.type !== 'image') throw new Error(`The saved scene has no character layer for ${id}.`)
     const kit = seriesSpeakerKit(workspace, series, id, library)!
@@ -77,8 +86,7 @@ export function applySeriesLipSync(scene: Scene, workspace: string, series: Seri
     if (!beat || beat.text !== line.text || !track || track.prompt !== line.text) {
       throw new Error(`The saved audio does not match dialogue ${line.id}. Prepare its voice in the editor first.`)
     }
-    // Phrase durations are measured from audio; visemes use the editor's known-text planner.
-    // Marking a whole phrase as word-aligned would hold one mouth for the entire line.
+    // The batch analyzes the real recording after mounting. Keep existing cue provenance.
     // An offscreen line keeps its recorded audio and must not animate a visible listener.
     return { ...beat, mouthLayerIds: mouths.get(line.characterId) ?? [], confidence: 'known-text' as const }
   })

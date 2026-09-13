@@ -41,6 +41,31 @@ async function fixture() {
   return { series, episode, shot, kit, library, scene, character }
 }
 
+test('a configured character uses its saved resting mouth in silent shots and while listening', async () => {
+  const { scene, series, shot, library, character, kit } = await fixture()
+  shot.dialogueBeats = []
+  const silentScene = { ...scene, audioTracks: [], dialogueBeats: [] }
+  const result = applySeriesLipSync(silentScene, 'default', series, shot, library)
+  assert.equal(result.layers.find(layer => layer.id === character.id)!.source, kit.base!.source)
+  const mouths = result.layers.filter(layer => layer.faceBinding?.poseLayerId === character.id)
+  assert.equal(mouths.length, 4)
+  for (const time of [0, 2, 5.9]) {
+    assert.equal(evaluateSceneLayer(mouths.find(layer => layer.faceBinding!.state === 'closed')!, time).opacity, 1)
+    assert.ok(mouths.filter(layer => layer.faceBinding!.state !== 'closed').every(layer => evaluateSceneLayer(layer, time).opacity === 0))
+  }
+  const fingerprint = seriesLipSyncFingerprint('default', series, shot, library)
+  kit.mouth.closed!.source = '/different-rest.png'
+  assert.notEqual(seriesLipSyncFingerprint('default', series, shot, library), fingerprint)
+})
+
+test('an incomplete listener keeps its original face rather than being replaced by a mouthless base', async () => {
+  const { scene, series, shot, library, character, kit } = await fixture()
+  shot.dialogueBeats = []; delete kit.mouth.closed
+  const result = applySeriesLipSync({ ...scene, dialogueBeats: [] }, 'default', series, shot, library)
+  assert.equal(result.layers.find(layer => layer.id === character.id)!.source, scene.layers.find(layer => layer.id === character.id)!.source)
+  assert.equal(result.layers.filter(layer => layer.faceBinding?.role === 'mouth').length, 0)
+})
+
 test('saved mouth layers follow the exact speaker, retain the wiped base and motion, and close between repeated turns', async () => {
   const { scene, series, shot, library, character } = await fixture()
   const before = structuredClone(scene)

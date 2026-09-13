@@ -683,7 +683,7 @@
     "sceneUnavailable": "No se encuentra la escena editable de esta toma.",
     "generatedDraft": "Vídeo generado · pendiente de revisión",
     "reviewTake": "Ver toma generada",
-    "lipsyncHint": "Reutiliza las voces y el movimiento de las tomas existentes con las bocas guardadas. Crea versiones nuevas para revisar y conserva las tomas anteriores y las aprobadas. Las voces fuera de plano mantienen su audio. Mantén la pestaña abierta durante la actualización.",
+    "lipsyncHint": "El lipsync usa el audio aislado de cada personaje y sus bocas guardadas. Detecta los sonidos y sus tiempos reales; también usa el guion para las voces en inglés. La boca de reposo se mantiene en los personajes que escuchan.",
     "refreshCharacters": "Actualizar configuración de personajes",
     "updateLipsync": "Regenerar con las bocas guardadas ({{count}})",
     "lipsyncIssues": {
@@ -711,6 +711,7 @@
     "regenerateOne": "Regenerar este plano",
     "simpleHint": "Crea versiones nuevas. Al regenerar, actualiza las bocas y conserva el audio y la edición. Mantén esta pestaña abierta.",
     "productionSettings": "Ajustes de producción",
-    "editShot": "Editar plano"
+    "editShot": "Editar plano",
+    "analyzing": "Sincronizando bocas con el audio…"
   }
 }

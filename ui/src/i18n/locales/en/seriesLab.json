@@ -683,7 +683,7 @@
     "sceneUnavailable": "The editable scene for this take is unavailable.",
     "generatedDraft": "Video generated · awaiting review",
     "reviewTake": "View generated take",
-    "lipsyncHint": "Reuse the recorded voices and motion with the saved mouth setup. Creates new versions for review and preserves previous and approved takes. Offscreen voices keep their audio. Keep this tab open during the update.",
+    "lipsyncHint": "Lip sync analyzes each isolated character recording and uses its saved mouth drawings. It detects sounds and their real timing, also using the script for English voices. Listeners keep their resting mouth.",
     "refreshCharacters": "Refresh character configuration",
     "updateLipsync": "Regenerate with saved mouths ({{count}})",
     "lipsyncIssues": {
@@ -711,6 +711,7 @@
     "regenerateOne": "Regenerate this shot",
     "simpleHint": "Create new versions. Regeneration updates mouths and preserves recorded audio and edits. Keep this tab open.",
     "productionSettings": "Production settings",
-    "editShot": "Edit shot"
+    "editShot": "Edit shot",
+    "analyzing": "Synchronizing mouths with the recording…"
   }
 }

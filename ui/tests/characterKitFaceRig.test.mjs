@@ -49,10 +49,10 @@ test('Face Rig validates a persistent approved base or pose', () => {
   assert.throws(() => validateFaceRigPose({ ...kit, base: { ...pose, source: 'blob:temporary' } }), /persistent pose source/)
 })
 
-test('Face Rig produces six identity-preserving generation requests including open eyes', () => {
+test('Face Rig produces nine mouth requests and two optional eye requests with the same identity', () => {
   const kit = { ...createCharacterKit('Luna'), base: pose }
   const requests = faceRigGenerationRequests(kit, 'base', 'a shy schoolgirl with red braids')
-  assert.deepEqual(requests.map(request => request.state), ['closed', 'small', 'wide', 'round', 'open-eyes', 'blink'])
+  assert.deepEqual(requests.map(request => request.state), ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue', 'open-eyes', 'blink'])
   assert.ok(requests.every(request => request.reference === 'base.png' && request.prompt.includes('a shy schoolgirl with red braids')))
   assert.ok(requests.every(request => request.prompt.includes('ONLY') && request.prompt.includes('transparent') && request.prompt.includes('no full character')))
   assert.match(faceRigPrompt(kit, 'blink'), /eyelids fully closed/)

@@ -128,7 +128,12 @@
     "closed": "Closed",
     "small": "Small",
     "wide": "Open",
-    "round": "Round"
+    "round": "Round",
+    "pressed": "M/B/P · pressed lips",
+    "medium": "E · medium opening",
+    "pucker": "U/W · puckered",
+    "bite": "F/V · teeth on lip",
+    "tongue": "L · raised tongue"
   },
   "alpha": {
     "transparent": "Transparent",
@@ -221,7 +226,12 @@
       "wide": "Open",
       "round": "Round",
       "open-eyes": "Eyes",
-      "blink": "Close eyes"
+      "blink": "Close eyes",
+      "pressed": "M/B/P · pressed lips",
+      "medium": "E · medium opening",
+      "pucker": "U/W · puckered",
+      "bite": "F/V · teeth on lip",
+      "tongue": "L · raised tongue"
     },
     "promptUsed": "Prompt used for {{name}}",
     "cleaningCutout": "Cleaning cutout…",
@@ -316,7 +326,7 @@
       "mouthTooLow": "Mouths on a full-body cutout usually sit above the chest. Nudge Down/Up until the overlay covers the lips, then lock all mouths."
     },
     "existingMouths": "Existing mouths",
-    "packHint": "Choose a style, preview its four shapes, then apply the pack to this character. Applied mouths stay pending until you review them.",
+    "packHint": "Choose a style, preview its mouth positions, then apply the pack to this character. Applied mouths stay pending until you review them.",
     "packsUnavailable": "No mouth packs are available. Reload the workshop to retry loading the catalog.",
     "stepPlace": "1. Cover and erase the original mouth",
     "stepChoose": "2. Choose existing mouths or generate new ones",
@@ -329,7 +339,12 @@
     "playSample": "Play included voice sample",
     "stopSample": "Stop sample",
     "sampleHint": "A recorded English phrase with mouth timings, included with the app. Uses your mouth shapes without generating audio or changing the saved character voice.",
-    "sampleUnavailable": "The included sample could not be loaded."
+    "sampleUnavailable": "The included sample could not be loaded.",
+    "downloadPack": "Download this style",
+    "downloadCollection": "Download the 20 new styles",
+    "downloading": "Preparing download…",
+    "phoneticPositions": "Additional phonetic positions",
+    "restHint": "Saving includes the resting mouth in the reusable character image. It is also used while listening or in silent shots."
   },
   "facePatch": {
     "title": "Raster mouth replacement patch",
@@ -346,7 +361,7 @@
     "wipedPending": "A new mouth-cleaned image is ready. Review and approve the pose before mounting it.",
     "disabled": {
       "external": "Face patch editing is disabled.",
-      "eyes": "Raster replacement patches apply only to closed, small, wide, or round mouth states. Eyes are handled separately.",
+      "eyes": "Raster replacement patches apply only to mouth states. Eyes are handled separately.",
       "pose": "Approve this base pose before preparing a facial patch.",
       "rotation": "Rotate the mouth box back to 0° before preparing a facial patch."
     },
