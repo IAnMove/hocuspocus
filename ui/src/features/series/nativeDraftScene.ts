@@ -5,6 +5,7 @@ import { decodeVoice } from '../scene3d/speech/audio'
 import { buildSeriesShotScene } from './shotScene'
 import type { SeriesEpisode, SeriesProject, SeriesShot } from './types'
 import type { Scene, SceneLayer } from '../../types'
+import { applySeriesLipSync } from './nativeLipSync'
 
 export async function submitSeriesSpeech(params: Record<string, unknown>, pendingKey: string) {
   const pending = localStorage.getItem(pendingKey)
@@ -76,13 +77,14 @@ export function animateSeriesDraft(scene: Scene, shot: SeriesShot): Scene {
 }
 
 export async function prepareNativeDraft(workspace: string, series: SeriesProject, episode: SeriesEpisode,
-  shot: SeriesShot, kits: CharacterKitLibrary) {
+  shot: SeriesShot, kits: CharacterKitLibrary, bodySources: Record<string, string> = {}) {
   const speech = await dialogueAudio(workspace, shot, series, kits)
   const durationSeconds = Math.ceil(speech.duration * 30) / 30
   if (durationSeconds > 180) throw new Error('Split this shot before rendering: its dialogue exceeds three minutes.')
   const currentShot = { ...shot, durationSeconds }
   const prepared = buildSeriesShotScene(workspace, series, episode, currentShot)
   if (prepared.dimension !== '2d') throw new Error('Automatic drafts currently require a 2D shot.')
-  return { shot: currentShot, scene: animateSeriesDraft({ ...prepared.document, audioTracks: speech.audioTracks,
-    dialogueBeats: speech.dialogueBeats }, currentShot) }
+  const scene = animateSeriesDraft({ ...prepared.document, audioTracks: speech.audioTracks,
+    dialogueBeats: speech.dialogueBeats }, currentShot)
+  return { shot: currentShot, scene: applySeriesLipSync(scene, workspace, series, currentShot, kits, bodySources) }
 }

@@ -43,7 +43,7 @@
         "detail": "Rhubarb creates mouth timings, not artwork. MuseTalk changes the face using a model. Neither is connected here yet."
       }
     },
-    "manualOnly": "Manual workshop: no image generation, neural background removal or voice generation here. Those buttons are disabled. Prepare variants externally and import them; the existing scene Face Rig retains its assisted tools.",
+    "manualOnly": "Use existing mouth packs or click the AI generation buttons to create new ones. Nothing is generated until you request it. Review the base and each mouth, then save the speech character.",
     "character": "Saved character",
     "choose": "Choose a character",
     "newCharacter": "New character from an image",
@@ -177,7 +177,7 @@
     },
     "createNew": {
       "summary": "Create a new body or mouths",
-      "hint": "Style and traits are only for generation. Luma and Brin already exist: you do not need this to place their mouth."
+      "hint": "Choose the style and traits for new generated variants. Existing mouth packs are shown below the pose."
     },
     "styles": {
       "paper-cut": "Paper cut",
@@ -211,7 +211,7 @@
     "usePack": "Use pack",
     "poseAlt": "{{name}} pose",
     "overlayAlt": "{{name}} {{state}} overlay",
-    "dragBoxHint": "Drag the box. The corner changes the size.",
+    "dragBoxHint": "Drag the rectangle over the original mouth. Drag its corner horizontally and vertically to change width and height independently. Wiping affects this rectangle; the new mouth keeps its own proportions.",
     "wiping": "Wiping…",
     "wipeMouth": "Wipe mouth area",
     "lockMouths": "Lock mouths",
@@ -254,7 +254,7 @@
     "generatingNamed": "Generating {{name}}…",
     "generateNamed": "Generate / replace {{name}}",
     "generatingPack": "Generating pack…",
-    "generateMissing": "Generate the missing ones",
+    "generateMissing": "Generate missing mouths with AI",
     "tryLine": {
       "sample": "The square is frozen and the bell is too loud.",
       "summary": "Try a line (not saved)",
@@ -314,7 +314,15 @@
       "eyeTooLarge": "This eye overlay is larger than a typical eye mask. Scale it down until it only covers the eyes.",
       "mouthTooLarge": "This mouth overlay is larger than a typical viseme. Scale it down until it sits on the lips.",
       "mouthTooLow": "Mouths on a full-body cutout usually sit above the chest. Nudge Down/Up until the overlay covers the lips, then lock all mouths."
-    }
+    },
+    "existingMouths": "Existing mouths",
+    "packHint": "Choose a style, preview its four shapes, then apply the pack to this character. Applied mouths stay pending until you review them.",
+    "packsUnavailable": "No mouth packs are available. Reload the workshop to retry loading the catalog.",
+    "stepPlace": "1. Cover and erase the original mouth",
+    "stepChoose": "2. Choose existing mouths or generate new ones",
+    "stepTry": "3. Try the mouths with a phrase",
+    "wipeArea": "Mouth erasure area",
+    "resizeArea": "Resize mouth erasure rectangle"
   },
   "facePatch": {
     "title": "Raster mouth replacement patch",

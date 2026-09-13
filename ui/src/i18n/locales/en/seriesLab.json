@@ -682,6 +682,16 @@
     "stopping": "Stopping after this shot",
     "sceneUnavailable": "The editable scene for this take is unavailable.",
     "generatedDraft": "Video generated · awaiting review",
-    "reviewTake": "View generated take"
+    "reviewTake": "View generated take",
+    "lipsyncHint": "2D lip sync uses the saved base pose, four approved mouth shapes and their placement in Character Creator. Mouth timing follows the text within each recorded line. Save the workshop, then refresh here. Updating creates new takes using the existing voices and scene motion; approved takes are preserved.",
+    "refreshCharacters": "Refresh character configuration",
+    "updateLipsync": "Update lip sync in generated takes ({{count}})",
+    "lipsyncIssues": {
+      "link": "Link and save this character in Character Creator.",
+      "pose": "Approve and save the base pose used by the mouth rig.",
+      "mouths": "Prepare, approve and save all four mouth shapes for the current base pose.",
+      "placement": "Place the mouth on the base pose and save the workshop.",
+      "offscreen": "The speaking character is not visible in one of its shots. Check the shot cast."
+    }
   }
 }

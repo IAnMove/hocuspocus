@@ -3,6 +3,7 @@ import { useSeriesNativeBatch } from './nativeBatchState'
 import { allowedSeriesMethods, seriesShotMethod, seriesTakeStage } from './productionMethods'
 import type { SeriesEpisode, SeriesProject } from './types'
 import { primaryButton } from './styles'
+import { SeriesLipSyncPreparation } from './SeriesLipSyncPreparation'
 
 export function SeriesNativeDrafts({ workspace, series, episode }: { workspace: string; series: SeriesProject; episode: SeriesEpisode }) {
   const { t } = useUiTranslation('seriesLab')
@@ -16,6 +17,7 @@ export function SeriesNativeDrafts({ workspace, series, episode }: { workspace: 
     <button className={primaryButton} disabled={job.running || !pending.length} onClick={() => {
       void import('./nativeBatch').then(module => module.generateNativeDrafts(workspace, series.id, episode.id))
     }}>{t('native.generate', { count: pending.length })}</button>
+    <SeriesLipSyncPreparation workspace={workspace} series={series} episode={episode} />
     {own && job.total > 0 && <p role="status" className="text-xs">{t('native.progress', { done: job.completed, total: job.total, order: job.order })}</p>}
     {own && job.error && <p role="alert" className="text-xs text-red-300">{job.error}</p>}
   </section>

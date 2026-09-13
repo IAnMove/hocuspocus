@@ -682,6 +682,16 @@
     "stopping": "Se detendrá al terminar este plano",
     "sceneUnavailable": "No se encuentra la escena editable de esta toma.",
     "generatedDraft": "Vídeo generado · pendiente de revisión",
-    "reviewTake": "Ver toma generada"
+    "reviewTake": "Ver toma generada",
+    "lipsyncHint": "El lipsync 2D usa la pose base guardada, las cuatro bocas aprobadas y su colocación en Character Creator. Los movimientos siguen el texto dentro de la duración de cada frase grabada. Guarda el taller y actualiza aquí. La actualización crea tomas nuevas con las voces y el movimiento existentes; conserva las tomas aprobadas.",
+    "refreshCharacters": "Actualizar configuración de personajes",
+    "updateLipsync": "Actualizar lipsync en tomas generadas ({{count}})",
+    "lipsyncIssues": {
+      "link": "Vincula y guarda este personaje en Character Creator.",
+      "pose": "Aprueba y guarda la pose base que usa la boca.",
+      "mouths": "Prepara, aprueba y guarda las cuatro bocas para la pose base actual.",
+      "placement": "Coloca la boca sobre la pose base y guarda el taller.",
+      "offscreen": "El personaje habla pero no está visible en alguno de sus planos. Revisa el reparto del plano."
+    }
   }
 }

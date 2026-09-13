@@ -415,11 +415,15 @@ export function previewPercentToImagePixel(
 }
 
 /** Fill an elliptical mouth box with sampled nearby skin. Leaves the rest of the pose intact. */
+function mouthWipeDistance(nx: number, ny: number, shape?: 'ellipse' | 'rectangle') {
+  return shape === 'rectangle' ? Math.max(nx * nx, ny * ny) : nx * nx + ny * ny
+}
+
 export function wipeMouthRegion(
   rgba: Uint8ClampedArray,
   width: number,
   height: number,
-  region: { cx: number; cy: number; rx: number; ry: number },
+  region: { cx: number; cy: number; rx: number; ry: number; shape?: 'ellipse' | 'rectangle' },
 ): Uint8ClampedArray {
   if (!(rgba instanceof Uint8ClampedArray) || rgba.length !== width * height * 4) {
     return new Uint8ClampedArray(rgba)
@@ -432,7 +436,7 @@ export function wipeMouthRegion(
     for (let x = 0; x < width; x += 1) {
       const nx = (x - region.cx) / rx
       const ny = (y - region.cy) / ry
-      const d = nx * nx + ny * ny
+      const d = mouthWipeDistance(nx, ny, region.shape)
       if (d < 1.05 || d > 1.45) continue
       const i = (y * width + x) * 4
       if (next[i + 3] < 16) continue
@@ -457,7 +461,7 @@ export function wipeMouthRegion(
     for (let x = 0; x < width; x += 1) {
       const nx = (x - region.cx) / rx
       const ny = (y - region.cy) / ry
-      const d = nx * nx + ny * ny
+      const d = mouthWipeDistance(nx, ny, region.shape)
       if (d > 1) continue
       const i = (y * width + x) * 4
       const mix = d > .72 ? (1 - d) / .28 : 1

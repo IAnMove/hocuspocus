@@ -43,7 +43,7 @@
         "detail": "Rhubarb calcula tiempos de boca, no dibuja las piezas. MuseTalk modifica el rostro con un modelo. Ninguno está conectado aquí todavía."
       }
     },
-    "manualOnly": "Taller manual: aquí no se genera imagen, voz ni se quita el fondo con modelos. Esos botones están deshabilitados. Prepara variantes fuera e impórtalas; Face Rig en escenas conserva sus herramientas asistidas.",
+    "manualOnly": "Puedes usar packs existentes o generar bocas nuevas con los botones de IA. Solo se genera cuando lo solicitas. Revisa la base y cada boca, y guarda el personaje para habla.",
     "character": "Personaje guardado",
     "choose": "Elige un personaje",
     "newCharacter": "Nuevo personaje desde una imagen",
@@ -177,7 +177,7 @@
     },
     "createNew": {
       "summary": "Crear un cuerpo o bocas nuevas",
-      "hint": "Estilo y rasgos solo para generar. Luma y Brin ya existen: no hace falta esto para colocarles la boca."
+      "hint": "Elige el estilo y los rasgos para las variantes que generes. Los packs existentes aparecen debajo de la pose."
     },
     "styles": {
       "paper-cut": "Recorte de papel",
@@ -211,7 +211,7 @@
     "usePack": "Usar pack",
     "poseAlt": "Pose de {{name}}",
     "overlayAlt": "Superposición {{state}} de {{name}}",
-    "dragBoxHint": "Arrastra la caja. La esquina cambia el tamaño.",
+    "dragBoxHint": "Arrastra el rectángulo sobre la boca original. Mueve su esquina en horizontal y vertical para ajustar ancho y alto por separado. Se borra esa zona; la boca nueva conserva sus proporciones.",
     "wiping": "Limpiando…",
     "wipeMouth": "Limpiar zona de la boca",
     "lockMouths": "Bloquear bocas",
@@ -254,7 +254,7 @@
     "generatingNamed": "Generando {{name}}…",
     "generateNamed": "Generar / cambiar {{name}}",
     "generatingPack": "Generando pack…",
-    "generateMissing": "Generar las que faltan",
+    "generateMissing": "Generar bocas que faltan con IA",
     "tryLine": {
       "sample": "El cuadrado está congelado y la campana es demasiado alta.",
       "summary": "Probar una frase (no se guarda)",
@@ -314,7 +314,15 @@
       "eyeTooLarge": "Esta superposición de ojos es más grande que una máscara típica. Redúcela hasta que cubra solo los ojos.",
       "mouthTooLarge": "Esta superposición de boca es más grande que un visema típico. Redúcela hasta que quede sobre los labios.",
       "mouthTooLow": "En un recorte de cuerpo entero las bocas suelen quedar por encima del pecho. Mueve Abajo/Arriba hasta tapar los labios y luego bloquea las bocas."
-    }
+    },
+    "existingMouths": "Bocas existentes",
+    "packHint": "Elige un estilo, revisa sus cuatro formas y aplica el pack al personaje. Las bocas quedan pendientes hasta que las revises.",
+    "packsUnavailable": "No hay packs de bocas disponibles. Recarga el taller para volver a cargar el catálogo.",
+    "stepPlace": "1. Cubre y borra la boca original",
+    "stepChoose": "2. Elige bocas existentes o genera unas nuevas",
+    "stepTry": "3. Prueba las bocas con una frase",
+    "wipeArea": "Zona de borrado de la boca",
+    "resizeArea": "Cambiar tamaño del rectángulo de borrado"
   },
   "facePatch": {
     "title": "Parche raster de sustitución de boca",

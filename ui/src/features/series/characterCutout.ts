@@ -2,28 +2,30 @@ import * as api from '../../api/client'
 import { seriesAssetUrl } from './referenceImages'
 import type { SeriesAsset, SeriesProject } from './types'
 
-export function characterCutout(series: SeriesProject, source: SeriesAsset) {
+export function characterCutout(series: SeriesProject, source: SeriesAsset, sourceKey?: string) {
   return Object.values(series.assets).find(asset => asset.metadata?.backgroundRemoved === true
-    && asset.metadata?.sourceAssetId === source.id && asset.kind === 'image')
+    && asset.metadata?.sourceAssetId === source.id && asset.metadata?.sourceKey === sourceKey && asset.kind === 'image')
 }
 
 const flights = new Map<string, Promise<{ asset: SeriesAsset; series: SeriesProject }>>()
-export function prepareCharacterCutout(workspace: string, series: SeriesProject, source: SeriesAsset) {
-  const key = `${workspace}/${series.id}/${source.id}`
-  const existing = characterCutout(series, source)
+export function prepareCharacterCutout(workspace: string, series: SeriesProject, source: SeriesAsset,
+  variant?: { sourceKey: string; sourceUrl: string }) {
+  const key = `${workspace}/${series.id}/${source.id}${variant ? `/${variant.sourceKey}` : ''}`
+  const existing = characterCutout(series, source, variant?.sourceKey)
   if (existing) return Promise.resolve({ asset: existing, series })
   const running = flights.get(key)
   if (running) return running
-  const request = removeCutout(workspace, series, source, key).finally(() => flights.delete(key))
+  const request = removeCutout(workspace, series, source, key, variant).finally(() => flights.delete(key))
   flights.set(key, request)
   return request
 }
 
-async function removeCutout(workspace: string, series: SeriesProject, source: SeriesAsset, key: string) {
+async function removeCutout(workspace: string, series: SeriesProject, source: SeriesAsset, key: string,
+  variant?: { sourceKey: string; sourceUrl: string }) {
   const storageKey = `hocuspocus:series-cutout:${key}`
   let jobId = localStorage.getItem(storageKey)
   if (!jobId) {
-    const response = await fetch(seriesAssetUrl(source))
+    const response = await fetch(variant?.sourceUrl || seriesAssetUrl(source))
     if (!response.ok) throw new Error('Character image is unavailable')
     const upload = await api.uploadImage(new File([await response.blob()], `${source.id}.png`, { type: 'image/png' }))
     const job = await api.submitToolRemoveBackground({ source: upload.path, source_workspace: '__uploads__', workspace,
@@ -50,7 +52,8 @@ async function removeCutout(workspace: string, series: SeriesProject, source: Se
   // A derived production asset preserves the approved identity and original image.
   const result = await api.importSeriesAsset(workspace, series.id, { uploadPath: upload.path,
     name: `${source.id}-cutout.png`, ownerType: 'series', ownerId: series.id, kind: 'image',
-    metadata: { backgroundRemoved: true, sourceAssetId: source.id, characterId: source.ownerId, jobId } })
+    metadata: { backgroundRemoved: true, sourceAssetId: source.id, characterId: source.ownerId, jobId,
+      ...(variant ? { sourceKey: variant.sourceKey } : {}) } })
   localStorage.removeItem(storageKey)
   return result
 }

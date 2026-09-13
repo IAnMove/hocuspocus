@@ -98,8 +98,8 @@ function SpeechDraftEditor({ kit: draft, workspace, controller }: { kit: Charact
         {readiness.rows.map(row => <li key={row.state} className="rounded border border-border px-2 py-1">{t(`mouths.${row.state}`)}: {t(`speechWorkshop.states.${row.status}`)}</li>)}
       </ul>
       <p className="text-xs text-text-secondary">{t(readiness.previewReady ? 'speechWorkshop.previewReady' : 'speechWorkshop.previewNotReady')}</p>
-      <div className="mx-auto max-w-xl rounded border border-border p-2">
-        <CharacterKitFaceRigPanel key={`${draft.id}:${currentPoseId}`} kit={draft} poseId={currentPoseId} workspace={workspace} disabled={busy} allowModelActions={false} onChange={controller.change} onStatus={controller.setStatus} />
+      <div className="mx-auto w-full max-w-5xl rounded border border-border p-4">
+        <CharacterKitFaceRigPanel key={`${draft.id}:${currentPoseId}`} kit={draft} poseId={currentPoseId} workspace={workspace} disabled={busy} onChange={controller.change} onStatus={controller.setStatus} />
       </div>
     </>
 }
