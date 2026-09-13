@@ -9,15 +9,22 @@ export function SeriesNativeDrafts({ workspace, series, episode }: { workspace: 
   const { t } = useUiTranslation('seriesLab')
   const job = useSeriesNativeBatch()
   if (!allowedSeriesMethods(series).includes('animation_2d')) return null
-  const pending = episode.shots.filter(shot => seriesShotMethod(series, shot) === 'animation_2d' && seriesTakeStage(shot) === 'missing')
+  const shots = episode.shots.filter(shot => seriesShotMethod(series, shot) === 'animation_2d')
+  const pending = shots.filter(shot => seriesTakeStage(shot) === 'missing' && !shot.attempts.some(attempt => ['queued', 'running', 'cancelling'].includes(attempt.status)))
+  const completed = shots.filter(shot => seriesTakeStage(shot) !== 'missing').length
+  if (!shots.length) return null
   const own = job.workspace === workspace && job.seriesId === series.id && job.episodeId === episode.id
-  return <section aria-label={t('native.title')} className="space-y-3 rounded-xl border border-violet-500/40 bg-violet-500/10 p-4">
+  return <section aria-label={t('native.title')} className="space-y-3 rounded-lg border border-border p-3">
     <h3 className="text-sm font-semibold">{t('native.title')}</h3>
+    {pending.length > 0 && <>
     <p className="text-xs text-text-secondary">{t('native.hint')}</p>
     <button className={primaryButton} disabled={job.running || !pending.length} onClick={() => {
       void import('./nativeBatch').then(module => module.generateNativeDrafts(workspace, series.id, episode.id))
     }}>{t('native.generate', { count: pending.length })}</button>
-    <SeriesLipSyncPreparation workspace={workspace} series={series} episode={episode} />
+    </>}
+    {completed > 0 && <p className="text-xs text-text-secondary">{t('native.completedShots', { count: completed })}</p>}
+    <SeriesLipSyncPreparation key={`${workspace}/${series.id}/${episode.id}`} workspace={workspace} series={series} episode={episode}
+      initialShots={pending} hasCompleted={completed > 0} />
     {own && job.total > 0 && <p role="status" className="text-xs">{t('native.progress', { done: job.completed, total: job.total, order: job.order })}</p>}
     {own && job.error && <p role="alert" className="text-xs text-red-300">{job.error}</p>}
   </section>

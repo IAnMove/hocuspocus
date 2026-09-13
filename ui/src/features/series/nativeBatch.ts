@@ -11,7 +11,7 @@ import { openAgentSeriesSection, requestAgentSceneWorkflow } from '../../lib/uiB
 import type { SeriesEpisode, SeriesProject } from './types'
 import type { CharacterKitLibrary } from '../../lib/characterKit'
 import { applySeriesLipSync, seriesLipSyncFingerprint, seriesLipSyncIssues, seriesSpeakerKit } from './nativeLipSync'
-import { latestNativeTake, lipSyncCandidates } from './nativeTake'
+import { latestNativeTake, lipSyncUpdatePlan } from './nativeTake'
 import { seriesAssetUrl } from './referenceImages'
 import i18n from '../../i18n'
 
@@ -112,7 +112,7 @@ export async function generateNativeDrafts(workspace: string, seriesId: string, 
     await useSeriesStore.getState().saveNow()
     const { series, episode } = source(workspace, seriesId, episodeId)
     const kits = await api.fetchCharacterKitLibrary(workspace)
-    const shots = updateLipSync ? lipSyncCandidates(workspace, series, episode, kits) : nativeDraftCandidates(series, episode)
+    const shots = updateLipSync ? lipSyncUpdatePlan(workspace, series, episode, kits).ready : nativeDraftCandidates(series, episode)
     assertLipSyncReady(workspace, series, shots, kits)
     useSeriesNativeBatch.setState({ total: shots.length })
     for (const shot of shots) {

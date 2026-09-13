@@ -15,22 +15,26 @@ function hasMouthPlacement(kit?: CharacterKit) {
   return anchor && Object.values(anchor).every(Number.isFinite) && anchor.scale > 0
 }
 
+export function visibleSeriesSpeakers(shot: SeriesShot) {
+  return [...new Set(shot.dialogueBeats.map(beat => beat.characterId))].filter(id => shot.visibleCharacterIds.includes(id))
+}
+
 export function seriesLipSyncIssues(workspace: string, series: SeriesProject, shots: SeriesShot[], library: CharacterKitLibrary) {
-  const issues = new Map<string, { id: string; name: string; reason: 'link' | 'pose' | 'mouths' | 'placement' | 'offscreen' }>()
-  for (const shot of shots) for (const beat of shot.dialogueBeats) {
-    const kit = seriesSpeakerKit(workspace, series, beat.characterId, library)
+  const issues = new Map<string, { id: string; name: string; reason: 'link' | 'pose' | 'mouths' | 'placement' }>()
+  for (const shot of shots) for (const id of visibleSeriesSpeakers(shot)) {
+    const kit = seriesSpeakerKit(workspace, series, id, library)
     const ready = kit && speechPreparationReadiness(kit, 'base')
-    const reason = !shot.visibleCharacterIds.includes(beat.characterId) ? 'offscreen'
-      : !kit ? 'link' : !ready?.poseApproved ? 'pose' : !ready.complete ? 'mouths' : !hasMouthPlacement(kit) ? 'placement' : undefined
-    if (reason) issues.set(beat.characterId, { id: beat.characterId,
-      name: series.characters.find(character => character.id === beat.characterId)?.name || beat.characterId, reason })
+    const reason = !kit ? 'link' : !ready?.poseApproved ? 'pose' : !ready.complete ? 'mouths' : !hasMouthPlacement(kit) ? 'placement' : undefined
+    if (reason) issues.set(id, { id,
+      name: series.characters.find(character => character.id === id)?.name || id, reason })
   }
   return [...issues.values()]
 }
 
 /** Only rendering inputs matter; saving unrelated voice/description fields does not stale a take. */
 export function seriesLipSyncFingerprint(workspace: string, series: SeriesProject, shot: SeriesShot, library: CharacterKitLibrary) {
-  return JSON.stringify([1, shot.dialogueBeats, [...new Set(shot.dialogueBeats.map(beat => beat.characterId))].sort().map(id => {
+  const speakers = visibleSeriesSpeakers(shot).sort()
+  return JSON.stringify([2, shot.dialogueBeats, speakers, speakers.map(id => {
     const kit = seriesSpeakerKit(workspace, series, id, library)
     return [id, kit?.id, kit?.base, kit?.mouth, kit?.anchors.base]
   })])
@@ -44,7 +48,7 @@ export function applySeriesLipSync(scene: Scene, workspace: string, series: Seri
   const speakers = new Set(shot.dialogueBeats.map(beat => beat.characterId))
   let layers = scene.layers.filter(layer => !(layer.faceBinding?.role === 'mouth' && speakers.has(layer.faceBinding.poseLayerId)))
   const mouths = new Map<string, string[]>()
-  for (const id of speakers) {
+  for (const id of visibleSeriesSpeakers(shot)) {
     const body = layers.find(layer => layer.id === id)
     if (!body || body.type !== 'image') throw new Error(`The saved scene has no character layer for ${id}.`)
     const kit = seriesSpeakerKit(workspace, series, id, library)!
@@ -65,7 +69,8 @@ export function applySeriesLipSync(scene: Scene, workspace: string, series: Seri
     }
     // Phrase durations are measured from audio; visemes use the editor's known-text planner.
     // Marking a whole phrase as word-aligned would hold one mouth for the entire line.
-    return { ...beat, mouthLayerIds: mouths.get(line.characterId)!, confidence: 'known-text' as const }
+    // An offscreen line keeps its recorded audio and must not animate a visible listener.
+    return { ...beat, mouthLayerIds: mouths.get(line.characterId) ?? [], confidence: 'known-text' as const }
   })
   return { ...scene, dialogueBeats,
     layers: rebuildCutoutDialogueLayers(layers, dialogueBeats, scene.fps || 30, scene.duration) }

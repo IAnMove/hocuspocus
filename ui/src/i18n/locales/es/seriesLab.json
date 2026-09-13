@@ -666,7 +666,7 @@
     "hint": "Aprobar personajes y escenarios prepara las referencias; cada plano necesita además una toma de vídeo. Las tomas generadas quedan sin aprobar hasta que las revises."
   },
   "native": {
-    "title": "Generación automática 2D",
+    "title": "Planos 2D",
     "hint": "Genera los planos que faltan: quita fondos de personajes, usa sus voces guardadas y crea animación básica editable. Guarda cada escena y su vídeo sin aprobar la toma. Mantén esta pestaña abierta; puedes detener el lote al terminar el plano actual.",
     "generate": "Generar todos los planos 2D pendientes ({{count}})",
     "removeBackground": "Quitar fondo del personaje",
@@ -683,15 +683,20 @@
     "sceneUnavailable": "No se encuentra la escena editable de esta toma.",
     "generatedDraft": "Vídeo generado · pendiente de revisión",
     "reviewTake": "Ver toma generada",
-    "lipsyncHint": "El lipsync 2D usa la pose base guardada, las cuatro bocas aprobadas y su colocación en Character Creator. Los movimientos siguen el texto dentro de la duración de cada frase grabada. Guarda el taller y actualiza aquí. La actualización crea tomas nuevas con las voces y el movimiento existentes; conserva las tomas aprobadas.",
+    "lipsyncHint": "Reutiliza las voces y el movimiento de las tomas existentes con las bocas guardadas. Crea versiones nuevas para revisar y conserva las tomas anteriores y las aprobadas. Las voces fuera de plano mantienen su audio. Mantén la pestaña abierta durante la actualización.",
     "refreshCharacters": "Actualizar configuración de personajes",
-    "updateLipsync": "Actualizar lipsync en tomas generadas ({{count}})",
+    "updateLipsync": "Actualizar lipsync de {{count}} planos listos",
     "lipsyncIssues": {
       "link": "Vincula y guarda este personaje en Character Creator.",
-      "pose": "Aprueba y guarda la pose base que usa la boca.",
-      "mouths": "Prepara, aprueba y guarda las cuatro bocas para la pose base actual.",
-      "placement": "Coloca la boca sobre la pose base y guarda el taller.",
-      "offscreen": "El personaje habla pero no está visible en alguno de sus planos. Revisa el reparto del plano."
-    }
+      "pose": "La imagen base del taller está sin aprobar. Abre el personaje, pulsa «He revisado esta imagen base» y guarda.",
+      "mouths": "Revisa y aprueba cada una de las cuatro bocas y guarda el personaje.",
+      "placement": "Coloca la boca sobre la pose base y guarda el taller."
+    },
+    "updateOptions": "Actualizar planos tras cambios en personajes",
+    "changedShots": "{{count}} por actualizar",
+    "completedShots": "{{count}} planos 2D ya tienen vídeo.",
+    "blockedUpdates": "{{shots}} planos necesitan revisar la configuración de {{characters}} personajes. Abre sus fichas desde estos enlaces; los demás planos listos pueden actualizarse.",
+    "noUpdates": "No hay tomas pendientes de actualizar. Las tomas aprobadas se conservan.",
+    "initialSpeechSetup": "Antes de generar los planos con diálogo, completa estos personajes:"
   }
 }

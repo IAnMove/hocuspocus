@@ -666,7 +666,7 @@
     "hint": "Approving characters and locations prepares the references; each shot also needs a video take. Generated takes remain unapproved until you review them."
   },
   "native": {
-    "title": "Automatic 2D production",
+    "title": "2D shots",
     "hint": "Generate missing shots: remove character backgrounds, use their saved voices and create editable basic animation. Save every scene and video without approving the take. Keep this tab open; you can stop after the current shot.",
     "generate": "Generate all pending 2D shots ({{count}})",
     "removeBackground": "Remove character background",
@@ -683,15 +683,20 @@
     "sceneUnavailable": "The editable scene for this take is unavailable.",
     "generatedDraft": "Video generated · awaiting review",
     "reviewTake": "View generated take",
-    "lipsyncHint": "2D lip sync uses the saved base pose, four approved mouth shapes and their placement in Character Creator. Mouth timing follows the text within each recorded line. Save the workshop, then refresh here. Updating creates new takes using the existing voices and scene motion; approved takes are preserved.",
+    "lipsyncHint": "Reuse the recorded voices and motion with the saved mouth setup. Creates new versions for review and preserves previous and approved takes. Offscreen voices keep their audio. Keep this tab open during the update.",
     "refreshCharacters": "Refresh character configuration",
-    "updateLipsync": "Update lip sync in generated takes ({{count}})",
+    "updateLipsync": "Update lip sync for {{count}} ready shots",
     "lipsyncIssues": {
       "link": "Link and save this character in Character Creator.",
-      "pose": "Approve and save the base pose used by the mouth rig.",
-      "mouths": "Prepare, approve and save all four mouth shapes for the current base pose.",
-      "placement": "Place the mouth on the base pose and save the workshop.",
-      "offscreen": "The speaking character is not visible in one of its shots. Check the shot cast."
-    }
+      "pose": "The workshop base is unapproved. Open the character, select “I have reviewed this base image” and save.",
+      "mouths": "Review and approve each of the four mouth shapes, then save the character.",
+      "placement": "Place the mouth on the base pose and save the workshop."
+    },
+    "updateOptions": "Update shots after character changes",
+    "changedShots": "{{count}} to update",
+    "completedShots": "{{count}} 2D shots already have video.",
+    "blockedUpdates": "{{shots}} shots need setup reviewed for {{characters}} characters. Open their settings using these links; other ready shots can still be updated.",
+    "noUpdates": "No takes need updating. Approved takes are preserved.",
+    "initialSpeechSetup": "Before generating dialogue shots, complete these characters:"
   }
 }
