@@ -41,6 +41,14 @@ export function SeriesShotProduction({ workspace, series, episode, shot, onChang
       const actualShot = actualEpisode.shots.find(item => item.id === shot.id) || shot
       const [{ buildSeriesShotScene }, { presentSceneDocument }] = await Promise.all([import('./shotScene'), import('../sceneFx/handoff')])
       const prepared = buildSeriesShotScene(workspace, current, actualEpisode, actualShot)
+      const latest = [...actualShot.attempts].reverse().find(attempt => attempt.status === 'completed')
+      const sceneFilename = latest?.outputAssetIds.map(id => current.assets[id]?.metadata?.sceneFilename).find(value => typeof value === 'string')
+      if (prepared.dimension === '2d' && typeof sceneFilename === 'string') {
+        const response = await fetch(api.getFileUrl(sceneFilename, workspace))
+        if (!response.ok) throw new Error(t('native.sceneUnavailable'))
+        const { parseSceneFile } = await import('../../lib/sceneFile')
+        prepared.document = parseSceneFile(await response.text())
+      }
       const stillHere = () => useStore.getState().activeWorkspace === workspace
       if (!stillHere()) throw new Error(t('production.workspaceChanged'))
       sessionStorage.setItem(`hocuspocus:series-scene:${workspace}:${series.id}:${episode.id}:${shot.id}`, JSON.stringify(prepared.document))

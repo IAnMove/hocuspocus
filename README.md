@@ -106,6 +106,8 @@ In **Series Lab → Canon**, generate reference images from each character or lo
 
 For 2D/3D animation, prepare both environments and characters. Each shot shows its environment selector and reference previews, and opens the editor once the episode has approved images for the environment and every visible character. Preparation shortcuts lead directly to the corresponding Bible cards. An establishing shot can use just its environment.
 
+**Generate all pending 2D shots**, available in Shots and Results, removes character backgrounds, generates dialogue with saved character voices, saves editable scenes and renders/imports every missing take. The batch preserves existing drafts and approved takes. Keep the browser tab open; stop finishes the current shot and retry skips completed takes. Character cards also offer **Remove character background**, retaining the original approved image. This first draft uses basic cutout motion; facial mouth rigs remain an editor configuration.
+
 **Results** separates approved references from pending video takes and links to each incomplete item. **Generate AI draft takes** leaves its outputs awaiting review; 2D/3D and imported shots have their own production shortcuts.
 
 You can also enable production methods directly in **Series Lab → Shots**. For an existing episode, select an enabled method and use **Apply to shots without a take** to assign it across unfinished shots; completed and active takes are preserved.

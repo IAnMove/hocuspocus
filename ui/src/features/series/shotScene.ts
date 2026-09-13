@@ -4,6 +4,7 @@ import type { SeriesEpisode, SeriesProject, SeriesShot, SeriesAsset } from './ty
 import { seriesAssetUrl } from './referenceImages'
 import { allowedSeriesMethods, seriesShotMethod } from './productionMethods'
 import { seriesShotReferences } from './shotReferences'
+import { characterCutout } from './characterCutout'
 
 export function buildSeriesShotScene(workspace: string, series: SeriesProject, episode: SeriesEpisode, shot: SeriesShot) {
   const method = seriesShotMethod(series, shot)
@@ -26,7 +27,7 @@ export function buildSeriesShotScene(workspace: string, series: SeriesProject, e
     }
     const document: Scene = { version: 1, name: title, width, height, duration, fps: 30, generationPolicy: 'provided_only',
       layers: [...(background ? [imageLayer(location!.id, location!.name, background, 0, true)] : []),
-        ...people.map((person, index) => imageLayer(person.id, person.name, person.asset!, index))],
+        ...people.map((person, index) => imageLayer(person.id, person.name, characterCutout(series, person.asset!) || person.asset!, index))],
       dialogueBeats: shot.dialogueBeats.map((line, index) => ({ id: line.id, text: line.text, start: index * duration / shot.dialogueBeats.length, end: (index + 1) * duration / shot.dialogueBeats.length, mouthLayerIds: [], confidence: 'known-text' })),
       narrative: { templateId: 'series-shot', controls: { seriesId: series.id, episodeId: episode.id, shotId: shot.id }, visualIntent: shot.action || shot.prompt },
     }

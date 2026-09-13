@@ -112,6 +112,7 @@ async function runSeriesReferenceImage(workspace: string, series: SeriesProject,
 /** Import only the reference change into current edits; a delayed image must not replace authored fields. */
 export function mergeSeriesReferenceImport(current: SeriesProject, result: SeriesReferenceImport): SeriesProject {
   const { asset } = result
+  if (asset.ownerType === 'series') return { ...current, revision: Math.max(current.revision, result.series.revision), assets: { ...current.assets, [asset.id]: asset } }
   if (asset.ownerType === 'attempt') {
     const episodes = { ...current.episodesById }
     for (const remote of Object.values(result.series.episodesById)) {

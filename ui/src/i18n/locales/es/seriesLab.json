@@ -513,7 +513,7 @@
     "reroute": "Reenrutar",
     "advancedDetails": "IDs, estrategia, manifiesto y overrides",
     "noDialogue": "Sin diálogo",
-    "pendingTake": "Toma pendiente",
+    "pendingTake": "Sin vídeo generado",
     "strategyAria": "Estrategia de render del plano {{order}}",
     "auto": "Auto",
     "direct": "T2V directo",
@@ -581,7 +581,7 @@
     "importHint": "Importa el clip terminado como una toma y revísalo antes de aprobarlo para el montaje. Su duración debe cubrir el plano.",
     "importTake": "Importar vídeo como toma",
     "workspaceChanged": "Ha cambiado el espacio de trabajo. Vuelve al plano antes de continuar.",
-    "batchHint": "Los botones de render generan los planos asignados a IA. Los planos 2D, 3D e importados se completan desde sus controles.",
+    "batchHint": "Estos botones generan planos asignados a IA. Para los planos 2D usa Generación automática 2D. Los planos 3D e importados tienen sus propios controles.",
     "assets": {
       "title": "Escenarios y personajes para animación",
       "setupHint": "Prepara las imágenes de los escenarios y del reparto en la Biblia y aprueba el canon. Cada plano 2D/3D necesita un escenario y las referencias de todos los personajes visibles.",
@@ -643,7 +643,7 @@
     "sourceChanged": "El proyecto ha cambiado. Vuelve al episodio de origen para continuar."
   },
   "renderActions": {
-    "hint": "Generar crea tomas de vídeo con IA pendientes de aprobación. Los planos 2D y 3D se preparan, animan y exportan desde su editor; después se importa la toma terminada.",
+    "hint": "Generar crea tomas de vídeo con IA pendientes de aprobación. El lote automático 2D crea y guarda sus propias escenas y tomas; puedes editarlas después.",
     "generate": "Generar borradores con IA ({{count}})",
     "retry": "Reintentar tomas IA fallidas ({{count}})",
     "animation_2d": "Preparar planos 2D ({{count}})",
@@ -664,5 +664,24 @@
     "review": "Toma creada: falta revisarla y aprobarla",
     "approved": "Toma aprobada",
     "hint": "Aprobar personajes y escenarios prepara las referencias; cada plano necesita además una toma de vídeo. Las tomas generadas quedan sin aprobar hasta que las revises."
+  },
+  "native": {
+    "title": "Generación automática 2D",
+    "hint": "Genera los planos que faltan: quita fondos de personajes, usa sus voces guardadas y crea animación básica editable. Guarda cada escena y su vídeo sin aprobar la toma. Mantén esta pestaña abierta; puedes detener el lote al terminar el plano actual.",
+    "generate": "Generar todos los planos 2D pendientes ({{count}})",
+    "removeBackground": "Quitar fondo del personaje",
+    "cleaning": "Quitando fondos de personajes…",
+    "cleaned": "Recorte transparente preparado",
+    "cutoutHint": "Conserva la imagen original aprobada. El recorte transparente se reutiliza en los planos 2D y se prepara también al generar el lote.",
+    "cutoutAlt": "{{name}} sin fondo",
+    "progress": "{{done}} de {{total}} planos generados · Plano {{order}}",
+    "preparing": "Preparando el lote…",
+    "voices": "Generando diálogos con las voces de los personajes…",
+    "rendering": "Guardando y renderizando la escena editable…",
+    "stop": "Detener después de este plano",
+    "stopping": "Se detendrá al terminar este plano",
+    "sceneUnavailable": "No se encuentra la escena editable de esta toma.",
+    "generatedDraft": "Vídeo generado · pendiente de revisión",
+    "reviewTake": "Ver toma generada"
   }
 }

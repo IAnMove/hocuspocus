@@ -16,6 +16,11 @@ import type { OpenSeriesReference } from './shotReferences'
 import { SeriesProductionMethods } from './SeriesProductionMethods'
 import { SeriesEpisodeReferences } from './SeriesEpisodeReferences'
 import { SeriesEpisodeProgress } from './SeriesEpisodeProgress'
+import { SeriesNativeDrafts } from './SeriesNativeDrafts'
+
+function completeManifest(value: SeriesShot['referenceManifest']) {
+  return value && [value.selected, value.omitted, value.warnings, value.errors].every(Array.isArray) ? value : undefined
+}
 
 export function SeriesShotsPanel({
   workspace, series, episode, updateSeries, updateEpisode, replaceSeries, saveNow, onAcknowledgeLipSync, onRender, onOpenReferences, onOpenEpisode, onConfigureCharacter, focusShotId, onReviewShot,
@@ -111,6 +116,7 @@ export function SeriesShotsPanel({
     finally { setAcknowledgingLipSync(false) }
   }
   return <div className="space-y-4 pb-10">
+    <SeriesNativeDrafts workspace={workspace} series={series} episode={episode} />
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
     <SeriesEpisodeProgress series={series} episode={episode} onOpenReferences={onOpenReferences} onReviewShot={onReviewShot}
       onOpenShot={id => document.getElementById(`series-shot-${id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })} />
@@ -133,8 +139,9 @@ export function SeriesShotsPanel({
       <p className="mb-3 text-[11px] text-text-muted">{t('production.batchHint')}</p>
       {!episode.shots.length && <p className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-4 text-xs text-violet-200">{t('shots.empty')}</p>}
       <div className="space-y-3">{episode.shots.map(shot => {
-        const manifest = shot.referenceManifest
+        const manifest = completeManifest(shot.referenceManifest)
         const approved = shot.attempts.find(item => item.id === shot.approvedAttemptId)
+        const draft = shot.attempts.some(item => item.status === 'completed' && item.reviewDecision !== 'rejected')
         const selectable = selectableShotIds.includes(shot.id)
         const isSelected = selectable && selected.has(shot.id)
         return <article key={shot.id} id={`series-shot-${shot.id}`} className="rounded-xl border border-border bg-bg-primary p-3">
@@ -157,7 +164,8 @@ export function SeriesShotsPanel({
             {shot.primarySpeakerId && <Pill tone="violet">{t('shots.speaker', { name: characters[shot.primarySpeakerId] || shot.primarySpeakerId })}</Pill>}
             {shot.locationId && <Pill>{locations[shot.locationId] || shot.locationId}</Pill>}
             {approved && <Pill tone="green">{t('shots.approvedModel', { model: approved.model })}</Pill>}
-            {!approved && <Pill>{t('shots.pendingTake')}</Pill>}
+            {!approved && <Pill tone={draft ? 'violet' : 'neutral'}>{t(draft ? 'native.generatedDraft' : 'shots.pendingTake')}</Pill>}
+            {draft && onReviewShot && <button className={secondaryButton} onClick={() => onReviewShot(shot.id)}>{t('native.reviewTake')}</button>}
             <button className={`ml-auto ${secondaryButton}`} disabled={routing} onClick={() => void routeOne(shot.id)}><RefreshCw size={12} />{t('shots.reroute')}</button>
           </div>
           <p className="mt-2 text-xs text-text-primary">{shot.action || shot.framing || t('shots.shotFallback')}</p>

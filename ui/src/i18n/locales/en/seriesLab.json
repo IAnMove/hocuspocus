@@ -513,7 +513,7 @@
     "reroute": "Re-route",
     "advancedDetails": "IDs, strategy, manifest and overrides",
     "noDialogue": "No dialogue",
-    "pendingTake": "Pending take",
+    "pendingTake": "No video generated",
     "strategyAria": "Render strategy for shot {{order}}",
     "auto": "Auto",
     "direct": "Direct T2V",
@@ -581,7 +581,7 @@
     "importHint": "Import a finished clip as a take and review it before approving it for assembly. Its duration must cover the shot.",
     "importTake": "Import video as a take",
     "workspaceChanged": "Workspace changed. Reopen the shot before continuing.",
-    "batchHint": "Render buttons generate shots assigned to AI. Complete 2D, 3D and imported shots using their own controls.",
+    "batchHint": "These buttons generate AI-assigned shots. Use Automatic 2D production for 2D shots. 3D and imported shots have their own controls.",
     "assets": {
       "title": "Environments and characters for animation",
       "setupHint": "Prepare environment and cast images in the Bible and approve the canon. Each 2D/3D shot needs an environment and references for every visible character.",
@@ -643,7 +643,7 @@
     "sourceChanged": "The project changed. Return to the source episode to continue."
   },
   "renderActions": {
-    "hint": "Generation creates AI video takes awaiting approval. Prepare, animate and export 2D and 3D shots in their editor, then import the finished take.",
+    "hint": "AI generation creates video takes awaiting approval. The automatic 2D batch creates and saves its own scenes and takes; you can edit them afterwards.",
     "generate": "Generate AI draft takes ({{count}})",
     "retry": "Retry failed AI takes ({{count}})",
     "animation_2d": "Prepare 2D shots ({{count}})",
@@ -664,5 +664,24 @@
     "review": "Take created: review and approval needed",
     "approved": "Take approved",
     "hint": "Approving characters and locations prepares the references; each shot also needs a video take. Generated takes remain unapproved until you review them."
+  },
+  "native": {
+    "title": "Automatic 2D production",
+    "hint": "Generate missing shots: remove character backgrounds, use their saved voices and create editable basic animation. Save every scene and video without approving the take. Keep this tab open; you can stop after the current shot.",
+    "generate": "Generate all pending 2D shots ({{count}})",
+    "removeBackground": "Remove character background",
+    "cleaning": "Removing character backgrounds…",
+    "cleaned": "Transparent cutout ready",
+    "cutoutHint": "Keeps the approved original image. The transparent cutout is reused in 2D shots and is also prepared when generating the batch.",
+    "cutoutAlt": "{{name}} without background",
+    "progress": "{{done}} of {{total}} shots generated · Shot {{order}}",
+    "preparing": "Preparing the batch…",
+    "voices": "Generating dialogue with character voices…",
+    "rendering": "Saving and rendering the editable scene…",
+    "stop": "Stop after this shot",
+    "stopping": "Stopping after this shot",
+    "sceneUnavailable": "The editable scene for this take is unavailable.",
+    "generatedDraft": "Video generated · awaiting review",
+    "reviewTake": "View generated take"
   }
 }

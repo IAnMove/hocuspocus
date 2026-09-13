@@ -12,6 +12,7 @@ import { useUiTranslation } from '../../i18n'
 import { SeriesVoiceFields } from './SeriesVoiceFields'
 import { SeriesCharacterSpeech } from './SeriesCharacterSpeech'
 import { SeriesReferenceGenerator } from './SeriesReferenceGenerator'
+import { SeriesCharacterCutout } from './SeriesCharacterCutout'
 import { seriesAssetUrl, type SeriesReferenceImport } from './referenceImages'
 
 function SeriesReferenceField({
@@ -184,6 +185,7 @@ export function SeriesCanonPanel({
               characters: current.characters.map(item => item.id === character.id ? { ...item, voiceProfile: { ...item.voiceProfile, ...patch } } : item),
             }))} />
           <SeriesReferenceGenerator key={`${workspace}/${series.id}/${character.id}`} workspace={workspace} series={series} target={{ kind: 'character', id: character.id }} saveNow={saveNow} onImported={acceptAssetImport} />
+          <SeriesCharacterCutout workspace={workspace} series={series} character={character} saveNow={saveNow} onImported={acceptAssetImport} />
           <SeriesReferenceField label={uploading === character.id ? t('canon.importing') : t('canon.addIdentity')} items={imageItems} disabled={Boolean(uploading)} onPick={item => void uploadReference(item, 'character', character.id)} />
           <button className={secondaryButton} onClick={() => update(current => ({ ...current, characters: current.characters.map((item, i) => i === index ? { ...item, approval: item.approval === 'approved' ? 'draft' : 'approved' } : item) }))}>{character.approval === 'approved' ? t('canon.returnDraft') : t('canon.approveCharacter')}</button>
         </div>
