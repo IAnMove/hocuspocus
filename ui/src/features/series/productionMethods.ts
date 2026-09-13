@@ -8,6 +8,23 @@ export function seriesShotMethod(series: Pick<SeriesProject, 'allowedProductionM
   return shot.productionMethod || allowedSeriesMethods(series)[0]
 }
 
+export type SeriesRenderMode = 'selected' | 'missing' | 'failed' | 'all'
+
+export function isSeriesGeneratedShot(series: Pick<SeriesProject, 'allowedProductionMethods'>, shot: Pick<SeriesShot, 'productionMethod'>) {
+  return allowedSeriesMethods(series).includes('generated_video') && seriesShotMethod(series, shot) === 'generated_video'
+}
+
+/** Match the render endpoint: selected shots may append alternatives to an approved take. */
+export function seriesRenderCandidates(series: Pick<SeriesProject, 'allowedProductionMethods'>,
+  episode: Pick<SeriesEpisode, 'shots'>, mode: SeriesRenderMode, shotIds: string[] = []) {
+  return episode.shots.filter(shot => {
+    if (!isSeriesGeneratedShot(series, shot)) return false
+    if (mode === 'selected') return shotIds.includes(shot.id)
+    if (shot.approvedAttemptId) return false
+    return mode !== 'failed' || shot.attempts.at(-1)?.status === 'failed'
+  })
+}
+
 export function canBatchAssignSeriesShot(shot: SeriesShot): boolean {
   return !shot.approvedAttemptId && !shot.attempts.some(attempt => ['queued', 'running', 'cancelling', 'completed'].includes(attempt.status))
 }
@@ -19,4 +36,10 @@ export function assignSeriesEpisodeMethod(series: Pick<SeriesProject, 'allowedPr
     ? { ...shot, productionMethod: method, referenceManifest: undefined,
       dialogueDuration: method === 'generated_video' ? shot.dialogueDuration : undefined }
     : shot) }
+}
+
+export function seriesTakeStage(shot: SeriesShot) {
+  if (shot.approvedAttemptId) return 'approved'
+  if (shot.attempts.some(attempt => attempt.status === 'completed' && attempt.reviewDecision !== 'rejected')) return 'review'
+  return 'missing'
 }

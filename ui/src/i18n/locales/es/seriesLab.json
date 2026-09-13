@@ -641,5 +641,28 @@
     "generated": "Imágenes generadas. Revisa y aprueba el canon antes de incorporarlas al episodio.",
     "incorporated": "Referencias aprobadas incorporadas al episodio. Ya puedes preparar los planos.",
     "sourceChanged": "El proyecto ha cambiado. Vuelve al episodio de origen para continuar."
+  },
+  "renderActions": {
+    "hint": "Generar crea tomas de vídeo con IA pendientes de aprobación. Los planos 2D y 3D se preparan, animan y exportan desde su editor; después se importa la toma terminada.",
+    "generate": "Generar borradores con IA ({{count}})",
+    "retry": "Reintentar tomas IA fallidas ({{count}})",
+    "animation_2d": "Preparar planos 2D ({{count}})",
+    "animation_3d": "Preparar planos 3D ({{count}})",
+    "imported_video": "Importar tomas de vídeo ({{count}})",
+    "noCandidates": "No hay planos de vídeo con IA disponibles para esta generación. Revisa el método de cada plano y sus tomas en Planos.",
+    "openShot": "Abrir producción del plano {{order}}"
+  },
+  "episodeProgress": {
+    "title": "Estado del episodio y próximos pasos",
+    "referencesMissing": "{{count}} referencias del episodio necesitan atención. Pulsa su nombre para abrir el elemento.",
+    "referencesReady": "Las referencias de personajes y escenarios están aprobadas e incorporadas al episodio.",
+    "takes": "Tomas de vídeo: {{missing}} sin crear · {{review}} pendientes de aprobación · {{approved}} de {{total}} aprobadas.",
+    "nextShot": "Preparar plano {{order}}",
+    "nextReview": "Revisar toma del plano {{order}}",
+    "showPending": "Ver los {{count}} planos pendientes",
+    "missing": "Falta crear o importar la toma de vídeo",
+    "review": "Toma creada: falta revisarla y aprobarla",
+    "approved": "Toma aprobada",
+    "hint": "Aprobar personajes y escenarios prepara las referencias; cada plano necesita además una toma de vídeo. Las tomas generadas quedan sin aprobar hasta que las revises."
   }
 }

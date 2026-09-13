@@ -72,7 +72,7 @@ function VariantEditor({ label, variants, onChange }: {
 }
 
 export function SeriesCanonPanel({
-  series, workspace, update: persistUpdate, replaceSeries, saveNow, onAssetImported, initialTab = 'world', focusCharacterId,
+  series, workspace, update: persistUpdate, replaceSeries, saveNow, onAssetImported, initialTab = 'world', focusCharacterId, focusLocationId,
 }: {
   series: SeriesProject
   workspace: string
@@ -82,6 +82,7 @@ export function SeriesCanonPanel({
   onAssetImported?: (workspace: string, result: SeriesReferenceImport) => void
   initialTab?: CanonTab
   focusCharacterId?: string
+  focusLocationId?: string
 }) {
   const { t } = useUiTranslation('seriesLab')
   const imageItems = useWorkspaceImageOutputs(workspace)
@@ -91,6 +92,9 @@ export function SeriesCanonPanel({
   useEffect(() => {
     if (tab === 'characters' && focused) document.getElementById(`series-character-${focused}`)?.scrollIntoView?.({ block: 'start' })
   }, [tab, focused])
+  useEffect(() => {
+    if (tab === 'locations' && focusLocationId) document.getElementById(`series-location-${focusLocationId}`)?.scrollIntoView?.({ block: 'start' })
+  }, [tab, focusLocationId])
   const [uploading, setUploading] = useState('')
   const [approving, setApproving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -190,7 +194,7 @@ export function SeriesCanonPanel({
     </SectionCard>}
 
     {tab === 'locations' && <SectionCard title={t('canon.locationsTitle')} action={<button className={primaryButton} onClick={() => update(current => ({ ...current, locations: [...current.locations, createSeriesLocation()] }))}><Plus size={13} />{t('canon.location')}</button>}>
-      <div className="grid gap-3 xl:grid-cols-2">{series.locations.map((location, index) => <div key={location.id} className="rounded-xl border border-border bg-bg-primary p-3">
+      <div className="grid gap-3 xl:grid-cols-2">{series.locations.map((location, index) => <div id={`series-location-${location.id}`} key={location.id} className="rounded-xl border border-border bg-bg-primary p-3">
         <div className="flex items-center gap-2"><input className={inputClass} value={location.name} onChange={event => update(current => ({ ...current, locations: current.locations.map((item, i) => i === index ? { ...item, name: event.target.value } : item) }))} /><Pill tone={location.approval === 'approved' ? 'green' : 'amber'}>{seriesStatusLabel(t, location.approval)}</Pill><button onClick={() => update(current => ({ ...current, locations: current.locations.filter((_, i) => i !== index) }))}><Trash2 size={14} className="text-red-400" /></button></div>
         <textarea className={`${textareaClass} mt-2`} value={location.description} onChange={event => update(current => ({ ...current, locations: current.locations.map((item, i) => i === index ? { ...item, description: event.target.value } : item) }))} placeholder={t('canon.locationPlaceholder')} />
         <VariantEditor label={t('canon.locationVariants')} variants={location.variants} onChange={variants => update(current => ({ ...current, locations: current.locations.map((item, i) => i === index ? { ...item, variants } : item) }))} />

@@ -4,13 +4,13 @@ import { refreshSeriesEpisodeReferences } from '../../api/series'
 import { useStore } from '../../stores/useStore'
 import { useSeriesStore } from './store'
 import type { SeriesEpisode, SeriesProject } from './types'
-import type { SeriesReferenceRoom } from './shotReferences'
+import type { OpenSeriesReference } from './shotReferences'
 import { episodeNeedsReferences, episodeReferenceTargets, generateMissingEpisodeReferences } from './episodeReferencePreparation'
 import { primaryButton, secondaryButton } from './styles'
 
 export function SeriesEpisodeReferences({ workspace, series, episode, onOpenReferences }: {
   workspace: string; series: SeriesProject; episode: SeriesEpisode
-  onOpenReferences?: (room: SeriesReferenceRoom) => void
+  onOpenReferences?: OpenSeriesReference
 }) {
   const { t } = useUiTranslation('seriesLab')
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState(''), [error, setError] = useState('')

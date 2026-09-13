@@ -8,7 +8,7 @@ import { allowedSeriesMethods, seriesShotMethod } from './productionMethods'
 import type { SeriesEpisode, SeriesProject, SeriesShot } from './types'
 import { secondaryButton, selectClass } from './styles'
 import { useSeriesStore } from './store'
-import { seriesShotReferences, type SeriesReferenceRoom } from './shotReferences'
+import { seriesShotReferences, type OpenSeriesReference } from './shotReferences'
 import { SeriesShotReferencePanel } from './SeriesShotReferencePanel'
 
 const METHOD_HINT = { generated_video: 'production.importHint', animation_2d: 'production.scene2dHint', animation_3d: 'production.scene3dHint', imported_video: 'production.importHint' } as const
@@ -16,7 +16,7 @@ const METHOD_HINT = { generated_video: 'production.importHint', animation_2d: 'p
 export function SeriesShotProduction({ workspace, series, episode, shot, onChange, saveNow, onOpenReferences, onOpenEpisode, onConfigureMethods }: {
   workspace: string; series: SeriesProject; episode: SeriesEpisode; shot: SeriesShot
   onChange: (shot: SeriesShot) => void; saveNow: () => Promise<unknown>
-  onOpenReferences?: (room: SeriesReferenceRoom) => void; onOpenEpisode?: () => void
+  onOpenReferences?: OpenSeriesReference; onOpenEpisode?: () => void
   onConfigureMethods?: () => void
 }) {
   const { t } = useUiTranslation('seriesLab')

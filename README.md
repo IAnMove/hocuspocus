@@ -106,6 +106,8 @@ In **Series Lab → Canon**, generate reference images from each character or lo
 
 For 2D/3D animation, prepare both environments and characters. Each shot shows its environment selector and reference previews, and opens the editor once the episode has approved images for the environment and every visible character. Preparation shortcuts lead directly to the corresponding Bible cards. An establishing shot can use just its environment.
 
+**Results** separates approved references from pending video takes and links to each incomplete item. **Generate AI draft takes** leaves its outputs awaiting review; 2D/3D and imported shots have their own production shortcuts.
+
 You can also enable production methods directly in **Series Lab → Shots**. For an existing episode, select an enabled method and use **Apply to shots without a take** to assign it across unfinished shots; completed and active takes are preserved.
 
 Location image prompts describe empty environments. Series Lab separates the physical setting and rendering style from character design and narrative occupants before generating. Use **Prepare environment prompt** in the location card to review the exact prompt first.

@@ -641,5 +641,28 @@
     "generated": "Images generated. Review and approve canon before incorporating them into the episode.",
     "incorporated": "Approved references incorporated into the episode. You can now prepare the shots.",
     "sourceChanged": "The project changed. Return to the source episode to continue."
+  },
+  "renderActions": {
+    "hint": "Generation creates AI video takes awaiting approval. Prepare, animate and export 2D and 3D shots in their editor, then import the finished take.",
+    "generate": "Generate AI draft takes ({{count}})",
+    "retry": "Retry failed AI takes ({{count}})",
+    "animation_2d": "Prepare 2D shots ({{count}})",
+    "animation_3d": "Prepare 3D shots ({{count}})",
+    "imported_video": "Import video takes ({{count}})",
+    "noCandidates": "No AI video shots are available for this generation. Check each shot’s production method and takes in Shots.",
+    "openShot": "Open production for shot {{order}}"
+  },
+  "episodeProgress": {
+    "title": "Episode status and next steps",
+    "referencesMissing": "{{count}} episode references need attention. Click a name to open its source.",
+    "referencesReady": "Character and location references are approved and incorporated into this episode.",
+    "takes": "Video takes: {{missing}} to create · {{review}} awaiting approval · {{approved}} of {{total}} approved.",
+    "nextShot": "Prepare shot {{order}}",
+    "nextReview": "Review take for shot {{order}}",
+    "showPending": "Show {{count}} pending shots",
+    "missing": "Create or import the video take",
+    "review": "Take created: review and approval needed",
+    "approved": "Take approved",
+    "hint": "Approving characters and locations prepares the references; each shot also needs a video take. Generated takes remain unapproved until you review them."
   }
 }

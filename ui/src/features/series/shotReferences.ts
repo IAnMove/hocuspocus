@@ -1,6 +1,7 @@
 import type { SeriesAsset, SeriesCharacter, SeriesEpisode, SeriesLocation, SeriesProject, SeriesShot } from './types'
 
 export type SeriesReferenceRoom = 'characters' | 'locations'
+export type OpenSeriesReference = (room: SeriesReferenceRoom, entityId?: string) => void
 export type SeriesReferenceState = 'ready' | 'missingEntity' | 'missingImage' | 'unapproved' | 'availableInSeries'
 
 export function seriesEntityImage(entity: SeriesCharacter | SeriesLocation | undefined,
@@ -39,4 +40,17 @@ function referenceState(entity: SeriesCharacter | SeriesLocation | undefined, as
   if (!entity) return 'missingEntity'
   if (asset) return entity.approval === 'approved' ? 'ready' : 'unapproved'
   return seriesEntityImage(current, assets) ? 'availableInSeries' : 'missingImage'
+}
+
+export function episodeReferenceIssues(series: SeriesProject, episode: SeriesEpisode) {
+  const issues = new Map<string, { id: string; name: string; room: SeriesReferenceRoom; state: SeriesReferenceState; shotId: string }>()
+  for (const shot of episode.shots) {
+    const references = seriesShotReferences(series, episode, shot)
+    const items = [
+      { id: shot.locationId || shot.id, name: references.location?.name || shot.locationId || `#${shot.order}`, room: 'locations' as const, state: references.locationState },
+      ...references.people.map(person => ({ ...person, room: 'characters' as const })),
+    ]
+    for (const item of items) if (item.state !== 'ready') issues.set(`${item.room}/${item.id}`, { ...item, shotId: shot.id })
+  }
+  return [...issues.values()]
 }

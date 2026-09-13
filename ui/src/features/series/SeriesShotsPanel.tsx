@@ -11,13 +11,14 @@ import { primaryButton, secondaryButton, selectClass, textareaClass } from './st
 import type { SeriesEpisode, SeriesProject, SeriesShot } from './types'
 import { useUiTranslation } from '../../i18n'
 import { SeriesShotProduction } from './SeriesShotProduction'
-import { allowedSeriesMethods, seriesShotMethod } from './productionMethods'
-import type { SeriesReferenceRoom } from './shotReferences'
+import { isSeriesGeneratedShot, seriesRenderCandidates } from './productionMethods'
+import type { OpenSeriesReference } from './shotReferences'
 import { SeriesProductionMethods } from './SeriesProductionMethods'
 import { SeriesEpisodeReferences } from './SeriesEpisodeReferences'
+import { SeriesEpisodeProgress } from './SeriesEpisodeProgress'
 
 export function SeriesShotsPanel({
-  workspace, series, episode, updateSeries, updateEpisode, replaceSeries, saveNow, onAcknowledgeLipSync, onRender, onOpenReferences, onOpenEpisode, onConfigureCharacter,
+  workspace, series, episode, updateSeries, updateEpisode, replaceSeries, saveNow, onAcknowledgeLipSync, onRender, onOpenReferences, onOpenEpisode, onConfigureCharacter, focusShotId, onReviewShot,
 }: {
   workspace: string
   series: SeriesProject
@@ -28,9 +29,11 @@ export function SeriesShotsPanel({
   saveNow: () => Promise<unknown>
   onAcknowledgeLipSync: () => Promise<void>
   onRender: (mode: 'selected' | 'missing' | 'failed' | 'all', shotIds?: string[]) => void
-  onOpenReferences?: (room: SeriesReferenceRoom) => void
+  onOpenReferences?: OpenSeriesReference
   onOpenEpisode?: () => void
   onConfigureCharacter?: (id: string) => void
+  focusShotId?: string
+  onReviewShot?: (shotId: string) => void
 }) {
   const { t } = useUiTranslation('seriesLab')
   const imageItems = useWorkspaceImageOutputs(workspace)
@@ -39,10 +42,13 @@ export function SeriesShotsPanel({
   const [acknowledgingLipSync, setAcknowledgingLipSync] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const methodsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (focusShotId) document.getElementById(`series-shot-${focusShotId}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [workspace, episode.id, focusShotId])
   const characters = useMemo(() => Object.fromEntries(series.characters.map(item => [item.id, item.name])), [series.characters])
   const locations = useMemo(() => Object.fromEntries(series.locations.map(item => [item.id, item.name])), [series.locations])
   const selectableShotIds = useMemo(
-    () => episode.shots.filter(shot => !shot.approvedAttemptId && allowedSeriesMethods(series).includes('generated_video') && seriesShotMethod(series, shot) === 'generated_video').map(shot => shot.id),
+    () => episode.shots.filter(shot => !shot.approvedAttemptId && isSeriesGeneratedShot(series, shot)).map(shot => shot.id),
     [episode.shots, series],
   )
   const selectedCount = selectableShotIds.filter(id => selected.has(id)).length
@@ -106,6 +112,8 @@ export function SeriesShotsPanel({
   }
   return <div className="space-y-4 pb-10">
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
+    <SeriesEpisodeProgress series={series} episode={episode} onOpenReferences={onOpenReferences} onReviewShot={onReviewShot}
+      onOpenShot={id => document.getElementById(`series-shot-${id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })} />
     <div ref={methodsRef}>
       <SeriesProductionMethods key={`${workspace}/${series.id}/${episode.id}`} series={series} update={updateSeries}
         episode={episode} updateEpisode={updateEpisode} onOpenReferences={onOpenReferences} />
@@ -120,7 +128,7 @@ export function SeriesShotsPanel({
       <div className="mb-3 flex flex-wrap gap-2">
         <button type="button" className={secondaryButton} aria-pressed={allSelected} disabled={!selectableShotIds.length} onClick={() => setSelected(allSelected ? new Set() : new Set(selectableShotIds))}>{allSelected ? <CheckSquare size={13} /> : <Square size={13} />}{allSelected ? t('shots.clearSelection') : t('shots.selectAll', { count: selectableShotIds.length })}</button>
         <button className={primaryButton} disabled={!selectedCount || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('selected', selectableShotIds.filter(id => selected.has(id)))}><CheckSquare size={13} />{t('shots.renderSelected', { count: selectedCount })}</button>
-        <button className={secondaryButton} disabled={!selectableShotIds.length || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('missing')}>{t('shots.renderMissing')}</button><button className={secondaryButton} disabled={!selectableShotIds.length || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('failed')}>{t('shots.retryFailed')}</button><button className={secondaryButton} disabled={!selectableShotIds.length || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('all')}>{t('shots.renderUnapproved')}</button>
+        <button className={secondaryButton} disabled={!selectableShotIds.length || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('missing')}>{t('shots.renderMissing')}</button><button className={secondaryButton} disabled={!seriesRenderCandidates(series, episode, 'failed').length || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('failed')}>{t('shots.retryFailed')}</button><button className={secondaryButton} disabled={!selectableShotIds.length || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('all')}>{t('shots.renderUnapproved')}</button>
       </div>
       <p className="mb-3 text-[11px] text-text-muted">{t('production.batchHint')}</p>
       {!episode.shots.length && <p className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-4 text-xs text-violet-200">{t('shots.empty')}</p>}

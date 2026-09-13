@@ -123,3 +123,9 @@ Import a completed take using the existing `/api/v1/series/{seriesId}/assets/imp
 Voice-only characters do not need a GLB. The 3D model is optional; configuring the 3D face still requires a verified GLB. The 2D workshop opens the saved character's exact ID and keeps its recovery draft separate from other characters and the general workshop. A missing image or unprepared mouth remains visibly pending. Opening or saving settings does not generate audio, images or video.
 
 Dialogue-shot speech controls open the same Character Creator destination directly. The advanced voice table links to the corresponding character card. The 3D speech workflow consumes the linked kit's model, face settings and local TTS preset. 2D mouth preparation continues through the existing workshop and compositor. Native-audio AI video does not consume the local TTS voice ID; its provider generates the voice. Scene audio and existing takes remain independent of character settings.
+
+### Render actions and approval guidance
+
+**Shots** and **Results** report reference readiness separately from video takes: not created, awaiting review, or approved. Missing reference names open the exact character/location card, and pending-take links select their shot or review slot. Approving a character image does not create a video take.
+
+**Generate AI draft takes** creates unapproved takes only for shots assigned to permitted AI video generation. Results shows method-specific shortcuts for 2D/3D preparation and importing clips. Its history and playback actions send native/imported shots to their production controls instead of the AI regeneration form. Empty AI requests are blocked before submission in both the UI and Wizard. Failed retries use the latest attempt; explicit per-shot AI regeneration can still append an alternative while retaining an existing approved take. 2D/3D scenes must be animated and exported in their editors before the finished take can be imported and reviewed.

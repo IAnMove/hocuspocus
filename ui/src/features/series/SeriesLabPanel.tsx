@@ -21,6 +21,7 @@ import {
 } from '../../lib/productionProfile'
 
 import { openSeriesCharacterEditor, useSeriesCharacterReturn } from './seriesCharacterEditor'
+import { seriesRenderCandidates } from './productionMethods'
 
 type LabTab = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
 type SetupGap = 'title' | 'premise' | 'visualStyle'
@@ -43,7 +44,14 @@ export function SeriesLabPanel() {
   const [tab, setTab] = useState<LabTab>('setup')
   const [canonTab, setCanonTab] = useState<CanonTab>('world')
   const [focusCharacterId, setFocusCharacterId] = useState('')
-  const openReferences = (room: 'characters' | 'locations') => { setFocusCharacterId(''); setCanonTab(room); setTab('canon') }
+  const [focusShotId, setFocusShotId] = useState('')
+  const [reviewShotId, setReviewShotId] = useState('')
+  const openReviewShot = (id: string) => { setReviewShotId(id); setTab('review') }
+  const openShots = (id = '') => { setFocusShotId(id); setTab('shots') }
+  const [focusLocationId, setFocusLocationId] = useState('')
+  const openReferences = (room: 'characters' | 'locations', id = '') => {
+    setFocusCharacterId(room === 'characters' ? id : ''); setFocusLocationId(room === 'locations' ? id : ''); setCanonTab(room); setTab('canon')
+  }
   const configureCharacter = (id: string) => { void runAction(() => openSeriesCharacterEditor(workspace, activeSeriesId, id)) }
   const returnSource = useSeriesCharacterReturn(state => state.source)
   useEffect(() => {
@@ -142,10 +150,9 @@ export function SeriesLabPanel() {
       await saveNow()
       const current = useSeriesStore.getState().library.seriesById[series.id]
       const currentEpisode = current?.episodesById[episode.id] || episode
-      const stale = currentEpisode.shots.filter(shot => (
-        (mode !== 'selected' || (shotIds || []).includes(shot.id))
-        && (shot.scriptDialogueStatus === 'stale' || shot.scriptDialogueStatus === 'manual_conflict')
-      ))
+      const candidates = seriesRenderCandidates(current || series, currentEpisode, mode, shotIds)
+      if (!candidates.length) { setActionError(t('renderActions.noCandidates')); setTab('shots'); return }
+      const stale = candidates.filter(shot => (shot.scriptDialogueStatus === 'stale' || shot.scriptDialogueStatus === 'manual_conflict'))
       if (stale.length) {
         throw new Error(t('episode.syncBeforeRender', { count: stale.length }))
       }
@@ -200,10 +207,10 @@ export function SeriesLabPanel() {
         {importOpen && <div className="mb-4 rounded-xl border border-violet-500/30 bg-violet-500/10 p-3"><h3 className="text-xs font-semibold text-violet-200">{t('storyImport.title')}</h3><p className="mt-1 text-[10px] text-text-muted">{t('storyImport.description')}</p><div className="mt-2 flex gap-2"><select className="min-w-0 flex-1 rounded-lg border border-border bg-bg-primary px-2 py-2 text-xs" value={storyId} onChange={event => setStoryId(event.target.value)}>{storyOptions.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select><button className={primaryButton} disabled={!storyId || actionBusy} onClick={() => void runAction(async () => { await importStory(storyId); setImportOpen(false) })}>{t('chrome.import')}</button><button className={secondaryButton} onClick={() => setImportOpen(false)}>{t('chrome.cancel')}</button></div></div>}
         {!series ? <div className="mx-auto mt-20 max-w-lg rounded-2xl border border-violet-500/30 bg-violet-500/10 p-8 text-center"><BookOpen size={28} className="mx-auto text-violet-300" /><h3 className="mt-3 text-base font-semibold text-text-primary">{t('library.emptyTitle')}</h3><p className="mt-2 text-xs leading-relaxed text-text-muted">{t('library.emptyBody')}</p><button className={`mt-4 ${primaryButton}`} onClick={() => void runAction(newSeries)}><Plus size={13} />{t('library.createOriginal')}</button></div> : <>
           {tab === 'setup' && <SeriesSetupPanel workspace={workspace} series={series} update={updateSeries} saveNow={saveNow} replaceSeries={adoptRemoteSeries} job={canonJob} setJob={setCanonJob} onOpenReferences={openReferences} />}
-          {tab === 'canon' && <SeriesCanonPanel series={series} workspace={workspace} update={updateSeries} replaceSeries={adoptRemoteSeries} saveNow={saveNow} onAssetImported={acceptAssetImport} initialTab={canonTab} focusCharacterId={focusCharacterId} />}
+          {tab === 'canon' && <SeriesCanonPanel series={series} workspace={workspace} update={updateSeries} replaceSeries={adoptRemoteSeries} saveNow={saveNow} onAssetImported={acceptAssetImport} initialTab={canonTab} focusCharacterId={focusCharacterId} focusLocationId={focusLocationId} />}
           {tab === 'episode' && (episode ? <SeriesEpisodePanel workspace={workspace} series={series} episode={episode} updateEpisode={updater => updateEpisode(episode.id, updater)} saveNow={saveNow} reload={reload} onAdaptToComic={adaptEpisodeToComic} /> : <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-6 text-center text-xs text-violet-200"><button className={primaryButton} onClick={createEpisodeAction}><Plus size={13} />{t('library.createFirstEpisode')}</button></div>)}
-          {tab === 'shots' && (episode ? <SeriesShotsPanel workspace={workspace} series={series} episode={episode} updateSeries={updateSeries} updateEpisode={updater => updateEpisode(episode.id, updater)} replaceSeries={adoptRemoteSeries} saveNow={saveNow} onAcknowledgeLipSync={async () => { updateSeries(current => ({ ...current, bestEffortLipSyncAcknowledged: true })); await saveNow() }} onRender={(mode, ids) => void startRender(mode, ids)} onOpenReferences={openReferences} onOpenEpisode={() => setTab('episode')} onConfigureCharacter={configureCharacter} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
-          {tab === 'review' && (episode ? <SeriesReviewPanel workspace={workspace} series={series} episode={episode} job={renderJob} setJob={setRenderJob} reload={reload} startRender={startRender} updateEpisode={updater => updateEpisode(episode.id, updater)} saveNow={saveNow} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
+          {tab === 'shots' && (episode ? <SeriesShotsPanel focusShotId={focusShotId} workspace={workspace} series={series} episode={episode} updateSeries={updateSeries} updateEpisode={updater => updateEpisode(episode.id, updater)} replaceSeries={adoptRemoteSeries} saveNow={saveNow} onAcknowledgeLipSync={async () => { updateSeries(current => ({ ...current, bestEffortLipSyncAcknowledged: true })); await saveNow() }} onRender={(mode, ids) => void startRender(mode, ids)} onOpenReferences={openReferences} onOpenEpisode={() => setTab('episode')} onConfigureCharacter={configureCharacter} onReviewShot={openReviewShot} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
+          {tab === 'review' && (episode ? <SeriesReviewPanel requestedShotId={reviewShotId} onOpenReferences={openReferences} onOpenShots={openShots} workspace={workspace} series={series} episode={episode} job={renderJob} setJob={setRenderJob} reload={reload} startRender={startRender} updateEpisode={updater => updateEpisode(episode.id, updater)} saveNow={saveNow} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
         </>}
       </div>
     </div>

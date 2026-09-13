@@ -22,6 +22,8 @@ import type {
   StageSeriesComicCommand,
   UpdateSeriesEpisodeCommand,
 } from './commands'
+import i18n from '../../i18n'
+import { seriesRenderCandidates } from './productionMethods'
 import { shouldApproveCanonForExplicitEpisodeCreate } from './canonPolicy'
 import {
   bulkApproveSelections,
@@ -551,16 +553,15 @@ export async function renderSeriesShots(action: RenderSeriesShotsCommand): Promi
     ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
     : `“${series.title}” necesita un episodio activo o único.`)
   if (!episode.shots.length) throw new Error(`“${episode.title}” no tiene shots; genera y aplica un plan complete primero.`)
-  const staleShots = episode.shots.filter(shot => (
-    (action.mode !== 'selected' || action.shotIds.includes(shot.id))
-    && (shot.scriptDialogueStatus === 'stale' || shot.scriptDialogueStatus === 'manual_conflict')
-  ))
+  const eligible = seriesRenderCandidates(series, episode, action.mode, action.shotIds)
+  if (!eligible.length) throw new Error(i18n.t('seriesLab:renderActions.noCandidates'))
+  const staleShots = eligible.filter(shot => shot.scriptDialogueStatus === 'stale' || shot.scriptDialogueStatus === 'manual_conflict')
   if (staleShots.length) {
     throw new Error(
       `El diálogo del guion y de ${staleShots.length} plano(s) no coincide. Sincroniza los planos en Episodio antes de renderizar.`,
     )
   }
-  if (episode.shots.some(shot => shot.dialogueBeats.length > 0) && !series.bestEffortLipSyncAcknowledged) {
+  if (eligible.some(shot => shot.dialogueBeats.length > 0) && !series.bestEffortLipSyncAcknowledged) {
     throw new Error('Este episodio tiene diálogo. Marca primero “I understand lip sync is best-effort” en Series Lab; el Wizard no puede inferir ese consentimiento.')
   }
 
@@ -571,14 +572,6 @@ export async function renderSeriesShots(action: RenderSeriesShotsCommand): Promi
     const approved = action.shotIds.filter(id => Boolean(byId.get(id)?.approvedAttemptId))
     if (approved.length) throw new Error(`Los shots ya aprobados no se vuelven a renderizar: ${approved.join(', ')}.`)
   }
-  const eligible = episode.shots.filter(shot => {
-    if (shot.approvedAttemptId) return false
-    if (action.mode === 'selected') return action.shotIds.includes(shot.id)
-    if (action.mode === 'missing') return !shot.attempts.some(attempt => attempt.status === 'completed')
-    if (action.mode === 'failed') return shot.attempts.some(attempt => attempt.status === 'failed')
-    return true
-  })
-  if (!eligible.length) throw new Error(`No hay shots elegibles para el modo ${action.mode}.`)
 
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
