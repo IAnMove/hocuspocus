@@ -172,7 +172,7 @@
     "steps": {
       "box": "Drag the yellow box until it covers the lips. It saves when you release.",
       "wipe": "If the drawing still has a painted mouth, press Wipe mouth area.",
-      "eyes": "Open eyes stay on; Close eyes only blinks on top. If the body already has eyes, generate only Close eyes.",
+      "eyes": "Eyes and blinking are optional. Keep the existing drawing unless you need separate animated eyelids.",
       "scene": "Put on the scene and Preview. The mouth and blink animate on their own."
     },
     "createNew": {
@@ -214,7 +214,7 @@
     "dragBoxHint": "Drag the rectangle over the original mouth. Drag its corner horizontally and vertically to change width and height independently. Wiping affects this rectangle; the new mouth keeps its own proportions.",
     "wiping": "Wiping…",
     "wipeMouth": "Wipe mouth area",
-    "lockMouths": "Lock mouths",
+    "lockMouths": "Apply placement to all mouths",
     "states": {
       "closed": "Closed",
       "small": "Small",
@@ -322,7 +322,14 @@
     "stepChoose": "2. Choose existing mouths or generate new ones",
     "stepTry": "3. Try the mouths with a phrase",
     "wipeArea": "Mouth erasure area",
-    "resizeArea": "Resize mouth erasure rectangle"
+    "resizeArea": "Resize mouth erasure rectangle",
+    "optionalEyes": "Eyes and blinking (optional)",
+    "eyesOriginal": "Use the original drawing",
+    "optionalEyesHint": "The eyes already drawn on the character are enough. Lip sync only needs mouths. Add separate eye overlays here only if you want to change the eyes or animate eyelids; those pieces need their own placement and review.",
+    "playSample": "Play included voice sample",
+    "stopSample": "Stop sample",
+    "sampleHint": "A recorded English phrase with mouth timings, included with the app. Uses your mouth shapes without generating audio or changing the saved character voice.",
+    "sampleUnavailable": "The included sample could not be loaded."
   },
   "facePatch": {
     "title": "Raster mouth replacement patch",
@@ -428,6 +435,8 @@
     "title": "Configure {{name}}",
     "hint": "Configure the voice, mouths for 2D animation and model for 3D lip sync here. Saving links this configuration to the series character.",
     "return": "Return to the character in Series Lab",
-    "saveFirst": "Save voice or lip sync workshop changes before returning."
+    "saveFirst": "Use Save everything and return to save all pending settings.",
+    "saveAllReturn": "Save everything and return to Series Lab",
+    "saveAllHint": "Saves voice, mouth images and placement together. Existing approvals are preserved."
   }
 }

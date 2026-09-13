@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { fetchCharacterKitLibrary } from '../../api/characters'
 import { useStore } from '../../stores/useStore'
-import { useCharacterEditorHandoff } from '../characters/characterEditorHandoff'
+import { characterEditorHasUnsavedChanges, useCharacterEditorHandoff } from '../characters/characterEditorHandoff'
 import { useSeriesStore } from './store'
 import { seriesCharacterKit } from './seriesCharacterKit'
 import i18n from '../../i18n'
@@ -30,7 +30,8 @@ export async function openSeriesCharacterEditor(workspace: string, seriesId: str
   if (ref && (ref.workspace !== workspace || !library.kits[ref.id])) throw new Error(i18n.t('seriesLab:speech.missingLink'))
   const kit = seriesCharacterKit(workspace, series, character, ref ? library.kits[ref.id] : undefined)
   const sourceId = `${workspace}/${seriesId}/${characterId}`
-  const pending = useCharacterEditorHandoff.getState().request
+  let pending = useCharacterEditorHandoff.getState().request
+  if (pending && pending.sourceId !== sourceId && !characterEditorHasUnsavedChanges(pending)) pending = null
   if (pending && pending.sourceId !== sourceId) {
     throw new Error(i18n.t('seriesLab:speech.finishEditor'))
   }

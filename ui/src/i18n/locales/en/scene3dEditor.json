@@ -8,7 +8,7 @@
     "newCharacter": "Create new character",
     "useCharacter": "Use character in this shot",
     "definitionName": "Character name",
-    "saveCharacter": "Save character with face and voice",
+    "saveCharacter": "Save all character settings",
     "characterSaved": "Character saved. Model, mouth, eyes and voice are available in other shots.",
     "characterApplied": "Character applied. Shot interventions are preserved.",
     "reloadLibrary": "Reload library",

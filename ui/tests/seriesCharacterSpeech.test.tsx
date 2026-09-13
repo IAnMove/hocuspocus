@@ -88,6 +88,11 @@ test('Series opens the exact character in Character Creator, preserves a draft a
   await waitFor(() => assert.equal((reopened.getByTestId('character-voice') as HTMLSelectElement).value, 'serena'))
   assert.equal((reopened.getByTestId('saved-character') as HTMLSelectElement).value, ref.id)
   assert.equal(writes, 1, 'opening existing configuration must not create another character or a generation')
+  // Saving from the ordinary toolbar must also release the session when navigating by tabs.
+  fireEvent.click(reopened.getByTestId('save-character'))
+  await waitFor(() => assert.equal(useCharacterEditorHandoff.getState().request!.saved, true))
+  await openSeriesCharacterEditor('source', series.id, series.characters[1].id)
+  assert.equal(useCharacterEditorHandoff.getState().request!.sourceId, `source/${series.id}/${series.characters[1].id}`)
   useStore.setState({ activeWorkspace: 'elsewhere' })
   await assert.rejects(useCharacterEditorHandoff.getState().request!.onSaved(library.kits[ref.id]), /project changed/)
 })

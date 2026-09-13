@@ -4,7 +4,6 @@ import { analyzeAudio, cleanCharacterKitFaceOverlay, getFileUrl, uploadImage } f
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 import {
-  CHARACTER_FACE_RIG_STATES,
   FACE_RIG_PRESET_ROOT,
   FACE_RIG_STYLE_PRESETS,
   FACE_RIG_TRAIT_CHIPS,
@@ -42,6 +41,8 @@ import { useStore } from '../../stores/useStore'
 import i18n, { useUiTranslation } from '../../i18n'
 import { mouthWipeBox, resizeMouthWipeBox } from './mouthWipeBox'
 import { MouthPackChoices } from './MouthPackChoices'
+import { FaceRigSamplePreview } from './FaceRigSamplePreview'
+import { FaceRigStatePicker } from './FaceRigStatePicker'
 
 type Props = {
   kit: CharacterKit
@@ -53,6 +54,7 @@ type Props = {
   onChange: (kit: CharacterKit) => void
   onCommit?: (kit: CharacterKit) => void
   onStatus?: (message: string) => void
+  onBusyChange?: (busy: boolean) => void
 }
 
 const PLACEMENT_WARNING_KEYS: Record<string, ParseKeys<'characters'>> = {
@@ -98,7 +100,7 @@ async function inspectSourceAlpha(source: string) {
   } finally { bitmap.close() }
 }
 
-export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowModelActions = true, workspace: workspaceOverride, onChange, onCommit, onStatus }: Props) {
+export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowModelActions = true, workspace: workspaceOverride, onChange, onCommit, onStatus, onBusyChange }: Props) {
   const { t } = useUiTranslation('characters')
   const stateLabel = (state: CharacterKitFaceRigState) => t(`faceRig.states.${state}`)
   const imageModel = useStore(state => state.selectedModelPerMode.image || '')
@@ -127,6 +129,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin: CharacterFaceAnchor; aspect: number; mode: 'move' | 'resize' } | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const playTokenRef = useRef(0)
+  const sampleStopRef = useRef<(() => void) | null>(null)
   const dialoguePreviewRef = useRef<FaceRigDialoguePreview | null>(null)
   const savedAnchor = useMemo(() => faceRigAnchorFor(kit, poseId, selectedState), [kit, poseId, selectedState])
   const poseSource = poseId === 'base' ? kit.base?.source : kit.poses[poseId]?.source
@@ -158,6 +161,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   const poseName = characterKitPoseLabel(poseId)
   const dirtyAnchor = JSON.stringify(draftAnchor) !== JSON.stringify(savedAnchor)
   dialoguePreviewRef.current = dialoguePreview
+  useEffect(() => { onBusyChange?.(Boolean(busyState)); return () => onBusyChange?.(false) }, [busyState, onBusyChange])
 
   useEffect(() => {
     setDraftAnchor(savedAnchor)
@@ -308,6 +312,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   }
 
   const planDialogue = () => {
+    sampleStopRef.current?.()
     try {
       const preview = previewFaceRigDialogue(kit, dialogueText)
       setDialoguePreview(preview)
@@ -320,6 +325,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   }
 
   const playDialogue = () => {
+    sampleStopRef.current?.()
     let preview = dialoguePreviewRef.current
     if (!preview) {
       try {
@@ -356,6 +362,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
 
   const speakDialogue = async () => {
     if (modelActionsDisabled) return
+    sampleStopRef.current?.()
     const line = dialogueText.trim()
     if (!line) throw new Error(t('faceRig.errors.writeLine'))
     setBusyState('dialogue'); setError(null)
@@ -634,10 +641,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
     <div className="space-y-3">
     <h3 className="text-sm font-semibold">{t('faceRig.stepChoose')}</h3>
     <MouthPackChoices packs={presetPacks} selected={presetId} disabled={disabled || Boolean(busyState)} onSelect={setPresetId} onApply={applyPreset} />
-    <div className="grid grid-cols-3 gap-1">{CHARACTER_FACE_RIG_STATES.map(state => {
-      const asset = assetFor(kit, state)
-      return <button key={state} type="button" disabled={disabled || Boolean(busyState)} onClick={() => setSelectedState(state)} className={`rounded border px-1 py-2 text-xs ${selectedState === state ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{stateLabel(state)}<span className="block text-xs">{t(`review.${asset?.reviewState ?? 'missing'}`)}</span></button>
-    })}</div>
+    <FaceRigStatePicker kit={kit} selected={selectedState} disabled={disabled || Boolean(busyState)} onSelect={setSelectedState} />
     {selectedRequest && <details className="rounded border border-border/70 bg-black/10 px-1.5 py-1"><summary className="cursor-pointer text-xs text-text-muted">{t('faceRig.promptUsed', { name: stateLabel(selectedState) })}</summary><p className="mt-1 select-text text-xs leading-relaxed text-text-secondary">{selectedRequest.prompt}</p></details>}
     {assetFor(kit, selectedState) && <div className="space-y-1 rounded border border-emerald-300/20 bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px] p-1.5">
       <img src={assetFor(kit, selectedState)!.source} alt={`${kit.name} ${stateLabel(selectedState)}`} className="mx-auto h-28 w-full object-contain" />
@@ -680,6 +684,8 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
     </div>}
     <div className="grid grid-cols-2 gap-3"><button type="button" disabled={modelActionsDisabled || !selectedRequest} onClick={() => void generateSelected()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{busyState === selectedState ? t('faceRig.generatingNamed', { name: stateLabel(selectedState) }) : t('faceRig.generateNamed', { name: stateLabel(selectedState) })}</button><button type="button" disabled={modelActionsDisabled || !requests.length} onClick={() => void generateMissingPack()} className="rounded border border-emerald-300/30 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{busyState === 'pack' ? t('faceRig.generatingPack') : t('faceRig.generateMissing')}</button></div>
     <h3 className="pt-3 text-sm font-semibold">{t('faceRig.stepTry')}</h3>
+    <FaceRigSamplePreview kit={kit} disabled={disabled || Boolean(busyState)} stopRef={sampleStopRef}
+      onStart={() => { playTokenRef.current++; audioRef.current?.pause(); setShowOverlay(true) }} onViseme={setLiveViseme} />
     <details open className="space-y-3 rounded border border-amber-300/20 bg-black/15 p-3">
       <summary className="cursor-pointer text-xs text-text-muted">{t('faceRig.tryLine.summary')}</summary>
       <textarea value={dialogueText} disabled={disabled || Boolean(busyState)} onChange={event => setDialogueText(event.target.value)} rows={2} className="mt-1 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-2 text-xs" />

@@ -8,7 +8,7 @@
     "newCharacter": "Crear personaje nuevo",
     "useCharacter": "Usar personaje en este plano",
     "definitionName": "Nombre del personaje",
-    "saveCharacter": "Guardar personaje con cara y voz",
+    "saveCharacter": "Guardar toda la configuración del personaje",
     "characterSaved": "Personaje guardado. Modelo, boca, ojos y voz disponibles en otros planos.",
     "characterApplied": "Personaje aplicado. Los turnos del plano se conservan.",
     "reloadLibrary": "Recargar biblioteca",

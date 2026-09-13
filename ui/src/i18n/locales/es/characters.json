@@ -156,7 +156,7 @@
     },
     "wipeMouth": {
       "title": "Coloca la caja sobre los labios",
-      "detail": "En “{{pose}}”, arrastra la caja amarilla hasta tapar la boca. Si el dibujo todavía tiene labios pintados, pulsa Limpiar zona de la boca. Si ya está limpio, pulsa Bloquear bocas y luego Guardar."
+      "detail": "En “{{pose}}”, arrastra la caja amarilla hasta tapar la boca. Si el dibujo todavía tiene labios pintados, pulsa Limpiar zona de la boca. Si ya está limpio, pulsa Aplicar posición a todas las bocas y luego Guardar."
     },
     "makeMouths": {
       "title": "Haz o aprueba las bocas",
@@ -172,7 +172,7 @@
     "steps": {
       "box": "Arrastra la caja amarilla hasta tapar los labios. Al soltar se guarda sola.",
       "wipe": "Si el dibujo todavía tiene boca pintada, pulsa Limpiar zona de la boca.",
-      "eyes": "Los ojos abiertos se quedan siempre; Cerrar ojos solo parpadea encima. Si el cuerpo ya tiene ojos, genera solo Cerrar ojos.",
+      "eyes": "Los ojos y el parpadeo son opcionales. Conserva el dibujo si no necesitas párpados animados.",
       "scene": "Poner en la escena y Preview. La boca y el parpadeo se animan solos."
     },
     "createNew": {
@@ -214,7 +214,7 @@
     "dragBoxHint": "Arrastra el rectángulo sobre la boca original. Mueve su esquina en horizontal y vertical para ajustar ancho y alto por separado. Se borra esa zona; la boca nueva conserva sus proporciones.",
     "wiping": "Limpiando…",
     "wipeMouth": "Limpiar zona de la boca",
-    "lockMouths": "Bloquear bocas",
+    "lockMouths": "Aplicar posición a todas las bocas",
     "states": {
       "closed": "Cerrada",
       "small": "Pequeña",
@@ -322,7 +322,14 @@
     "stepChoose": "2. Elige bocas existentes o genera unas nuevas",
     "stepTry": "3. Prueba las bocas con una frase",
     "wipeArea": "Zona de borrado de la boca",
-    "resizeArea": "Cambiar tamaño del rectángulo de borrado"
+    "resizeArea": "Cambiar tamaño del rectángulo de borrado",
+    "optionalEyes": "Ojos y parpadeo (opcional)",
+    "eyesOriginal": "Usar los ojos del dibujo",
+    "optionalEyesHint": "Los ojos que ya tiene dibujados el personaje sirven. El lipsync solo necesita bocas. Añade aquí capas de ojos únicamente si quieres cambiarlos o animar los párpados; esas piezas requieren colocación y revisión propias.",
+    "playSample": "Reproducir frase de muestra incluida",
+    "stopSample": "Detener muestra",
+    "sampleHint": "Frase grabada en inglés con tiempos de boca, incluida en la app. Usa tus bocas sin generar audio ni cambiar la voz guardada del personaje.",
+    "sampleUnavailable": "No se ha podido cargar la muestra incluida."
   },
   "facePatch": {
     "title": "Parche raster de sustitución de boca",
@@ -428,6 +435,8 @@
     "title": "Configurar {{name}}",
     "hint": "Configura aquí la voz, las bocas para animación 2D y el modelo para lipsync 3D. Al guardar se vincula esta configuración al personaje de la serie.",
     "return": "Volver al personaje en Series Lab",
-    "saveFirst": "Guarda los cambios de voz o del taller de lipsync antes de volver."
+    "saveFirst": "Usa Guardar todo y volver para guardar toda la configuración pendiente.",
+    "saveAllReturn": "Guardar todo y volver a Series Lab",
+    "saveAllHint": "Guarda juntos la voz, las imágenes de boca y su colocación. Conserva las aprobaciones existentes."
   }
 }
