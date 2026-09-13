@@ -10,20 +10,29 @@ import { characterFromSlot, characterSlotPatch } from '../scene3d/speech/charact
 import { modelDigest } from '../scene3d/speech/profiles'
 import { CharacterVoiceFields } from './CharacterVoiceFields'
 import type { CharacterVoice } from '../../lib/characterVoice'
+import { randomUuid } from '../../lib/uuid'
+import { CharacterDefinitionSpeechTools } from './CharacterDefinitionSpeechTools'
 
 type Props = { workspace: string; slot?: Scene3DSlot; disabled?: boolean;
+  initialKit?: CharacterKit; onSaved?: (kit: CharacterKit) => void | Promise<void>;
   onApply?: (patch: Partial<Scene3DSlot>) => void; onBusyChange?: (busy: boolean) => void }
 
-function initialDefinition(workspace: string, slot?: Scene3DSlot) {
-  return { id: slot?.character?.kitRef?.workspace === workspace ? slot.character.kitRef.id : '',
-    name: slot?.character?.name ?? '', voice: slot?.character?.voice }
+function initialDefinition(workspace: string, slot?: Scene3DSlot, kit?: CharacterKit) {
+  const character = slot?.character
+  if (character) return { id: character.kitRef?.workspace === workspace ? character.kitRef.id : '', name: character.name, voice: character.voice }
+  return { id: kit?.id ?? '', name: kit?.name ?? '', voice: kit?.voice }
 }
-function canSaveDefinition(library: CharacterKitLibrary | undefined, name: string, slot: Scene3DSlot | undefined, model: ApiOutput | undefined, kit: CharacterKit | undefined) {
+function definitionKit(library: CharacterKitLibrary | undefined, id: string, seed?: CharacterKit) {
+  const saved = library?.kits[id]
+  if (seed?.id !== id) return saved
+  return saved ? { ...saved, base: saved.base ?? seed.base, identityReference: saved.identityReference ?? seed.identityReference } : seed
+}
+function canSaveDefinition(library: CharacterKitLibrary | undefined, name: string, slot: Scene3DSlot | undefined) {
   if (!library || !name.trim()) return false
-  return slot ? Boolean(slot.speech?.face && slot.sourceRef) : Boolean(model || kit?.speech3d)
+  return slot ? Boolean(slot.speech?.face && slot.sourceRef) : true
 }
 async function definitionForSave(workspace: string, name: string, voice: CharacterVoice | undefined, kit: CharacterKit | undefined, slot: Scene3DSlot | undefined, model: ApiOutput | undefined) {
-  const previous = kit ?? { ...createCharacterKit(name), id: crypto.randomUUID() }
+  const previous = kit ?? { ...createCharacterKit(name), id: randomUuid() }
   let next: CharacterKit = { ...previous, name: name.trim(), voice, updatedAt: new Date().toISOString() }
   if (slot) next = { ...await characterFromSlot(next, { ...slot, character: { id: slot.character?.id ?? slot.id, name, voice } }), voice }
   else if (model) {
@@ -35,18 +44,18 @@ async function definitionForSave(workspace: string, name: string, voice: Charact
 function DefinitionModelInput({ slot, kit, items, model, workspace, onChoose }: { slot?: Scene3DSlot; kit?: CharacterKit; items: ApiOutput[]; model?: ApiOutput; workspace: string; onChoose: (item: ApiOutput | undefined) => void }) {
   const { t } = useUiTranslation('scene3dEditor')
   if (slot) return null
-  return <AssetInput label={t('speech.chooseModel')} placeholder={kit?.speech3d?.model.filename ?? t('speech.chooseModel')}
+  return <details><summary className="cursor-pointer">{t('speech.optionalModel')}</summary><AssetInput label={t('speech.optionalModel')} placeholder={kit?.speech3d?.model.filename ?? t('speech.optionalModel')}
     items={items} value={model} accept=".glb,model/gltf-binary" workspaceId={workspace} constraints={{ kinds: ['model3d'], maxCount: 1, optional: false }}
-    onChoose={item => onChoose(item ?? undefined)} />
+    onChoose={item => onChoose(item ?? undefined)} /></details>
 }
 /** One authoritative Character Kit library, shared by Characters and the native 3D inspector. */
 export function CharacterDefinitionEditor(props: Props) {
-  return <ScopedDefinition key={props.workspace + '/' + (props.slot?.id ?? '')} {...props} />
+  return <ScopedDefinition key={props.workspace + '/' + (props.slot?.id ?? props.initialKit?.id ?? '')} {...props} />
 }
-function ScopedDefinition({ workspace, slot, disabled, onApply, onBusyChange }: Props) {
+function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onApply, onBusyChange }: Props) {
   const { t } = useUiTranslation('scene3dEditor')
   const [library, setLibrary] = useState<CharacterKitLibrary>()
-  const initial = initialDefinition(workspace, slot)
+  const initial = initialDefinition(workspace, slot, initialKit)
   const [id, setId] = useState(initial.id)
   const [name, setName] = useState(initial.name)
   const [voice, setVoice] = useState(initial.voice)
@@ -54,7 +63,7 @@ function ScopedDefinition({ workspace, slot, disabled, onApply, onBusyChange }: 
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('')
   const alive = useRef(true)
   const hasSlot = Boolean(slot)
-  const kit = library?.kits[id]
+  const kit = definitionKit(library, id, initialKit)
   useEffect(() => { onBusyChange?.(busy); return () => onBusyChange?.(false) }, [busy, onBusyChange])
   useEffect(() => {
     alive.current = true
@@ -72,13 +81,14 @@ function ScopedDefinition({ workspace, slot, disabled, onApply, onBusyChange }: 
   return <section data-testid="character-definition" className="space-y-2 rounded-lg border border-cyan-400/30 bg-bg-secondary p-3 text-xs">
     <h3 className="font-semibold text-text-primary">{t('speech.characterDefinition')}</h3>
     <p className="text-text-muted">{t('speech.definitionHint')}</p>
-    <fieldset disabled={disabled || busy} className="space-y-2">
+    <fieldset disabled={disabled || busy || !library} className="space-y-2">
       <label className="block">{t('speech.savedCharacter')}<select data-testid="saved-character" value={id}
         className="mt-1 min-h-10 w-full rounded border border-border bg-bg-primary px-2" onChange={event => {
           const next = library?.kits[event.target.value]; setId(event.target.value); setNotice('')
           if (!slot) { setName(next?.name ?? ''); setVoice(next?.voice); setModel(undefined) }
         }}>
         <option value="">{t('speech.newCharacter')}</option>
+        {initialKit && !library?.kits[initialKit.id] && <option value={initialKit.id}>{initialKit.name}</option>}
         {Object.values(library?.kits ?? {}).map(item => <option key={item.id} value={item.id}>{item.name}{item.speech3d ? ' · 3D' : ' · 2D'}</option>)}
       </select></label>
       {slot && <button data-testid="apply-character" className="min-h-10 rounded border border-border px-3" disabled={!kit?.speech3d}
@@ -94,19 +104,23 @@ function ScopedDefinition({ workspace, slot, disabled, onApply, onBusyChange }: 
         if (slot) onApply?.({ character: { id: slot.character?.id ?? slot.id, name: slot.character?.name ?? name, ...slot.character, voice: next } })
       }} />
       <button data-testid="save-character" className="min-h-10 rounded border border-border px-3"
-        disabled={!canSaveDefinition(library, name, slot, model, kit)}
+        disabled={!canSaveDefinition(library, name, slot)}
         onClick={() => run(async () => {
           const next = await definitionForSave(workspace, name, voice, kit, slot, model)
           if (!alive.current) return
           const saved = await saveCharacterKit(workspace, library!, next)
           if (!alive.current) return
           setLibrary(saved); setId(next.id); setNotice(t('speech.characterSaved'))
+          await onSaved?.(saved.kits[next.id])
           if (slot) onApply?.({ character: { id: slot.character?.id ?? slot.id, name: next.name, kitRef: { id: next.id, workspace }, libraryRevision: saved.revision, voice } })
         })}>{busy ? t('speech.busy') : t('speech.saveCharacter')}</button>
       <button className="min-h-10 px-2 underline" onClick={() => run(async () => {
         const saved = await fetchCharacterKitLibrary(workspace)
         if (alive.current) { setLibrary(saved); setNotice(t('speech.libraryReloaded')) }
       })}>{t('speech.reloadLibrary')}</button>
+      {!slot && <CharacterDefinitionSpeechTools workspace={workspace} kit={library?.kits[id]}
+        disabled={busy || name !== kit?.name || JSON.stringify(voice) !== JSON.stringify(kit?.voice) || Boolean(model)}
+        onSaved={saved => run(async () => { setLibrary(saved); await onSaved?.(saved.kits[id]) })} />}
       {!slot && kit?.speech3d && <button data-testid="edit-character-face" className="min-h-10 rounded border border-border px-3" onClick={() => run(async () => {
         const patch = await characterSlotPatch(kit, workspace, library!.revision)
         if (!alive.current) return

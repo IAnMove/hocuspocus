@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { SpeechProductionEntry } from '../scene3d/speech/SpeechProductionEntry'
 import { CheckSquare, Info, RefreshCw, Square } from 'lucide-react'
 import * as api from '../../api/client'
@@ -10,18 +10,26 @@ import { SeriesShotDurationControl } from './SeriesShotDurationControl'
 import { primaryButton, secondaryButton, selectClass, textareaClass } from './styles'
 import type { SeriesEpisode, SeriesProject, SeriesShot } from './types'
 import { useUiTranslation } from '../../i18n'
+import { SeriesShotProduction } from './SeriesShotProduction'
+import { allowedSeriesMethods, seriesShotMethod } from './productionMethods'
+import type { SeriesReferenceRoom } from './shotReferences'
+import { SeriesProductionMethods } from './SeriesProductionMethods'
 
 export function SeriesShotsPanel({
-  workspace, series, episode, updateEpisode, replaceSeries, saveNow, onAcknowledgeLipSync, onRender,
+  workspace, series, episode, updateSeries, updateEpisode, replaceSeries, saveNow, onAcknowledgeLipSync, onRender, onOpenReferences, onOpenEpisode, onConfigureCharacter,
 }: {
   workspace: string
   series: SeriesProject
   episode: SeriesEpisode
+  updateSeries: (updater: (series: SeriesProject) => SeriesProject) => void
   updateEpisode: (updater: (episode: SeriesEpisode) => SeriesEpisode) => void
   replaceSeries: (series: SeriesProject) => void
   saveNow: () => Promise<unknown>
   onAcknowledgeLipSync: () => Promise<void>
   onRender: (mode: 'selected' | 'missing' | 'failed' | 'all', shotIds?: string[]) => void
+  onOpenReferences?: (room: SeriesReferenceRoom) => void
+  onOpenEpisode?: () => void
+  onConfigureCharacter?: (id: string) => void
 }) {
   const { t } = useUiTranslation('seriesLab')
   const imageItems = useWorkspaceImageOutputs(workspace)
@@ -29,15 +37,16 @@ export function SeriesShotsPanel({
   const [routing, setRouting] = useState(false)
   const [acknowledgingLipSync, setAcknowledgingLipSync] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const methodsRef = useRef<HTMLDivElement>(null)
   const characters = useMemo(() => Object.fromEntries(series.characters.map(item => [item.id, item.name])), [series.characters])
   const locations = useMemo(() => Object.fromEntries(series.locations.map(item => [item.id, item.name])), [series.locations])
   const selectableShotIds = useMemo(
-    () => episode.shots.filter(shot => !shot.approvedAttemptId).map(shot => shot.id),
-    [episode.shots],
+    () => episode.shots.filter(shot => !shot.approvedAttemptId && allowedSeriesMethods(series).includes('generated_video') && seriesShotMethod(series, shot) === 'generated_video').map(shot => shot.id),
+    [episode.shots, series],
   )
   const selectedCount = selectableShotIds.filter(id => selected.has(id)).length
   const allSelected = selectableShotIds.length > 0 && selectedCount === selectableShotIds.length
-  const hasDialogueShots = episode.shots.some(shot => shot.dialogueBeats.length > 0)
+  const hasDialogueShots = episode.shots.some(shot => selectableShotIds.includes(shot.id) && shot.dialogueBeats.length > 0)
   useEffect(() => {
     const selectableIds = new Set(selectableShotIds)
     setSelected(current => {
@@ -96,6 +105,10 @@ export function SeriesShotsPanel({
   }
   return <div className="space-y-4 pb-10">
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
+    <div ref={methodsRef}>
+      <SeriesProductionMethods key={`${workspace}/${series.id}/${episode.id}`} series={series} update={updateSeries}
+        episode={episode} updateEpisode={updateEpisode} onOpenReferences={onOpenReferences} />
+    </div>
     <SectionCard title={t('shots.title')} description={t('shots.description', { count: episode.shots.length, duration: totalDuration.toFixed(1) })} action={<button className={secondaryButton} disabled={routing || !episode.shots.length} onClick={() => void routeAll()}><RefreshCw size={13} className={routing ? 'animate-spin' : ''} />{t('shots.routeAll')}</button>}>
       {hasDialogueShots && !series.bestEffortLipSyncAcknowledged && <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
         <Info size={16} className="shrink-0 text-amber-300" />
@@ -105,13 +118,14 @@ export function SeriesShotsPanel({
       <div className="mb-3 flex flex-wrap gap-2">
         <button type="button" className={secondaryButton} aria-pressed={allSelected} disabled={!selectableShotIds.length} onClick={() => setSelected(allSelected ? new Set() : new Set(selectableShotIds))}>{allSelected ? <CheckSquare size={13} /> : <Square size={13} />}{allSelected ? t('shots.clearSelection') : t('shots.selectAll', { count: selectableShotIds.length })}</button>
         <button className={primaryButton} disabled={!selectedCount || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('selected', selectableShotIds.filter(id => selected.has(id)))}><CheckSquare size={13} />{t('shots.renderSelected', { count: selectedCount })}</button>
-        <button className={secondaryButton} disabled={hasDialogueShots && !series.bestEffortLipSyncAcknowledged} onClick={() => onRender('missing')}>{t('shots.renderMissing')}</button><button className={secondaryButton} disabled={hasDialogueShots && !series.bestEffortLipSyncAcknowledged} onClick={() => onRender('failed')}>{t('shots.retryFailed')}</button><button className={secondaryButton} disabled={hasDialogueShots && !series.bestEffortLipSyncAcknowledged} onClick={() => onRender('all')}>{t('shots.renderUnapproved')}</button>
+        <button className={secondaryButton} disabled={!selectableShotIds.length || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('missing')}>{t('shots.renderMissing')}</button><button className={secondaryButton} disabled={!selectableShotIds.length || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('failed')}>{t('shots.retryFailed')}</button><button className={secondaryButton} disabled={!selectableShotIds.length || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('all')}>{t('shots.renderUnapproved')}</button>
       </div>
+      <p className="mb-3 text-[11px] text-text-muted">{t('production.batchHint')}</p>
       {!episode.shots.length && <p className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-4 text-xs text-violet-200">{t('shots.empty')}</p>}
       <div className="space-y-3">{episode.shots.map(shot => {
         const manifest = shot.referenceManifest
         const approved = shot.attempts.find(item => item.id === shot.approvedAttemptId)
-        const selectable = !shot.approvedAttemptId
+        const selectable = selectableShotIds.includes(shot.id)
         const isSelected = selectable && selected.has(shot.id)
         return <article key={shot.id} id={`series-shot-${shot.id}`} className="rounded-xl border border-border bg-bg-primary p-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -138,6 +152,9 @@ export function SeriesShotsPanel({
           </div>
           <p className="mt-2 text-xs text-text-primary">{shot.action || shot.framing || t('shots.shotFallback')}</p>
           <p className="mt-1 text-[11px] text-text-secondary">{shot.dialogueBeats.map(beat => beat.text).filter(Boolean).join(' / ') || t('shots.noDialogue')}</p>
+          <SeriesShotProduction key={`${workspace}/${series.id}/${episode.id}/${shot.id}`} workspace={workspace} series={series} episode={episode} shot={shot}
+            onChange={next => patchShot(shot.id, () => next)} saveNow={saveNow} onOpenReferences={onOpenReferences} onOpenEpisode={onOpenEpisode}
+            onConfigureMethods={() => methodsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
           <div className="mt-3 max-w-xs">
             <SeriesShotDurationControl workspace={workspace} series={series} shot={shot} onChange={planned => patchShot(shot.id, () => planned)} />
           </div>
@@ -163,6 +180,7 @@ export function SeriesShotsPanel({
           </div>
           </details>
           {shot.dialogueBeats.length > 0 && <SpeechProductionEntry key={workspace + '/' + shot.id} kind="episode" workspace={workspace}
+            onConfigureCharacter={onConfigureCharacter}
             title={episode.title + ' · ' + shot.order} sourceId={series.id + '/' + episode.id + '/' + shot.id}
               cast={[...new Set(shot.dialogueBeats.map(beat => beat.characterId))].map(id => ({ id, name: characters[id] || id,
                 characterKitRef: series.characters.find(character => character.id === id)?.voiceProfile?.characterKitRef }))}

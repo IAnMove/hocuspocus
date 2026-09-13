@@ -2,9 +2,10 @@ import type {
   SeriesCharacter, SeriesLibrary, SeriesLocation, SeriesProject, SeriesProp, SeriesVisualVariant,
 } from './types'
 import { normalizeLanguageIntent } from '../../lib/languageIntent'
+import { randomUuid } from '../../lib/uuid'
 
 export const seriesId = (prefix: string): string =>
-  `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
+  `${prefix}_${randomUuid().replaceAll('-', '')}`
 
 const text = (value: unknown, fallback = ''): string => typeof value === 'string' ? value : fallback
 const objects = <T>(value: unknown): T[] => Array.isArray(value)

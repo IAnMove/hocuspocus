@@ -346,7 +346,7 @@ export async function generateImageAsset(
   options?: LocalImageOptions,
 ): Promise<ComicAsset> {
   if (provider === 'minimax') {
-    const requestedWorkspace = useStore.getState().activeWorkspace
+    const requestedWorkspace = options?.workspace || useStore.getState().activeWorkspace
     const subjectReference = await persistMiniMaxSubjectReference(reference, requestedWorkspace)
     const providerPrompt = compactProviderPrompt(prompt)
     let job: api.MiniMaxImageJob

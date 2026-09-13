@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, Plus, Trash2 } from 'lucide-react'
 import * as api from '../../api/client'
 import type { ApiOutput } from '../../api/client'
@@ -10,6 +10,9 @@ import { inputClass, primaryButton, secondaryButton, textareaClass } from './sty
 import type { SeriesProject, SeriesVisualVariant } from './types'
 import { useUiTranslation } from '../../i18n'
 import { SeriesVoiceFields } from './SeriesVoiceFields'
+import { SeriesCharacterSpeech } from './SeriesCharacterSpeech'
+import { SeriesReferenceGenerator } from './SeriesReferenceGenerator'
+import { seriesAssetUrl, type SeriesReferenceImport } from './referenceImages'
 
 function SeriesReferenceField({
   label, items, disabled, onPick,
@@ -32,25 +35,26 @@ function SeriesReferenceField({
   )
 }
 
-type CanonTab = 'world' | 'characters' | 'locations' | 'continuity' | 'advanced'
+export type CanonTab = 'world' | 'characters' | 'locations' | 'continuity' | 'advanced'
 const CANON_TABS: CanonTab[] = ['world', 'characters', 'locations', 'continuity', 'advanced']
 const CHARACTER_FIELDS = ['name', 'role', 'personality', 'desire', 'need', 'flaw', 'longArc', 'voiceAndDialogue', 'appearance', 'identityLock'] as const
 
-function ReferenceStrip({ series, assetIds }: { series: SeriesProject; assetIds: string[] }) {
+function ReferenceStrip({ series, assetIds, primaryId, onPrimary, onRemove }: {
+  series: SeriesProject; assetIds: string[]; primaryId?: string
+  onPrimary?: (id: string) => void; onRemove?: (id: string) => void
+}) {
   const { t } = useUiTranslation('seriesLab')
   if (!assetIds.length) return <span className="text-[10px] text-text-muted">{t('canon.noReference')}</span>
   return <div className="flex flex-wrap gap-2">{assetIds.map(id => {
     const asset = series.assets[id]
     if (!asset) return <Pill key={id} tone="red">{t('canon.missingAsset', { id })}</Pill>
-    const filename = asset.uri.replace(/^outputs\//, '')
-    const previewUrl = /^https?:\/\//i.test(asset.uri)
-      ? asset.uri
-      : api.getOutputThumbnailUrl(filename)
-    return <div key={id} className="w-20 overflow-hidden rounded-lg border border-border bg-bg-primary">
+    const previewUrl = seriesAssetUrl(asset)
+    return <div key={id} className="w-28 overflow-hidden rounded-lg border border-border bg-bg-primary">
       {asset.kind === 'image' || asset.kind === 'character' || asset.kind === 'location' || asset.kind === 'prop'
-        ? <img className="h-14 w-full object-cover" src={previewUrl} alt="" loading="lazy" />
+        ? <a href={previewUrl} target="_blank" rel="noreferrer"><img className="h-28 w-full object-contain" src={previewUrl} alt={String(asset.metadata.name || t('references.prompt'))} loading="lazy" /></a>
         : <div className="flex h-14 items-center justify-center text-[9px] text-text-muted">{asset.kind}</div>}
-      <div className="truncate px-1 py-1 text-[8px] text-text-muted" title={id}>{id}</div>
+      {onPrimary && <button type="button" className="w-full px-1 text-[10px] text-violet-200" aria-pressed={primaryId === id} onClick={() => onPrimary(id)}>{primaryId === id ? t('references.primary') : t('references.usePrimary')}</button>}
+      {onRemove && <button type="button" className="w-full px-1 text-[10px] text-red-300" onClick={() => onRemove(id)}>{t('references.remove')}</button>}
     </div>
   })}</div>
 }
@@ -68,17 +72,25 @@ function VariantEditor({ label, variants, onChange }: {
 }
 
 export function SeriesCanonPanel({
-  series, workspace, update: persistUpdate, replaceSeries, saveNow,
+  series, workspace, update: persistUpdate, replaceSeries, saveNow, onAssetImported, initialTab = 'world', focusCharacterId,
 }: {
   series: SeriesProject
   workspace: string
   update: (updater: (series: SeriesProject) => SeriesProject) => void
   replaceSeries: (series: SeriesProject) => void
   saveNow: () => Promise<unknown>
+  onAssetImported?: (workspace: string, result: SeriesReferenceImport) => void
+  initialTab?: CanonTab
+  focusCharacterId?: string
 }) {
   const { t } = useUiTranslation('seriesLab')
   const imageItems = useWorkspaceImageOutputs(workspace)
-  const [tab, setTab] = useState<CanonTab>('world')
+  const acceptAssetImport = onAssetImported || ((_workspace: string, result: SeriesReferenceImport) => replaceSeries(result.series))
+  const [tab, setTab] = useState<CanonTab>(initialTab)
+  const [focused, setFocused] = useState(focusCharacterId)
+  useEffect(() => {
+    if (tab === 'characters' && focused) document.getElementById(`series-character-${focused}`)?.scrollIntoView?.({ block: 'start' })
+  }, [tab, focused])
   const [uploading, setUploading] = useState('')
   const [approving, setApproving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -105,7 +117,7 @@ export function SeriesCanonPanel({
         uploadPath: ensured.path, name: item.name, ownerType, ownerId,
         kind: ownerType, referenceRole: ownerType === 'character' ? 'primary_portrait' : 'reference',
       })
-      replaceSeries(result.series)
+      acceptAssetImport(workspace, result)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('canon.importFailed'))
     } finally { setUploading('') }
@@ -149,15 +161,25 @@ export function SeriesCanonPanel({
     </>}
 
     {tab === 'characters' && <SectionCard title={t('canon.charactersTitle')} description={t('canon.charactersDescription')} action={<button className={primaryButton} onClick={() => update(current => ({ ...current, characters: [...current.characters, createSeriesCharacter()] }))}><Plus size={13} />{t('canon.character')}</button>}>
-      <div className="grid gap-3 xl:grid-cols-2">{series.characters.map((character, index) => <div key={character.id} className="rounded-xl border border-border bg-bg-primary p-3">
+      <div className="grid gap-3 xl:grid-cols-2">{series.characters.map((character, index) => <div id={`series-character-${character.id}`} key={character.id} className="rounded-xl border border-border bg-bg-primary p-3">
         <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><strong className="text-xs text-text-primary">{character.name}</strong><Pill tone={character.approval === 'approved' ? 'green' : 'amber'}>{seriesStatusLabel(t, character.approval)}</Pill></div><button onClick={() => update(current => ({ ...current, characters: current.characters.filter((_, i) => i !== index) }))}><Trash2 size={14} className="text-red-400" /></button></div>
         <div className="grid gap-2 md:grid-cols-2">
           {CHARACTER_FIELDS.map(key => <label key={key} className="text-[10px] uppercase text-text-muted">{t(`canon.fields.${key}`)}<textarea className={`${inputClass} mt-1 min-h-14`} value={character[key]} onChange={event => update(current => ({ ...current, characters: current.characters.map((item, i) => i === index ? { ...item, [key]: event.target.value } : item) }))} /></label>)}
         </div>
         <VariantEditor label={t('canon.wardrobeVariants')} variants={character.wardrobeVariants} onChange={variants => update(current => ({ ...current, characters: current.characters.map((item, i) => i === index ? { ...item, wardrobeVariants: variants, defaultWardrobeVariantId: variants.some(variant => variant.id === item.defaultWardrobeVariantId) ? item.defaultWardrobeVariantId : variants[0]?.id } : item) }))} />
         {character.wardrobeVariants.length > 0 && <label className="mt-2 block text-[10px] uppercase text-text-muted">{t('canon.defaultWardrobe')}<select className={`${inputClass} mt-1`} value={character.defaultWardrobeVariantId || ''} onChange={event => update(current => ({ ...current, characters: current.characters.map((item, i) => i === index ? { ...item, defaultWardrobeVariantId: event.target.value || undefined } : item) }))}><option value="">{t('canon.noDefault')}</option>{character.wardrobeVariants.map(variant => <option key={variant.id} value={variant.id}>{variant.label}</option>)}</select></label>}
-        <div className="mt-3"><ReferenceStrip series={series} assetIds={character.referenceAssetIds} /></div>
+        <div className="mt-3"><ReferenceStrip series={series} assetIds={character.referenceAssetIds} primaryId={character.primaryReferenceAssetId}
+          onPrimary={id => update(current => ({ ...current, characters: current.characters.map(item => item.id === character.id ? { ...item, primaryReferenceAssetId: id } : item) }))}
+          onRemove={id => update(current => ({ ...current, characters: current.characters.map(item => item.id === character.id ? { ...item,
+            referenceAssetIds: item.referenceAssetIds.filter(ref => ref !== id),
+            primaryReferenceAssetId: item.primaryReferenceAssetId === id ? item.referenceAssetIds.find(ref => ref !== id) : item.primaryReferenceAssetId,
+          } : item) }))} /></div>
         <div className="mt-3 space-y-2">
+          <SeriesCharacterSpeech key={`${workspace}/${series.id}/${character.id}`} workspace={workspace} series={series} character={character}
+            saveNow={saveNow} onPatch={patch => update(current => current.id !== series.id ? current : ({ ...current,
+              characters: current.characters.map(item => item.id === character.id ? { ...item, voiceProfile: { ...item.voiceProfile, ...patch } } : item),
+            }))} />
+          <SeriesReferenceGenerator key={`${workspace}/${series.id}/${character.id}`} workspace={workspace} series={series} target={{ kind: 'character', id: character.id }} saveNow={saveNow} onImported={acceptAssetImport} />
           <SeriesReferenceField label={uploading === character.id ? t('canon.importing') : t('canon.addIdentity')} items={imageItems} disabled={Boolean(uploading)} onPick={item => void uploadReference(item, 'character', character.id)} />
           <button className={secondaryButton} onClick={() => update(current => ({ ...current, characters: current.characters.map((item, i) => i === index ? { ...item, approval: item.approval === 'approved' ? 'draft' : 'approved' } : item) }))}>{character.approval === 'approved' ? t('canon.returnDraft') : t('canon.approveCharacter')}</button>
         </div>
@@ -172,8 +194,12 @@ export function SeriesCanonPanel({
         <div className="flex items-center gap-2"><input className={inputClass} value={location.name} onChange={event => update(current => ({ ...current, locations: current.locations.map((item, i) => i === index ? { ...item, name: event.target.value } : item) }))} /><Pill tone={location.approval === 'approved' ? 'green' : 'amber'}>{seriesStatusLabel(t, location.approval)}</Pill><button onClick={() => update(current => ({ ...current, locations: current.locations.filter((_, i) => i !== index) }))}><Trash2 size={14} className="text-red-400" /></button></div>
         <textarea className={`${textareaClass} mt-2`} value={location.description} onChange={event => update(current => ({ ...current, locations: current.locations.map((item, i) => i === index ? { ...item, description: event.target.value } : item) }))} placeholder={t('canon.locationPlaceholder')} />
         <VariantEditor label={t('canon.locationVariants')} variants={location.variants} onChange={variants => update(current => ({ ...current, locations: current.locations.map((item, i) => i === index ? { ...item, variants } : item) }))} />
-        <div className="my-3"><ReferenceStrip series={series} assetIds={location.referenceAssetIds} /></div>
+        <div className="my-3"><ReferenceStrip series={series} assetIds={location.referenceAssetIds}
+          onRemove={id => update(current => ({ ...current, locations: current.locations.map(item => item.id === location.id ? { ...item,
+            referenceAssetIds: item.referenceAssetIds.filter(ref => ref !== id),
+          } : item) }))} /></div>
         <div className="space-y-2">
+          <SeriesReferenceGenerator key={`${workspace}/${series.id}/${location.id}`} workspace={workspace} series={series} target={{ kind: 'location', id: location.id }} saveNow={saveNow} onImported={acceptAssetImport} />
           <SeriesReferenceField label={t('canon.addReference')} items={imageItems} disabled={Boolean(uploading)} onPick={item => void uploadReference(item, 'location', location.id)} />
           <button className={secondaryButton} onClick={() => update(current => ({ ...current, locations: current.locations.map((item, i) => i === index ? { ...item, approval: item.approval === 'approved' ? 'draft' : 'approved' } : item) }))}>{t('canon.toggleApproval')}</button>
         </div>
@@ -190,7 +216,7 @@ export function SeriesCanonPanel({
     </>}
 
     {tab === 'advanced' && <SectionCard title={t('canon.voicesTitle')} description={t('canon.voicesDescription')}>
-      <SeriesVoiceFields series={series} onPatchVoice={patchVoice} />
+      <SeriesVoiceFields series={series} onPatchVoice={patchVoice} onConfigureCharacter={id => { setFocused(id); setTab('characters') }} />
     </SectionCard>}
   </div>
 }

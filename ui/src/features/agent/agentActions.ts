@@ -49,6 +49,7 @@ import type {
   AgentMountVideoclipAlternativeSongAction,
 } from './alternativeSongActions'
 import type { ExampleConversation } from './agentExamples'
+import { parseWizardIntent, WIZARD_INTENT_SCHEMA, type WizardIntent } from './wizardIntent'
 import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
 import {
@@ -695,6 +696,8 @@ export type AgentAction = AgentOpenTabAction
 export interface AgentTurn {
   reply: string
   actions: AgentAction[]
+  /** Semantic interpretation proposed by the planner, never proof of execution. */
+  intent?: WizardIntent
   /** Locally derived validation/policy diagnostics, never trusted from the model. */
   rejections?: WizardActionRejection[]
   /** Original proposal positions when parser exclusions shifted action indices. */
@@ -1764,9 +1767,11 @@ export function parseAgentTurn(raw: string): AgentTurn {
     proposalIndices.push(index)
   }
   const conversationLanguage = normalizeConversationLanguageTag(object.conversation_language)
+  const intent = parseWizardIntent(object.intent)
   return {
     reply: reply || (actions.length ? 'El hechizo está trazado; voy a mover HocusPocus.' : humanReply(raw.trim())),
     actions,
+    ...(intent ? { intent } : {}),
     ...(proposalIndices.some((index, position) => index !== position) ? { proposalIndices } : {}),
     ...(rejections.length ? { rejections } : {}),
     ...(conversationLanguage ? { conversationLanguage } : {}),
@@ -2662,6 +2667,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = mergeRe
   additionalProperties: false,
   properties: {
     reply: { type: 'string', maxLength: 8_000 },
+    intent: WIZARD_INTENT_SCHEMA,
     conversation_language: { type: 'string', maxLength: 120 },
     actions: {
       type: 'array',
@@ -2881,7 +2887,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = mergeRe
       },
     },
   },
-  required: ['reply', 'actions'],
+  required: ['reply', 'intent', 'actions'],
 })
 
 export function wizardLlmRequestSchema(): Record<string, unknown> {

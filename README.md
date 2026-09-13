@@ -96,7 +96,21 @@ Gandalf speaking in that world (image lips on the mesh, not a baked video):
 
 The **Wizard** is an in-app director: “open the concert scene”, “prepare a 3D showcase”, “make a 5-second clip of the cube in the rain”. **MCP** exposes the same jobs to external agents (image, video, SFX, scenes, receipts). Switching the footer workspace while a Wizard scene is still loading will **not** stomp the compositor or wipe undo.
 
+Connect through **Settings → Integrations → Hocuspocus MCP**, using the app's address plus `/api/v1/mcp` and the MCP Bearer token. This is Hocuspocus's shared tool server, including generation, assets, collections and scenes supported by the installation. The historical `/api/v1/wangp/mcp` URL remains an alias for existing clients. See the [MCP connection guide](docs/development/SCENE_EFFECTS_AND_MCP.md#enable-and-connect-mcp).
+
 **Example.** In 3D Video, ask the Wizard to open a saved scene by name and select a layer. If you change output folder mid-load, it aborts instead of importing into the wrong world.
+
+Wizard interprets your intended outcome using the conversation and current project. Describe what you want in your own words: it can explain, ask for essential missing context, or plan supported actions. Questions remain visible even when it also opens a lab. Once a series request has creative direction, Wizard can propose missing titles and plot details and save a first episode draft without another interview. Its receipt includes the saved series and episode premises. Opening Series Lab alone does not generate an episode's media.
+
+In **Series Lab → Canon**, generate reference images from each character or location's description and the series style. Approve the images with the canon, then use **Use current approved references** in an existing episode. **Setup → Allowed production methods** lets you combine AI video, 2D animation, 3D scenes and imported clips; each shot has its own method and production controls. See [Series production and references](docs/series-lab/IMPLEMENTATION.md#reference-images-and-mixed-production).
+
+For 2D/3D animation, prepare both environments and characters. Each shot shows its environment selector and reference previews, and opens the editor once the episode has approved images for the environment and every visible character. Preparation shortcuts lead directly to the corresponding Bible cards. An establishing shot can use just its environment.
+
+You can also enable production methods directly in **Series Lab → Shots**. For an existing episode, select an enabled method and use **Apply to shots without a take** to assign it across unfinished shots; completed and active takes are preserved.
+
+Location image prompts describe empty environments. Series Lab separates the physical setting and rendering style from character design and narrative occupants before generating. Use **Prepare environment prompt** in the location card to review the exact prompt first.
+
+Each **Canon → Characters** card also shows voice, 2D lip-sync and 3D lip-sync readiness. **Configure voice and lip sync** opens the shared character editor, carries over the series reference image, and links the saved library character by ID. A voice can be saved without a 3D model. Save the character before opening its 2D mouth workshop or 3D face calibration. Dialogue shots and the advanced voice table link back to the exact character card. AI video with native audio continues to use its generator's voice; the reusable TTS preset is used in the speech editor.
 
 ### Finish without regenerating
 
@@ -113,7 +127,7 @@ The **Wizard** is an in-app director: “open the concert scene”, “prepare a
 - **CivitAI LoRA browser** with one-click install, update badges, and auto-written prompting guides from CivitAI / Hugging Face cards.
 - **Local LLM** (Gemma 4 / Qwen GGUF via llama.cpp) or external OpenAI / Anthropic / compatible endpoints. Unloads after idle so VRAM goes back to generation.
 - **Themes:** Golden Hour, Classic, Onyx.
-- **LAN:** optional share on the local network; optional token auth (`LOREFRAME_LAN_AUTH`).
+- **LAN:** optional share on the local network; optional token auth (`LOREFRAME_LAN_AUTH`). Creating series drafts, characters and speech clips also works from plain HTTP network URLs. After updating, reload the browser; Wizard can continue an empty series draft with the same title after a failed creation attempt.
 - **NSFW** and experimental gates are opt-in.
 
 Operator index: [docs/HOWUSEIT.md](docs/HOWUSEIT.md).

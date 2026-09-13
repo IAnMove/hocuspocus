@@ -64,3 +64,62 @@ app/env/bin/python -m pytest -q tests
 ```
 
 Broader Story Lab, Director, job lifecycle and Video Editor regression suites are required before release.
+
+## Reference images and mixed production
+
+In **Canon → Characters / Locations**, **Generate reference image** uses the subject description and the series visual style. The prompt can be edited before submission. Generation uses the configured image provider and the existing image job queue. A pending job can reconnect from the same browser without submitting another generation. Images are copied into the series asset library with their prompt, provider and job provenance. Choose the primary character image or remove a reference from its card; removing a reference preserves its file and earlier episode evidence.
+
+Location references use a dedicated empty-environment prompt. Before a new location image job, the series writing model extracts the physical setting and environment rendering style, removing character-design instructions and occupants even when mentioned in the location description. **Prepare environment prompt** previews that editable result without generating an image. The same preparation is used by the Setup batch. Failed preparation does not submit an image; reconnecting an existing image job preserves its original prompt. Locations use 16:9 framing, an explicit zero-occupant instruction and clean local model defaults so an old character reference cannot leak in from Studio. The scoped writer uses `/api/v1/llm/generate` with optional `writingProvider`, `writingModel` and `writingBaseUrl`, preserving the configured global model.
+
+Review the result and approve the canon. New episodes capture those references automatically. For an existing pilot, click **Use current approved references** in the Episode room. This updates the matching characters' and locations' reference images, preserving the episode's frozen story, dialogue and existing takes. Active rendering and stale revisions block this update.
+
+**Setup → Allowed production methods** stores a nonempty `allowedProductionMethods` list:
+
+| Value | Shot workflow |
+| --- | --- |
+| `generated_video` | Automatic video-model rendering with the configured H3 variant. |
+| `animation_2d` | Open the episode references as editable character/background layers in Video 2D. |
+| `animation_3d` | Open an editable spatial composition using reference image planes; models can be assigned in Video 3D. |
+| `imported_video` | Import a completed clip from another workflow or generator. |
+
+Select several methods to permit a mixed episode. The planner chooses `productionMethod` per shot from that list; each shot can be reassigned manually. Existing legacy shots retain `generated_video`. H3 batch rendering processes only permitted model-video shots, and checks the permission again before running queued shots. Native/imported shot durations are editable independently of H3 duration quantization.
+
+The same production-method checkboxes are available at the top of **Shots**, including in existing series. Enabling a method adds it to every shot's selector. To reassign an existing episode, choose the enabled method in **Method for shots without a take**, then click **Apply to shots without a take**. This updates eligible shots in the current episode, preserving completed/approved takes and queued/running/cancelling attempts. Each shot's **Configure series methods** link returns to the checkboxes. Changing the allowed list alone preserves existing shot assignments.
+
+The 2D/3D buttons prepare scenes; animation, model assignment, audio and export are completed in those editors. Import the exported video back into its shot using **Import video as a take**. The server verifies the video stream and duration, appends a completed take, and preserves earlier takes and approval. Approve the imported take in Review to include it in the normal episode assembly.
+
+Both animation methods require an approved environment image and approved images for every visible character in the episode snapshot. Setup shows environment/cast preparation counts and links to their Bible cards. Each animation shot displays the assigned environment, its optional variant and the exact reference previews; preparation stays disabled until all required images are available. Video assets, derived thumbnails and unapproved references do not satisfy this requirement. Establishing shots can have an empty cast, but still need an environment. When a planning response omits an animation shot's location, it inherits its script scene's canonical location; a plan without either is rejected. Use **Update episode references** to reach the existing reference refresh action after approving new images.
+
+The normal project PUT API persists `allowedProductionMethods`; episode/shot updates persist `productionMethod`. To refresh approved references in an existing episode, POST `/api/v1/series/{seriesId}/episodes/{episodeId}/references/refresh` with `workspace` and the current series `baseRevision`:
+
+```javascript
+const result = await fetch(`${base}/api/v1/series/${seriesId}/episodes/${episodeId}/references/refresh`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ workspace: 'default', baseRevision: series.revision }),
+});
+if (!result.ok) throw new Error(await result.text());
+const updated = await result.json();
+```
+
+```python
+response = requests.post(f'{base}/api/v1/series/{series_id}/episodes/{episode_id}/references/refresh',
+    json={'workspace': 'default', 'baseRevision': series['revision']})
+response.raise_for_status()
+updated = response.json()
+```
+
+```bash
+curl -X POST "$BASE/api/v1/series/$SERIES_ID/episodes/$EPISODE_ID/references/refresh" \
+  -H 'Content-Type: application/json' \
+  -d '{"workspace":"default","baseRevision":12}'
+```
+
+Import a completed take using the existing `/api/v1/series/{seriesId}/assets/import` endpoint with `ownerType: "shot"`, `ownerId: shotId`, `kind: "video"`, `asTake: true`, and an `uploadPath` returned by `/api/v1/upload`. Both imports and reference refresh are supported by the full and core runtimes. The automatic H3 renderer remains part of the full runtime.
+
+## Reusable character voice and lip-sync configuration
+
+**Canon → Characters** owns the setup entry for each series character. It reports voice, 2D mouth-pack and 3D face-calibration readiness separately. An empty library no longer leaves the user with only an unlinked selector: **Configure voice and lip sync** opens the shared Characters definition editor with the series name and reference image as a draft. Saving persists a Character Kit and its exact workspace/id link in the series. Editing that link opens the same identity; it never matches or merges characters by name. Linking an existing library character remains available as a secondary action.
+
+Voice-only characters do not need a GLB. The 3D model is optional; configuring the 3D face still requires a verified GLB. The 2D workshop opens the saved character's exact ID and keeps its recovery draft separate from other characters and the general workshop. A missing image or unprepared mouth remains visibly pending. Opening or saving settings does not generate audio, images or video.
+
+The advanced voice table and dialogue-shot speech controls provide a shortcut back to the corresponding character card. The 3D speech workflow consumes the linked kit's model, face settings and local TTS preset. 2D mouth preparation continues through the existing workshop and compositor. Native-audio AI video does not consume the local TTS voice ID; its provider generates the voice. Scene audio and existing takes remain independent of character settings.

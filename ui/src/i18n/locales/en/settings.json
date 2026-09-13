@@ -375,9 +375,9 @@
     "modelSizeTitle": "{{primary}} deletable here; the rest lives in linked installs or belongs to a base model"
   },
   "mcp": {
-    "title": "MCP · External assistants",
+    "title": "Hocuspocus MCP · External assistants",
     "info": "How MCP works",
-    "summary": "Connect an external assistant to this installation. Wizard remains available inside the app.",
+    "summary": "Connect an external assistant to Hocuspocus to use the generation, asset, collection and scene tools available in this installation. Wizard remains available inside the app.",
     "enable": "Enable MCP access",
     "endpoint": "Connection URL",
     "token": "New token — copy before closing Settings",

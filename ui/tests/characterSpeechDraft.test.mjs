@@ -15,6 +15,21 @@ Object.assign(globalThis, {
   document: dom.window.document,
 })
 
+test('character-specific speech drafts preserve other characters and the general workshop draft', () => {
+  const first = createCharacterKit('First'), second = createCharacterKit('Second')
+  writeSpeechDraft('scoped-voices', { baseRevision: 2, kit: first })
+  writeSpeechDraft('scoped-voices', { baseRevision: 3, kit: first }, first.id)
+  writeSpeechDraft('scoped-voices', { baseRevision: 4, kit: second }, second.id)
+  assert.equal(readSpeechDraft('scoped-voices')?.baseRevision, 2)
+  assert.equal(readSpeechDraft('scoped-voices', first.id)?.baseRevision, 3)
+  assert.equal(readSpeechDraft('scoped-voices', second.id)?.baseRevision, 4)
+  clearSpeechDraft('scoped-voices', first.id)
+  assert.equal(readSpeechDraft('scoped-voices', first.id), null)
+  assert.equal(readSpeechDraft('scoped-voices', second.id)?.kit.id, second.id)
+  assert.equal(readSpeechDraft('scoped-voices')?.kit.id, first.id)
+  assert.throws(() => writeSpeechDraft('scoped-voices', { baseRevision: 4, kit: first }, second.id), /another character/)
+})
+
 const asset = (id, reviewState = 'pending', source = `/${id}.png`, kind = 'overlay') => ({
   id,
   name: id,

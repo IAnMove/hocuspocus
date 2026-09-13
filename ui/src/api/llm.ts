@@ -68,6 +68,9 @@ export async function writeSong(params: {
 // --- LLM Service ---
 
 export async function generateLlmText(params: {
+  writingProvider?: string
+  writingModel?: string
+  writingBaseUrl?: string
   onMediaEvidence?: (evidence: VisualEvidence[]) => void
   media?: { source: string; kind: 'image' | 'video' }[]
   workspace?: string
@@ -94,6 +97,9 @@ export async function generateLlmText(params: {
       json_schema: params.json_schema,
       media: params.media,
       workspace: params.workspace,
+      writingProvider: params.writingProvider,
+      writingModel: params.writingModel,
+      writingBaseUrl: params.writingBaseUrl,
     }),
   })
   if (!res.ok) {

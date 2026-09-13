@@ -232,11 +232,16 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(createdEpisode.id)
   const canonResult = approvedCanon ? 'preparado y aprobado el canon editable necesario, y ' : ''
+  const savedEpisode = series.episodesById[createdEpisode.id] || createdEpisode
+  const synopsis = [
+    series.premise.trim() ? `Serie “${series.title}”: ${series.premise.trim()}` : '',
+    savedEpisode.premise.trim() ? `Primer borrador de “${savedEpisode.title}”: ${savedEpisode.premise.trim()}` : '',
+  ].filter(Boolean).join('\n\n')
   return seriesEpisodeResult(
     workspace,
-    createdEpisode,
+    savedEpisode,
     'episode',
-    `He ${createdSeries ? 'creado la serie, ' : ''}${canonResult}guardado el episodio “${createdEpisode.title}” con ${beats.length} beats; está abierto en Series Lab → Episode room.`,
+    `He ${createdSeries ? 'creado la serie, ' : ''}${canonResult}guardado el episodio “${savedEpisode.title}” con ${savedEpisode.outline.beats.length} beats; está abierto en Series Lab → Episode room.${synopsis ? `\n\n${synopsis}` : ''}`,
   )
 }
 

@@ -258,6 +258,10 @@ def _pick(observe: Mapping[str, Any], key: str, fallback):
 def receipt_status(engine: str, platform: str) -> dict[str, Any]:
     """Read the managed receipt only. Never spawn engine Python or import Torch."""
     spec = profiles.recipe(engine, platform)
+    # Core and WanGP share app/env, but have different platform recipes.
+    # A receipt in that folder is not evidence for an unsupported engine.
+    if platform not in spec["platforms"]:
+        return {"present": False, "installed": False, "fingerprint_match": False}
     path = profiles.APP_DIR.parent / spec["env"] / ".hocus-runtime-profile.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -265,12 +269,16 @@ def receipt_status(engine: str, platform: str) -> dict[str, Any]:
         return {"present": False, "installed": False, "fingerprint_match": False}
     if not isinstance(payload, dict):
         return {"present": True, "installed": False, "fingerprint_match": False}
-    expected = profiles.dependency_fingerprint(engine, platform)
+    try:
+        expected = profiles.dependency_fingerprint(engine, platform)
+    except OSError:
+        # An incomplete installation is a diagnostic result, not a server error.
+        return {"present": True, "installed": False, "fingerprint_match": False}
     fingerprint_match = payload.get("fingerprint") == expected
     installed = (
         fingerprint_match
         and payload.get("profile") == spec["id"]
-        and payload.get("cudaCalculation") is True
+        and payload.get("cudaCalculation") is bool(spec.get("cuda"))
     )
     return {
         "present": True,

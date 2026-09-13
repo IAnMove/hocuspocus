@@ -8,7 +8,7 @@ export const speechLibraryServices = { load: fetchCharacterKitLibrary, save: sav
 export type SpeechLibraryServices = typeof speechLibraryServices
 
 /** The owner is keyed by workspace. Late completions never write into a new owner. */
-export function useCharacterSpeechLibrary(workspace: string, services: SpeechLibraryServices) {
+export function useCharacterSpeechLibrary(workspace: string, services: SpeechLibraryServices, initialKitId?: string, onSaved?: (library: CharacterKitLibrary) => void) {
   const { t } = useUiTranslation('characters')
   const [library, setLibrary] = useState<CharacterKitLibrary | null>(null)
   const [draft, setDraft] = useState<CharacterKit | null>(null)
@@ -25,15 +25,15 @@ export function useCharacterSpeechLibrary(workspace: string, services: SpeechLib
     epoch.current = owner
     void services.load(workspace).then(result => {
       if (epoch.current !== owner) return
-      const recovered = readSpeechDraft(workspace)
+      const recovered = readSpeechDraft(workspace, initialKitId)
       setLibrary(result)
       setBaseRevision(recovered?.baseRevision ?? result.revision)
-      setDraft(recovered?.kit ?? result.kits[result.activeId] ?? Object.values(result.kits)[0] ?? null)
+      setDraft(recovered?.kit ?? (initialKitId ? result.kits[initialKitId] : result.kits[result.activeId] ?? Object.values(result.kits)[0]) ?? null)
     }).catch(cause => {
       if (epoch.current === owner) setError(cause instanceof Error ? cause.message : String(cause))
     }).finally(() => { if (epoch.current === owner) setBusy(false) })
     return () => { epoch.current = null }
-  }, [workspace, services])
+  }, [workspace, services, initialKitId])
 
   useEffect(() => {
     if (!dirty) return
@@ -64,19 +64,19 @@ export function useCharacterSpeechLibrary(workspace: string, services: SpeechLib
   const remember = (next: CharacterKit, revision: number) => {
     setDraft(next)
     setBaseRevision(revision)
-    try { writeSpeechDraft(workspace, { baseRevision: revision, kit: next }) }
+    try { writeSpeechDraft(workspace, { baseRevision: revision, kit: next }, initialKitId) }
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
   }
 
   const select = (id: string) => {
-    if (busy || dirty || !library) return
-    clearSpeechDraft(workspace)
+    if (busy || dirty || !library || initialKitId) return
+    clearSpeechDraft(workspace, initialKitId)
     setBaseRevision(library.revision)
     setDraft(library.kits[id] ?? null); setStatus(''); setError(null)
   }
 
   const importBase = (name: string, file: File) => {
-    if (busy || dirty || !library) return
+    if (busy || dirty || !library || initialKitId) return
     if (!name.trim() || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size <= 0 || file.size > 20 * 1024 * 1024) {
       setError(t('speechWorkshop.invalidImport')); return
     }
@@ -103,9 +103,10 @@ export function useCharacterSpeechLibrary(workspace: string, services: SpeechLib
       const result = await services.save(workspace, { ...library, revision: baseRevision }, snapshot)
       if (!current()) return
       if (!result.kits[snapshot.id]) throw new Error(t('speechWorkshop.invalidSave'))
-      clearSpeechDraft(workspace)
+      clearSpeechDraft(workspace, initialKitId)
       setBaseRevision(result.revision)
       setLibrary(result); setDraft(result.kits[snapshot.id]); setStatus(t('speechWorkshop.saved'))
+      onSaved?.(result)
     })
   }
 
@@ -115,7 +116,7 @@ export function useCharacterSpeechLibrary(workspace: string, services: SpeechLib
     void run(async current => {
       const result = await services.load(workspace)
       if (!current()) return
-      clearSpeechDraft(workspace)
+      clearSpeechDraft(workspace, initialKitId)
       setBaseRevision(result.revision)
       setLibrary(result)
       setDraft(result.kits[draft?.id ?? result.activeId] ?? null)

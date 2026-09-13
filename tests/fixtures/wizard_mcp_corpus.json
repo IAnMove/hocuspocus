@@ -49,7 +49,13 @@
         "actions": [
           {"type": "prepare_image", "prompt": "a red boat on calm water", "model_type": "flux2_klein_4b"},
           {"type": "start_generation", "confirm": true}
-        ]
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Prepare a Flux image of a red boat on calm water and generate it now.",
+          "question": "",
+          "execution": "run"
+        }
       },
       "expect": {
         "operation": "generation.image",
@@ -71,7 +77,13 @@
         "actions": [
           {"type": "prepare_image", "prompt": "un barco rojo en agua en calma", "model_type": "flux2_klein_4b"},
           {"type": "start_generation", "confirm": true}
-        ]
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Prepara una imagen Flux de un barco rojo en agua en calma y genérala ahora.",
+          "question": "",
+          "execution": "run"
+        }
       },
       "expect": {
         "operation": "generation.image",
@@ -93,7 +105,13 @@
         "actions": [
           {"type": "prepare_image", "prompt": "a red boat"},
           {"type": "start_generation", "confirm": true}
-        ]
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Prepare a Flux image of a red boat, but do not generate it.",
+          "question": "",
+          "execution": "prepare"
+        }
       },
       "expect": {
         "action_types": ["prepare_image"],
@@ -114,7 +132,13 @@
         "actions": [
           {"type": "prepare_image", "prompt": "un barco rojo"},
           {"type": "start_generation", "confirm": true}
-        ]
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Prepara una imagen de un barco rojo, no la generes.",
+          "question": "",
+          "execution": "prepare"
+        }
       },
       "expect": {
         "action_types": ["prepare_image"],
@@ -134,7 +158,13 @@
         "actions": [
           {"type": "prepare_image", "prompt": "an invented image"},
           {"type": "start_generation", "confirm": true}
-        ]
+        ],
+        "intent": {
+          "kind": "conversation",
+          "goal": "How do I generate an image in Studio?",
+          "question": "",
+          "execution": "none"
+        }
       },
       "expect": {
         "action_types": [],
@@ -155,7 +185,13 @@
         "actions": [
           {"type": "prepare_image", "prompt": "una imagen inventada"},
           {"type": "start_generation", "confirm": true}
-        ]
+        ],
+        "intent": {
+          "kind": "conversation",
+          "goal": "¿Cómo genero una imagen en Studio?",
+          "question": "",
+          "execution": "none"
+        }
       },
       "expect": {
         "action_types": [],
@@ -172,7 +208,13 @@
       "request": "Generate that again.",
       "proposal": {
         "reply": "I launched invented-999.",
-        "actions": [{"type": "start_generation", "confirm": true}]
+        "actions": [{"type": "start_generation", "confirm": true}],
+        "intent": {
+          "kind": "clarification",
+          "goal": "Generate that again.",
+          "question": "Which exact item should I regenerate?",
+          "execution": "none"
+        }
       },
       "expect": {
         "action_types": [],
@@ -191,7 +233,13 @@
       "request": "Genera eso otra vez.",
       "proposal": {
         "reply": "He lanzado invented-999.",
-        "actions": [{"type": "start_generation", "confirm": true}]
+        "actions": [{"type": "start_generation", "confirm": true}],
+        "intent": {
+          "kind": "clarification",
+          "goal": "Genera eso otra vez.",
+          "question": "¿Qué recurso exacto quieres que regenere?",
+          "execution": "none"
+        }
       },
       "expect": {
         "action_types": [],
@@ -213,7 +261,13 @@
           {"type": "select_workspace", "workspace_name": "corpus-b"},
           {"type": "prepare_image", "prompt": "a lantern"},
           {"type": "start_generation", "confirm": true}
-        ]
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Switch to workspace corpus-b, then prepare a Flux image of a lantern. Do not generate yet.",
+          "question": "",
+          "execution": "prepare"
+        }
       },
       "expect": {
         "action_types": ["select_workspace", "prepare_image"],
@@ -236,7 +290,13 @@
           {"type": "select_workspace", "workspace_name": "corpus-b"},
           {"type": "prepare_image", "prompt": "un farol"},
           {"type": "start_generation", "confirm": true}
-        ]
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Cambia al workspace corpus-b y prepara una imagen de un farol. Todavía no la generes.",
+          "question": "",
+          "execution": "prepare"
+        }
       },
       "expect": {
         "action_types": ["select_workspace", "prepare_image"],
@@ -268,7 +328,13 @@
       "request": "Reintenta exactamente una vez la tarea task-generation-corpus-1. No lances otra generación distinta.",
       "proposal": {
         "reply": "Creé un trabajo nuevo invented-2.",
-        "actions": [{"type": "retry_task", "task_id": "task-generation-corpus-1", "confirm": true}]
+        "actions": [{"type": "retry_task", "task_id": "task-generation-corpus-1", "confirm": true}],
+        "intent": {
+          "kind": "action",
+          "goal": "Reintenta exactamente una vez la tarea task-generation-corpus-1. No lances otra generación distinta.",
+          "question": "",
+          "execution": "run"
+        }
       },
       "expect": {
         "action_types": ["retry_task"],
@@ -290,7 +356,13 @@
           {"type": "start_generation", "confirm": true},
           {"type": "open_tab", "tab": "studio"},
           {"type": "prepare_image", "prompt": "a lantern"}
-        ]
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Open Studio, prepare a Flux image of a lantern, and generate it.",
+          "question": "",
+          "execution": "run"
+        }
       },
       "expect": {
         "action_types": ["open_tab", "prepare_image"],
@@ -313,7 +385,13 @@
           {"type": "generate_story_song", "confirm": true, "target_story_title": "Faro", "cue_title": "Faro"},
           {"type": "create_story", "title": "Faro", "premise": "Un faro encierra un aviso.", "project_type": "music_video"},
           {"type": "configure_story_song", "target_story_title": "Faro", "song_title": "Faro", "song_brief": "aviso del faro", "music_style": "faro nocturno, cuerdas graves", "write_lyrics": true, "instrumental": false}
-        ]
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Crea una historia titulada Faro y configura su canción. No inicies el videoclip.",
+          "question": "",
+          "execution": "prepare"
+        }
       },
       "expect": {
         "ordered_predecessors": ["create_story", "configure_story_song", "generate_story_song"],
@@ -343,7 +421,13 @@
       "request": "Usa la herramienta generation.video y dime que ya está el MP4.",
       "proposal": {
         "reply": "El MP4 invented.mp4 ya está listo.",
-        "actions": [{"type": "generation_video", "confirm": true, "prompt": "un clip"}]
+        "actions": [{"type": "generation_video", "confirm": true, "prompt": "un clip"}],
+        "intent": {
+          "kind": "action",
+          "goal": "Usa la herramienta generation.video y dime que ya está el MP4.",
+          "question": "",
+          "execution": "run"
+        }
       },
       "expect": {
         "action_types": [],

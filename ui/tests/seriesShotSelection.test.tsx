@@ -49,6 +49,7 @@ test('approving a selected Series shot removes it from selection and bulk count'
   }
   const props = {
     workspace: 'default', series: series as never,
+    updateSeries: () => undefined,
     updateEpisode: () => undefined, replaceSeries: () => undefined,
     saveNow: async () => undefined, onAcknowledgeLipSync: async () => undefined,
     onRender: () => undefined,

@@ -2,22 +2,22 @@ import { useState } from 'react'
 import { LabsLibraryPick } from '../../lib/LabsLibraryPick'
 import { useUiTranslation } from '../../i18n'
 import { speechPreparationReadiness } from '../../lib/characterSpeechPreparation'
-import type { CharacterKit } from '../../lib/characterKit'
+import type { CharacterKit, CharacterKitLibrary } from '../../lib/characterKit'
 import { CharacterKitFaceRigPanel } from './CharacterKitFaceRigPanel'
 import { characterKitPoseOptions } from './characterKitGuide'
 import { speechLibraryServices, useCharacterSpeechLibrary, type SpeechLibraryServices } from './useCharacterSpeechLibrary'
 
-type Props = { workspace: string; services?: SpeechLibraryServices }
+type Props = { workspace: string; services?: SpeechLibraryServices; initialKitId?: string; onSaved?: (library: CharacterKitLibrary) => void }
 type Controller = ReturnType<typeof useCharacterSpeechLibrary>
 const button = 'rounded border border-border px-3 py-2 text-xs text-text-primary disabled:opacity-40'
 
-export function CharacterSpeechPreparation({ workspace, services = speechLibraryServices }: Props) {
-  return <SpeechWorkspace key={workspace} workspace={workspace} services={services} />
+export function CharacterSpeechPreparation(props: Props) {
+  return <SpeechWorkspace key={props.workspace + '/' + (props.initialKitId ?? '')} {...props} />
 }
 
-function SpeechWorkspace({ workspace, services = speechLibraryServices }: Props) {
+function SpeechWorkspace({ workspace, services = speechLibraryServices, initialKitId, onSaved }: Props) {
   const { t } = useUiTranslation('characters')
-  const controller = useCharacterSpeechLibrary(workspace, services)
+  const controller = useCharacterSpeechLibrary(workspace, services, initialKitId, onSaved)
   const { library, draft, busy, dirty } = controller
 
   return <section aria-label={t('speechWorkshop.title')} className="space-y-3 rounded-lg border border-violet-400/30 bg-bg-secondary p-3">
@@ -34,13 +34,13 @@ function SpeechWorkspace({ workspace, services = speechLibraryServices }: Props)
     </details>
     <p className="text-xs text-amber-200">{t('speechWorkshop.manualOnly')}</p>
     <label className="block text-xs text-text-secondary">{t('speechWorkshop.character')}
-      <select aria-label={t('speechWorkshop.character')} disabled={busy || dirty || !library} value={draft?.id ?? ''} onChange={event => controller.select(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary p-2">
+      <select aria-label={t('speechWorkshop.character')} disabled={Boolean(initialKitId) || busy || dirty || !library} value={draft?.id ?? ''} onChange={event => controller.select(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary p-2">
         <option value="">{t('speechWorkshop.choose')}</option>
         {Object.values(library?.kits ?? {}).map(kit => <option key={kit.id} value={kit.id}>{kit.name}</option>)}
         {draft && !library?.kits[draft.id] && <option value={draft.id}>{draft.name}</option>}
       </select>
     </label>
-    <ImportSpeechBase workspace={workspace} controller={controller} />
+    {!initialKitId && <ImportSpeechBase workspace={workspace} controller={controller} />}
     {draft && <SpeechDraftEditor key={draft.id} kit={draft} workspace={workspace} controller={controller} />}
     <div className="flex flex-wrap gap-2">
       <button type="button" className={button} disabled={busy || !dirty || !draft?.base} onClick={controller.save}>{t('speechWorkshop.save')}</button>

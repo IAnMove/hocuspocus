@@ -50,6 +50,7 @@ test('Series Shots controls have programmatic names and selection state', async 
     workspace="default"
     series={series}
     episode={episode}
+    updateSeries={() => {}}
     updateEpisode={() => {}}
     replaceSeries={() => {}}
     saveNow={async () => ({})}
