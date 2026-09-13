@@ -102,3 +102,22 @@ test('Shots opens a completed native take with an empty AI manifest and links to
   fireEvent.click(view.getByRole('button', { name: 'View generated take', exact: true }))
   assert.deepEqual(reviewed, [shot.id])
 })
+
+test('viewing a regenerated shot previews its new draft while keeping the approved original for assembly', async t => {
+  const { render, cleanup, waitFor } = await import('@testing-library/react')
+  const { SeriesReviewPanel } = await import('../src/features/series/SeriesReviewPanel')
+  const { series, episode } = fixture(), shot = episode.shots[0]
+  const asset = Object.values(series.assets)[0]
+  series.assets.old = { ...asset, id: 'old', kind: 'video', uri: 'old.mp4' }
+  series.assets.new = { ...asset, id: 'new', kind: 'video', uri: 'new.mp4' }
+  shot.dialogueBeats = []
+  shot.attempts = ['old', 'new'].map(id => ({ id, status: 'completed', outputAssetIds: [id], retryCount: 0 })) as typeof shot.attempts
+  shot.approvedAttemptId = 'old'; episode.shots = [shot]
+  const fetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({ kits: {}, jobs: [] }))
+  t.after(() => { cleanup(); globalThis.fetch = fetch })
+  const view = render(<SeriesReviewPanel workspace="default" series={series} episode={episode} requestedShotId={shot.id}
+    job={null} setJob={() => {}} reload={async () => {}} startRender={async () => {}} updateEpisode={() => {}} saveNow={async () => series} />)
+  await waitFor(() => assert.ok(view.container.querySelector('video')?.src.includes('new.mp4')))
+  assert.equal(shot.approvedAttemptId, 'old')
+})

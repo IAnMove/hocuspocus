@@ -685,18 +685,32 @@
     "reviewTake": "Ver toma generada",
     "lipsyncHint": "Reutiliza las voces y el movimiento de las tomas existentes con las bocas guardadas. Crea versiones nuevas para revisar y conserva las tomas anteriores y las aprobadas. Las voces fuera de plano mantienen su audio. Mantén la pestaña abierta durante la actualización.",
     "refreshCharacters": "Actualizar configuración de personajes",
-    "updateLipsync": "Actualizar lipsync de {{count}} planos listos",
+    "updateLipsync": "Regenerar con las bocas guardadas ({{count}})",
     "lipsyncIssues": {
       "link": "Vincula y guarda este personaje en Character Creator.",
       "pose": "La imagen base del taller está sin aprobar. Abre el personaje, pulsa «He revisado esta imagen base» y guarda.",
       "mouths": "Revisa y aprueba cada una de las cuatro bocas y guarda el personaje.",
-      "placement": "Coloca la boca sobre la pose base y guarda el taller."
+      "placement": "Coloca la boca sobre la pose base y guarda el taller.",
+      "savedPose": "Guarda una imagen base válida en Character Creator; no puede estar rechazada.",
+      "savedMouths": "Guarda las cuatro bocas para esta imagen base; no pueden faltar, estar rechazadas o corresponder a otra pose."
     },
     "updateOptions": "Actualizar planos tras cambios en personajes",
     "changedShots": "{{count}} por actualizar",
     "completedShots": "{{count}} planos 2D ya tienen vídeo.",
     "blockedUpdates": "{{shots}} planos necesitan revisar la configuración de {{characters}} personajes. Abre sus fichas desde estos enlaces; los demás planos listos pueden actualizarse.",
-    "noUpdates": "No hay tomas pendientes de actualizar. Las tomas aprobadas se conservan.",
-    "initialSpeechSetup": "Antes de generar los planos con diálogo, completa estos personajes:"
+    "noUpdates": "Las tomas existentes ya usan la configuración guardada, o no tienen diálogo que actualizar.",
+    "initialSpeechSetup": "Antes de generar los planos con diálogo, completa estos personajes:",
+    "draftRegenerationHint": "Crea nuevos borradores con lipsync, incluso si las bocas guardadas aún están pendientes de aprobación. Conserva los vídeos aprobados.",
+    "newVersions": "{{count}} planos tienen una versión nueva para revisar.",
+    "reviewVersionsHint": "El montaje sigue usando las tomas aprobadas. En Historial, reproduce la «Versión regenerada» y pulsa «Usar esta toma» si te convence.",
+    "reviewVersions": "Revisar nuevas versiones",
+    "regeneratedLipsync": "Versión regenerada",
+    "generateAll": "Generar todos ({{count}})",
+    "regenerateAll": "Regenerar todos ({{count}})",
+    "generateOne": "Generar este plano",
+    "regenerateOne": "Regenerar este plano",
+    "simpleHint": "Crea versiones nuevas. Al regenerar, actualiza las bocas y conserva el audio y la edición. Mantén esta pestaña abierta.",
+    "productionSettings": "Ajustes de producción",
+    "editShot": "Editar plano"
   }
 }

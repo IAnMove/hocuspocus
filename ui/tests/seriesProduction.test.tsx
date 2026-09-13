@@ -65,6 +65,7 @@ test('shot breakdown enables methods and assigns existing empty shots without al
       onAcknowledgeLipSync={async () => {}} onRender={() => {}} />
   }
   const view = render(<Form />)
+  for (const details of view.container.querySelectorAll('details')) details.open = true
   const animationBox = view.getByRole('checkbox', { name:/2D animation/ })
   fireEvent.click(animationBox)
   assert.deepEqual(saved.allowedProductionMethods, ['generated_video', 'animation_2d'])

@@ -2,7 +2,6 @@ import { useUiTranslation } from '../../i18n'
 import { useSeriesNativeBatch } from './nativeBatchState'
 import { allowedSeriesMethods, seriesShotMethod, seriesTakeStage } from './productionMethods'
 import type { SeriesEpisode, SeriesProject } from './types'
-import { primaryButton } from './styles'
 import { SeriesLipSyncPreparation } from './SeriesLipSyncPreparation'
 
 export function SeriesNativeDrafts({ workspace, series, episode }: { workspace: string; series: SeriesProject; episode: SeriesEpisode }) {
@@ -16,12 +15,6 @@ export function SeriesNativeDrafts({ workspace, series, episode }: { workspace: 
   const own = job.workspace === workspace && job.seriesId === series.id && job.episodeId === episode.id
   return <section aria-label={t('native.title')} className="space-y-3 rounded-lg border border-border p-3">
     <h3 className="text-sm font-semibold">{t('native.title')}</h3>
-    {pending.length > 0 && <>
-    <p className="text-xs text-text-secondary">{t('native.hint')}</p>
-    <button className={primaryButton} disabled={job.running || !pending.length} onClick={() => {
-      void import('./nativeBatch').then(module => module.generateNativeDrafts(workspace, series.id, episode.id))
-    }}>{t('native.generate', { count: pending.length })}</button>
-    </>}
     {completed > 0 && <p className="text-xs text-text-secondary">{t('native.completedShots', { count: completed })}</p>}
     <SeriesLipSyncPreparation key={`${workspace}/${series.id}/${episode.id}`} workspace={workspace} series={series} episode={episode}
       initialShots={pending} hasCompleted={completed > 0} />

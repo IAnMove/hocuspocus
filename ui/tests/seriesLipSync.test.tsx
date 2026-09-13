@@ -6,7 +6,7 @@ import { JSDOM } from 'jsdom'
 import type { SeriesProject } from '../src/features/series/types'
 import { createCharacterKit, type CharacterKitAsset } from '../src/lib/characterKit'
 import { applySeriesLipSync, seriesLipSyncFingerprint, seriesLipSyncIssues } from '../src/features/series/nativeLipSync'
-import { lipSyncCandidates, lipSyncUpdatePlan } from '../src/features/series/nativeTake'
+import { lipSyncCandidates, lipSyncDraftsToReview, lipSyncUpdatePlan } from '../src/features/series/nativeTake'
 import { evaluateSceneLayer } from '../src/lib/sceneTimeline'
 
 const dom = new JSDOM('<!doctype html><html><body /></html>', { url: 'http://localhost/' })
@@ -98,6 +98,61 @@ test('changing dialogue cannot silently reuse an older voice recording', async (
   assert.throws(() => applySeriesLipSync(scene, 'default', series, shot, library), /saved audio does not match/)
 })
 
+test('explicit draft regeneration uses pending saved rigs without approving or mutating the character', async () => {
+  const { scene, series, shot, library, kit } = await fixture()
+  kit.base!.reviewState = 'pending'
+  for (const mouth of Object.values(kit.mouth)) mouth!.reviewState = 'pending'
+  const before = structuredClone(library)
+  assert.equal(seriesLipSyncIssues('default', series, [shot], library)[0].reason, 'pose')
+  assert.deepEqual(seriesLipSyncIssues('default', series, [shot], library, 'saved-draft'), [])
+  const result = applySeriesLipSync(scene, 'default', series, shot, library, {}, 'saved-draft')
+  assert.equal(result.layers.filter(layer => layer.faceBinding?.role === 'mouth').length, 4)
+  assert.ok(result.dialogueBeats!.every(beat => beat.mouthLayerIds.length === 4))
+  assert.deepEqual(library, before)
+  kit.mouth.wide!.reviewState = 'rejected'
+  assert.equal(seriesLipSyncIssues('default', series, [shot], library, 'saved-draft')[0].reason, 'savedMouths')
+  assert.throws(() => applySeriesLipSync(scene, 'default', series, shot, library, {}, 'saved-draft'), /savedMouths/)
+  kit.base!.reviewState = 'rejected'
+  assert.equal(seriesLipSyncIssues('default', series, [shot], library, 'saved-draft')[0].reason, 'savedPose')
+})
+
+test('approved old videos remain eligible for draft regeneration and persisted new drafts prevent duplicate work', async () => {
+  const { series, episode, shot, library, kit } = await fixture()
+  kit.base!.reviewState = 'pending'
+  series.assets.video = { ...Object.values(series.assets)[0], id: 'video', kind: 'video', metadata: { productionMethod: 'animation_2d', sceneFilename: 'old.json' } }
+  shot.attempts = [{ id: 'old', status: 'completed', outputAssetIds: ['video'] }] as typeof shot.attempts
+  shot.approvedAttemptId = 'old'
+  assert.equal(lipSyncUpdatePlan('default', series, episode, library, 'saved-draft').ready.length, 1)
+  assert.equal(lipSyncDraftsToReview(series, episode).length, 0)
+  series.assets.new = { ...series.assets.video, id: 'new', metadata: { ...series.assets.video.metadata, sceneFilename: 'new.json',
+    lipSyncUpdate: true, lipSyncFingerprint: seriesLipSyncFingerprint('default', series, shot, library) } }
+  shot.attempts.push({ ...shot.attempts[0], id: 'new', outputAssetIds: ['new'] })
+  assert.equal(lipSyncUpdatePlan('default', series, episode, library, 'saved-draft').candidates.length, 0)
+  assert.equal(shot.approvedAttemptId, 'old')
+  assert.deepEqual(lipSyncDraftsToReview(series, episode).map(item => item.id), [shot.id])
+  shot.attempts[1].reviewDecision = 'rejected'
+  assert.equal(lipSyncDraftsToReview(series, episode).length, 0)
+  assert.equal(lipSyncUpdatePlan('default', series, episode, library, 'saved-draft').ready.length, 1)
+  shot.attempts[1].reviewDecision = 'approved'; shot.approvedAttemptId = 'new'
+  assert.equal(lipSyncDraftsToReview(series, episode).length, 0)
+})
+
+test('regenerate all includes current approved and silent shots while individual regeneration selects exactly one', async () => {
+  const { nativeGenerationPlan } = await import('../src/features/series/nativeGenerationPlan')
+  const { series, episode, shot, library } = await fixture()
+  series.assets.video = { ...Object.values(series.assets)[0], id: 'video', kind: 'video', metadata: {
+    productionMethod: 'animation_2d', sceneFilename: 'current.json', lipSyncFingerprint: seriesLipSyncFingerprint('default', series, shot, library) } }
+  shot.attempts = [{ id: 'approved', status: 'completed', outputAssetIds: ['video'] }] as typeof shot.attempts
+  shot.approvedAttemptId = 'approved'
+  episode.shots = [shot, { ...shot, id: 'silent', dialogueBeats: [] },
+    { ...shot, id: 'active', attempts: [{ ...shot.attempts[0], status: 'running' }] },
+    { ...shot, id: 'external', productionMethod: 'imported_video' }]
+  assert.deepEqual(nativeGenerationPlan('default', series, episode, library, 'regenerate').ready.map(item => item.id), [shot.id, 'silent'])
+  assert.deepEqual(nativeGenerationPlan('default', series, episode, library, 'regenerate', ['silent']).ready.map(item => item.id), ['silent'])
+  assert.equal(nativeGenerationPlan('default', series, episode, library, 'missing').candidates.length, 0)
+  assert.equal(shot.approvedAttemptId, 'approved')
+})
+
 test('an offscreen speaker keeps their voice and does not animate the visible listener', async () => {
   const { scene, series, shot, library, character } = await fixture()
   const other = series.characters.find(item => item.id !== character.id)!
@@ -150,7 +205,7 @@ test('cutouts of a mouthless pose never reuse the original baked-mouth image', a
   assert.equal(characterCutout(series, original, 'wiped-v3'), undefined)
 })
 
-test('updates stay folded, explain missing approvals and show a usable action after refreshing saved settings', async t => {
+test('regeneration reveals missing assets and becomes usable after refreshing saved settings', async t => {
   const { render, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
   const { SeriesLipSyncPreparation } = await import('../src/features/series/SeriesLipSyncPreparation')
   const { series, episode, shot, library, kit, character } = await fixture()
@@ -162,17 +217,13 @@ test('updates stay folded, explain missing approvals and show a usable action af
   globalThis.fetch = async () => new Response(JSON.stringify(library))
   t.after(() => { cleanup(); globalThis.fetch = fetch })
   const view = render(<SeriesLipSyncPreparation workspace="default" series={series} episode={episode} />)
-  const details = view.container.querySelector('details')!
-  assert.equal(details.open, false)
-  assert.equal(view.queryByRole('button', { name: character.name }), null)
-  fireEvent.click(view.getByText('Update shots after character changes'))
-  details.open = true
-  await waitFor(() => assert.ok(view.getByText(/Review and approve each of the four mouth shapes/)))
+  await waitFor(() => assert.ok(view.getByText(/Save all four mouths for this base image/)))
+  assert.equal(view.container.querySelector('details'), null)
   assert.ok(view.getByRole('button', { name: character.name }))
-  assert.equal(view.queryByRole('button', { name: /Update lip sync for/ }), null, 'no unexplained disabled update button')
+  assert.equal((view.getByRole('button', { name: 'Regenerate all (0)' }) as HTMLButtonElement).disabled, true, 'blocker and exact character link explain the disabled action')
   kit.mouth = mouths
   fireEvent.click(view.getByRole('button', { name: 'Refresh character configuration' }))
-  await waitFor(() => assert.equal((view.getByRole('button', { name: 'Update lip sync for 1 ready shots' }) as HTMLButtonElement).disabled, false))
+  await waitFor(() => assert.equal((view.getByRole('button', { name: 'Regenerate all (1)' }) as HTMLButtonElement).disabled, false))
   assert.equal(view.queryByRole('button', { name: character.name }), null)
 })
 
@@ -186,12 +237,42 @@ test('initial generation keeps setup links while completed episodes hide the zer
   t.after(() => { cleanup(); globalThis.fetch = fetch })
   const view = render(<SeriesNativeDrafts workspace="default" series={series} episode={episode} />)
   await waitFor(() => assert.ok(view.getByRole('button', { name: character.name })))
-  assert.ok(view.getByRole('button', { name: /Generate all pending 2D shots/ }))
+  assert.ok(view.getByRole('button', { name: /Generate all/ }))
   assert.equal(view.queryByText('Update shots after character changes'), null)
   shot.attempts = [{ id: 'done', status: 'completed', outputAssetIds: [] }] as typeof shot.attempts
   view.rerender(<SeriesNativeDrafts workspace="default" series={series} episode={{ ...episode }} />)
-  assert.equal(view.queryByRole('button', { name: /Generate all pending 2D shots/ }), null)
+  assert.equal(view.queryByRole('button', { name: /Generate all/ }), null)
   assert.equal(view.queryByRole('button', { name: character.name }), null)
-  assert.equal(view.container.querySelector('details')?.open, false)
+  assert.equal(view.container.querySelector('details'), null)
   assert.ok(view.getByText('1 2D shots already have video.'))
+})
+
+test('approved episodes show a visible regeneration action and a persisted receipt linking to new versions', async t => {
+  const { render, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
+  const { SeriesLipSyncPreparation } = await import('../src/features/series/SeriesLipSyncPreparation')
+  const { listenForAgentSeriesReviewView } = await import('../src/lib/uiBus')
+  const { series, episode, shot, library, kit } = await fixture()
+  kit.base!.reviewState = 'pending'
+  series.assets.video = { ...Object.values(series.assets)[0], id: 'video', kind: 'video', metadata: { productionMethod: 'animation_2d', sceneFilename: 'saved.json' } }
+  shot.attempts = [{ id: 'old', status: 'completed', outputAssetIds: ['video'] }] as typeof shot.attempts
+  shot.approvedAttemptId = 'old'
+  const fetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify(library))
+  Object.assign(globalThis, { CustomEvent: dom.window.CustomEvent })
+  let destination = ''
+  const unlisten = listenForAgentSeriesReviewView(view => { destination = view })
+  t.after(() => { cleanup(); globalThis.fetch = fetch; unlisten() })
+  const view = render(<SeriesLipSyncPreparation workspace="default" series={series} episode={episode} />)
+  await waitFor(() => assert.ok(view.getByRole('button', { name: 'Regenerate all (1)' })))
+  assert.equal(view.getByRole('button', { name: 'Regenerate all (1)' }).closest('details'), null)
+  series.assets.new = { ...series.assets.video, id: 'new', metadata: { ...series.assets.video.metadata,
+    lipSyncUpdate: true, lipSyncFingerprint: seriesLipSyncFingerprint('default', series, shot, library) } }
+  shot.attempts.push({ ...shot.attempts[0], id: 'new', outputAssetIds: ['new'] })
+  view.rerender(<SeriesLipSyncPreparation workspace="default" series={series} episode={{ ...episode }} />)
+  assert.ok(view.getByText('1 shots have a new version to review.'))
+  assert.equal((view.getByRole('button', { name: 'Regenerate all (1)' }) as HTMLButtonElement).disabled, false, 'explicit regeneration remains available for current takes')
+  fireEvent.click(view.getByRole('button', { name: 'Review new versions' }))
+  assert.equal(destination, 'history')
+  assert.equal(shot.approvedAttemptId, 'old')
+  assert.equal(kit.base!.reviewState, 'pending')
 })

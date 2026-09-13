@@ -93,10 +93,11 @@ def test_imported_finished_take_is_verified_append_only_and_keeps_method(method,
     shot['productionMethod'] = method
     for attempt in shot['attempts']:
         attempt['status'] = 'completed'
+    shot['approvedAttemptId'] = shot['attempts'][0]['id']
     previous = copy.deepcopy(shot['attempts'])
     approved = shot.get('approvedAttemptId')
     asset = {'id':'asset_external', 'kind':'video', 'uri':'assets/take.mp4', 'workspaceId':'default',
-             'ownerType':'shot', 'ownerId':shot['id'], 'isDerivedThumbnail':False, 'metadata':{}}
+             'ownerType':'shot', 'ownerId':shot['id'], 'isDerivedThumbnail':False, 'metadata':{'lipSyncUpdate':True}}
     monkeypatch.setattr('services.video_editor.probe_media', lambda path: {'duration':60, 'width':1280, 'height':720})
     attach_series_import(series, asset, as_take=True, source_path='verified.mp4')
     updated = episode['shots'][0]
@@ -105,6 +106,8 @@ def test_imported_finished_take_is_verified_append_only_and_keeps_method(method,
     take = updated['attempts'][-1]
     assert take['status'] == 'completed' and take['model'] == method
     assert take['outputAssetIds'] == [asset['id']]
+    assert take['id'] != approved and take.get('reviewDecision') != 'approved'
+    assert asset['metadata']['lipSyncUpdate'] is True
     assert asset['ownerType'] == 'attempt' and asset['ownerId'] == take['id']
     normalize_series_project(series, series['id'], 'default')
     monkeypatch.setattr('services.video_editor.probe_media', lambda path: {'duration':.01})

@@ -685,18 +685,32 @@
     "reviewTake": "View generated take",
     "lipsyncHint": "Reuse the recorded voices and motion with the saved mouth setup. Creates new versions for review and preserves previous and approved takes. Offscreen voices keep their audio. Keep this tab open during the update.",
     "refreshCharacters": "Refresh character configuration",
-    "updateLipsync": "Update lip sync for {{count}} ready shots",
+    "updateLipsync": "Regenerate with saved mouths ({{count}})",
     "lipsyncIssues": {
       "link": "Link and save this character in Character Creator.",
       "pose": "The workshop base is unapproved. Open the character, select “I have reviewed this base image” and save.",
       "mouths": "Review and approve each of the four mouth shapes, then save the character.",
-      "placement": "Place the mouth on the base pose and save the workshop."
+      "placement": "Place the mouth on the base pose and save the workshop.",
+      "savedPose": "Save a valid base image in Character Creator; it must not be rejected.",
+      "savedMouths": "Save all four mouths for this base image; they cannot be missing, rejected or belong to another pose."
     },
     "updateOptions": "Update shots after character changes",
     "changedShots": "{{count}} to update",
     "completedShots": "{{count}} 2D shots already have video.",
     "blockedUpdates": "{{shots}} shots need setup reviewed for {{characters}} characters. Open their settings using these links; other ready shots can still be updated.",
-    "noUpdates": "No takes need updating. Approved takes are preserved.",
-    "initialSpeechSetup": "Before generating dialogue shots, complete these characters:"
+    "noUpdates": "Existing takes already use the saved setup, or have no dialogue to update.",
+    "initialSpeechSetup": "Before generating dialogue shots, complete these characters:",
+    "draftRegenerationHint": "Create new lip sync drafts, including saved mouths awaiting approval. Approved videos are preserved.",
+    "newVersions": "{{count}} shots have a new version to review.",
+    "reviewVersionsHint": "The assembly still uses approved takes. In History, play the “Regenerated version” and choose “Use this take” if it works for you.",
+    "reviewVersions": "Review new versions",
+    "regeneratedLipsync": "Regenerated version",
+    "generateAll": "Generate all ({{count}})",
+    "regenerateAll": "Regenerate all ({{count}})",
+    "generateOne": "Generate this shot",
+    "regenerateOne": "Regenerate this shot",
+    "simpleHint": "Create new versions. Regeneration updates mouths and preserves recorded audio and edits. Keep this tab open.",
+    "productionSettings": "Production settings",
+    "editShot": "Edit shot"
   }
 }

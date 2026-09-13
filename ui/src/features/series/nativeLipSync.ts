@@ -2,6 +2,7 @@ import type { Scene } from '../../types'
 import type { CharacterKit, CharacterKitLibrary } from '../../lib/characterKit'
 import { mountCharacterKitLayers } from '../../lib/characterKit'
 import { speechPreparationReadiness } from '../../lib/characterSpeechPreparation'
+import { usableCharacterAsset, type CharacterKitReviewPolicy } from '../../lib/characterKitReview'
 import { rebuildCutoutDialogueLayers } from '../../lib/cutoutDialogue'
 import type { SeriesProject, SeriesShot } from './types'
 
@@ -19,12 +20,21 @@ export function visibleSeriesSpeakers(shot: SeriesShot) {
   return [...new Set(shot.dialogueBeats.map(beat => beat.characterId))].filter(id => shot.visibleCharacterIds.includes(id))
 }
 
-export function seriesLipSyncIssues(workspace: string, series: SeriesProject, shots: SeriesShot[], library: CharacterKitLibrary) {
-  const issues = new Map<string, { id: string; name: string; reason: 'link' | 'pose' | 'mouths' | 'placement' }>()
+function kitIssue(kit: CharacterKit | undefined, policy: CharacterKitReviewPolicy) {
+  if (!kit) return 'link' as const
+  const ready = speechPreparationReadiness(kit, 'base')
+  if (!usableCharacterAsset(kit.base, policy)) return policy === 'saved-draft' ? 'savedPose' as const : 'pose' as const
+  const mouthReady = ready.rows.every(row => row.status === 'approved' || (policy === 'saved-draft' && row.status === 'pending'))
+  if (!mouthReady) return policy === 'saved-draft' ? 'savedMouths' as const : 'mouths' as const
+  return hasMouthPlacement(kit) ? undefined : 'placement' as const
+}
+
+export function seriesLipSyncIssues(workspace: string, series: SeriesProject, shots: SeriesShot[], library: CharacterKitLibrary,
+  policy: CharacterKitReviewPolicy = 'approved') {
+  const issues = new Map<string, { id: string; name: string; reason: NonNullable<ReturnType<typeof kitIssue>> }>()
   for (const shot of shots) for (const id of visibleSeriesSpeakers(shot)) {
     const kit = seriesSpeakerKit(workspace, series, id, library)
-    const ready = kit && speechPreparationReadiness(kit, 'base')
-    const reason = !kit ? 'link' : !ready?.poseApproved ? 'pose' : !ready.complete ? 'mouths' : !hasMouthPlacement(kit) ? 'placement' : undefined
+    const reason = kitIssue(kit, policy)
     if (reason) issues.set(id, { id,
       name: series.characters.find(character => character.id === id)?.name || id, reason })
   }
@@ -42,8 +52,8 @@ export function seriesLipSyncFingerprint(workspace: string, series: SeriesProjec
 
 /** Mount the saved base and mouths onto exact Series character IDs, preserving authored motion/audio. */
 export function applySeriesLipSync(scene: Scene, workspace: string, series: SeriesProject, shot: SeriesShot,
-  library: CharacterKitLibrary, bodySources: Record<string, string> = {}): Scene {
-  const issues = seriesLipSyncIssues(workspace, series, [shot], library)
+  library: CharacterKitLibrary, bodySources: Record<string, string> = {}, policy: CharacterKitReviewPolicy = 'approved'): Scene {
+  const issues = seriesLipSyncIssues(workspace, series, [shot], library, policy)
   if (issues.length) throw new Error(`Lip sync: ${issues.map(issue => `${issue.name} (${issue.reason})`).join(', ')}`)
   const speakers = new Set(shot.dialogueBeats.map(beat => beat.characterId))
   let layers = scene.layers.filter(layer => !(layer.faceBinding?.role === 'mouth' && speakers.has(layer.faceBinding.poseLayerId)))
@@ -52,8 +62,8 @@ export function applySeriesLipSync(scene: Scene, workspace: string, series: Seri
     const body = layers.find(layer => layer.id === id)
     if (!body || body.type !== 'image') throw new Error(`The saved scene has no character layer for ${id}.`)
     const kit = seriesSpeakerKit(workspace, series, id, library)!
-    // Validate face-patch provenance against the approved pose before using its transparent derivative.
-    const mounted = mountCharacterKitLayers(kit, 'base', body.transform, scene.duration, scene)
+    // Validate face-patch provenance before using the pose's transparent derivative.
+    const mounted = mountCharacterKitLayers(kit, 'base', body.transform, scene.duration, scene, policy)
     const overlays = mounted.filter(layer => layer.faceBinding?.role === 'mouth').map((layer, index) => ({ ...layer,
       id: `series-${id}-mouth-${layer.faceBinding!.state}`, z: body.z + (index + 1) / 100,
       faceBinding: { ...layer.faceBinding!, poseLayerId: id }, relationship: { type: 'parent' as const, targetLayerId: id } }))

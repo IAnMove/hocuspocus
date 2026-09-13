@@ -33,11 +33,8 @@ test('Review routes a 2D-only episode to shot production instead of offering an 
   const view = render(<SeriesReviewPanel workspace="default" series={series} episode={episode} job={null} setJob={() => {}}
     reload={async () => {}} saveNow={async () => series} updateEpisode={() => {}}
     startRender={async mode => { rendered.push(mode) }} onOpenShots={id => { opened.push(id ?? '') }} />)
-  const generate = view.getByRole('button', { name: 'Generate AI draft takes (0)' }) as HTMLButtonElement
-  assert.equal(generate.disabled, true)
-  fireEvent.click(generate)
-  fireEvent.click(view.getByRole('button', { name: `Prepare 2D shots (${episode.shots.length})` }))
-  assert.deepEqual(opened, [episode.shots[0].id])
+  assert.equal(view.queryByRole('button', { name: 'Generate AI draft takes (0)' }), null)
+  assert.equal(view.queryByRole('button', { name: /Prepare 2D shots/ }), null)
   fireEvent.click(view.getByRole('button', { name: /History and attempts/ }))
   fireEvent.click(view.getByRole('button', { name: 'Open production for shot 1' }))
   assert.equal(opened.at(-1), episode.shots[0].id)

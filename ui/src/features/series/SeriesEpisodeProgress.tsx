@@ -13,6 +13,7 @@ export function SeriesEpisodeProgress({ series, episode, onOpenReferences, onOpe
   const pending = episode.shots.filter(shot => seriesTakeStage(shot) !== 'approved')
   const missing = pending.filter(shot => seriesTakeStage(shot) === 'missing')
   const review = pending.filter(shot => seriesTakeStage(shot) === 'review')
+  if (!issues.length && !pending.length) return null
   return <section aria-label={t('episodeProgress.title')} className="space-y-3 rounded-xl border border-border bg-bg-secondary p-4">
     <h3 className="text-sm font-semibold">{t('episodeProgress.title')}</h3>
     <p className={`text-xs ${issues.length ? 'text-amber-200' : 'text-emerald-300'}`}>{t(issues.length ? 'episodeProgress.referencesMissing' : 'episodeProgress.referencesReady', { count: issues.length })}</p>

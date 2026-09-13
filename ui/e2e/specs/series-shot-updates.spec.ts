@@ -4,7 +4,7 @@ import { closeApp, gotoApp } from '../helpers/gotoApp'
 import { createCharacterKit, type CharacterKitLibrary } from '../../src/lib/characterKit'
 import type { SeriesLibrary } from '../../src/features/series/types'
 
-test('completed shots keep updates discreet and explain character blockers without disabling ready shots', async ({ page }) => {
+test('approved old takes expose draft regeneration and link directly to missing character assets', async ({ page }) => {
   const session = await gotoApp(page)
   const series = (JSON.parse(readFileSync(new URL('../../../docs/series-lab/example-series-library-v1.json', import.meta.url), 'utf8')) as SeriesLibrary).seriesById.series_signal
   series.allowedProductionMethods = ['animation_2d']
@@ -13,7 +13,8 @@ test('completed shots keep updates discreet and explain character blockers witho
   const library: CharacterKitLibrary = { version: 1, revision: 1, activeId: '', kits: {} }
   for (const [index, character] of series.characters.entries()) {
     const kit = createCharacterKit(character.name)
-    kit.base = { id: 'base', name: 'Base', source: '/fixture-body.svg', kind: 'image', alphaStatus: 'transparent', reviewState: index === 0 ? 'approved' : 'pending' }
+    kit.base = { id: 'base', name: 'Base', source: '/fixture-body.svg', kind: 'image', alphaStatus: 'transparent', reviewState: 'pending' }
+    if (index !== 0) kit.base = undefined
     kit.anchors.base = { mouth: { offsetX: 0, offsetY: -20, scale: .08, rotation: 0 } }
     for (const state of ['closed', 'small', 'wide', 'round'] as const) kit.mouth[state] = {
       id: state, name: state, source: `/character-kit-presets/mouths/paper-cut/${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved',
@@ -24,7 +25,7 @@ test('completed shots keep updates discreet and explain character blockers witho
   series.assets.video = { ...Object.values(series.assets)[0], id: 'video', kind: 'video', uri: 'fixture.mp4',
     metadata: { productionMethod: 'animation_2d', sceneFilename: 'fixture.json' } }
   episode.shots = series.characters.map((character, index) => ({ ...template, id: `shot-${index}`, order: index + 1,
-    productionMethod: 'animation_2d', approvedAttemptId: undefined, visibleCharacterIds: [character.id],
+    productionMethod: 'animation_2d', approvedAttemptId: `take-${index}`, visibleCharacterIds: [character.id],
     dialogueBeats: [{ ...template.dialogueBeats[0], id: `beat-${index}`, characterId: character.id, text: 'Hello.' }],
     attempts: [{ ...template.attempts[0], id: `take-${index}`, status: 'completed', outputAssetIds: ['video'] }] }))
   await page.route('**/api/v1/series/**', async route => {
@@ -40,11 +41,17 @@ test('completed shots keep updates discreet and explain character blockers witho
   await page.getByRole('button', { name: '4 · Shots', exact: true }).click()
   const panel = page.getByRole('region', { name: '2D shots', exact: true })
   await expect(panel.getByText('2 2D shots already have video.')).toBeVisible()
-  await expect(panel.getByRole('button', { name: /Generate all pending/ })).toHaveCount(0)
-  await expect(panel.getByRole('button', { name: /Update lip sync for/ })).toBeHidden()
-  await panel.getByText('Update shots after character changes').click()
-  await expect(panel.getByRole('button', { name: 'Update lip sync for 1 ready shots' })).toBeEnabled()
-  await expect(panel.getByText(/workshop base is unapproved/)).toBeVisible()
+  await expect(panel.getByRole('button', { name: /^Generate all/ })).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: 'Regenerate all (1)' })).toBeEnabled()
+  await expect(panel.getByText(/preserves recorded audio and edits/)).toBeVisible()
+  await expect(panel.getByText(/Save a valid base image/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Regenerate this shot', exact: true })).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Render selection (0)', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: /Shot 1 method/ })).toBeHidden()
+  await page.getByText('Edit shot', { exact: true }).first().click()
+  await expect(page.getByRole('combobox', { name: 'Shot 1 method', exact: true })).toBeVisible()
+  await page.getByText('Production settings', { exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: /2D animation/ })).toBeVisible()
   await panel.getByRole('button', { name: series.characters[1].name, exact: true }).click()
   await expect(page.getByTestId('character-name')).toHaveValue(series.characters[1].name)
   await closeApp(page, session)

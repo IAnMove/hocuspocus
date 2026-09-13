@@ -2,24 +2,21 @@ import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { useSeriesStore } from './store'
 import { useSeriesNativeBatch } from './nativeBatchState'
-import { allowedSeriesMethods, seriesShotMethod, seriesTakeStage } from './productionMethods'
 import { seriesShotReferences } from './shotReferences'
 import { prepareCharacterCutout } from './characterCutout'
 import { prepareNativeDraft } from './nativeDraftScene'
 import { presentSceneDocument } from '../sceneFx/handoff'
-import { openAgentSeriesSection, requestAgentSceneWorkflow } from '../../lib/uiBus'
+import { openAgentSeriesReviewView, openAgentSeriesSection, requestAgentSceneWorkflow } from '../../lib/uiBus'
 import type { SeriesEpisode, SeriesProject } from './types'
 import type { CharacterKitLibrary } from '../../lib/characterKit'
+import type { CharacterKitReviewPolicy } from '../../lib/characterKitReview'
 import { applySeriesLipSync, seriesLipSyncFingerprint, seriesLipSyncIssues, seriesSpeakerKit } from './nativeLipSync'
-import { latestNativeTake, lipSyncUpdatePlan } from './nativeTake'
+import { latestNativeTake } from './nativeTake'
+import { nativeGenerationPlan, type NativeGenerationMode } from './nativeGenerationPlan'
 import { seriesAssetUrl } from './referenceImages'
 import i18n from '../../i18n'
 
-export function nativeDraftCandidates(series: SeriesProject, episode: SeriesEpisode) {
-  return allowedSeriesMethods(series).includes('animation_2d') ? episode.shots.filter(shot =>
-    seriesShotMethod(series, shot) === 'animation_2d' && seriesTakeStage(shot) === 'missing'
-    && !shot.attempts.some(attempt => ['queued', 'running', 'cancelling'].includes(attempt.status))) : []
-}
+export { nativeDraftCandidates } from './nativeGenerationPlan'
 
 function source(workspace: string, seriesId: string, episodeId: string) {
   const state = useSeriesStore.getState()
@@ -50,17 +47,18 @@ async function cleanShotCharacters(workspace: string, seriesId: string, episodeI
   return bodySources
 }
 
-async function renderNativeShot(workspace: string, seriesId: string, episodeId: string, shotId: string, updateLipSync: boolean) {
+async function renderNativeShot(workspace: string, seriesId: string, episodeId: string, shotId: string, mode: NativeGenerationMode) {
+  const policy = mode === 'missing' ? 'approved' : 'saved-draft'
   const kits = await api.fetchCharacterKitLibrary(workspace)
   const before = source(workspace, seriesId, episodeId)
-  assertLipSyncReady(workspace, before.series, [before.episode.shots.find(item => item.id === shotId)!], kits)
+  assertLipSyncReady(workspace, before.series, [before.episode.shots.find(item => item.id === shotId)!], kits, policy)
   const bodySources = await cleanShotCharacters(workspace, seriesId, episodeId, shotId, kits)
   const { series, episode } = source(workspace, seriesId, episodeId)
   const shot = episode.shots.find(item => item.id === shotId)!
   useSeriesNativeBatch.setState({ phase: 'voices' })
-  const prepared = updateLipSync
+  const prepared = mode !== 'missing' && latestNativeTake(series, shot)
     ? await updateSavedLipSync(workspace, series, episode, shot, kits, bodySources)
-    : await prepareNativeDraft(workspace, series, episode, shot, kits, bodySources)
+    : await prepareNativeDraft(workspace, series, episode, shot, kits, bodySources, policy)
   source(workspace, seriesId, episodeId)
   useSeriesStore.getState().updateEpisode(episodeId, current => ({ ...current,
     shots: current.shots.map(item => item.id === shotId ? { ...item, durationSeconds: prepared.shot.durationSeconds } : item) }))
@@ -81,12 +79,14 @@ async function renderNativeShot(workspace: string, seriesId: string, episodeId: 
   const result = await api.importSeriesAsset(workspace, seriesId, { uploadPath: upload.path, name: filename,
     ownerType: 'shot', ownerId: shotId, kind: 'video', asTake: true,
     metadata: { productionMethod: 'animation_2d', sceneFilename: scene.outputNames?.[0], automaticDraft: true,
+      nativeRegeneration: mode !== 'missing', lipSyncUpdate: mode !== 'missing' && shot.dialogueBeats.length > 0, characterReviewPolicy: policy,
       lipSyncFingerprint: seriesLipSyncFingerprint(workspace, series, prepared.shot, kits) } })
   useSeriesStore.getState().acceptAssetImport(workspace, result)
 }
 
-function assertLipSyncReady(workspace: string, series: SeriesProject, shots: SeriesEpisode['shots'], kits: CharacterKitLibrary) {
-  const issues = seriesLipSyncIssues(workspace, series, shots, kits)
+function assertLipSyncReady(workspace: string, series: SeriesProject, shots: SeriesEpisode['shots'], kits: CharacterKitLibrary,
+  policy: CharacterKitReviewPolicy = 'approved') {
+  const issues = seriesLipSyncIssues(workspace, series, shots, kits, policy)
   if (issues.length) throw new Error(issues.map(issue => `${issue.name}: ${i18n.t(`seriesLab:native.lipsyncIssues.${issue.reason}`)}`).join('\n'))
 }
 
@@ -102,24 +102,26 @@ async function updateSavedLipSync(workspace: string, series: SeriesProject, epis
   if (controls?.seriesId !== series.id || controls?.episodeId !== episode.id || controls?.shotId !== shot.id) {
     throw new Error(i18n.t('seriesLab:native.sceneUnavailable'))
   }
-  return { shot: { ...shot, durationSeconds: scene.duration }, scene: applySeriesLipSync(scene, workspace, series, shot, kits, bodySources) }
+  return { shot: { ...shot, durationSeconds: scene.duration }, scene: applySeriesLipSync(scene, workspace, series, shot, kits, bodySources, 'saved-draft') }
 }
 
-export async function generateNativeDrafts(workspace: string, seriesId: string, episodeId: string, updateLipSync = false) {
+export async function generateNativeDrafts(workspace: string, seriesId: string, episodeId: string,
+  mode: NativeGenerationMode = 'missing', shotIds?: string[]) {
   if (useSeriesNativeBatch.getState().running) return
   useSeriesNativeBatch.setState({ running: true, stopping: false, workspace, seriesId, episodeId, completed: 0, total: 0, order: 0, phase: 'preparing', error: '' })
   try {
     await useSeriesStore.getState().saveNow()
     const { series, episode } = source(workspace, seriesId, episodeId)
     const kits = await api.fetchCharacterKitLibrary(workspace)
-    const shots = updateLipSync ? lipSyncUpdatePlan(workspace, series, episode, kits).ready : nativeDraftCandidates(series, episode)
-    assertLipSyncReady(workspace, series, shots, kits)
+    const plan = nativeGenerationPlan(workspace, series, episode, kits, mode, shotIds)
+    if (!plan.ready.length) assertLipSyncReady(workspace, series, plan.blocked, kits, mode === 'missing' ? 'approved' : 'saved-draft')
+    const shots = plan.ready
     useSeriesNativeBatch.setState({ total: shots.length })
     for (const shot of shots) {
       if (useSeriesNativeBatch.getState().stopping) break
       source(workspace, seriesId, episodeId)
       useSeriesNativeBatch.setState({ order: shot.order })
-      await renderNativeShot(workspace, seriesId, episodeId, shot.id, updateLipSync)
+      await renderNativeShot(workspace, seriesId, episodeId, shot.id, mode)
       useSeriesNativeBatch.setState(state => ({ completed: state.completed + 1 }))
     }
   } catch (reason) { useSeriesNativeBatch.setState({ error: (reason as Error).message }) }
@@ -128,7 +130,7 @@ export async function generateNativeDrafts(workspace: string, seriesId: string, 
     if (useStore.getState().activeWorkspace === workspace) {
       useStore.getState().setMediaFilter('series')
       // Series Lab mounts on return and then receives the destination.
-      setTimeout(() => openAgentSeriesSection('review'), 250)
+      setTimeout(() => { openAgentSeriesSection('review'); openAgentSeriesReviewView('history') }, 250)
     }
   }
 }

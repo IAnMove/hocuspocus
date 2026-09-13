@@ -54,7 +54,7 @@ export function SeriesEpisodeReferences({ workspace, series, episode, onOpenRefe
     useSeriesStore.getState().adoptRemoteSeries(updated)
     setNotice(t('referenceBatch.incorporated'))
   })
-  if (!episode.shots.length) return null
+  if (!episode.shots.length || ![missing.length, needsReferences, busy, notice, error].some(Boolean)) return null
   return <section aria-label={t('referenceBatch.title')} className="space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
     <h3 className="text-sm font-semibold">{t('referenceBatch.title')}</h3>
     <p className="text-xs text-text-secondary">{t(missing.length ? 'referenceBatch.missing' : needsReferences ? 'referenceBatch.available' : 'referenceBatch.ready', { count: missing.length })}</p>
