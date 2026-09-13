@@ -156,14 +156,19 @@ function serializedByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength
 }
 
-function storageKey(workspace: string, kitId?: string): string {
+function storageKey(workspace: string, kitId?: string): string | null {
   if (typeof workspace !== 'string') throw new Error('Speech draft workspace must be a string.')
+  // An omitted kitId is the general workshop. An empty string is not a valid
+  // scope and must not alias that shared recovery key.
+  if (kitId !== undefined && !kitId) return null
   return `${STORAGE_PREFIX}:${encodeURIComponent(workspace)}${kitId ? `:kit:${encodeURIComponent(kitId)}` : ''}`
 }
 
 /** The session key is namespaced and intentionally includes the encoded workspace. */
 export function speechDraftStorageKey(workspace: string, kitId?: string): string {
-  return storageKey(workspace, kitId)
+  const key = storageKey(workspace, kitId)
+  if (!key) throw new Error('Speech draft kit id is invalid.')
+  return key
 }
 
 function parsePersistedDraft(raw: string, workspace: string): CharacterSpeechDraft {
@@ -178,6 +183,7 @@ function parsePersistedDraft(raw: string, workspace: string): CharacterSpeechDra
 
 export function readSpeechDraft(workspace: string, kitId?: string): CharacterSpeechDraft | null {
   const key = storageKey(workspace, kitId)
+  if (!key) return null
   const raw = safeStorageGet('session', key)
   if (raw === null) return null
   try {
@@ -192,6 +198,7 @@ export function readSpeechDraft(workspace: string, kitId?: string): CharacterSpe
 
 export function writeSpeechDraft(workspace: string, draft: CharacterSpeechDraft, kitId?: string): void {
   const key = storageKey(workspace, kitId)
+  if (!key) throw new Error('Speech draft kit id is invalid.')
   try {
     if (!isRecord(draft) || !isSafeRevision(draft.baseRevision)) throw new Error('Speech draft revision is invalid.')
     validateKit(draft.kit)
@@ -217,5 +224,7 @@ export function writeSpeechDraft(workspace: string, draft: CharacterSpeechDraft,
 }
 
 export function clearSpeechDraft(workspace: string, kitId?: string): void {
-  safeStorageRemove('session', storageKey(workspace, kitId))
+  const key = storageKey(workspace, kitId)
+  if (!key) return
+  safeStorageRemove('session', key)
 }

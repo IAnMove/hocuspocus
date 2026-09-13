@@ -28,6 +28,10 @@ test('character-specific speech drafts preserve other characters and the general
   assert.equal(readSpeechDraft('scoped-voices', second.id)?.kit.id, second.id)
   assert.equal(readSpeechDraft('scoped-voices')?.kit.id, first.id)
   assert.throws(() => writeSpeechDraft('scoped-voices', { baseRevision: 4, kit: first }, second.id), /another character/)
+  assert.equal(readSpeechDraft('scoped-voices', ''), null)
+  assert.throws(() => writeSpeechDraft('scoped-voices', { baseRevision: 5, kit: first }, ''), /kit id is invalid/)
+  clearSpeechDraft('scoped-voices', '')
+  assert.equal(readSpeechDraft('scoped-voices')?.kit.id, first.id)
 })
 
 const asset = (id, reviewState = 'pending', source = `/${id}.png`, kind = 'overlay') => ({
