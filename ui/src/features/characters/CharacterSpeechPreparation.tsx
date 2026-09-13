@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { LabsLibraryPick } from '../../lib/LabsLibraryPick'
 import { useUiTranslation } from '../../i18n'
 import { speechPreparationReadiness } from '../../lib/characterSpeechPreparation'
@@ -7,7 +7,8 @@ import { CharacterKitFaceRigPanel } from './CharacterKitFaceRigPanel'
 import { characterKitPoseOptions } from './characterKitGuide'
 import { speechLibraryServices, useCharacterSpeechLibrary, type SpeechLibraryServices } from './useCharacterSpeechLibrary'
 
-type Props = { workspace: string; services?: SpeechLibraryServices; initialKitId?: string; onSaved?: (library: CharacterKitLibrary) => void }
+type Props = { workspace: string; services?: SpeechLibraryServices; initialKitId?: string; onSaved?: (library: CharacterKitLibrary) => void;
+  onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void }
 type Controller = ReturnType<typeof useCharacterSpeechLibrary>
 const button = 'rounded border border-border px-3 py-2 text-xs text-text-primary disabled:opacity-40'
 
@@ -15,10 +16,12 @@ export function CharacterSpeechPreparation(props: Props) {
   return <SpeechWorkspace key={props.workspace + '/' + (props.initialKitId ?? '')} {...props} />
 }
 
-function SpeechWorkspace({ workspace, services = speechLibraryServices, initialKitId, onSaved }: Props) {
+function SpeechWorkspace({ workspace, services = speechLibraryServices, initialKitId, onSaved, onDirtyChange, onBusyChange }: Props) {
   const { t } = useUiTranslation('characters')
   const controller = useCharacterSpeechLibrary(workspace, services, initialKitId, onSaved)
   const { library, draft, busy, dirty } = controller
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
+  useEffect(() => { onBusyChange?.(busy) }, [busy, onBusyChange])
 
   return <section aria-label={t('speechWorkshop.title')} className="space-y-3 rounded-lg border border-violet-400/30 bg-bg-secondary p-3">
     <h3 className="text-sm font-semibold text-text-primary">{t('speechWorkshop.title')}</h3>

@@ -415,5 +415,11 @@
       "hunyuanFailed": "Hunyuan3D falló",
       "hunyuanCancelled": "Hunyuan3D cancelado"
     }
+  },
+  "editorSession": {
+    "title": "Configurar {{name}}",
+    "hint": "Configura aquí la voz, las bocas para animación 2D y el modelo para lipsync 3D. Al guardar se vincula esta configuración al personaje de la serie.",
+    "return": "Volver al personaje en Series Lab",
+    "saveFirst": "Guarda los cambios de voz o del taller de lipsync antes de volver."
   }
 }

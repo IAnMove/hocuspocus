@@ -415,5 +415,11 @@
       "hunyuanFailed": "Hunyuan3D failed",
       "hunyuanCancelled": "Hunyuan3D cancelled"
     }
+  },
+  "editorSession": {
+    "title": "Configure {{name}}",
+    "hint": "Configure the voice, mouths for 2D animation and model for 3D lip sync here. Saving links this configuration to the series character.",
+    "return": "Return to the character in Series Lab",
+    "saveFirst": "Save voice or lip sync workshop changes before returning."
   }
 }

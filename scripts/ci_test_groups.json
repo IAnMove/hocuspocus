@@ -240,6 +240,7 @@
         "tests/test_series_assembly_router.py",
         "tests/test_series_jobs.py",
         "tests/test_series_planning.py",
+        "tests/test_series_production.py",
         "tests/test_series_shot_dialogue.py",
         "tests/test_shared_api_bootstrap.py",
         "tests/test_speech_analysis_cache.py",

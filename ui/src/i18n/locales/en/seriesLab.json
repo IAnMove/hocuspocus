@@ -600,7 +600,8 @@
         "ready": "Approved reference in this episode",
         "missingEntity": "Unassigned or absent from this episode’s canon",
         "missingImage": "An approved reference image is missing from this episode",
-        "unapproved": "Awaiting approval"
+        "unapproved": "Awaiting approval",
+        "availableInSeries": "Image available in the series. Review canon and incorporate it into the episode."
       }
     },
     "bulkHint": "To change existing shots, choose a method and apply it to shots without a take. Shots with completed or active takes keep their method.",
@@ -623,6 +624,22 @@
     "linkExisting": "Use a library character",
     "loading": "Loading character settings…",
     "missingLink": "The linked character is unavailable in this workspace. Unlink it or choose another library character.",
-    "reuseHint": "Voice and mouth settings belong to the reusable character. Episodes use that link when preparing speech in the editors. AI video with native audio uses its own generator’s voice."
+    "reuseHint": "Voice and mouth settings belong to the reusable character. Episodes use that link when preparing speech in the editors. AI video with native audio uses its own generator’s voice.",
+    "openCreator": "Configure in Character Creator",
+    "finishEditor": "Another configuration is open in Character Creator. Save its changes and return to Series Lab before opening another character.",
+    "changedLink": "The linked configuration changed. Select the saved character from its Series Lab card."
+  },
+  "referenceBatch": {
+    "title": "References for the shots",
+    "missing": "{{count}} character or location images used in this episode are missing.",
+    "available": "The images already exist in the series. Review their approval and incorporate them into the episode to use them in shots.",
+    "ready": "Shot locations and characters have approved references in this episode.",
+    "generate": "Generate all missing references ({{count}})",
+    "review": "Review and approve canon",
+    "incorporate": "Use approved references in this episode",
+    "hint": "Generate missing images, review and approve canon, then incorporate the references. The episode keeps its script and takes.",
+    "generated": "Images generated. Review and approve canon before incorporating them into the episode.",
+    "incorporated": "Approved references incorporated into the episode. You can now prepare the shots.",
+    "sourceChanged": "The project changed. Return to the source episode to continue."
   }
 }

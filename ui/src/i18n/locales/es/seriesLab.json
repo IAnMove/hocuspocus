@@ -600,7 +600,8 @@
         "ready": "Referencia aprobada en este episodio",
         "missingEntity": "Sin asignar o ausente del canon de este episodio",
         "missingImage": "Falta una imagen de referencia aprobada en este episodio",
-        "unapproved": "Pendiente de aprobación"
+        "unapproved": "Pendiente de aprobación",
+        "availableInSeries": "Imagen disponible en la serie. Revisa el canon e incorpórala al episodio."
       }
     },
     "bulkHint": "Para cambiar los planos ya creados, elige un método y aplícalo a los planos sin toma. Los planos con tomas completadas o en curso conservan su método.",
@@ -623,6 +624,22 @@
     "linkExisting": "Usar un personaje de la biblioteca",
     "loading": "Cargando configuración del personaje…",
     "missingLink": "El personaje vinculado no está disponible en esta carpeta. Desvincúlalo o elige otro personaje de la biblioteca.",
-    "reuseHint": "La voz y la boca se guardan en la ficha reutilizable del personaje. Los episodios usan ese vínculo al preparar habla en los editores. El vídeo IA con audio nativo usa la voz de su propio generador."
+    "reuseHint": "La voz y la boca se guardan en la ficha reutilizable del personaje. Los episodios usan ese vínculo al preparar habla en los editores. El vídeo IA con audio nativo usa la voz de su propio generador.",
+    "openCreator": "Configurar en Character Creator",
+    "finishEditor": "Hay otra configuración abierta en Character Creator. Guarda sus cambios y vuelve a Series Lab antes de abrir otro personaje.",
+    "changedLink": "La configuración vinculada ha cambiado. Selecciona el personaje guardado desde su ficha en Series Lab."
+  },
+  "referenceBatch": {
+    "title": "Referencias para los planos",
+    "missing": "Faltan {{count}} imágenes de personajes o escenarios utilizados en este episodio.",
+    "available": "Las imágenes ya existen en la serie. Revisa su aprobación e incorpóralas al episodio para usarlas en los planos.",
+    "ready": "Los escenarios y personajes de los planos tienen referencias aprobadas en este episodio.",
+    "generate": "Generar todas las referencias que faltan ({{count}})",
+    "review": "Revisar y aprobar canon",
+    "incorporate": "Incorporar referencias aprobadas al episodio",
+    "hint": "Primero genera las imágenes que faltan, después revisa y aprueba el canon y, por último, incorpora las referencias. El episodio conserva su guion y sus tomas.",
+    "generated": "Imágenes generadas. Revisa y aprueba el canon antes de incorporarlas al episodio.",
+    "incorporated": "Referencias aprobadas incorporadas al episodio. Ya puedes preparar los planos.",
+    "sourceChanged": "El proyecto ha cambiado. Vuelve al episodio de origen para continuar."
   }
 }

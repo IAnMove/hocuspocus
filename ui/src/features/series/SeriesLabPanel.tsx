@@ -20,6 +20,8 @@ import {
   seriesProviderMatchesGlobal,
 } from '../../lib/productionProfile'
 
+import { openSeriesCharacterEditor, useSeriesCharacterReturn } from './seriesCharacterEditor'
+
 type LabTab = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
 type SetupGap = 'title' | 'premise' | 'visualStyle'
 
@@ -42,7 +44,13 @@ export function SeriesLabPanel() {
   const [canonTab, setCanonTab] = useState<CanonTab>('world')
   const [focusCharacterId, setFocusCharacterId] = useState('')
   const openReferences = (room: 'characters' | 'locations') => { setFocusCharacterId(''); setCanonTab(room); setTab('canon') }
-  const configureCharacter = (id: string) => { setFocusCharacterId(id); setCanonTab('characters'); setTab('canon') }
+  const configureCharacter = (id: string) => { void runAction(() => openSeriesCharacterEditor(workspace, activeSeriesId, id)) }
+  const returnSource = useSeriesCharacterReturn(state => state.source)
+  useEffect(() => {
+    if (returnSource?.workspace !== workspace || returnSource.seriesId !== activeSeriesId) return
+    setFocusCharacterId(returnSource.characterId); setCanonTab('characters'); setTab('canon')
+    useSeriesCharacterReturn.setState({ source: null })
+  }, [returnSource, workspace, activeSeriesId])
   useEffect(() => listenForAgentSeriesSection(setTab), [])
   const [storyOptions, setStoryOptions] = useState<Array<{ id: string; title: string }>>([])
   const [storyId, setStoryId] = useState('')

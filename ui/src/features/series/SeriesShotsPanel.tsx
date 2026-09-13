@@ -14,6 +14,7 @@ import { SeriesShotProduction } from './SeriesShotProduction'
 import { allowedSeriesMethods, seriesShotMethod } from './productionMethods'
 import type { SeriesReferenceRoom } from './shotReferences'
 import { SeriesProductionMethods } from './SeriesProductionMethods'
+import { SeriesEpisodeReferences } from './SeriesEpisodeReferences'
 
 export function SeriesShotsPanel({
   workspace, series, episode, updateSeries, updateEpisode, replaceSeries, saveNow, onAcknowledgeLipSync, onRender, onOpenReferences, onOpenEpisode, onConfigureCharacter,
@@ -109,6 +110,7 @@ export function SeriesShotsPanel({
       <SeriesProductionMethods key={`${workspace}/${series.id}/${episode.id}`} series={series} update={updateSeries}
         episode={episode} updateEpisode={updateEpisode} onOpenReferences={onOpenReferences} />
     </div>
+    <SeriesEpisodeReferences key={`${workspace}/${series.id}/${episode.id}`} workspace={workspace} series={series} episode={episode} onOpenReferences={onOpenReferences} />
     <SectionCard title={t('shots.title')} description={t('shots.description', { count: episode.shots.length, duration: totalDuration.toFixed(1) })} action={<button className={secondaryButton} disabled={routing || !episode.shots.length} onClick={() => void routeAll()}><RefreshCw size={13} className={routing ? 'animate-spin' : ''} />{t('shots.routeAll')}</button>}>
       {hasDialogueShots && !series.bestEffortLipSyncAcknowledged && <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
         <Info size={16} className="shrink-0 text-amber-300" />
