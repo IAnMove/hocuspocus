@@ -4,6 +4,19 @@ Verificado el 7 de septiembre de 2026 contra `origin/development` **`ef5b0871`**
 Es una fotografía con evidencia, no un sustituto de Git. Antes de reservar trabajo:
 `git fetch origin development`, consultar PR abiertos y comprobar sus archivos.
 
+## Documentación de operación — 14 septiembre 2026
+
+Pasada de docs contra `origin/development` **`65dfca3f`**. No implementa
+producto. Contratos alineados con el código:
+
+- Character Kits: nueve bocas, fallback de cuatro, preflight de Series.
+- Help in-app: overlay perezoso, i18n, tabla de secciones.
+- Tijeral: Story Lab → Video 2D, kits de cuatro visemas, Qwen, no overwrite.
+- Vídeo 3D: paquete 9×6 de cara-cubo (distinto del kit 2D).
+- macOS: el perfil core/remote ya está en `development`; falta QA física.
+
+Índice: [HOWUSEIT](../HOWUSEIT.md). Esta nota no publica ni cierra PRs.
+
 ## Correcciones de integración — 12 septiembre 2026
 
 Rama `fix/integration-audit-20260912`, base `5f68eb12`, preparada para PR hacia

@@ -1,11 +1,11 @@
 # macOS compatibility contract
 
-Status: Apple Silicon core/remote implemented on `development-mac-integration`.
-Physical Mac install/start/export QA is still required before merging to
-`development`.
-Apple Silicon core/remote is the first supported Mac profile. Intel Mac is
-explicitly out of the first launch. This document is the live contract, not
-the full engineering estimate.
+Status: Apple Silicon **core/remote** recipes and endpoint mounts landed on
+`development` (runtime revision `runtime-profiles-v1-macos-core`, follow-up
+PRs that mount Series/MCP/Video3D/diagnostics on the core profile). Physical
+Mac install / Start / export QA is still required before calling the profile
+a supported launch. Intel Mac remains out of the first launch.
+This document is the live contract, not a QA certificate.
 
 ## Authority
 
@@ -37,9 +37,12 @@ are `available` only when the binary is present; otherwise `disabled`.
 
 ## Integration line
 
-Work lands on `development-mac-integration`, not on `development`, until the
-Apple Silicon profile can install and start. PRs into that line should be
-large working slices, not a contract-only drip.
+The contract and core engine are on `development`. Land new core mounts
+there, not on a side integration branch. Remaining work is physical QA
+(Install, Start, FFmpeg/Rhubarb presence, remote MiniMax/Meshy, Video
+Editor / Video3D export without CUDA) and fixing gaps found on a real Mac.
+Do not open contract-only drip PRs that restate this file without a
+failing capability.
 
 ## Core/remote profile
 
