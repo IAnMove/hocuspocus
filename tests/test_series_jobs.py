@@ -58,11 +58,15 @@ def test_render_endpoint_and_resumption_cannot_bypass_series_production_permissi
         '_series_render_candidates':lambda episode, body: episode['shots'],
     }
     _load_launch_functions('start_series_episode_render', '_series_render_context', namespace=namespace)
-    with pytest.raises(HTTPException, match='not permitted') as denied:
+    with pytest.raises(HTTPException, match='No permitted') as denied:
         namespace['start_series_episode_render']('series-1', 'episode-1', {})
     assert denied.value.status_code == 400
     with pytest.raises(ValueError, match='not permitted'):
         namespace['_series_render_context']({'workspace':'default','seriesId':'series-1','episodeId':'episode-1'}, {'shotId':'shot-1'})
+    leftover = {'id':'shot-leftover', 'productionMethod':'imported_video', 'attempts':[]}
+    episode['shots'] = [leftover, shot]
+    with pytest.raises(HTTPException, match='No permitted'):
+        namespace['start_series_episode_render']('series-1', 'episode-1', {})
     shot['productionMethod'] = 'animation_2d'
     with pytest.raises(HTTPException, match='No permitted'):
         namespace['start_series_episode_render']('series-1', 'episode-1', {})
