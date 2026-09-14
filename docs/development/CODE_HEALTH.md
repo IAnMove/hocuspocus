@@ -118,7 +118,9 @@ symbols are measured separately.
 
 Ordinary feature PRs and pushes keep the existing single-change ratchet.
 For a release PR whose actual source is `development` and base is `main`,
-`check_code_health_pr_base.sh` invokes `code_health_integration.py`:
+`check_code_health_pr_base.sh` invokes `code_health_integration.py`.
+Both PR repositories must also match GitHub's current repository identity;
+a fork branch named `development` keeps the ordinary ratchet.
 
 - Production LOC and the number of functions at complexity 15+ must stay within
   the unchanged budget at **every first-parent integration**. Splitting a release
@@ -138,8 +140,10 @@ tree. The main base must have the same tree as the integration merge-base
 (publication-only merge history is allowed). It rejects dirty product files,
 missing blobs, omitted measurements, and changes to the analyzer, policy,
 ESLint configuration or UI dependency manifests anywhere in the chain.
-Historical blob metrics must reproduce the full base and candidate reports
-exactly. Unsupported history or measurement changes fail closed and require
+Changes to `scripts.test` are allowed because measurement invokes ESLint
+directly; all other manifest fields, install hooks and the lockfile must remain
+identical. Historical blob metrics must reproduce the gate's base and candidate
+measurements exactly. Unsupported history or measurement changes fail closed and require
 separate review; branch labels alone are insufficient to pass.
 
 Unique source blobs are analyzed once with the existing Python AST counter and
@@ -151,6 +155,8 @@ CI fetches complete history when necessary. Local reproduction uses exact SHAs:
 
 ```bash
 BASE_BRANCH=main SOURCE_BRANCH=development \
+GITHUB_REPOSITORY=IAnMove/hocuspocus \
+BASE_REPOSITORY=IAnMove/hocuspocus SOURCE_REPOSITORY=IAnMove/hocuspocus \
 BASE_SHA=<main-base-sha> SOURCE_HEAD_SHA=<candidate-sha> \
 bash scripts/check_code_health_pr_base.sh
 ```
@@ -159,3 +165,11 @@ The integration that introduced the explosion effects had two historical
 hotspot regressions. Separating material/particle animation and replacing
 effect-default branches with a defaults table repairs those current functions;
 the release rule still checks their final complexity against main.
+
+The same rule applies to the ensuing canonical `push` to `main` only when its
+`before` SHA equals the first parent of a two-parent merge, the published tree
+equals its second parent's tree, and that second parent belongs to a freshly
+fetched `origin/development` history. Thus publishing the verified development
+tree keeps the same gate. Fast-forward/squash commits, changed merge trees,
+unrelated second parents and ambiguous metadata keep the ordinary ratchet;
+missing history or a failed fetch cannot produce a pass.

@@ -24,6 +24,45 @@ def git(*args: str) -> str:
     return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
 
 
+def tree_entries(sha: str) -> list[tuple[str, str, str, str]]:
+    output = subprocess.check_output(["git", "-C", str(ROOT), "ls-tree", "-r", "-z", sha])
+    entries = []
+    for entry in output.decode("utf-8").split("\0"):
+        if entry:
+            metadata, path = entry.split("\t", 1)
+            mode, kind, blob = metadata.split()
+            entries.append((mode, kind, blob, path))
+    return entries
+
+
+def main_push_source(base: str, head: str, development: str) -> str | None:
+    """Recognize only an unchanged development tree published by a merge commit."""
+    if not all(re.fullmatch(r"[0-9a-f]{40}", sha) for sha in (base, head)):
+        return None
+    if git("rev-parse", "HEAD") != head:
+        return None
+    parents = git("rev-list", "--parents", "-n", "1", head).split()
+    if len(parents) != 3 or parents[0] != head or parents[1] != base:
+        return None
+    source = parents[2]
+    if git("rev-parse", f"{head}^{{tree}}") != git("rev-parse", f"{source}^{{tree}}"):
+        return None
+    if subprocess.run(
+        ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", source, development],
+        capture_output=True,
+    ).returncode != 0:
+        return None
+    return source
+
+
+def measurement_manifest(source: str) -> str:
+    manifest = json.loads(source)
+    # The directly invoked ESLint scanner does not run the test command.
+    # Lifecycle/install hooks remain inputs because they can modify dependencies.
+    manifest.get("scripts", {}).pop("test", None)
+    return json.dumps(manifest, sort_keys=True)
+
+
 def release_chain(base: str, head: str) -> list[str]:
     """Require complete history and a release tree identical to its fork point."""
     if not all(re.fullmatch(r"[0-9a-f]{40}", sha) for sha in (base, head)):
@@ -54,9 +93,7 @@ def read_trees(chain: list[str]) -> tuple[list[dict[str, str]], dict[str, str]]:
     for sha in chain:
         tree = {}
         measurement = {}
-        for entry in git("ls-tree", "-r", sha).splitlines():
-            metadata, path = entry.split("\t", 1)
-            mode, kind, blob = metadata.split()
+        for mode, kind, blob, path in tree_entries(sha):
             if path in MEASUREMENT_INPUTS:
                 measurement[path] = blob
             if health._is_product(path):
@@ -66,6 +103,7 @@ def read_trees(chain: list[str]) -> tuple[list[dict[str, str]], dict[str, str]]:
                 blobs.add(blob)
         if set(measurement) != set(MEASUREMENT_INPUTS):
             raise ValueError(f"Missing measurement inputs at {sha}")
+        measurement["ui/package.json"] = measurement_manifest(git("show", f"{sha}:ui/package.json"))
         if inputs is not None and measurement != inputs:
             raise ValueError(f"Policy, analyzer or UI measurement inputs changed at {sha}")
         inputs = measurement

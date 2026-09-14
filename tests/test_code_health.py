@@ -362,11 +362,90 @@ class ReleaseIntegrationHealthTests(unittest.TestCase):
             self.release.release_chain("origin/main", head)
 
     def test_changed_or_missing_historical_measurement_inputs_fail_closed(self):
-        rows = [f"100644 blob {'a' * 40}\t{path}" for path in self.release.MEASUREMENT_INPUTS]
-        for second in (rows[:-1], [row.replace('a' * 40, 'b' * 40) for row in rows]):
-            with self.patch.object(self.release, "git", side_effect=["\n".join(rows), "\n".join(second)]):
+        rows = [('100644', 'blob', 'a' * 40, path) for path in self.release.MEASUREMENT_INPUTS]
+        for second in (rows[:-1], [(mode, kind, 'b' * 40, path) for mode, kind, _, path in rows]):
+            with self.patch.object(self.release, 'tree_entries', side_effect=[rows, second]), \
+                 self.patch.object(self.release, "git", return_value='{}'):
                 with self.assertRaisesRegex(ValueError, "measurement inputs|measurement inputs changed"):
                     self.release.read_trees(["base", "head"])
+
+    def test_only_test_script_changes_are_irrelevant_to_measurement(self):
+        base = {"scripts": {"test": "old", "postinstall": "safe"}, "dependencies": {"eslint": "1"}}
+        changed = {**base, "scripts": {"test": "new", "postinstall": "safe"}}
+        original = self.release.measurement_manifest(json.dumps(base))
+        self.assertEqual(original, self.release.measurement_manifest(json.dumps(changed)))
+        changed["scripts"]["postinstall"] = "mutate-eslint"
+        self.assertNotEqual(original, self.release.measurement_manifest(json.dumps(changed)))
+
+    def test_main_push_requires_exact_unchanged_two_parent_development_merge(self):
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            def git(*args):
+                return subprocess.check_output(
+                    ['git', '-C', folder, '-c', 'user.name=Test', '-c', 'user.email=test@example.test', *args],
+                    text=True,
+                ).strip()
+            git('init', '-q')
+            (root / 'file').write_text('base')
+            git('add', '.')
+            git('commit', '-qm', 'base')
+            base = git('rev-parse', 'HEAD')
+            git('checkout', '-qb', 'development')
+            (root / 'file').write_text('development')
+            git('commit', '-qam', 'feature')
+            source = git('rev-parse', 'HEAD')
+            git('checkout', '-qb', 'published', base)
+            git('merge', '--no-ff', '-qm', 'release', source)
+            head = git('rev-parse', 'HEAD')
+            with self.patch.object(self.release, 'ROOT', root):
+                self.assertEqual(self.release.main_push_source(base, head, source), source)
+                self.assertIsNone(self.release.main_push_source(source, head, source))
+                self.assertIsNone(self.release.main_push_source(base, source, source))
+                self.assertIsNone(self.release.main_push_source(base, head, base))
+                self.assertIsNone(self.release.main_push_source(base, 'HEAD', source))
+                # A conflict resolution that changes the published tree is not a release passthrough.
+                changed = git('commit-tree', f'{base}^{{tree}}', '-p', base, '-p', source, '-m', 'changed merge')
+                self.assertIsNone(self.release.main_push_source(base, changed, source))
+                third = git('commit-tree', f'{source}^{{tree}}', '-p', base, '-m', 'third')
+                octopus = git('commit-tree', f'{source}^{{tree}}', '-p', base, '-p', source, '-p', third, '-m', 'octopus')
+                self.assertIsNone(self.release.main_push_source(base, octopus, source))
+
+    def test_intermediate_unicode_product_cannot_disappear_from_history(self):
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            def git(*args):
+                return subprocess.check_output(
+                    ['git', '-C', folder, '-c', 'user.name=Test', '-c', 'user.email=test@example.test', *args],
+                    text=True,
+                ).strip()
+            git('init', '-q')
+            for name in self.release.MEASUREMENT_INPUTS:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('{}' if name.endswith('.json') else '', encoding='utf-8')
+            git('add', '.')
+            git('commit', '-qm', 'base')
+            chain = [git('rev-parse', 'HEAD')]
+            name = 'app/services/épisode.py'
+            path = root / name
+            path.parent.mkdir(parents=True)
+            path.write_text('pass\n' * 4001, encoding='utf-8')
+            git('add', '.')
+            git('commit', '-qm', 'temporary growth')
+            chain.append(git('rev-parse', 'HEAD'))
+            path.unlink()
+            git('add', '-u')
+            git('commit', '-qm', 'remove temporary growth')
+            chain.append(git('rev-parse', 'HEAD'))
+            with self.patch.object(self.release, 'ROOT', root):
+                trees, sources = self.release.read_trees(chain)
+            self.assertNotIn(name, trees[0])
+            self.assertNotIn(name, trees[-1])
+            self.assertEqual(len(sources[trees[1][name]].splitlines()), 4001)
 
 
 if __name__ == "__main__":
