@@ -1,4 +1,4 @@
-import scenes from './darkFantasyScenes.json'
+import scenes from './darkFantasyScenes.json' with { type: 'json' }
 import { DARK_FANTASY_IDS, isDarkFantasyTemplate } from './darkFantasyIds'
 import type { Scene3DDocument, Scene3DSlotId } from './types'
 import type { Scene3DTemplate } from './templates'
