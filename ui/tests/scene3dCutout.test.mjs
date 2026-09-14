@@ -53,8 +53,8 @@ test('optional floor finishes survive save/reopen and preserve old defaults', ()
   assert.deepEqual(parseEnvironment({ ...base, floorStyle: 'invalid' }), base)
 })
 
-test('all ten fantasy presets reopen with bundled resources and independent camera/effect documents', () => {
-  assert.equal(DARK_FANTASY_IDS.length, 10)
+test('all fantasy presets reopen with bundled resources and independent camera/effect documents', () => {
+  assert.equal(DARK_FANTASY_IDS.length, 30)
   const cameras = new Set()
   for (const id of DARK_FANTASY_IDS) {
     assert.ok(SCENE3D_TEMPLATES.some(template => template.id === id))
@@ -65,6 +65,7 @@ test('all ten fantasy presets reopen with bundled resources and independent came
     assert.equal(parsed.duration, 6)
     assert.ok(parsed.slots.some(slot => slot.surface === 'cutout'))
     assert.ok(parsed.worldSfx.length > 0)
+    for (const cue of doc.worldSfx) assert.ok(Number.isFinite(cue.rotation.x))
     for (const slot of parsed.slots) {
       assert.ok(slot.sourceUrl.startsWith('/examples/dark-fantasy/'))
       assert.ok(fs.existsSync(new URL('../public' + slot.sourceUrl, import.meta.url)))
@@ -73,5 +74,5 @@ test('all ten fantasy presets reopen with bundled resources and independent came
     doc.slots[0].position[0] = 999
     assert.notEqual(applyScene3DTemplate(id).slots[0].position[0], 999)
   }
-  assert.equal(cameras.size, 10)
+  assert.equal(cameras.size, 20)
 })

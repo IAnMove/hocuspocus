@@ -280,4 +280,4 @@ Bugs and requests: [github.com/IAnMove/hocuspocus/issues](https://github.com/IAn
 
 ### Dark Fantasy perspective templates
 
-In **Studios → Video 3D**, search **Dark Fantasy** for ten editable six-second scenes with bundled image assets, transparent 2D characters, 3D camera movement, spatial effects and reflections. Choose tiled, seamless or hidden floors, replace the cutouts, and render with the native compositor. These are 2.5D perspective studies; the figures are image planes rather than rigged 3D models. See [the collection guide](ui/public/examples/dark-fantasy/README.md) for editing and sharing.
+In **Studios → Video 3D → Shot library**, the **Dark Fantasy** filter offers 30 editable six-second templates: ten landscape compositions, ten new vertical 9:16 scenes and ten PSX variants. The **PSX** filter selects effects on the full frame or only on character layers. Edit depth, tint, image lighting, camera movement, spatial effects and floor finish, then render with the native compositor. These are 2.5D scenes with image characters. See [the collection guide](ui/public/examples/dark-fantasy/README.md) for editing and sharing.

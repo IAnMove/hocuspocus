@@ -35,7 +35,7 @@ test('all 3D shots roundtrip and produce finite, nondegenerate cameras', () => {
 test('new layouts are distinct and existing shots get different camera compositions', () => {
   const fingerprints = SCENE3D_TEMPLATES.map(template => {
     const scene = applyScene3DTemplate(template.id)
-    return JSON.stringify([scene.camera, scene.slots, scene.dressing])
+    return JSON.stringify([scene.camera, scene.slots, scene.dressing, scene.sfx])
   })
   assert.equal(new Set(fingerprints).size, SCENE3D_TEMPLATE_IDS.length)
 })

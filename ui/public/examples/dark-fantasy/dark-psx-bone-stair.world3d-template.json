@@ -1,0 +1,198 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-psx-bone-stair",
+  "title": "Dark Fantasy · La escalera de hueso · PSX escena completa",
+  "description": "Arco de hueso brillante delante, centinela negro en medio y escalera violeta detrás; giro de perspectiva. PSX: escena completa.",
+  "includeAssets": true,
+  "createdAt": "2026-09-14T19:30:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-bone-stair",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-bone-stair.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          0.1,
+          -0.2,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          -0.1,
+          -1.8,
+          3
+        ],
+        "scale": 4.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#fff0bc"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "magic_circle",
+        "kind": "magic_circle",
+        "position": {
+          "x": 0,
+          "y": 0.05,
+          "z": -0.4
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#e5b574",
+        "scale": 1.5,
+        "intensity": 0.55,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#d6a4f1",
+        "scale": 2,
+        "intensity": 0.3,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.3,
+        3.5,
+        11
+      ],
+      "look": [
+        0,
+        3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.24242424242424246,
+          1.2424242424242424,
+          6.666666666666667
+        ],
+        "to": [
+          0.30303030303030304,
+          1.0606060606060608,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          -0.060606060606060615,
+          0.9393939393939394,
+          -0.6060606060606061
+        ],
+        "lookTo": [
+          -0.060606060606060615,
+          0.9393939393939394,
+          -0.6060606060606061
+        ],
+        "rollFrom": -9,
+        "rollTo": 8,
+        "relativeToFacing": false
+      }
+    },
+    "sfx": [
+      {
+        "id": "psx-frame",
+        "kind": "psx",
+        "label": "PSX · escena completa",
+        "start": 0,
+        "end": 6,
+        "x": 50,
+        "y": 50,
+        "size": 100,
+        "intensity": 1.5,
+        "color": "#ffffff",
+        "seed": 17,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

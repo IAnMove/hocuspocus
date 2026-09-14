@@ -1,0 +1,181 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-vertical-jade-rift",
+  "title": "Dark Fantasy · La grieta de jade",
+  "description": "La grieta verde ilumina la distancia; un oráculo rojo permanece entre esa luz y una silueta azul negra cercana.",
+  "includeAssets": true,
+  "createdAt": "2026-09-14T19:30:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-jade-rift",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-jade-rift.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          0.2,
+          -0.45,
+          0
+        ],
+        "scale": 1.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -1.7,
+          -0.6,
+          3.1
+        ],
+        "scale": 2.7,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#374552"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "energy_orb",
+        "kind": "energy_orb",
+        "position": {
+          "x": 0.9,
+          "y": 2.8,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#58ffc2",
+        "scale": 0.3,
+        "intensity": 0.55,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.1,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#2e8a6b",
+        "scale": 2.5,
+        "intensity": 0.35,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.6,
+        3,
+        10.6
+      ],
+      "look": [
+        0,
+        3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.2162162162162162,
+          0.8648648648648648,
+          5.729729729729729
+        ],
+        "to": [
+          -0.35135135135135137,
+          1.0270270270270268,
+          4.756756756756757
+        ],
+        "lookFrom": [
+          -0.10810810810810811,
+          0.8648648648648648,
+          -0.5405405405405405
+        ],
+        "lookTo": [
+          -0.10810810810810811,
+          0.8648648648648648,
+          -0.5405405405405405
+        ],
+        "rollFrom": 4,
+        "rollTo": -4,
+        "relativeToFacing": false
+      }
+    }
+  }
+}

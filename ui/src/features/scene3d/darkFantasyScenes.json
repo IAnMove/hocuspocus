@@ -1465,5 +1465,3350 @@
         "relativeToFacing": false
       }
     }
+  },
+  "dark-vertical-ivory-gate": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-ivory-gate",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-ivory-gate.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          0.15,
+          -0.4,
+          0
+        ],
+        "scale": 2,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -1.85,
+          -1.2,
+          3
+        ],
+        "scale": 3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#879aa6"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "sparks",
+        "kind": "sparks",
+        "position": {
+          "x": 0.4,
+          "y": 0.2,
+          "z": 1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff6c22",
+        "scale": 2.2,
+        "intensity": 0.5,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#951a18",
+        "scale": 2,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.5,
+        3.2,
+        11
+      ],
+      "look": [
+        0,
+        3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.325,
+          0.8,
+          5.5
+        ],
+        "to": [
+          0.175,
+          0.5999999999999999,
+          4.4
+        ],
+        "lookFrom": [
+          -0.075,
+          0.7,
+          -0.5
+        ],
+        "lookTo": [
+          -0.075,
+          0.7,
+          -0.5
+        ],
+        "rollFrom": -2,
+        "rollTo": 2,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-vertical-saffron-well": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-saffron-well",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-saffron-well.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -0.2,
+          -0.5,
+          0
+        ],
+        "scale": 2.1,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        },
+        "motion": {
+          "to": [
+            -0.2,
+            -0.15,
+            0
+          ],
+          "easing": "smooth"
+        }
+      },
+      {
+        "id": "near-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          0,
+          -1,
+          3.2
+        ],
+        "scale": 5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#26201c"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f4bd57",
+        "scale": 2.4,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.65,
+        2.8,
+        11
+      ],
+      "look": [
+        0,
+        3.1,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.40476190476190477,
+          0.5714285714285713,
+          5.238095238095238
+        ],
+        "to": [
+          -0.16666666666666669,
+          0.9047619047619047,
+          4.285714285714286
+        ],
+        "lookFrom": [
+          0.09523809523809523,
+          0.7142857142857143,
+          -0.47619047619047616
+        ],
+        "lookTo": [
+          0.09523809523809523,
+          0.7142857142857143,
+          -0.47619047619047616
+        ],
+        "rollFrom": 3,
+        "rollTo": -3,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-vertical-crimson-tide": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-crimson-tide",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-crimson-tide.jpg",
+        "position": [
+          0,
+          -9.7,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          -0.35,
+          -0.6,
+          -0.3
+        ],
+        "scale": 1.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          2.25,
+          -1,
+          3.3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#96c5d2"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.4,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#237e88",
+        "scale": 2.4,
+        "intensity": 0.55,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.8,
+        3.3,
+        10.6
+      ],
+      "look": [
+        -0.1,
+        2.9,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.23684210526315794,
+          1.0526315789473684,
+          5.736842105263158
+        ],
+        "to": [
+          0.5526315789473684,
+          0.7894736842105263,
+          5.0
+        ],
+        "lookFrom": [
+          0.13157894736842105,
+          0.8421052631578948,
+          -0.3684210526315789
+        ],
+        "lookTo": [
+          0.13157894736842105,
+          0.8421052631578948,
+          -0.3684210526315789
+        ],
+        "rollFrom": -5,
+        "rollTo": 3,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-vertical-frozen-bell": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-frozen-bell",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-frozen-bell.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          0.2,
+          -0.5,
+          0
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "far-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          0,
+          -1.5,
+          -3
+        ],
+        "scale": 4.2,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#436875"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "snow",
+        "kind": "snow",
+        "position": {
+          "x": 0,
+          "y": 0.5,
+          "z": 1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#dcffff",
+        "scale": 2.2,
+        "intensity": 0.6,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.65,
+        2.7,
+        11
+      ],
+      "look": [
+        0,
+        3.3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.25,
+          0.7777777777777778,
+          6.111111111111111
+        ],
+        "to": [
+          -0.3055555555555556,
+          1.5,
+          5.0
+        ],
+        "lookFrom": [
+          -0.11111111111111112,
+          1.111111111111111,
+          -0.5555555555555556
+        ],
+        "lookTo": [
+          -0.11111111111111112,
+          1.3888888888888888,
+          -0.5555555555555556
+        ],
+        "rollFrom": -2,
+        "rollTo": 2,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-vertical-bone-stair": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-bone-stair",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-bone-stair.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          0.1,
+          -0.2,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          -0.1,
+          -1.8,
+          3
+        ],
+        "scale": 4.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#fff0bc"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "magic_circle",
+        "kind": "magic_circle",
+        "position": {
+          "x": 0,
+          "y": 0.05,
+          "z": -0.4
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#e5b574",
+        "scale": 1.5,
+        "intensity": 0.55,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#d6a4f1",
+        "scale": 2,
+        "intensity": 0.3,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.3,
+        3.5,
+        11
+      ],
+      "look": [
+        0,
+        3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.24242424242424246,
+          1.2424242424242424,
+          6.666666666666667
+        ],
+        "to": [
+          0.30303030303030304,
+          1.0606060606060608,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          -0.060606060606060615,
+          0.9393939393939394,
+          -0.6060606060606061
+        ],
+        "lookTo": [
+          -0.060606060606060615,
+          0.9393939393939394,
+          -0.6060606060606061
+        ],
+        "rollFrom": -9,
+        "rollTo": 8,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-vertical-jade-rift": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-jade-rift",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-jade-rift.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          0.2,
+          -0.45,
+          0
+        ],
+        "scale": 1.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -1.7,
+          -0.6,
+          3.1
+        ],
+        "scale": 2.7,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#374552"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "energy_orb",
+        "kind": "energy_orb",
+        "position": {
+          "x": 0.9,
+          "y": 2.8,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#58ffc2",
+        "scale": 0.3,
+        "intensity": 0.55,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.1,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#2e8a6b",
+        "scale": 2.5,
+        "intensity": 0.35,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.6,
+        3,
+        10.6
+      ],
+      "look": [
+        0,
+        3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.2162162162162162,
+          0.8648648648648648,
+          5.729729729729729
+        ],
+        "to": [
+          -0.35135135135135137,
+          1.0270270270270268,
+          4.756756756756757
+        ],
+        "lookFrom": [
+          -0.10810810810810811,
+          0.8648648648648648,
+          -0.5405405405405405
+        ],
+        "lookTo": [
+          -0.10810810810810811,
+          0.8648648648648648,
+          -0.5405405405405405
+        ],
+        "rollFrom": 4,
+        "rollTo": -4,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-vertical-ashen-rose": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-ashen-rose",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-ashen-rose.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          -0.35,
+          -0.4,
+          0
+        ],
+        "scale": 1.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-tree",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "position": [
+          1.75,
+          -1,
+          3
+        ],
+        "scale": 4,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#664753"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "sparks",
+        "kind": "sparks",
+        "position": {
+          "x": 0.3,
+          "y": 1,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff304a",
+        "scale": 2,
+        "intensity": 0.45,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.7,
+        3.2,
+        11
+      ],
+      "look": [
+        0,
+        3.8,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.18421052631578946,
+          0.8947368421052633,
+          5.7894736842105265
+        ],
+        "to": [
+          0.4736842105263158,
+          1.0526315789473684,
+          4.736842105263158
+        ],
+        "lookFrom": [
+          0.18421052631578946,
+          1.2105263157894737,
+          -0.5263157894736842
+        ],
+        "lookTo": [
+          0.18421052631578946,
+          1.2105263157894737,
+          -0.5263157894736842
+        ],
+        "rollFrom": 0,
+        "rollTo": 4,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-vertical-violet-gravity": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-violet-gravity",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-violet-gravity.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          0.25,
+          0.2,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        },
+        "motion": {
+          "to": [
+            0.25,
+            0.6,
+            0
+          ],
+          "easing": "smooth"
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -2.1,
+          -0.8,
+          3
+        ],
+        "scale": 2.7,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#402c58"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "energy_orb",
+        "kind": "energy_orb",
+        "position": {
+          "x": 0.8,
+          "y": 3,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#e29eff",
+        "scale": 0.3,
+        "intensity": 0.6,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "z": -1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#b99bdb",
+        "scale": 2.3,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.6,
+        3.4,
+        11
+      ],
+      "look": [
+        0,
+        3.2,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.21212121212121213,
+          0.9393939393939394,
+          6.666666666666667
+        ],
+        "to": [
+          -0.5151515151515151,
+          1.0606060606060608,
+          5.696969696969697
+        ],
+        "lookFrom": [
+          -0.15151515151515152,
+          0.8181818181818185,
+          -0.6060606060606061
+        ],
+        "lookTo": [
+          -0.15151515151515152,
+          0.8181818181818185,
+          -0.6060606060606061
+        ],
+        "rollFrom": 10,
+        "rollTo": -9,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-vertical-ember-totem": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-ember-totem",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-ember-totem.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          0.15,
+          -0.4,
+          0
+        ],
+        "scale": 2,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          0,
+          -1.2,
+          3.2
+        ],
+        "scale": 5.1,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#324e69"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "sparks",
+        "kind": "sparks",
+        "position": {
+          "x": 0,
+          "y": 0.2,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffa63d",
+        "scale": 2.5,
+        "intensity": 0.6,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fire",
+        "kind": "fire",
+        "position": {
+          "x": -1.5,
+          "y": -0.2,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ed7830",
+        "scale": 0.6,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.6,
+        2.6,
+        10.8
+      ],
+      "look": [
+        0,
+        3.1,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.375,
+          0.5,
+          5.4
+        ],
+        "to": [
+          0.125,
+          0.34999999999999987,
+          4.4
+        ],
+        "lookFrom": [
+          -0.075,
+          0.75,
+          -0.5
+        ],
+        "lookTo": [
+          -0.075,
+          0.75,
+          -0.5
+        ],
+        "rollFrom": -3,
+        "rollTo": 3,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-vertical-white-abyss": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-white-abyss",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-white-abyss.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          0,
+          -0.5,
+          0
+        ],
+        "scale": 2.1,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-oracle",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          1.7,
+          -1,
+          3.2
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ea6973"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": -0.2,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#dadacf",
+        "scale": 2.4,
+        "intensity": 0.25,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.55,
+        3,
+        11
+      ],
+      "look": [
+        0,
+        3.3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.2619047619047619,
+          0.6666666666666666,
+          5.238095238095238
+        ],
+        "to": [
+          -0.21428571428571427,
+          0.9047619047619047,
+          4.3809523809523805
+        ],
+        "lookFrom": [
+          0.0,
+          0.8095238095238093,
+          -0.47619047619047616
+        ],
+        "lookTo": [
+          0.0,
+          0.8095238095238093,
+          -0.47619047619047616
+        ],
+        "rollFrom": 2,
+        "rollTo": -2,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-psx-ivory-gate": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-ivory-gate",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-ivory-gate.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          0.15,
+          -0.4,
+          0
+        ],
+        "scale": 2,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -1.85,
+          -1.2,
+          3
+        ],
+        "scale": 3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#879aa6"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "sparks",
+        "kind": "sparks",
+        "position": {
+          "x": 0.4,
+          "y": 0.2,
+          "z": 1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff6c22",
+        "scale": 2.2,
+        "intensity": 0.5,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#951a18",
+        "scale": 2,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.5,
+        3.2,
+        11
+      ],
+      "look": [
+        0,
+        3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.325,
+          0.8,
+          5.5
+        ],
+        "to": [
+          0.175,
+          0.5999999999999999,
+          4.4
+        ],
+        "lookFrom": [
+          -0.075,
+          0.7,
+          -0.5
+        ],
+        "lookTo": [
+          -0.075,
+          0.7,
+          -0.5
+        ],
+        "rollFrom": -2,
+        "rollTo": 2,
+        "relativeToFacing": false
+      }
+    },
+    "sfx": [
+      {
+        "id": "psx-frame",
+        "kind": "psx",
+        "label": "PSX · escena completa",
+        "start": 0,
+        "end": 6,
+        "x": 50,
+        "y": 50,
+        "size": 100,
+        "intensity": 1.5,
+        "color": "#ffffff",
+        "seed": 17,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-psx-saffron-well": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-saffron-well",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-saffron-well.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -0.2,
+          -0.5,
+          0
+        ],
+        "scale": 2.1,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff",
+          "psx": 1.4
+        },
+        "motion": {
+          "to": [
+            -0.2,
+            -0.15,
+            0
+          ],
+          "easing": "smooth"
+        }
+      },
+      {
+        "id": "near-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          0,
+          -1,
+          3.2
+        ],
+        "scale": 5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#26201c"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f4bd57",
+        "scale": 2.4,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.65,
+        2.8,
+        11
+      ],
+      "look": [
+        0,
+        3.1,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.40476190476190477,
+          0.5714285714285713,
+          5.238095238095238
+        ],
+        "to": [
+          -0.16666666666666669,
+          0.9047619047619047,
+          4.285714285714286
+        ],
+        "lookFrom": [
+          0.09523809523809523,
+          0.7142857142857143,
+          -0.47619047619047616
+        ],
+        "lookTo": [
+          0.09523809523809523,
+          0.7142857142857143,
+          -0.47619047619047616
+        ],
+        "rollFrom": 3,
+        "rollTo": -3,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-psx-crimson-tide": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-crimson-tide",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-crimson-tide.jpg",
+        "position": [
+          0,
+          -9.7,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          -0.35,
+          -0.6,
+          -0.3
+        ],
+        "scale": 1.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          2.25,
+          -1,
+          3.3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#96c5d2"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.4,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#237e88",
+        "scale": 2.4,
+        "intensity": 0.55,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.8,
+        3.3,
+        10.6
+      ],
+      "look": [
+        -0.1,
+        2.9,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.23684210526315794,
+          1.0526315789473684,
+          5.736842105263158
+        ],
+        "to": [
+          0.5526315789473684,
+          0.7894736842105263,
+          5.0
+        ],
+        "lookFrom": [
+          0.13157894736842105,
+          0.8421052631578948,
+          -0.3684210526315789
+        ],
+        "lookTo": [
+          0.13157894736842105,
+          0.8421052631578948,
+          -0.3684210526315789
+        ],
+        "rollFrom": -5,
+        "rollTo": 3,
+        "relativeToFacing": false
+      }
+    },
+    "sfx": [
+      {
+        "id": "psx-frame",
+        "kind": "psx",
+        "label": "PSX · escena completa",
+        "start": 0,
+        "end": 6,
+        "x": 50,
+        "y": 50,
+        "size": 100,
+        "intensity": 1.5,
+        "color": "#ffffff",
+        "seed": 17,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-psx-frozen-bell": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-frozen-bell",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-frozen-bell.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          0.2,
+          -0.5,
+          0
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff",
+          "psx": 1.4
+        }
+      },
+      {
+        "id": "far-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          0,
+          -1.5,
+          -3
+        ],
+        "scale": 4.2,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#436875"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "snow",
+        "kind": "snow",
+        "position": {
+          "x": 0,
+          "y": 0.5,
+          "z": 1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#dcffff",
+        "scale": 2.2,
+        "intensity": 0.6,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.65,
+        2.7,
+        11
+      ],
+      "look": [
+        0,
+        3.3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.25,
+          0.7777777777777778,
+          6.111111111111111
+        ],
+        "to": [
+          -0.3055555555555556,
+          1.5,
+          5.0
+        ],
+        "lookFrom": [
+          -0.11111111111111112,
+          1.111111111111111,
+          -0.5555555555555556
+        ],
+        "lookTo": [
+          -0.11111111111111112,
+          1.3888888888888888,
+          -0.5555555555555556
+        ],
+        "rollFrom": -2,
+        "rollTo": 2,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-psx-bone-stair": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-bone-stair",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-bone-stair.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          0.1,
+          -0.2,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          -0.1,
+          -1.8,
+          3
+        ],
+        "scale": 4.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#fff0bc"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "magic_circle",
+        "kind": "magic_circle",
+        "position": {
+          "x": 0,
+          "y": 0.05,
+          "z": -0.4
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#e5b574",
+        "scale": 1.5,
+        "intensity": 0.55,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#d6a4f1",
+        "scale": 2,
+        "intensity": 0.3,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.3,
+        3.5,
+        11
+      ],
+      "look": [
+        0,
+        3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.24242424242424246,
+          1.2424242424242424,
+          6.666666666666667
+        ],
+        "to": [
+          0.30303030303030304,
+          1.0606060606060608,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          -0.060606060606060615,
+          0.9393939393939394,
+          -0.6060606060606061
+        ],
+        "lookTo": [
+          -0.060606060606060615,
+          0.9393939393939394,
+          -0.6060606060606061
+        ],
+        "rollFrom": -9,
+        "rollTo": 8,
+        "relativeToFacing": false
+      }
+    },
+    "sfx": [
+      {
+        "id": "psx-frame",
+        "kind": "psx",
+        "label": "PSX · escena completa",
+        "start": 0,
+        "end": 6,
+        "x": 50,
+        "y": 50,
+        "size": 100,
+        "intensity": 1.5,
+        "color": "#ffffff",
+        "seed": 17,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-psx-jade-rift": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-jade-rift",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-jade-rift.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          0.2,
+          -0.45,
+          0
+        ],
+        "scale": 1.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff",
+          "psx": 1.4
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -1.7,
+          -0.6,
+          3.1
+        ],
+        "scale": 2.7,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#374552",
+          "psx": 1.4
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "energy_orb",
+        "kind": "energy_orb",
+        "position": {
+          "x": 0.9,
+          "y": 2.8,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#58ffc2",
+        "scale": 0.3,
+        "intensity": 0.55,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.1,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#2e8a6b",
+        "scale": 2.5,
+        "intensity": 0.35,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.6,
+        3,
+        10.6
+      ],
+      "look": [
+        0,
+        3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.2162162162162162,
+          0.8648648648648648,
+          5.729729729729729
+        ],
+        "to": [
+          -0.35135135135135137,
+          1.0270270270270268,
+          4.756756756756757
+        ],
+        "lookFrom": [
+          -0.10810810810810811,
+          0.8648648648648648,
+          -0.5405405405405405
+        ],
+        "lookTo": [
+          -0.10810810810810811,
+          0.8648648648648648,
+          -0.5405405405405405
+        ],
+        "rollFrom": 4,
+        "rollTo": -4,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-psx-ashen-rose": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-ashen-rose",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-ashen-rose.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          -0.35,
+          -0.4,
+          0
+        ],
+        "scale": 1.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-tree",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "position": [
+          1.75,
+          -1,
+          3
+        ],
+        "scale": 4,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#664753"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "sparks",
+        "kind": "sparks",
+        "position": {
+          "x": 0.3,
+          "y": 1,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff304a",
+        "scale": 2,
+        "intensity": 0.45,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.7,
+        3.2,
+        11
+      ],
+      "look": [
+        0,
+        3.8,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.18421052631578946,
+          0.8947368421052633,
+          5.7894736842105265
+        ],
+        "to": [
+          0.4736842105263158,
+          1.0526315789473684,
+          4.736842105263158
+        ],
+        "lookFrom": [
+          0.18421052631578946,
+          1.2105263157894737,
+          -0.5263157894736842
+        ],
+        "lookTo": [
+          0.18421052631578946,
+          1.2105263157894737,
+          -0.5263157894736842
+        ],
+        "rollFrom": 0,
+        "rollTo": 4,
+        "relativeToFacing": false
+      }
+    },
+    "sfx": [
+      {
+        "id": "psx-frame",
+        "kind": "psx",
+        "label": "PSX · escena completa",
+        "start": 0,
+        "end": 6,
+        "x": 50,
+        "y": 50,
+        "size": 100,
+        "intensity": 1.5,
+        "color": "#ffffff",
+        "seed": 17,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-psx-violet-gravity": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-violet-gravity",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-violet-gravity.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          0.25,
+          0.2,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff",
+          "psx": 1.4
+        },
+        "motion": {
+          "to": [
+            0.25,
+            0.6,
+            0
+          ],
+          "easing": "smooth"
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -2.1,
+          -0.8,
+          3
+        ],
+        "scale": 2.7,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#402c58",
+          "psx": 1.4
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "energy_orb",
+        "kind": "energy_orb",
+        "position": {
+          "x": 0.8,
+          "y": 3,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#e29eff",
+        "scale": 0.3,
+        "intensity": 0.6,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "z": -1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#b99bdb",
+        "scale": 2.3,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.6,
+        3.4,
+        11
+      ],
+      "look": [
+        0,
+        3.2,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.21212121212121213,
+          0.9393939393939394,
+          6.666666666666667
+        ],
+        "to": [
+          -0.5151515151515151,
+          1.0606060606060608,
+          5.696969696969697
+        ],
+        "lookFrom": [
+          -0.15151515151515152,
+          0.8181818181818185,
+          -0.6060606060606061
+        ],
+        "lookTo": [
+          -0.15151515151515152,
+          0.8181818181818185,
+          -0.6060606060606061
+        ],
+        "rollFrom": 10,
+        "rollTo": -9,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-psx-ember-totem": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-ember-totem",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-ember-totem.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          0.15,
+          -0.4,
+          0
+        ],
+        "scale": 2,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-arch",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          0,
+          -1.2,
+          3.2
+        ],
+        "scale": 5.1,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#324e69"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "sparks",
+        "kind": "sparks",
+        "position": {
+          "x": 0,
+          "y": 0.2,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffa63d",
+        "scale": 2.5,
+        "intensity": 0.6,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fire",
+        "kind": "fire",
+        "position": {
+          "x": -1.5,
+          "y": -0.2,
+          "z": -2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ed7830",
+        "scale": 0.6,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.6,
+        2.6,
+        10.8
+      ],
+      "look": [
+        0,
+        3.1,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.375,
+          0.5,
+          5.4
+        ],
+        "to": [
+          0.125,
+          0.34999999999999987,
+          4.4
+        ],
+        "lookFrom": [
+          -0.075,
+          0.75,
+          -0.5
+        ],
+        "lookTo": [
+          -0.075,
+          0.75,
+          -0.5
+        ],
+        "rollFrom": -3,
+        "rollTo": 3,
+        "relativeToFacing": false
+      }
+    },
+    "sfx": [
+      {
+        "id": "psx-frame",
+        "kind": "psx",
+        "label": "PSX · escena completa",
+        "start": 0,
+        "end": 6,
+        "x": 50,
+        "y": 50,
+        "size": 100,
+        "intensity": 1.5,
+        "color": "#ffffff",
+        "seed": 17,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-psx-white-abyss": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-psx-white-abyss",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-white-abyss.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          0,
+          -0.5,
+          0
+        ],
+        "scale": 2.1,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff",
+          "psx": 1.4
+        }
+      },
+      {
+        "id": "near-oracle",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
+        "position": [
+          1.7,
+          -1,
+          3.2
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ea6973",
+          "psx": 1.4
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": -0.2,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#dadacf",
+        "scale": 2.4,
+        "intensity": 0.25,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.55,
+        3,
+        11
+      ],
+      "look": [
+        0,
+        3.3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.2619047619047619,
+          0.6666666666666666,
+          5.238095238095238
+        ],
+        "to": [
+          -0.21428571428571427,
+          0.9047619047619047,
+          4.3809523809523805
+        ],
+        "lookFrom": [
+          0.0,
+          0.8095238095238093,
+          -0.47619047619047616
+        ],
+        "lookTo": [
+          0.0,
+          0.8095238095238093,
+          -0.47619047619047616
+        ],
+        "rollFrom": 2,
+        "rollTo": -2,
+        "relativeToFacing": false
+      }
+    }
   }
 }

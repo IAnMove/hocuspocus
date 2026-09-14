@@ -3,17 +3,17 @@ import { Search } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
-import { SCENE3D_TEMPLATES, type Scene3DTemplateCategory, type Scene3DTemplateId } from './templates'
+import { SCENE3D_TEMPLATES, type Scene3DTemplateFilter, type Scene3DTemplateId } from './templates'
 import { filterScene3DTemplates, settingsIn, type TemplateSetting } from './templateFilters'
 import { Scene3DTemplateThumb } from './Scene3DTemplateThumb'
 
-const categories = ['action', 'cinema', 'drive', 'space', 'music', 'product'] as const
+const categories = ['dark-fantasy', 'psx', 'action', 'cinema', 'drive', 'space', 'music', 'product'] as const
 
 export function Scene3DTemplateBrowser({ selected, disabled, onSelect }: {
   selected?: Scene3DTemplateId; disabled: boolean; onSelect: (id: Scene3DTemplateId) => void
 }) {
   const { t, i18n } = useUiTranslation('scene3dEditor')
-  const [category, setCategory] = useState<'all' | Scene3DTemplateCategory>('all')
+  const [category, setCategory] = useState<'all' | Scene3DTemplateFilter>('all')
   const [setting, setSetting] = useState<'all' | TemplateSetting>('all')
   const [query, setQuery] = useState('')
   const locale = i18n.language.startsWith('es') ? 'es' : 'en'
@@ -47,7 +47,7 @@ export function Scene3DTemplateBrowser({ selected, disabled, onSelect }: {
         return <button key={item.id} type="button" disabled={disabled} onClick={() => onSelect(item.id)} aria-pressed={selected === item.id}
           data-testid={`world3d-template-${item.id}`}
           className={`overflow-hidden rounded-lg border text-left transition-colors focus-visible:outline-2 focus-visible:outline-cyan-200 disabled:opacity-40 ${selected === item.id ? 'border-cyan-300 bg-cyan-300/10' : 'border-border bg-bg-primary hover:border-cyan-300/50'}`}>
-          <Scene3DTemplateThumb id={item.id} />
+          <Scene3DTemplateThumb id={item.id} portrait={item.frameFormat === 'portrait'} />
           <span className="flex items-start justify-between gap-2 px-3 pt-2 text-sm font-semibold text-text-primary">{t(`template.${item.id}.title`)}<span className="whitespace-nowrap text-xs font-normal tabular-nums text-text-muted">{item.duration} s</span></span>
           <span className="mt-0.5 block px-3 pb-2 text-[11px] leading-4 text-text-secondary">{t(`template.${item.id}.description`)}</span>
           {selected === item.id && card?.requirements.map(req => <span key={req} className="block px-3 pb-1 text-[10px] leading-4 text-text-muted">{req}</span>)}

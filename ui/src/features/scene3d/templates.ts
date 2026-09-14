@@ -16,9 +16,13 @@ export type Scene3DTemplate = {
   camera: Scene3DCameraFamily
   duration: number
   slots: Scene3DSlotId[]
+  tags?: readonly Scene3DTemplateTag[]
+  frameFormat?: 'landscape' | 'portrait'
 }
 
+export type Scene3DTemplateTag = 'dark-fantasy' | 'psx'
 export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
+export type Scene3DTemplateFilter = Scene3DTemplateCategory | Scene3DTemplateTag
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
   ...DARK_FANTASY_CATEGORIES,
   ...CINEMATIC_CATEGORIES,
@@ -473,7 +477,7 @@ const DRESSING_BY_TEMPLATE: Partial<Record<Scene3DTemplateId, Scene3DDocument['d
 export function patchScene3DSlot(
   document: Scene3DDocument,
   slotId: string,
-  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance'>>,
+  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook'>>,
 ): Scene3DDocument {
   return {
     ...document,
@@ -538,8 +542,10 @@ export function remountScene3DTemplate(id: Scene3DTemplateId, previous: Scene3DD
   next.soundtrack = previous.soundtrack ? structuredClone(previous.soundtrack) : undefined
   if (previous.production) next.duration = previous.duration
   next.texts = previous.texts ? structuredClone(previous.texts) : undefined
-  next.width = previous.width
-  next.height = previous.height
+  if (!SCENE3D_TEMPLATES.find(template => template.id === id)?.frameFormat) {
+    next.width = previous.width
+    next.height = previous.height
+  }
   next.fps = previous.fps
   next.camera = adaptAuthoredCameraToFrame(next.camera, next.width, next.height)
   if (!keepAssets) return next

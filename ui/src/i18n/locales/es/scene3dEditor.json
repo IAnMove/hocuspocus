@@ -268,7 +268,9 @@
     "product": "Producto",
     "music": "Videoclip",
     "space": "Espacio",
-    "drive": "Conducción"
+    "drive": "Conducción",
+    "dark-fantasy": "Dark Fantasy",
+    "psx": "PSX"
   },
   "setting": {
     "sea": "Mar",
@@ -287,46 +289,46 @@
     "stage": "Escenario"
   },
   "template": {
-  "dark-cathedral": {
-    "title": "Dark Fantasy · La catedral del eclipse",
-    "description": "Acercamiento bajo, contraluz rojo y reflejo del caballero; ceniza a otra profundidad."
-  },
-  "dark-forest": {
-    "title": "Dark Fantasy · El bosque que respira",
-    "description": "Travelling entre árboles cercanos y lejanos; oráculo inmóvil entre niebla turquesa y luciérnagas."
-  },
-  "dark-stairway": {
-    "title": "Dark Fantasy · La escalera imposible",
-    "description": "Arquitectura imposible: cámara inclinada que cambia de eje mientras el oráculo levita."
-  },
-  "dark-moonlake": {
-    "title": "Dark Fantasy · El lago de dos lunas",
-    "description": "Composición contemplativa: figura lateral, dos lunas y ondas sobre una superficie reflectante."
-  },
-  "dark-portal": {
-    "title": "Dark Fantasy · La puerta del otro mundo",
-    "description": "Dos personajes a distintas distancias y un portal espacial entre ambos; mundos frío y cálido."
-  },
-  "dark-throne": {
-    "title": "Dark Fantasy · El trono de ceniza",
-    "description": "Contrapicado autoritario con desplazamiento diagonal y fuego detrás del personaje."
-  },
-  "dark-library": {
-    "title": "Dark Fantasy · La biblioteca del vacío",
-    "description": "Revelado desde arriba; biblioteca suspendida, dos figuras y luces a tres profundidades."
-  },
-  "dark-ice": {
-    "title": "Dark Fantasy · La santa de hielo",
-    "description": "Arco de cámara corto, luz cian, santuario rojo y nieve que cruza por delante y detrás."
-  },
-  "dark-abyss": {
-    "title": "Dark Fantasy · El puente del abismo",
-    "description": "Perspectiva de vértigo: guardián en primer término y oráculo lejano sobre el abismo."
-  },
-  "dark-eclipse": {
-    "title": "Dark Fantasy · El último sol",
-    "description": "Silueta monumental ante un sol oscuro volumétrico; polvo rojo y aproximación final."
-  },
+    "dark-cathedral": {
+      "title": "Dark Fantasy · La catedral del eclipse",
+      "description": "Acercamiento bajo, contraluz rojo y reflejo del caballero; ceniza a otra profundidad."
+    },
+    "dark-forest": {
+      "title": "Dark Fantasy · El bosque que respira",
+      "description": "Travelling entre árboles cercanos y lejanos; oráculo inmóvil entre niebla turquesa y luciérnagas."
+    },
+    "dark-stairway": {
+      "title": "Dark Fantasy · La escalera imposible",
+      "description": "Arquitectura imposible: cámara inclinada que cambia de eje mientras el oráculo levita."
+    },
+    "dark-moonlake": {
+      "title": "Dark Fantasy · El lago de dos lunas",
+      "description": "Composición contemplativa: figura lateral, dos lunas y ondas sobre una superficie reflectante."
+    },
+    "dark-portal": {
+      "title": "Dark Fantasy · La puerta del otro mundo",
+      "description": "Dos personajes a distintas distancias y un portal espacial entre ambos; mundos frío y cálido."
+    },
+    "dark-throne": {
+      "title": "Dark Fantasy · El trono de ceniza",
+      "description": "Contrapicado autoritario con desplazamiento diagonal y fuego detrás del personaje."
+    },
+    "dark-library": {
+      "title": "Dark Fantasy · La biblioteca del vacío",
+      "description": "Revelado desde arriba; biblioteca suspendida, dos figuras y luces a tres profundidades."
+    },
+    "dark-ice": {
+      "title": "Dark Fantasy · La santa de hielo",
+      "description": "Arco de cámara corto, luz cian, santuario rojo y nieve que cruza por delante y detrás."
+    },
+    "dark-abyss": {
+      "title": "Dark Fantasy · El puente del abismo",
+      "description": "Perspectiva de vértigo: guardián en primer término y oráculo lejano sobre el abismo."
+    },
+    "dark-eclipse": {
+      "title": "Dark Fantasy · El último sol",
+      "description": "Silueta monumental ante un sol oscuro volumétrico; polvo rojo y aproximación final."
+    },
     "speech-portrait": {
       "title": "Retrato hablando",
       "description": "Primer plano con voz, boca integrada y expresiones."
@@ -802,6 +804,86 @@
     "voxel-talk": {
       "title": "Charla voxel",
       "description": "Una cabeza cubo y un cráneo voxel se turnan en la azotea, ojos anime sobre caras de bloques."
+    },
+    "dark-vertical-ivory-gate": {
+      "title": "Dark Fantasy · La puerta de marfil",
+      "description": "Caballero marfil en el centro, centinela casi negro delante y una grieta roja al fondo. Acercamiento lateral."
+    },
+    "dark-vertical-saffron-well": {
+      "title": "Dark Fantasy · El pozo del sol",
+      "description": "Negro sobre oro: un arco oscuro pasa muy cerca de cámara y encierra una figura ante el pozo luminoso."
+    },
+    "dark-vertical-crimson-tide": {
+      "title": "Dark Fantasy · La marea carmesí",
+      "description": "Rojo, cian y negro a tres distancias; el caballero cercano descubre el oráculo con el movimiento de cámara."
+    },
+    "dark-vertical-frozen-bell": {
+      "title": "Dark Fantasy · La campana de hielo",
+      "description": "El rojo cercano separa a la figura de una campana helada. Nieve delante, arco intermedio y grúa ascendente."
+    },
+    "dark-vertical-bone-stair": {
+      "title": "Dark Fantasy · La escalera de hueso",
+      "description": "Arco de hueso brillante delante, centinela negro en medio y escalera violeta detrás; giro de perspectiva."
+    },
+    "dark-vertical-jade-rift": {
+      "title": "Dark Fantasy · La grieta de jade",
+      "description": "La grieta verde ilumina la distancia; un oráculo rojo permanece entre esa luz y una silueta azul negra cercana."
+    },
+    "dark-vertical-ashen-rose": {
+      "title": "Dark Fantasy · La rosa de ceniza",
+      "description": "Marfil sobre sombra borgoña, rosa roja en altura y ramas negras cruzando el primer plano."
+    },
+    "dark-vertical-violet-gravity": {
+      "title": "Dark Fantasy · Gravedad violeta",
+      "description": "Figura blanca suspendida, sombra morada cercana y vacío violeta lejano; levitación y cambio de eje."
+    },
+    "dark-vertical-ember-totem": {
+      "title": "Dark Fantasy · El tótem de brasas",
+      "description": "Arco azul oscuro cercano, guardián de obsidiana y luz de brasas detrás; acercamiento desde abajo."
+    },
+    "dark-vertical-white-abyss": {
+      "title": "Dark Fantasy · El abismo blanco",
+      "description": "Contraste invertido: guardián negro sobre abismo blanco y una figura roja muy cercana al borde."
+    },
+    "dark-psx-ivory-gate": {
+      "title": "PSX · La puerta de marfil · escena completa",
+      "description": "Caballero marfil en el centro, centinela casi negro delante y una grieta roja al fondo. Acercamiento lateral. PSX: escena completa."
+    },
+    "dark-psx-saffron-well": {
+      "title": "PSX · El pozo del sol · solo personajes",
+      "description": "Negro sobre oro: un arco oscuro pasa muy cerca de cámara y encierra una figura ante el pozo luminoso. PSX: solo personajes."
+    },
+    "dark-psx-crimson-tide": {
+      "title": "PSX · La marea carmesí · escena completa",
+      "description": "Rojo, cian y negro a tres distancias; el caballero cercano descubre el oráculo con el movimiento de cámara. PSX: escena completa."
+    },
+    "dark-psx-frozen-bell": {
+      "title": "PSX · La campana de hielo · solo personajes",
+      "description": "El rojo cercano separa a la figura de una campana helada. Nieve delante, arco intermedio y grúa ascendente. PSX: solo personajes."
+    },
+    "dark-psx-bone-stair": {
+      "title": "PSX · La escalera de hueso · escena completa",
+      "description": "Arco de hueso brillante delante, centinela negro en medio y escalera violeta detrás; giro de perspectiva. PSX: escena completa."
+    },
+    "dark-psx-jade-rift": {
+      "title": "PSX · La grieta de jade · solo personajes",
+      "description": "La grieta verde ilumina la distancia; un oráculo rojo permanece entre esa luz y una silueta azul negra cercana. PSX: solo personajes."
+    },
+    "dark-psx-ashen-rose": {
+      "title": "PSX · La rosa de ceniza · escena completa",
+      "description": "Marfil sobre sombra borgoña, rosa roja en altura y ramas negras cruzando el primer plano. PSX: escena completa."
+    },
+    "dark-psx-violet-gravity": {
+      "title": "PSX · Gravedad violeta · solo personajes",
+      "description": "Figura blanca suspendida, sombra morada cercana y vacío violeta lejano; levitación y cambio de eje. PSX: solo personajes."
+    },
+    "dark-psx-ember-totem": {
+      "title": "PSX · El tótem de brasas · escena completa",
+      "description": "Arco azul oscuro cercano, guardián de obsidiana y luz de brasas detrás; acercamiento desde abajo. PSX: escena completa."
+    },
+    "dark-psx-white-abyss": {
+      "title": "PSX · El abismo blanco · solo personajes",
+      "description": "Contraste invertido: guardián negro sobre abismo blanco y una figura roja muy cercana al borde. PSX: solo personajes."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -931,5 +1013,12 @@
     "idle": "Mantener una pose viva",
     "idleHelp": "Usa la animación elegida en su punto de inicio con un movimiento corporal sutil. Elige un fotograma relajado de reposo o de andar; no se transfieren animaciones entre rigs.",
     "background": "Fondo de escena completo"
+  },
+  "imageLook": {
+    "title": "Aspecto de la imagen",
+    "tint": "Tinte",
+    "unlit": "Conservar iluminación original",
+    "psx": "PSX solo en esta capa",
+    "intensity": "Intensidad PSX"
   }
 }

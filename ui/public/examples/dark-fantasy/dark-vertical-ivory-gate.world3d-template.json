@@ -1,0 +1,181 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-vertical-ivory-gate",
+  "title": "Dark Fantasy · La puerta de marfil",
+  "description": "Caballero marfil en el centro, centinela casi negro delante y una grieta roja al fondo. Acercamiento lateral.",
+  "includeAssets": true,
+  "createdAt": "2026-09-14T19:30:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-vertical-ivory-gate",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.5,
+        -0.8
+      ],
+      "intensity": 2.2,
+      "color": "#ffffff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.1,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/vertical-ivory-gate.jpg",
+        "position": [
+          0,
+          -8,
+          -12
+        ],
+        "scale": 12.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+        "position": [
+          0.15,
+          -0.4,
+          0
+        ],
+        "scale": 2,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -1.85,
+          -1.2,
+          3
+        ],
+        "scale": 3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "tint": "#879aa6"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "sparks",
+        "kind": "sparks",
+        "position": {
+          "x": 0.4,
+          "y": 0.2,
+          "z": 1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff6c22",
+        "scale": 2.2,
+        "intensity": 0.5,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#951a18",
+        "scale": 2,
+        "intensity": 0.4,
+        "seed": 17,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.5,
+        3.2,
+        11
+      ],
+      "look": [
+        0,
+        3,
+        -1
+      ],
+      "fov": 49,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.325,
+          0.8,
+          5.5
+        ],
+        "to": [
+          0.175,
+          0.5999999999999999,
+          4.4
+        ],
+        "lookFrom": [
+          -0.075,
+          0.7,
+          -0.5
+        ],
+        "lookTo": [
+          -0.075,
+          0.7,
+          -0.5
+        ],
+        "rollFrom": -2,
+        "rollTo": 2,
+        "relativeToFacing": false
+      }
+    }
+  }
+}

@@ -268,7 +268,9 @@
     "product": "Product",
     "music": "Music video",
     "space": "Space",
-    "drive": "Driving"
+    "drive": "Driving",
+    "dark-fantasy": "Dark Fantasy",
+    "psx": "PSX"
   },
   "setting": {
     "sea": "Sea",
@@ -287,46 +289,46 @@
     "stage": "Stage"
   },
   "template": {
-  "dark-cathedral": {
-    "title": "Dark Fantasy · Eclipse cathedral",
-    "description": "Low camera push, crimson backlight and a reflected knight."
-  },
-  "dark-forest": {
-    "title": "Dark Fantasy · Breathing forest",
-    "description": "Lateral parallax between near trees, an oracle and distant teal mist."
-  },
-  "dark-stairway": {
-    "title": "Dark Fantasy · Impossible stairway",
-    "description": "A rolling camera, floating oracle and a golden spatial sigil."
-  },
-  "dark-moonlake": {
-    "title": "Dark Fantasy · Moonlit lake",
-    "description": "Moonlight, a reflected figure and animated ripples."
-  },
-  "dark-portal": {
-    "title": "Dark Fantasy · Door to another world",
-    "description": "Two figures at different depths with a glowing portal between them."
-  },
-  "dark-throne": {
-    "title": "Dark Fantasy · Throne of ash",
-    "description": "Low diagonal camera with fire and drifting ash behind the knight."
-  },
-  "dark-library": {
-    "title": "Dark Fantasy · Library of the void",
-    "description": "Elevated reveal across a floating library, two figures and spatial lights."
-  },
-  "dark-ice": {
-    "title": "Dark Fantasy · Ice oracle",
-    "description": "A short camera arc, cyan light and snow at multiple depths."
-  },
-  "dark-abyss": {
-    "title": "Dark Fantasy · Guardians of the abyss",
-    "description": "Strong depth contrast between a near sentinel and a distant floating oracle."
-  },
-  "dark-eclipse": {
-    "title": "Dark Fantasy · The last sun",
-    "description": "A monumental silhouette, spatial black sun and drifting red dust."
-  },
+    "dark-cathedral": {
+      "title": "Dark Fantasy · Eclipse cathedral",
+      "description": "Low camera push, crimson backlight and a reflected knight."
+    },
+    "dark-forest": {
+      "title": "Dark Fantasy · Breathing forest",
+      "description": "Lateral parallax between near trees, an oracle and distant teal mist."
+    },
+    "dark-stairway": {
+      "title": "Dark Fantasy · Impossible stairway",
+      "description": "A rolling camera, floating oracle and a golden spatial sigil."
+    },
+    "dark-moonlake": {
+      "title": "Dark Fantasy · Moonlit lake",
+      "description": "Moonlight, a reflected figure and animated ripples."
+    },
+    "dark-portal": {
+      "title": "Dark Fantasy · Door to another world",
+      "description": "Two figures at different depths with a glowing portal between them."
+    },
+    "dark-throne": {
+      "title": "Dark Fantasy · Throne of ash",
+      "description": "Low diagonal camera with fire and drifting ash behind the knight."
+    },
+    "dark-library": {
+      "title": "Dark Fantasy · Library of the void",
+      "description": "Elevated reveal across a floating library, two figures and spatial lights."
+    },
+    "dark-ice": {
+      "title": "Dark Fantasy · Ice oracle",
+      "description": "A short camera arc, cyan light and snow at multiple depths."
+    },
+    "dark-abyss": {
+      "title": "Dark Fantasy · Guardians of the abyss",
+      "description": "Strong depth contrast between a near sentinel and a distant floating oracle."
+    },
+    "dark-eclipse": {
+      "title": "Dark Fantasy · The last sun",
+      "description": "A monumental silhouette, spatial black sun and drifting red dust."
+    },
     "speech-portrait": {
       "title": "Talking portrait",
       "description": "Close-up with voice, an integrated mouth and expressions."
@@ -802,6 +804,86 @@
     "voxel-talk": {
       "title": "Voxel talk",
       "description": "A cube-head and a voxel skull take turns on the roof, anime eyes on blocky faces."
+    },
+    "dark-vertical-ivory-gate": {
+      "title": "Dark Fantasy · Ivory gate",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-vertical-saffron-well": {
+      "title": "Dark Fantasy · The sun well",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-vertical-crimson-tide": {
+      "title": "Dark Fantasy · Crimson tide",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-vertical-frozen-bell": {
+      "title": "Dark Fantasy · Frozen bell",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-vertical-bone-stair": {
+      "title": "Dark Fantasy · Bone stair",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-vertical-jade-rift": {
+      "title": "Dark Fantasy · Jade rift",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-vertical-ashen-rose": {
+      "title": "Dark Fantasy · Ashen rose",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-vertical-violet-gravity": {
+      "title": "Dark Fantasy · Violet gravity",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-vertical-ember-totem": {
+      "title": "Dark Fantasy · Ember totem",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-vertical-white-abyss": {
+      "title": "Dark Fantasy · The white abyss",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+    },
+    "dark-psx-ivory-gate": {
+      "title": "PSX · Ivory gate · full scene",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+    },
+    "dark-psx-saffron-well": {
+      "title": "PSX · The sun well · characters only",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
+    },
+    "dark-psx-crimson-tide": {
+      "title": "PSX · Crimson tide · full scene",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+    },
+    "dark-psx-frozen-bell": {
+      "title": "PSX · Frozen bell · characters only",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
+    },
+    "dark-psx-bone-stair": {
+      "title": "PSX · Bone stair · full scene",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+    },
+    "dark-psx-jade-rift": {
+      "title": "PSX · Jade rift · characters only",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
+    },
+    "dark-psx-ashen-rose": {
+      "title": "PSX · Ashen rose · full scene",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+    },
+    "dark-psx-violet-gravity": {
+      "title": "PSX · Violet gravity · characters only",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
+    },
+    "dark-psx-ember-totem": {
+      "title": "PSX · Ember totem · full scene",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+    },
+    "dark-psx-white-abyss": {
+      "title": "PSX · The white abyss · characters only",
+      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -931,5 +1013,12 @@
     "idle": "Hold a living pose",
     "idleHelp": "Uses the selected animation at its start offset with subtle body movement. Choose a relaxed frame of an idle or walking clip; no animation is transferred between rigs.",
     "background": "Full scene background"
+  },
+  "imageLook": {
+    "title": "Image appearance",
+    "tint": "Tint",
+    "unlit": "Keep original lighting",
+    "psx": "PSX on this layer only",
+    "intensity": "PSX intensity"
   }
 }

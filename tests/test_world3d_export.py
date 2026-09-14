@@ -198,6 +198,29 @@ def test_owned_browser_script_uses_scene_clock_and_waits_for_assets():
     assert "/src/" not in _OWNED_BROWSER_JS
 
 
+def test_bundled_template_refs_do_not_require_duplicate_workspace_uploads(tmp_path):
+    document = _document()
+    document["slots"][0].update(media="image", surface="cutout", sourceUrl="/examples/dark-fantasy/knight.png")
+    frozen = freeze_export_command(_command(document=document))
+    snapshot = frozen["effective"]["input"]["snapshot"]
+    assert snapshot["refs"] == [{"slotId": "subject_1", "url": "/examples/dark-fantasy/knight.png", "kind": "image"}]
+    _service(tmp_path)._assert_refs(snapshot["refs"], WORKSPACE)
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/missing.png"
+    frozen = freeze_export_command(_command(document=document))
+    with pytest.raises(Exception) as error:
+        _service(tmp_path)._assert_refs(frozen["effective"]["input"]["snapshot"]["refs"], WORKSPACE)
+    assert error.value.detail["code"] == "missing_ref"
+
+
+@pytest.mark.parametrize("url", ["/examples/../private.png", "/examples/%2e%2e/private.png", "/examples/a%5cprivate.png"])
+def test_bundled_template_refs_reject_traversal(url):
+    document = _document()
+    document["slots"][0]["sourceUrl"] = url
+    with pytest.raises(Exception) as error:
+        freeze_export_command(_command(document=document))
+    assert error.value.detail["code"] == "missing_ref"
+
+
 def test_staging_dir_does_not_treat_dotdot_as_workspace_root(tmp_path):
     escaped = staging_dir(str(tmp_path), "..")
     assert escaped.resolve().parent == (tmp_path / ".world3d-export").resolve()

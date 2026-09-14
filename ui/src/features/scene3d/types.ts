@@ -168,6 +168,7 @@ export type Scene3DSlot = {
   media: Scene3DSlotMedia
   screen?: import('./mediaScreen').MediaScreen
   surface?: 'wall' | 'floor' | 'environment' | 'cutout'
+  imageLook?: import('./imageLook').ImageLook
   appearance?: { start: number; duration: number; color: string }
   textureRepeat?: number
   performance?: 'typing' | 'idle'
