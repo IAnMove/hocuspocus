@@ -74,7 +74,8 @@
     "invalidUpload": "The upload did not return a persistent image URL.",
     "invalidSave": "The server did not return the saved character.",
     "imported": "Base uploaded. Review it in the preview, then save the character explicitly.",
-    "saved": "Character saved to this workspace. Visual and audio validation remain separate."
+    "saved": "Character saved to this workspace. Visual and audio validation remain separate.",
+    "completeSet": "{{count}}/9 mouths approved. Preparing new speaking shots requires all nine positions; you can save unfinished work and complete it later."
   },
   "library": {
     "title": "Cutout characters",
@@ -165,7 +166,7 @@
     },
     "makeMouths": {
       "title": "Make or approve the mouths",
-      "detail": "You need at least a closed mouth and one open mouth. Generate the missing ones, place them on the lips, and approve the transparent ones."
+      "detail": "Complete all nine positions, review their placement and try a line with the character’s voice before generating shots."
     },
     "putOnScene": {
       "title": "Put it on the scene",
@@ -267,9 +268,9 @@
     "generateMissing": "Generate missing mouths with AI",
     "tryLine": {
       "sample": "The square is frozen and the bell is too loud.",
-      "summary": "Try a line (not saved)",
-      "planMouths": "See mouth rhythm",
-      "speak": "Speak 3 s",
+      "summary": "Try the character’s voice (not saved)",
+      "planMouths": "Quick text preview (approximate)",
+      "speak": "Try with their voice",
       "generatingVoice": "Generating voice…",
       "beats": "{{count}} beats · {{duration}}s · available {{available}}",
       "none": "none",
@@ -344,7 +345,8 @@
     "downloadCollection": "Download the 20 new styles",
     "downloading": "Preparing download…",
     "phoneticPositions": "Additional phonetic positions",
-    "restHint": "Saving includes the resting mouth in the reusable character image. It is also used while listening or in silent shots."
+    "restHint": "Saving includes the resting mouth in the reusable character image. It is also used while listening or in silent shots.",
+    "packOption": "{{name}} · {{count}}/9 mouths"
   },
   "facePatch": {
     "title": "Raster mouth replacement patch",

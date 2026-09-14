@@ -532,41 +532,22 @@ def _concat_without_transition(
     *,
     fps: int | None = None,
     expected_frames: int | None = None,
+    frame_counts: list[int] | None = None,
 ) -> None:
     if len(segments) == 1:
         shutil.copy2(segments[0], output_path)
         return
 
-    list_path = os.path.join(os.path.dirname(segments[0]), "concat.txt")
-    with open(list_path, "w", encoding="utf-8") as handle:
-        for segment in segments:
-            escaped = os.path.abspath(segment).replace("\\", "/").replace("'", "'\\''")
-            handle.write(f"file '{escaped}'\n")
-    command = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        list_path,
-        "-c",
-        "copy",
-        "-fflags",
-        "+genpts",
-        "-avoid_negative_ts",
-        "make_zero",
-        "-movflags",
-        "+faststart",
-        output_path,
+    # Packet-copy concat keeps AAC priming/padding at each cut and shifts speech
+    # against the frame-counted picture. Decode each segment onto the same clock.
+    counts = list(frame_counts) if frame_counts is not None else [
+        count_decoded_video_frames(segment) for segment in segments
     ]
-    _run(
-        command,
-        timeout=1200,
-        label="Joining clips",
-        phase="concat",
-        output={"segments": len(segments), "expected_frames": expected_frames},
+    output_fps = int(fps or probe_assembly_source(segments[0])["fps"])
+    _concat_with_transitions(
+        segments, [count / output_fps for count in counts], output_path,
+        [{"type": "none", "duration": 0} for _ in segments[1:]],
+        fps=output_fps, frame_counts=counts,
     )
 
 
@@ -579,9 +560,10 @@ def _concat_with_transitions(
     fps: int | None = None,
     frame_counts: list[int] | None = None,
 ) -> None:
-    command = ["ffmpeg", "-y"]
+    command = ["ffmpeg", "-y", "-filter_complex_threads", "1"]
     for segment in segments:
-        command.extend(["-i", segment])
+        # Many short shots must not allocate one full decoder thread pool each.
+        command.extend(["-threads", "1", "-i", segment])
 
     output_fps = int(fps or 30)
     counts = list(frame_counts) if frame_counts is not None else [
@@ -595,7 +577,9 @@ def _concat_with_transitions(
             f"setpts=N/{output_fps}/TB[v{index}s]"
         )
         filters.append(
-            f"[{index}:a]aresample=48000,asetpts=PTS-STARTPTS[a{index}s]"
+            f"[{index}:a]aresample=48000,apad,"
+            f"atrim=end_sample={round(count * 48000 / output_fps)},"
+            f"asetpts=N/SR/TB[a{index}s]"
         )
     video_label = "v0s"
     audio_label = "a0s"

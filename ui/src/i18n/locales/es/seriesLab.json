@@ -74,6 +74,8 @@
     "delivery": "Entrega",
     "saveRegenerate": "Guardar y regenerar en esta posición",
     "downloadJoined": "Descargar episodio unido",
+    "savedAssembly": "Último episodio exportado",
+    "openJoined": "Ver episodio completo",
     "cancelJoin": "Cancelar unión",
     "resumeJoin": "Reanudar unión",
     "discardCheckpoint": "Descartar punto de control",
@@ -689,10 +691,10 @@
     "lipsyncIssues": {
       "link": "Vincula y guarda este personaje en Character Creator.",
       "pose": "La imagen base del taller está sin aprobar. Abre el personaje, pulsa «He revisado esta imagen base» y guarda.",
-      "mouths": "Revisa y aprueba cada una de las cuatro bocas y guarda el personaje.",
+      "mouths": "Revisa y aprueba las nueve posiciones de boca y guarda el personaje. Abre su configuración para ver cuáles faltan.",
       "placement": "Coloca la boca sobre la pose base y guarda el taller.",
       "savedPose": "Guarda una imagen base válida en Character Creator; no puede estar rechazada.",
-      "savedMouths": "Guarda las cuatro bocas para esta imagen base; no pueden faltar, estar rechazadas o corresponder a otra pose."
+      "savedMouths": "Guarda las nueve bocas para esta imagen base; no pueden faltar, estar rechazadas o corresponder a otra pose."
     },
     "updateOptions": "Actualizar planos tras cambios en personajes",
     "changedShots": "{{count}} por actualizar",

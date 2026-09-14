@@ -25,7 +25,7 @@ async function fixture() {
   const kit = createCharacterKit('Configured actor')
   const asset: CharacterKitAsset = { id: 'pose', name: 'Mouthless base', source: '/mouthless.png', kind: 'image', alphaStatus: 'transparent', reviewState: 'approved' }
   kit.base = asset; kit.anchors.base = { mouth: { offsetX: 1, offsetY: -18, scale: .08, rotation: 0 } }
-  for (const state of ['closed', 'small', 'wide', 'round'] as const) kit.mouth[state] = { ...asset, id: state, source: `/${state}.png`, kind: 'overlay' }
+  for (const state of ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const) kit.mouth[state] = { ...asset, id: state, source: `/${state}.png`, kind: 'overlay' }
   const character = series.characters.find(item => item.id === shot.visibleCharacterIds[0])!
   character.voiceProfile = { characterKitRef: { workspace: 'default', id: kit.id } }
   shot.dialogueBeats = [{ id: 'first', characterId: character.id, text: 'Hello, how are you?' },
@@ -48,7 +48,7 @@ test('a configured character uses its saved resting mouth in silent shots and wh
   const result = applySeriesLipSync(silentScene, 'default', series, shot, library)
   assert.equal(result.layers.find(layer => layer.id === character.id)!.source, kit.base!.source)
   const mouths = result.layers.filter(layer => layer.faceBinding?.poseLayerId === character.id)
-  assert.equal(mouths.length, 4)
+  assert.equal(mouths.length, 9)
   for (const time of [0, 2, 5.9]) {
     assert.equal(evaluateSceneLayer(mouths.find(layer => layer.faceBinding!.state === 'closed')!, time).opacity, 1)
     assert.ok(mouths.filter(layer => layer.faceBinding!.state !== 'closed').every(layer => evaluateSceneLayer(layer, time).opacity === 0))
@@ -76,9 +76,9 @@ test('saved mouth layers follow the exact speaker, retain the wiped base and mot
   assert.equal(body.source, '/transparent-mouthless.png')
   assert.deepEqual(body.animation, before.layers.find(layer => layer.id === character.id)!.animation)
   const mouths = result.layers.filter(layer => layer.faceBinding?.role === 'mouth')
-  assert.equal(mouths.length, 4)
+  assert.equal(mouths.length, 9)
   assert.ok(mouths.every(layer => layer.relationship?.targetLayerId === character.id))
-  assert.ok(result.dialogueBeats!.every(beat => beat.mouthLayerIds.length === 4 && beat.confidence === 'known-text'))
+  assert.ok(result.dialogueBeats!.every(beat => beat.mouthLayerIds.length === 9 && beat.confidence === 'known-text'))
   const closed = mouths.find(layer => layer.faceBinding!.state === 'closed')!
   for (const time of [0, .2, 3, 3.8, 5.8]) {
     assert.equal(evaluateSceneLayer(closed, time).opacity, 1)
@@ -131,8 +131,8 @@ test('explicit draft regeneration uses pending saved rigs without approving or m
   assert.equal(seriesLipSyncIssues('default', series, [shot], library)[0].reason, 'pose')
   assert.deepEqual(seriesLipSyncIssues('default', series, [shot], library, 'saved-draft'), [])
   const result = applySeriesLipSync(scene, 'default', series, shot, library, {}, 'saved-draft')
-  assert.equal(result.layers.filter(layer => layer.faceBinding?.role === 'mouth').length, 4)
-  assert.ok(result.dialogueBeats!.every(beat => beat.mouthLayerIds.length === 4))
+  assert.equal(result.layers.filter(layer => layer.faceBinding?.role === 'mouth').length, 9)
+  assert.ok(result.dialogueBeats!.every(beat => beat.mouthLayerIds.length === 9))
   assert.deepEqual(library, before)
   kit.mouth.wide!.reviewState = 'rejected'
   assert.equal(seriesLipSyncIssues('default', series, [shot], library, 'saved-draft')[0].reason, 'savedMouths')
@@ -186,7 +186,7 @@ test('an offscreen speaker keeps their voice and does not animate the visible li
   assert.deepEqual(seriesLipSyncIssues('default', series, [shot], library), [])
   const result = applySeriesLipSync(scene, 'default', series, shot, library)
   assert.deepEqual(result.audioTracks, scene.audioTracks)
-  assert.equal(result.dialogueBeats![0].mouthLayerIds.length, 4)
+  assert.equal(result.dialogueBeats![0].mouthLayerIds.length, 9)
   assert.deepEqual(result.dialogueBeats![1].mouthLayerIds, [])
   const mouths = result.layers.filter(layer => layer.faceBinding?.role === 'mouth')
   for (const mouth of mouths) assert.equal(evaluateSceneLayer(mouth, 4.5).opacity, mouth.faceBinding!.state === 'closed' ? 1 : 0)
@@ -242,7 +242,7 @@ test('regeneration reveals missing assets and becomes usable after refreshing sa
   globalThis.fetch = async () => new Response(JSON.stringify(library))
   t.after(() => { cleanup(); globalThis.fetch = fetch })
   const view = render(<SeriesLipSyncPreparation workspace="default" series={series} episode={episode} />)
-  await waitFor(() => assert.ok(view.getByText(/Save all four mouths for this base image/)))
+  await waitFor(() => assert.ok(view.getByText(/Save all nine mouths for this base image/)))
   assert.equal(view.container.querySelector('details'), null)
   assert.ok(view.getByRole('button', { name: character.name }))
   assert.equal((view.getByRole('button', { name: 'Regenerate all (0)' }) as HTMLButtonElement).disabled, true, 'blocker and exact character link explain the disabled action')

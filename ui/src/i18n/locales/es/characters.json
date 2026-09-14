@@ -74,7 +74,8 @@
     "invalidUpload": "La subida no devolvió una URL de imagen persistente.",
     "invalidSave": "El servidor no devolvió el personaje guardado.",
     "imported": "Base subida. Revísala en la vista previa y guarda el personaje explícitamente.",
-    "saved": "Personaje guardado en este workspace. La validación visual y de audio es independiente."
+    "saved": "Personaje guardado en este workspace. La validación visual y de audio es independiente.",
+    "completeSet": "{{count}}/9 bocas aprobadas. Para preparar nuevos planos con habla necesitas las nueve posiciones; puedes guardar el trabajo incompleto y terminarlo después."
   },
   "library": {
     "title": "Personajes recortables",
@@ -165,7 +166,7 @@
     },
     "makeMouths": {
       "title": "Haz o aprueba las bocas",
-      "detail": "Hace falta al menos boca cerrada y una abierta. Genera las que falten, colócalas sobre los labios y aprueba las transparentes."
+      "detail": "Completa las nueve posiciones, revisa su colocación y prueba una frase con la voz del personaje antes de generar los planos."
     },
     "putOnScene": {
       "title": "Ponlo en la escena",
@@ -267,9 +268,9 @@
     "generateMissing": "Generar bocas que faltan con IA",
     "tryLine": {
       "sample": "El cuadrado está congelado y la campana es demasiado alta.",
-      "summary": "Probar una frase (no se guarda)",
-      "planMouths": "Ver ritmo de bocas",
-      "speak": "Hablar 3 s",
+      "summary": "Prueba con la voz del personaje (no se guarda)",
+      "planMouths": "Vista rápida por texto (aproximada)",
+      "speak": "Probar con su voz",
       "generatingVoice": "Generando voz…",
       "beats": "{{count}} beats · {{duration}}s · disponibles {{available}}",
       "none": "ninguna",
@@ -344,7 +345,8 @@
     "downloadCollection": "Descargar los 20 estilos nuevos",
     "downloading": "Preparando descarga…",
     "phoneticPositions": "Posiciones fonéticas adicionales",
-    "restHint": "Al guardar, la boca de reposo se incorpora a la imagen reutilizable del personaje. También se usará cuando escuche o no tenga diálogo."
+    "restHint": "Al guardar, la boca de reposo se incorpora a la imagen reutilizable del personaje. También se usará cuando escuche o no tenga diálogo.",
+    "packOption": "{{name}} · {{count}}/9 bocas"
   },
   "facePatch": {
     "title": "Parche raster de sustitución de boca",

@@ -74,6 +74,8 @@
     "delivery": "Delivery",
     "saveRegenerate": "Save and regenerate in this slot",
     "downloadJoined": "Download joined episode",
+    "savedAssembly": "Latest exported episode",
+    "openJoined": "Watch full episode",
     "cancelJoin": "Cancel join",
     "resumeJoin": "Resume join",
     "discardCheckpoint": "Discard checkpoint",
@@ -689,10 +691,10 @@
     "lipsyncIssues": {
       "link": "Link and save this character in Character Creator.",
       "pose": "The workshop base is unapproved. Open the character, select “I have reviewed this base image” and save.",
-      "mouths": "Review and approve each of the four mouth shapes, then save the character.",
+      "mouths": "Review and approve all nine mouth positions, then save the character. Open its configuration to see what is missing.",
       "placement": "Place the mouth on the base pose and save the workshop.",
       "savedPose": "Save a valid base image in Character Creator; it must not be rejected.",
-      "savedMouths": "Save all four mouths for this base image; they cannot be missing, rejected or belong to another pose."
+      "savedMouths": "Save all nine mouths for this base image; they cannot be missing, rejected or belong to another pose."
     },
     "updateOptions": "Update shots after character changes",
     "changedShots": "{{count}} to update",

@@ -2,6 +2,10 @@
 
 Save the character in **Character Creator**, then return to **Series Lab → Shots → Regenerate all** (or **Regenerate this shot**). Regeneration creates new editable scenes and unapproved MP4 takes. Existing motion, recordings and approved takes are preserved.
 
+**Series Lab → Results** keeps **Watch full episode** and **Download joined episode**
+links for the last saved assembly, including after reopening the app. Regenerating
+shots preserves that exported file until a new assembly is saved.
+
 ## Resting face
 
 The animation rig retains the wiped, mouthless base plus separate mouth layers. Saving also composes a reusable still from that base and the selected **closed** mouth, using its saved placement. Library thumbnails and still-reference consumers prefer this resting image. A changed base, closed drawing or placement invalidates the old composite; saving rebuilds it. No original image is overwritten and pending assets stay pending.
@@ -14,7 +18,23 @@ The previous Series planner distributed letters across the recorded phrase. The 
 
 Rhubarb already inserts suitable intermediate mouth shapes. The editor stores those cues alongside their audio/text provenance and compiles ordinary editable opacity keyframes. Moving a complete line moves its relative cues; changing the text, track binding or duration invalidates the old analysis. No video-generation model runs. If the offline engine is unavailable, the batch reports an error instead of silently claiming phonetic quality from estimated letter timings.
 
-Four legacy positions still work. Nine drawings retain more distinctions:
+New speaking shots require all nine mouth positions. Character Creator shows all
+nine slots, including missing ones, and its checklist reports approval and pose
+compatibility. Missing-mouth generation covers all nine; the default shared pack
+is a complete one. Drafts can still be saved before they are complete. Previously
+rendered clips and imported legacy four-drawing scenes remain usable; preparing or
+regenerating speaking shots requires completing their kits first. Explicit draft
+regeneration retains its existing policy of accepting saved pending images, while
+missing/rejected/incompatible images remain blockers.
+
+**Try with their voice** generates a line with the character's saved voice and
+analyzes its entire isolated recording using the same phonetic endpoint as native
+shots. It no longer limits the preview to three/four seconds or substitutes word
+timing when phonetic analysis fails. Playback follows the audio clock, closes the
+mouth in gaps and at the end, and invalidates the preview when the character or
+text changes. The separate quick text preview is explicitly approximate.
+
+Nine drawings retain these distinctions:
 
 | Drawing | Rhubarb | Use |
 | --- | --- | --- |
@@ -29,6 +49,13 @@ Four legacy positions still work. Nine drawings retain more distinctions:
 | tongue | H | L |
 
 Audio amplitude helps locate activity and pauses; it does not identify vowels by itself. Rhubarb analyzes speech sounds, with a script-assisted recognizer for English. Recognition remains approximate, especially with noisy recordings, accents and very fast speech. The scene's cue track and layers remain editable. For mixed recordings, the existing speech-analysis endpoint can isolate vocals; generated Series voice lines are already isolated and do not need that extra operation.
+
+Video Editor joins decoded picture and audio on the same frame-counted timeline.
+Each segment's audio is padded or trimmed to its exact sample span before joining;
+AAC encoder padding is not carried across cuts. This also applies when exported
+scenes are joined into a complete episode. Existing assembled videos need to be
+exported again to benefit from this correction. Joining now includes an encoding
+pass, so long exports can take longer than the previous packet-copy join.
 
 ## Twenty styles to share
 

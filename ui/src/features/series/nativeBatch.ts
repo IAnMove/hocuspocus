@@ -15,6 +15,7 @@ import { analyzeNativeSpeech } from './nativeSpeechAnalysis'
 import { latestNativeTake } from './nativeTake'
 import { nativeGenerationPlan, type NativeGenerationMode } from './nativeGenerationPlan'
 import { seriesAssetUrl } from './referenceImages'
+import { releaseStoredSceneCopy } from '../../lib/sceneRecovery'
 import i18n from '../../i18n'
 
 export { nativeDraftCandidates } from './nativeGenerationPlan'
@@ -66,7 +67,9 @@ async function renderNativeShot(workspace: string, seriesId: string, episodeId: 
   useSeriesStore.getState().updateEpisode(episodeId, current => ({ ...current,
     shots: current.shots.map(item => item.id === shotId ? { ...item, durationSeconds: prepared.shot.durationSeconds } : item) }))
   await useSeriesStore.getState().saveNow()
-  sessionStorage.setItem(`hocuspocus:series-scene:${workspace}:${seriesId}:${episodeId}:${shotId}`, JSON.stringify(prepared.scene))
+  const recoveryKey = `hocuspocus:series-scene:${workspace}:${seriesId}:${episodeId}:${shotId}`
+  const recoveryCopy = JSON.stringify(prepared.scene)
+  sessionStorage.setItem(recoveryKey, recoveryCopy)
   useSeriesNativeBatch.setState({ phase: 'rendering' })
   useStore.getState().setMediaFilter('scene3d')
   await presentSceneDocument('2d', prepared.scene, () => useStore.getState().activeWorkspace === workspace)
@@ -85,6 +88,9 @@ async function renderNativeShot(workspace: string, seriesId: string, episodeId: 
       nativeRegeneration: mode !== 'missing', lipSyncUpdate: mode !== 'missing' && shot.dialogueBeats.length > 0, characterReviewPolicy: policy,
       lipSyncFingerprint: seriesLipSyncFingerprint(workspace, series, prepared.shot, kits) } })
   useSeriesStore.getState().acceptAssetImport(workspace, result)
+  // Release only our unchanged temporary copy, after both editable scene and
+  // video are persisted. Failed renders retain their recovery document.
+  if (scene.outputNames?.[0]) releaseStoredSceneCopy(sessionStorage, recoveryKey, recoveryCopy)
 }
 
 function assertLipSyncReady(workspace: string, series: SeriesProject, shots: SeriesEpisode['shots'], kits: CharacterKitLibrary,

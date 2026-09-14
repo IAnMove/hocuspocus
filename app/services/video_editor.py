@@ -821,6 +821,7 @@ def render_project(
                 assembled_path,
                 fps=fps,
                 expected_frames=expected_frames,
+                frame_counts=render_frame_counts,
             )
         else:
             _concat_with_transitions(
@@ -1005,6 +1006,7 @@ def render_comic_animatic(
                 assembled_path,
                 fps=fps,
                 expected_frames=expected_frames,
+                frame_counts=frame_counts,
             )
         else:
             _concat_with_transitions(
