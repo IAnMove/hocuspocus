@@ -287,6 +287,46 @@
     "stage": "Escenario"
   },
   "template": {
+  "dark-cathedral": {
+    "title": "Dark Fantasy · La catedral del eclipse",
+    "description": "Acercamiento bajo, contraluz rojo y reflejo del caballero; ceniza a otra profundidad."
+  },
+  "dark-forest": {
+    "title": "Dark Fantasy · El bosque que respira",
+    "description": "Travelling entre árboles cercanos y lejanos; oráculo inmóvil entre niebla turquesa y luciérnagas."
+  },
+  "dark-stairway": {
+    "title": "Dark Fantasy · La escalera imposible",
+    "description": "Arquitectura imposible: cámara inclinada que cambia de eje mientras el oráculo levita."
+  },
+  "dark-moonlake": {
+    "title": "Dark Fantasy · El lago de dos lunas",
+    "description": "Composición contemplativa: figura lateral, dos lunas y ondas sobre una superficie reflectante."
+  },
+  "dark-portal": {
+    "title": "Dark Fantasy · La puerta del otro mundo",
+    "description": "Dos personajes a distintas distancias y un portal espacial entre ambos; mundos frío y cálido."
+  },
+  "dark-throne": {
+    "title": "Dark Fantasy · El trono de ceniza",
+    "description": "Contrapicado autoritario con desplazamiento diagonal y fuego detrás del personaje."
+  },
+  "dark-library": {
+    "title": "Dark Fantasy · La biblioteca del vacío",
+    "description": "Revelado desde arriba; biblioteca suspendida, dos figuras y luces a tres profundidades."
+  },
+  "dark-ice": {
+    "title": "Dark Fantasy · La santa de hielo",
+    "description": "Arco de cámara corto, luz cian, santuario rojo y nieve que cruza por delante y detrás."
+  },
+  "dark-abyss": {
+    "title": "Dark Fantasy · El puente del abismo",
+    "description": "Perspectiva de vértigo: guardián en primer término y oráculo lejano sobre el abismo."
+  },
+  "dark-eclipse": {
+    "title": "Dark Fantasy · El último sol",
+    "description": "Silueta monumental ante un sol oscuro volumétrico; polvo rojo y aproximación final."
+  },
     "speech-portrait": {
       "title": "Retrato hablando",
       "description": "Primer plano con voz, boca integrada y expresiones."
@@ -797,6 +837,7 @@
     "ease": "Entrada y salida suaves",
     "distance": "Distancia recta: {{distance}} m · {{speed}} m/s",
     "floor": "Usar imagen como textura de suelo",
+    "cutout": "Personaje / recorte con transparencia",
     "surface": "Uso de la imagen",
     "backdrop": "Fondo",
     "wall": "Textura de pared",
@@ -875,6 +916,10 @@
   },
   "cinematic": {
     "title": "Entorno cinematográfico",
+    "floorStyle": "Acabado del suelo",
+    "tiles": "Baldosas",
+    "mirror": "Superficie continua",
+    "noFloor": "Sin suelo",
     "floor": "Suelo metálico reflectante",
     "platform": "Tarima de materialización",
     "bloom": "Resplandor",

@@ -25,15 +25,15 @@ export class CinematicRuntime {
   private createMirror() {
     const reflectorShader = (Reflector as unknown as { ReflectorShader: { uniforms: Record<string, IUniform>; vertexShader: string } }).ReflectorShader
     const shader = {
-      uniforms: UniformsUtils.clone(reflectorShader.uniforms),
+      uniforms: { ...UniformsUtils.clone(reflectorShader.uniforms), tileStrength: { value: 1 } },
       vertexShader: reflectorShader.vertexShader.replace('varying vec4 vUv;', 'varying vec4 vUv; varying vec3 groundPos;')
         .replace('vUv = textureMatrix', 'groundPos=(modelMatrix*vec4(position,1.)).xyz; vUv = textureMatrix'),
-      fragmentShader: `uniform vec3 color; uniform sampler2D tDiffuse; varying vec4 vUv; varying vec3 groundPos; ${ENERGY_NOISE}
+      fragmentShader: `uniform vec3 color; uniform float tileStrength; uniform sampler2D tDiffuse; varying vec4 vUv; varying vec3 groundPos; ${ENERGY_NOISE}
       void main(){vec2 p=groundPos.xz;vec2 uv=vUv.xy/vUv.w;float grain=noise2(p*145.);
         vec3 refl=texture2D(tDiffuse,uv+vec2((grain-.5)*.0007,0.)).rgb;
         vec2 seam=abs(fract(p*vec2(.52,.35))-.5);float joint=smoothstep(.476,.495,max(seam.x,seam.y));
         float brushed=noise2(vec2(p.x*320.,p.y*4.));vec3 steel=vec3(.035,.043,.075)+brushed*.018;
-        vec3 c=mix(steel,refl,.58)*(1.-joint*.63);float fade=1.-smoothstep(4.,11.,length(p));
+        vec3 c=mix(steel,refl,.58)*(1.-joint*.63*tileStrength);float fade=1.-smoothstep(4.,11.,length(p));
         gl_FragColor=vec4(c,fade*.95);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -83,8 +83,11 @@ export class CinematicRuntime {
   private syncStage(doc: Scene3DDocument) {
     const { world } = this
     if (doc.environment?.reflectiveFloor && !this.mirror) this.createMirror()
-    if (this.mirror) this.mirror.visible = doc.environment?.reflectiveFloor === true
-    world.floor.visible = !doc.environment?.reflectiveFloor
+    if (this.mirror) {
+      this.mirror.visible = doc.environment?.reflectiveFloor === true && doc.environment.floorStyle !== 'none'
+      ;(this.mirror.material as ShaderMaterial).uniforms.tileStrength.value = doc.environment?.floorStyle === 'mirror' ? 0 : 1
+    }
+    world.floor.visible = !doc.environment?.reflectiveFloor && doc.environment?.floorStyle !== 'none'
     if (doc.environment?.platform && !this.platform) this.createPlatform()
     if (this.platform) this.platform.visible = doc.environment?.platform === true
   }

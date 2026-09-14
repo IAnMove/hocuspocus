@@ -6,7 +6,8 @@ const bounded = (n: unknown, fallback: number, min: number, max: number) =>
 export function parseEnvironment(raw: unknown): Scene3DDocument['environment'] {
   if (!raw || typeof raw !== 'object') return undefined
   const v = raw as NonNullable<Scene3DDocument['environment']>
-  return { reflectiveFloor: v.reflectiveFloor === true, platform: v.platform === true, bloom: bounded(v.bloom, .48, 0, 1.5) }
+  const floorStyle = v.floorStyle === 'mirror' || v.floorStyle === 'none' || v.floorStyle === 'tiles' ? v.floorStyle : undefined
+  return { reflectiveFloor: v.reflectiveFloor === true, platform: v.platform === true, bloom: bounded(v.bloom, .48, 0, 1.5), ...(floorStyle ? { floorStyle } : {}) }
 }
 
 export function parseAppearance(raw: unknown): Scene3DSlot['appearance'] {

@@ -1,3 +1,4 @@
+import { imageCutoutMesh, poseImageCutout } from './imageCutout'
 import { CinematicRuntime } from './cinematicRuntime'
 import { MaterializationRuntime } from './materialization'
 import { framingPose } from './framing'
@@ -171,6 +172,7 @@ export function makeStripeTexture(): Texture {
 }
 
 export function imageBackdropMesh(slot: Scene3DSlot, texture: Texture | null): Mesh {
+  if (slot.surface === 'cutout') return imageCutoutMesh(slot, texture)
   if (texture && slot.surface && slot.surface !== 'environment') {
     texture.wrapT = RepeatWrapping
     const repeat = slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2)
@@ -572,6 +574,10 @@ export function poseLoadedSlot(current: SlotGpu, slot: Scene3DSlot) {
     current.root.position.set(0, CYLINDER_HEIGHT * 0.35 * scale, 0)
     current.root.rotation.y = slot.rotationY
     current.root.scale.setScalar(scale)
+    return
+  }
+  if (current.kind === 'image' && slot.surface === 'cutout') {
+    poseImageCutout(current.root, slot)
     return
   }
   if (current.kind === 'image') {

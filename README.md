@@ -277,3 +277,7 @@ If we missed a name you shipped into this tree, open an issue — we want the li
 ## Issues
 
 Bugs and requests: [github.com/IAnMove/hocuspocus/issues](https://github.com/IAnMove/hocuspocus/issues).
+
+### Dark Fantasy perspective templates
+
+In **Studios → Video 3D**, search **Dark Fantasy** for ten editable six-second scenes with bundled image assets, transparent 2D characters, 3D camera movement, spatial effects and reflections. Choose tiled, seamless or hidden floors, replace the cutouts, and render with the native compositor. These are 2.5D perspective studies; the figures are image planes rather than rigged 3D models. See [the collection guide](ui/public/examples/dark-fantasy/README.md) for editing and sharing.

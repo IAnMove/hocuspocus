@@ -287,6 +287,46 @@
     "stage": "Stage"
   },
   "template": {
+  "dark-cathedral": {
+    "title": "Dark Fantasy · Eclipse cathedral",
+    "description": "Low camera push, crimson backlight and a reflected knight."
+  },
+  "dark-forest": {
+    "title": "Dark Fantasy · Breathing forest",
+    "description": "Lateral parallax between near trees, an oracle and distant teal mist."
+  },
+  "dark-stairway": {
+    "title": "Dark Fantasy · Impossible stairway",
+    "description": "A rolling camera, floating oracle and a golden spatial sigil."
+  },
+  "dark-moonlake": {
+    "title": "Dark Fantasy · Moonlit lake",
+    "description": "Moonlight, a reflected figure and animated ripples."
+  },
+  "dark-portal": {
+    "title": "Dark Fantasy · Door to another world",
+    "description": "Two figures at different depths with a glowing portal between them."
+  },
+  "dark-throne": {
+    "title": "Dark Fantasy · Throne of ash",
+    "description": "Low diagonal camera with fire and drifting ash behind the knight."
+  },
+  "dark-library": {
+    "title": "Dark Fantasy · Library of the void",
+    "description": "Elevated reveal across a floating library, two figures and spatial lights."
+  },
+  "dark-ice": {
+    "title": "Dark Fantasy · Ice oracle",
+    "description": "A short camera arc, cyan light and snow at multiple depths."
+  },
+  "dark-abyss": {
+    "title": "Dark Fantasy · Guardians of the abyss",
+    "description": "Strong depth contrast between a near sentinel and a distant floating oracle."
+  },
+  "dark-eclipse": {
+    "title": "Dark Fantasy · The last sun",
+    "description": "A monumental silhouette, spatial black sun and drifting red dust."
+  },
     "speech-portrait": {
       "title": "Talking portrait",
       "description": "Close-up with voice, an integrated mouth and expressions."
@@ -797,6 +837,7 @@
     "ease": "Ease in and out",
     "distance": "Straight distance: {{distance}} m · {{speed}} m/s",
     "floor": "Use image as a floor texture",
+    "cutout": "Character / transparent cutout",
     "surface": "Image use",
     "backdrop": "Backdrop",
     "wall": "Wall texture",
@@ -875,6 +916,10 @@
   },
   "cinematic": {
     "title": "Cinematic environment",
+    "floorStyle": "Floor finish",
+    "tiles": "Tiles",
+    "mirror": "Seamless surface",
+    "noFloor": "No floor",
     "floor": "Reflective metal floor",
     "platform": "Materialization platform",
     "bloom": "Bloom",

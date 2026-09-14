@@ -5,7 +5,7 @@ export function Scene3DFramingControls({ framing, slots, disabled, onChange }: {
   framing?: Scene3DFraming; slots: Scene3DSlot[]; disabled?: boolean; onChange: (value?: Scene3DFraming) => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
-  const subjects = slots.filter(slot => slot.media === 'model3d')
+  const subjects = slots.filter(slot => slot.media === 'model3d' || slot.surface === 'cutout')
   return <details className="rounded-lg border border-border p-3">
     <summary className="cursor-pointer text-sm font-semibold">{t('framing.title')}</summary>
     <fieldset disabled={disabled} className="mt-2 space-y-3 text-xs disabled:opacity-50">

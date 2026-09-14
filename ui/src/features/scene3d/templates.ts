@@ -1,4 +1,5 @@
 import { effectsTemplateDocument, EFFECTS_TEMPLATES } from './effectsTemplates'
+import { darkFantasyTemplateDocument, DARK_FANTASY_TEMPLATES, DARK_FANTASY_CATEGORIES } from './darkFantasyTemplates'
 import { cinematicDocument, CINEMATIC_TEMPLATES, CINEMATIC_CATEGORIES } from './cinematicTemplates'
 import { speechTemplateDocument, SPEECH_TEMPLATES, SPEECH_CATEGORIES } from './speech/templates'
 import { mediaTemplateDocument, MEDIA_TEMPLATES, MEDIA_CATEGORIES } from './mediaTemplates'
@@ -19,6 +20,7 @@ export type Scene3DTemplate = {
 
 export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
+  ...DARK_FANTASY_CATEGORIES,
   ...CINEMATIC_CATEGORIES,
   ...SPEECH_CATEGORIES,
   ...MEDIA_CATEGORIES,
@@ -157,6 +159,7 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   { id: 'coder-room', camera: 'establishment', duration: 7, slots: ['subject_1', 'background'] },
   { id: 'clone-chase', camera: 'follow', duration: 7, slots: ['subject_1', 'subject_2', 'prop', 'background'] },
   ...CINEMATIC_TEMPLATES,
+  ...DARK_FANTASY_TEMPLATES,
   ...SPEECH_TEMPLATES,
   ...MEDIA_TEMPLATES,
   ...EFFECTS_TEMPLATES,
@@ -354,6 +357,8 @@ function emptySlot(id: Scene3DSlotId): Scene3DSlot {
 }
 
 export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
+  const fantasy = darkFantasyTemplateDocument(id)
+  if (fantasy) return fantasy
   const action = actionTemplateDocument(id)
   if (action) return action
   const campaign = campaignTemplateDocument(id)

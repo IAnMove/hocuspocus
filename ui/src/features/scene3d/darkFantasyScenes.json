@@ -1,0 +1,1469 @@
+{
+  "dark-cathedral": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-cathedral",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": true,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "mirror"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/01-cathedral.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 17
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          0,
+          -0.18,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "cinders",
+        "kind": "sparks",
+        "position": {
+          "x": 0,
+          "y": 0.3,
+          "z": 1
+        },
+        "color": "#ff7a37",
+        "scale": 2,
+        "intensity": 0.55,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "cold-fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.05,
+          "z": -1
+        },
+        "color": "#326893",
+        "scale": 2,
+        "intensity": 0.4,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        -0.4,
+        2.3,
+        10
+      ],
+      "look": [
+        0,
+        1.9,
+        0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.24242424242424246,
+          0.5030303030303029,
+          6.0606060606060606
+        ],
+        "to": [
+          0.15151515151515152,
+          0.07878787878787887,
+          4.121212121212121
+        ],
+        "lookFrom": [
+          0.0,
+          0.26060606060606056,
+          0.0
+        ],
+        "lookTo": [
+          0.0,
+          0.26060606060606056,
+          0.0
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-forest": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-forest",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/02-forest.jpg",
+        "clip": null,
+        "position": [
+          0,
+          7,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 24
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          0,
+          4.85,
+          0
+        ],
+        "scale": 1.45,
+        "rotationY": 0
+      },
+      {
+        "id": "tree-near",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "clip": null,
+        "position": [
+          -3.2,
+          4,
+          2.5
+        ],
+        "scale": 3.3,
+        "rotationY": 0.08
+      },
+      {
+        "id": "tree-far",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "clip": null,
+        "position": [
+          4,
+          4.1,
+          -2
+        ],
+        "scale": 3.5,
+        "rotationY": -0.1
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "teal-mist",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 5.25,
+          "z": -1
+        },
+        "color": "#38b1bb",
+        "scale": 3,
+        "intensity": 0.65,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fireflies",
+        "kind": "sparks",
+        "position": {
+          "x": 1,
+          "y": 6,
+          "z": -1
+        },
+        "color": "#ffce76",
+        "scale": 2.2,
+        "intensity": 0.45,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        -2.1,
+        7.3,
+        10
+      ],
+      "look": [
+        0,
+        6.9,
+        0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -1.4482758620689655,
+          0.6896551724137931,
+          6.8965517241379315
+        ],
+        "to": [
+          1.2413793103448276,
+          0.5517241379310344,
+          5.862068965517242
+        ],
+        "lookFrom": [
+          0.0,
+          0.41379310344827624,
+          0.0
+        ],
+        "lookTo": [
+          0.0,
+          0.41379310344827624,
+          0.0
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-stairway": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-stairway",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/03-stairs.jpg",
+        "clip": null,
+        "position": [
+          0,
+          7,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 24
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          0,
+          5.25,
+          0
+        ],
+        "scale": 1.35,
+        "rotationY": 0,
+        "motion": {
+          "to": [
+            0,
+            5.5,
+            0
+          ],
+          "easing": "smooth"
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "gold-sigil",
+        "kind": "magic_circle",
+        "position": {
+          "x": 0,
+          "y": 5.08,
+          "z": -0.3
+        },
+        "color": "#edb664",
+        "scale": 1.6,
+        "intensity": 0.7,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "gold-dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 6,
+          "z": -1
+        },
+        "color": "#e0a564",
+        "scale": 2,
+        "intensity": 0.35,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        -1.3,
+        7.5,
+        10
+      ],
+      "look": [
+        0,
+        7,
+        0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.9629629629629629,
+          0.6666666666666669,
+          7.4074074074074066
+        ],
+        "to": [
+          1.037037037037037,
+          1.25925925925926,
+          5.925925925925926
+        ],
+        "lookFrom": [
+          0.0,
+          0.29629629629629656,
+          0.0
+        ],
+        "lookTo": [
+          0.0,
+          0.29629629629629656,
+          0.0
+        ],
+        "rollFrom": -13,
+        "rollTo": 16,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-moonlake": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-moonlake",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": true,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "mirror"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/04-lake.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 17
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          -1.25,
+          -0.13,
+          -0.8
+        ],
+        "scale": 1.3,
+        "rotationY": 0
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "lake-mist",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.04,
+          "z": -0.5
+        },
+        "color": "#708dac",
+        "scale": 3,
+        "intensity": 0.4,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "ripples",
+        "kind": "splash",
+        "position": {
+          "x": -1.25,
+          "y": 0.015,
+          "z": -0.8
+        },
+        "color": "#a9cbf4",
+        "scale": 2,
+        "intensity": 0.5,
+        "start": 0.3,
+        "end": 4.7,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        -0.8,
+        1.8,
+        11
+      ],
+      "look": [
+        0,
+        1.9,
+        -0.8
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.3461538461538461,
+          0.48461538461538467,
+          9.076923076923077
+        ],
+        "to": [
+          1.6538461538461537,
+          0.3692307692307692,
+          7.538461538461538
+        ],
+        "lookFrom": [
+          0.9615384615384615,
+          0.5615384615384615,
+          0.0
+        ],
+        "lookTo": [
+          0.9615384615384615,
+          0.5615384615384615,
+          0.0
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-portal": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-portal",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": true,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "mirror"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/05-gate.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 17
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          1.4,
+          -0.18,
+          0.7
+        ],
+        "scale": 1.7,
+        "rotationY": -0.1
+      },
+      {
+        "id": "distant-oracle",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          -0.8,
+          -0.08,
+          -4
+        ],
+        "scale": 1.05,
+        "rotationY": 0.07
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "dimensional-gate",
+        "kind": "summoning_gate",
+        "position": {
+          "x": -0.3,
+          "y": 2.2,
+          "z": -2.5
+        },
+        "color": "#ff8b58",
+        "scale": 2.8,
+        "intensity": 0.85,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "gate-mist",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.08,
+          "z": -1
+        },
+        "color": "#5dd9dd",
+        "scale": 2.6,
+        "intensity": 0.5,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        -1,
+        2.4,
+        11
+      ],
+      "look": [
+        0,
+        2,
+        -1
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -1.411764705882353,
+          0.5176470588235293,
+          6.058823529411765
+        ],
+        "to": [
+          0.11764705882352952,
+          0.22352941176470584,
+          4.294117647058823
+        ],
+        "lookFrom": [
+          -0.8235294117647058,
+          0.2823529411764706,
+          -1.0
+        ],
+        "lookTo": [
+          -0.8235294117647058,
+          0.2823529411764706,
+          -1.0
+        ],
+        "rollFrom": -3,
+        "rollTo": 3,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-throne": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-throne",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#ffc69a"
+    },
+    "environment": {
+      "reflectiveFloor": true,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "mirror"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/06-throne.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 17
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          -1.0,
+          -0.18,
+          0.4
+        ],
+        "scale": 1.8,
+        "rotationY": 0
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "brazier-left",
+        "kind": "fire",
+        "position": {
+          "x": -3.2,
+          "y": 0.05,
+          "z": -2
+        },
+        "color": "#f07332",
+        "scale": 1.3,
+        "intensity": 0.7,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "brazier-right",
+        "kind": "fire",
+        "position": {
+          "x": 3.2,
+          "y": 0.05,
+          "z": -2
+        },
+        "color": "#f07332",
+        "scale": 1.3,
+        "intensity": 0.7,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "ash",
+        "kind": "sparks",
+        "position": {
+          "x": 0,
+          "y": 0.5,
+          "z": -1
+        },
+        "color": "#e8b26d",
+        "scale": 2.6,
+        "intensity": 0.45,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        1.8,
+        1.3,
+        10
+      ],
+      "look": [
+        0,
+        1.9,
+        -1
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          1.5555555555555554,
+          -0.1777777777777778,
+          5.333333333333333
+        ],
+        "to": [
+          -0.33333333333333337,
+          -0.3444444444444445,
+          3.888888888888889
+        ],
+        "lookFrom": [
+          0.5555555555555556,
+          0.15555555555555545,
+          -0.7777777777777777
+        ],
+        "lookTo": [
+          0.5555555555555556,
+          0.15555555555555545,
+          -0.7777777777777777
+        ],
+        "rollFrom": 5,
+        "rollTo": -5,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-library": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-library",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/07-library.jpg",
+        "clip": null,
+        "position": [
+          0,
+          7,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 24
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          0.45,
+          5.2,
+          0
+        ],
+        "scale": 1.3,
+        "rotationY": 0
+      },
+      {
+        "id": "sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          -2,
+          5.1,
+          -4
+        ],
+        "scale": 0.95,
+        "rotationY": 0
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "orb-near",
+        "kind": "energy_orb",
+        "position": {
+          "x": -1.3,
+          "y": 7.8,
+          "z": 1
+        },
+        "color": "#e5b55e",
+        "scale": 0.36,
+        "intensity": 0.55,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "orb-far",
+        "kind": "energy_orb",
+        "position": {
+          "x": 1.6,
+          "y": 8.2,
+          "z": -3
+        },
+        "color": "#b681ed",
+        "scale": 0.32,
+        "intensity": 0.55,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "stardust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 6,
+          "z": -1
+        },
+        "color": "#cab99d",
+        "scale": 2.8,
+        "intensity": 0.35,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        2,
+        9,
+        11
+      ],
+      "look": [
+        0,
+        7,
+        0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          1.1923076923076923,
+          1.923076923076923,
+          8.461538461538462
+        ],
+        "to": [
+          -1.423076923076923,
+          1.1538461538461537,
+          6.538461538461538
+        ],
+        "lookFrom": [
+          -0.34615384615384615,
+          0.3846153846153846,
+          0.0
+        ],
+        "lookTo": [
+          -0.34615384615384615,
+          0.3846153846153846,
+          0.0
+        ],
+        "rollFrom": 10,
+        "rollTo": -7,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-ice": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-ice",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#b9f9ff"
+    },
+    "environment": {
+      "reflectiveFloor": true,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "mirror"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/08-ice.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 17
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          0.25,
+          -0.15,
+          0
+        ],
+        "scale": 1.5,
+        "rotationY": 0
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "snow",
+        "kind": "snow",
+        "position": {
+          "x": 0,
+          "y": 0.2,
+          "z": 0
+        },
+        "color": "#daefff",
+        "scale": 2.8,
+        "intensity": 0.8,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "frost",
+        "kind": "ice_burst",
+        "position": {
+          "x": -1.4,
+          "y": 0.08,
+          "z": -1.5
+        },
+        "color": "#64d9f8",
+        "scale": 0.8,
+        "intensity": 0.55,
+        "start": 2,
+        "end": 4.5,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "cold-haze",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.05,
+          "z": -1
+        },
+        "color": "#71a4ba",
+        "scale": 2.7,
+        "intensity": 0.35,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        2,
+        2.4,
+        9
+      ],
+      "look": [
+        0,
+        1.8,
+        0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          1.1666666666666667,
+          0.6999999999999998,
+          6.0
+        ],
+        "to": [
+          -1.1666666666666667,
+          0.4333333333333333,
+          5.2
+        ],
+        "lookFrom": [
+          -0.16666666666666666,
+          0.3,
+          0.0
+        ],
+        "lookTo": [
+          -0.16666666666666666,
+          0.3,
+          0.0
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-abyss": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-abyss",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/09-abyss.jpg",
+        "clip": null,
+        "position": [
+          0,
+          7,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 24
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          -0.6,
+          5.05,
+          -1
+        ],
+        "scale": 1.25,
+        "rotationY": 0
+      },
+      {
+        "id": "near-sentinel",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          2.4,
+          4.6,
+          2.7
+        ],
+        "scale": 2,
+        "rotationY": -0.12
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "abyss-fog",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 4.9,
+          "z": -2
+        },
+        "color": "#9d3949",
+        "scale": 3.5,
+        "intensity": 0.75,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "ascending-ash",
+        "kind": "sparks",
+        "position": {
+          "x": -0.5,
+          "y": 4,
+          "z": -1
+        },
+        "color": "#c95b36",
+        "scale": 2.4,
+        "intensity": 0.35,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        -1.8,
+        8.8,
+        11
+      ],
+      "look": [
+        -0.2,
+        6.9,
+        -1
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.9600000000000002,
+          2.000000000000001,
+          9.6
+        ],
+        "to": [
+          1.36,
+          1.2,
+          8.0
+        ],
+        "lookFrom": [
+          0.31999999999999995,
+          0.4800000000000004,
+          0.0
+        ],
+        "lookTo": [
+          0.31999999999999995,
+          0.4800000000000004,
+          0.0
+        ],
+        "rollFrom": -10,
+        "rollTo": 4,
+        "relativeToFacing": false
+      }
+    }
+  },
+  "dark-eclipse": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-eclipse",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/10-eclipse.jpg",
+        "clip": null,
+        "position": [
+          0,
+          7,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 24
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          0,
+          4.9,
+          0
+        ],
+        "scale": 1.45,
+        "rotationY": 0
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "black-sun",
+        "kind": "black_hole",
+        "position": {
+          "x": 0,
+          "y": 9.8,
+          "z": -4
+        },
+        "color": "#ffe8c4",
+        "scale": 3.8,
+        "intensity": 0.7,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "red-dust",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 5.1,
+          "z": -1
+        },
+        "color": "#973d43",
+        "scale": 3.3,
+        "intensity": 0.5,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "last-embers",
+        "kind": "sparks",
+        "position": {
+          "x": 0,
+          "y": 6,
+          "z": 0.5
+        },
+        "color": "#f09545",
+        "scale": 2,
+        "intensity": 0.45,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        0,
+        6.6,
+        11
+      ],
+      "look": [
+        0,
+        7.2,
+        -1
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.0,
+          0.17241379310344768,
+          7.586206896551724
+        ],
+        "to": [
+          0.48275862068965514,
+          0.44827586206896514,
+          4.9655172413793105
+        ],
+        "lookFrom": [
+          0.0,
+          0.5862068965517239,
+          -0.6896551724137931
+        ],
+        "lookTo": [
+          0.0,
+          0.5862068965517239,
+          -0.6896551724137931
+        ],
+        "rollFrom": 0,
+        "rollTo": -5,
+        "relativeToFacing": false
+      }
+    }
+  }
+}

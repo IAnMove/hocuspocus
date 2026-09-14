@@ -1,0 +1,171 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-forest",
+  "title": "Dark Fantasy · El bosque que respira",
+  "description": "Travelling entre árboles cercanos y lejanos; oráculo inmóvil entre niebla turquesa y luciérnagas.",
+  "createdAt": "2026-09-14T17:00:00Z",
+  "includeAssets": true,
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-forest",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "none"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/02-forest.jpg",
+        "clip": null,
+        "position": [
+          0,
+          7,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 24
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          0,
+          4.85,
+          0
+        ],
+        "scale": 1.45,
+        "rotationY": 0
+      },
+      {
+        "id": "tree-near",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "clip": null,
+        "position": [
+          -3.2,
+          4,
+          2.5
+        ],
+        "scale": 3.3,
+        "rotationY": 0.08
+      },
+      {
+        "id": "tree-far",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "clip": null,
+        "position": [
+          4,
+          4.1,
+          -2
+        ],
+        "scale": 3.5,
+        "rotationY": -0.1
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "teal-mist",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 5.25,
+          "z": -1
+        },
+        "color": "#38b1bb",
+        "scale": 3,
+        "intensity": 0.65,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "fireflies",
+        "kind": "sparks",
+        "position": {
+          "x": 1,
+          "y": 6,
+          "z": -1
+        },
+        "color": "#ffce76",
+        "scale": 2.2,
+        "intensity": 0.45,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        -2.1,
+        7.3,
+        10
+      ],
+      "look": [
+        0,
+        6.9,
+        0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -1.4482758620689655,
+          0.6896551724137931,
+          6.8965517241379315
+        ],
+        "to": [
+          1.2413793103448276,
+          0.5517241379310344,
+          5.862068965517242
+        ],
+        "lookFrom": [
+          0.0,
+          0.41379310344827624,
+          0.0
+        ],
+        "lookTo": [
+          0.0,
+          0.41379310344827624,
+          0.0
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    }
+  }
+}

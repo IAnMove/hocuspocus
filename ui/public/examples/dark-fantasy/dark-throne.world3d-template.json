@@ -1,0 +1,157 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-throne",
+  "title": "Dark Fantasy · El trono de ceniza",
+  "description": "Contrapicado autoritario con desplazamiento diagonal y fuego detrás del personaje.",
+  "createdAt": "2026-09-14T17:00:00Z",
+  "includeAssets": true,
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-throne",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#ffc69a"
+    },
+    "environment": {
+      "reflectiveFloor": true,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "mirror"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/06-throne.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 17
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          -1.0,
+          -0.18,
+          0.4
+        ],
+        "scale": 1.8,
+        "rotationY": 0
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "brazier-left",
+        "kind": "fire",
+        "position": {
+          "x": -3.2,
+          "y": 0.05,
+          "z": -2
+        },
+        "color": "#f07332",
+        "scale": 1.3,
+        "intensity": 0.7,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "brazier-right",
+        "kind": "fire",
+        "position": {
+          "x": 3.2,
+          "y": 0.05,
+          "z": -2
+        },
+        "color": "#f07332",
+        "scale": 1.3,
+        "intensity": 0.7,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "ash",
+        "kind": "sparks",
+        "position": {
+          "x": 0,
+          "y": 0.5,
+          "z": -1
+        },
+        "color": "#e8b26d",
+        "scale": 2.6,
+        "intensity": 0.45,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        1.8,
+        1.3,
+        10
+      ],
+      "look": [
+        0,
+        1.9,
+        -1
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          1.5555555555555554,
+          -0.1777777777777778,
+          5.333333333333333
+        ],
+        "to": [
+          -0.33333333333333337,
+          -0.3444444444444445,
+          3.888888888888889
+        ],
+        "lookFrom": [
+          0.5555555555555556,
+          0.15555555555555545,
+          -0.7777777777777777
+        ],
+        "lookTo": [
+          0.5555555555555556,
+          0.15555555555555545,
+          -0.7777777777777777
+        ],
+        "rollFrom": 5,
+        "rollTo": -5,
+        "relativeToFacing": false
+      }
+    }
+  }
+}

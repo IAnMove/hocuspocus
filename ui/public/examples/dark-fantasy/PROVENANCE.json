@@ -1,0 +1,110 @@
+{
+  "createdWith": "HocusPocus public MiniMax Image-01 jobs; HocusPocus remove-background; native Video 3D compositor",
+  "notes": "The knight, oracle and tree PNGs are the app background-removal outputs. No AI video generator is needed to render these scenes. Characters are 2D cutouts in a 3D camera, lighting and effects scene.",
+  "images": [
+    {
+      "asset": "01-cathedral.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Monumental ruined Gothic cathedral interior, immense pointed arches receding to a brilliant circular blood-red eclipse seen through the broken apse, midnight-blue stone, scarlet fog, glossy obsidian floor, immense scale, low symmetrical vanishing point. No characters.",
+      "jobId": "minimax-image-b0cc89bc47ed",
+      "createdAt": "2026-09-14T17:08:21Z"
+    },
+    {
+      "asset": "02-forest.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Ancient haunted forest, enormous twisted nearly black tree trunks framing the extreme left and right, layered turquoise mist, tiny amber fireflies, crimson ferns near the ground, a luminous distant turquoise lake at center, deep negative space in middle, stunning teal-versus-amber color contrast.",
+      "jobId": "minimax-image-0d0675a6785b",
+      "createdAt": "2026-09-14T17:08:53Z"
+    },
+    {
+      "asset": "03-stairs.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Surreal Escher-inspired immense inverted medieval staircases floating in an amethyst void, carved limestone arches, intense warm gold shafts cutting diagonally across cool violet shadow, one broad isolated staircase central below, architectural vertigo, no people.",
+      "jobId": "minimax-image-fdbcfb5fcf04",
+      "createdAt": "2026-09-14T17:09:08Z"
+    },
+    {
+      "asset": "04-lake.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Endless perfectly still black lake, two huge pale moons overlapping above a razor-thin distant mountain horizon, silver blue moonlight, delicate vermilion reeds at edges, distant ruined abbey silhouette, negative space, meditative gothic dream, precise horizontal composition.",
+      "jobId": "minimax-image-ac6350ccda36",
+      "createdAt": "2026-09-14T17:09:25Z"
+    },
+    {
+      "asset": "05-gate.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. A monumental empty circular stone doorway in a basalt cliff, its interior filled with a luminous distant crimson desert and scarlet sun, outer world icy teal cavern, wide stone terrace in foreground, two incompatible worlds in one frame, deep dimensional perspective.",
+      "jobId": "minimax-image-a6d3b628476e",
+      "createdAt": "2026-09-14T17:09:57Z"
+    },
+    {
+      "asset": "06-throne.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Empty jagged black iron throne on a far dais inside a colossal ruined royal hall, gigantic skeletal buttresses, molten orange fissures lighting the lower stones against smoky desaturated blue upper vaults, ash and ember atmosphere, low wide-angle authoritarian grandeur.",
+      "jobId": "minimax-image-2ba4b782c767",
+      "createdAt": "2026-09-14T17:10:14Z"
+    },
+    {
+      "asset": "07-library.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Impossible medieval library floating over a cosmic void, tall narrow blackened wood bookshelves suspended as islands receding into distance, dusty antique gold light from scattered candles, deep ultramarine shadows, starfield behind broken ceiling, luminous magenta nebula far away, very refined cinematic composition.",
+      "jobId": "minimax-image-484041bbe3ff",
+      "createdAt": "2026-09-14T17:10:33Z"
+    },
+    {
+      "asset": "08-ice.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. A cavern made of enormous angular translucent ice crystals, radiant cyan ice light from left and a small intense red shrine far at center, frozen polished floor with sweeping curves, delicate powder-snow atmosphere, cathedral-scale cold blue architecture, no statues shaped like people.",
+      "jobId": "minimax-image-1610d87e4210",
+      "createdAt": "2026-09-14T17:10:51Z"
+    },
+    {
+      "asset": "09-abyss.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Narrow ancient stone bridge cutting diagonally across a bottomless abyss, monumental ruined towers disappearing into crimson mist below, tiny intense pale cyan light at the far end, dizzying depth viewed at a slightly elevated diagonal, near cliff edges framing lower corners, no people.",
+      "jobId": "minimax-image-1860311f8aea",
+      "createdAt": "2026-09-14T17:11:08Z"
+    },
+    {
+      "asset": "10-eclipse.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Surreal black volcanic plain beneath a huge luminous ivory total solar eclipse, enormous black monoliths receding towards horizon, burning scarlet dust lit from below, porcelain white solar halo against near-black sky, graphic minimal monumental dark fantasy, refined minimalism, no characters.",
+      "jobId": "minimax-image-5c588fad4879",
+      "createdAt": "2026-09-14T17:11:26Z"
+    },
+    {
+      "asset": "actor-knight.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Single full-body dark fantasy knight, front view slightly turned three quarters, slim imposing adult in beautifully engraved weathered blackened silver armor, closed angular helmet, deep crimson long torn cape, hands resting on a downward-pointing sword, both boots fully visible, intricate realistic painterly game cinematic art, subtle cyan rimlight from left and warm amber rimlight from right. Entire figure isolated on pure flat WHITE background, generous margin, no floor, no cast shadow, no environment, no text. Opaque fabric. Beautiful sophisticated silhouette.",
+      "jobId": "minimax-image-f4418386567d",
+      "createdAt": "2026-09-14T17:12:31Z"
+    },
+    {
+      "asset": "actor-oracle.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "Single full-body mysterious adult dark fantasy oracle, back view slightly turned, tall elegant figure wearing layered opaque ivory ceremonial robes with golden filigree hem and an enormous delicate black antler crown, face hidden, long draping robe reaches visible feet, both hands open slightly from body. Richly textured cinematic fantasy painting, turquoise rim light and subtle crimson reflected highlights. Entire figure isolated on pure flat WHITE background, generous margin, no ground, no shadow, no environment, no text.",
+      "jobId": "minimax-image-d43d06704437",
+      "createdAt": "2026-09-14T17:12:47Z"
+    },
+    {
+      "asset": "prop-tree.jpg",
+      "provider": "MiniMax",
+      "model": "image-01",
+      "prompt": "One enormous sinister gnarled leafless ancient black tree, elaborate beautiful twisted branches reaching diagonally upward and outward like cathedral tracery, exposed roots at bottom, detailed bark, gothic painterly realism, near-black silhouette with very subtle cool blue edges. Entire tree isolated on pure solid WHITE background, all branches and roots inside frame with margin, no ground, no shadow, no people, no text.",
+      "jobId": "minimax-image-14ae9b6aaa7f",
+      "createdAt": "2026-09-14T17:13:04Z"
+    }
+  ]
+}

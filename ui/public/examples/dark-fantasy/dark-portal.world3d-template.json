@@ -1,0 +1,156 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-portal",
+  "title": "Dark Fantasy · La puerta del otro mundo",
+  "description": "Dos personajes a distintas distancias y un portal espacial entre ambos; mundos frío y cálido.",
+  "createdAt": "2026-09-14T17:00:00Z",
+  "includeAssets": true,
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-portal",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": true,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "mirror"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/05-gate.jpg",
+        "clip": null,
+        "position": [
+          0,
+          2,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 17
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/knight.png",
+        "clip": null,
+        "position": [
+          1.4,
+          -0.18,
+          0.7
+        ],
+        "scale": 1.7,
+        "rotationY": -0.1
+      },
+      {
+        "id": "distant-oracle",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          -0.8,
+          -0.08,
+          -4
+        ],
+        "scale": 1.05,
+        "rotationY": 0.07
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "dimensional-gate",
+        "kind": "summoning_gate",
+        "position": {
+          "x": -0.3,
+          "y": 2.2,
+          "z": -2.5
+        },
+        "color": "#ff8b58",
+        "scale": 2.8,
+        "intensity": 0.85,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "gate-mist",
+        "kind": "fog",
+        "position": {
+          "x": 0,
+          "y": 0.08,
+          "z": -1
+        },
+        "color": "#5dd9dd",
+        "scale": 2.6,
+        "intensity": 0.5,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        -1,
+        2.4,
+        11
+      ],
+      "look": [
+        0,
+        2,
+        -1
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -1.411764705882353,
+          0.5176470588235293,
+          6.058823529411765
+        ],
+        "to": [
+          0.11764705882352952,
+          0.22352941176470584,
+          4.294117647058823
+        ],
+        "lookFrom": [
+          -0.8235294117647058,
+          0.2823529411764706,
+          -1.0
+        ],
+        "lookTo": [
+          -0.8235294117647058,
+          0.2823529411764706,
+          -1.0
+        ],
+        "rollFrom": -3,
+        "rollTo": 3,
+        "relativeToFacing": false
+      }
+    }
+  }
+}

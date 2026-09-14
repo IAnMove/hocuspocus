@@ -10,6 +10,9 @@ export function CinematicControls({ environment, disabled, onChange }: {
     <label className="flex min-h-9 items-center gap-2 font-semibold"><input type="checkbox" checked={Boolean(environment)} onChange={e => onChange(e.target.checked ? { reflectiveFloor: true, platform: false, bloom: .48 } : undefined)} />{t('cinematic.title')}</label>
     {environment && <div className="flex flex-wrap items-center gap-4">
       <label><input type="checkbox" checked={environment.reflectiveFloor} onChange={e => onChange({ ...environment, reflectiveFloor: e.target.checked })} /> {t('cinematic.floor')}</label>
+      <label>{t('cinematic.floorStyle')} <select className="min-h-9 rounded border border-border bg-bg-tertiary px-2" value={environment.floorStyle ?? 'tiles'} onChange={e => onChange({ ...environment, floorStyle: e.target.value as 'tiles' | 'mirror' | 'none' })}>
+        <option value="tiles">{t('cinematic.tiles')}</option><option value="mirror">{t('cinematic.mirror')}</option><option value="none">{t('cinematic.noFloor')}</option>
+      </select></label>
       <label><input type="checkbox" checked={environment.platform} onChange={e => onChange({ ...environment, platform: e.target.checked })} /> {t('cinematic.platform')}</label>
       <label>{t('cinematic.bloom')} <input className={inputClass} type="number" min="0" max="1.5" step=".05" value={environment.bloom} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) onChange({ ...environment, bloom: Math.max(0, Math.min(1.5, e.target.valueAsNumber)) }) }} /></label>
     </div>}

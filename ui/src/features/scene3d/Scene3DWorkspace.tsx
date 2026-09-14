@@ -497,7 +497,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
           const pose = applyScene3DTemplate(sceneDoc.templateId).slots.find(slot => slot.id === selected.id)
           if (pose) applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
         }} />}
-      {selected && selected.media !== 'image' && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))} />}
+      {selected && (selected.media !== 'image' || selected.surface === 'cutout') && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))} />}
       <button type="button" disabled={editingLocked || sceneDoc.slots.length >= 64} className="min-h-11 self-start rounded-lg border border-cyan-400/50 px-4 text-sm text-text-primary" onClick={() => {
         if (!canMutateWorld3DScene(exportingRef.current)) return
         const id = `screen_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -524,13 +524,13 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
                 <AssetInput
                   label={t(`stage.slot.${slot.slot}`)}
                   placeholder={t('stage.fromApp')}
-                  items={slot.slot === 'background' ? imageItems : modelItems}
+                  items={slot.media === 'image' ? imageItems : modelItems}
                   value={pickerOutputFromSlot(slot.sourceUrl, slot.media, slot.sourceRef)}
-                  accept={slot.slot === 'background' ? 'image/*' : '.glb,model/gltf-binary'}
+                  accept={slot.media === 'image' ? 'image/*' : '.glb,model/gltf-binary'}
                   optional
                   disabled={exporting}
                   constraints={{
-                    kinds: slot.slot === 'background' ? ['image'] : ['model3d'],
+                    kinds: slot.media === 'image' ? ['image'] : ['model3d'],
                     maxCount: 1,
                     optional: true,
                   }}
@@ -554,8 +554,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
               <AppearanceControls slot={slot} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, slot.id, patch))} />
               <Scene3DAnimationControls slot={slot} clips={catalogs[slot.id]} duration={sceneDoc.duration} disabled={editingLocked}
                 onChange={patch => applyScene(current => patchScene3DSlot(current, slot.id, patch))} />
-              {slot.slot === 'background' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => applyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as 'floor' | 'wall' | 'environment', loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}
-              {slot.slot === 'background' && slot.surface && slot.surface !== 'environment' && numberField(editorT('travel.repeat'), slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2), value => applyScene(current => patchScene3DSlot(current, slot.id, { textureRepeat: Math.max(1, Math.min(16, value)) })), 1, exporting)}
+              {slot.media === 'image' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => applyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}
+              {slot.media === 'image' && (slot.surface === 'floor' || slot.surface === 'wall') && numberField(editorT('travel.repeat'), slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2), value => applyScene(current => patchScene3DSlot(current, slot.id, { textureRepeat: Math.max(1, Math.min(16, value)) })), 1, exporting)}
               {slot.slot === 'background' && !slot.surface && (
                 <InfiniteBackdropControls
                   loop={slot.loop}
