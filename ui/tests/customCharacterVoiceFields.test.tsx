@@ -15,12 +15,12 @@ const saved: CustomCharacterVoice = { provider: 'local', model: 'qwen3_tts_base'
 
 function mockDecode(t: test.TestContext, duration = 6) {
   const original = globalThis.OfflineAudioContext
-  const samples = new Float32Array(6 * 16000).fill(.1)
   globalThis.OfflineAudioContext = class {
+    constructor(_channels: number, private frames: number) {}
     destination = {}
     async decodeAudioData() { return { duration } }
     createBufferSource() { return { connect() {}, start() {} } }
-    async startRendering() { return { getChannelData: () => samples } }
+    async startRendering() { return { getChannelData: () => new Float32Array(this.frames).fill(.1) } }
   } as unknown as typeof OfflineAudioContext
   t.after(() => { globalThis.OfflineAudioContext = original })
 }
@@ -128,4 +128,21 @@ test('recording a new reference stops microphone tracks, uploads WAV and require
   assert.equal(changes[0].referenceAudio, '/api/v1/uploads/new.wav')
   assert.equal(changes[0].transcript, '', 'never apply an old transcript to a replacement recording')
   assert.equal(changes[0].name, saved.name)
+})
+
+test('a microphone take that overruns its timer retains the first 30 seconds instead of being rejected', async t => {
+  const { uploadVoiceReference } = await import('../src/features/characters/characterVoiceReference')
+  mockDecode(t, 30.25)
+  const original = globalThis.fetch; let uploads = 0
+  globalThis.fetch = async (url, init) => {
+    assert.ok(String(url).endsWith('/upload-audio')); uploads++
+    const audio = (init?.body as FormData).get('file') as File
+    assert.equal(audio.size, 44 + 30 * 16000 * 2, 'saved WAV matches the advertised interval')
+    return json({ filename: 'capped.wav', url: '/api/v1/uploads/capped.wav', path: '/private/capped.wav' })
+  }
+  t.after(() => { globalThis.fetch = original })
+  const blob = new Blob(['full recording']), signal = new AbortController().signal
+  assert.equal(await uploadVoiceReference(blob, signal, 'microphone'), '/api/v1/uploads/capped.wav')
+  await assert.rejects(uploadVoiceReference(blob, signal, 'import'), /voiceFileDuration/)
+  assert.equal(uploads, 1, 'imported recordings are never silently cropped')
 })

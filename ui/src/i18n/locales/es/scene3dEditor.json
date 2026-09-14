@@ -247,7 +247,7 @@
       "hint": "Usa una muestra limpia de una sola persona, sin música ni otras voces. Importa o graba entre 3 y 30 segundos; después escribe exactamente lo que dice. El modelo usará su voz para leer diálogos nuevos.",
       "import": "Importar muestra de audio",
       "record": "Grabar con el micrófono",
-      "recordHint": "La grabación se detiene a los 30 segundos. Puedes leer una frase de 5–15 segundos y copiarla en la transcripción.",
+      "recordHint": "Se guardan hasta 30 segundos. Puedes leer una frase de 5–15 segundos y copiarla en la transcripción.",
       "referencePreview": "Muestra original de la voz",
       "transcript": "Texto exacto de la muestra",
       "transcriptPlaceholder": "Escribe aquí las mismas palabras que se escuchan en el audio. No es el diálogo que se generará.",

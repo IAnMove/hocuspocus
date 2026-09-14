@@ -19,14 +19,14 @@ export function useVoiceReferenceCapture(onAudio: (url: string) => void, onBusyC
       ? t('speech.microphoneDenied') : error.message || t('speech.recordingFailed'))
     setState('idle')
   }
-  const upload = async (blob: Blob, signal: AbortSignal) => {
+  const upload = async (blob: Blob, signal: AbortSignal, source: 'import' | 'microphone') => {
     setState('uploading')
-    try { const url = await uploadVoiceReference(blob, signal); if (!signal.aborted) { onAudio(url); setState('idle') } }
+    try { const url = await uploadVoiceReference(blob, signal, source); if (!signal.aborted) { onAudio(url); setState('idle') } }
     catch (cause) { fail(cause, signal) }
   }
   const importAudio = (file: File) => {
     owner.current?.abort(); const request = new AbortController(); owner.current = request; setError('')
-    void upload(file, request.signal)
+    void upload(file, request.signal, 'import')
   }
   const record = () => {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -35,7 +35,7 @@ export function useVoiceReferenceCapture(onAudio: (url: string) => void, onBusyC
     owner.current?.abort(); const request = new AbortController(); owner.current = request
     setError(''); setState('permission')
     void recordMicrophone(request.signal, {
-      onRecording: () => setState('recording'), onComplete: blob => { void upload(blob, request.signal) },
+      onRecording: () => setState('recording'), onComplete: blob => { void upload(blob, request.signal, 'microphone') },
       onError: cause => fail(cause, request.signal),
     }, 30).then(finish => { if (!request.signal.aborted) stop.current = finish }).catch(cause => fail(cause, request.signal))
   }

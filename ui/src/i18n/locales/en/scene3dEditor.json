@@ -247,7 +247,7 @@
       "hint": "Use a clean sample of one speaker, without music or other voices. Import or record 3–30 seconds, then enter exactly what it says. The model will use that voice to read new dialogue.",
       "import": "Import audio sample",
       "record": "Record with microphone",
-      "recordHint": "Recording stops after 30 seconds. You can read a 5–15 second sentence and copy it into the transcript.",
+      "recordHint": "Up to 30 seconds are saved. You can read a 5–15 second sentence and copy it into the transcript.",
       "referencePreview": "Original voice sample",
       "transcript": "Exact sample transcript",
       "transcriptPlaceholder": "Enter the same words heard in the audio. This is not the dialogue to generate.",
