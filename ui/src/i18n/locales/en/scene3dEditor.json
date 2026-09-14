@@ -17,7 +17,7 @@
     "libraryVoice": "Preferred voice (optional)",
     "noPreferredVoice": "No preferred voice · use existing audio",
     "voiceDirection": "Voice direction (optional)",
-    "voiceHint": "Local Qwen3 CustomVoice. Language is detected from the text. Requires the model installed; no credentials or automatic audio generation.",
+    "voiceHint": "Qwen3 CustomVoice supports several languages, but none of these nine original voices is native Spanish. Pronunciation and accent vary across languages: listen to a sample before choosing. Voice direction can influence delivery; it does not guarantee a different accent.",
     "generateVoice": "Generate this line's voice",
     "attachGeneratedVoice": "Apply already generated audio",
     "existingAudioWins": "This line already has audio: reuse it without generating another voice.",
@@ -205,7 +205,78 @@
     "optionalModel": "3D model (optional; not required for voice or 2D characters)",
     "configure2d": "Configure 2D mouth and lip sync",
     "need2dImage": "For 2D lip sync, add an image and save the character. You can do this in Characters or from its reference in Series Lab.",
-    "configureLibraryCharacter": "Configure voice and lip sync for {{name}}"
+    "configureLibraryCharacter": "Configure voice and lip sync for {{name}}",
+    "voiceOrigin": "Original language/profile: {{language}}",
+    "voiceOrigins": {
+      "chinese": "Chinese",
+      "beijing": "Chinese · Beijing",
+      "sichuan": "Chinese · Sichuan",
+      "english": "English",
+      "americanEnglish": "American English",
+      "japanese": "Japanese",
+      "korean": "Korean"
+    },
+    "voiceProfiles": {
+      "vivian": "Young female voice, bright with a slight edge.",
+      "serena": "Young female voice, warm and gentle.",
+      "uncle_fu": "Mature male voice, low and mellow.",
+      "dylan": "Young male voice, clear and natural.",
+      "eric": "Lively male voice, bright and slightly husky.",
+      "ryan": "Dynamic male voice with pronounced rhythm.",
+      "aiden": "Bright male voice with a clear midrange.",
+      "ono_anna": "Playful female voice, light and agile.",
+      "sohee": "Warm, expressive female voice."
+    },
+    "voiceAudition": {
+      "language": "Sample sentence language",
+      "sample": {
+        "es": "Hola, esta es mi voz. Así sueno al contar una historia en español.",
+        "en": "Hello, this is my voice. This is how I sound when telling a story in English."
+      },
+      "generate": "Generate voice sample",
+      "generating": "Generating sample…",
+      "cancel": "Cancel sample",
+      "audio": "Selected voice sample",
+      "hint": "Uses this voice and its current direction. Choosing a voice does not generate audio. This button creates a short recording in HocusPocus; no character save or mouth setup is needed."
+    },
+    "customVoice": {
+      "add": "Add your own voice: import or record",
+      "selected": "Custom voice",
+      "saved": "Custom voices saved with characters",
+      "name": "Voice name",
+      "hint": "Use a clean sample of one speaker, without music or other voices. Import or record 3–30 seconds, then enter exactly what it says. The model will use that voice to read new dialogue.",
+      "import": "Import audio sample",
+      "record": "Record with microphone",
+      "recordHint": "Recording stops after 30 seconds. You can read a 5–15 second sentence and copy it into the transcript.",
+      "referencePreview": "Original voice sample",
+      "transcript": "Exact sample transcript",
+      "transcriptPlaceholder": "Enter the same words heard in the audio. This is not the dialogue to generate.",
+      "language": "Language for new dialogue",
+      "saveHint": "Save the whole character to keep this voice. You can select it for other characters; new or regenerated shots will use that configuration.",
+      "incomplete": "To preview or save this voice, add its name, an audio sample, and its exact transcript.",
+      "voiceFileSize": "Choose a nonempty audio file up to 20 MB.",
+      "voiceFileDecode": "The browser could not decode this audio. Try WAV or MP3.",
+      "voiceFileDuration": "The sample must last 3–30 seconds. Trim the audio and keep the exact transcript of that segment.",
+      "microphoneUnavailable": "Browsers only allow the microphone on HTTPS or localhost. Open HocusPocus at one of those addresses, or import an audio file here.",
+      "states": {
+        "permission": "Allow microphone access in your browser…",
+        "recording": "Recording · 30 seconds maximum",
+        "uploading": "Saving audio sample…"
+      },
+      "languages": {
+        "auto": "Automatic from text",
+        "spanish": "Spanish",
+        "english": "English",
+        "chinese": "Chinese",
+        "japanese": "Japanese",
+        "korean": "Korean",
+        "german": "German",
+        "french": "French",
+        "russian": "Russian",
+        "portuguese": "Portuguese",
+        "italian": "Italian"
+      }
+    }
   },
   "title": "3D scene studio",
   "subtitle": "Choose a shot, place your objects and press Play.",

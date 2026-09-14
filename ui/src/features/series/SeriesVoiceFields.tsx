@@ -47,7 +47,7 @@ export function SeriesVoiceFields({
               <input className={inputClass} value={String(kitOwnsTts ? tts.provider || '' : character.voiceProfile?.provider || '')} disabled={kitOwnsTts} onChange={event => onPatchVoice(index, { provider: event.target.value })} />
             </SeriesField>
             <SeriesField label={t('canon.voiceId')} hint={t('canon.voiceIdHint')}>
-              <input className={inputClass} value={String(kitOwnsTts ? tts.voiceId || '' : character.voiceProfile?.voiceId || '')} disabled={kitOwnsTts} onChange={event => onPatchVoice(index, { voiceId: event.target.value })} />
+              <input className={inputClass} value={String(kitOwnsTts ? tts.voiceName || tts.voiceId || '' : character.voiceProfile?.voiceId || '')} disabled={kitOwnsTts} onChange={event => onPatchVoice(index, { voiceId: event.target.value })} />
             </SeriesField>
             <SeriesField label={t('canon.language')}>
               <input className={inputClass} value={String(character.voiceProfile?.language || '')} onChange={event => onPatchVoice(index, { language: event.target.value })} />
