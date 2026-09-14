@@ -133,7 +133,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
           setId(nextId); setNotice('')
           if (!slot) { setName(next?.name ?? ''); setVoice(next?.voice); setModel(undefined) }
         }} />
-      {slot && <button data-testid="apply-character" className="min-h-10 rounded border border-border px-3" disabled={!kit?.speech3d}
+      {slot && <button data-testid="apply-character" className="min-h-10 rounded border border-border px-3" disabled={speechBusy || !kit?.speech3d}
         onClick={() => run(async () => {
           const patch = await characterSlotPatch(kit!, workspace, library!.revision, slot)
           if (alive.current) { setVoice(kit!.voice); setName(kit!.name); onApply?.(patch); setNotice(t('speech.characterApplied')) }
@@ -160,7 +160,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
       {!slot && <CharacterDefinitionSpeechTools workspace={workspace} kit={library?.kits[id]}
         disabled={busy || dirty} saveRef={workshopSave} onDirtyChange={setWorkshopDirty} onBusyChange={setWorkshopBusy}
         onSaved={async saved => { setLibrary(saved); await onSaved?.(saved.kits[id]) }} />}
-      {!slot && kit?.speech3d && <button data-testid="edit-character-face" className="min-h-10 rounded border border-border px-3" onClick={() => run(async () => {
+      {!slot && kit?.speech3d && <button data-testid="edit-character-face" className="min-h-10 rounded border border-border px-3" disabled={speechBusy} onClick={() => run(async () => {
         const patch = await characterSlotPatch(kit, workspace, library!.revision)
         if (!alive.current) return
         const { buildSpeechProduction } = await import('../scene3d/speech/production')
