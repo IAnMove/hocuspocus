@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Activity, BookOpen, Boxes, Clapperboard, FolderKanban, Languages,
+  Activity, BookOpen, Boxes, CircleHelp, Clapperboard, FolderKanban, Languages,
   Library, MonitorPlay, Search, Settings, Sparkles, Video, WandSparkles, X,
 } from 'lucide-react'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
@@ -85,6 +85,7 @@ function NavigationBar({ category, title, items, activeValue, barRef }: { catego
 export function TabFilter() {
   const { t, i18n } = useUiTranslation('navigation')
   const { t: tSettings } = useUiTranslation('settings')
+  const { t: tHelp } = useUiTranslation('help')
   const mediaFilter = useStore(s => s.mediaFilter)
   const developerMode = useStore(s => s.developerMode)
   const generationMode = useStore(s => s.generationMode)
@@ -341,6 +342,9 @@ export function TabFilter() {
               <option value="en">EN</option>
             </select>
           </label>
+          <button type="button" onClick={() => window.dispatchEvent(new Event('hocuspocus:help-open'))} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-bg-hover hover:text-text-primary" aria-label={tHelp('openAria')}>
+            <CircleHelp size={14} /><span>{tHelp('button')}</span>
+          </button>
           <button type="button" onClick={() => window.dispatchEvent(new Event('hocuspocus:settings-open'))} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-bg-hover hover:text-text-primary" aria-label={tSettings('title')}>
             <Settings size={14} /><span>{tSettings('title')}</span>
           </button>

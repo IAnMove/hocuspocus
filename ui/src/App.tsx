@@ -41,6 +41,10 @@ const SettingsDrawer = lazy(() => import('./components/SettingsDrawer/SettingsDr
   default: module.SettingsDrawer,
 })))
 
+const HelpOverlay = lazy(() => import('./components/Help/HelpOverlay').then(module => ({
+  default: module.HelpOverlay,
+})))
+
 export function LazySettingsDrawer({ open }: { open: boolean }) {
   // Loads on the first open and then stays mounted. The drawer slides itself
   // with a transform driven by the store, so unmounting it on close would
@@ -62,6 +66,23 @@ export function LazyDirectorOverlay({ open }: { open: boolean }) {
   if (!open) return null
   return <Suspense fallback={<div role="status" className="sr-only">Loading video workflows…</div>}>
     <DirectorDashboard />
+  </Suspense>
+}
+
+export function LazyHelpOverlay() {
+  const [open, setOpen] = useState(false)
+  const [everOpened, setEverOpened] = useState(false)
+  useEffect(() => {
+    const openHelp = () => {
+      setEverOpened(true)
+      setOpen(true)
+    }
+    window.addEventListener('hocuspocus:help-open', openHelp)
+    return () => window.removeEventListener('hocuspocus:help-open', openHelp)
+  }, [])
+  if (!everOpened) return null
+  return <Suspense fallback={null}>
+    <HelpOverlay open={open} onClose={() => setOpen(false)} />
   </Suspense>
 }
 
@@ -223,6 +244,7 @@ function AppContent() {
       <GalleryReadyToast />
       <ActivityFooter />
       <LazySettingsDrawer open={settingsOpen} />
+      <LazyHelpOverlay />
       <LoraBrowser />
       <LazyDirectorOverlay open={dashboardOpen} />
       <StorageDashboard />

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'shell', 'characters', 'comics', 'studio', 'generationInspector']
+const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'shell', 'characters', 'comics', 'studio', 'generationInspector', 'help']
 const LANGUAGES = ['en', 'es']
 
 function load(language, namespace) {
@@ -33,6 +33,7 @@ export function catalogReport() {
 
 const PILOT_FILES = [
   'src/components/MainContent/TabFilter.tsx',
+  'src/components/Help/HelpOverlay.tsx',
   'src/components/MainContent/MainContent.tsx',
   'src/components/MainContent/MediaFeedItem.tsx',
   'src/components/MainContent/VideoExtraInfoDialog.tsx',
