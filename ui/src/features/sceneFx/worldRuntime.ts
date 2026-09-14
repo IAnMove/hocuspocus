@@ -138,77 +138,82 @@ function poseMissiles(root: Group, cue: WorldSfx, from: Vector3, to: Vector3, lo
   }
 }
 
+function animateMaterials(child: Mesh | Points, cue: WorldSfx, local: number, span: number) {
+  const materials = Array.isArray(child.material) ? child.material : [child.material]
+  for (const material of materials) {
+    if (material instanceof MeshBasicMaterial && material.userData.energyBaseColor) {
+      material.color.copy(material.userData.energyBaseColor).multiplyScalar(cue.intensity)
+    }
+    if (!(material instanceof ShaderMaterial)) continue
+    const uniforms = material.uniforms
+    if (uniforms.uTime) uniforms.uTime.value = local
+    if (uniforms.uPower) {
+      const p = Math.min(1, local / span)
+      uniforms.uPower.value = child.parent?.userData.kind === 'plume'
+        ? cue.intensity * Math.min(1, Math.max(0, p - 0.28) * 1.8) * 0.65
+        : cue.intensity
+    }
+    if (uniforms.uSeed) uniforms.uSeed.value = cue.seed + (child.userData.seedOffset ?? 0)
+    if (uniforms.uProgress) uniforms.uProgress.value = Math.min(1, local / span)
+    if (uniforms.uMap?.value instanceof VideoTexture) uniforms.uMap.value.needsUpdate = true
+  }
+  if (child instanceof Mesh && cue.kind === 'explosion') {
+    const p = Math.min(1, local / span)
+    if (child.userData.kind === 'fireball') child.scale.setScalar(0.55 + Math.sin(Math.min(1, p * 1.35) * Math.PI) * 0.95)
+    if (child.userData.kind === 'flash') child.scale.setScalar(Math.max(0.2, 1.8 * (1 - p * 1.35)))
+  }
+}
+
+function animateParticles(child: Points, cue: WorldSfx, local: number, span: number) {
+  const geometry = child.geometry
+  const base = geometry.getAttribute('base')
+  const position = geometry.getAttribute('position')
+  if (!base || !position) return
+  for (let i = 0; i < position.count; i++) {
+    const bx = base.getX(i), by = base.getY(i), bz = base.getZ(i)
+    if (child.userData.kind === 'rise' || child.userData.kind === 'shockdust') {
+      const climb = (local * (0.35 + cue.intensity * 0.25) + fxRandom(cue.seed, i) * 1.2) % 1.4
+      position.setXYZ(i, bx * (1 + (child.userData.kind === 'shockdust' ? local * 0.4 : 0)), climb, bz * (1 + (child.userData.kind === 'shockdust' ? local * 0.4 : 0)))
+    } else if (child.userData.kind === 'fall') {
+      const speed = cue.kind === 'snow' ? 0.45 : 1.55
+      const y = ((by - local * speed) % 3.2 + 3.2) % 3.2
+      const sway = Math.sin(local * (cue.kind === 'snow' ? 1.1 : 4) + i) * (cue.kind === 'snow' ? 0.14 : 0.02)
+      position.setXYZ(i, bx + sway, y, bz)
+    } else if (child.userData.kind === 'drift') {
+      position.setXYZ(i, bx + Math.sin(local * 0.3 + i) * 0.2, by + Math.sin(local * 0.5 + i) * 0.12, bz)
+    } else if (child.userData.kind === 'spin') {
+      const spin = local * 1.7
+      const cos = Math.cos(spin), sin = Math.sin(spin)
+      position.setXYZ(i, bx * cos - bz * sin, by, bx * sin + bz * cos)
+    } else if (child.userData.kind === 'burst') {
+      const p = Math.min(1, local / span)
+      const expand = Math.pow(p, 0.36) * (3.8 + cue.intensity * 1.4)
+      const drag = 1 - p * 0.28
+      position.setXYZ(i, bx * expand * drag, by * expand * drag - p * p * 1.7, bz * expand * drag)
+    } else if (child.userData.kind === 'orb') {
+      const spin = local * 1.4
+      const cos = Math.cos(spin), sin = Math.sin(spin)
+      position.setXYZ(i, bx * cos - bz * sin, by + Math.sin(local * 5 + i) * 0.04, bx * sin + bz * cos)
+    } else {
+      const spin = local * (0.7 + cue.intensity * 0.4)
+      const cos = Math.cos(spin), sin = Math.sin(spin)
+      position.setXYZ(i, bx * cos - bz * sin, by + Math.sin(local * 6 + i) * 0.02, bx * sin + bz * cos)
+    }
+  }
+  position.needsUpdate = true
+}
+
 function animate(root: Group, cue: WorldSfx, seconds: number) {
   const local = Math.max(0, seconds - cue.start)
   const span = Math.max(.001, cue.end - cue.start)
   root.traverse(child => {
-    if (child instanceof Mesh || child instanceof Points) {
-      const materials = Array.isArray(child.material) ? child.material : [child.material]
-      for (const material of materials) {
-        if (material instanceof MeshBasicMaterial && material.userData.energyBaseColor) {
-          material.color.copy(material.userData.energyBaseColor).multiplyScalar(cue.intensity)
-        }
-        if (!(material instanceof ShaderMaterial)) continue
-        const uniforms = material.uniforms
-        if (uniforms.uTime) uniforms.uTime.value = local
-        if (uniforms.uPower) {
-          const p = Math.min(1, local / span)
-          uniforms.uPower.value = child.parent?.userData.kind === 'plume'
-            ? cue.intensity * Math.min(1, Math.max(0, p - 0.28) * 1.8) * 0.65
-            : cue.intensity
-        }
-        if (uniforms.uSeed) uniforms.uSeed.value = cue.seed + (child.userData.seedOffset ?? 0)
-        if (uniforms.uProgress) uniforms.uProgress.value = Math.min(1, local / span)
-        if (uniforms.uMap?.value instanceof VideoTexture) uniforms.uMap.value.needsUpdate = true
-      }
-      if (child instanceof Mesh && cue.kind === 'explosion') {
-        const p = Math.min(1, local / span)
-        if (child.userData.kind === 'fireball') child.scale.setScalar(0.55 + Math.sin(Math.min(1, p * 1.35) * Math.PI) * 0.95)
-        if (child.userData.kind === 'flash') child.scale.setScalar(Math.max(0.2, 1.8 * (1 - p * 1.35)))
-      }
-    }
+    if (child instanceof Mesh || child instanceof Points) animateMaterials(child, cue, local, span)
     if (cue.kind === 'explosion' && child.userData.kind === 'plume') {
       const p = Math.min(1, local / span)
       child.visible = p > 0.28
       child.position.y = 0.18 + Math.max(0, p - 0.28) * 0.9
     }
-    if (!(child instanceof Points)) return
-    const geometry = child.geometry
-    const base = geometry.getAttribute('base')
-    const position = geometry.getAttribute('position')
-    if (!base || !position) return
-    for (let i = 0; i < position.count; i++) {
-      const bx = base.getX(i), by = base.getY(i), bz = base.getZ(i)
-      if (child.userData.kind === 'rise' || child.userData.kind === 'shockdust') {
-        const climb = (local * (0.35 + cue.intensity * 0.25) + fxRandom(cue.seed, i) * 1.2) % 1.4
-        position.setXYZ(i, bx * (1 + (child.userData.kind === 'shockdust' ? local * 0.4 : 0)), climb, bz * (1 + (child.userData.kind === 'shockdust' ? local * 0.4 : 0)))
-      } else if (child.userData.kind === 'fall') {
-        const speed = cue.kind === 'snow' ? 0.45 : 1.55
-        const y = ((by - local * speed) % 3.2 + 3.2) % 3.2
-        const sway = Math.sin(local * (cue.kind === 'snow' ? 1.1 : 4) + i) * (cue.kind === 'snow' ? 0.14 : 0.02)
-        position.setXYZ(i, bx + sway, y, bz)
-      } else if (child.userData.kind === 'drift') {
-        position.setXYZ(i, bx + Math.sin(local * 0.3 + i) * 0.2, by + Math.sin(local * 0.5 + i) * 0.12, bz)
-      } else if (child.userData.kind === 'spin') {
-        const spin = local * 1.7
-        const cos = Math.cos(spin), sin = Math.sin(spin)
-        position.setXYZ(i, bx * cos - bz * sin, by, bx * sin + bz * cos)
-      } else if (child.userData.kind === 'burst') {
-        const p = Math.min(1, local / span)
-        const expand = Math.pow(p, 0.36) * (3.8 + cue.intensity * 1.4)
-        const drag = 1 - p * 0.28
-        position.setXYZ(i, bx * expand * drag, by * expand * drag - p * p * 1.7, bz * expand * drag)
-      } else if (child.userData.kind === 'orb') {
-        const spin = local * 1.4
-        const cos = Math.cos(spin), sin = Math.sin(spin)
-        position.setXYZ(i, bx * cos - bz * sin, by + Math.sin(local * 5 + i) * 0.04, bx * sin + bz * cos)
-      } else {
-        const spin = local * (0.7 + cue.intensity * 0.4)
-        const cos = Math.cos(spin), sin = Math.sin(spin)
-        position.setXYZ(i, bx * cos - bz * sin, by + Math.sin(local * 6 + i) * 0.02, bx * sin + bz * cos)
-      }
-    }
-    position.needsUpdate = true
+    if (child instanceof Points) animateParticles(child, cue, local, span)
   })
 }
 

@@ -52,6 +52,35 @@ class CoreRuntimeTests(unittest.TestCase):
         os.chdir(previous)
         folder.cleanup()
 
+    def test_saved_scene_url_keeps_its_workspace_after_active_folder_changes(self):
+        from services import core_workspace as core
+
+        for requested in ("scene-lab", "default", None):
+            with self.subTest(workspace=requested):
+                folder, previous = self._in_temp_workspace()
+                try:
+                    core.save_config({"services": {"active_workspace": "active-lab"}})
+                    scene = {"version": 1, "name": "Workspace round trip"}
+                    payload = {"scene": scene}
+                    if requested is not None:
+                        payload["workspace"] = requested
+                    saved = self.client.post("/api/v1/scenes", json=payload)
+                    self.assertEqual(saved.status_code, 200, saved.text)
+                    result = saved.json()
+                    workspace = requested if requested is not None else "active-lab"
+                    self.assertEqual(
+                        result["url"], f"/api/v1/file/{result['name']}?workspace={workspace}",
+                    )
+                    core.save_config({"services": {"active_workspace": "other-lab"}})
+                    fetched = self.client.get(result["url"])
+                    self.assertEqual(fetched.status_code, 200, fetched.text)
+                    self.assertEqual(fetched.json(), scene)
+                    self.assertEqual(
+                        self.client.get(f"/api/v1/file/{result['name']}").status_code, 404,
+                    )
+                finally:
+                    self._leave_temp_workspace(folder, previous)
+
     def test_boot_surface_and_local_engines_are_blocked(self):
         listed = self.client.get("/api/v1/system/capabilities")
         self.assertEqual(listed.status_code, 200)

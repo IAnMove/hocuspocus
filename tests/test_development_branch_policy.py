@@ -37,6 +37,29 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
             text,
         )
 
+    def test_release_budget_selection_requires_same_repository_metadata(self):
+        import os
+        import subprocess
+
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        for field in ('base', 'head'):
+            self.assertIn(f'github.event.pull_request.{field}.repo.full_name', workflow)
+        wrapper = (ROOT / 'scripts/check_code_health_pr_base.sh').read_text(encoding='utf-8')
+        condition = wrapper.split('RELEASE_INTEGRATION=false\n', 1)[1].split('; then', 1)[0]
+        command = condition + '; then exit 0; else exit 1; fi'
+        metadata = {
+            'BASE_BRANCH': 'main', 'SOURCE_BRANCH': 'development',
+            'GITHUB_REPOSITORY': 'owner/project',
+            'BASE_REPOSITORY': 'owner/project', 'SOURCE_REPOSITORY': 'owner/project',
+        }
+        cases = [({}, 0), ({'SOURCE_REPOSITORY': 'fork/project'}, 1),
+                 ({'BASE_REPOSITORY': ''}, 1), ({'GITHUB_REPOSITORY': ''}, 1),
+                 ({'SOURCE_BRANCH': 'feature'}, 1), ({'BASE_BRANCH': 'development'}, 1)]
+        for changed, expected in cases:
+            with self.subTest(changed=changed):
+                result = subprocess.run(['bash', '-c', command], env={**os.environ, **metadata, **changed})
+                self.assertEqual(result.returncode, expected)
+
     def test_ci_measures_without_pr_write_and_reuses_helper(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         self.assertRegex(text, r'(?m)^permissions:\n  contents: read\n')
@@ -62,6 +85,19 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
         self.assertLess(status_at, summary_at)
         self.assertLess(summary_at, exit_at)
 
+    def test_main_push_verification_fetches_complete_development_history_first(self):
+        wrapper = (ROOT / 'scripts/check_code_health_pr_base.sh').read_text(encoding='utf-8')
+        push = wrapper.split('elif [[ "${GITHUB_EVENT_NAME:-}" == "push"', 1)[1]
+        self.assertIn('"${GITHUB_REF:-}" == "refs/heads/main"', push)
+        self.assertIn('"${EVENT_REPOSITORY:-}" == "$GITHUB_REPOSITORY"', push)
+        self.assertIn('"${GITHUB_SHA:-}" == "$HEAD_SHA"', push)
+        self.assertIn('"$HEAD_SHA" == "$(git -C "$ROOT" rev-parse HEAD)"', push)
+        self.assertLess(push.index('--unshallow'), push.index('main_push_source'))
+        self.assertLess(
+            push.index('refs/heads/development:refs/remotes/origin/development'),
+            push.index('main_push_source'),
+        )
+
     def test_ci_cancels_only_superseded_pull_requests(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         self.assertIn(
@@ -72,6 +108,18 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
             'cancel-in-progress: ${{ github.event_name == \'pull_request\' }}',
             text,
         )
+
+    def test_ui_validation_runs_after_ratchet_failure_without_masking_failures(self):
+        text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        ui = text[text.index('  ui-check:'):text.index('  ui-e2e:')]
+        self.assertIn('name: Install UI deps\n        id: ui-deps', ui)
+        for name in ('UI tests', 'Lint with zero warnings', 'Type-check, build and bundle budget'):
+            self.assertIn(
+                f"name: {name}\n        if: ${{{{ !cancelled() && steps.ui-deps.outcome == 'success' }}}}",
+                ui,
+            )
+        self.assertNotIn('continue-on-error:', ui)
+        self.assertIn('exit "$STATUS"', ui)
 
     def test_ci_required_aggregates_existing_job_names(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')

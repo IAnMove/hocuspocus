@@ -260,6 +260,18 @@ export function planAlignedCutoutDialogue(
   return { start, end, visemes }
 }
 
+function groupCutoutDialogueBeats(beats: SceneDialogueBeat[]): SceneDialogueBeat[][] {
+  const groups: SceneDialogueBeat[][] = []
+  for (const beat of beats) {
+    const last = groups.at(-1)
+    const sameMouths = last && last[0].mouthLayerIds.join('\0') === beat.mouthLayerIds.join('\0')
+    const alignedRun = !beat.lipSync && !last?.[0].lipSync && beat.confidence === 'aligned-audio' && last?.[0].confidence === 'aligned-audio'
+    if (sameMouths && alignedRun) last.push(beat)
+    else groups.push([beat])
+  }
+  return groups
+}
+
 /** Recompile edited beat records into ordinary mouth opacity keyframes.
  * `clearLayerIds` removes stale frames from a previous speaker/beat assignment
  * while leaving unrelated animation tracks untouched. */
@@ -273,14 +285,7 @@ export function rebuildCutoutDialogueLayers(
   const layerById = new Map(layers.map(layer => [layer.id, layer]))
   const framesByLayer = new Map<string, SceneKeyframe[]>()
   const affected = new Set(clearLayerIds)
-  const groups: SceneDialogueBeat[][] = []
-  for (const beat of beats) {
-    const last = groups.at(-1)
-    const sameMouths = last && last[0].mouthLayerIds.join('\0') === beat.mouthLayerIds.join('\0')
-    const alignedRun = !beat.lipSync && !last?.[0].lipSync && beat.confidence === 'aligned-audio' && last?.[0].confidence === 'aligned-audio'
-    if (sameMouths && alignedRun) last.push(beat)
-    else groups.push([beat])
-  }
+  const groups = groupCutoutDialogueBeats(beats)
   for (const group of groups) {
     const targets = group[0].mouthLayerIds.flatMap(id => layerById.get(id) ? [layerById.get(id)!] : [])
     if (!targets.length) continue
