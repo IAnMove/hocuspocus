@@ -21,6 +21,7 @@ A **layered compositor**, not MiniMax H3.
 | Video Editor | **Video Editor** | Join compositor clips with H3 clips |
 | Character Kits | **3D Video** sidebar | Reusable 2D cutout puppets + Face Rig mouth overlays. Operator guide: [Character Kits](../character-kits/HOWUSEIT.md) |
 | TV / sprite head | **3D Video** → subject GLB | Animated GLB with a **plane parented to `headfront`**. Bundled example: `/examples/tv-head-humanoid.glb` (~7 KB CRT-head walker, template **CRT-head walk**). Meshy TV-heads work the same if they expose `headfront`. |
+| 9×6 mascot face | **Character Creator** → Lipsync face, then **Video 3D → Voice** | Cube-front stills assembled into a viseme×expression sheet. Applied to the TV-head screen, not Character Kit PNG flaps. See §5.10. |
 
 **Shareable Video 3D scenarios** live under **Shot library → My scenarios**. **Export scenario template** writes `name.world3d.template.json` (`kind: hocuspocus.world3d.template`): camera, dressing, slot layout, motion, screens, texts and world SFX. Blob URLs are stripped; optional durable gallery URLs can be included. **Import** stores up to 24 templates in this browser (`localStorage`, 1.5 MB each). Apply remounts the scenario; **Keep my objects** copies current GLBs onto matching slots. This is not **Save shot JSON** (`clip-NN-id.world3d.json`, one clip with clip number) and it is not a zip of meshes—recipients still assign their own GLBs unless durable URLs were included.
 
@@ -260,6 +261,39 @@ inventory (`APPROVED_CHARACTER_KIT`). Spoken cutout dialogue is persisted as
 `scene.dialogueBeats` and compiled into held/snap opacity keyframes; it is not
 phoneme-perfect lip-sync. Read the full CAS, review, mouth-pack, and dialogue
 contract in [Character Kits / Face Rig](../character-kits/HOWUSEIT.md).
+
+### 5.10 Cube-front 9x6 face pack (Video 3D screen)
+
+This is **not** the Character Kit nine-mouth overlay set. It paints a
+**square face texture** on a TV/monitor plane (`headfront` / `Head` /
+`tv_frame`).
+
+| Axis | Values |
+|---|---|
+| Visemes | `rest`, `M`, `A`, `E`, `I`, `O`, `U`, `F`, `L` |
+| Expressions | `neutral`, `happy`, `angry`, `worried`, `surprised`, `sleepy` |
+
+**Build (Character Creator → Lipsync face (cube plane)):**
+
+1. Generate a 1:1 rest plane (eyes, nose, rest mouth; skin fills the cube front).
+2. Edit only the mouth (visemes) or only the eyes (expressions).
+3. Drop stills named `rest.png`, `A.png`, `M.png`, `happy.png`, … into the
+   maker. Missing visemes alias `I→E`, `U→O`, `F→M`, `L→A`.
+4. **Build 9×6 pack** locks skin color to rest so talking does not flash.
+   Download `pack.png`.
+
+**Apply (Video 3D → Voice and lip-sync → Mascot face):**
+
+Twenty bundled packs live in `/examples/face-pack/` (`tv`, `skull`, `voxel`,
+`anime`, `cubeskull`, `felt`, `clay`, `pixel`, `porcelain`, `cat`, `oni`,
+`stencil`, `alien`, `pumpkin`, `ice`, `mushroom`, `vector`, `halftone`,
+`steampunk`, `gummy`). `applyBundledFacePack` sets `speech.facePack`, keeps
+existing cues when present, and turns blink/eyes overlays off. The demo
+mascot uses `/examples/tv-head-humanoid.glb` plus `talkingScreen`.
+
+Do not use this sheet as Character Kit `kit.mouth` overlays. Do not use
+Face Rig PNG flaps as a cube-front pack. Speech timing still follows
+[VIDEO3D_SPEECH](../development/VIDEO3D_SPEECH.md).
 
 ---
 

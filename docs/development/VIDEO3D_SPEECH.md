@@ -97,6 +97,18 @@ comando a través de `prepare_programmatic_video.scene_command`. Ver el contrato
 Grabar y colocar mediante clic son acciones del navegador. MCP puede preparar
 la voz sin una pestaña, pero este circuito de exportación utiliza el editor.
 
+## Paquete 9×6 (cara de cubo, no kit 2D)
+
+**Character Creator → Lipsync face (cube plane)** arma una textura 9 visemas ×
+6 expresiones (`rest/M/A/E/I/O/U/F/L` ×
+`neutral/happy/angry/worried/surprised/sleepy`). El color de piel se fija al
+plano de reposo. Visemas ausentes se aliasan `I→E`, `U→O`, `F→M`, `L→A`.
+
+**Vídeo 3D → Voz y lip-sync → Mascot face** aplica uno de los 20 paquetes
+empaquetados en `/examples/face-pack/` al plano de pantalla del GLB
+(`headfront`). Eso no son los overlays PNG de Character Kit. Contrato de
+operación: [3D Video compositor §5.10](../3d-video-compositor/HOWUSEIT.md#510-cube-front-9x6-face-pack-video-3d-screen).
+
 ## Evidencia y recursos
 
 La frase incluida se generó localmente con KugelAudio 0 Open 7B. Su texto,

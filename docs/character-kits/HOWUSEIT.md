@@ -13,6 +13,8 @@ UI: **3D Video** sidebar (`SceneAnimatorPanel` → Character Kits). Code:
 
 Related: [3D Video compositor](../3d-video-compositor/HOWUSEIT.md),
 [Character Creator orbit](../3d-video-compositor/HOWUSEIT.md#54-hunyuan3d-mesh),
+[2D speech quality](SPEECH_QUALITY.md) (nine mouths, Rhubarb, Series batch),
+[Tijeral cut-paper](../cut-paper/HOWUSEIT.md) (bundled four-drawing kits),
 [Studio Tools rembg](../tools/HOWUSEIT.md) (general image background removal;
 Face Rig cleanup is a different endpoint).
 
@@ -29,11 +31,17 @@ Face Rig cleanup is a different endpoint).
 | Recipe runner | **3D Video** | Compiles `dialogueBeats` and only **approved** kit pieces |
 
 Use a kit when you need a **repeatable graphic character** that can speak with
-four mouth sprites. Use Character Creator when you need a **3D mesh**. Use H3
-when you need a **performed** face rather than a paper-cutout flap.
+mouth sprites. New speaking work uses **nine** drawings. Legacy four-drawing
+kits (`closed` / `small` / `wide` / `round`) still open and play; Series
+**Generate all** / phonetic regeneration requires the nine approved slots.
+Use Character Creator when you need a **3D mesh**. Use H3 when you need a
+**performed** face rather than a paper-cutout flap. The 9×6 cube-front pack
+in Character Creator is a different path (Video 3D screen / TV-head), not
+these PNG overlays.
 
 The compositor does not claim phoneme-perfect lip-sync. Cadence is bounded and
-graphic.
+graphic. Offline Rhubarb analysis is the phonetic authority for Series 2D
+batches; letter-timed planning is the older fallback.
 
 ### Output folder versus Workspace collection
 
@@ -61,9 +69,14 @@ without creating or moving files. See the
 4. **Review gates:** only `approved` pieces mount or enter Recipe inventory.
    Generated Face Rig states, mouth packs, and cleaned overlays remain `pending`
    until reviewed and saved.
-5. **Mouth states:** `closed`, `small`, `wide`, and `round`. Eye states are
-   `open` and `blink`; the Face Rig generator calls the first one `open-eyes`.
-   Unknown keys are rejected with `400`.
+5. **Mouth states:** the library accepts nine keys —
+   `closed`, `small`, `wide`, `round`, `pressed`, `medium`, `pucker`, `bite`,
+   `tongue`. Eye states are `open` and `blink`; the Face Rig generator calls
+   the first one `open-eyes`. Unknown keys are rejected with `400`. Four-state
+   kits remain valid JSON. `speechPreparationReadiness` is **preview-ready**
+   with an approved pose, `closed`, and one other basic open mouth; it is
+   **complete** only when all nine mouths are approved. Series speaking
+   preflight uses that complete set (`seriesLipSyncIssues`).
 6. **Pose-local anchors:** offsets are relative to the character, not the 16:9
    frame. Defaults are mouth `{ offsetX: 0, offsetY: -18, scale: 0.05,
    rotation: 0 }` and eyes `{ offsetX: 0, offsetY: -28, scale: 0.12,
@@ -84,7 +97,7 @@ CharacterKitLibrary { version: 1, revision, activeId, kits{} }
 CharacterKit
   id, name, style: cutout | children-illustration | anime-2d
   identityReference?, base?, poses{}
-  mouth { closed?, small?, wide?, round? }
+  mouth { closed?, small?, wide?, round?, pressed?, medium?, pucker?, bite?, tongue? }
   eyes { open?, blink? }
   voice? { provider: local, model: qwen3_tts_customvoice, voiceId, instructions? }
   lookNotes?
@@ -152,15 +165,19 @@ Image jobs use the selected Studio image model with `strictReference: true` and
 the approved pose as identity. The negative prompt forbids a full head/body,
 skin rectangle, background, text, glow, and shadow.
 
-The six generator states are `closed`, `small`, `wide`, `round`, `open-eyes`,
-and `blink`. The first four populate `kit.mouth`; the last two populate
-`kit.eyes`. Every generated state starts `pending`.
+The generator states are the nine mouth keys plus `open-eyes` and `blink`
+(`CHARACTER_FACE_RIG_STATES`). Mouths populate `kit.mouth`; the last two
+populate `kit.eyes`. Every generated state starts `pending`.
 
 **Mouth packs** are static assets (no GPU generation):
-`GET /character-kit-presets/mouths/manifest.json`. Available packs currently
-include `paper-cut`, `children-illustration`, `limited-anime`, `felt-puppet`,
-`comic-ink`, and `watercolor`. Applying a pack attaches pending overlays; place
-and approve them before mounting.
+`GET /character-kit-presets/mouths/manifest.json`. The manifest `states` list
+is the nine keys. Six older packs (`paper-cut`, `children-illustration`,
+`limited-anime`, `felt-puppet`, `comic-ink`, `watercolor`) still ship only
+the four basic drawings. Twenty later Studio styles ship all nine aligned
+512 px PNGs. Applying a pack attaches pending overlays; place and approve
+them before mounting. Four-state packs map extras through
+`MOUTH_STATE_FALLBACK` (`pressed→closed`, `medium→wide`, `pucker→round`,
+`bite→small`, `tongue→small`).
 
 **Wipe mouth box** paints an ellipse with nearby samples and uploads a new PNG
 named like `<kit-id>-<pose-id>-mouthless.png`. It registers a new pose and does
@@ -177,24 +194,33 @@ Placement warnings from `assessFaceRigPlacement` never auto-approve. Typical
 mouth scale is ≤ 0.12 and blink scale ≤ 0.20. Full-body cutouts usually put the
 mouth above the chest (`offsetY` more negative than −8).
 
-**Lock all mouths** copies one calibrated mouth box to
-`closed`, `small`, `wide`, and `round` for that pose. The equivalent eye action
+**Lock all mouths** copies one calibrated mouth box onto all nine mouth
+states for that pose (`lockFaceRigMouthPlacement`). The equivalent eye action
 copies the box to `open-eyes` and `blink`.
 
 ### 4.4 Preview speech (Face Rig only)
 
 `previewFaceRigDialogue` plans **2–4 seconds** of visemes with the same cadence
-as scene dialogue. Missing shapes fall back from `wide` to `small`, `round`, or
-`closed` as available. The preview does not write scene keyframes.
+as scene dialogue. Missing shapes fall back through `MOUTH_STATE_FALLBACK` to
+the four basic drawings. The preview does not write scene keyframes.
+
+**Try with their voice** (Character Creator / Series) is a different preview:
+it synthesizes the kit's saved Qwen voice, then runs the same phonetic
+`/api/v1/character-kits/speech/analyze` path as native shots. It is not
+capped at 2–4 seconds and it does not substitute letter timing when Rhubarb
+fails. See [SPEECH_QUALITY](SPEECH_QUALITY.md).
 
 ---
 
 ## 5. Cutout dialogue in a scene
 
 Bind overlays to the selected pose first (`faceBinding` plus a parent
-relationship). A speaking kit needs at least one of `small`, `wide`, `round`,
-or a legacy overlay identified as `open`; `closed` is optional but provides a
-safe resting shape.
+relationship). A compositor scene can still flap with the four basic
+drawings (or a legacy overlay identified as `open`). Series **Generate all**
+and phonetic regeneration of a visible speaker require the nine approved
+slots plus a saved mouth placement. Listeners only need an approved rest
+pose (`closed` + placement); offscreen dialogue keeps its audio and never
+drives another face.
 
 | Action | Result |
 |---|---|
@@ -340,8 +366,10 @@ The response includes `filename`, public `source`, `original`, `width`,
 
 ## 8. Pitfalls
 
-- Treating Face Rig as a 3D blendshape or H3 speech. It is a small set of PNG
-  overlays plus opacity holds.
+- Treating Face Rig as a 3D blendshape, an H3 performance, or the 9×6
+  cube-front pack. Face Rig is PNG overlays plus opacity holds.
+- Regenerating a Series speaking shot from a four-drawing kit. Legacy
+  scenes still play; the batch preflight wants all nine approved mouths.
 - Mounting before review. The compositor rejects unapproved poses and overlays.
 - Saving from two browser tabs with the same revision. The second tab receives
   `409` and must reload.
@@ -363,6 +391,8 @@ The response includes `filename`, public `source`, `original`, `width`,
 
 | Path | Why |
 |---|---|
+| `ui/src/lib/characterMouthStates.ts` | Nine keys, four-state fallback, Rhubarb map |
+| `ui/src/lib/characterSpeechPreparation.ts` | Preview-ready vs complete |
 | `ui/src/lib/characterKit.ts` | Types, mounting, and Recipe inventory |
 | `ui/src/lib/characterKitFaceRig.ts` | Prompts, packs, anchors, wipe, preview |
 | `ui/src/lib/cutoutDialogue.ts` | Viseme planner and keyframe compiler |
@@ -373,3 +403,4 @@ The response includes `filename`, public `source`, `original`, `width`,
 | `ui/public/character-kit-presets/mouths/manifest.json` | Pack IDs and files |
 | `tests/test_character_kit_library.py` | Server contract |
 | `ui/tests/characterKitFaceRig.test.mjs` | Client Face Rig contract |
+| [SPEECH_QUALITY.md](SPEECH_QUALITY.md) | Nine mouths, Rhubarb, Series batch |
