@@ -403,13 +403,18 @@ class ReleaseIntegrationHealthTests(unittest.TestCase):
                 self.assertEqual(self.release.main_push_source(base, head, source), source)
                 self.assertIsNone(self.release.main_push_source(source, head, source))
                 self.assertIsNone(self.release.main_push_source(base, source, source))
+                git('checkout', '-q', '--detach', source)
+                self.assertIsNone(self.release.main_push_source(base, source, source))
+                git('checkout', '-q', '--detach', head)
                 self.assertIsNone(self.release.main_push_source(base, head, base))
                 self.assertIsNone(self.release.main_push_source(base, 'HEAD', source))
                 # A conflict resolution that changes the published tree is not a release passthrough.
                 changed = git('commit-tree', f'{base}^{{tree}}', '-p', base, '-p', source, '-m', 'changed merge')
+                git('checkout', '-q', '--detach', changed)
                 self.assertIsNone(self.release.main_push_source(base, changed, source))
                 third = git('commit-tree', f'{source}^{{tree}}', '-p', base, '-m', 'third')
                 octopus = git('commit-tree', f'{source}^{{tree}}', '-p', base, '-p', source, '-p', third, '-m', 'octopus')
+                git('checkout', '-q', '--detach', octopus)
                 self.assertIsNone(self.release.main_push_source(base, octopus, source))
 
     def test_intermediate_unicode_product_cannot_disappear_from_history(self):
