@@ -43,6 +43,7 @@ import { TemplateComposerDialog } from '../../features/sceneTemplates/TemplateCo
 import type { SceneRecipe } from '../../lib/sceneRecipe'
 import { sceneToRecipe } from '../../lib/sceneToRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
+import { SceneHandoffRecovery } from '../../lib/sceneRecovery'
 import { SceneLibraryDialog } from './SceneLibraryDialog'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { loadAgentLibraryScene } from '../../lib/agentSceneOpen'
@@ -519,6 +520,7 @@ export function SceneAnimatorPanel() {
   const selectedSpeechModel = useStore(s => s.selectedModelPerAudioSubMode.speech ?? 'kugelaudio_0_open')
   const [scene, setScene] = useState<AnimatorScene>(blankScene)
   const sceneRef = useRef(scene)
+  const sceneRecovery = useRef(new SceneHandoffRecovery())
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [templateComposerOpen, setTemplateComposerOpen] = useState(false)
@@ -2208,7 +2210,7 @@ export function SceneAnimatorPanel() {
       updateScene(() => adopted.document)
       return
     }
-    sessionStorage.setItem('hocuspocus:scene-before-command:' + Date.now(), JSON.stringify(sceneRef.current))
+    sceneRecovery.current.backup(sessionStorage, workspace, sceneRef.current)
     if (!importScene(JSON.stringify(adopted.document))) throw new Error('The prepared 2D scene could not be opened.')
   })
   const publishRecording = async (blob: Blob, current: Scene) => {
@@ -2314,6 +2316,7 @@ export function SceneAnimatorPanel() {
       }))
       const persisted = { ...current, layers }
       const saved = await saveSceneOutput(persisted, preview.toDataURL('image/png'), workspace)
+      sceneRecovery.current.markSaved(workspace, persisted)
       replaceScene(persisted); localFilesRef.current = {}; await loadOutputs()
       setMessage(t('animator.sceneSaved', { name: saved.name }))
       return saved.name
