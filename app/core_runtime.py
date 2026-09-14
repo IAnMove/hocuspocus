@@ -522,7 +522,8 @@ async def save_scene(request: Request):
     scene = body.get("scene") if isinstance(body, dict) else None
     if not isinstance(scene, dict):
         raise HTTPException(status_code=400, detail="A version 1 scene is required")
-    folder = core.workspace_dir(body.get("workspace") if isinstance(body, dict) else None)
+    workspace = body.get("workspace") if isinstance(body, dict) else None
+    folder = core.workspace_dir(workspace)
     os.makedirs(folder, exist_ok=True)
     import json
     import time
@@ -532,7 +533,8 @@ async def save_scene(request: Request):
     Path_write = path
     with open(Path_write, "w", encoding="utf-8") as handle:
         json.dump(scene, handle)
-    return {"name": name, "type": "scene", "url": f"/api/v1/file/{name}"}
+    suffix = f"?workspace={workspace}" if workspace else ""
+    return {"name": name, "type": "scene", "url": f"/api/v1/file/{name}{suffix}"}
 
 
 @api.post("/api/v1/video-editor/probe")
