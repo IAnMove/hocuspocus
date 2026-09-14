@@ -30132,7 +30132,7 @@ def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
 
 @api.post("/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
 def start_series_episode_render(series_id: str, episode_id: str, body: dict):
-    from services.series_production import series_shot_method
+    from services.series_production import is_series_generated_shot
     from services.series_library import append_shot_render_attempt, series_for_episode_snapshot
     from services.series_reference_router import route_shot_references
     from services.series_render import (
@@ -30160,7 +30160,7 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         routing_series = series_for_episode_snapshot(series, episode)
         try:
             candidates = _series_render_candidates(episode, body)
-            candidates = [shot for shot in candidates if series_shot_method(series, shot) == "generated_video"]
+            candidates = [shot for shot in candidates if is_series_generated_shot(series, shot)]
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not candidates:

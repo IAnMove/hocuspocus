@@ -92,6 +92,12 @@ def series_shot_method(series: dict, shot: dict) -> str:
     return selected
 
 
+def is_series_generated_shot(series: dict, shot: dict) -> bool:
+    """True when this shot should join an AI-video batch. Leftover methods are skipped."""
+    allowed = normalize_production_methods(series.get("allowedProductionMethods"))
+    return "generated_video" in allowed and (shot.get("productionMethod") or allowed[0]) == "generated_video"
+
+
 def refresh_episode_references(series: dict, episode_id: str, base_revision: int) -> dict:
     from services.series_library import SeriesConflictError, create_episode_canon_snapshot
     if int(series.get("revision") or 1) != base_revision:
