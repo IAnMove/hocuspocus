@@ -321,12 +321,12 @@ def _normalize_attempt(value: dict, shot_id: str, index: int) -> dict:
     return attempt
 
 
-def _normalize_shot(value: dict, index: int) -> dict:
+def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -> dict:
     from .series_render import normalize_series_shot_duration
     from .series_production import PRODUCTION_METHODS
 
     shot = copy.deepcopy(value)
-    method = shot.get("productionMethod") or "generated_video"
+    method = shot.get("productionMethod") or (allowed[0] if allowed else "generated_video")
     if method not in PRODUCTION_METHODS:
         raise ValueError("Unsupported Series shot production method")
     shot_id = _id(shot.get("id"), f"shot_{index + 1}")
@@ -414,7 +414,8 @@ def _unique_runtime_id(candidate: str, used: set[str], fallback: str) -> str:
     return value
 
 
-def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon: dict) -> dict:
+def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon: dict,
+                       allowed: list[str] | None = None) -> dict:
     now = _now()
     episode = copy.deepcopy(value)
     episode_id = _id(episode.get("id"), key or f"episode_{index + 1}")
@@ -431,7 +432,7 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
         for scene_index, item in enumerate(_objects(episode.get("script")))
     ]
     shots = [
-        _normalize_shot(item, shot_index)
+        _normalize_shot(item, shot_index, allowed)
         for shot_index, item in enumerate(_objects(episode.get("shots")))
     ]
     # Older planner responses sometimes copied IDs when a scene was expanded or
@@ -776,13 +777,14 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         })]
     season_ids = {item["id"] for item in seasons}
     default_season_id = seasons[0]["id"]
+    allowed = normalize_production_methods(project.get("allowedProductionMethods"))
 
     episodes: dict[str, dict] = {}
     raw_episodes = project.get("episodesById") if isinstance(project.get("episodesById"), dict) else {}
     for index, (episode_key, raw_episode) in enumerate(raw_episodes.items()):
         if not isinstance(raw_episode, dict):
             continue
-        episode = _normalize_episode(raw_episode, str(episode_key), index, default_season_id, canon)
+        episode = _normalize_episode(raw_episode, str(episode_key), index, default_season_id, canon, allowed)
         if episode["seasonId"] not in season_ids:
             episode["seasonId"] = default_season_id
         episodes[episode["id"]] = episode
@@ -856,7 +858,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "version": 1,
         "id": series_id,
         "revision": _integer(project.get("revision"), 1, 1),
-        "allowedProductionMethods": normalize_production_methods(project.get("allowedProductionMethods")),
+        "allowedProductionMethods": allowed,
         "title": _text(project.get("title"), "Untitled series"),
         "logline": _text(project.get("logline")),
         "premise": _text(project.get("premise")),
@@ -1161,9 +1163,11 @@ def create_series_episode(series: dict, season_id: str | None = None, **override
     for key, value in overrides.items():
         if key not in {"id", "seasonId", "canonRevisionAtCreation", "canonSnapshot", "createdAt"}:
             episode[key] = copy.deepcopy(value)
+    from services.series_production import normalize_production_methods
     return _normalize_episode(
         episode, episode_id, len(season_episodes), str(season["id"]),
         _normalize_canon(series.get("canon")),
+        normalize_production_methods(series.get("allowedProductionMethods")),
     )
 
 
