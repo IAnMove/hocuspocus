@@ -16,8 +16,8 @@ test('approved old takes expose draft regeneration and link directly to missing 
     kit.base = { id: 'base', name: 'Base', source: '/fixture-body.svg', kind: 'image', alphaStatus: 'transparent', reviewState: 'pending' }
     if (index !== 0) kit.base = undefined
     kit.anchors.base = { mouth: { offsetX: 0, offsetY: -20, scale: .08, rotation: 0 } }
-    for (const state of ['closed', 'small', 'wide', 'round'] as const) kit.mouth[state] = {
-      id: state, name: state, source: `/character-kit-presets/mouths/paper-cut/${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved',
+    for (const state of ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const) kit.mouth[state] = {
+      id: state, name: state, source: `/character-kit-presets/mouths/minimal-line/${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved',
     }
     library.kits[kit.id] = kit
     character.voiceProfile = { characterKitRef: { workspace: 'default', id: kit.id } }

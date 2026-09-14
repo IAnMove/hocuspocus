@@ -46,6 +46,13 @@ Nine drawings retain these distinctions:
 
 Audio amplitude helps locate activity and pauses; it does not identify vowels by itself. Rhubarb analyzes speech sounds, with a script-assisted recognizer for English. Recognition remains approximate, especially with noisy recordings, accents and very fast speech. The scene's cue track and layers remain editable. For mixed recordings, the existing speech-analysis endpoint can isolate vocals; generated Series voice lines are already isolated and do not need that extra operation.
 
+Video Editor joins decoded picture and audio on the same frame-counted timeline.
+Each segment's audio is padded or trimmed to its exact sample span before joining;
+AAC encoder padding is not carried across cuts. This also applies when exported
+scenes are joined into a complete episode. Existing assembled videos need to be
+exported again to benefit from this correction. Joining now includes an encoding
+pass, so long exports can take longer than the previous packet-copy join.
+
 ## Twenty styles to share
 
 Character Creator's mouth selector includes **20 new Studio styles**, each containing nine aligned 512px transparent PNGs. **Download this style** and **Download the 20 new styles** export ZIP files with images, a manifest, slot mapping and reuse instructions. Original generated artwork provenance is recorded in the manifest. All nine sprites share a frame and scale: keep their square canvases to avoid size/placement jumps. The six earlier four-state packs remain available.

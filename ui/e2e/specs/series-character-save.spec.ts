@@ -31,7 +31,9 @@ test('Series saves voice and pending mouths together, returns to the character a
       const body = request.postDataJSON()
       expect(body.baseRevision).toBe(library.revision)
       expect(body.kit.voice.voiceId).toBe('serena')
-      expect(Object.keys(body.kit.mouth)).toHaveLength(4)
+      expect(Object.keys(body.kit.mouth).sort()).toEqual([
+        'bite', 'closed', 'medium', 'pressed', 'pucker', 'round', 'small', 'tongue', 'wide',
+      ])
       expect(Object.values(body.kit.mouth).every(mouth => (mouth as { reviewState: string }).reviewState === 'pending')).toBe(true)
       library = { ...library, revision: library.revision + 1, kits: { ...library.kits, [kit.id]: body.kit } }
       writes++
