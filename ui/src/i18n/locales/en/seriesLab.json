@@ -74,6 +74,8 @@
     "delivery": "Delivery",
     "saveRegenerate": "Save and regenerate in this slot",
     "downloadJoined": "Download joined episode",
+    "savedAssembly": "Latest exported episode",
+    "openJoined": "Watch full episode",
     "cancelJoin": "Cancel join",
     "resumeJoin": "Resume join",
     "discardCheckpoint": "Discard checkpoint",

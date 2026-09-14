@@ -2,6 +2,10 @@
 
 Save the character in **Character Creator**, then return to **Series Lab → Shots → Regenerate all** (or **Regenerate this shot**). Regeneration creates new editable scenes and unapproved MP4 takes. Existing motion, recordings and approved takes are preserved.
 
+**Series Lab → Results** keeps **Watch full episode** and **Download joined episode**
+links for the last saved assembly, including after reopening the app. Regenerating
+shots preserves that exported file until a new assembly is saved.
+
 ## Resting face
 
 The animation rig retains the wiped, mouthless base plus separate mouth layers. Saving also composes a reusable still from that base and the selected **closed** mouth, using its saved placement. Library thumbnails and still-reference consumers prefer this resting image. A changed base, closed drawing or placement invalidates the old composite; saving rebuilds it. No original image is overwritten and pending assets stay pending.

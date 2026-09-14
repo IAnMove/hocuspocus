@@ -74,6 +74,8 @@
     "delivery": "Entrega",
     "saveRegenerate": "Guardar y regenerar en esta posición",
     "downloadJoined": "Descargar episodio unido",
+    "savedAssembly": "Último episodio exportado",
+    "openJoined": "Ver episodio completo",
     "cancelJoin": "Cancelar unión",
     "resumeJoin": "Reanudar unión",
     "discardCheckpoint": "Descartar punto de control",

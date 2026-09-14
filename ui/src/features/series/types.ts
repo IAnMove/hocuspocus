@@ -257,6 +257,8 @@ export interface SeriesCanonDeltaItem extends CanonFact {
 }
 
 export interface SeriesEpisode {
+  latestAssemblyAssetId?: string
+  assemblyAssetIds?: string[]
   id: string
   seasonId: string
   number: number
