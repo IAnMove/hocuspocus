@@ -82,12 +82,13 @@ export class CinematicRuntime {
   }
   private syncStage(doc: Scene3DDocument) {
     const { world } = this
-    if (doc.environment?.reflectiveFloor && !this.mirror) this.createMirror()
+    const useMirror = doc.environment?.reflectiveFloor === true || doc.environment?.floorStyle === 'mirror'
+    if (useMirror && !this.mirror) this.createMirror()
     if (this.mirror) {
-      this.mirror.visible = doc.environment?.reflectiveFloor === true && doc.environment.floorStyle !== 'none'
+      this.mirror.visible = useMirror && doc.environment?.floorStyle !== 'none'
       ;(this.mirror.material as ShaderMaterial).uniforms.tileStrength.value = doc.environment?.floorStyle === 'mirror' ? 0 : 1
     }
-    world.floor.visible = !doc.environment?.reflectiveFloor && doc.environment?.floorStyle !== 'none'
+    world.floor.visible = !useMirror && doc.environment?.floorStyle !== 'none'
     if (doc.environment?.platform && !this.platform) this.createPlatform()
     if (this.platform) this.platform.visible = doc.environment?.platform === true
   }
