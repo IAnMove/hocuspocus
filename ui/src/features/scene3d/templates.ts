@@ -1,5 +1,6 @@
 import { effectsTemplateDocument, EFFECTS_TEMPLATES } from './effectsTemplates'
 import { darkFantasyTemplateDocument, DARK_FANTASY_TEMPLATES, DARK_FANTASY_CATEGORIES } from './darkFantasyTemplates'
+import { creativeTemplateDocument, CREATIVE_TEMPLATES, CREATIVE_CATEGORIES } from './creativeTemplates'
 import { cinematicDocument, CINEMATIC_TEMPLATES, CINEMATIC_CATEGORIES } from './cinematicTemplates'
 import { speechTemplateDocument, SPEECH_TEMPLATES, SPEECH_CATEGORIES } from './speech/templates'
 import { mediaTemplateDocument, MEDIA_TEMPLATES, MEDIA_CATEGORIES } from './mediaTemplates'
@@ -20,11 +21,12 @@ export type Scene3DTemplate = {
   frameFormat?: 'landscape' | 'portrait'
 }
 
-export type Scene3DTemplateTag = 'dark-fantasy' | 'psx'
+export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative'
 export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
 export type Scene3DTemplateFilter = Scene3DTemplateCategory | Scene3DTemplateTag
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
   ...DARK_FANTASY_CATEGORIES,
+  ...CREATIVE_CATEGORIES,
   ...CINEMATIC_CATEGORIES,
   ...SPEECH_CATEGORIES,
   ...MEDIA_CATEGORIES,
@@ -164,6 +166,7 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   { id: 'clone-chase', camera: 'follow', duration: 7, slots: ['subject_1', 'subject_2', 'prop', 'background'] },
   ...CINEMATIC_TEMPLATES,
   ...DARK_FANTASY_TEMPLATES,
+  ...CREATIVE_TEMPLATES,
   ...SPEECH_TEMPLATES,
   ...MEDIA_TEMPLATES,
   ...EFFECTS_TEMPLATES,
@@ -361,6 +364,8 @@ function emptySlot(id: Scene3DSlotId): Scene3DSlot {
 }
 
 export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
+  const creative = creativeTemplateDocument(id)
+  if (creative) return creative
   const fantasy = darkFantasyTemplateDocument(id)
   if (fantasy) return fantasy
   const action = actionTemplateDocument(id)

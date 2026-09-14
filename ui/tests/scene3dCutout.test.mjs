@@ -45,7 +45,7 @@ test('ordinary backdrops keep their existing landscape geometry and position', (
 test('optional floor finishes survive save/reopen and preserve old defaults', () => {
   const base = { reflectiveFloor: true, platform: false, bloom: .3 }
   assert.deepEqual(parseEnvironment(base), base)
-  for (const floorStyle of ['tiles', 'mirror', 'none']) {
+  for (const floorStyle of ['tiles', 'mirror', 'none', 'backdrop']) {
     const doc = createDefaultScene3DDocument()
     doc.environment = { ...base, floorStyle }
     assert.deepEqual(parseScene3DDocument(JSON.parse(JSON.stringify(doc))).environment, doc.environment)

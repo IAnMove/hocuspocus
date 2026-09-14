@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-eclipse",
   "title": "Dark Fantasy · El último sol",
-  "description": "Silueta monumental ante un sol oscuro volumétrico; polvo rojo y aproximación final.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "createdAt": "2026-09-14T17:00:00Z",
   "includeAssets": true,
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28232b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -40,7 +42,7 @@
         "clip": null,
         "position": [
           0,
-          7,
+          2.0999999999999996,
           -12
         ],
         "rotationY": 0,
@@ -55,11 +57,15 @@
         "clip": null,
         "position": [
           0,
-          4.9,
+          0,
           0
         ],
         "scale": 1.45,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -68,7 +74,7 @@
         "kind": "black_hole",
         "position": {
           "x": 0,
-          "y": 9.8,
+          "y": 4.9,
           "z": -4
         },
         "color": "#ffe8c4",
@@ -84,7 +90,7 @@
         "kind": "fog",
         "position": {
           "x": 0,
-          "y": 5.1,
+          "y": 0.1999999999999993,
           "z": -1
         },
         "color": "#973d43",
@@ -100,7 +106,7 @@
         "kind": "sparks",
         "position": {
           "x": 0,
-          "y": 6,
+          "y": 1.0999999999999996,
           "z": 0.5
         },
         "color": "#f09545",
@@ -115,28 +121,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        0,
-        6.6,
-        11
+        0.52,
+        2.7,
+        9.340000000000002
       ],
       "look": [
-        0,
-        7.2,
-        -1
+        0.0,
+        2.2999999999999994,
+        -1.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.0,
-          0.17241379310344768,
-          7.586206896551724
+          0.3586206896551724,
+          0.8620689655172415,
+          6.4413793103448285
         ],
         "to": [
-          0.48275862068965514,
-          0.44827586206896514,
-          4.9655172413793105
+          0.12413793103448273,
+          0.8620689655172415,
+          6.110344827586207
         ],
         "lookFrom": [
           0.0,
@@ -149,8 +155,9 @@
           -0.6896551724137931
         ],
         "rollFrom": 0,
-        "rollTo": -5,
-        "relativeToFacing": false
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

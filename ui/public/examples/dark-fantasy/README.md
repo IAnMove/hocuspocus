@@ -2,7 +2,8 @@
 
 Open **Studios → Video 3D → Shot library** and select the **Dark Fantasy** filter.
 The collection contains ten landscape studies, ten new 720 × 1280 vertical
-compositions, and ten vertical PSX variants. The **PSX** filter selects the variants.
+compositions, and ten vertical PSX variants. The **PSX** filter also includes the
+twenty mixed-style scenes in the [Creative collection](../creative/README.md).
 Vertical presets open in 9:16 automatically, with their authored camera framing.
 Each six-second scene includes its original generated images, transparent character
 cutouts, camera movement, lighting, atmospheric effects and floor finish. No model
@@ -14,11 +15,15 @@ The figures do not have a skeleton or an unseen 3D back; use modest camera arcs.
 
 Replace a character image and choose **Character / transparent cutout** under its
 surface control. The image retains its aspect ratio and alpha. Position, scale,
-camera framing and effects remain editable. Images with transparent margins may
-need their vertical position adjusted to place visible feet on the floor.
+camera framing and effects remain editable. **Align visible feet to the ground**
+ignores transparent bottom margins; **Contact shadow** reinforces their support.
+All thirty presets now use grounded cutouts, stationary figures and slow, level
+camera moves. Their horizon does not roll or turn vertically.
 
 Cinematic floor finishes include the original tiles, a seamless reflective surface,
-and no floor for floating compositions. Export uses the same native renderer as
+no floor, and **Floor from backdrop**. The latter projects the painted backdrop
+onto a real ground plane. Its lower-image slider brings foreground floor detail
+under the cutouts while retaining the distant artwork. Export uses the same native renderer as
 preview. Use **Save scene** to retain a revision in the current workspace, or
 **My scenarios → Export scenario** to share a JSON template.
 

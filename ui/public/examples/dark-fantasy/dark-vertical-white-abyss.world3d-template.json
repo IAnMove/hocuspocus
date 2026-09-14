@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-vertical-white-abyss",
   "title": "Dark Fantasy · El abismo blanco",
-  "description": "Contraste invertido: guardián negro sobre abismo blanco y una figura roja muy cercana al borde.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "includeAssets": true,
   "createdAt": "2026-09-14T19:30:00Z",
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28232b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -58,7 +60,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           0,
-          -0.5,
+          0,
           0
         ],
         "scale": 2.1,
@@ -66,7 +68,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -77,7 +81,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           1.7,
-          -1,
+          0,
           3.2
         ],
         "scale": 2.8,
@@ -85,7 +89,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ea6973"
+          "tint": "#ea6973",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -117,28 +123,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.55,
-        3,
-        11
+        0.22000000000000006,
+        3.465,
+        10.34
       ],
       "look": [
-        0,
-        3.3,
-        -1
+        0.0,
+        3.8,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.2619047619047619,
-          0.6666666666666666,
-          5.238095238095238
+          0.10476190476190478,
+          0.6499999999999999,
+          4.923809523809523
         ],
         "to": [
-          -0.21428571428571427,
-          0.9047619047619047,
-          4.3809523809523805
+          -0.057142857142857134,
+          0.6499999999999999,
+          4.695238095238095
         ],
         "lookFrom": [
           0.0,
@@ -150,9 +156,10 @@
           0.8095238095238093,
           -0.47619047619047616
         ],
-        "rollFrom": 2,
-        "rollTo": -2,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

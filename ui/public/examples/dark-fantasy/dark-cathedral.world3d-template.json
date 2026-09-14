@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-cathedral",
   "title": "Dark Fantasy · La catedral del eclipse",
-  "description": "Acercamiento bajo, contraluz rojo y reflejo del caballero; ceniza a otra profundidad.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "createdAt": "2026-09-14T17:00:00Z",
   "includeAssets": true,
   "document": {
@@ -26,10 +26,12 @@
       "color": "#accbff"
     },
     "environment": {
-      "reflectiveFloor": true,
+      "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "mirror"
+      "floorStyle": "backdrop",
+      "floorColor": "#25282e",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -44,7 +46,7 @@
           -12
         ],
         "rotationY": 0,
-        "scale": 17
+        "scale": 21.6875771012713
       },
       {
         "id": "hero",
@@ -55,11 +57,15 @@
         "clip": null,
         "position": [
           0,
-          -0.18,
+          0,
           0
         ],
         "scale": 1.65,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -99,28 +105,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -0.4,
-        2.3,
-        10
+        -0.245,
+        2.7224999999999997,
+        8.639999999999999
       ],
       "look": [
-        0,
-        1.9,
-        0
+        0.0,
+        2.0799999999999996,
+        0.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.24242424242424246,
-          0.5030303030303029,
-          6.0606060606060606
+          -0.1484848484848485,
+          0.6499999999999999,
+          5.236363636363636
         ],
         "to": [
-          0.15151515151515152,
-          0.07878787878787887,
-          4.121212121212121
+          0.05757575757575757,
+          0.6499999999999999,
+          4.945454545454545
         ],
         "lookFrom": [
           0.0,
@@ -134,7 +140,8 @@
         ],
         "rollFrom": 0,
         "rollTo": 0,
-        "relativeToFacing": false
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

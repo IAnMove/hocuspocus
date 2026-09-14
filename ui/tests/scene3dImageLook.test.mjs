@@ -42,7 +42,7 @@ test('PSX stays on the cutout material; backdrop texture, lighting and opacity r
 test('Dark Fantasy includes all variants, PSX narrows it, and vertical presets retain authored framing', () => {
   const input = { category: 'dark-fantasy', setting: 'all', query: '', locale: 'en', titleOf: id => id }
   assert.equal(filterScene3DTemplates(input).length, 30)
-  assert.equal(filterScene3DTemplates({ ...input, category: 'psx' }).length, 10)
+  assert.equal(filterScene3DTemplates({ ...input, category: 'psx' }).length, 30)
   assert.equal(filterScene3DTemplates({ ...input, category: 'all', query: 'dark fantasy' }).length, 30)
   const old = createDefaultScene3DDocument()
   const next = remountScene3DTemplate('dark-vertical-ivory-gate', old)

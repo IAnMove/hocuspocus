@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-vertical-ember-totem",
   "title": "Dark Fantasy · El tótem de brasas",
-  "description": "Arco azul oscuro cercano, guardián de obsidiana y luz de brasas detrás; acercamiento desde abajo.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "includeAssets": true,
   "createdAt": "2026-09-14T19:30:00Z",
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#232533",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -58,7 +60,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           0.15,
-          -0.4,
+          0,
           0
         ],
         "scale": 2,
@@ -66,7 +68,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -77,7 +81,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           0,
-          -1.2,
+          0,
           3.2
         ],
         "scale": 5.1,
@@ -85,7 +89,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#324e69"
+          "tint": "#324e69",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -139,28 +145,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.6,
-        2.6,
-        10.8
+        -0.27,
+        3.3,
+        10.040000000000001
       ],
       "look": [
-        0,
-        3.1,
-        -1
+        0.0,
+        3.5,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.375,
-          0.5,
-          5.4
+          -0.21000000000000002,
+          0.6499999999999999,
+          5.0200000000000005
         ],
         "to": [
-          0.125,
-          0.34999999999999987,
-          4.4
+          -0.039999999999999994,
+          0.6499999999999999,
+          4.78
         ],
         "lookFrom": [
           -0.075,
@@ -172,9 +178,10 @@
           0.75,
           -0.5
         ],
-        "rollFrom": -3,
-        "rollTo": 3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

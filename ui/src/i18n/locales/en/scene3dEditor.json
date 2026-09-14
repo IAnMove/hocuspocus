@@ -270,7 +270,8 @@
     "space": "Space",
     "drive": "Driving",
     "dark-fantasy": "Dark Fantasy",
-    "psx": "PSX"
+    "psx": "PSX",
+    "creative": "Creative"
   },
   "setting": {
     "sea": "Sea",
@@ -291,43 +292,43 @@
   "template": {
     "dark-cathedral": {
       "title": "Dark Fantasy · Eclipse cathedral",
-      "description": "Low camera push, crimson backlight and a reflected knight."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-forest": {
       "title": "Dark Fantasy · Breathing forest",
-      "description": "Lateral parallax between near trees, an oracle and distant teal mist."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-stairway": {
       "title": "Dark Fantasy · Impossible stairway",
-      "description": "A rolling camera, floating oracle and a golden spatial sigil."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-moonlake": {
       "title": "Dark Fantasy · Moonlit lake",
-      "description": "Moonlight, a reflected figure and animated ripples."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-portal": {
       "title": "Dark Fantasy · Door to another world",
-      "description": "Two figures at different depths with a glowing portal between them."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-throne": {
       "title": "Dark Fantasy · Throne of ash",
-      "description": "Low diagonal camera with fire and drifting ash behind the knight."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-library": {
       "title": "Dark Fantasy · Library of the void",
-      "description": "Elevated reveal across a floating library, two figures and spatial lights."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-ice": {
       "title": "Dark Fantasy · Ice oracle",
-      "description": "A short camera arc, cyan light and snow at multiple depths."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-abyss": {
       "title": "Dark Fantasy · Guardians of the abyss",
-      "description": "Strong depth contrast between a near sentinel and a distant floating oracle."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-eclipse": {
       "title": "Dark Fantasy · The last sun",
-      "description": "A monumental silhouette, spatial black sun and drifting red dust."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "speech-portrait": {
       "title": "Talking portrait",
@@ -807,83 +808,163 @@
     },
     "dark-vertical-ivory-gate": {
       "title": "Dark Fantasy · Ivory gate",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-vertical-saffron-well": {
       "title": "Dark Fantasy · The sun well",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-vertical-crimson-tide": {
       "title": "Dark Fantasy · Crimson tide",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-vertical-frozen-bell": {
       "title": "Dark Fantasy · Frozen bell",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-vertical-bone-stair": {
       "title": "Dark Fantasy · Bone stair",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-vertical-jade-rift": {
       "title": "Dark Fantasy · Jade rift",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-vertical-ashen-rose": {
       "title": "Dark Fantasy · Ashen rose",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-vertical-violet-gravity": {
       "title": "Dark Fantasy · Violet gravity",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-vertical-ember-totem": {
       "title": "Dark Fantasy · Ember totem",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-vertical-white-abyss": {
       "title": "Dark Fantasy · The white abyss",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
     },
     "dark-psx-ivory-gate": {
       "title": "PSX · Ivory gate · full scene",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
     },
     "dark-psx-saffron-well": {
       "title": "PSX · The sun well · characters only",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
     },
     "dark-psx-crimson-tide": {
       "title": "PSX · Crimson tide · full scene",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
     },
     "dark-psx-frozen-bell": {
       "title": "PSX · Frozen bell · characters only",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
     },
     "dark-psx-bone-stair": {
       "title": "PSX · Bone stair · full scene",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
     },
     "dark-psx-jade-rift": {
       "title": "PSX · Jade rift · characters only",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
     },
     "dark-psx-ashen-rose": {
       "title": "PSX · Ashen rose · full scene",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
     },
     "dark-psx-violet-gravity": {
       "title": "PSX · Violet gravity · characters only",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
     },
     "dark-psx-ember-totem": {
       "title": "PSX · Ember totem · full scene",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: full scene."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
     },
     "dark-psx-white-abyss": {
       "title": "PSX · The white abyss · characters only",
-      "description": "Vertical 9:16 · layered light and silhouette contrast · editable camera and image layers. PSX: characters only; painted background."
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "creative-neon-diner": {
+      "title": "Last ramen",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-sun-orchard": {
+      "title": "Tomorrow orchard",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-vermilion-museum": {
+      "title": "Vermilion museum",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on background."
+    },
+    "creative-cobalt-moon": {
+      "title": "Moon shift",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-coral-caravan": {
+      "title": "Paper caravan",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-emerald-hotel": {
+      "title": "Emerald hotel",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-mint-pool": {
+      "title": "Six oclock pool",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-indigo-shrine": {
+      "title": "Indigo rain",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-ocean-window": {
+      "title": "Abyssal station",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on background."
+    },
+    "creative-velvet-theatre": {
+      "title": "Silent theatre",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-ochre-terminal": {
+      "title": "Sun terminal",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-ceramic-room": {
+      "title": "Cobalt room",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-tangerine-market": {
+      "title": "Tangerine market",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on background."
+    },
+    "creative-botanical-hangar": {
+      "title": "Botanical hangar",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-ink-mountain": {
+      "title": "Ink valley",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-submerged-archive": {
+      "title": "Blue archive",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-sunset-court": {
+      "title": "Last game",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-kinetic-gold": {
+      "title": "Golden balance",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on background."
+    },
+    "creative-lunar-garden": {
+      "title": "Orbital greenhouse",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-peach-laundry": {
+      "title": "Midnight laundry",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1012,13 +1093,18 @@
     "color": "Energy color",
     "idle": "Hold a living pose",
     "idleHelp": "Uses the selected animation at its start offset with subtle body movement. Choose a relaxed frame of an idle or walking clip; no animation is transferred between rigs.",
-    "background": "Full scene background"
+    "background": "Full scene background",
+    "floorColor": "Floor color",
+    "backdropFloor": "Floor from backdrop",
+    "floorSourceHeight": "Lower backdrop portion used as floor"
   },
   "imageLook": {
     "title": "Image appearance",
     "tint": "Tint",
     "unlit": "Keep original lighting",
     "psx": "PSX on this layer only",
-    "intensity": "PSX intensity"
+    "intensity": "PSX intensity",
+    "grounded": "Align ground to visible feet",
+    "shadow": "Contact shadow"
   }
 }

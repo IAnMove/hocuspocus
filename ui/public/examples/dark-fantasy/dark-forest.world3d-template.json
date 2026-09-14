@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-forest",
   "title": "Dark Fantasy · El bosque que respira",
-  "description": "Travelling entre árboles cercanos y lejanos; oráculo inmóvil entre niebla turquesa y luciérnagas.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "createdAt": "2026-09-14T17:00:00Z",
   "includeAssets": true,
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#202a25",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -40,7 +42,7 @@
         "clip": null,
         "position": [
           0,
-          7,
+          2.1500000000000004,
           -12
         ],
         "rotationY": 0,
@@ -55,11 +57,15 @@
         "clip": null,
         "position": [
           0,
-          4.85,
+          0,
           0
         ],
         "scale": 1.45,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "tree-near",
@@ -70,11 +76,15 @@
         "clip": null,
         "position": [
           -3.2,
-          4,
+          0,
           2.5
         ],
         "scale": 3.3,
-        "rotationY": 0.08
+        "rotationY": 0.08,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "tree-far",
@@ -85,11 +95,15 @@
         "clip": null,
         "position": [
           4,
-          4.1,
+          0,
           -2
         ],
         "scale": 3.5,
-        "rotationY": -0.1
+        "rotationY": -0.1,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -98,7 +112,7 @@
         "kind": "fog",
         "position": {
           "x": 0,
-          "y": 5.25,
+          "y": 0.40000000000000036,
           "z": -1
         },
         "color": "#38b1bb",
@@ -114,7 +128,7 @@
         "kind": "sparks",
         "position": {
           "x": 1,
-          "y": 6,
+          "y": 1.1500000000000004,
           "z": -1
         },
         "color": "#ffce76",
@@ -129,28 +143,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -2.1,
-        7.3,
-        10
+        0.02000000000000004,
+        2.7,
+        9.490000000000002
       ],
       "look": [
-        0,
-        6.9,
-        0
+        0.0,
+        2.0500000000000007,
+        0.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -1.4482758620689655,
-          0.6896551724137931,
-          6.8965517241379315
+          0.01379310344827589,
+          0.8620689655172415,
+          6.544827586206898
         ],
         "to": [
-          1.2413793103448276,
-          0.5517241379310344,
-          5.862068965517242
+          -0.2206896551724138,
+          0.8620689655172415,
+          6.2137931034482765
         ],
         "lookFrom": [
           0.0,
@@ -164,7 +178,8 @@
         ],
         "rollFrom": 0,
         "rollTo": 0,
-        "relativeToFacing": false
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

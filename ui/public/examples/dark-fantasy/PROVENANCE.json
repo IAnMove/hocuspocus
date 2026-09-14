@@ -256,5 +256,475 @@
       "backgroundRemovalJob": "16d839d5",
       "sha256": "6b9142b1997b65275354bb44248a23becd095ee01f96e1b75c96621e867db3d4"
     }
+  ],
+  "groundingEdits": [
+    {
+      "file": "dark-fantasy/vertical-saffron-well.jpg",
+      "sha256": "56ef751c6398c550a4c0a3697b12de0d60b8b7a758fdbcc45d85173f590f8013",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 dark fantasy painting. A towering deep GOLD sandstone shaft and succession of giant ancient arches receding to a brilliant pale SAFFRON yellow-white sun high in the center. Extreme color contrast: nearest corners ink black, middle ochre yellow, far white gold. Broad near BLACK SANDSTONE terrace across lower half, lit by orange gold side light, visibly solid foreground. Keep the yellow glowing shaft in the upper half, distant behind the level terrace. Bold black and gold only.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-10cd386e03c1",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789414252.3531132,
+          "updatedAt": 1789414252.3531132,
+          "taskId": "task-minimax-image-minimax-image-10cd386e03c1",
+          "rootTaskId": "task-minimax-image-minimax-image-10cd386e03c1"
+        },
+        "status": {
+          "jobId": "minimax-image-10cd386e03c1",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h35m20s_minimax-comic_dcddfbde.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-6a2f1f30c602",
+              "name": "2026-09-14-21h35m20s_minimax-comic_dcddfbde.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h35m20s_minimax-comic_dcddfbde.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h35m20s_minimax-comic_dcddfbde.jpg",
+              "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 dark fantasy painting. A towering deep GOLD sandstone shaft and succession of giant ancient arches receding to a brilliant pale SAFFRON yellow-white sun high in the center. Extreme color contrast: nearest corners ink black, middle ochre yellow, far white gold. Broad near BLACK SANDSTONE terrace across lower half, lit by orange gold side light, visibly solid foreground. Keep the yellow glowing shaft in the upper half, distant behind the level terrace. Bold black and gold only.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:35:20Z",
+              "metadata": {
+                "jobId": "minimax-image-10cd386e03c1",
+                "taskId": "task-minimax-image-minimax-image-10cd386e03c1",
+                "rootTaskId": "task-minimax-image-minimax-image-10cd386e03c1",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789414252.3531132,
+          "updatedAt": 1789414520.9425485,
+          "taskId": "task-minimax-image-minimax-image-10cd386e03c1",
+          "rootTaskId": "task-minimax-image-minimax-image-10cd386e03c1",
+          "startedAt": 1789414503.7468982,
+          "finishedAt": 1789414520.9425452
+        }
+      }
+    },
+    {
+      "file": "dark-fantasy/vertical-violet-gravity.jpg",
+      "sha256": "5da1739a8fc18dbb07f566f52f7fb1abf9b2a4315549966ca07ad0abcda61a1d",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 dark fantasy painting, deep VIOLET and PLUM chasm with an enormous razor-thin VIOLET WHITE light beam high in center. Broken black monoliths far behind the wide foreground. A broad level dark purple basalt terrace across lower half, solid flagstones visible, entire lower foreground supports weight. Pitch black sides, deep purple middle, white purple distant beam. No suspended objects in the foreground.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-4cda8a68ab7c",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789414503.7365794,
+          "updatedAt": 1789414503.7365794,
+          "taskId": "task-minimax-image-minimax-image-4cda8a68ab7c",
+          "rootTaskId": "task-minimax-image-minimax-image-4cda8a68ab7c"
+        },
+        "status": {
+          "jobId": "minimax-image-4cda8a68ab7c",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h35m38s_minimax-comic_edf5a424.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-144d3839bec2",
+              "name": "2026-09-14-21h35m38s_minimax-comic_edf5a424.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h35m38s_minimax-comic_edf5a424.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h35m38s_minimax-comic_edf5a424.jpg",
+              "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 dark fantasy painting, deep VIOLET and PLUM chasm with an enormous razor-thin VIOLET WHITE light beam high in center. Broken black monoliths far behind the wide foreground. A broad level dark purple basalt terrace across lower half, solid flagstones visible, entire lower foreground supports weight. Pitch black sides, deep purple middle, white purple distant beam. No suspended objects in the foreground.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:35:38Z",
+              "metadata": {
+                "jobId": "minimax-image-4cda8a68ab7c",
+                "taskId": "task-minimax-image-minimax-image-4cda8a68ab7c",
+                "rootTaskId": "task-minimax-image-minimax-image-4cda8a68ab7c",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789414503.7365794,
+          "updatedAt": 1789414538.7608292,
+          "taskId": "task-minimax-image-minimax-image-4cda8a68ab7c",
+          "rootTaskId": "task-minimax-image-minimax-image-4cda8a68ab7c",
+          "startedAt": 1789414520.9423256,
+          "finishedAt": 1789414538.7608242
+        }
+      }
+    },
+    {
+      "file": "dark-fantasy/vertical-white-abyss.jpg",
+      "sha256": "7de2d62a70bfa7e7ce08ef1291ea3d0a1edd032eeaa69bd51ba4c7a642b900ad",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 dark fantasy painting, enormous gothic BLACK spires rise from a distant almost WHITE glowing fog abyss, a thin small CRIMSON sun high overhead, one black bridge far in distance. Extreme minimalist black and white contrast. Foreground entire lower half is a wide solid level black stone balcony, clear slate texture and sharp edges, no railing cutting across center. The white abyss is BEYOND the far edge of this foreground balcony, not below the camera or in the foreground.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-975bae4d745c",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789414503.81209,
+          "updatedAt": 1789414503.81209,
+          "taskId": "task-minimax-image-minimax-image-975bae4d745c",
+          "rootTaskId": "task-minimax-image-minimax-image-975bae4d745c"
+        },
+        "status": {
+          "jobId": "minimax-image-975bae4d745c",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h35m59s_minimax-comic_bbd062b9.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-aacd4d2cad29",
+              "name": "2026-09-14-21h35m59s_minimax-comic_bbd062b9.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h35m59s_minimax-comic_bbd062b9.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h35m59s_minimax-comic_bbd062b9.jpg",
+              "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 dark fantasy painting, enormous gothic BLACK spires rise from a distant almost WHITE glowing fog abyss, a thin small CRIMSON sun high overhead, one black bridge far in distance. Extreme minimalist black and white contrast. Foreground entire lower half is a wide solid level black stone balcony, clear slate texture and sharp edges, no railing cutting across center. The white abyss is BEYOND the far edge of this foreground balcony, not below the camera or in the foreground.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:35:59Z",
+              "metadata": {
+                "jobId": "minimax-image-975bae4d745c",
+                "taskId": "task-minimax-image-minimax-image-975bae4d745c",
+                "rootTaskId": "task-minimax-image-minimax-image-975bae4d745c",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789414503.81209,
+          "updatedAt": 1789414559.4476519,
+          "taskId": "task-minimax-image-minimax-image-975bae4d745c",
+          "rootTaskId": "task-minimax-image-minimax-image-975bae4d745c",
+          "startedAt": 1789414538.760462,
+          "finishedAt": 1789414559.447649
+        }
+      }
+    },
+    {
+      "file": "dark-fantasy/vertical-bone-stair.jpg",
+      "sha256": "1cbea6d151faf118a9c4768c96cf6f2ea4d3248d06a4fc1e4c2e0805240446dd",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 surreal dark fantasy painting, an immense IVORY spiral vertebra-like staircase rises high into a WINE PURPLE void, brilliant warm ivory ancient gothic ribs arch high across top, near corners dark nearly black plum. A broad flat level dark violet stone terrace across lower half with large visible slabs, the spiral stair starts far behind this open foreground terrace. Elegant ivory versus purple palette.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-9772f76a4182",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789414503.8482647,
+          "updatedAt": 1789414503.8482647,
+          "taskId": "task-minimax-image-minimax-image-9772f76a4182",
+          "rootTaskId": "task-minimax-image-minimax-image-9772f76a4182"
+        },
+        "status": {
+          "jobId": "minimax-image-9772f76a4182",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h37m03s_minimax-comic_6f141ba2.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-564af1aa4c94",
+              "name": "2026-09-14-21h37m03s_minimax-comic_6f141ba2.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h37m03s_minimax-comic_6f141ba2.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h37m03s_minimax-comic_6f141ba2.jpg",
+              "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 surreal dark fantasy painting, an immense IVORY spiral vertebra-like staircase rises high into a WINE PURPLE void, brilliant warm ivory ancient gothic ribs arch high across top, near corners dark nearly black plum. A broad flat level dark violet stone terrace across lower half with large visible slabs, the spiral stair starts far behind this open foreground terrace. Elegant ivory versus purple palette.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:37:03Z",
+              "metadata": {
+                "jobId": "minimax-image-9772f76a4182",
+                "taskId": "task-minimax-image-minimax-image-9772f76a4182",
+                "rootTaskId": "task-minimax-image-minimax-image-9772f76a4182",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789414503.8482647,
+          "updatedAt": 1789414623.3619723,
+          "taskId": "task-minimax-image-minimax-image-9772f76a4182",
+          "rootTaskId": "task-minimax-image-minimax-image-9772f76a4182",
+          "startedAt": 1789414559.4475322,
+          "finishedAt": 1789414623.361968
+        }
+      }
+    },
+    {
+      "file": "dark-fantasy/04-lake.jpg",
+      "sha256": "a0a346fd3b2a8a80f043b4264853cc020cde7dfa2a3121fb1f2fcefb821bb790",
+      "generation": {
+        "request": {
+          "aspect_ratio": "16:9",
+          "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Endless perfectly still black lake, two huge pale moons overlapping above a razor-thin distant mountain horizon, silver blue moonlight, delicate vermilion reeds at edges, distant ruined abbey silhouette, negative space, meditative gothic dream, precise horizontal composition. Change the foreground so the entire lower half is a broad flat dark stone terrace with clearly visible slabs extending from edge to edge; any water or abyss must remain distant beyond the far edge of this solid foreground.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-ba17025c312e",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789414503.8974402,
+          "updatedAt": 1789414503.8974402,
+          "taskId": "task-minimax-image-minimax-image-ba17025c312e",
+          "rootTaskId": "task-minimax-image-minimax-image-ba17025c312e"
+        },
+        "status": {
+          "jobId": "minimax-image-ba17025c312e",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h37m39s_minimax-comic_bb0d8e6d.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-146ec96cf28c",
+              "name": "2026-09-14-21h37m39s_minimax-comic_bb0d8e6d.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h37m39s_minimax-comic_bb0d8e6d.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h37m39s_minimax-comic_bb0d8e6d.jpg",
+              "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Endless perfectly still black lake, two huge pale moons overlapping above a razor-thin distant mountain horizon, silver blue moonlight, delicate vermilion reeds at edges, distant ruined abbey silhouette, negative space, meditative gothic dream, precise horizontal composition. Change the foreground so the entire lower half is a broad flat dark stone terrace with clearly visible slabs extending from edge to edge; any water or abyss must remain distant beyond the far edge of this solid foreground.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:37:39Z",
+              "metadata": {
+                "jobId": "minimax-image-ba17025c312e",
+                "taskId": "task-minimax-image-minimax-image-ba17025c312e",
+                "rootTaskId": "task-minimax-image-minimax-image-ba17025c312e",
+                "subjectReference": false,
+                "aspectRatio": "16:9"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789414503.8974402,
+          "updatedAt": 1789414659.2669191,
+          "taskId": "task-minimax-image-minimax-image-ba17025c312e",
+          "rootTaskId": "task-minimax-image-minimax-image-ba17025c312e",
+          "startedAt": 1789414641.6623588,
+          "finishedAt": 1789414659.2669158
+        }
+      }
+    },
+    {
+      "file": "dark-fantasy/09-abyss.jpg",
+      "sha256": "81a002e685ac454b0960b6dcaae8175b2910e95f7abe724b8cb319e8b5648ea2",
+      "generation": {
+        "request": {
+          "aspect_ratio": "16:9",
+          "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Narrow ancient stone bridge cutting diagonally across a bottomless abyss, monumental ruined towers disappearing into crimson mist below, tiny intense pale cyan light at the far end, dizzying depth viewed at a slightly elevated diagonal, near cliff edges framing lower corners, no people. Change the foreground so the entire lower half is a broad flat dark stone terrace with clearly visible slabs extending from edge to edge; any water or abyss must remain distant beyond the far edge of this solid foreground.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-8bc42854c2b7",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789414503.92399,
+          "updatedAt": 1789414503.92399,
+          "taskId": "task-minimax-image-minimax-image-8bc42854c2b7",
+          "rootTaskId": "task-minimax-image-minimax-image-8bc42854c2b7"
+        },
+        "status": {
+          "jobId": "minimax-image-8bc42854c2b7",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h37m58s_minimax-comic_5db53d27.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-ad37cecd9201",
+              "name": "2026-09-14-21h37m58s_minimax-comic_5db53d27.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h37m58s_minimax-comic_5db53d27.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h37m58s_minimax-comic_5db53d27.jpg",
+              "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Cinematic dark fantasy art direction, visually breathtaking, richly textured painterly realism, strong chiaroscuro, dramatic atmospheric depth, elegant controlled two-color palette, extremely detailed tactile stone and fabric, high-end art-film still. Widescreen 16:9 environment plate. NO text, NO lettering, NO watermark, ZERO people, ZERO human silhouettes. Keep an unobstructed midground for a separate character. Narrow ancient stone bridge cutting diagonally across a bottomless abyss, monumental ruined towers disappearing into crimson mist below, tiny intense pale cyan light at the far end, dizzying depth viewed at a slightly elevated diagonal, near cliff edges framing lower corners, no people. Change the foreground so the entire lower half is a broad flat dark stone terrace with clearly visible slabs extending from edge to edge; any water or abyss must remain distant beyond the far edge of this solid foreground.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:37:58Z",
+              "metadata": {
+                "jobId": "minimax-image-8bc42854c2b7",
+                "taskId": "task-minimax-image-minimax-image-8bc42854c2b7",
+                "rootTaskId": "task-minimax-image-minimax-image-8bc42854c2b7",
+                "subjectReference": false,
+                "aspectRatio": "16:9"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789414503.92399,
+          "updatedAt": 1789414678.1183877,
+          "taskId": "task-minimax-image-minimax-image-8bc42854c2b7",
+          "rootTaskId": "task-minimax-image-minimax-image-8bc42854c2b7",
+          "startedAt": 1789414659.2667518,
+          "finishedAt": 1789414678.1183825
+        }
+      }
+    }
   ]
 }

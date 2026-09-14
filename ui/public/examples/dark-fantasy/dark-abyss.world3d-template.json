@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-abyss",
   "title": "Dark Fantasy · El puente del abismo",
-  "description": "Perspectiva de vértigo: guardián en primer término y oráculo lejano sobre el abismo.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "createdAt": "2026-09-14T17:00:00Z",
   "includeAssets": true,
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#232533",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -40,7 +42,7 @@
         "clip": null,
         "position": [
           0,
-          7,
+          1.9500000000000002,
           -12
         ],
         "rotationY": 0,
@@ -55,11 +57,15 @@
         "clip": null,
         "position": [
           -0.6,
-          5.05,
+          0,
           -1
         ],
         "scale": 1.25,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "near-sentinel",
@@ -70,11 +76,15 @@
         "clip": null,
         "position": [
           2.4,
-          4.6,
+          0,
           2.7
         ],
         "scale": 2,
-        "rotationY": -0.12
+        "rotationY": -0.12,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -83,7 +93,7 @@
         "kind": "fog",
         "position": {
           "x": 0,
-          "y": 4.9,
+          "y": -0.14999999999999947,
           "z": -2
         },
         "color": "#9d3949",
@@ -99,7 +109,7 @@
         "kind": "sparks",
         "position": {
           "x": -0.5,
-          "y": 4,
+          "y": -1.0499999999999998,
           "z": -1
         },
         "color": "#c95b36",
@@ -114,28 +124,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -1.8,
-        8.8,
-        11
+        -0.52,
+        2.7,
+        10.240000000000002
       ],
       "look": [
-        -0.2,
-        6.9,
-        -1
+        -0.20000000000000007,
+        1.8500000000000005,
+        -1.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.9600000000000002,
-          2.000000000000001,
-          9.6
+          0.06399999999999995,
+          1.1600000000000001,
+          8.992
         ],
         "to": [
-          1.36,
-          1.2,
-          8.0
+          0.33599999999999997,
+          1.1600000000000001,
+          8.608
         ],
         "lookFrom": [
           0.31999999999999995,
@@ -147,9 +157,10 @@
           0.4800000000000004,
           0.0
         ],
-        "rollFrom": -10,
-        "rollTo": 4,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

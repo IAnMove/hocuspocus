@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-portal",
   "title": "Dark Fantasy · La puerta del otro mundo",
-  "description": "Dos personajes a distintas distancias y un portal espacial entre ambos; mundos frío y cálido.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "createdAt": "2026-09-14T17:00:00Z",
   "includeAssets": true,
   "document": {
@@ -26,10 +26,12 @@
       "color": "#accbff"
     },
     "environment": {
-      "reflectiveFloor": true,
+      "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "mirror"
+      "floorStyle": "backdrop",
+      "floorColor": "#26282b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -44,7 +46,7 @@
           -12
         ],
         "rotationY": 0,
-        "scale": 17
+        "scale": 21.69388338586995
       },
       {
         "id": "hero",
@@ -55,11 +57,15 @@
         "clip": null,
         "position": [
           1.4,
-          -0.18,
+          0,
           0.7
         ],
         "scale": 1.7,
-        "rotationY": -0.1
+        "rotationY": -0.1,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "distant-oracle",
@@ -70,11 +76,15 @@
         "clip": null,
         "position": [
           -0.8,
-          -0.08,
+          0,
           -4
         ],
         "scale": 1.05,
-        "rotationY": 0.07
+        "rotationY": 0.07,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -114,28 +124,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -1,
-        2.4,
-        11
+        0.1299999999999999,
+        2.8049999999999997,
+        9.74
       ],
       "look": [
-        0,
-        2,
-        -1
+        0.0,
+        2.1799999999999997,
+        -1.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -1.411764705882353,
-          0.5176470588235293,
-          6.058823529411765
+          -0.7470588235294118,
+          0.6499999999999999,
+          5.31764705882353
         ],
         "to": [
-          0.11764705882352952,
-          0.22352941176470584,
-          4.294117647058823
+          -0.5470588235294118,
+          0.6499999999999999,
+          5.035294117647059
         ],
         "lookFrom": [
           -0.8235294117647058,
@@ -147,9 +157,10 @@
           0.2823529411764706,
           -1.0
         ],
-        "rollFrom": -3,
-        "rollTo": 3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

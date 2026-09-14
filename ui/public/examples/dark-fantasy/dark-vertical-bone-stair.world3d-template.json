@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-vertical-bone-stair",
   "title": "Dark Fantasy · La escalera de hueso",
-  "description": "Arco de hueso brillante delante, centinela negro en medio y escalera violeta detrás; giro de perspectiva.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "includeAssets": true,
   "createdAt": "2026-09-14T19:30:00Z",
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#26282b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -58,7 +60,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           0.1,
-          -0.2,
+          0,
           0
         ],
         "scale": 1.65,
@@ -66,7 +68,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -77,7 +81,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           -0.1,
-          -1.8,
+          0,
           3
         ],
         "scale": 4.9,
@@ -85,7 +89,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#fff0bc"
+          "tint": "#fff0bc",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -139,28 +145,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.3,
-        3.5,
-        11
+        -0.02000000000000003,
+        2.7224999999999997,
+        10.39
       ],
       "look": [
-        0,
-        3,
-        -1
+        0.0,
+        3.2,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.24242424242424246,
-          1.2424242424242424,
-          6.666666666666667
+          -0.07272727272727275,
+          0.6499999999999999,
+          6.296969696969698
         ],
         "to": [
-          0.30303030303030304,
-          1.0606060606060608,
-          5.636363636363637
+          0.13333333333333333,
+          0.6499999999999999,
+          6.006060606060607
         ],
         "lookFrom": [
           -0.060606060606060615,
@@ -172,9 +178,10 @@
           0.9393939393939394,
           -0.6060606060606061
         ],
-        "rollFrom": -9,
-        "rollTo": 8,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

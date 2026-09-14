@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-vertical-frozen-bell",
   "title": "Dark Fantasy · La campana de hielo",
-  "description": "El rojo cercano separa a la figura de una campana helada. Nieve delante, arco intermedio y grúa ascendente.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "includeAssets": true,
   "createdAt": "2026-09-14T19:30:00Z",
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#152a34",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -58,7 +60,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           0.2,
-          -0.5,
+          0,
           0
         ],
         "scale": 1.8,
@@ -66,7 +68,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -77,7 +81,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           0,
-          -1.5,
+          0,
           -3
         ],
         "scale": 4.2,
@@ -85,7 +89,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#436875"
+          "tint": "#436875",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -117,42 +123,43 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.65,
-        2.7,
-        11
+        0.32,
+        2.9699999999999998,
+        10.24
       ],
       "look": [
-        0,
-        3.3,
-        -1
+        0.0,
+        4.05,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.25,
-          0.7777777777777778,
-          6.111111111111111
+          0.06666666666666665,
+          0.6499999999999998,
+          5.688888888888889
         ],
         "to": [
-          -0.3055555555555556,
-          1.5,
-          5.0
+          -0.12222222222222223,
+          0.6499999999999998,
+          5.422222222222222
         ],
         "lookFrom": [
           -0.11111111111111112,
-          1.111111111111111,
+          1.25,
           -0.5555555555555556
         ],
         "lookTo": [
           -0.11111111111111112,
-          1.3888888888888888,
+          1.25,
           -0.5555555555555556
         ],
-        "rollFrom": -2,
-        "rollTo": 2,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

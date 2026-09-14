@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-throne",
   "title": "Dark Fantasy · El trono de ceniza",
-  "description": "Contrapicado autoritario con desplazamiento diagonal y fuego detrás del personaje.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "createdAt": "2026-09-14T17:00:00Z",
   "includeAssets": true,
   "document": {
@@ -26,10 +26,12 @@
       "color": "#ffc69a"
     },
     "environment": {
-      "reflectiveFloor": true,
+      "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "mirror"
+      "floorStyle": "backdrop",
+      "floorColor": "#28252c",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -44,7 +46,7 @@
           -12
         ],
         "rotationY": 0,
-        "scale": 17
+        "scale": 22.23533471168053
       },
       {
         "id": "hero",
@@ -55,11 +57,15 @@
         "clip": null,
         "position": [
           -1.0,
-          -0.18,
+          0,
           0.4
         ],
         "scale": 1.8,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -115,28 +121,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        1.8,
-        1.3,
-        10
+        0.2699999999999998,
+        2.9699999999999998,
+        8.940000000000001
       ],
       "look": [
-        0,
-        1.9,
-        -1
+        0.0,
+        2.08,
+        -0.9999999999999999
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          1.5555555555555554,
-          -0.1777777777777778,
-          5.333333333333333
+          0.7055555555555554,
+          0.6499999999999998,
+          4.7444444444444445
         ],
         "to": [
-          -0.33333333333333337,
-          -0.3444444444444445,
-          3.888888888888889
+          0.5166666666666665,
+          0.6499999999999998,
+          4.477777777777777
         ],
         "lookFrom": [
           0.5555555555555556,
@@ -148,9 +154,10 @@
           0.15555555555555545,
           -0.7777777777777777
         ],
-        "rollFrom": 5,
-        "rollTo": -5,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

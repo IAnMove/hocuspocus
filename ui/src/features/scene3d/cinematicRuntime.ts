@@ -7,6 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { ENERGY_NOISE } from '../sceneFx/energyShaders'
 import type { GpuWorld } from './gpu'
 import type { Scene3DDocument } from './types'
+import { BackdropFloor } from './backdropFloor'
 
 /** Shared preview/export pipeline. No frame delta, random state or private assets. */
 export class CinematicRuntime {
@@ -20,7 +21,8 @@ export class CinematicRuntime {
   private size = new Vector2()
   private document?: Scene3DDocument
   private world: GpuWorld
-  constructor(world: GpuWorld) { this.world = world }
+  private backdropFloor: BackdropFloor
+  constructor(world: GpuWorld) { this.world = world; this.backdropFloor = new BackdropFloor(world) }
 
   private createMirror() {
     const reflectorShader = (Reflector as unknown as { ReflectorShader: { uniforms: Record<string, IUniform>; vertexShader: string } }).ReflectorShader
@@ -81,13 +83,12 @@ export class CinematicRuntime {
     }
   }
   private syncStage(doc: Scene3DDocument) {
-    const { world } = this
     if (doc.environment?.reflectiveFloor && !this.mirror) this.createMirror()
     if (this.mirror) {
       this.mirror.visible = doc.environment?.reflectiveFloor === true && doc.environment.floorStyle !== 'none'
       ;(this.mirror.material as ShaderMaterial).uniforms.tileStrength.value = doc.environment?.floorStyle === 'mirror' ? 0 : 1
     }
-    world.floor.visible = !doc.environment?.reflectiveFloor && doc.environment?.floorStyle !== 'none'
+    this.backdropFloor.sync(doc)
     if (doc.environment?.platform && !this.platform) this.createPlatform()
     if (this.platform) this.platform.visible = doc.environment?.platform === true
   }
@@ -130,6 +131,7 @@ export class CinematicRuntime {
     } else { this.lights.forEach(light => { light.intensity = 0 }); renderer.render(scene, camera) }
   }
   dispose() {
+    this.backdropFloor.dispose()
     this.background?.dispose()
     this.composer?.passes.forEach(pass => pass.dispose()); this.composer?.dispose()
     this.mirror?.removeFromParent(); this.mirror?.geometry.dispose(); this.mirror?.dispose()

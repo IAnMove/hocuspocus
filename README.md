@@ -278,6 +278,6 @@ If we missed a name you shipped into this tree, open an issue — we want the li
 
 Bugs and requests: [github.com/IAnMove/hocuspocus/issues](https://github.com/IAnMove/hocuspocus/issues).
 
-### Dark Fantasy perspective templates
+### Creative and Dark Fantasy perspective templates
 
-In **Studios → Video 3D → Shot library**, the **Dark Fantasy** filter offers 30 editable six-second templates: ten landscape compositions, ten new vertical 9:16 scenes and ten PSX variants. The **PSX** filter selects effects on the full frame or only on character layers. Edit depth, tint, image lighting, camera movement, spatial effects and floor finish, then render with the native compositor. These are 2.5D scenes with image characters. See [the collection guide](ui/public/examples/dark-fantasy/README.md) for editing and sharing.
+In **Studios → Video 3D → Shot library**, **Creative** offers 20 vertical scenes ranging from neon streets and paper landscapes to orbital gardens and ceramic architecture. **Dark Fantasy** offers 30 more: ten landscape compositions, ten vertical scenes and ten PSX variants. All are editable six-second 2.5D scenes with grounded image characters and gentle, level camera movement. **PSX** includes selective treatments of characters, props or backgrounds; each image layer can keep its own style. Edit depth, contact shadows, tint, camera movement, spatial effects and the floor projected from the backdrop, then render with the native compositor. See the [Creative guide](ui/public/examples/creative/README.md) and [Dark Fantasy guide](ui/public/examples/dark-fantasy/README.md) for editing and sharing.

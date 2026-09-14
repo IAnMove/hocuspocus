@@ -19,10 +19,12 @@
       "color": "#accbff"
     },
     "environment": {
-      "reflectiveFloor": true,
+      "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "mirror"
+      "floorStyle": "backdrop",
+      "floorColor": "#25282e",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -37,7 +39,7 @@
           -12
         ],
         "rotationY": 0,
-        "scale": 17
+        "scale": 21.6875771012713
       },
       {
         "id": "hero",
@@ -48,11 +50,15 @@
         "clip": null,
         "position": [
           0,
-          -0.18,
+          0,
           0
         ],
         "scale": 1.65,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -92,28 +98,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -0.4,
-        2.3,
-        10
+        -0.245,
+        2.7224999999999997,
+        8.639999999999999
       ],
       "look": [
-        0,
-        1.9,
-        0
+        0.0,
+        2.0799999999999996,
+        0.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.24242424242424246,
-          0.5030303030303029,
-          6.0606060606060606
+          -0.1484848484848485,
+          0.6499999999999999,
+          5.236363636363636
         ],
         "to": [
-          0.15151515151515152,
-          0.07878787878787887,
-          4.121212121212121
+          0.05757575757575757,
+          0.6499999999999999,
+          4.945454545454545
         ],
         "lookFrom": [
           0.0,
@@ -127,7 +133,8 @@
         ],
         "rollFrom": 0,
         "rollTo": 0,
-        "relativeToFacing": false
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -154,7 +161,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#202a25",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -165,7 +174,7 @@
         "clip": null,
         "position": [
           0,
-          7,
+          2.1500000000000004,
           -12
         ],
         "rotationY": 0,
@@ -180,11 +189,15 @@
         "clip": null,
         "position": [
           0,
-          4.85,
+          0,
           0
         ],
         "scale": 1.45,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "tree-near",
@@ -195,11 +208,15 @@
         "clip": null,
         "position": [
           -3.2,
-          4,
+          0,
           2.5
         ],
         "scale": 3.3,
-        "rotationY": 0.08
+        "rotationY": 0.08,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "tree-far",
@@ -210,11 +227,15 @@
         "clip": null,
         "position": [
           4,
-          4.1,
+          0,
           -2
         ],
         "scale": 3.5,
-        "rotationY": -0.1
+        "rotationY": -0.1,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -223,7 +244,7 @@
         "kind": "fog",
         "position": {
           "x": 0,
-          "y": 5.25,
+          "y": 0.40000000000000036,
           "z": -1
         },
         "color": "#38b1bb",
@@ -239,7 +260,7 @@
         "kind": "sparks",
         "position": {
           "x": 1,
-          "y": 6,
+          "y": 1.1500000000000004,
           "z": -1
         },
         "color": "#ffce76",
@@ -254,28 +275,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -2.1,
-        7.3,
-        10
+        0.02000000000000004,
+        2.7,
+        9.490000000000002
       ],
       "look": [
-        0,
-        6.9,
-        0
+        0.0,
+        2.0500000000000007,
+        0.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -1.4482758620689655,
-          0.6896551724137931,
-          6.8965517241379315
+          0.01379310344827589,
+          0.8620689655172415,
+          6.544827586206898
         ],
         "to": [
-          1.2413793103448276,
-          0.5517241379310344,
-          5.862068965517242
+          -0.2206896551724138,
+          0.8620689655172415,
+          6.2137931034482765
         ],
         "lookFrom": [
           0.0,
@@ -289,7 +310,8 @@
         ],
         "rollFrom": 0,
         "rollTo": 0,
-        "relativeToFacing": false
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -316,7 +338,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28222d",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -327,7 +351,7 @@
         "clip": null,
         "position": [
           0,
-          7,
+          1.75,
           -12
         ],
         "rotationY": 0,
@@ -342,18 +366,14 @@
         "clip": null,
         "position": [
           0,
-          5.25,
+          0,
           0
         ],
         "scale": 1.35,
         "rotationY": 0,
-        "motion": {
-          "to": [
-            0,
-            5.5,
-            0
-          ],
-          "easing": "smooth"
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -363,7 +383,7 @@
         "kind": "magic_circle",
         "position": {
           "x": 0,
-          "y": 5.08,
+          "y": -0.16999999999999993,
           "z": -0.3
         },
         "color": "#edb664",
@@ -379,7 +399,7 @@
         "kind": "dust",
         "position": {
           "x": 0,
-          "y": 6,
+          "y": 0.75,
           "z": -1
         },
         "color": "#e0a564",
@@ -394,28 +414,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -1.3,
-        7.5,
-        10
+        -0.12,
+        2.7,
+        9.24
       ],
       "look": [
-        0,
-        7,
-        0
+        0.0,
+        1.7500000000000004,
+        0.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.9629629629629629,
-          0.6666666666666669,
-          7.4074074074074066
+          -0.08888888888888888,
+          1.0,
+          6.844444444444444
         ],
         "to": [
-          1.037037037037037,
-          1.25925925925926,
-          5.925925925925926
+          0.16296296296296295,
+          1.0,
+          6.488888888888888
         ],
         "lookFrom": [
           0.0,
@@ -427,9 +447,10 @@
           0.29629629629629656,
           0.0
         ],
-        "rollFrom": -13,
-        "rollTo": 16,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -453,10 +474,12 @@
       "color": "#accbff"
     },
     "environment": {
-      "reflectiveFloor": true,
+      "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "mirror"
+      "floorStyle": "backdrop",
+      "floorColor": "#152a34",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -471,7 +494,7 @@
           -12
         ],
         "rotationY": 0,
-        "scale": 17
+        "scale": 22.352848976728364
       },
       {
         "id": "hero",
@@ -482,11 +505,15 @@
         "clip": null,
         "position": [
           -1.25,
-          -0.13,
+          0,
           -0.8
         ],
         "scale": 1.3,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -526,13 +553,13 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -0.8,
-        1.8,
-        11
+        0.21999999999999997,
+        2.7,
+        10.239999999999997
       ],
       "look": [
-        0,
-        1.9,
+        0.0,
+        2.0300000000000002,
         -0.8
       ],
       "fov": 43,
@@ -540,14 +567,14 @@
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.3461538461538461,
-          0.48461538461538467,
-          9.076923076923077
+          1.1307692307692307,
+          1.076923076923077,
+          8.49230769230769
         ],
         "to": [
-          1.6538461538461537,
-          0.3692307692307692,
-          7.538461538461538
+          0.8692307692307691,
+          1.076923076923077,
+          8.123076923076923
         ],
         "lookFrom": [
           0.9615384615384615,
@@ -561,7 +588,8 @@
         ],
         "rollFrom": 0,
         "rollTo": 0,
-        "relativeToFacing": false
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -585,10 +613,12 @@
       "color": "#accbff"
     },
     "environment": {
-      "reflectiveFloor": true,
+      "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "mirror"
+      "floorStyle": "backdrop",
+      "floorColor": "#26282b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -603,7 +633,7 @@
           -12
         ],
         "rotationY": 0,
-        "scale": 17
+        "scale": 21.69388338586995
       },
       {
         "id": "hero",
@@ -614,11 +644,15 @@
         "clip": null,
         "position": [
           1.4,
-          -0.18,
+          0,
           0.7
         ],
         "scale": 1.7,
-        "rotationY": -0.1
+        "rotationY": -0.1,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "distant-oracle",
@@ -629,11 +663,15 @@
         "clip": null,
         "position": [
           -0.8,
-          -0.08,
+          0,
           -4
         ],
         "scale": 1.05,
-        "rotationY": 0.07
+        "rotationY": 0.07,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -673,28 +711,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -1,
-        2.4,
-        11
+        0.1299999999999999,
+        2.8049999999999997,
+        9.74
       ],
       "look": [
-        0,
-        2,
-        -1
+        0.0,
+        2.1799999999999997,
+        -1.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -1.411764705882353,
-          0.5176470588235293,
-          6.058823529411765
+          -0.7470588235294118,
+          0.6499999999999999,
+          5.31764705882353
         ],
         "to": [
-          0.11764705882352952,
-          0.22352941176470584,
-          4.294117647058823
+          -0.5470588235294118,
+          0.6499999999999999,
+          5.035294117647059
         ],
         "lookFrom": [
           -0.8235294117647058,
@@ -706,9 +744,10 @@
           0.2823529411764706,
           -1.0
         ],
-        "rollFrom": -3,
-        "rollTo": 3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -732,10 +771,12 @@
       "color": "#ffc69a"
     },
     "environment": {
-      "reflectiveFloor": true,
+      "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "mirror"
+      "floorStyle": "backdrop",
+      "floorColor": "#28252c",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -750,7 +791,7 @@
           -12
         ],
         "rotationY": 0,
-        "scale": 17
+        "scale": 22.23533471168053
       },
       {
         "id": "hero",
@@ -761,11 +802,15 @@
         "clip": null,
         "position": [
           -1.0,
-          -0.18,
+          0,
           0.4
         ],
         "scale": 1.8,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -821,28 +866,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        1.8,
-        1.3,
-        10
+        0.2699999999999998,
+        2.9699999999999998,
+        8.940000000000001
       ],
       "look": [
-        0,
-        1.9,
-        -1
+        0.0,
+        2.08,
+        -0.9999999999999999
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          1.5555555555555554,
-          -0.1777777777777778,
-          5.333333333333333
+          0.7055555555555554,
+          0.6499999999999998,
+          4.7444444444444445
         ],
         "to": [
-          -0.33333333333333337,
-          -0.3444444444444445,
-          3.888888888888889
+          0.5166666666666665,
+          0.6499999999999998,
+          4.477777777777777
         ],
         "lookFrom": [
           0.5555555555555556,
@@ -854,9 +899,10 @@
           0.15555555555555545,
           -0.7777777777777777
         ],
-        "rollFrom": 5,
-        "rollTo": -5,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -883,7 +929,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#272536",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -894,7 +942,7 @@
         "clip": null,
         "position": [
           0,
-          7,
+          1.7999999999999998,
           -12
         ],
         "rotationY": 0,
@@ -909,11 +957,15 @@
         "clip": null,
         "position": [
           0.45,
-          5.2,
+          0,
           0
         ],
         "scale": 1.3,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "sentinel",
@@ -924,11 +976,15 @@
         "clip": null,
         "position": [
           -2,
-          5.1,
+          0,
           -4
         ],
         "scale": 0.95,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -937,7 +993,7 @@
         "kind": "energy_orb",
         "position": {
           "x": -1.3,
-          "y": 7.8,
+          "y": 2.5999999999999996,
           "z": 1
         },
         "color": "#e5b55e",
@@ -953,7 +1009,7 @@
         "kind": "energy_orb",
         "position": {
           "x": 1.6,
-          "y": 8.2,
+          "y": 2.999999999999999,
           "z": -3
         },
         "color": "#b681ed",
@@ -969,7 +1025,7 @@
         "kind": "dust",
         "position": {
           "x": 0,
-          "y": 6,
+          "y": 0.7999999999999998,
           "z": -1
         },
         "color": "#cab99d",
@@ -984,28 +1040,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        2,
-        9,
-        11
+        0.13000000000000012,
+        2.7,
+        9.99
       ],
       "look": [
-        0,
-        7,
-        0
+        0.0,
+        1.8,
+        0.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          1.1923076923076923,
-          1.923076923076923,
-          8.461538461538462
+          -0.24615384615384608,
+          1.076923076923077,
+          7.684615384615385
         ],
         "to": [
-          -1.423076923076923,
-          1.1538461538461537,
-          6.538461538461538
+          0.015384615384615469,
+          1.076923076923077,
+          7.315384615384615
         ],
         "lookFrom": [
           -0.34615384615384615,
@@ -1017,9 +1073,10 @@
           0.3846153846153846,
           0.0
         ],
-        "rollFrom": 10,
-        "rollTo": -7,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -1043,10 +1100,12 @@
       "color": "#b9f9ff"
     },
     "environment": {
-      "reflectiveFloor": true,
+      "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "mirror"
+      "floorStyle": "backdrop",
+      "floorColor": "#24323d",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -1061,7 +1120,7 @@
           -12
         ],
         "rotationY": 0,
-        "scale": 17
+        "scale": 22.63726695290731
       },
       {
         "id": "hero",
@@ -1072,11 +1131,15 @@
         "clip": null,
         "position": [
           0.25,
-          -0.15,
+          0,
           0
         ],
         "scale": 1.5,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -1132,28 +1195,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        2,
-        2.4,
-        9
+        0.42000000000000004,
+        2.7,
+        8.64
       ],
       "look": [
-        0,
-        1.8,
-        0
+        0.0,
+        1.95,
+        0.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          1.1666666666666667,
-          0.6999999999999998,
-          6.0
+          0.11333333333333334,
+          0.8000000000000002,
+          5.76
         ],
         "to": [
-          -1.1666666666666667,
-          0.4333333333333333,
-          5.2
+          -0.11333333333333334,
+          0.8000000000000002,
+          5.4399999999999995
         ],
         "lookFrom": [
           -0.16666666666666666,
@@ -1167,7 +1230,8 @@
         ],
         "rollFrom": 0,
         "rollTo": 0,
-        "relativeToFacing": false
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -1194,7 +1258,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#232533",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -1205,7 +1271,7 @@
         "clip": null,
         "position": [
           0,
-          7,
+          1.9500000000000002,
           -12
         ],
         "rotationY": 0,
@@ -1220,11 +1286,15 @@
         "clip": null,
         "position": [
           -0.6,
-          5.05,
+          0,
           -1
         ],
         "scale": 1.25,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "near-sentinel",
@@ -1235,11 +1305,15 @@
         "clip": null,
         "position": [
           2.4,
-          4.6,
+          0,
           2.7
         ],
         "scale": 2,
-        "rotationY": -0.12
+        "rotationY": -0.12,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -1248,7 +1322,7 @@
         "kind": "fog",
         "position": {
           "x": 0,
-          "y": 4.9,
+          "y": -0.14999999999999947,
           "z": -2
         },
         "color": "#9d3949",
@@ -1264,7 +1338,7 @@
         "kind": "sparks",
         "position": {
           "x": -0.5,
-          "y": 4,
+          "y": -1.0499999999999998,
           "z": -1
         },
         "color": "#c95b36",
@@ -1279,28 +1353,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        -1.8,
-        8.8,
-        11
+        -0.52,
+        2.7,
+        10.240000000000002
       ],
       "look": [
-        -0.2,
-        6.9,
-        -1
+        -0.20000000000000007,
+        1.8500000000000005,
+        -1.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.9600000000000002,
-          2.000000000000001,
-          9.6
+          0.06399999999999995,
+          1.1600000000000001,
+          8.992
         ],
         "to": [
-          1.36,
-          1.2,
-          8.0
+          0.33599999999999997,
+          1.1600000000000001,
+          8.608
         ],
         "lookFrom": [
           0.31999999999999995,
@@ -1312,9 +1386,10 @@
           0.4800000000000004,
           0.0
         ],
-        "rollFrom": -10,
-        "rollTo": 4,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -1341,7 +1416,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28232b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -1352,7 +1429,7 @@
         "clip": null,
         "position": [
           0,
-          7,
+          2.0999999999999996,
           -12
         ],
         "rotationY": 0,
@@ -1367,11 +1444,15 @@
         "clip": null,
         "position": [
           0,
-          4.9,
+          0,
           0
         ],
         "scale": 1.45,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -1380,7 +1461,7 @@
         "kind": "black_hole",
         "position": {
           "x": 0,
-          "y": 9.8,
+          "y": 4.9,
           "z": -4
         },
         "color": "#ffe8c4",
@@ -1396,7 +1477,7 @@
         "kind": "fog",
         "position": {
           "x": 0,
-          "y": 5.1,
+          "y": 0.1999999999999993,
           "z": -1
         },
         "color": "#973d43",
@@ -1412,7 +1493,7 @@
         "kind": "sparks",
         "position": {
           "x": 0,
-          "y": 6,
+          "y": 1.0999999999999996,
           "z": 0.5
         },
         "color": "#f09545",
@@ -1427,28 +1508,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        0,
-        6.6,
-        11
+        0.52,
+        2.7,
+        9.340000000000002
       ],
       "look": [
-        0,
-        7.2,
-        -1
+        0.0,
+        2.2999999999999994,
+        -1.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.0,
-          0.17241379310344768,
-          7.586206896551724
+          0.3586206896551724,
+          0.8620689655172415,
+          6.4413793103448285
         ],
         "to": [
-          0.48275862068965514,
-          0.44827586206896514,
-          4.9655172413793105
+          0.12413793103448273,
+          0.8620689655172415,
+          6.110344827586207
         ],
         "lookFrom": [
           0.0,
@@ -1461,8 +1542,9 @@
           -0.6896551724137931
         ],
         "rollFrom": 0,
-        "rollTo": -5,
-        "relativeToFacing": false
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -1489,7 +1571,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#25282e",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -1518,7 +1602,7 @@
         "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
         "position": [
           0.15,
-          -0.4,
+          0,
           0
         ],
         "scale": 2,
@@ -1526,7 +1610,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -1537,7 +1623,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -1.85,
-          -1.2,
+          0,
           3
         ],
         "scale": 3,
@@ -1545,7 +1631,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#879aa6"
+          "tint": "#879aa6",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -1599,28 +1687,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.5,
-        3.2,
-        11
+        -0.17000000000000007,
+        3.3,
+        10.14
       ],
       "look": [
-        0,
-        3,
-        -1
+        0.0,
+        3.4,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.325,
-          0.8,
-          5.5
+          -0.16000000000000003,
+          0.6499999999999999,
+          5.07
         ],
         "to": [
-          0.175,
-          0.5999999999999999,
-          4.4
+          0.009999999999999995,
+          0.6499999999999999,
+          4.83
         ],
         "lookFrom": [
           -0.075,
@@ -1632,9 +1720,10 @@
           0.7,
           -0.5
         ],
-        "rollFrom": -2,
-        "rollTo": 2,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -1661,7 +1750,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#202a25",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -1690,7 +1781,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -0.2,
-          -0.5,
+          0,
           0
         ],
         "scale": 2.1,
@@ -1698,15 +1789,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
-        },
-        "motion": {
-          "to": [
-            -0.2,
-            -0.15,
-            0
-          ],
-          "easing": "smooth"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -1717,7 +1802,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           0,
-          -1,
+          0,
           3.2
         ],
         "scale": 5,
@@ -1725,7 +1810,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#26201c"
+          "tint": "#26201c",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -1757,28 +1844,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.65,
-        2.8,
-        11
+        0.22000000000000003,
+        3.465,
+        10.24
       ],
       "look": [
-        0,
-        3.1,
-        -1
+        0.0,
+        3.6,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.40476190476190477,
-          0.5714285714285713,
-          5.238095238095238
+          0.2,
+          0.6499999999999999,
+          4.876190476190476
         ],
         "to": [
-          -0.16666666666666669,
-          0.9047619047619047,
-          4.285714285714286
+          0.038095238095238085,
+          0.6499999999999999,
+          4.647619047619048
         ],
         "lookFrom": [
           0.09523809523809523,
@@ -1790,9 +1877,10 @@
           0.7142857142857143,
           -0.47619047619047616
         ],
-        "rollFrom": 3,
-        "rollTo": -3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -1819,7 +1907,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28222d",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -1848,7 +1938,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           -0.35,
-          -0.6,
+          0,
           -0.3
         ],
         "scale": 1.9,
@@ -1856,7 +1946,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -1867,7 +1959,7 @@
         "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
         "position": [
           2.25,
-          -1,
+          0,
           3.3
         ],
         "scale": 2.8,
@@ -1875,7 +1967,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#96c5d2"
+          "tint": "#96c5d2",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -1907,28 +2001,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.8,
-        3.3,
-        10.6
+        -0.22000000000000014,
+        3.135,
+        10.139999999999999
       ],
       "look": [
         -0.1,
-        2.9,
-        -1
+        3.5,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.23684210526315794,
-          1.0526315789473684,
-          5.736842105263158
+          0.06842105263157887,
+          0.6499999999999999,
+          5.494736842105263
         ],
         "to": [
-          0.5526315789473684,
-          0.7894736842105263,
-          5.0
+          0.24736842105263152,
+          0.6499999999999999,
+          5.242105263157894
         ],
         "lookFrom": [
           0.13157894736842105,
@@ -1940,9 +2034,10 @@
           0.8421052631578948,
           -0.3684210526315789
         ],
-        "rollFrom": -5,
-        "rollTo": 3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -1969,7 +2064,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#152a34",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -1998,7 +2095,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           0.2,
-          -0.5,
+          0,
           0
         ],
         "scale": 1.8,
@@ -2006,7 +2103,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -2017,7 +2116,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           0,
-          -1.5,
+          0,
           -3
         ],
         "scale": 4.2,
@@ -2025,7 +2124,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#436875"
+          "tint": "#436875",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -2057,42 +2158,43 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.65,
-        2.7,
-        11
+        0.32,
+        2.9699999999999998,
+        10.24
       ],
       "look": [
-        0,
-        3.3,
-        -1
+        0.0,
+        4.05,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.25,
-          0.7777777777777778,
-          6.111111111111111
+          0.06666666666666665,
+          0.6499999999999998,
+          5.688888888888889
         ],
         "to": [
-          -0.3055555555555556,
-          1.5,
-          5.0
+          -0.12222222222222223,
+          0.6499999999999998,
+          5.422222222222222
         ],
         "lookFrom": [
           -0.11111111111111112,
-          1.111111111111111,
+          1.25,
           -0.5555555555555556
         ],
         "lookTo": [
           -0.11111111111111112,
-          1.3888888888888888,
+          1.25,
           -0.5555555555555556
         ],
-        "rollFrom": -2,
-        "rollTo": 2,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -2119,7 +2221,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#26282b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -2148,7 +2252,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           0.1,
-          -0.2,
+          0,
           0
         ],
         "scale": 1.65,
@@ -2156,7 +2260,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -2167,7 +2273,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           -0.1,
-          -1.8,
+          0,
           3
         ],
         "scale": 4.9,
@@ -2175,7 +2281,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#fff0bc"
+          "tint": "#fff0bc",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -2229,28 +2337,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.3,
-        3.5,
-        11
+        -0.02000000000000003,
+        2.7224999999999997,
+        10.39
       ],
       "look": [
-        0,
-        3,
-        -1
+        0.0,
+        3.2,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.24242424242424246,
-          1.2424242424242424,
-          6.666666666666667
+          -0.07272727272727275,
+          0.6499999999999999,
+          6.296969696969698
         ],
         "to": [
-          0.30303030303030304,
-          1.0606060606060608,
-          5.636363636363637
+          0.13333333333333333,
+          0.6499999999999999,
+          6.006060606060607
         ],
         "lookFrom": [
           -0.060606060606060615,
@@ -2262,9 +2370,10 @@
           0.9393939393939394,
           -0.6060606060606061
         ],
-        "rollFrom": -9,
-        "rollTo": 8,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -2291,7 +2400,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28252c",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -2320,7 +2431,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           0.2,
-          -0.45,
+          0,
           0
         ],
         "scale": 1.85,
@@ -2328,7 +2439,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -2339,7 +2452,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -1.7,
-          -0.6,
+          0,
           3.1
         ],
         "scale": 2.7,
@@ -2347,7 +2460,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#374552"
+          "tint": "#374552",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -2401,28 +2516,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.6,
-        3,
-        10.6
+        0.245,
+        3.0524999999999998,
+        9.94
       ],
       "look": [
-        0,
-        3,
-        -1
+        0.0,
+        3.45,
+        -0.9999999999999999
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.2162162162162162,
-          0.8648648648648648,
-          5.729729729729729
+          0.024324324324324312,
+          0.6499999999999998,
+          5.372972972972972
         ],
         "to": [
-          -0.35135135135135137,
-          1.0270270270270268,
-          4.756756756756757
+          -0.1594594594594595,
+          0.6499999999999998,
+          5.113513513513514
         ],
         "lookFrom": [
           -0.10810810810810811,
@@ -2434,9 +2549,10 @@
           0.8648648648648648,
           -0.5405405405405405
         ],
-        "rollFrom": 4,
-        "rollTo": -4,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -2463,7 +2579,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#272536",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -2492,7 +2610,7 @@
         "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
         "position": [
           -0.35,
-          -0.4,
+          0,
           0
         ],
         "scale": 1.9,
@@ -2500,7 +2618,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -2511,7 +2631,7 @@
         "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
         "position": [
           1.75,
-          -1,
+          0,
           3
         ],
         "scale": 4,
@@ -2519,7 +2639,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#664753"
+          "tint": "#664753",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -2551,28 +2673,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.7,
-        3.2,
-        11
+        -0.245,
+        3.135,
+        10.24
       ],
       "look": [
-        0,
-        3.8,
-        -1
+        0.0,
+        4.199999999999999,
+        -0.9999999999999999
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.18421052631578946,
-          0.8947368421052633,
-          5.7894736842105265
+          0.055263157894736833,
+          0.6499999999999999,
+          5.389473684210527
         ],
         "to": [
-          0.4736842105263158,
-          1.0526315789473684,
-          4.736842105263158
+          0.23421052631578948,
+          0.6499999999999999,
+          5.136842105263158
         ],
         "lookFrom": [
           0.18421052631578946,
@@ -2585,8 +2707,9 @@
           -0.5263157894736842
         ],
         "rollFrom": 0,
-        "rollTo": 4,
-        "relativeToFacing": false
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -2613,7 +2736,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#24323d",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -2624,7 +2749,7 @@
         "sourceUrl": "/examples/dark-fantasy/vertical-violet-gravity.jpg",
         "position": [
           0,
-          -8,
+          -8.2,
           -12
         ],
         "scale": 12.8,
@@ -2642,7 +2767,7 @@
         "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
         "position": [
           0.25,
-          0.2,
+          0,
           0
         ],
         "scale": 1.65,
@@ -2650,15 +2775,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
-        },
-        "motion": {
-          "to": [
-            0.25,
-            0.6,
-            0
-          ],
-          "easing": "smooth"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -2669,7 +2788,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -2.1,
-          -0.8,
+          0,
           3
         ],
         "scale": 2.7,
@@ -2677,7 +2796,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#402c58"
+          "tint": "#402c58",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -2687,7 +2808,7 @@
         "kind": "energy_orb",
         "position": {
           "x": 0.8,
-          "y": 3,
+          "y": 2.8,
           "z": -2
         },
         "rotation": {
@@ -2709,7 +2830,7 @@
         "kind": "dust",
         "position": {
           "x": 0,
-          "y": 1,
+          "y": 0.8,
           "z": -1
         },
         "rotation": {
@@ -2731,28 +2852,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.6,
-        3.4,
-        11
+        0.17000000000000007,
+        2.7224999999999997,
+        10.44
       ],
       "look": [
-        0,
-        3.2,
-        -1
+        0.0,
+        3.0,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.21212121212121213,
-          0.9393939393939394,
-          6.666666666666667
+          -0.04848484848484845,
+          0.6499999999999999,
+          6.327272727272727
         ],
         "to": [
-          -0.5151515151515151,
-          1.0606060606060608,
-          5.696969696969697
+          -0.2545454545454545,
+          0.6499999999999999,
+          6.036363636363636
         ],
         "lookFrom": [
           -0.15151515151515152,
@@ -2764,9 +2885,10 @@
           0.8181818181818185,
           -0.6060606060606061
         ],
-        "rollFrom": 10,
-        "rollTo": -9,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -2793,7 +2915,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#232533",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -2822,7 +2946,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           0.15,
-          -0.4,
+          0,
           0
         ],
         "scale": 2,
@@ -2830,7 +2954,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -2841,7 +2967,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           0,
-          -1.2,
+          0,
           3.2
         ],
         "scale": 5.1,
@@ -2849,7 +2975,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#324e69"
+          "tint": "#324e69",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -2903,28 +3031,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.6,
-        2.6,
-        10.8
+        -0.27,
+        3.3,
+        10.040000000000001
       ],
       "look": [
-        0,
-        3.1,
-        -1
+        0.0,
+        3.5,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.375,
-          0.5,
-          5.4
+          -0.21000000000000002,
+          0.6499999999999999,
+          5.0200000000000005
         ],
         "to": [
-          0.125,
-          0.34999999999999987,
-          4.4
+          -0.039999999999999994,
+          0.6499999999999999,
+          4.78
         ],
         "lookFrom": [
           -0.075,
@@ -2936,9 +3064,10 @@
           0.75,
           -0.5
         ],
-        "rollFrom": -3,
-        "rollTo": 3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -2965,7 +3094,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28232b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -2994,7 +3125,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           0,
-          -0.5,
+          0,
           0
         ],
         "scale": 2.1,
@@ -3002,7 +3133,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -3013,7 +3146,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           1.7,
-          -1,
+          0,
           3.2
         ],
         "scale": 2.8,
@@ -3021,7 +3154,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ea6973"
+          "tint": "#ea6973",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -3053,28 +3188,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.55,
-        3,
-        11
+        0.22000000000000006,
+        3.465,
+        10.34
       ],
       "look": [
-        0,
-        3.3,
-        -1
+        0.0,
+        3.8,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.2619047619047619,
-          0.6666666666666666,
-          5.238095238095238
+          0.10476190476190478,
+          0.6499999999999999,
+          4.923809523809523
         ],
         "to": [
-          -0.21428571428571427,
-          0.9047619047619047,
-          4.3809523809523805
+          -0.057142857142857134,
+          0.6499999999999999,
+          4.695238095238095
         ],
         "lookFrom": [
           0.0,
@@ -3086,9 +3221,10 @@
           0.8095238095238093,
           -0.47619047619047616
         ],
-        "rollFrom": 2,
-        "rollTo": -2,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -3115,7 +3251,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#25282e",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -3144,7 +3282,7 @@
         "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
         "position": [
           0.15,
-          -0.4,
+          0,
           0
         ],
         "scale": 2,
@@ -3152,7 +3290,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -3163,7 +3303,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -1.85,
-          -1.2,
+          0,
           3
         ],
         "scale": 3,
@@ -3171,7 +3311,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#879aa6"
+          "tint": "#879aa6",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -3225,28 +3367,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.5,
-        3.2,
-        11
+        -0.17000000000000007,
+        3.3,
+        10.14
       ],
       "look": [
-        0,
-        3,
-        -1
+        0.0,
+        3.4,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.325,
-          0.8,
-          5.5
+          -0.16000000000000003,
+          0.6499999999999999,
+          5.07
         ],
         "to": [
-          0.175,
-          0.5999999999999999,
-          4.4
+          0.009999999999999995,
+          0.6499999999999999,
+          4.83
         ],
         "lookFrom": [
           -0.075,
@@ -3258,9 +3400,10 @@
           0.7,
           -0.5
         ],
-        "rollFrom": -2,
-        "rollTo": 2,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     },
     "sfx": [
@@ -3304,7 +3447,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#202a25",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -3333,7 +3478,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -0.2,
-          -0.5,
+          0,
           0
         ],
         "scale": 2.1,
@@ -3342,15 +3487,9 @@
         "imageLook": {
           "unlit": true,
           "tint": "#ffffff",
-          "psx": 1.4
-        },
-        "motion": {
-          "to": [
-            -0.2,
-            -0.15,
-            0
-          ],
-          "easing": "smooth"
+          "psx": 1.4,
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -3361,7 +3500,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           0,
-          -1,
+          0,
           3.2
         ],
         "scale": 5,
@@ -3369,7 +3508,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#26201c"
+          "tint": "#26201c",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -3401,28 +3542,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.65,
-        2.8,
-        11
+        0.22000000000000003,
+        3.465,
+        10.24
       ],
       "look": [
-        0,
-        3.1,
-        -1
+        0.0,
+        3.6,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.40476190476190477,
-          0.5714285714285713,
-          5.238095238095238
+          0.2,
+          0.6499999999999999,
+          4.876190476190476
         ],
         "to": [
-          -0.16666666666666669,
-          0.9047619047619047,
-          4.285714285714286
+          0.038095238095238085,
+          0.6499999999999999,
+          4.647619047619048
         ],
         "lookFrom": [
           0.09523809523809523,
@@ -3434,9 +3575,10 @@
           0.7142857142857143,
           -0.47619047619047616
         ],
-        "rollFrom": 3,
-        "rollTo": -3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -3463,7 +3605,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28222d",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -3492,7 +3636,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           -0.35,
-          -0.6,
+          0,
           -0.3
         ],
         "scale": 1.9,
@@ -3500,7 +3644,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -3511,7 +3657,7 @@
         "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
         "position": [
           2.25,
-          -1,
+          0,
           3.3
         ],
         "scale": 2.8,
@@ -3519,7 +3665,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#96c5d2"
+          "tint": "#96c5d2",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -3551,28 +3699,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.8,
-        3.3,
-        10.6
+        -0.22000000000000014,
+        3.135,
+        10.139999999999999
       ],
       "look": [
         -0.1,
-        2.9,
-        -1
+        3.5,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.23684210526315794,
-          1.0526315789473684,
-          5.736842105263158
+          0.06842105263157887,
+          0.6499999999999999,
+          5.494736842105263
         ],
         "to": [
-          0.5526315789473684,
-          0.7894736842105263,
-          5.0
+          0.24736842105263152,
+          0.6499999999999999,
+          5.242105263157894
         ],
         "lookFrom": [
           0.13157894736842105,
@@ -3584,9 +3732,10 @@
           0.8421052631578948,
           -0.3684210526315789
         ],
-        "rollFrom": -5,
-        "rollTo": 3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     },
     "sfx": [
@@ -3630,7 +3779,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#152a34",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -3659,7 +3810,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           0.2,
-          -0.5,
+          0,
           0
         ],
         "scale": 1.8,
@@ -3668,7 +3819,9 @@
         "imageLook": {
           "unlit": true,
           "tint": "#ffffff",
-          "psx": 1.4
+          "psx": 1.4,
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -3679,7 +3832,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           0,
-          -1.5,
+          0,
           -3
         ],
         "scale": 4.2,
@@ -3687,7 +3840,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#436875"
+          "tint": "#436875",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -3719,42 +3874,43 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.65,
-        2.7,
-        11
+        0.32,
+        2.9699999999999998,
+        10.24
       ],
       "look": [
-        0,
-        3.3,
-        -1
+        0.0,
+        4.05,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.25,
-          0.7777777777777778,
-          6.111111111111111
+          0.06666666666666665,
+          0.6499999999999998,
+          5.688888888888889
         ],
         "to": [
-          -0.3055555555555556,
-          1.5,
-          5.0
+          -0.12222222222222223,
+          0.6499999999999998,
+          5.422222222222222
         ],
         "lookFrom": [
           -0.11111111111111112,
-          1.111111111111111,
+          1.25,
           -0.5555555555555556
         ],
         "lookTo": [
           -0.11111111111111112,
-          1.3888888888888888,
+          1.25,
           -0.5555555555555556
         ],
-        "rollFrom": -2,
-        "rollTo": 2,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -3781,7 +3937,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#26282b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -3810,7 +3968,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           0.1,
-          -0.2,
+          0,
           0
         ],
         "scale": 1.65,
@@ -3818,7 +3976,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -3829,7 +3989,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           -0.1,
-          -1.8,
+          0,
           3
         ],
         "scale": 4.9,
@@ -3837,7 +3997,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#fff0bc"
+          "tint": "#fff0bc",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -3891,28 +4053,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.3,
-        3.5,
-        11
+        -0.02000000000000003,
+        2.7224999999999997,
+        10.39
       ],
       "look": [
-        0,
-        3,
-        -1
+        0.0,
+        3.2,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.24242424242424246,
-          1.2424242424242424,
-          6.666666666666667
+          -0.07272727272727275,
+          0.6499999999999999,
+          6.296969696969698
         ],
         "to": [
-          0.30303030303030304,
-          1.0606060606060608,
-          5.636363636363637
+          0.13333333333333333,
+          0.6499999999999999,
+          6.006060606060607
         ],
         "lookFrom": [
           -0.060606060606060615,
@@ -3924,9 +4086,10 @@
           0.9393939393939394,
           -0.6060606060606061
         ],
-        "rollFrom": -9,
-        "rollTo": 8,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     },
     "sfx": [
@@ -3970,7 +4133,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28252c",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -3999,7 +4164,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           0.2,
-          -0.45,
+          0,
           0
         ],
         "scale": 1.85,
@@ -4008,7 +4173,9 @@
         "imageLook": {
           "unlit": true,
           "tint": "#ffffff",
-          "psx": 1.4
+          "psx": 1.4,
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -4019,7 +4186,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -1.7,
-          -0.6,
+          0,
           3.1
         ],
         "scale": 2.7,
@@ -4028,7 +4195,9 @@
         "imageLook": {
           "unlit": true,
           "tint": "#374552",
-          "psx": 1.4
+          "psx": 1.4,
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -4082,28 +4251,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.6,
-        3,
-        10.6
+        0.245,
+        3.0524999999999998,
+        9.94
       ],
       "look": [
-        0,
-        3,
-        -1
+        0.0,
+        3.45,
+        -0.9999999999999999
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.2162162162162162,
-          0.8648648648648648,
-          5.729729729729729
+          0.024324324324324312,
+          0.6499999999999998,
+          5.372972972972972
         ],
         "to": [
-          -0.35135135135135137,
-          1.0270270270270268,
-          4.756756756756757
+          -0.1594594594594595,
+          0.6499999999999998,
+          5.113513513513514
         ],
         "lookFrom": [
           -0.10810810810810811,
@@ -4115,9 +4284,10 @@
           0.8648648648648648,
           -0.5405405405405405
         ],
-        "rollFrom": 4,
-        "rollTo": -4,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -4144,7 +4314,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#272536",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -4173,7 +4345,7 @@
         "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
         "position": [
           -0.35,
-          -0.4,
+          0,
           0
         ],
         "scale": 1.9,
@@ -4181,7 +4353,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -4192,7 +4366,7 @@
         "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
         "position": [
           1.75,
-          -1,
+          0,
           3
         ],
         "scale": 4,
@@ -4200,7 +4374,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#664753"
+          "tint": "#664753",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -4232,28 +4408,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.7,
-        3.2,
-        11
+        -0.245,
+        3.135,
+        10.24
       ],
       "look": [
-        0,
-        3.8,
-        -1
+        0.0,
+        4.199999999999999,
+        -0.9999999999999999
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.18421052631578946,
-          0.8947368421052633,
-          5.7894736842105265
+          0.055263157894736833,
+          0.6499999999999999,
+          5.389473684210527
         ],
         "to": [
-          0.4736842105263158,
-          1.0526315789473684,
-          4.736842105263158
+          0.23421052631578948,
+          0.6499999999999999,
+          5.136842105263158
         ],
         "lookFrom": [
           0.18421052631578946,
@@ -4266,8 +4442,9 @@
           -0.5263157894736842
         ],
         "rollFrom": 0,
-        "rollTo": 4,
-        "relativeToFacing": false
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     },
     "sfx": [
@@ -4311,7 +4488,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#24323d",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -4322,7 +4501,7 @@
         "sourceUrl": "/examples/dark-fantasy/vertical-violet-gravity.jpg",
         "position": [
           0,
-          -8,
+          -8.2,
           -12
         ],
         "scale": 12.8,
@@ -4340,7 +4519,7 @@
         "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
         "position": [
           0.25,
-          0.2,
+          0,
           0
         ],
         "scale": 1.65,
@@ -4349,15 +4528,9 @@
         "imageLook": {
           "unlit": true,
           "tint": "#ffffff",
-          "psx": 1.4
-        },
-        "motion": {
-          "to": [
-            0.25,
-            0.6,
-            0
-          ],
-          "easing": "smooth"
+          "psx": 1.4,
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -4368,7 +4541,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -2.1,
-          -0.8,
+          0,
           3
         ],
         "scale": 2.7,
@@ -4377,7 +4550,9 @@
         "imageLook": {
           "unlit": true,
           "tint": "#402c58",
-          "psx": 1.4
+          "psx": 1.4,
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -4387,7 +4562,7 @@
         "kind": "energy_orb",
         "position": {
           "x": 0.8,
-          "y": 3,
+          "y": 2.8,
           "z": -2
         },
         "rotation": {
@@ -4409,7 +4584,7 @@
         "kind": "dust",
         "position": {
           "x": 0,
-          "y": 1,
+          "y": 0.8,
           "z": -1
         },
         "rotation": {
@@ -4431,28 +4606,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.6,
-        3.4,
-        11
+        0.17000000000000007,
+        2.7224999999999997,
+        10.44
       ],
       "look": [
-        0,
-        3.2,
-        -1
+        0.0,
+        3.0,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.21212121212121213,
-          0.9393939393939394,
-          6.666666666666667
+          -0.04848484848484845,
+          0.6499999999999999,
+          6.327272727272727
         ],
         "to": [
-          -0.5151515151515151,
-          1.0606060606060608,
-          5.696969696969697
+          -0.2545454545454545,
+          0.6499999999999999,
+          6.036363636363636
         ],
         "lookFrom": [
           -0.15151515151515152,
@@ -4464,9 +4639,10 @@
           0.8181818181818185,
           -0.6060606060606061
         ],
-        "rollFrom": 10,
-        "rollTo": -9,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   },
@@ -4493,7 +4669,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#232533",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -4522,7 +4700,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           0.15,
-          -0.4,
+          0,
           0
         ],
         "scale": 2,
@@ -4530,7 +4708,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -4541,7 +4721,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           0,
-          -1.2,
+          0,
           3.2
         ],
         "scale": 5.1,
@@ -4549,7 +4729,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#324e69"
+          "tint": "#324e69",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -4603,28 +4785,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.6,
-        2.6,
-        10.8
+        -0.27,
+        3.3,
+        10.040000000000001
       ],
       "look": [
-        0,
-        3.1,
-        -1
+        0.0,
+        3.5,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.375,
-          0.5,
-          5.4
+          -0.21000000000000002,
+          0.6499999999999999,
+          5.0200000000000005
         ],
         "to": [
-          0.125,
-          0.34999999999999987,
-          4.4
+          -0.039999999999999994,
+          0.6499999999999999,
+          4.78
         ],
         "lookFrom": [
           -0.075,
@@ -4636,9 +4818,10 @@
           0.75,
           -0.5
         ],
-        "rollFrom": -3,
-        "rollTo": 3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     },
     "sfx": [
@@ -4682,7 +4865,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#28232b",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -4711,7 +4896,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           0,
-          -0.5,
+          0,
           0
         ],
         "scale": 2.1,
@@ -4720,7 +4905,9 @@
         "imageLook": {
           "unlit": true,
           "tint": "#ffffff",
-          "psx": 1.4
+          "psx": 1.4,
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -4731,7 +4918,7 @@
         "sourceUrl": "/examples/dark-fantasy/scarlet-oracle.png",
         "position": [
           1.7,
-          -1,
+          0,
           3.2
         ],
         "scale": 2.8,
@@ -4740,7 +4927,9 @@
         "imageLook": {
           "unlit": true,
           "tint": "#ea6973",
-          "psx": 1.4
+          "psx": 1.4,
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -4772,28 +4961,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.55,
-        3,
-        11
+        0.22000000000000006,
+        3.465,
+        10.34
       ],
       "look": [
-        0,
-        3.3,
-        -1
+        0.0,
+        3.8,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.2619047619047619,
-          0.6666666666666666,
-          5.238095238095238
+          0.10476190476190478,
+          0.6499999999999999,
+          4.923809523809523
         ],
         "to": [
-          -0.21428571428571427,
-          0.9047619047619047,
-          4.3809523809523805
+          -0.057142857142857134,
+          0.6499999999999999,
+          4.695238095238095
         ],
         "lookFrom": [
           0.0,
@@ -4805,9 +4994,10 @@
           0.8095238095238093,
           -0.47619047619047616
         ],
-        "rollFrom": 2,
-        "rollTo": -2,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-vertical-saffron-well",
   "title": "Dark Fantasy · El pozo del sol",
-  "description": "Negro sobre oro: un arco oscuro pasa muy cerca de cámara y encierra una figura ante el pozo luminoso.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "includeAssets": true,
   "createdAt": "2026-09-14T19:30:00Z",
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#202a25",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -58,7 +60,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -0.2,
-          -0.5,
+          0,
           0
         ],
         "scale": 2.1,
@@ -66,15 +68,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
-        },
-        "motion": {
-          "to": [
-            -0.2,
-            -0.15,
-            0
-          ],
-          "easing": "smooth"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -85,7 +81,7 @@
         "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
         "position": [
           0,
-          -1,
+          0,
           3.2
         ],
         "scale": 5,
@@ -93,7 +89,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#26201c"
+          "tint": "#26201c",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -125,28 +123,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        0.65,
-        2.8,
-        11
+        0.22000000000000003,
+        3.465,
+        10.24
       ],
       "look": [
-        0,
-        3.1,
-        -1
+        0.0,
+        3.6,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          0.40476190476190477,
-          0.5714285714285713,
-          5.238095238095238
+          0.2,
+          0.6499999999999999,
+          4.876190476190476
         ],
         "to": [
-          -0.16666666666666669,
-          0.9047619047619047,
-          4.285714285714286
+          0.038095238095238085,
+          0.6499999999999999,
+          4.647619047619048
         ],
         "lookFrom": [
           0.09523809523809523,
@@ -158,9 +156,10 @@
           0.7142857142857143,
           -0.47619047619047616
         ],
-        "rollFrom": 3,
-        "rollTo": -3,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

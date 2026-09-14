@@ -1,6 +1,6 @@
 import { NearestFilter, Vector2, type MeshBasicMaterial, type MeshStandardMaterial, type Texture } from 'three'
 
-export type ImageLook = { tint?: string; unlit?: boolean; psx?: number }
+export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number }
 
 export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (!raw || typeof raw !== 'object') return undefined
@@ -8,6 +8,8 @@ export function parseImageLook(raw: unknown): ImageLook | undefined {
   const look: ImageLook = {}
   if (typeof value.tint === 'string' && /^#[\da-f]{6}$/i.test(value.tint)) look.tint = value.tint
   if (value.unlit === true) look.unlit = true
+  if (value.grounded === true) look.grounded = true
+  if (typeof value.shadow === 'number' && Number.isFinite(value.shadow) && value.shadow > 0) look.shadow = Math.min(1, value.shadow)
   if (typeof value.psx === 'number' && Number.isFinite(value.psx) && value.psx > 0) look.psx = Math.max(.5, Math.min(2, value.psx))
   return Object.keys(look).length ? look : undefined
 }

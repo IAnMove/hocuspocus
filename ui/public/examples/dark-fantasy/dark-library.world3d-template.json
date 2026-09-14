@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-library",
   "title": "Dark Fantasy · La biblioteca del vacío",
-  "description": "Revelado desde arriba; biblioteca suspendida, dos figuras y luces a tres profundidades.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "createdAt": "2026-09-14T17:00:00Z",
   "includeAssets": true,
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.2,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#272536",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -40,7 +42,7 @@
         "clip": null,
         "position": [
           0,
-          7,
+          1.7999999999999998,
           -12
         ],
         "rotationY": 0,
@@ -55,11 +57,15 @@
         "clip": null,
         "position": [
           0.45,
-          5.2,
+          0,
           0
         ],
         "scale": 1.3,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       },
       {
         "id": "sentinel",
@@ -70,11 +76,15 @@
         "clip": null,
         "position": [
           -2,
-          5.1,
+          0,
           -4
         ],
         "scale": 0.95,
-        "rotationY": 0
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
       }
     ],
     "worldSfx": [
@@ -83,7 +93,7 @@
         "kind": "energy_orb",
         "position": {
           "x": -1.3,
-          "y": 7.8,
+          "y": 2.5999999999999996,
           "z": 1
         },
         "color": "#e5b55e",
@@ -99,7 +109,7 @@
         "kind": "energy_orb",
         "position": {
           "x": 1.6,
-          "y": 8.2,
+          "y": 2.999999999999999,
           "z": -3
         },
         "color": "#b681ed",
@@ -115,7 +125,7 @@
         "kind": "dust",
         "position": {
           "x": 0,
-          "y": 6,
+          "y": 0.7999999999999998,
           "z": -1
         },
         "color": "#cab99d",
@@ -130,28 +140,28 @@
     "camera": {
       "family": "establishment",
       "eye": [
-        2,
-        9,
-        11
+        0.13000000000000012,
+        2.7,
+        9.99
       ],
       "look": [
-        0,
-        7,
-        0
+        0.0,
+        1.8,
+        0.0
       ],
       "fov": 43,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          1.1923076923076923,
-          1.923076923076923,
-          8.461538461538462
+          -0.24615384615384608,
+          1.076923076923077,
+          7.684615384615385
         ],
         "to": [
-          -1.423076923076923,
-          1.1538461538461537,
-          6.538461538461538
+          0.015384615384615469,
+          1.076923076923077,
+          7.315384615384615
         ],
         "lookFrom": [
           -0.34615384615384615,
@@ -163,9 +173,10 @@
           0.3846153846153846,
           0.0
         ],
-        "rollFrom": 10,
-        "rollTo": -7,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     }
   }

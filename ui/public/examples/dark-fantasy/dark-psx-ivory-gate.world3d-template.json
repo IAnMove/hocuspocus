@@ -3,7 +3,7 @@
   "version": 1,
   "id": "dark-psx-ivory-gate",
   "title": "Dark Fantasy · La puerta de marfil · PSX escena completa",
-  "description": "Caballero marfil en el centro, centinela casi negro delante y una grieta roja al fondo. Acercamiento lateral. PSX: escena completa.",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
   "includeAssets": true,
   "createdAt": "2026-09-14T19:30:00Z",
   "document": {
@@ -29,7 +29,9 @@
       "reflectiveFloor": false,
       "platform": false,
       "bloom": 0.1,
-      "floorStyle": "none"
+      "floorStyle": "backdrop",
+      "floorColor": "#25282e",
+      "floorSourceHeight": 0.42
     },
     "slots": [
       {
@@ -58,7 +60,7 @@
         "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
         "position": [
           0.15,
-          -0.4,
+          0,
           0
         ],
         "scale": 2,
@@ -66,7 +68,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#ffffff"
+          "tint": "#ffffff",
+          "grounded": true,
+          "shadow": 0.82
         }
       },
       {
@@ -77,7 +81,7 @@
         "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
         "position": [
           -1.85,
-          -1.2,
+          0,
           3
         ],
         "scale": 3,
@@ -85,7 +89,9 @@
         "clip": null,
         "imageLook": {
           "unlit": true,
-          "tint": "#879aa6"
+          "tint": "#879aa6",
+          "grounded": true,
+          "shadow": 0.82
         }
       }
     ],
@@ -139,28 +145,28 @@
       "family": "establishment",
       "frameFormat": "portrait",
       "eye": [
-        -0.5,
-        3.2,
-        11
+        -0.17000000000000007,
+        3.3,
+        10.14
       ],
       "look": [
-        0,
-        3,
-        -1
+        0.0,
+        3.4,
+        -1.0
       ],
       "fov": 49,
       "framing": {
         "targetSlot": "hero",
         "anchor": "center",
         "from": [
-          -0.325,
-          0.8,
-          5.5
+          -0.16000000000000003,
+          0.6499999999999999,
+          5.07
         ],
         "to": [
-          0.175,
-          0.5999999999999999,
-          4.4
+          0.009999999999999995,
+          0.6499999999999999,
+          4.83
         ],
         "lookFrom": [
           -0.075,
@@ -172,9 +178,10 @@
           0.7,
           -0.5
         ],
-        "rollFrom": -2,
-        "rollTo": 2,
-        "relativeToFacing": false
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
       }
     },
     "sfx": [
