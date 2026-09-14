@@ -1,7 +1,7 @@
 """HTTP boundary for user-facing install and generation diagnostics.
 
 Importable without the application launcher, CUDA or heavy engines.
-Mount with create_user_diagnostics_router() — see ui/src/features/diagnostics/INTEGRATION.patch.
+Mount with create_user_diagnostics_router() in either application runtime.
 """
 from __future__ import annotations
 

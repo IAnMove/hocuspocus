@@ -168,6 +168,7 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - name: Install UI deps
+        id: ui-deps
         working-directory: ui
         run: npm ci
       - name: First-party LOC and complexity ratchet
@@ -176,6 +177,9 @@ jobs:
           # with the previous tip (github.event.before). Never fall back to
           # the historical dashboard: that paints merge commits red.
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          SOURCE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           if [ -z "${BASE_SHA:-}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
@@ -195,17 +199,24 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: code-health-report
-          path: code-health.md
+          path: |
+            code-health.md
+            code-health-integration.json
           if-no-files-found: ignore
       # Split `npm run check` so a hung runner is visible in the failing step
       # instead of one opaque 6-hour job (GitHub's default timeout).
+      # Collect all validation results even when the ratchet or an earlier
+      # check fails. A failed step still fails this job and CI required.
       - name: UI tests
+        if: ${{ !cancelled() && steps.ui-deps.outcome == 'success' }}
         working-directory: ui
         run: npm test
       - name: Lint with zero warnings
+        if: ${{ !cancelled() && steps.ui-deps.outcome == 'success' }}
         working-directory: ui
         run: npm run lint -- --max-warnings=0
       - name: Type-check, build and bundle budget
+        if: ${{ !cancelled() && steps.ui-deps.outcome == 'success' }}
         working-directory: ui
         run: python ../scripts/build_ui.py && python ../scripts/build_ui.py --check && npm run budget
 

@@ -253,5 +253,121 @@ def outer(a, b):
             self.assertEqual(code_health._line_count(path), (3, 2))
 
 
+
+
+class ReleaseIntegrationHealthTests(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        import code_health_integration
+        self.release = code_health_integration
+        self.patch = patch
+
+    def report(self, lines=100_000, complex_count=100, file_complexity=20):
+        return {
+            "policy": dict(code_health.POLICY),
+            "measurement": {"ui": "complete"},
+            "product_paths": ["app/services/example.py"],
+            "summary": {
+                "production_lines": lines, "complex_functions": complex_count,
+                "max_complexity": 50, "functions_measured": 1000,
+            },
+            "hotspots": {},
+            "complexity_hotspots": {"app/services/example.py": file_complexity},
+        }
+
+    def compare(self, *reports):
+        return self.release.compare_release(
+            reports[-1], reports[0], [str(i) for i in range(len(reports))], list(reports),
+        )
+
+    def test_cumulative_growth_passes_only_when_each_integration_fits(self):
+        first = self.report()
+        middle = self.report(103_000, 105)
+        last = self.report(106_000, 110)
+        _, ordinary_failures = code_health.compare(last, first)
+        self.assertEqual(len(ordinary_failures), 2)
+        _, failures, _ = self.compare(first, middle, last)
+        self.assertEqual(failures, [])
+
+    def test_later_reduction_cannot_hide_an_aggregate_budget_failure(self):
+        for middle in (self.report(104_000), self.report(complex_count=106)):
+            with self.subTest(summary=middle["summary"]):
+                _, failures, _ = self.compare(self.report(), middle, self.report())
+                self.assertTrue(any(item.startswith("Integration 1:") for item in failures))
+
+    def test_current_hotspot_still_compares_with_release_base(self):
+        _, failures, _ = self.compare(
+            self.report(), self.report(file_complexity=25), self.report(file_complexity=30),
+        )
+        self.assertTrue(any("complexity hotspot" in item for item in failures))
+
+    def test_repaired_historical_hotspot_is_reported_and_final_limit_remains(self):
+        _, failures, historical = self.compare(
+            self.report(), self.report(file_complexity=40), self.report(),
+        )
+        self.assertEqual(failures, [])
+        self.assertEqual(len(historical), 1)
+        self.assertIn("complexity hotspot", historical[0]["local_findings"][0])
+
+    def test_policy_and_missing_measurement_failures_are_not_relaxed(self):
+        last = self.report()
+        last["policy"]["line_growth_pct"] = 1
+        self.assertTrue(any("policy changed" in item for item in self.compare(self.report(), last)[1]))
+        last = self.report()
+        last["measurement"]["ui"] = "missing"
+        self.assertTrue(any("not measured" in item for item in self.compare(self.report(), last)[1]))
+
+    def test_missing_or_disagreeing_checkpoints_fail_closed(self):
+        baseline = self.report()
+        for measured in ({**baseline, "product_paths": []}, self.report(complex_count=99)):
+            with self.subTest(measured=measured):
+                with self.assertRaisesRegex(ValueError, "disagree"):
+                    self.release.compare_release(baseline, baseline, ["base", "head"], [baseline, measured])
+        with self.assertRaisesRegex(ValueError, "Missing integration"):
+            self.release.compare_release(baseline, baseline, ["base", "head"], [baseline])
+
+    def chain_git(self, overrides=None):
+        base, head, common = "a" * 40, "b" * 40, "c" * 40
+        answers = {
+            ("rev-parse", "--is-shallow-repository"): "false",
+            ("merge-base", base, head): common,
+            ("rev-parse", f"{base}^{{tree}}"): "base-tree",
+            ("rev-parse", f"{common}^{{tree}}"): "base-tree",
+            ("rev-parse", "HEAD^{tree}"): "head-tree",
+            ("rev-parse", f"{head}^{{tree}}"): "head-tree",
+            ("diff", "HEAD", "--name-only", "--", "app", "ui/src", *self.release.MEASUREMENT_INPUTS): "",
+            ("rev-list", "--first-parent", "--reverse", f"{common}..{head}"): head,
+            ("rev-parse", f"{head}^1"): common,
+        }
+        answers.update(overrides or {})
+        return base, head, lambda *args: answers[args]
+
+    def test_chain_requires_full_history_matching_trees_and_contiguous_parents(self):
+        base, head, fake_git = self.chain_git()
+        with self.patch.object(self.release, "git", fake_git):
+            self.assertEqual(self.release.release_chain(base, head), [base, head])
+        cases = [
+            ({("rev-parse", "--is-shallow-repository"): "true"}, "complete history"),
+            ({("rev-parse", f"{base}^{{tree}}"): "other"}, "merge-base"),
+            ({("rev-parse", "HEAD^{tree}"): "other"}, "candidate tree"),
+            ({("rev-parse", f"{head}^1"): "other"}, "gap"),
+        ]
+        for overrides, expected in cases:
+            with self.subTest(expected=expected):
+                _, _, fake_git = self.chain_git(overrides)
+                with self.patch.object(self.release, "git", fake_git):
+                    with self.assertRaisesRegex(ValueError, expected):
+                        self.release.release_chain(base, head)
+        with self.assertRaisesRegex(ValueError, "exact commit"):
+            self.release.release_chain("origin/main", head)
+
+    def test_changed_or_missing_historical_measurement_inputs_fail_closed(self):
+        rows = [f"100644 blob {'a' * 40}\t{path}" for path in self.release.MEASUREMENT_INPUTS]
+        for second in (rows[:-1], [row.replace('a' * 40, 'b' * 40) for row in rows]):
+            with self.patch.object(self.release, "git", side_effect=["\n".join(rows), "\n".join(second)]):
+                with self.assertRaisesRegex(ValueError, "measurement inputs|measurement inputs changed"):
+                    self.release.read_trees(["base", "head"])
+
+
 if __name__ == "__main__":
     unittest.main()

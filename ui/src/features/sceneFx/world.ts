@@ -40,6 +40,23 @@ export type WorldSfx = {
 }
 
 const PRESETS = Object.fromEntries(catalog.map(item => [item.id, item]))
+const WORLD_DEFAULTS: Partial<Record<WorldSfxKind, { y: number; scale: number }>> = {
+  magic_circle: { y: 0.02, scale: 1.4 },
+  shockwave: { y: 0.02, scale: 1.4 },
+  splash: { y: 0.02, scale: 1.4 },
+  dust: { y: 0.02, scale: 1.4 },
+  portal: { y: 1.15, scale: 1.4 },
+  summoning_gate: { y: 1.15, scale: 1.4 },
+  media_portal: { y: 1.15, scale: 1.7 },
+  explosion: { y: 0.42, scale: 1.65 },
+  ice_burst: { y: 0.42, scale: 1.4 },
+  rain: { y: 0.05, scale: 2.1 },
+  snow: { y: 0.05, scale: 2.1 },
+  fog: { y: 0.05, scale: 2.1 },
+  fire: { y: 0.15, scale: 1.4 },
+  tornado: { y: 0.05, scale: 1.4 },
+  laser: { y: 1, scale: 0.7 },
+}
 const number = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback
 
@@ -114,10 +131,7 @@ export function parseWorldSfx(raw: unknown): WorldSfx[] {
     if (end <= start || ids.has(id)) return []
     ids.add(id)
     const preset = PRESETS[value.kind]
-    const floor = value.kind === 'magic_circle' || value.kind === 'shockwave' || value.kind === 'splash' || value.kind === 'dust'
-    const standing = value.kind === 'portal' || value.kind === 'summoning_gate' || value.kind === 'media_portal'
-    const blast = value.kind === 'explosion' || value.kind === 'ice_burst'
-    const weather = value.kind === 'rain' || value.kind === 'snow' || value.kind === 'fog'
+    const layout = WORLD_DEFAULTS[value.kind] ?? { y: 1, scale: 1.4 }
     const sourceUrl = worldMediaUrl(value.sourceUrl)
     return [{
       id,
@@ -125,9 +139,9 @@ export function parseWorldSfx(raw: unknown): WorldSfx[] {
       ...(typeof value.label === 'string' ? { label: value.label.slice(0, 80) } : {}),
       start,
       end,
-      position: worldVec3(value.position, { x: 0, y: floor ? 0.02 : blast ? 0.42 : weather ? 0.05 : standing ? 1.15 : value.kind === 'fire' ? 0.15 : value.kind === 'tornado' ? 0.05 : 1.0, z: 0 }, -50, 50),
+      position: worldVec3(value.position, { x: 0, y: layout.y, z: 0 }, -50, 50),
       rotation: worldVec3(value.rotation, { x: 0, y: 0, z: 0 }, -180, 180),
-      scale: number(value.scale, value.kind === 'laser' ? 0.7 : value.kind === 'explosion' ? 1.65 : weather ? 2.1 : value.kind === 'media_portal' ? 1.7 : 1.4, 0.05, 20),
+      scale: number(value.scale, layout.scale, 0.05, 20),
       intensity: number(value.intensity, 1, 0.1, 2),
       color: typeof value.color === 'string' && /^#[\da-f]{6}$/i.test(value.color) ? value.color : preset.color,
       seed: Math.round(number(value.seed, index + 21, 1, 1000000)),

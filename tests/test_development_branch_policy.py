@@ -73,6 +73,18 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
             text,
         )
 
+    def test_ui_validation_runs_after_ratchet_failure_without_masking_failures(self):
+        text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        ui = text[text.index('  ui-check:'):text.index('  ui-e2e:')]
+        self.assertIn('name: Install UI deps\n        id: ui-deps', ui)
+        for name in ('UI tests', 'Lint with zero warnings', 'Type-check, build and bundle budget'):
+            self.assertIn(
+                f"name: {name}\n        if: ${{{{ !cancelled() && steps.ui-deps.outcome == 'success' }}}}",
+                ui,
+            )
+        self.assertNotIn('continue-on-error:', ui)
+        self.assertIn('exit "$STATUS"', ui)
+
     def test_ci_required_aggregates_existing_job_names(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         self.assertIn('name: Clean-repo guard + Python checks', text)
