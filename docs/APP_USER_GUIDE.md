@@ -56,7 +56,7 @@ identidad y revisa el consumo antes de reanudarla.
 
 | Estudio | Flujo de trabajo | Wizard |
 | --- | --- | --- |
-| Story Lab | Crea un proyecto, completa premisa, personajes y lugares, genera o edita secciones y guarda. Desde la canción puedes pasar al videoclip. | `create_story`, `update_story`, `generate_story_section`, `configure_story_song`, `generate_story_song`, `stage_story_video`. Ejemplo: «Crea una historia nueva titulada El mago del barrio, completa su premisa y guárdala». |
+| Story Lab | Crea un proyecto, completa premisa, personajes y lugares, genera o edita secciones y guarda. Desde la canción puedes pasar al videoclip. **Load Tijeral cut-paper example** carga el capítulo de cartulina (no es una pestaña). Guía: [Tijeral](cut-paper/HOWUSEIT.md). | `create_story`, `update_story`, `generate_story_section`, `configure_story_song`, `generate_story_song`, `stage_story_video`. Ejemplo: «Crea una historia nueva titulada El mago del barrio, completa su premisa y guárdala». |
 | Series Lab | Crea una serie y un episodio, prepara el plan de planos, genera los planos y ensambla el episodio. | `create_series_episode`, `generate_series_plan`, `render_series_shots`, `assemble_series_episode`. Pide cada etapa o una producción explícita. |
 | Comics | Crea un cómic, define páginas y viñetas, genera y revisa cada panel antes de exportar. | `create_comic`, `generate_comic`, `generate_comic_panel`: «Crea un cómic nuevo de dos páginas sobre un mago programador». |
 | Character Creator | Crea un kit de personaje, adjunta referencias consistentes y construye el kit. Usa después sus vistas o rig en otros estudios. | `create_character_kit`, `attach_character_kit_references`, `build_character_kit`. |
@@ -102,6 +102,7 @@ aplicar cuando el Wizard propone ambas acciones seguidas en una sola respuesta.
 | Edits, Multi-clip, Favorites | Filtra por edición, montaje o favorito. | Ajuste manual de filtros y favoritos cuando no haya una capacidad específica. |
 | Workspaces | Crea colecciones de referencias y notas conservando los IDs de sus assets. | `create_workspace_collection`, `update_workspace_collection`. No es lo mismo que cambiar Output. |
 | Activity | Consulta cola, recursos y errores; abre detalles de una tarea antes de cancelarla o reintentarla. | `inspect_queue`, `cancel_task`, `retry_task`, `resume_task`. Ejemplo: «Muestra las tareas de esta carpeta y explica cuál sigue activa». |
+| Help | El botón **Help** abre el tutorial in-app (ES/EN). No lanza GPU. Cómo mantener copias y capturas: [Help HOWUSEIT](help/HOWUSEIT.md). | No hay capacidad Wizard; es chrome de la galería. |
 | Settings | Configura idioma, apariencia, modelos, proveedores y almacenamiento. | Navegación y descarga de modelos (`download_model`) parciales; credenciales y preferencias se revisan manualmente. |
 
 ## Cómo repetir y leer la auditoría
