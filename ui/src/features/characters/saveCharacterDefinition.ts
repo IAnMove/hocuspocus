@@ -14,13 +14,19 @@ export async function saveCharacterDefinition(input: {
   if (workshop) {
     const saved = await workshop(update)
     check()
-    return { saved, kit: saved.kits[id], linked: true }
+    const savedKit = saved.kits[id]
+    if (!savedKit) throw new Error('The character editor changed before saving finished.')
+    return { saved, kit: savedKit, linked: true }
   }
-  const recovery = readSpeechDraft(workspace, id)
+  // Only a real kit id may recover a scoped draft. An empty id is "new
+  // character" and must not alias the general workshop recovery key.
+  const recovery = id ? readSpeechDraft(workspace, id) : null
   const next = await update(recovery?.kit ?? kit)
   check()
   const saved = await saveCharacterKit(workspace, { ...library, revision: recovery?.baseRevision ?? library.revision }, next)
   check()
-  clearSpeechDraft(workspace, id)
-  return { saved, kit: saved.kits[next.id], linked: false }
+  if (id) clearSpeechDraft(workspace, id)
+  const savedKit = saved.kits[next.id]
+  if (!savedKit) throw new Error('The character editor changed before saving finished.')
+  return { saved, kit: savedKit, linked: false }
 }
