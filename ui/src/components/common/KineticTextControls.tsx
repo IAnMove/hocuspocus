@@ -1,5 +1,6 @@
 import { useUiTranslation } from '../../i18n'
 import { KINETIC_PRESETS, parseKineticTexts, type KineticText } from '../../lib/kineticText'
+import { randomUuid } from '../../lib/uuid'
 
 export function KineticTextControls({ cues = [], duration, disabled, onChange }: {
   cues?: KineticText[]; duration: number; disabled?: boolean; onChange: (cues: KineticText[]) => void
@@ -22,7 +23,7 @@ export function KineticTextControls({ cues = [], duration, disabled, onChange }:
         </div>
         <button type="button" onClick={() => onChange(cues.filter(item => item.id !== cue.id))} className="min-h-9 text-xs text-red-300">{t('remove')}</button>
       </div>)}
-      <button type="button" disabled={cues.length >= 12} onClick={() => onChange([...cues, ...parseKineticTexts([{ id: crypto.randomUUID(), text: t('defaultText'), start: 0, end: Math.min(3, duration), preset: 'impact' }])])} className="min-h-10 rounded border border-cyan-400/40 px-3 text-xs text-cyan-200 disabled:opacity-40">{t('add')}</button>
+      <button type="button" disabled={cues.length >= 12} onClick={() => onChange([...cues, ...parseKineticTexts([{ id: randomUuid(), text: t('defaultText'), start: 0, end: Math.min(3, duration), preset: 'impact' }])])} className="min-h-10 rounded border border-cyan-400/40 px-3 text-xs text-cyan-200 disabled:opacity-40">{t('add')}</button>
     </fieldset>
   </details>
 }

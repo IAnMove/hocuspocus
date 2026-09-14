@@ -93,6 +93,7 @@ function deferred<T>() {
 
 async function viewFor(options: {
   workspace?: string
+  initialKitId?: string
   services: {
     load: (workspace: string) => Promise<ReturnType<typeof library>>
     save: (workspace: string, current: ReturnType<typeof library>, draft: ReturnType<typeof kit>) => Promise<ReturnType<typeof library>>
@@ -102,7 +103,7 @@ async function viewFor(options: {
   const { render, screen, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
   const { CharacterSpeechPreparation } = await import('../src/features/characters/CharacterSpeechPreparation.tsx')
   presetRequests.length = 0
-  const view = render(<CharacterSpeechPreparation workspace={options.workspace ?? 'default'} services={options.services} />)
+  const view = render(<CharacterSpeechPreparation workspace={options.workspace ?? 'default'} services={options.services} initialKitId={options.initialKitId} />)
   return { ...view, screen, fireEvent, waitFor, cleanup, Component: CharacterSpeechPreparation }
 }
 
@@ -111,6 +112,24 @@ function assertOnlyPresetGets() {
   assert.ok(presetRequests.every(request => request.method === 'GET'
     && request.url.endsWith('/character-kit-presets/mouths/manifest.json')))
 }
+
+test('a character shortcut opens its exact kit without replacing another workshop recovery draft', async () => {
+  const { writeSpeechDraft, readSpeechDraft } = await import('../src/lib/characterSpeechDraft')
+  const first = kit('first', 'First'), second = kit('second', 'Second')
+  writeSpeechDraft('default', { baseRevision: 2, kit: first })
+  const view = await viewFor({ initialKitId: second.id, services: {
+    load: async () => library(3, first, second),
+    save: async () => { throw new Error('Opening configuration must not save') },
+    upload: async () => { throw new Error('Opening configuration must not upload') },
+  } })
+  try {
+    const selected = await view.screen.findByRole('combobox', { name: 'Saved character' }) as HTMLSelectElement
+    await view.waitFor(() => assert.equal(selected.value, second.id))
+    assert.equal(selected.disabled, true)
+    assert.equal(view.screen.queryByRole('button', { name: 'Upload base and create draft' }), null)
+    assert.equal(readSpeechDraft('default')?.kit.id, first.id)
+  } finally { view.cleanup() }
+})
 
 test('loads and selects saved kits without upload or model POST, while manual packs and import remain available', { concurrency: false }, async () => {
   const first = kit('kit-a', 'Same name')
@@ -133,8 +152,8 @@ test('loads and selects saved kits without upload or model POST, while manual pa
 
     assert.equal(uploads.length, 0)
     assertOnlyPresetGets()
-    for (const name of [/Regenerate body \(stays pending\)/, /Generate \/ replace Open/, /Generate the missing ones/, /Speak 3 s/]) {
-      assert.equal((view.screen.getByRole('button', { name })).disabled, true, `${name} should be disabled in the manual workshop`)
+    for (const name of [/Regenerate body \(stays pending\)/, /Generate \/ replace Open/, /Generate missing mouths with AI/, /Speak 3 s/]) {
+      assert.equal((view.screen.getByRole('button', { name })).disabled, false, `${name} should be available after the user explicitly clicks it`)
     }
     assert.equal((view.screen.getByRole('button', { name: 'Use pack' }) as HTMLButtonElement).disabled, false)
     assert.equal((view.screen.getByRole('button', { name: 'Upload base and create draft' }) as HTMLButtonElement).disabled, true)

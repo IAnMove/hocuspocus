@@ -833,7 +833,7 @@ export HOCUSPOCUS_URL=http://127.0.0.1:7860
   folder; disallowed/missing images return `400`/`404`.
 
 The output-folder token is `default` or `[A-Za-z0-9][A-Za-z0-9_-]*`. Kit mouth
-keys are `closed`, `small`, `wide`, and `round`; eye keys are `open` and
+keys are `closed`, `small`, `wide`, `round`, `pressed`, `medium`, `pucker`, `bite`, and `tongue`; eye keys are `open` and
 `blink`. `blob:` sources are rejected. Optional `lookNotes` (max 4000
 characters) and `voice` (local Qwen3 CustomVoice) persist on the kit.
 
@@ -868,3 +868,5 @@ These routes always use the server active output folder. They do not accept `?wo
 - Batch prompt rewrite is UI-only: loop `POST /api/v1/llm/generate` (local LLM) then PUT the chosen prompts.
 
 Operator notes: `docs/tools/HOWUSEIT.md`, `docs/video-editor/HOWUSEIT.md`, `docs/workspaces/HOWUSEIT.md`, and `docs/character-kits/HOWUSEIT.md`.
+
+Character Kit `restPose` optionally contains `{asset, fingerprint}`: a derived resting still for reference consumers. The original `base` remains the animation rig source. Speech analysis accepts both PCM WAV bytes and a bounded JSON envelope with `wavBase64`, `dialogue`, and `language`; see [2D speech quality](../../docs/character-kits/SPEECH_QUALITY.md).

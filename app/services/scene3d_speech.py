@@ -30,7 +30,9 @@ def rhubarb_executable() -> str | None:
     if configured:
         candidate = Path(configured)
         return str(candidate) if candidate.is_absolute() and candidate.is_file() else None
-    return shutil.which("rhubarb")
+    from services.install_speech_tools import bundled_executable
+    bundled = bundled_executable()
+    return shutil.which("rhubarb") or (str(bundled) if bundled.is_file() else None)
 
 
 def validate_voice_wav(data: bytes) -> float:
@@ -49,7 +51,7 @@ def validate_voice_wav(data: bytes) -> float:
         raise SpeechAnalysisError("Invalid PCM WAV.") from exc
 
 
-def analyze_voice(data: bytes, isolate_vocals: bool = False) -> dict:
+def analyze_voice(data: bytes, isolate_vocals: bool = False, dialogue: str = "", language: str = "") -> dict:
     duration = validate_voice_wav(data)
     executable = rhubarb_executable()
     if not executable:
@@ -58,36 +60,45 @@ def analyze_voice(data: bytes, isolate_vocals: bool = False) -> dict:
     if isolate_vocals:
         from services.vocal_isolation import isolation_key_material
         isolation = isolation_key_material()
+    recognizer = "pocketSphinx" if language.lower().split('-')[0] == "en" else "phonetic"
+    options = {"recognizer": recognizer, "extendedShapes": "GHX", "threads": 2}
+    if dialogue:
+        options["dialogue"] = dialogue
     material = analysis_material(
         data, duration, isolate_vocals, executable,
-        {"recognizer": "phonetic", "extendedShapes": "GHX", "threads": 2}, isolation)
-    payload = remember(material, lambda: json.dumps(_analyze_uncached(data, duration, isolate_vocals, executable)).encode(), ".json")
+        options, isolation)
+    payload = remember(material, lambda: json.dumps(_analyze_uncached(data, duration, isolate_vocals, executable, recognizer, dialogue)).encode(), ".json")
     return json.loads(payload)
 
 
-def _analyze_uncached(data: bytes, duration: float, isolate_vocals: bool, executable: str) -> dict:
+def _analyze_uncached(data: bytes, duration: float, isolate_vocals: bool, executable: str, recognizer: str = "phonetic", dialogue: str = "") -> dict:
     if not _LOCK.acquire(blocking=False):
         raise SpeechAnalysisUnavailable("Another local speech analysis is running. Try again shortly.")
     try:
         if isolate_vocals:
             from services.vocal_isolation import isolate_voice
             data = isolate_voice(data)
-        cues = _rhubarb_mouth_cues(executable, data, duration)
-        return {"mouthCues": cues, "recognizer": "phonetic", "duration": duration,
+        cues = _rhubarb_mouth_cues(executable, data, duration, recognizer, dialogue)
+        return {"mouthCues": cues, "recognizer": recognizer, "duration": duration,
                 "analysisSource": "isolated-vocals" if isolate_vocals else "original"}
     finally:
         _LOCK.release()
 
 
-def _rhubarb_mouth_cues(executable: str, data: bytes, duration: float) -> list:
+def _rhubarb_mouth_cues(executable: str, data: bytes, duration: float, recognizer: str = "phonetic", dialogue: str = "") -> list:
     # Keep diagnostic files: never delete user audio or imported assets.
     folder = Path(tempfile.mkdtemp(prefix="hocuspocus-speech-"))
     source, output = folder / "voice.wav", folder / "cues.json"
     source.write_bytes(data)
+    arguments = []
+    if dialogue:
+        transcript = folder / "dialogue.txt"
+        transcript.write_text(dialogue, encoding="utf-8")
+        arguments = ["--dialogFile", str(transcript)]
     try:
         completed = subprocess.run(
-            [executable, "--threads", "2", "--quiet", "-r", "phonetic",
-             "--extendedShapes", "GHX", "-f", "json", "-o", str(output), str(source)],
+            [executable, "--threads", "2", "--quiet", "-r", recognizer,
+             "--extendedShapes", "GHX", "-f", "json", "-o", str(output), *arguments, str(source)],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             timeout=90, check=False, shell=False,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,

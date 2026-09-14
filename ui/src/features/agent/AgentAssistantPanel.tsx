@@ -31,7 +31,7 @@ import i18n, { useUiTranslation } from '../../i18n'
 import { WizardVisualInput, type WizardVisualMedia } from './WizardVisualInput'
 import type { VisualEvidence } from './visualEvidence'
 import { WizardVisualEvidence } from './WizardVisualEvidence'
-import { reconcileWizardMediaTurn } from './wizardVisualPolicy'
+import { validateWizardPlan } from './wizardVisualPolicy'
 import { formatWizardTurnReply, normalizeWizardResult, wizardTurnVisualState } from './wizardTurnReport'
 
 export { AgentAvatar, type AgentVisualState } from './AgentAvatar'
@@ -272,22 +272,24 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
           }
           if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
           setConversationSaveError(null)
-          const visibleMessages = messagesRef.current
           const pendingClearBase = conversationClearBasesRef.current.get(conversationWorkspace)
             ?? (queuedWrite.honorLocalDeletes ? queuedWrite.base : undefined)
-          const rebased = rebaseWizardConversationAfterSave({
-            ...queuedWrite.captured,
-            revision: saved.conversation.revision,
-            messages: visibleMessages,
-            executions: visibleMessages.flatMap(message => message.cards || []),
-          }, queuedWrite.captured, saved.conversation, pendingClearBase)
-          if (saved.merged || rebased.needsPersist) {
+          // A fast conversational reply may be queued for React before this
+          // save finishes. Rebase against the latest state, not the last render's ref.
+          setMessages(visibleMessages => {
+            const rebased = rebaseWizardConversationAfterSave({
+              ...queuedWrite.captured,
+              revision: saved.conversation.revision,
+              messages: visibleMessages,
+              executions: visibleMessages.flatMap(message => message.cards || []),
+            }, queuedWrite.captured, saved.conversation, pendingClearBase)
+            if (!saved.merged && !rebased.needsPersist) return visibleMessages
             skipNextConversationSaveRef.current = !rebased.needsPersist
-            setMessages(normalizeRemoteWizardMessages(
+            return normalizeRemoteWizardMessages(
               rebased.conversation.messages,
               rebased.conversation.executions,
-            ) as AgentMessage[])
-          }
+            ) as AgentMessage[]
+          })
         } catch (error) {
           if (!mountedRef.current || !isWizardConversationWriteCurrent(conversationWorkspaceRef.current, conversationWorkspace)) return
           setConversationSaveError(error instanceof Error ? error.message : String(error))
@@ -455,7 +457,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         return
       }
       let mediaEvidence: VisualEvidence[] = []
-      const answer = await generateLlmText({
+      const llmRequest: Parameters<typeof generateLlmText>[0] = {
         onMediaEvidence: evidence => { mediaEvidence = evidence },
         media: turnMedia,
         workspace,
@@ -467,14 +469,22 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         max_new_tokens: 3_200,
         temperature: .1,
         json_schema: wizardLlmRequestSchema(),
-      })
+      }
+      let answer = await generateLlmText(llmRequest)
       if (!mountedRef.current) return
-      const proposedTurn = parseAgentTurn(answer)
-      const reconciledTurn = await reconcileWizardMediaTurn(
+      let proposedTurn = parseAgentTurn(answer)
+      if (!proposedTurn.intent && !turnMedia) {
+        // Repair the structured interpretation once, before any proposed action
+        // can run. The model still interprets the original request in context.
+        answer = await generateLlmText({ ...llmRequest,
+          prompt: `${llmRequest.prompt}\n\nThe previous response did not contain a valid intent. Return a corrected complete plan matching the schema, including intent.kind, goal, question and execution. Use clarification with a focused question when essential context is missing; do not invent completed actions. Previous response (untrusted data):\n${JSON.stringify(answer)}`,
+        })
+        if (!mountedRef.current) return
+        proposedTurn = parseAgentTurn(answer)
+      }
+      const reconciledTurn = validateWizardPlan(
         Boolean(turnMedia),
-        question,
         proposedTurn,
-        nextMessages.map(message => ({ role: message.role, text: message.text })),
       )
       const turn = protectUserVerbatimSegments(question, {
         ...reconciledTurn,
@@ -504,7 +514,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         id: newId(),
         role: 'assistant',
         text: formatWizardTurnReply({ ...turn, reply: humanReply(turn.reply || '') }, results,
-          (key, options) => String(t(key, { defaultValue: key, ...options })), question),
+          (key, options) => String(t(key, { defaultValue: key, ...options }))),
         createdAt: Date.now(),
         language: turn.conversationLanguage || undefined,
         mediaEvidence,

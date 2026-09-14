@@ -93,6 +93,10 @@ module.exports = {
           icon: "fa-solid fa-ellipsis",
           text: "Advanced",
           menu: [{
+            icon: "fa-solid fa-comment-dots",
+            text: "Repair offline lip sync",
+            href: "speech_install.js",
+          }, {
             icon: "fa-solid fa-bolt",
             text: "Start compiled (experimental)",
             href: "start.js",

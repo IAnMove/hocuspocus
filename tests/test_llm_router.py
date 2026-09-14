@@ -96,6 +96,30 @@ def test_generate_returns_llm_text_without_loading_wgp():
     generate.assert_called_once()
 
 
+def test_generate_can_use_scoped_series_writer_without_changing_the_global_model():
+    app = FastAPI()
+    loaded = []
+    requests = []
+    def writer(body):
+        requests.append(body)
+        return {"model": "series-writer", "base_url": "http://writer.example/v1", "api_key": "test"}
+    app.include_router(_core_router(ensure_llm_loaded=lambda: loaded.append(True), comic_writing_llm=writer))
+    client = TestClient(app)
+    schema = {"type": "object", "properties": {"environment": {"type": "string"}}}
+    with patch("services.llm_service.generate_openai_compatible", return_value='{"environment":"Empty diner"}') as generate:
+        response = client.post("/api/v1/llm/generate", json={
+            "prompt": "Prepare the location", "writingProvider": "minimax", "writingModel": "series-writer",
+            "system_prompt": "Remove occupants", "json_schema": schema,
+        })
+    assert response.status_code == 200
+    assert response.json() == {"text": '{"environment":"Empty diner"}'}
+    assert requests[0]["writingProvider"] == "minimax"
+    assert not loaded
+    assert generate.call_args.kwargs["model_id"] == "series-writer"
+    assert generate.call_args.kwargs["json_schema"] == schema
+    assert generate.call_args.kwargs["system_prompt"] == "Remove occupants"
+
+
 def test_list_llm_models_forwards_url_query_to_the_catalog():
     app = FastAPI()
     app.include_router(_core_router())

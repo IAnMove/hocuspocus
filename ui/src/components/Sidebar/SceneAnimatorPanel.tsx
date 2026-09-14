@@ -1,5 +1,6 @@
 import { sceneAudioWav, supportsSceneAac } from '../../features/sceneFx/audioExport'
 import { paintSceneFx } from '../../features/sceneFx/paint'
+import { waitForSceneImages } from '../../lib/sceneMediaReady'
 import { mixFxAudio } from '../../features/sceneFx/mix'
 import { encodeSpeechAudio } from '../../features/scene3d/speech/encodeAudio'
 import { presentSceneDocument, useSceneDocumentHandoff } from '../../features/sceneFx/handoff'
@@ -2241,6 +2242,7 @@ export function SceneAnimatorPanel() {
       .finally(() => setPublishing(false))
   }
   const waitForModelViewers = async () => {
+    await waitForSceneImages(canvasRef.current, sceneRef.current.layers)
     const root = canvasRef.current
     if (!root) return
     const deadline = Date.now() + 25000

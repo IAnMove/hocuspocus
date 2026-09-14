@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
 import shutil
 import threading
@@ -444,9 +445,56 @@ def create_core_labs_router() -> APIRouter:
             _write_series(target, library)
         return {"deleted": True, "episodeId": episode_id, "outputsPreserved": True}
 
+    @router.post("/api/v1/series/{series_id}/canon/approve")
+    def approve_canon(series_id: str, body: dict):
+        workspace = _series_workspace(body.get("workspace"))
+        try:
+            base_revision = int(body.get("baseRevision"))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="baseRevision is required") from exc
+        with _LOCK:
+            library = _read_series(workspace)
+            series = copy.deepcopy(_series_or_404(library, series_id))
+            canon = series["canon"]
+            if int(canon.get("revision") or 1) != base_revision:
+                raise HTTPException(status_code=409, detail="Canon revision changed; reload before approval")
+            if not canon.get("worldSummary", "").strip() or not series.get("characters") or not series.get("locations"):
+                raise HTTPException(status_code=400, detail="Complete the world, characters and locations before approving canon")
+            if canon.get("approval") != "approved":
+                canon["revision"] = base_revision + 1
+            canon.update(approval="approved", approvedAt=_iso_now())
+            for collection in ("characters", "locations", "props"):
+                for entity in series.get(collection, []):
+                    entity["approval"] = "approved"
+            series["revision"] += 1
+            series["updatedAt"] = _iso_now()
+            library["seriesById"][series_id] = series
+            stored = _write_series(workspace, library)
+        return stored["seriesById"][series_id]
+
+    @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/references/refresh")
+    def refresh_references(series_id: str, episode_id: str, body: dict):
+        from services.series_production import refresh_episode_references
+        from services.series_library import SeriesConflictError
+        workspace = _series_workspace(body.get("workspace"))
+        with _LOCK:
+            library = _read_series(workspace)
+            try:
+                series = refresh_episode_references(_series_or_404(library, series_id), episode_id, int(body.get("baseRevision", -1)))
+            except SeriesConflictError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            series["updatedAt"] = _iso_now()
+            series["episodesById"][episode_id]["updatedAt"] = series["updatedAt"]
+            library["seriesById"][series_id] = series
+            stored = _write_series(workspace, library)
+        return stored["seriesById"][series_id]
+
     @router.post("/api/v1/series/{series_id}/assets/import")
     def import_asset(series_id: str, body: dict):
         import shutil
+        from services.series_production import attach_series_import, existing_generated_reference
 
         workspace = _series_workspace(body.get("workspace"))
         source_name = str(body.get("uploadPath") or "")
@@ -465,15 +513,25 @@ def create_core_labs_router() -> APIRouter:
         with _LOCK:
             library = _read_series(workspace)
             series = copy.deepcopy(_series_or_404(library, series_id))
-            os.makedirs(os.path.dirname(destination), exist_ok=True)
-            shutil.copy2(source, destination)
+            metadata = copy.deepcopy(body.get("metadata")) if isinstance(body.get("metadata"), dict) else {}
+            if len(json.dumps(metadata, ensure_ascii=False).encode()) > 32 * 1024:
+                raise HTTPException(status_code=413, detail="Series asset metadata is too large")
+            existing = existing_generated_reference(series, owner_type, owner_id, metadata)
+            if existing and body.get("asTake") is not True:
+                return {"asset": existing, "series": series}
             asset = {
                 "id": asset_id, "workspaceId": workspace, "kind": kind,
                 "uri": relative, "ownerType": owner_type, "ownerId": owner_id,
                 "isDerivedThumbnail": False,
-                "metadata": {"name": str(body.get("name") or os.path.basename(source))[:300]},
+                "metadata": {**metadata, "name": str(body.get("name") or os.path.basename(source))[:300],
+                    "referenceRole": str(body.get("referenceRole") or "reference")[:100], "importedAt": _iso_now()},
             }
-            series.setdefault("assets", {})[asset_id] = asset
+            try:
+                attach_series_import(series, asset, as_take=body.get("asTake") is True, source_path=source)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            shutil.copy2(source, destination)
             series["revision"] = int(series.get("revision") or 1) + 1
             series["updatedAt"] = _iso_now()
             library["seriesById"][series_id] = series

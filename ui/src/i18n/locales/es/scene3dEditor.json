@@ -2,13 +2,13 @@
   "speech": {
     "resting": "en silencio",
     "speaking": "hablando",
-    "characterDefinition": "Personaje reutilizable · modelo 3D, cara y voz",
-    "definitionHint": "La ficha guarda el modelo y su cara. Cada escena conserva una copia independiente; sus frases y audios no se guardan en el personaje.",
+    "characterDefinition": "Personaje reutilizable · voz y lipsync",
+    "definitionHint": "Configura su voz y, cuando lo necesites, su boca 2D o su modelo 3D. Las frases y los audios pertenecen a cada escena. Guarda los cambios antes de preparar lipsync.",
     "savedCharacter": "Personaje de la biblioteca",
     "newCharacter": "Crear personaje nuevo",
     "useCharacter": "Usar personaje en este plano",
     "definitionName": "Nombre del personaje",
-    "saveCharacter": "Guardar personaje con cara y voz",
+    "saveCharacter": "Guardar toda la configuración del personaje",
     "characterSaved": "Personaje guardado. Modelo, boca, ojos y voz disponibles en otros planos.",
     "characterApplied": "Personaje aplicado. Los turnos del plano se conservan.",
     "reloadLibrary": "Recargar biblioteca",
@@ -201,7 +201,11 @@
       "missing": "Modelo opcional no disponible. Necesita audio-separator instalado y el checkpoint BS-RoFormer con su YAML en app/ckpts/roformer. No se descarga nada automáticamente.",
       "error": "No se pudo comprobar el modelo opcional.",
       "retry": "Comprobar de nuevo"
-    }
+    },
+    "optionalModel": "Modelo 3D (opcional; no hace falta para voz o personajes 2D)",
+    "configure2d": "Configurar boca y lipsync 2D",
+    "need2dImage": "Para lipsync 2D, añade una imagen al personaje y guarda su ficha. Puedes hacerlo en Personajes o desde su referencia en Series Lab.",
+    "configureLibraryCharacter": "Configurar voz y lipsync de {{name}}"
   },
   "title": "Estudio de escenas 3D",
   "subtitle": "Elige un plano, coloca tus objetos y pulsa Reproducir.",

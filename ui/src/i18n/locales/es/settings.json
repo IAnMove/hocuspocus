@@ -375,9 +375,9 @@
     "modelSizeTitle": "{{primary}} se puede borrar aquí; el resto vive en instalaciones enlazadas o pertenece a un modelo base"
   },
   "mcp": {
-    "title": "MCP · Asistentes externos",
+    "title": "MCP de Hocuspocus · Asistentes externos",
     "info": "Cómo funciona MCP",
-    "summary": "Conecta un asistente externo a esta instalación. El Wizard sigue disponible dentro de la aplicación.",
+    "summary": "Conecta un asistente externo a Hocuspocus para usar las herramientas de generación, recursos, colecciones y escenas disponibles en esta instalación. El Wizard sigue disponible dentro de la aplicación.",
     "enable": "Activar acceso MCP",
     "endpoint": "URL de conexión",
     "token": "Token nuevo — cópialo antes de cerrar Settings",

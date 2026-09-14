@@ -8,6 +8,7 @@ import { faceSettings, loadFaceProfile, saveFaceProfile } from './profiles'
 import { SpeechNumber, speechInput } from './FaceControls'
 import { CharacterDefinitionEditor } from '../../characters/CharacterDefinitionEditor'
 import { GenerateCharacterLine } from './GenerateCharacterLine'
+import { randomUuid } from '../../../lib/uuid'
 
 export function Scene3DSpeakerControls(props: SpeechControlsProps) {
   const { t } = useUiTranslation('scene3dEditor')
@@ -48,7 +49,7 @@ export function Scene3DSpeakerControls(props: SpeechControlsProps) {
         const existing = (stored.clips || stored.audio || stored.cues.length) ? clips.map(item => ({ ...item, end: item.end ?? Math.min(600, item.start + Math.max(.1, (item.cues.at(-1)?.end ?? 5) - item.offset)) })) : []
         const start = Math.max(0, ...existing.map(item => item.end))
         if (start >= 600) return
-        commit({ ...stored, clips: [...existing, { id: crypto.randomUUID(), start, end: Math.min(600, start + 5),
+        commit({ ...stored, clips: [...existing, { id: randomUuid(), start, end: Math.min(600, start + 5),
           offset: 0, gain: 1, cues: [], driver: 'imported' }] })
         setSelected(existing.length)
       }}>{t('speech.addIntervention')}</button>

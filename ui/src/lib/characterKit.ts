@@ -1,11 +1,14 @@
 import type { SceneFaceBindingState, SceneLayer } from '../types'
 import type { SceneRecipeInventoryItem } from './sceneRecipe'
+import { usableCharacterAsset, type CharacterKitReviewPolicy } from './characterKitReview'
 import { assertFacePatchPose, facePatchSceneTransform, isFacePatchCompatible, type FacePatchMetadata } from './characterFacePatch'
+import { CHARACTER_MOUTH_STATES, type CharacterMouthState } from './characterMouthStates'
+import { characterRestPoseSource } from './characterRestPose'
+export type { CharacterMouthState } from './characterMouthStates'
 
 export type CharacterKitStyle = 'cutout' | 'children-illustration' | 'anime-2d'
 export type CharacterKitReviewState = 'pending' | 'approved' | 'rejected'
 export type CharacterKitAlphaStatus = 'unknown' | 'transparent' | 'opaque'
-export type CharacterMouthState = 'closed' | 'small' | 'wide' | 'round'
 
 export interface CharacterKitAsset {
   id: string
@@ -41,6 +44,7 @@ export interface CharacterKit {
   style: CharacterKitStyle
   identityReference?: CharacterKitAsset
   base?: CharacterKitAsset
+  restPose?: { asset: CharacterKitAsset; fingerprint: string }
   poses: Record<string, CharacterKitAsset>
   mouth: Partial<Record<CharacterMouthState, CharacterKitAsset>>
   eyes: Partial<Record<'open' | 'blink', CharacterKitAsset>>
@@ -90,6 +94,8 @@ export function listCharacterKits(
 
 /** Canonical still for MiniMax / Story identity: identity photo, else the base pose. */
 export function characterKitStillSource(kit: CharacterKit): string | undefined {
+  const rest = characterRestPoseSource(kit)
+  if (rest) return rest
   const asset = kit.identityReference ?? kit.base
   return asset?.source || undefined
 }
@@ -281,10 +287,11 @@ export function mountCharacterKitLayers(
   transform: SceneLayer['transform'] = { x: 50, y: 55, scale: .72, opacity: 1, rotation: 0 },
   duration = 10,
   viewport = { width: 1280, height: 720 },
+  reviewPolicy: CharacterKitReviewPolicy = 'approved',
 ): SceneLayer[] {
   const poseAsset = poseId === 'base' ? kit.base : kit.poses[poseId]
   if (!poseAsset) throw new Error(`Character Kit “${kit.name}” has no ${poseId} pose.`)
-  if (poseAsset.reviewState !== 'approved') throw new Error(`Review and approve ${poseAsset.name} before mounting it.`)
+  if (!usableCharacterAsset(poseAsset, reviewPolicy)) throw new Error(`Review and approve ${poseAsset.name} before mounting it.`)
   const poseLayerId = `kit-${kit.id}-pose-${cleanId(poseId) || 'base'}`
   const animation = { start: { ...transform }, end: { ...transform }, duration, curve: 'hold' as const }
   const pose: SceneLayer = {
@@ -296,9 +303,9 @@ export function mountCharacterKitLayers(
   const faceTransform = (anchor: CharacterFaceAnchor) => appliedCharacterFaceTransform(transform, anchor)
   const layers: SceneLayer[] = [pose]
   let z = 21
-  for (const state of ['closed', 'small', 'wide', 'round'] as const) {
+  for (const state of CHARACTER_MOUTH_STATES) {
     const asset = kit.mouth[state]
-    if (!asset || asset.reviewState !== 'approved') continue
+    if (!asset || !usableCharacterAsset(asset, reviewPolicy)) continue
     assertFacePatchPose(asset, poseId, poseAsset.source)
     const anchor = anchors?.mouthStates?.[state] ?? mouthAnchor
     const placed = asset.facePatch ? facePatchSceneTransform(transform, anchor, asset.facePatch, viewport) : faceTransform(anchor)

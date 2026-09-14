@@ -87,7 +87,8 @@ def _require_mcp_bearer(request: Request, token: str) -> None:
 def create_core_mcp_router(access) -> APIRouter:
     router = APIRouter()
 
-    @router.post("/api/v1/wangp/mcp")
+    @router.post("/api/v1/wangp/mcp", include_in_schema=False)
+    @router.post("/api/v1/mcp")
     async def wangp_mcp(request: Request):
         _require_mcp_bearer(request, access.token())
         body = await request.json()

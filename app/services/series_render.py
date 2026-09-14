@@ -182,6 +182,10 @@ def plan_series_shot_duration(series: dict, shot: dict) -> dict:
 
 def apply_series_shot_duration(series: dict, shot: dict) -> dict:
     """Mutate a persisted/rendered shot to the authoritative duration plan."""
+    if shot.get("productionMethod") in {"animation_2d", "animation_3d", "imported_video"}:
+        shot["durationSeconds"] = max(.1, min(600, float(shot.get("durationSeconds") or 5)))
+        shot.pop("dialogueDuration", None)
+        return shot
     planned = plan_series_shot_duration(series, shot)
     shot.clear()
     shot.update(planned)

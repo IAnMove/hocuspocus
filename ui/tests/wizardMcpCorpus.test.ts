@@ -21,7 +21,8 @@ Object.assign(globalThis, {
 })
 window.matchMedia = () => ({ matches: false }) as MediaQueryList
 
-const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+const { validateWizardPlan } = await import('../src/features/agent/wizardVisualPolicy.ts')
 
 const tEn = (key: string, options?: Record<string, unknown>) => String(i18n.t(key, { ns: 'wizard', lng: 'en', ...options }))
 const tEs = (key: string, options?: Record<string, unknown>) => String(i18n.t(key, { ns: 'wizard', lng: 'es', ...options }))
@@ -76,9 +77,7 @@ test('wizard corpus cases keep receipts, not invented LLM success', async () => 
   for (const item of corpus.cases) {
     if (item.surface === 'mcp' || !item.proposal) continue
     const parsed = parseAgentTurn(JSON.stringify(item.proposal))
-    const turn = item.request
-      ? await reconcileAgentTurnWithRequest(item.request, parsed)
-      : parsed
+    const turn = validateWizardPlan(false, parsed)
     const types = turn.actions.map(action => action.type)
     if (item.expect.action_types) {
       assert.deepEqual(types, item.expect.action_types, item.id)
@@ -95,7 +94,7 @@ test('wizard corpus cases keep receipts, not invented LLM success', async () => 
     if (item.expect.creates_task === false) {
       assert.ok(!types.includes('start_generation'), item.id)
     }
-    const reply = formatWizardTurnReply(turn, [], translate(item.lang), item.request || '')
+    const reply = formatWizardTurnReply(turn, [], translate(item.lang))
     const actionBearing = Boolean(turn.actions.length || turn.rejections?.length)
     if (actionBearing && item.expect.promise_success === false) {
       assert.doesNotMatch(reply, /Completed|Completado|successfully|con éxito/i)
@@ -105,7 +104,7 @@ test('wizard corpus cases keep receipts, not invented LLM success', async () => 
         assert.doesNotMatch(reply, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
       }
     }
-    if (item.expect.creates_task === false && types.length === 0 && actionBearing) {
+    if (item.expect.creates_task === false && types.length === 0 && actionBearing && turn.intent?.kind !== 'clarification') {
       assert.match(reply, item.lang === 'es'
         ? /No se ha ejecutado ninguna acción/
         : /No action was executed/)
@@ -127,20 +126,20 @@ test('unpublished wizard tool cannot display a finished artifact', () => {
   const turn = parseAgentTurn(JSON.stringify(item.proposal))
   assert.equal(turn.actions.length, 0)
   assert.equal(turn.rejections?.[0].code, 'invalid_action')
-  const reply = formatWizardTurnReply(turn, [], tEs, item.request)
+  const reply = formatWizardTurnReply(turn, [], tEs)
   assert.match(reply, /No se ha ejecutado ninguna acción/)
   assert.match(reply, /generation_video/)
   assert.doesNotMatch(reply, /invented\.mp4/)
 })
 
-test('how-to empty turns do not start generation even if model prose remains', async () => {
+test('a dropped action proposal cannot become an informational success claim', async () => {
   const item = corpus.cases.find(entry => entry.id === 'en-how-to-image')
   assert.ok(item?.proposal && item.request)
-  const turn = await reconcileAgentTurnWithRequest(item.request, parseAgentTurn(JSON.stringify(item.proposal)))
+  const turn = validateWizardPlan(false, parseAgentTurn(JSON.stringify(item.proposal)))
   assert.deepEqual(turn.actions, [])
-  const reply = formatWizardTurnReply(turn, [], tEn, item.request)
-  assert.doesNotMatch(reply, /No action was executed/)
-  assert.match(reply, /invented\.png/)
+  const reply = formatWizardTurnReply(turn, [], tEn)
+  assert.match(reply, /No action was executed/)
+  assert.doesNotMatch(reply, /invented\.png/)
 })
 
 test('queued execution reports keep real IDs without completing', async () => {

@@ -1,6 +1,7 @@
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from './safeStorage'
 import { validateFacePatchMetadata } from './characterFacePatch'
 import type { CharacterKit, CharacterKitAsset } from './characterKit'
+import { CHARACTER_MOUTH_STATES } from './characterMouthStates'
 
 const STORAGE_PREFIX = 'hocuspocus-character-speech-draft-v1'
 const PAYLOAD_VERSION = 1
@@ -16,7 +17,7 @@ const ID_PATTERN = new RegExp(`^[A-Za-z0-9][A-Za-z0-9._-]{0,${MAX_KIT_ID_LENGTH 
 const STYLES = new Set<CharacterKit['style']>(['cutout', 'children-illustration', 'anime-2d'])
 const REVIEW_STATES = new Set<CharacterKitAsset['reviewState']>(['pending', 'approved', 'rejected'])
 const ALPHA_STATES = new Set<CharacterKitAsset['alphaStatus']>(['unknown', 'transparent', 'opaque'])
-const MOUTH_STATES = new Set(['closed', 'small', 'wide', 'round'])
+const MOUTH_STATES = new Set<string>(CHARACTER_MOUTH_STATES)
 const EYE_STATES = new Set(['open', 'blink'])
 
 export type CharacterSpeechDraft = {
@@ -135,6 +136,7 @@ function validateKit(value: unknown): asserts value is CharacterKit {
   if (Object.hasOwn(value, 'identityReference') && value.identityReference !== undefined) {
     validateAsset(value.identityReference, 'Character Kit identity reference')
   }
+  if (value.restPose !== undefined) validateRestPose(value.restPose)
   if (!isRecord(value.poses) || Object.keys(value.poses).length > MAX_POSES) throw new Error('Character Kit poses are invalid.')
   for (const [poseId, asset] of Object.entries(value.poses)) {
     if (!isIdentifier(poseId)) throw new Error('Character Kit pose id is invalid.')
@@ -152,18 +154,23 @@ function validateKit(value: unknown): asserts value is CharacterKit {
   validateOptionalString(value.updatedAt, MAX_ASSET_NAME_LENGTH, 'Character Kit updatedAt')
 }
 
+function validateRestPose(value: unknown): void {
+  if (!isRecord(value) || !isBoundedString(value.fingerprint, 8000, true)) throw new Error('Character resting pose is invalid.')
+  validateAsset(value.asset, 'Character resting pose')
+}
+
 function serializedByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength
 }
 
-function storageKey(workspace: string): string {
+function storageKey(workspace: string, kitId?: string): string {
   if (typeof workspace !== 'string') throw new Error('Speech draft workspace must be a string.')
-  return `${STORAGE_PREFIX}:${encodeURIComponent(workspace)}`
+  return `${STORAGE_PREFIX}:${encodeURIComponent(workspace)}${kitId ? `:kit:${encodeURIComponent(kitId)}` : ''}`
 }
 
 /** The session key is namespaced and intentionally includes the encoded workspace. */
-export function speechDraftStorageKey(workspace: string): string {
-  return storageKey(workspace)
+export function speechDraftStorageKey(workspace: string, kitId?: string): string {
+  return storageKey(workspace, kitId)
 }
 
 function parsePersistedDraft(raw: string, workspace: string): CharacterSpeechDraft {
@@ -176,23 +183,26 @@ function parsePersistedDraft(raw: string, workspace: string): CharacterSpeechDra
   return { baseRevision: value.baseRevision, kit: value.kit }
 }
 
-export function readSpeechDraft(workspace: string): CharacterSpeechDraft | null {
-  const key = storageKey(workspace)
+export function readSpeechDraft(workspace: string, kitId?: string): CharacterSpeechDraft | null {
+  const key = storageKey(workspace, kitId)
   const raw = safeStorageGet('session', key)
   if (raw === null) return null
   try {
-    return parsePersistedDraft(raw, workspace)
+    const draft = parsePersistedDraft(raw, workspace)
+    if (kitId && draft.kit.id !== kitId) throw new Error('Speech draft belongs to another character.')
+    return draft
   } catch {
     safeStorageRemove('session', key)
     return null
   }
 }
 
-export function writeSpeechDraft(workspace: string, draft: CharacterSpeechDraft): void {
-  const key = storageKey(workspace)
+export function writeSpeechDraft(workspace: string, draft: CharacterSpeechDraft, kitId?: string): void {
+  const key = storageKey(workspace, kitId)
   try {
     if (!isRecord(draft) || !isSafeRevision(draft.baseRevision)) throw new Error('Speech draft revision is invalid.')
     validateKit(draft.kit)
+    if (kitId && draft.kit.id !== kitId) throw new Error('Speech draft belongs to another character.')
     const payload: PersistedCharacterSpeechDraft = {
       version: PAYLOAD_VERSION,
       workspace,
@@ -213,6 +223,6 @@ export function writeSpeechDraft(workspace: string, draft: CharacterSpeechDraft)
   }
 }
 
-export function clearSpeechDraft(workspace: string): void {
-  safeStorageRemove('session', storageKey(workspace))
+export function clearSpeechDraft(workspace: string, kitId?: string): void {
+  safeStorageRemove('session', storageKey(workspace, kitId))
 }

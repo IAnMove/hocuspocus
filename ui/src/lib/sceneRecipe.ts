@@ -9,6 +9,8 @@ import type { NarrativeSceneControls, NarrativeSceneId, NarrativeTemplateInput }
 import { parseSceneGenerationPolicy, sceneGenerationPolicyFields, SCENE_GENERATION_POLICIES } from './sceneGenerationPolicy'
 import type { SceneGenerationPolicy } from './sceneGenerationPolicy'
 import { canonicalSceneFps } from './sceneFps.ts'
+import { parseCutoutLipSync, CUTOUT_LIP_SYNC_SCHEMA, planPhoneticCutoutDialogue } from './cutoutPhonetic'
+import { CHARACTER_MOUTH_STATES } from './characterMouthStates'
 
 const GRADE_MOODS: readonly SceneGradeMood[] = ['calm', 'tense', 'dreamy', 'heroic']
 const GRADE_PALETTES: readonly SceneGradePalette[] = ['natural', 'cool', 'warm', 'neon']
@@ -72,7 +74,8 @@ const parseDialogueBeats = (raw: unknown): SceneRecipeDialogueBeat[] | undefined
     const confidence: SceneRecipeDialogueBeat['confidence'] = beat.confidence === 'aligned-audio' || beat.confidence === 'energy-fallback'
       ? beat.confidence
       : 'known-text'
-    return { id, text, start, end, mouthLayerIds, audioTrackId: asString(beat.audioTrackId) || undefined, confidence }
+    return { id, text, start, end, mouthLayerIds, audioTrackId: asString(beat.audioTrackId) || undefined, confidence,
+      ...(beat.lipSync ? { lipSync: parseCutoutLipSync(beat.lipSync) } : {}) }
   })
   return beats.length ? beats : undefined
 }
@@ -197,6 +200,7 @@ export interface SceneRecipeDialogueBeat {
   mouthLayerIds: string[]
   audioTrackId?: string
   confidence: 'known-text' | 'aligned-audio' | 'energy-fallback'
+  lipSync?: import('./cutoutPhonetic').CutoutLipSync
 }
 
 export interface SceneRecipe {
@@ -416,7 +420,7 @@ const recipeLayerSchema = {
       properties: {
         poseLayerId: { type: 'string', minLength: 1, maxLength: 80 },
         role: { enum: ['mouth', 'blink'] },
-        state: { enum: ['closed', 'small', 'wide', 'round', 'blink'] },
+        state: { enum: [...CHARACTER_MOUTH_STATES, 'blink', 'open'] },
       },
       required: ['poseLayerId', 'role'],
       additionalProperties: false,
@@ -580,8 +584,9 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         properties: {
           id: { type: 'string', minLength: 1, maxLength: 120 }, text: { type: 'string', minLength: 1, maxLength: 2000 },
           start: { type: 'number', minimum: 0, maximum: 60 }, end: { type: 'number', minimum: .01, maximum: 60 },
-          mouthLayerIds: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 120 } },
+          mouthLayerIds: { type: 'array', minItems: 1, maxItems: 9, items: { type: 'string', minLength: 1, maxLength: 120 } },
           audioTrackId: { type: 'string', minLength: 1, maxLength: 120 }, confidence: { enum: ['known-text', 'aligned-audio', 'energy-fallback'] },
+          lipSync: CUTOUT_LIP_SYNC_SCHEMA,
         }, required: ['id', 'text', 'start', 'end', 'mouthLayerIds', 'confidence'],
       },
     },
@@ -1460,6 +1465,13 @@ function compileRecipeAudio(recipe: SceneRecipe, resolved: Record<string, string
   })
 }
 
+function appendRecipeMouthFrames(byLayer: Map<string, SceneKeyframe[]>, generated: Record<string, SceneKeyframe[]>, start: number) {
+  for (const [id, frames] of Object.entries(generated)) {
+    const previous = byLayer.get(id) ?? []
+    byLayer.set(id, [...previous, ...(previous.length && start > 0 ? frames.filter(frame => frame.time > 0) : frames)])
+  }
+}
+
 function compileRecipeDialogue(
   layers: SceneLayer[],
   beats: SceneRecipeDialogueBeat[] | undefined,
@@ -1489,11 +1501,9 @@ function compileRecipeDialogue(
     const start = Math.max(0, Math.min(duration, beat.start))
     const end = Math.max(start + 1 / Math.max(1, fps), Math.min(duration, beat.end))
     if (start >= duration) continue
-    const plan = planCutoutDialogue(beat.text, start, Math.min(duration, end), fps)
+    const plan = planPhoneticCutoutDialogue(beat, duration) ?? planCutoutDialogue(beat.text, start, Math.min(duration, end), fps)
     const generated = applyCutoutDialogue(mouthLayers, plan)
-    for (const [layerId, frames] of Object.entries(generated)) {
-      framesByLayer.set(layerId, [...(framesByLayer.get(layerId) ?? []), ...frames])
-    }
+    appendRecipeMouthFrames(framesByLayer, generated, plan.start)
     appliedBeats.push({ ...beat, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(generated) })
   }
   if (!framesByLayer.size) return { layers, beats: appliedBeats }

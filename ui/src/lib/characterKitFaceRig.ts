@@ -1,4 +1,5 @@
 import { planCutoutDialogue } from './cutoutDialogue'
+import { CHARACTER_MOUTH_STATES } from './characterMouthStates'
 import {
   DEFAULT_CHARACTER_BLINK_ANCHOR,
   DEFAULT_CHARACTER_MOUTH_ANCHOR,
@@ -9,7 +10,7 @@ import {
   type CharacterMouthState,
 } from './characterKit'
 
-export const CHARACTER_FACE_RIG_STATES = ['closed', 'small', 'wide', 'round', 'open-eyes', 'blink'] as const
+export const CHARACTER_FACE_RIG_STATES = [...CHARACTER_MOUTH_STATES, 'open-eyes', 'blink'] as const
 export type CharacterKitFaceRigState = typeof CHARACTER_FACE_RIG_STATES[number]
 
 export function facePatchControls(kit: CharacterKit, asset: CharacterKitAsset | undefined, disabled: boolean | undefined, busy: unknown) {
@@ -275,6 +276,7 @@ export function lockFaceRigMouthPlacement(
     small: nextAnchor,
     wide: nextAnchor,
     round: nextAnchor,
+    pressed: nextAnchor, medium: nextAnchor, pucker: nextAnchor, bite: nextAnchor, tongue: nextAnchor,
   }
   return {
     ...kit,
@@ -415,11 +417,15 @@ export function previewPercentToImagePixel(
 }
 
 /** Fill an elliptical mouth box with sampled nearby skin. Leaves the rest of the pose intact. */
+function mouthWipeDistance(nx: number, ny: number, shape?: 'ellipse' | 'rectangle') {
+  return shape === 'rectangle' ? Math.max(nx * nx, ny * ny) : nx * nx + ny * ny
+}
+
 export function wipeMouthRegion(
   rgba: Uint8ClampedArray,
   width: number,
   height: number,
-  region: { cx: number; cy: number; rx: number; ry: number },
+  region: { cx: number; cy: number; rx: number; ry: number; shape?: 'ellipse' | 'rectangle' },
 ): Uint8ClampedArray {
   if (!(rgba instanceof Uint8ClampedArray) || rgba.length !== width * height * 4) {
     return new Uint8ClampedArray(rgba)
@@ -432,7 +438,7 @@ export function wipeMouthRegion(
     for (let x = 0; x < width; x += 1) {
       const nx = (x - region.cx) / rx
       const ny = (y - region.cy) / ry
-      const d = nx * nx + ny * ny
+      const d = mouthWipeDistance(nx, ny, region.shape)
       if (d < 1.05 || d > 1.45) continue
       const i = (y * width + x) * 4
       if (next[i + 3] < 16) continue
@@ -457,7 +463,7 @@ export function wipeMouthRegion(
     for (let x = 0; x < width; x += 1) {
       const nx = (x - region.cx) / rx
       const ny = (y - region.cy) / ry
-      const d = nx * nx + ny * ny
+      const d = mouthWipeDistance(nx, ny, region.shape)
       if (d > 1) continue
       const i = (y * width + x) * 4
       const mix = d > .72 ? (1 - d) / .28 : 1
@@ -497,6 +503,7 @@ export interface FaceRigMouthPresetPack {
   style?: string
   notes?: string
   states: Partial<Record<CharacterMouthState, { file: string }>>
+  collection?: string
 }
 
 /** Attach a reusable viseme pack as pending overlays. Does not approve placement. */
@@ -506,8 +513,8 @@ export function applyFaceRigMouthPreset(
   workspace?: string,
 ): CharacterKit {
   if (!pack.id.trim()) throw new Error('Choose a mouth style pack first.')
-  let next = kit
-  for (const state of FACE_RIG_MOUTH_STATES) {
+  let next = { ...kit, mouth: {} } as CharacterKit
+  for (const state of CHARACTER_MOUTH_STATES) {
     const file = pack.states[state]?.file
     if (!file) continue
     const source = `${FACE_RIG_PRESET_ROOT}/${file.replace(/^\/+/, '')}`
@@ -527,7 +534,7 @@ export function applyFaceRigMouthPreset(
       methodHint: 'character-kit-face-rig-preset',
     })
   }
-  if (next === kit) throw new Error(`Pack “${pack.label}” has no closed/small/wide/round overlays.`)
+  if (!Object.keys(next.mouth).length) throw new Error(`Pack “${pack.label}” has no closed/small/wide/round overlays.`)
   return next
 }
 export const FACE_RIG_DIALOGUE_MIN_SECONDS = 2
