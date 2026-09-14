@@ -138,7 +138,7 @@ test('dialogue preview marks missing mouths as fallbacks and stays off the kit',
   const preview = previewFaceRigDialogue(kit, 'The square is frozen and the bell is too loud.', 3)
   assert.equal(preview.end, 3)
   assert.deepEqual(preview.available, ['closed', 'wide'])
-  assert.deepEqual(preview.missing, ['small', 'round'])
+  assert.deepEqual(preview.missing, ['small', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'])
   assert.ok(preview.visemes.some(beat => beat.state === 'closed'))
   assert.ok(preview.visemes.filter(beat => beat.fallback).every(beat => beat.sourceState === 'wide' || beat.sourceState === 'closed'))
   assert.equal(kit.mouth.small, undefined)

@@ -1,5 +1,6 @@
 import { planCutoutDialogue } from './cutoutDialogue'
-import { CHARACTER_MOUTH_STATES } from './characterMouthStates'
+import { CHARACTER_MOUTH_STATES, MOUTH_STATE_FALLBACK, PHONETIC_MOUTH_STATE } from './characterMouthStates'
+import { parseMouthCues } from '../features/scene3d/speech/track'
 import {
   DEFAULT_CHARACTER_BLINK_ANCHOR,
   DEFAULT_CHARACTER_MOUTH_ANCHOR,
@@ -563,8 +564,8 @@ export function clampFaceRigDialogueDuration(value: number): number {
 }
 
 function mouthAvailability(kit: CharacterKit): { available: CharacterMouthState[]; missing: CharacterMouthState[]; fallback?: CharacterMouthState } {
-  const available = FACE_RIG_MOUTH_STATES.filter(state => Boolean(kit.mouth[state]?.source))
-  const missing = FACE_RIG_MOUTH_STATES.filter(state => !kit.mouth[state]?.source)
+  const available = CHARACTER_MOUTH_STATES.filter(state => Boolean(kit.mouth[state]?.source))
+  const missing = CHARACTER_MOUTH_STATES.filter(state => !kit.mouth[state]?.source)
   const fallback = (['wide', 'small', 'round', 'closed'] as const).find(state => available.includes(state))
   return { available, missing, fallback }
 }
@@ -585,7 +586,8 @@ function withMouthFallback(
     missing,
     visemes: visemes.map(beat => {
       const has = available.includes(beat.state)
-      const sourceState = has ? beat.state : fallback ?? beat.state
+      const basic = MOUTH_STATE_FALLBACK[beat.state]
+      const sourceState = has ? beat.state : available.includes(basic) ? basic : fallback ?? beat.state
       return { ...beat, sourceState, fallback: !has && sourceState !== beat.state }
     }),
   }
@@ -616,9 +618,25 @@ export function previewFaceRigDialogueFromAudio(
   return withMouthFallback(kit, text.trim() || usable.map(unit => unit.text).join(' '), visemes, 0, end)
 }
 
+/** Use the isolated recording's phonetic clock, including silence and the full tail. */
+export function previewFaceRigDialogueFromCues(kit: CharacterKit, text: string, data: unknown, duration: number): FaceRigDialoguePreview {
+  if (!Number.isFinite(duration) || duration <= 0 || duration > 90) throw new Error('Use a speech preview up to 90 seconds.')
+  const visemes: Array<{ start: number; end: number; state: CharacterMouthState }> = []
+  let cursor = 0
+  for (const cue of parseMouthCues(data)) {
+    if (cue.end > duration + .1) throw new Error('Mouth cues exceed the recorded voice.')
+    const start = Math.min(duration, Math.max(cursor, cue.start)), end = Math.min(duration, cue.end)
+    if (start > cursor) visemes.push({ start: cursor, end: start, state: 'closed' })
+    if (end > start) visemes.push({ start, end, state: PHONETIC_MOUTH_STATE[cue.viseme] })
+    cursor = Math.max(cursor, end)
+  }
+  if (cursor < duration) visemes.push({ start: cursor, end: duration, state: 'closed' })
+  return withMouthFallback(kit, text.trim(), visemes, 0, duration)
+}
+
 export function faceRigVisemeAt(preview: FaceRigDialoguePreview, time: number): FaceRigDialogueViseme | undefined {
   if (!preview.visemes.length) return undefined
-  return preview.visemes.find(beat => time >= beat.start && time < beat.end) ?? preview.visemes[preview.visemes.length - 1]
+  return preview.visemes.find(beat => time >= beat.start && time < beat.end)
 }
 
 /** Warn when an overlay is far from the face or obviously the wrong size. Never auto-approves. */

@@ -1,4 +1,4 @@
-/** Four legacy drawings remain sufficient; the extra five preserve phonetic detail. */
+/** Legacy scenes can use four drawings; newly prepared speech requires all nine slots. */
 export const BASIC_MOUTH_STATES = ['closed', 'small', 'wide', 'round'] as const
 export const CHARACTER_MOUTH_STATES = [...BASIC_MOUTH_STATES, 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const
 export type CharacterMouthState = typeof CHARACTER_MOUTH_STATES[number]

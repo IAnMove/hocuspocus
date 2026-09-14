@@ -100,6 +100,7 @@ function SpeechDraftEditor({ kit: draft, workspace, controller, faceBusy, onBusy
         <button type="button" disabled={busy || faceBusy || !pose?.source || readiness.poseApproved} onClick={approvePose} className={button}>{t('speechWorkshop.approvePose')}</button>
       </div>
       <p className="text-xs text-amber-200">{t('speechWorkshop.singlePack')}</p>
+      <p className="text-xs text-text-secondary">{t('speechWorkshop.completeSet', { count: readiness.rows.filter(row => row.status === 'approved').length })}</p>
       <ul aria-label={t('speechWorkshop.checklist')} className="flex flex-wrap gap-2 text-xs">
         {readiness.rows.map(row => <li key={row.state} className="rounded border border-border px-2 py-1">{t(`mouths.${row.state}`)}: {t(`speechWorkshop.states.${row.status}`)}</li>)}
       </ul>

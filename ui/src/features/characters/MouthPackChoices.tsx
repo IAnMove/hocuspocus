@@ -22,7 +22,9 @@ export function MouthPackChoices({ packs, selected, disabled, onSelect, onApply 
     {packs.length ? <>
       <label className="block text-xs">{t('faceRig.mouthPackAria')}
         <select aria-label={t('faceRig.mouthPackAria')} value={selected} disabled={disabled} onChange={event => onSelect(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary p-2">
-          {packs.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+          {packs.map(item => <option key={item.id} value={item.id}>{t('faceRig.packOption', {
+            name: item.label, count: CHARACTER_MOUTH_STATES.filter(state => item.states[state]?.file).length,
+          })}</option>)}
         </select>
       </label>
       <div className="grid grid-cols-3 gap-2">{CHARACTER_MOUTH_STATES.filter(state => pack?.states[state]).map(state => <figure key={state} className="rounded border border-border bg-bg-primary p-2">

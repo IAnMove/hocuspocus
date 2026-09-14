@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ParseKeys } from 'i18next'
-import { analyzeAudio, cleanCharacterKitFaceOverlay, getFileUrl, uploadImage } from '../../api/client'
+import { cleanCharacterKitFaceOverlay, getFileUrl, uploadImage } from '../../api/client'
 import { generateImageAsset } from '../../lib/imageGeneration'
-import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
+import { createCharacterSpeechPreview } from '../../lib/characterSpeechPreview'
+import { CHARACTER_MOUTH_STATES } from '../../lib/characterMouthStates'
 import {
   FACE_RIG_PRESET_ROOT,
   FACE_RIG_STYLE_PRESETS,
@@ -23,7 +24,6 @@ import {
   lockFaceRigEyePlacement,
   lockFaceRigMouthPlacement,
   previewFaceRigDialogue,
-  previewFaceRigDialogueFromAudio,
   registerCleanedFaceRigAsset,
   registerGeneratedFaceRigAsset,
   setFaceRigReviewState,
@@ -129,6 +129,8 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin: CharacterFaceAnchor; aspect: number; mode: 'move' | 'resize' } | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const playTokenRef = useRef(0)
+  const speechRequestRef = useRef<AbortController | null>(null)
+  const dialogueFilenameRef = useRef<string | null>(null)
   const sampleStopRef = useRef<(() => void) | null>(null)
   const dialoguePreviewRef = useRef<FaceRigDialoguePreview | null>(null)
   const savedAnchor = useMemo(() => faceRigAnchorFor(kit, poseId, selectedState), [kit, poseId, selectedState])
@@ -164,6 +166,16 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   useEffect(() => { onBusyChange?.(Boolean(busyState)); return () => onBusyChange?.(false) }, [busyState, onBusyChange])
 
   useEffect(() => {
+    const playback = playTokenRef, audio = audioRef.current, speech = speechRequestRef
+    playback.current++
+    audio?.pause()
+    setDialoguePreview(null); dialoguePreviewRef.current = null
+    setDialogueAudio(null); dialogueFilenameRef.current = null
+    setLiveViseme(undefined)
+    return () => { playback.current++; audio?.pause(); speech.current?.abort() }
+  }, [kit, poseId, workspace, dialogueText])
+
+  useEffect(() => {
     setDraftAnchor(savedAnchor)
   }, [savedAnchor, selectedState, poseId, kit.id])
   useEffect(() => {
@@ -173,7 +185,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
       const data = await response.json() as { packs?: FaceRigMouthPresetPack[] }
       if (!cancelled) {
         setPresetPacks(Array.isArray(data.packs) ? data.packs : [])
-        setPresetId(current => current || data.packs?.[0]?.id || '')
+        setPresetId(current => current || data.packs?.find(pack => CHARACTER_MOUTH_STATES.every(state => pack.states[state]?.file))?.id || data.packs?.[0]?.id || '')
       }
     }).catch(() => { if (!cancelled) setPresetPacks([]) })
     return () => { cancelled = true }
@@ -273,7 +285,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
     setBusyState('pack'); setError(null)
     try {
       let next = persistLook(kit)
-      const missing = (['closed', 'small', 'wide', 'round'] as const).filter(state => !assetFor(next, state) || assetFor(next, state)?.reviewState === 'rejected')
+      const missing = CHARACTER_MOUTH_STATES.filter(state => !assetFor(next, state)?.source || assetFor(next, state)?.reviewState === 'rejected')
       if (!missing.length) throw new Error(t('faceRig.errors.packComplete'))
       for (const state of missing) {
         onStatus?.(t('faceRig.status.generatingState', { name: stateLabel(state) }))
@@ -313,6 +325,8 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
 
   const planDialogue = () => {
     sampleStopRef.current?.()
+    playTokenRef.current++; audioRef.current?.pause()
+    setDialogueAudio(null); dialogueFilenameRef.current = null
     try {
       const preview = previewFaceRigDialogue(kit, dialogueText)
       setDialoguePreview(preview)
@@ -324,7 +338,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
     }
   }
 
-  const playDialogue = () => {
+  const playDialogue = async () => {
     sampleStopRef.current?.()
     let preview = dialoguePreviewRef.current
     if (!preview) {
@@ -339,20 +353,25 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
       }
     }
     const token = ++playTokenRef.current
-    const started = performance.now()
     const audio = audioRef.current
-    if (audio && dialogueAudio) {
+    const filename = dialogueFilenameRef.current
+    if (audio && filename) {
+      audio.src = getFileUrl(filename, workspace)
       audio.currentTime = 0
-      void audio.play().catch(() => undefined)
+      try { await audio.play() } catch (cause) {
+        if (token === playTokenRef.current) setError(cause instanceof Error ? cause.message : t('faceRig.errors.planFailed'))
+        return
+      }
     }
+    const started = performance.now()
     const tick = () => {
       if (playTokenRef.current !== token) return
       const current = dialoguePreviewRef.current
       if (!current) return
-      const elapsed = audio && dialogueAudio && !audio.paused ? audio.currentTime : (performance.now() - started) / 1000
+      const elapsed = audio && filename ? audio.currentTime : (performance.now() - started) / 1000
       setLiveViseme(faceRigVisemeAt(current, elapsed))
-      if (elapsed >= current.end) {
-        setLiveViseme(undefined)
+      if (elapsed >= current.end || (audio && filename && audio.ended)) {
+        setLiveViseme({ start: current.end, end: current.end, state: 'closed', sourceState: 'closed', fallback: false })
         return
       }
       requestAnimationFrame(tick)
@@ -364,26 +383,23 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
     if (modelActionsDisabled) return
     sampleStopRef.current?.()
     const line = dialogueText.trim()
-    if (!line) throw new Error(t('faceRig.errors.writeLine'))
+    if (!line) { setError(t('faceRig.errors.writeLine')); return }
+    playTokenRef.current++; audioRef.current?.pause()
+    setDialoguePreview(null); dialoguePreviewRef.current = null
+    setDialogueAudio(null); dialogueFilenameRef.current = null
+    const request = new AbortController()
+    speechRequestRef.current?.abort(); speechRequestRef.current = request
     setBusyState('dialogue'); setError(null)
     try {
-      const clip = await generateSceneSpeechClip({ prompt: line, model: kit.voice?.model || speechModel, voice: kit.voice, workspace, durationSeconds: 3 })
-      setDialogueAudio(clip.filename)
-      let preview = previewFaceRigDialogue(kit, line, 3)
-      try {
-        const analysis = await analyzeAudio({ audio_path: clip.filename, transcribe: true, extract_vocals: true, lyrics_hint: line })
-        const units = (analysis.lyrics ?? []).flatMap(segment => segment.words?.length
-          ? segment.words.map(word => ({ text: word.text, start: word.start, end: word.end }))
-          : [{ text: segment.text, start: segment.start, end: segment.end }])
-        preview = previewFaceRigDialogueFromAudio(kit, line, units)
-      } catch {
-        preview = previewFaceRigDialogue(kit, line, 3)
-      }
-      setDialoguePreview(preview)
+      const { filename, preview } = await createCharacterSpeechPreview({ kit, text: line, model: speechModel,
+        workspace, language: i18n.resolvedLanguage || i18n.language, signal: request.signal })
+      if (request.signal.aborted) return
+      setDialogueAudio(filename); dialogueFilenameRef.current = filename
+      setDialoguePreview(preview); dialoguePreviewRef.current = preview
       onStatus?.(t('faceRig.status.speechReady', { count: preview.visemes.length }))
-      requestAnimationFrame(() => playDialogue())
+      requestAnimationFrame(() => { if (!request.signal.aborted) void playDialogue() })
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('faceRig.errors.speechFailed'))
+      if (!request.signal.aborted) setError(cause instanceof Error ? cause.message : t('faceRig.errors.speechFailed'))
     } finally { setBusyState(null) }
   }
 
@@ -698,9 +714,9 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
         <p className="text-xs text-text-secondary">{t('faceRig.tryLine.beats', { count: dialoguePreview.visemes.length, duration: dialoguePreview.end.toFixed(1), available: dialoguePreview.available.join(', ') || t('faceRig.tryLine.none') })}</p>
         {dialoguePreview.missing.length > 0 && <p className="text-xs text-amber-200">{t('faceRig.tryLine.missing', { missing: dialoguePreview.missing.join(', '), fallback: dialoguePreview.visemes.find(beat => beat.fallback)?.sourceState ?? t('faceRig.tryLine.remainingMouth') })}</p>}
         <div className="flex flex-wrap gap-1">{dialoguePreview.visemes.map((beat, index) => <span key={`${beat.start}-${index}`} className={`rounded border px-1 py-0.5 text-xs ${liveViseme && liveViseme.start === beat.start && liveViseme.state === beat.state ? 'border-amber-300 text-amber-100' : 'border-border text-text-muted'}`}>{beat.state}{beat.fallback ? `→${beat.sourceState}` : ''}</span>)}</div>
-        <button type="button" disabled={disabled || Boolean(busyState)} onClick={playDialogue} className="w-full rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.tryLine.playMouths')}</button>
+        <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void playDialogue()} className="w-full rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.tryLine.playMouths')}</button>
       </div>}
-      {dialogueAudio && <audio ref={audioRef} src={getFileUrl(dialogueAudio, workspace)} preload="auto" className="hidden" />}
+      <audio ref={audioRef} src={dialogueAudio ? getFileUrl(dialogueAudio, workspace) : undefined} preload="auto" className="hidden" />
     </details>
     </div>
     </div>

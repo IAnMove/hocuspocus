@@ -14,7 +14,23 @@ The previous Series planner distributed letters across the recorded phrase. The 
 
 Rhubarb already inserts suitable intermediate mouth shapes. The editor stores those cues alongside their audio/text provenance and compiles ordinary editable opacity keyframes. Moving a complete line moves its relative cues; changing the text, track binding or duration invalidates the old analysis. No video-generation model runs. If the offline engine is unavailable, the batch reports an error instead of silently claiming phonetic quality from estimated letter timings.
 
-Four legacy positions still work. Nine drawings retain more distinctions:
+New speaking shots require all nine mouth positions. Character Creator shows all
+nine slots, including missing ones, and its checklist reports approval and pose
+compatibility. Missing-mouth generation covers all nine; the default shared pack
+is a complete one. Drafts can still be saved before they are complete. Previously
+rendered clips and imported legacy four-drawing scenes remain usable; preparing or
+regenerating speaking shots requires completing their kits first. Explicit draft
+regeneration retains its existing policy of accepting saved pending images, while
+missing/rejected/incompatible images remain blockers.
+
+**Try with their voice** generates a line with the character's saved voice and
+analyzes its entire isolated recording using the same phonetic endpoint as native
+shots. It no longer limits the preview to three/four seconds or substitutes word
+timing when phonetic analysis fails. Playback follows the audio clock, closes the
+mouth in gaps and at the end, and invalidates the preview when the character or
+text changes. The separate quick text preview is explicitly approximate.
+
+Nine drawings retain these distinctions:
 
 | Drawing | Rhubarb | Use |
 | --- | --- | --- |

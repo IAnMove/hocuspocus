@@ -152,7 +152,7 @@ test('loads and selects saved kits without upload or model POST, while manual pa
 
     assert.equal(uploads.length, 0)
     assertOnlyPresetGets()
-    for (const name of [/Regenerate body \(stays pending\)/, /Generate \/ replace Open/, /Generate missing mouths with AI/, /Speak 3 s/]) {
+    for (const name of [/Regenerate body \(stays pending\)/, /Generate \/ replace Open/, /Generate missing mouths with AI/, /Try with their voice/]) {
       assert.equal((view.screen.getByRole('button', { name })).disabled, false, `${name} should be available after the user explicitly clicks it`)
     }
     assert.equal((view.screen.getByRole('button', { name: 'Use pack' }) as HTMLButtonElement).disabled, false)
