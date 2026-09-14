@@ -57,6 +57,7 @@ function makeSeriesReviewFixture() {
     ownerType: 'attempt', ownerId: id, isDerivedThumbnail: false, metadata: {},
   })
   const series = {
+    characters: [], locations: [],
     id: 'series-1', title: 'Series', assets: {
       'asset-1': asset('asset-1', 'clip-1.mp4'),
       'asset-2': asset('asset-2', 'clip-2.mp4'),
@@ -233,6 +234,7 @@ test('episode proposal review exposes editable controls and applies the edited d
     proposedCanonDelta: { baseRevision: 1, add: [], change: [], retire: [] },
   }
   const series = {
+    characters: [], locations: [],
     id: 'series-1', title: 'Series', locations: [{ id: 'location-1', name: 'Street' }],
     characters: [], assets: {}, provider: { videoSettings: { resolution: '540p', orientation: 'landscape' } },
   }

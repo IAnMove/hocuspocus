@@ -11,6 +11,12 @@ import type { SeriesAssemblyJob, SeriesEpisode, SeriesJobStatus, SeriesProject, 
 import { listenForAgentSeriesAssemblyJob, listenForAgentSeriesReviewView } from '../../lib/uiBus'
 import { useUiTranslation } from '../../i18n'
 import { bulkApproveSelections } from './shotReviewPolicy'
+import { isSeriesGeneratedShot } from './productionMethods'
+import { SeriesRenderActions, SeriesReviewShotAction } from './SeriesRenderActions'
+import { SeriesEpisodeProgress } from './SeriesEpisodeProgress'
+import { SeriesNativeDrafts } from './SeriesNativeDrafts'
+import { isRegeneratedSeriesAsset } from './nativeTake'
+import type { OpenSeriesReference } from './shotReferences'
 
 function AttemptPreview({ series, attempt, approved, onApprove, onReject }: {
   series: SeriesProject; attempt: SeriesRenderAttempt; approved: boolean; onApprove: () => void; onReject: () => void
@@ -21,6 +27,7 @@ function AttemptPreview({ series, attempt, approved, onApprove, onReject }: {
   const filename = asset?.uri.replace(/^outputs\//, '')
   const url = filename ? api.getFileUrl(filename, asset?.workspaceId) : ''
   return <div className={`rounded-lg border p-2 ${approved ? 'border-green-500/40 bg-green-500/10' : 'border-border bg-bg-primary'}`}>
+    {isRegeneratedSeriesAsset(asset) && <p className="mb-2 text-xs font-medium text-violet-200">{t('native.regeneratedLipsync')}</p>}
     <div className="flex items-center gap-2"><Pill tone={attempt.status === 'completed' ? 'green' : attempt.status === 'failed' ? 'red' : 'violet'}>{t(`status.${attempt.status}`, { defaultValue: attempt.status })}</Pill>{attempt.reviewDecision && <Pill tone={attempt.reviewDecision === 'approved' ? 'green' : 'red'}>{t(`status.${attempt.reviewDecision}`, { defaultValue: attempt.reviewDecision })}</Pill>}<span className="text-[10px] text-text-muted">{t('review.seedMeta', { seed: attempt.seed ?? t('review.seedRandom'), seconds: (Number(attempt.elapsedMs || 0) / 1000).toFixed(1), model: attempt.model })}</span></div>
     {url && (open ? <video className="mt-2 max-h-64 w-full rounded bg-black" src={url} controls autoPlay preload="metadata" /> : <button className="relative mt-2 flex h-28 w-full items-center justify-center overflow-hidden rounded bg-black/70 text-xs text-white" onClick={() => setOpen(true)}><img src={api.getOutputThumbnailUrl(filename || '', asset?.workspaceId)} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-70" /><span className="relative flex items-center rounded-full bg-black/70 px-3 py-2"><Play size={18} className="mr-2" />{t('review.loadPreview')}</span></button>)}
     {attempt.error && <p className="mt-2 text-[10px] text-red-300">{attempt.error}</p>}
@@ -30,7 +37,7 @@ function AttemptPreview({ series, attempt, approved, onApprove, onReject }: {
 }
 
 export function SeriesReviewPanel({
-  workspace, series, episode, job, setJob, reload, startRender, updateEpisode, saveNow,
+  workspace, series, episode, job, setJob, reload, startRender, updateEpisode, saveNow, onOpenShots, onOpenReferences, requestedShotId,
 }: {
   workspace: string
   series: SeriesProject
@@ -40,6 +47,9 @@ export function SeriesReviewPanel({
   reload: () => Promise<void>
   startRender: (mode: 'selected' | 'missing' | 'failed' | 'all', shotIds?: string[], seed?: number) => Promise<void>
   updateEpisode: (updater: (episode: SeriesEpisode) => SeriesEpisode) => void
+  onOpenShots?: (shotId?: string) => void
+  onOpenReferences?: OpenSeriesReference
+  requestedShotId?: string
   saveNow: () => Promise<SeriesProject | null>
 }) {
   const { t } = useUiTranslation('seriesLab')
@@ -50,6 +60,7 @@ export function SeriesReviewPanel({
   const [playbackShotId, setPlaybackShotId] = useState<string | null>(null)
   const [playingAll, setPlayingAll] = useState(false)
   const [focusShotId, setFocusShotId] = useState(episode.shots[0]?.id || '')
+  const [revealReviewShot, setRevealReviewShot] = useState(false)
   const [previewAttemptByShot, setPreviewAttemptByShot] = useState<Record<string, string>>({})
   const [editingShotId, setEditingShotId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<Pick<SeriesShot,
@@ -251,7 +262,20 @@ export function SeriesReviewPanel({
     setFocusShotId(shotId)
     if (playable.some(item => item.shotId === shotId)) setPlaybackShotId(shotId)
   }
+  const requestedPreviewId = episode.shots.find(shot => shot.id === requestedShotId)?.attempts
+    .filter(attempt => attempt.status === 'completed' && attempt.reviewDecision !== 'rejected').at(-1)?.id
+  useEffect(() => {
+    if (!requestedShotId) return
+    setReviewView('assembly'); setFocusShotId(requestedShotId); setPlayingAll(false); setRevealReviewShot(true)
+    if (requestedPreviewId) setPreviewAttemptByShot(current => ({ ...current, [requestedShotId]: requestedPreviewId }))
+  }, [requestedShotId, requestedPreviewId])
+  useEffect(() => {
+    if (!revealReviewShot || reviewView !== 'assembly') return
+    document.getElementById('series-review-assembly')?.scrollIntoView?.({ block: 'start' })
+    setRevealReviewShot(false)
+  }, [revealReviewShot, reviewView])
   const beginEdit = (shot: SeriesShot) => {
+    if (!isSeriesGeneratedShot(series, shot)) { onOpenShots?.(shot.id); return }
     setEditingShotId(shot.id)
     setEditSeed('')
     setEditDraft({
@@ -310,6 +334,7 @@ export function SeriesReviewPanel({
     ...episode.proposedCanonDelta.retire.map(item => ({ id: item.factId, label: t('review.retireDelta', { factId: item.factId }) })),
   ]
   return <div className="space-y-4 pb-10">
+    <SeriesNativeDrafts workspace={workspace} series={series} episode={episode} />
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
     <div className="sticky top-0 z-10 flex flex-wrap gap-2 rounded-xl border border-border bg-bg-secondary/95 p-2 shadow-lg backdrop-blur">
       {([
@@ -318,8 +343,12 @@ export function SeriesReviewPanel({
         ['finish', t('review.finishCanon'), `${approved.length}/${episode.shots.length}`],
       ] as const).map(([id, label, count]) => <button key={id} className={`rounded-lg border px-3 py-2 text-xs ${reviewView === id ? 'border-violet-400 bg-violet-500/20 text-violet-100' : 'border-border bg-bg-primary text-text-muted hover:bg-bg-hover'}`} onClick={() => setReviewView(id)}>{label}<span className="ml-2 rounded bg-black/20 px-1.5 py-0.5 text-[9px]">{count}</span></button>)}
     </div>
-    <SectionCard title={t('review.durableQueue')} description={t('review.durableQueueHint')}>
-      <div className="flex flex-wrap gap-2"><button className={primaryButton} disabled={Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))} onClick={() => void startRender('missing')}><Film size={13} />{t('review.generateMissing')}</button><button className={secondaryButton} disabled={Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))} onClick={() => void startRender('failed')}><RotateCcw size={13} />{t('review.retryFailed')}</button>{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => {
+    <SeriesEpisodeProgress series={series} episode={episode} onOpenReferences={onOpenReferences}
+      onOpenShot={id => onOpenShots?.(id)} onReviewShot={id => { setReviewView('assembly'); focusSlot(id); setRevealReviewShot(true) }} />
+    {(job || episode.shots.some(shot => isSeriesGeneratedShot(series, shot))) && <SectionCard title={t('review.durableQueue')} description={t('review.durableQueueHint')}>
+      <SeriesRenderActions series={series} episode={episode} busy={Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))}
+        onRender={mode => void startRender(mode)} onOpenShots={onOpenShots} />
+      <div className="mt-2 flex flex-wrap gap-2">{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => {
         const episodeId = episode.id
         const jobId = job.jobId
         void api.cancelSeriesRenderJob(jobId).then(value => {
@@ -333,10 +362,10 @@ export function SeriesReviewPanel({
           if (episodeIdRef.current === episodeId && value.jobId === jobId) setJob(value)
         })
       }}>{t('review.resumeIncomplete')}</button>}</div>}
-    </SectionCard>
+    </SectionCard>}
 
     {reviewView === 'history' && <SectionCard title={t('review.historyTitle')} description={t('review.historyHint')}>
-      <div className="space-y-3">{sortedShots.map(shot => { const latest = [...shot.attempts].reverse()[0]; const approvedAttempt = shot.attempts.find(attempt => attempt.id === shot.approvedAttemptId); const primaryAttempts = [approvedAttempt, latest].filter((attempt, index, values): attempt is SeriesRenderAttempt => Boolean(attempt) && values.findIndex(value => value?.id === attempt?.id) === index); const history = shot.attempts.filter(attempt => !primaryAttempts.some(primary => primary.id === attempt.id)); return <div key={shot.id} className="rounded-xl border border-border p-3"><div className="mb-2 flex flex-wrap items-center gap-2"><Pill tone="blue">{t('review.shot', { order: shot.order })}</Pill><span className="min-w-0 flex-1 text-xs text-text-secondary">{shot.action}</span>{shot.approvedAttemptId && <Pill tone="green">{t('status.approved')}</Pill>}<button className={secondaryButton} onClick={() => beginEdit(shot)}><Edit3 size={12} />{t('review.editRegenerate')}</button></div><div className="grid gap-2 xl:grid-cols-2">{primaryAttempts.map(attempt => <AttemptPreview key={attempt.id} series={series} attempt={attempt} approved={shot.approvedAttemptId === attempt.id} onApprove={() => void approve(shot.id, attempt.id)} onReject={() => void reject(shot.id, attempt.id)} />)}</div>{history.length > 0 && <details className="mt-2"><summary className="cursor-pointer text-[10px] text-text-muted">{t('review.showOlderAttempts', { count: history.length })}</summary><div className="mt-2 grid gap-2 xl:grid-cols-2">{history.map(attempt => <AttemptPreview key={attempt.id} series={series} attempt={attempt} approved={false} onApprove={() => void approve(shot.id, attempt.id)} onReject={() => void reject(shot.id, attempt.id)} />)}</div></details>}{!shot.attempts.length && <p className="text-[10px] text-text-muted">{t('review.noAttempt')}</p>}</div> })}</div>
+      <div className="space-y-3">{sortedShots.map(shot => { const latest = [...shot.attempts].reverse()[0]; const approvedAttempt = shot.attempts.find(attempt => attempt.id === shot.approvedAttemptId); const primaryAttempts = [approvedAttempt, latest].filter((attempt, index, values): attempt is SeriesRenderAttempt => Boolean(attempt) && values.findIndex(value => value?.id === attempt?.id) === index); const history = shot.attempts.filter(attempt => !primaryAttempts.some(primary => primary.id === attempt.id)); return <div key={shot.id} className="rounded-xl border border-border p-3"><div className="mb-2 flex flex-wrap items-center gap-2"><Pill tone="blue">{t('review.shot', { order: shot.order })}</Pill><span className="min-w-0 flex-1 text-xs text-text-secondary">{shot.action}</span>{shot.approvedAttemptId && <Pill tone="green">{t('status.approved')}</Pill>}<SeriesReviewShotAction series={series} shot={shot} onEdit={beginEdit} onOpenShots={onOpenShots}><Edit3 size={12} />{t('review.editRegenerate')}</SeriesReviewShotAction></div><div className="grid gap-2 xl:grid-cols-2">{primaryAttempts.map(attempt => <AttemptPreview key={attempt.id} series={series} attempt={attempt} approved={shot.approvedAttemptId === attempt.id} onApprove={() => void approve(shot.id, attempt.id)} onReject={() => void reject(shot.id, attempt.id)} />)}</div>{history.length > 0 && <details className="mt-2"><summary className="cursor-pointer text-[10px] text-text-muted">{t('review.showOlderAttempts', { count: history.length })}</summary><div className="mt-2 grid gap-2 xl:grid-cols-2">{history.map(attempt => <AttemptPreview key={attempt.id} series={series} attempt={attempt} approved={false} onApprove={() => void approve(shot.id, attempt.id)} onReject={() => void reject(shot.id, attempt.id)} />)}</div></details>}{!shot.attempts.length && <p className="text-[10px] text-text-muted">{t('review.noAttempt')}</p>}</div> })}</div>
     </SectionCard>}
 
     {reviewView === 'assembly' && <SectionCard title={t('review.assemblyTitle')} description={t('review.assemblyDescription', { ready: playable.length, total: episode.shots.length })}>
@@ -355,7 +384,7 @@ export function SeriesReviewPanel({
         <button className={greenButton} disabled={approved.length !== episode.shots.length || Boolean(assemblyJob && ['queued', 'running', 'cancelling'].includes(assemblyJob.status))} onClick={() => void joinApproved()}>{assemblyJob && ['queued', 'running', 'cancelling'].includes(assemblyJob.status) ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}{t('review.joinClips')}</button>
       </div>
       <p className="mt-2 text-[10px] text-text-muted">{t('review.usePendingTakesHint', { kept: pendingApprovals.kept, omitted: pendingApprovals.omitted })}</p>
-      <div className="mt-3 grid min-h-[28rem] overflow-hidden rounded-xl border border-border lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <div id="series-review-assembly" className="mt-3 grid min-h-[28rem] overflow-hidden rounded-xl border border-border lg:grid-cols-[18rem_minmax(0,1fr)]">
         <div className="max-h-[70vh] overflow-y-auto border-b border-border bg-bg-secondary p-2 lg:border-b-0 lg:border-r">{sortedShots.map(shot => { const safe = playable.find(item => item.shot.id === shot.id); const queuedItem = job?.items?.find(item => item.shotId === shot.id && ['queued', 'running', 'cancelling'].includes(item.status)); const selected = displayPlayback?.shot.id === shot.id; return <button key={shot.id} onClick={() => focusSlot(shot.id)} className={`mb-2 w-full rounded-lg border p-2 text-left ${selected ? 'border-violet-400 bg-violet-500/20' : 'border-border bg-bg-primary hover:bg-bg-hover'}`}><div className="flex items-center gap-2"><Pill tone={selected && playingAll ? 'violet' : shot.approvedAttemptId ? 'green' : safe ? 'blue' : 'neutral'}>{t('review.shot', { order: shot.order })}</Pill>{queuedItem && <Pill tone="violet">{t(`status.${queuedItem.status}`, { defaultValue: queuedItem.status })}</Pill>}<span className="ml-auto text-[9px] text-text-muted">{shot.durationSeconds}s · {t('review.tries', { count: shot.attempts.length })}</span></div><p className="mt-1 line-clamp-2 text-[10px] text-text-secondary">{shot.action || shot.prompt || t('review.emptyShot')}</p><div className="mt-2 flex gap-1"><span className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[9px] text-text-muted">{safe ? t('review.playable') : t('review.missing')}</span>{shot.approvedAttemptId && <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[9px] text-green-300">{t('review.final')}</span>}{queuedItem && <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200">{t('review.willReplace')}</span>}</div></button> })}</div>
       {displayPlayback ? <div className="min-w-0 bg-black">
         <video
@@ -383,7 +412,7 @@ export function SeriesReviewPanel({
             ? t('review.shotProgress', { order: displayPlayback.shot.order, current: playIndex + 1, total: playable.length })
             : t('review.shot', { order: displayPlayback.shot.order })}</span>
           <span className="text-text-muted">{displayPlayback.shot.action}</span>
-          <button className={`ml-auto ${secondaryButton}`} onClick={() => beginEdit(displayPlayback.shot)}><Edit3 size={12} />{t('review.edit')}</button>
+          <SeriesReviewShotAction series={series} shot={displayPlayback.shot} onEdit={beginEdit} onOpenShots={onOpenShots}><Edit3 size={12} />{t('review.edit')}</SeriesReviewShotAction>
         </div>
         <div className="border-t border-border bg-bg-primary p-3"><div className="mb-2 text-[10px] font-medium text-text-secondary">{t('review.attemptsInSlot')}</div><div className="flex flex-wrap gap-1">{displayPlayback.shot.attempts.map(attempt => <button key={attempt.id} className={`rounded px-2 py-1 text-[9px] ${attempt.id === displayPlayback.attempt.id ? 'bg-violet-500/25 text-violet-100' : attempt.reviewDecision === 'rejected' ? 'bg-red-500/10 text-red-300' : 'bg-bg-tertiary text-text-muted'}`} onClick={() => setPreviewAttemptByShot(current => ({ ...current, [displayPlayback.shot.id]: attempt.id }))}>{attempt.id === displayPlayback.shot.approvedAttemptId ? t('review.tryFinal', { count: attempt.retryCount + 1 }) : t('review.tryN', { count: attempt.retryCount + 1 })}</button>)}</div></div>
       </div> : <div className="flex items-center justify-center bg-black/80 p-8 text-center text-xs text-text-muted">{t('review.noPlayable')}</div>}
@@ -416,7 +445,7 @@ export function SeriesReviewPanel({
             <label className="text-[10px] text-text-muted md:col-span-2">{t('review.negativePrompt')}<textarea className="mt-1 min-h-20 w-full rounded border border-border bg-bg-primary p-2 text-xs text-text-primary" value={editDraft.negativePrompt} onChange={event => setEditDraft(current => current && ({ ...current, negativePrompt: event.target.value }))} /></label>
             {editDraft.dialogueBeats.map((beat, index) => <div key={beat.id} className="grid gap-2 rounded border border-border p-2 md:col-span-2 md:grid-cols-2"><label className="text-[10px] text-text-muted md:col-span-2">{t('review.dialogueN', { count: index + 1 })}<textarea className="mt-1 min-h-16 w-full rounded border border-border bg-bg-primary p-2 text-xs text-text-primary" value={beat.text} onChange={event => setEditDraft(current => current && ({ ...current, dialogueBeats: current.dialogueBeats.map(item => item.id === beat.id ? { ...item, text: event.target.value } : item) }))} /></label><label className="text-[10px] text-text-muted">{t('review.emotion')}<input className="mt-1 w-full rounded border border-border bg-bg-primary p-2 text-xs text-text-primary" value={beat.emotion} onChange={event => setEditDraft(current => current && ({ ...current, dialogueBeats: current.dialogueBeats.map(item => item.id === beat.id ? { ...item, emotion: event.target.value } : item) }))} /></label><label className="text-[10px] text-text-muted">{t('review.delivery')}<input className="mt-1 w-full rounded border border-border bg-bg-primary p-2 text-xs text-text-primary" value={beat.delivery} onChange={event => setEditDraft(current => current && ({ ...current, dialogueBeats: current.dialogueBeats.map(item => item.id === beat.id ? { ...item, delivery: event.target.value } : item) }))} /></label></div>)}
           </div>
-          <button className={`mt-3 ${greenButton}`} disabled={editBusy} onClick={() => void regenerateEdited()}>{editBusy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}{t('review.saveRegenerate')}</button>
+          <button className={`mt-3 ${greenButton}`} disabled={editBusy || !isSeriesGeneratedShot(series, sourceShot)} onClick={() => void regenerateEdited()}>{editBusy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}{t('review.saveRegenerate')}</button>
         </div>
       })()}
       {assemblyJob && <div className={`mt-3 rounded-lg border p-3 text-xs ${['failed', 'interrupted'].includes(assemblyJob.status) ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-green-500/30 bg-green-500/10 text-green-200'}`}><div className="flex flex-wrap items-center gap-2">{['queued', 'running', 'cancelling'].includes(assemblyJob.status) && <Loader2 size={13} className="animate-spin" />}<span>{assemblyJob.message}</span>{assemblyJob.filename && <a className={`ml-auto ${greenButton}`} href={api.getFileUrl(assemblyJob.filename, workspace)} download><Download size={13} />{t('review.downloadJoined')}</a>}{['queued', 'running'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => {

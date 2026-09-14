@@ -169,3 +169,43 @@ def test_review_notes_keep_a_stale_selected_take_stale(tmp_path):
     assert saved['clips'][0]['selected_video_filename'] == 'old.mp4'
     assert saved['clips'][0]['review_notes'] == 'keep stale'
     assert saved['clips'][0]['tag'] == 'good'
+
+
+def test_desk_notes_persist_can_restate_an_existing_stale_approval(tmp_path):
+    path, state = fixture(tmp_path)
+    state['clips'][0].update(
+        selected_video_filename='old.mp4',
+        video_filename='old.mp4',
+        video_stale=True,
+        tag='good',
+    )
+    path.write_text(json.dumps(state))
+    save_review(str(tmp_path), 'review-test', [
+        {'type': 'select_take', 'pipelineId': 'review-test', 'clipIndex': 0, 'filename': 'old.mp4', 'takeId': 'old-id'},
+        {'type': 'tag_clip', 'pipelineId': 'review-test', 'clipIndex': 0, 'tag': 'good'},
+        {'type': 'note_clip', 'pipelineId': 'review-test', 'clipIndex': 0, 'notes': 'rerun the start frame'},
+    ])
+    saved = json.loads(path.read_text())
+    assert saved['clips'][0]['review_notes'] == 'rerun the start frame'
+    assert saved['clips'][0]['tag'] == 'good'
+    assert saved['clips'][0]['video_stale'] is True
+    assert saved['clips'][0]['selected_video_filename'] == 'old.mp4'
+
+
+def test_review_cannot_newly_approve_a_stale_take(tmp_path):
+    path, state = fixture(tmp_path)
+    state['clips'][0].update(
+        selected_video_filename='old.mp4',
+        video_filename='old.mp4',
+        video_stale=True,
+        tag=None,
+    )
+    path.write_text(json.dumps(state))
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match='completed current take'):
+        save_review(str(tmp_path), 'review-test', [
+            {'type': 'select_take', 'pipelineId': 'review-test', 'clipIndex': 0, 'filename': 'old.mp4'},
+            {'type': 'tag_clip', 'pipelineId': 'review-test', 'clipIndex': 0, 'tag': 'good'},
+            {'type': 'note_clip', 'pipelineId': 'review-test', 'clipIndex': 0, 'notes': 'should roll back'},
+        ])
+    assert path.read_bytes() == before

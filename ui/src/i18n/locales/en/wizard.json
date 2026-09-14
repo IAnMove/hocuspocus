@@ -69,6 +69,7 @@
     "reported": "Reported"
   },
   "rejectionReason": {
+    "invalid_intent": "The assistant did not return a valid interpretation of your intent. Retry your request.",
     "invalid_action": "Unknown action, missing required parameters or invalid values.",
     "invalid_action_list": "The proposed actions must be a list.",
     "action_limit": "The proposal exceeds the number of actions allowed in one turn.",

@@ -97,11 +97,51 @@ class CoreRuntimeTests(unittest.TestCase):
         blob = json.dumps(packed)
         self.assertNotIn("sk-", blob)
 
+    def test_series_reference_import_and_refresh_are_persisted_in_core(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post('/api/v1/series', json={'workspace':'default', 'title':'Reference test'}).json()
+            series['canon']['worldSummary'] = 'A persistent world'
+            series['characters'] = [{'id':'char_a', 'name':'Ada', 'referenceAssetIds':[]}]
+            series['locations'] = [{'id':'loc_a', 'name':'Lab', 'referenceAssetIds':[]}]
+            series['allowedProductionMethods'] = ['animation_2d', 'imported_video']
+            path = f"/api/v1/series/{series['id']}"
+            saved = self.client.put(path, json={'workspace':'default', 'series':series, 'baseRevision':series['revision']})
+            self.assertEqual(saved.status_code, 200, saved.text)
+            series = saved.json()
+            series = self.client.post(path + '/canon/approve', json={'workspace':'default', 'baseRevision':series['canon']['revision']}).json()
+            episode_response = self.client.post(path + '/episodes', json={'workspace':'default'})
+            self.assertEqual(episode_response.status_code, 200, episode_response.text)
+            episode = episode_response.json()
+            Path('uploads').mkdir(exist_ok=True)
+            Path('uploads/portrait.png').write_bytes(b'reference fixture')
+            imported = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'portrait.png',
+                'ownerType':'character', 'ownerId':'char_a', 'kind':'character', 'referenceRole':'primary_portrait',
+                'metadata':{'prompt':'Ada in a paper cutout style', 'jobId':'image-job'}})
+            self.assertEqual(imported.status_code, 200, imported.text)
+            result = imported.json()
+            self.assertEqual(result['series']['characters'][0]['referenceAssetIds'], [result['asset']['id']])
+            self.assertEqual(result['asset']['metadata']['jobId'], 'image-job')
+            self.assertEqual(result['series']['canon']['approval'], 'draft')
+            retry = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'portrait.png',
+                'ownerType':'character', 'ownerId':'char_a', 'kind':'character', 'metadata':{'jobId':'image-job'}})
+            self.assertEqual(retry.status_code, 200, retry.text)
+            self.assertEqual(retry.json()['asset']['id'], result['asset']['id'])
+            self.assertEqual(retry.json()['series']['revision'], result['series']['revision'])
+            approved = self.client.post(path + '/canon/approve', json={'workspace':'default', 'baseRevision':result['series']['canon']['revision']}).json()
+            refreshed = self.client.post(path + f"/episodes/{episode['id']}/references/refresh", json={'workspace':'default', 'baseRevision':approved['revision']})
+            self.assertEqual(refreshed.status_code, 200, refreshed.text)
+            snapshot = refreshed.json()['episodesById'][episode['id']]['canonSnapshot']
+            self.assertEqual(snapshot['characters'][0]['primaryReferenceAssetId'], result['asset']['id'])
+            self.assertEqual(refreshed.json()['allowedProductionMethods'], ['animation_2d', 'imported_video'])
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
     def test_mcp_settings_status_on_the_core_profile(self):
         listed = self.client.get("/api/v1/settings/mcp")
         self.assertEqual(listed.status_code, 200, listed.text)
         body = listed.json()
-        self.assertEqual(body["endpoint"], "/api/v1/wangp/mcp")
+        self.assertEqual(body["endpoint"], "/api/v1/mcp")
         self.assertEqual(body["authentication"], "Bearer")
         self.assertNotIn("token", body)
         blocked = self.client.put("/api/v1/settings/mcp", json={"enabled": True})

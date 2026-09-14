@@ -48,7 +48,16 @@ def _apply_review(state: dict, commands: list, workspace: Path, pid: str) -> Non
             tag = command.get("tag")
             if tag not in (None, "good", "needs_work"):
                 raise ValueError("Invalid review decision")
-            if tag == "good" and (not clip.get("video_filename") or clip.get("video_stale")):
+            # The desk always restates the current decision with notes/select.
+            # After an image rerun the take stays tagged good and video_stale,
+            # so rejecting a no-op "good" would drop the notes in the same
+            # atomic batch. Only a new approval of a missing/stale take is
+            # blocked; Rejoin/export still read video_stale independently.
+            if (
+                tag == "good"
+                and clip.get("tag") != "good"
+                and (not clip.get("video_filename") or clip.get("video_stale"))
+            ):
                 raise ValueError("Only a completed current take can be approved")
             clip["tag"] = tag
         elif kind == "note_clip":

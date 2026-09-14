@@ -3,7 +3,7 @@ import { stableSerialize } from './agentContract'
 import type { AgentVisualState } from './AgentAvatar'
 
 export type WizardRejectionCode = 'invalid_action' | 'invalid_action_list' | 'action_limit'
-  | 'preparation_required' | 'duplicate_generation' | 'request_policy' | 'visual_evidence_only'
+  | 'preparation_required' | 'duplicate_generation' | 'request_policy' | 'visual_evidence_only' | 'invalid_intent'
 
 export interface WizardActionRejection {
   index: number
@@ -41,16 +41,6 @@ export function withWizardRejections(before: AgentTurn, after: AgentTurn,
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
-/** Conservative presentation policy, not an authorization or execution classifier. */
-function allowsExplanation(request: string): boolean {
-  // JS `\b` is ASCII-only. Fold accents so "Qué" / "por qué" keep a word boundary.
-  const text = request.trim().replace(/^[¿¡]+/, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  if (/^(?:hola|hello|hi|gracias|thanks)[\s!.]*$/i.test(text)) return true
-  // An informational prefix does not erase a later imperative in a mixed turn.
-  if (/(?:[,;.!?\n]|\b(?:and|then|also|y|luego|despu[eé]s))\s*(?:(?:please|por favor)[,\s]+)?(?:create|generate|make|update|delete|remove|add|save|export|start|retry|run|open|select|crea\w*|genera\w*|haz\w*|actualiza\w*|elimina\w*|borra\w*|a[nñ]ade\w*|guarda\w*|exporta\w*|inicia\w*|reintenta\w*|ejecuta\w*|abre|selecciona\w*)\b/i.test(text)) return false
-  return /^(?:(?:please|por favor)[,\s]+)?(?:how\b|what\b|which\b|why\b|where\b|explain\b|describe\b|tell me (?:about|how|what|why)\b|(?:can|could) you (?:explain|describe)\b|c[oó]mo\b|qu[eé]\b|cu[aá]l\b|por qu[eé]\b|d[oó]nde\b|explica(?:me|rme)?\b|describe\b|descr[ií]beme\b|(?:puedes|podr[ií]as) explica(?:r|rme)\b)/i.test(text)
-}
-
 export function wizardResultState(result: AgentActionResult) {
   const states = [result.commandResult?.status, result.report?.state]
   if (states.includes('failed')) return 'failed'
@@ -79,14 +69,17 @@ export function wizardTurnVisualState(turn: AgentTurn, results: AgentActionResul
   const states = results.map(wizardResultState)
   if (turn.rejections?.length || states.some(state => ['failed', 'partial'].includes(state))) return 'error'
   if (states.some(state => state === 'queued' || state === 'running')) return 'acting'
+  if (turn.intent?.kind === 'clarification') return 'idle'
   return states.length && states.every(state => state === 'completed') ? 'success' : 'idle'
 }
 
 /** Free-form model prose cannot certify the result of an action-bearing turn. */
-export function formatWizardTurnReply(turn: AgentTurn, results: AgentActionResult[], t: Translate, request = ''): string {
+export function formatWizardTurnReply(turn: AgentTurn, results: AgentActionResult[], t: Translate): string {
   const hasActions = Boolean(turn.actions.length || results.length || turn.rejections?.length)
-  const explanation = !hasActions && allowsExplanation(request)
+  const explanation = !hasActions && turn.intent?.kind === 'conversation'
+  const question = turn.intent?.kind === 'clarification' ? turn.intent.question : ''
   const paragraphs: string[] = []
+  if (question) paragraphs.push(question)
   if (explanation && turn.reply) paragraphs.push(turn.reply)
   if (results.length) {
     const lines = results.map(result => {
@@ -94,7 +87,7 @@ export function formatWizardTurnReply(turn: AgentTurn, results: AgentActionResul
       return `- **${label}.** ${result.message}`
     })
     paragraphs.push(`### ${t('actionReport')}\n${lines.join('\n')}`)
-  } else if (!explanation) paragraphs.push(t('noActionReceipt'))
+  } else if (!explanation && !question) paragraphs.push(t('noActionReceipt'))
   if (turn.rejections?.length) {
     const lines = turn.rejections.map(rejection => `- ${t('rejectedAction', {
       action: rejection.actionType,

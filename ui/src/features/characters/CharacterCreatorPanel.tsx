@@ -20,6 +20,8 @@ import { useUiTranslation } from '../../i18n'
 import { CharacterSpeechWorkshopEntry } from './CharacterSpeechWorkshopEntry'
 import { CharacterFacePackMaker } from './CharacterFacePackMaker'
 import { Character3DLibraryEntry } from './Character3DLibraryEntry'
+import { useCharacterEditorHandoff } from './characterEditorHandoff'
+import { CharacterEditorSession } from './CharacterEditorSession'
 import {
   buildCharacterOrbitPrompt,
   CHARACTER_ORBIT_VIEWS,
@@ -76,6 +78,15 @@ function newId(): string {
 }
 
 export function CharacterCreatorPanel() {
+  const workspace = useStore(state => state.activeWorkspace)
+  const request = useCharacterEditorHandoff(state => state.request)
+  if (request?.workspace === workspace) return <div className="h-full overflow-y-auto rounded-xl border border-border bg-bg-primary">
+    <CharacterEditorSession key={`${workspace}/${request.kit.id}`} request={request} />
+  </div>
+  return <CharacterCreatorWorkshop />
+}
+
+function CharacterCreatorWorkshop() {
   const { t } = useUiTranslation('characters')
   const models = useStore(s => s.models)
   const activeWorkspace = useStore(s => s.activeWorkspace)

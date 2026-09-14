@@ -22,12 +22,24 @@ Related contracts: [SHARED_NATIVE_COMMANDS](SHARED_NATIVE_COMMANDS.md),
   typed actions (`prepare_image`, `start_generation`, `retry_task`, …). The
   visible answer is built from execution receipts and rejection codes, not from
   “I created the file” model prose.
-- **MCP** is an external client talking to `POST /api/v1/wangp/mcp` with a
+- **MCP** is an external client talking to `POST /api/v1/mcp` with a
   Bearer token. You call a **named tool**. The server does not ask Wizard’s LLM
   to interpret that call.
 
 Both share the same published operations, the same `intent_id`, and the same
 canonical task. Closing the browser does not cancel an already admitted job.
+
+Wizard's model interprets the intended outcome using the conversation and current
+project. Its structured `intent` distinguishes conversation, clarification and
+action, with an execution scope of none, preparation or running work. The panel
+validates that plan without reconstructing actions from keywords. Clarification
+questions stay visible alongside navigation receipts. A series request without
+creative direction can start with one question. Once the user supplies a subject,
+setting, tone or references, Wizard develops a first episode draft, inventing
+provisional missing titles and plot details. It does not require another explicit
+creation command or a phrase delegating invention. Requests to discuss before
+saving remain conversational. Opening Series Lab alone does not create an episode
+or render a video. Creation receipts include the premises actually saved.
 
 ### Before you start
 
@@ -35,7 +47,7 @@ canonical task. Closing the browser does not cancel an already admitted job.
 2. In **Settings**, enable only models that are already installed. This guide
    never downloads weights.
 3. For MCP, enable it in Settings (or set `HOCUS_MCP_TOKEN` before start). The
-   endpoint is `http://SERVER:PORT/api/v1/wangp/mcp`. Keep the token out of
+   endpoint is `http://SERVER:PORT/api/v1/mcp`. Keep the token out of
    screenshots and reports. If no token is configured, MCP answers `503`.
 4. Open **Ask to the Wizard** or connect your MCP client. Discovery is
    authoritative: `GET /api/v1/generation/commands` and MCP `tools/list`.
@@ -70,17 +82,17 @@ with the typed operations above.
 3. **How-to.** “How do I generate an image in Studio?” Navigation or
    explanation only. No `start_generation`.
 4. **Ambiguous.** “Generate that again.” Without an exact target this cannot
-   start. You should see a local rejection or “no action was executed”, never
-   an invented filename.
+   start. The Wizard should ask which item you mean. An inconsistent action
+   proposal produces a local rejection, never an invented filename.
 5. **Workspace change.** “Switch to workspace corpus-b, then prepare a lantern.
    Do not generate yet.” The destination must change **before** a later
    generate. Recover receipts in the **original** output workspace.
 6. **Retry.** After a timeout, repeat the **same** intention. Do not invent a
    second job. In Wizard, `retry_task` with the exact task id retries that job.
-7. **Compound.** Preparation must precede start. “Prepare a Flux image … and
-   generate it now.” launches when the proposal is already ordered. “Open
-   Studio, prepare … and generate it.” currently **fills the form only** (the
-   trailing “generate it” is not classified as `generate … image`). Queued ≠
+7. **Compound.** Preparation must precede start. The model interprets requests
+   to prepare and generate together, regardless of phrasing, and orders the
+   actions. If its proposal puts start before preparation, validation rejects
+   that start. A request to prepare for later must not launch work. Queued ≠
    completed.
 8. **Unpublished.** If the model proposes `generation_video` or another unknown
    action, the panel lists **Actions not executed**. That is not success.
@@ -147,10 +159,24 @@ retry.
 
 Local evidence (not in git): `outputs/wizard-mcp-corpus-20260911/`.
 
-Known presentation limit (not fixed here): a how-to question with **no**
-actions still keeps model prose. “How do I generate an image?” plus a false
-“I generated invented.png.” will not start a job, but the sentence can remain.
-Action-bearing turns already replace that prose with receipts.
+Conversation-only plans keep the model's explanation; it is not an execution
+receipt. Plans with actions or validation rejections replace free-form claims
+with actual receipts. Clarification plans display their dedicated question.
+
+Follow-up verification (2026-09-13): four live MiniMax-M3 planning probes covered
+a broad series ambition, an indirect episodic idea, creative delegation using
+earlier context with video deferred, and an explanation-only request. All four
+returned the expected intent and execution scope. Proposed actions were not
+executed. Local evidence: `outputs/wizard-intent-20260913/live-plans.json`.
+
+The creative-continuation regression can be checked against the configured LLM
+from `ui/` with `HOCUSPOCUS_BASE_URL=http://127.0.0.1:PORT node_modules/.bin/tsx
+--tsconfig tsconfig.app.json scripts/check-wizard-intent-live.ts` (use the actual
+running port). It covers creative references, indirect follow-up without a title,
+discussion before saving and an idea without a subject. It validates plans only
+and does not execute actions. `seriesWizardDraft.test.ts` separately exercises
+the Series adapter against simulated persistence, including the saved premises
+in its receipt and excluding media generation.
 
 ---
 
@@ -161,12 +187,23 @@ Action-bearing turns already replace that prose with receipts.
 - **Wizard** es el chat de la aplicación. Convierte tu frase en acciones
   tipadas. La respuesta visible sale de recibos y rechazos, no de un “ya está
   el archivo” inventado por el modelo.
-- **MCP** es un cliente externo contra `POST /api/v1/wangp/mcp` con token
+- **MCP** es un cliente externo contra `POST /api/v1/mcp` con token
   Bearer. Llamas a una **herramienta con nombre**. El servidor no pasa esa
   llamada por el LLM del Wizard.
 
 Comparten operaciones publicadas, `intent_id` y la tarea canónica. Cerrar el
 navegador no cancela un trabajo ya admitido.
+
+El modelo interpreta la intención usando la conversación y el proyecto actual.
+Distingue entre conversar, pedir un dato necesario y actuar, y entre preparar
+algo o ejecutarlo. La aplicación valida ese plan sin reconstruir acciones a
+partir de palabras clave. Las preguntas se muestran incluso cuando también se
+abre una sección. Si todavía no hay dirección creativa puede preguntar, pero al
+recibir un tema, ambiente, tono o referencias desarrolla un primer borrador y
+propone los títulos y detalles que falten. No necesita otra orden de creación
+ni una frase que delegue la invención. Si pides conversar antes de guardar, se
+mantiene en esa fase. El recibo muestra las premisas guardadas. Abrir Series Lab
+por sí solo no crea el episodio ni genera vídeos.
 
 ### Antes de empezar
 
@@ -174,7 +211,7 @@ navegador no cancela un trabajo ya admitido.
 2. En **Ajustes**, deja visibles solo modelos **ya instalados**. Esta guía no
    descarga pesos.
 3. Para MCP, actívalo en Ajustes (o `HOCUS_MCP_TOKEN` al arrancar). El
-   endpoint es `http://SERVIDOR:PUERTO/api/v1/wangp/mcp`. No guardes el token
+   endpoint es `http://SERVIDOR:PUERTO/api/v1/mcp`. No guardes el token
    en capturas. Sin token, MCP responde `503`.
 4. Abre **Ask to the Wizard** o conecta el cliente. La autoridad de
    descubrimiento es `GET /api/v1/generation/commands` y `tools/list`.
@@ -191,7 +228,8 @@ Vídeo con `prepare_video` (acción de UI, no este comando nativo).
 2. **Negación.** «Prepara una imagen de un barco rojo, no la generes.» Puede
    rellenar el formulario. **No hay tarea nueva.**
 3. **Cómo.** «¿Cómo genero una imagen en Studio?» Sin `start_generation`.
-4. **Ambiguo.** «Genera eso otra vez.» Sin destino exacto no arranca.
+4. **Ambiguo.** «Genera eso otra vez.» Sin destino exacto pregunta a qué recurso
+   te refieres; no arranca una generación inventada.
 5. **Cambio de workspace.** Cambia a `corpus-b` y prepara; no generes aún.
    Los recibos se recuperan en el workspace **original**.
 6. **Reintento.** Tras un timeout, la **misma** intención. No un segundo

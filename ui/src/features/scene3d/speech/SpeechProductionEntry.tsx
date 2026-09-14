@@ -17,12 +17,13 @@ type ProductionEntryProps = {
   kind: SpeechProductionInput['kind']; title: string; sourceId?: string; audio?: Scene3DSourceRef
   cast?: { id: string; name: string; characterKitRef?: CharacterKitRef }[]; lines?: SpeechProductionInput['lines']; workspace?: string
   castOptions?: { id: string; name: string; characterKitRef?: CharacterKitRef }[]
+  onConfigureCharacter?: (id: string) => void
 }
 export function SpeechProductionEntry(props: ProductionEntryProps) {
   const active = useStore(s => s.activeWorkspace), workspace = props.workspace ?? active
   return <ScopedSpeechProductionEntry key={workspace + '/' + (props.sourceId ?? props.title)} {...props} workspace={workspace} />
 }
-function ScopedSpeechProductionEntry({ kind, title, sourceId, audio, cast: initialCast = [{ id: 'speaker', name: '' }], castOptions, lines, workspace }: ProductionEntryProps & { workspace: string }) {
+function ScopedSpeechProductionEntry({ kind, title, sourceId, audio, cast: initialCast = [{ id: 'speaker', name: '' }], castOptions, lines, workspace, onConfigureCharacter }: ProductionEntryProps & { workspace: string }) {
   const { t } = useUiTranslation('scene3dEditor')
   const { kits: speech3dKits } = useCharacterKitLibrary(workspace, true)
   const [open, setOpen] = useState(false), [items, setItems] = useState<ApiOutput[]>([])
@@ -53,6 +54,7 @@ function ScopedSpeechProductionEntry({ kind, title, sourceId, audio, cast: initi
       <ProductionCharacterSelect options={castOptions} value={storyCharacter}
         onChange={id => { setStoryCharacter(id); setLinks({}); setModels({}) }} />
       {cast.length > 2 ? <p role="alert">{t('speech.twoSpeakers')}</p> : cast.map(character => <div key={character.id} className="space-y-2">
+        {onConfigureCharacter && <button type="button" className="min-h-10 rounded border border-border px-3" onClick={() => onConfigureCharacter(character.id)}>{t('speech.configureLibraryCharacter', { name: character.name })}</button>}
         <CharacterKitLink workspace={workspace} requireSpeech3d value={Object.hasOwn(links, character.id) ? links[character.id] : character.characterKitRef}
           disabled={busy} onChange={ref => { setLinks(previous => ({ ...previous, [character.id]: ref })); setModels(previous => ({ ...previous, [character.id]: undefined })) }} />
         <AssetInput
@@ -102,4 +104,3 @@ function ProductionCharacterSelect({ options, value, onChange }: { options: Prod
     {options.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
   </select></label>
 }
-

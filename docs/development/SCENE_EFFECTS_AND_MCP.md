@@ -94,7 +94,12 @@ revokes the previous key. Keys are stored in `app/settings/mcp-access.json`
 with mode 0600 where supported. A configured `HOCUS_MCP_TOKEN` takes precedence;
 Settings can disable access, but environment-managed keys rotate outside the UI.
 
-The endpoint is the app's existing address plus `/api/v1/wangp/mcp`. There is no
+This is the **Hocuspocus MCP server**: it exposes the installation's published
+generation, asset, collection, scene and workflow tools. The historical
+`/api/v1/wangp/mcp` URL remains a compatibility alias to the same server, with
+the same token, tool catalog and request journal.
+
+The endpoint is the app's existing address plus `/api/v1/mcp`. There is no
 second listener or daemon. The HocusPocus process must be running. A client on
 another machine uses the reachable LAN address shown when accessing the app
 from that machine, rather than `localhost` on the client.
@@ -103,7 +108,7 @@ Use an HTTP-capable MCP client with an Authorization header. For clients that
 support this configuration shape:
 
 ```json
-{"mcpServers":{"hocuspocus":{"url":"http://APP_HOST:PORT/api/v1/wangp/mcp","headers":{"Authorization":"Bearer <YOUR_TOKEN>"}}}}
+{"mcpServers":{"hocuspocus":{"url":"http://APP_HOST:PORT/api/v1/mcp","headers":{"Authorization":"Bearer <YOUR_TOKEN>"}}}}
 ```
 
 Client configuration keys vary. Transport: Streamable HTTP JSON-RPC POST,

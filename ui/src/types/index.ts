@@ -390,7 +390,7 @@ export interface OutputFile {
 
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'
 export type SceneFaceBindingRole = 'mouth' | 'blink' | 'eyes'
-export type SceneFaceBindingState = 'closed' | 'small' | 'wide' | 'round' | 'blink' | 'open'
+export type SceneFaceBindingState = import('../lib/characterMouthStates').CharacterMouthState | 'blink' | 'open'
 /** Optional semantic metadata for a cutout facial overlay. */
 export interface SceneFaceBinding {
   poseLayerId: string
@@ -619,6 +619,7 @@ export interface Scene {
     /** How the timing was obtained: authored bounds, speech alignment, or an
      * approximate voice-activity envelope when no transcript is available. */
     confidence: 'known-text' | 'aligned-audio' | 'energy-fallback'
+    lipSync?: import('../lib/cutoutPhonetic').CutoutLipSync
   }>
   composition?: {
     showGrid: boolean

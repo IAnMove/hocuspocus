@@ -9,10 +9,11 @@ import { useStore } from '../../stores/useStore'
 import { resolvedCharacterTts } from '../../lib/characterKit'
 
 export function SeriesVoiceFields({
-  series, onPatchVoice,
+  series, onPatchVoice, onConfigureCharacter,
 }: {
   series: SeriesProject
   onPatchVoice: (index: number, patch: Record<string, unknown>) => void
+  onConfigureCharacter?: (id: string) => void
 }) {
   const { t } = useUiTranslation('seriesLab')
   const workspace = useStore(s => s.activeWorkspace)
@@ -26,6 +27,7 @@ export function SeriesVoiceFields({
         return (
         <div key={character.id} className="rounded-lg border border-border p-3">
           <strong className="text-xs text-text-primary">{character.name || t('canon.character')}</strong>
+          {onConfigureCharacter && <button type="button" className="ml-3 text-xs text-cyan-200 underline" onClick={() => onConfigureCharacter(character.id)}>{t('speech.configure')}</button>}
           <CharacterKitLink
             value={character.voiceProfile?.characterKitRef}
             kits={kits}

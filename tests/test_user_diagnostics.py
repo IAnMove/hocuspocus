@@ -253,6 +253,54 @@ def test_receipt_status_rejects_non_object_receipts(tmp_path, monkeypatch):
     assert receipt_status("wangp", "linux")["installed"] is True
 
 
+def test_shared_environment_does_not_check_an_unsupported_platform_recipe(tmp_path, monkeypatch):
+    from services import runtime_profiles as profiles
+    app = tmp_path / "app"
+    env = app / "env"
+    env.mkdir(parents=True)
+    (env / ".hocus-runtime-profile.json").write_text(json.dumps({
+        "fingerprint": "matching", "profile": "linux-x64-nvidia-wangp", "cudaCalculation": True,
+    }))
+    monkeypatch.setattr(profiles, "APP_DIR", app)
+
+    def unsupported_fingerprint(*args):
+        raise AssertionError("There is no core recipe for Linux or Windows")
+
+    monkeypatch.setattr(profiles, "dependency_fingerprint", unsupported_fingerprint)
+    for platform in ("linux", "win32"):
+        assert receipt_status("core", platform) == {
+            "present": False, "installed": False, "fingerprint_match": False,
+        }
+
+
+def test_incomplete_recipe_is_reported_without_crashing_diagnostics(tmp_path, monkeypatch):
+    from services import runtime_profiles as profiles
+    app = tmp_path / "app"
+    env = app / "env"
+    env.mkdir(parents=True)
+    (env / ".hocus-runtime-profile.json").write_text(json.dumps({"fingerprint": "old"}))
+    monkeypatch.setattr(profiles, "APP_DIR", app)
+    # The installed receipt exists, but this checkout is missing recipe files.
+    assert receipt_status("wangp", "linux") == {
+        "present": True, "installed": False, "fingerprint_match": False,
+    }
+
+
+def test_core_receipt_does_not_require_a_cuda_calculation(tmp_path, monkeypatch):
+    from services import runtime_profiles as profiles
+    app = tmp_path / "app"
+    env = app / "env"
+    env.mkdir(parents=True)
+    receipt = env / ".hocus-runtime-profile.json"
+    monkeypatch.setattr(profiles, "APP_DIR", app)
+    monkeypatch.setattr(profiles, "dependency_fingerprint", lambda engine, platform: "matching")
+    for cuda, expected in ((False, True), (True, False), (None, False)):
+        receipt.write_text(json.dumps({
+            "fingerprint": "matching", "profile": "darwin-arm64-core-core", "cudaCalculation": cuda,
+        }))
+        assert receipt_status("core", "darwin")["installed"] is expected
+
+
 def test_router_get_and_report_redact_loaded_task():
     def load_task(_task_id: str):
         return {

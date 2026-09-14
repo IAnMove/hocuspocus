@@ -2,13 +2,13 @@
   "speech": {
     "resting": "silent",
     "speaking": "speaking",
-    "characterDefinition": "Reusable character · 3D model, face and voice",
-    "definitionHint": "The character stores its model and face. Each scene keeps an independent snapshot; dialogue and audio belong to the scene, not the character.",
+    "characterDefinition": "Reusable character · voice and lip sync",
+    "definitionHint": "Choose a voice and, when needed, configure a 2D mouth or 3D model. Lines and audio belong to each scene. Save changes before preparing lip sync.",
     "savedCharacter": "Library character",
     "newCharacter": "Create new character",
     "useCharacter": "Use character in this shot",
     "definitionName": "Character name",
-    "saveCharacter": "Save character with face and voice",
+    "saveCharacter": "Save all character settings",
     "characterSaved": "Character saved. Model, mouth, eyes and voice are available in other shots.",
     "characterApplied": "Character applied. Shot interventions are preserved.",
     "reloadLibrary": "Reload library",
@@ -201,7 +201,11 @@
       "missing": "Optional model unavailable. Requires installed audio-separator and the BS-RoFormer checkpoint plus YAML in app/ckpts/roformer. Nothing is downloaded automatically.",
       "error": "Could not check the optional model.",
       "retry": "Check again"
-    }
+    },
+    "optionalModel": "3D model (optional; not required for voice or 2D characters)",
+    "configure2d": "Configure 2D mouth and lip sync",
+    "need2dImage": "For 2D lip sync, add an image and save the character. You can do this in Characters or from its reference in Series Lab.",
+    "configureLibraryCharacter": "Configure voice and lip sync for {{name}}"
   },
   "title": "3D scene studio",
   "subtitle": "Choose a shot, place your objects and press Play.",

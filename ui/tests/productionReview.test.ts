@@ -218,6 +218,20 @@ test('re-persisting the current take does not clear a stale clip', () => {
   assert.equal(moved.clips[1].video_stale, false)
 })
 
+test('notes persist restates an existing stale approval instead of omitting the tag', () => {
+  const { pipeline, records } = tenPack()
+  pipeline.clips[0].tag = 'good'
+  pipeline.clips[0].video_stale = true
+  const desk = setShotNotes(projectReviewDesk({ pipeline, records }), 'shot-1', 'rerun the start frame')
+  const commands = persistCommandsFor(desk, ['shot-1'])
+  assert.equal(commands.find(command => command.type === 'tag_clip')?.tag, 'good')
+  assert.equal(commands.find(command => command.type === 'note_clip')?.notes, 'rerun the start frame')
+  const saved = applyPersistCommands(pipeline, commands)
+  assert.equal(saved.clips[0].tag, 'good')
+  assert.equal(saved.clips[0].review_notes, 'rerun the start frame')
+  assert.equal(saved.clips[0].video_stale, true)
+})
+
 test('generation records are read as a projection including queued status and duration', () => {
   const generated = takeRecordFromGeneration(projectFromAssetManifest({
     asset: { id: 'asset_clip', filename: 's1a.mp4' },
