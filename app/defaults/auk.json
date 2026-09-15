@@ -10,7 +10,7 @@
   },
   "prompt": "Say \"Welcome back. It is wonderful to hear from you.\" in a warm, calm female voice.",
   "audio_prompt_type": "",
-  "duration_seconds": 30,
+  "duration_seconds": 5,
   "num_inference_steps": 32,
   "guidance_scale": 2,
   "prompt_enhancer": ""

@@ -105,7 +105,7 @@ def _yue2_profile() -> dict[str, Any]:
         "downloadable": True, "community": False,
         "prompt_limit": 8000, "lyrics_limit": 8000,
         "duration_min": DURATION_MIN, "duration_max": 600, "count_max": 1,
-        "modes": ("original", "instrumental"), "caption_format": "music_style",
+        "modes": ("original",), "caption_format": "music_style",
         "lyrics_format": "section_tags", "backend": "generateMusic",
     }
 
