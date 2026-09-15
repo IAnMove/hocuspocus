@@ -26,27 +26,41 @@ export class BackdropFloor {
 
   sync(doc: Scene3DDocument) {
     this.restore(doc)
-    const slot = doc.slots.find(s => s.slot === 'background' && s.media === 'image' && (!s.surface || s.surface === 'cutout'))
-    const root = slot && this.world.slots.get(slot.id)?.root
-    const texture = root instanceof Mesh && (root.material as MeshBasicMaterial).map
-    if (doc.environment?.floorStyle !== 'backdrop' || !slot || !(root instanceof Mesh) || !texture) return
-    const planeSize = root.geometry instanceof PlaneGeometry ? root.geometry.parameters : root.geometry.userData.imagePlaneSize
-    if (!planeSize || !(planeSize.width > 0) || !(planeSize.height > 0)) return
+    const source = this.sourcePlane(doc)
+    if (!source) return
+    const { slot, root, texture, planeSize } = source
     if (this.texture !== texture || this.psx !== slot.imageLook?.psx) this.create(texture, slot.imageLook?.psx)
     root.updateMatrixWorld(true)
-    const frame = doc.camera.framing, target = doc.slots.find(s => s.id === frame?.targetSlot)
-    const actor = target && this.world.slots.get(target.id)?.root
-    const eye = frame && target && actor ? framingPose(frame, framingAnchor(actor, frame.anchor), target, doc.duration / 2, doc.duration).eye
-      : cameraEyeAtTime(doc.camera, doc.duration / 2, doc.duration, doc.slots)
+    const eye = this.referenceEye(doc)
     const u = this.uniforms
-    u.hpGroundFallback.value.set(doc.environment.floorColor ?? '#1c222c')
-    u.hpGroundSourceHeight.value = doc.environment.floorSourceHeight ?? 1
+    u.hpGroundFallback.value.set(doc.environment?.floorColor ?? '#1c222c')
+    u.hpGroundSourceHeight.value = doc.environment?.floorSourceHeight ?? 1
     u.hpGroundEye.value.set(...eye)
     root.getWorldPosition(u.hpGroundOrigin.value)
     u.hpGroundNormal.value.set(0, 0, 1).transformDirection(root.matrixWorld)
     u.hpGroundInverse.value.copy(root.matrixWorld).invert()
     u.hpGroundSize.value.set(planeSize.width, planeSize.height)
     this.world.floor.material = this.material!
+  }
+
+  private sourcePlane(doc: Scene3DDocument) {
+    if (doc.environment?.floorStyle !== 'backdrop') return
+    const slot = doc.slots.find(s => s.slot === 'background' && s.media === 'image' && (!s.surface || s.surface === 'cutout'))
+    if (!slot) return
+    const root = this.world.slots.get(slot.id)?.root
+    if (!(root instanceof Mesh)) return
+    const texture = (root.material as MeshBasicMaterial).map
+    if (!texture) return
+    const planeSize = root.geometry instanceof PlaneGeometry ? root.geometry.parameters : root.geometry.userData.imagePlaneSize
+    if (!planeSize || !(planeSize.width > 0) || !(planeSize.height > 0)) return
+    return { slot, root, texture, planeSize }
+  }
+
+  private referenceEye(doc: Scene3DDocument) {
+    const frame = doc.camera.framing, target = doc.slots.find(s => s.id === frame?.targetSlot)
+    const actor = target && this.world.slots.get(target.id)?.root
+    return frame && target && actor ? framingPose(frame, framingAnchor(actor, frame.anchor), target, doc.duration / 2, doc.duration).eye
+      : cameraEyeAtTime(doc.camera, doc.duration / 2, doc.duration, doc.slots)
   }
 
   private create(texture: Texture, psx?: number) {

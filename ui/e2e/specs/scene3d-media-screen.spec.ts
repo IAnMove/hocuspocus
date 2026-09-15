@@ -55,7 +55,7 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
   scene.camera.framing = undefined
   await workspace.getByLabel('Open shot JSON').setInputFiles({ name: 'ocean.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(scene)) })
   const controls = workspace.getByTestId('scene3d-screen-controls')
-  await controls.getByLabel('Animate this background with a video').check()
+  await controls.getByLabel('Animate this layer').check()
   const url = '/api/v1/uploads/background-motion.webm'
   const video = await readFile(new URL('../../public/rig-previews/animation-jump.webm', import.meta.url))
   await page.route('**/api/v1/upload', route => route.fulfill({ json: { filename: 'background-motion.webm', path: url, url, kind: 'video' } }))
@@ -71,9 +71,9 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
   const slot = document.slots[0]
   expect(slot).toMatchObject({ media: 'image', surface: 'cutout', position: scene.slots[0].position, scale: scene.slots[0].scale, imageLook: scene.slots[0].imageLook })
   expect(slot.screen).toMatchObject({ sourceUrl: url, media: 'video', fit: 'cover', loop: true })
-  await controls.getByLabel('Animate this background with a video').uncheck()
-  await workspace.getByLabel('Open shot JSON').setInputFiles(path)
-  await expect(controls.getByLabel('Animate this background with a video')).toBeChecked()
+  await controls.getByLabel('Animate this layer').uncheck()
+  await workspace.getByLabel('Open shot JSON').setInputFiles({ name: 'animated-background.world3d.json', mimeType: 'application/json', buffer: await readFile(path) })
+  await expect(controls.getByLabel('Animate this layer')).toBeChecked()
   await expect(controls.getByText('background-motion.webm', { exact: true })).toBeVisible()
   await page.route('**/api/v1/scenes/recordings', route => route.fulfill({ json: { name: 'animated-background.mp4', type: 'video', url: '/api/v1/file/animated-background.mp4' } }))
   await workspace.getByTestId('world3d-export').click()

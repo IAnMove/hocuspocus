@@ -40,7 +40,7 @@ test('runs Remove Background from direct Tools and exposes the derived asset', a
     await openBackgroundRemovalTools(page)
     const run = page.getByRole('button', { name: 'Remove Background', exact: true })
     await expect(run).toBeDisabled()
-    await expect(page.getByRole('status')).toContainText('Choose an image from the library')
+    await expect(page.getByRole('status')).toContainText('Choose an image or video from the library')
 
     await chooseLibraryFile(page, 'hero.png')
     await expect(page.getByRole('img', { name: 'hero.png', exact: true })).toBeVisible()
