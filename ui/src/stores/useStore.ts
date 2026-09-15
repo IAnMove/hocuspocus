@@ -1,3 +1,4 @@
+import { isInstructionSpeechModel, applyInstructionSpeechParams } from '../lib/instructionSpeech'
 import { h3ModelSwitchSettings, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
 import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
@@ -727,7 +728,7 @@ const audioSubFamilies: ModelFamily[] = [
 // Keep local MiniMax Music3 in the same direct-audio family as ACE-Step. It
 // does not share the ace_step prefix, so without this explicit entry it is
 // available to Story Lab but disappears from Studio → Audio → Music.
-const musicModelTypes = new Set<string>(['minimax_music3'])
+const musicModelTypes = new Set<string>(['minimax_music3', 'yue2'])
 const musicModelPrefixes = ['ace_step', 'heartmula']
 
 function isMusicModelType(modelType: string): boolean {
@@ -803,6 +804,9 @@ const DEFAULT_ENABLED_MODELS = new Set([
   'minimax_h3_ref2va_full',
   'minimax_h3_fused_turbo',
   'minimax_h3_ref2va_fused_turbo',
+  'yue2',
+  'auk',
+  'auk_flash',
   // Audio — Speech
   'kugelaudio_0_open',
   'qwen3_tts_base',
@@ -830,8 +834,9 @@ const DEFAULT_ENABLED_MODELS = new Set([
  * a user who then disables them stays disabled forever. (This is
  * deliberately narrower than auto-enabling every unknown model — only
  * the curated list's own additions are pushed.) */
-const DEFAULTS_VERSION = 11
+const DEFAULTS_VERSION = 12
 const DEFAULTS_ADDED_IN: Record<number, string[]> = {
+  12: ['yue2', 'auk', 'auk_flash'],
   11: ["viggle_animate", "h3_advanced_fl2va_pruned", "h3_advanced_ref2va_pruned", "h3_advanced_vdn_pruned", "sensenova_u1_5_8b_mot"],
   // v1.2.0: the ACE-Step XL SFT pair; LM_4B becomes the music default.
   2: ['ace_step_v1_5_xl_sft', 'ace_step_v1_5_xl_sft_lm_4b'],
@@ -5095,29 +5100,33 @@ export const useStore = create<AppState>((set, get) => {
         params.multi_prompts_gen_type = 2  // Preserve full text as one prompt (don't split by newlines)
         // Save original prompt + speaker names before swap (for load settings)
         params._tts_original_prompt = params.prompt
-        params._tts_speaker_name1 = state.ttsSpeakerName1 || ''
-        params._tts_speaker_name2 = state.ttsSpeakerName2 || ''
-        // Save all voice names for metadata
-        for (let i = 0; i < state.ttsVoices.length; i++) {
-          (params as Record<string, unknown>)[`_tts_speaker_name${i + 1}`] = state.ttsVoices[i]?.name || ''
-        }
-        params._tts_voice_count = state.ttsVoiceCount
-        // Swap character names → Speaker N: for TTS multi-voice mode
-        const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        let text = params.prompt as string
-        for (let i = 0; i < state.ttsVoices.length; i++) {
-          const name = state.ttsVoices[i]?.name
-          if (name) {
-            text = text.replace(new RegExp(escapeRegex(name) + '\\s*:', 'gi'), `Speaker ${i + 1}:`)
+        if (isInstructionSpeechModel(params.model_type)) {
+          applyInstructionSpeechParams(params)
+        } else {
+          params._tts_speaker_name1 = state.ttsSpeakerName1 || ''
+          params._tts_speaker_name2 = state.ttsSpeakerName2 || ''
+          // Save all voice names for metadata
+          for (let i = 0; i < state.ttsVoices.length; i++) {
+            (params as Record<string, unknown>)[`_tts_speaker_name${i + 1}`] = state.ttsVoices[i]?.name || ''
           }
-        }
-        params.prompt = text
-        // Set audio_guide paths for each voice (audio_guide, audio_guide2, audio_guide3, etc.)
-        for (let i = 0; i < state.ttsVoices.length; i++) {
-          const voice = state.ttsVoices[i]
-          if (voice?.path) {
-            const key = i === 0 ? 'audio_guide' : `audio_guide${i + 1}`
-            params[key as keyof typeof params] = voice.path as never
+          params._tts_voice_count = state.ttsVoiceCount
+          // Swap character names → Speaker N: for TTS multi-voice mode
+          const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          let text = params.prompt as string
+          for (let i = 0; i < state.ttsVoices.length; i++) {
+            const name = state.ttsVoices[i]?.name
+            if (name) {
+              text = text.replace(new RegExp(escapeRegex(name) + '\\s*:', 'gi'), `Speaker ${i + 1}:`)
+            }
+          }
+          params.prompt = text
+          // Set audio_guide paths for each voice (audio_guide, audio_guide2, audio_guide3, etc.)
+          for (let i = 0; i < state.ttsVoices.length; i++) {
+            const voice = state.ttsVoices[i]
+            if (voice?.path) {
+              const key = i === 0 ? 'audio_guide' : `audio_guide${i + 1}`
+              params[key as keyof typeof params] = voice.path as never
+            }
           }
         }
         // TTS duration (max duration for the model to generate)
@@ -6330,6 +6339,18 @@ export const useStore = create<AppState>((set, get) => {
           paramUpdates.loras_multipliers = ''
           paramUpdates.h3_model_profile = 'quality'
         }
+      }
+      if (modelType === 'yue2' || isInstructionSpeechModel(modelType)) {
+        Object.assign(paramUpdates, {
+          audio_prompt_type: '', audio_guide: undefined, audio_guide2: undefined,
+          audio_guide3: undefined, audio_guide4: undefined, audio_guide5: undefined, audio_guide6: undefined,
+          custom_settings: undefined, model_mode: modelType === 'yue2' ? 0 : undefined,
+          sample_solver: '', audio_scale: undefined, alt_guidance_scale: undefined,
+          temperature: modelType === 'yue2' ? 1 : undefined,
+          top_k: modelType === 'yue2' ? 100 : undefined,
+          top_p: modelType === 'yue2' ? 0.95 : undefined,
+          guidance_phases: modelType === 'auk_flash' ? 0 : 1,
+        })
       }
       // Apply model defaults for inference steps and guidance scale
       if (options.default_num_inference_steps != null) {

@@ -1,0 +1,556 @@
+{
+  "repository": "https://github.com/deepbeepmeep/Wan2GP",
+  "commit": "09a6c1dad469fc3a2dc7577b9ab0a08254be9ad2",
+  "weights": {
+    "repository": "DeepBeepMeep/TTS",
+    "revision": "864a479cbf3e810e1b2c1993b438510750e383b2"
+  },
+  "files": [
+    {
+      "source": "models/TTS/auk/__init__.py",
+      "destination": "app/models/TTS/auk/__init__.py",
+      "upstream_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "local_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/auk/auk_handler.py",
+      "destination": "app/models/TTS/auk/auk_handler.py",
+      "upstream_sha256": "0674421dee9247fc10fab8ef8ae3c0bad47b6c9115ac7c110c8b8363f633156f",
+      "local_sha256": "fa108f111473d7a7a4a71e832b53b2774cb194f672732d8d7183ec90ed028a08",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/auk/help.py",
+      "destination": "app/models/TTS/auk/help.py",
+      "upstream_sha256": "5f446d4e697d39eef73afc4a17615d9443ae6173815113f865ce4744cc2116cf",
+      "local_sha256": "5f446d4e697d39eef73afc4a17615d9443ae6173815113f865ce4744cc2116cf",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/pipeline.py",
+      "destination": "app/models/TTS/auk/pipeline.py",
+      "upstream_sha256": "4a1dc90b316372fb3e5cd6b29dc14b472ab836d2b33f559251d78a4da6cd570c",
+      "local_sha256": "4a1dc90b316372fb3e5cd6b29dc14b472ab836d2b33f559251d78a4da6cd570c",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/encoder.py",
+      "destination": "app/models/TTS/auk/encoder.py",
+      "upstream_sha256": "40e34f3dfc174d33750752805a99a3cf5e7ecbb1b40708eff925407118040865",
+      "local_sha256": "53c02ec590806c992a80570659df2cfc206d04947d60c814694850a98ca4f3fe",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/auk/transformer.py",
+      "destination": "app/models/TTS/auk/transformer.py",
+      "upstream_sha256": "44e10b58ce94953a6692ac755c6bf52216574127669ce5dc3919e62fd66fe021",
+      "local_sha256": "44e10b58ce94953a6692ac755c6bf52216574127669ce5dc3919e62fd66fe021",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/LICENSE",
+      "destination": "app/models/TTS/auk/LICENSE",
+      "upstream_sha256": "40eebc5270decd68865db9efad73c7fa86e1ab2ebe815195bf3c5903375ad2a1",
+      "local_sha256": "5c9be80e8e880e80b31463f667b772f47843c06406ac18ee89745f1796ac956f",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/auk/rotary.py",
+      "destination": "app/models/TTS/auk/rotary.py",
+      "upstream_sha256": "6a576530937028b64b5b1a348c415385568b4cb3d4182c8d5eb5a0239b4072a2",
+      "local_sha256": "6a576530937028b64b5b1a348c415385568b4cb3d4182c8d5eb5a0239b4072a2",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/prompt_enhancer.py",
+      "destination": "app/models/TTS/auk/prompt_enhancer.py",
+      "upstream_sha256": "b28406d6d3064ebe0b42f4689c501c15f49db9ec2d250edf108426b10186e556",
+      "local_sha256": "b28406d6d3064ebe0b42f4689c501c15f49db9ec2d250edf108426b10186e556",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/modules.py",
+      "destination": "app/models/TTS/auk/modules.py",
+      "upstream_sha256": "cefbabef4bd5209eba5d8c893e59c147477848ae30e3fe8fb19ba6c9ad670285",
+      "local_sha256": "cefbabef4bd5209eba5d8c893e59c147477848ae30e3fe8fb19ba6c9ad670285",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/auk.json",
+      "destination": "app/models/TTS/auk/auk.json",
+      "upstream_sha256": "c1023db9888017abe09f6ac80c387ba6e86320dcb8af907c504f8476a5e17908",
+      "local_sha256": "c1023db9888017abe09f6ac80c387ba6e86320dcb8af907c504f8476a5e17908",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/__init__.py",
+      "destination": "app/models/TTS/auk/vae/__init__.py",
+      "upstream_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "local_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/auk/vae/THIRD_PARTY_LICENSES.txt",
+      "destination": "app/models/TTS/auk/vae/THIRD_PARTY_LICENSES.txt",
+      "upstream_sha256": "b2e913c4f4c68cdd1093e6a97b53ed739bdaf8d0443caa25cacbb87d7291b4f4",
+      "local_sha256": "b2e913c4f4c68cdd1093e6a97b53ed739bdaf8d0443caa25cacbb87d7291b4f4",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/bigvgan_flow_vae.py",
+      "destination": "app/models/TTS/auk/vae/bigvgan_flow_vae.py",
+      "upstream_sha256": "3a30da1611474e20b8b33e2bd55d8e19275b2abbb13a998440d929f51a294a6d",
+      "local_sha256": "3a30da1611474e20b8b33e2bd55d8e19275b2abbb13a998440d929f51a294a6d",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/__init__.py",
+      "destination": "app/models/TTS/auk/vae/modules/__init__.py",
+      "upstream_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "local_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/commons/__init__.py",
+      "destination": "app/models/TTS/auk/vae/modules/commons/__init__.py",
+      "upstream_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "local_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/commons/layers.py",
+      "destination": "app/models/TTS/auk/vae/modules/commons/layers.py",
+      "upstream_sha256": "cd5c108163377880688b70f3944798e15591467d5d5507803c1b952047845393",
+      "local_sha256": "cd5c108163377880688b70f3944798e15591467d5d5507803c1b952047845393",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/commons/ops.py",
+      "destination": "app/models/TTS/auk/vae/modules/commons/ops.py",
+      "upstream_sha256": "efe7099eaf8ba965f39477358cbd804bbb3a0db347188ada47ed63add3189894",
+      "local_sha256": "efe7099eaf8ba965f39477358cbd804bbb3a0db347188ada47ed63add3189894",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/bigvgan/__init__.py",
+      "destination": "app/models/TTS/auk/vae/modules/bigvgan/__init__.py",
+      "upstream_sha256": "168e9e4ea3f499050b02fa534bdc81bff825e6da1798e9305de49bde1edbd54d",
+      "local_sha256": "168e9e4ea3f499050b02fa534bdc81bff825e6da1798e9305de49bde1edbd54d",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/bigvgan/activations.py",
+      "destination": "app/models/TTS/auk/vae/modules/bigvgan/activations.py",
+      "upstream_sha256": "9ce74ea0f607b383c3f106379a23e6bbd0b5122117b32dc61710093475a2b4d6",
+      "local_sha256": "9ce74ea0f607b383c3f106379a23e6bbd0b5122117b32dc61710093475a2b4d6",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/bigvgan/alias_free_torch/resample.py",
+      "destination": "app/models/TTS/auk/vae/modules/bigvgan/alias_free_torch/resample.py",
+      "upstream_sha256": "b98f85bb5e442036ba52ae8f10da9cdc29cd1beae670477e59a0058529a46fb7",
+      "local_sha256": "b98f85bb5e442036ba52ae8f10da9cdc29cd1beae670477e59a0058529a46fb7",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/bigvgan/alias_free_torch/__init__.py",
+      "destination": "app/models/TTS/auk/vae/modules/bigvgan/alias_free_torch/__init__.py",
+      "upstream_sha256": "768474ccc6795200afad6424b0b6174e3a585a500ebb5f3599fe5ebe6955bcfd",
+      "local_sha256": "768474ccc6795200afad6424b0b6174e3a585a500ebb5f3599fe5ebe6955bcfd",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/bigvgan/alias_free_torch/filter.py",
+      "destination": "app/models/TTS/auk/vae/modules/bigvgan/alias_free_torch/filter.py",
+      "upstream_sha256": "7c592d266008c5a0a8a813f36a55f9d4ca002b9867a58c25706cadb0cfa27165",
+      "local_sha256": "7c592d266008c5a0a8a813f36a55f9d4ca002b9867a58c25706cadb0cfa27165",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/bigvgan/alias_free_torch/act.py",
+      "destination": "app/models/TTS/auk/vae/modules/bigvgan/alias_free_torch/act.py",
+      "upstream_sha256": "6f7cea6c9c53d6ee45388d896b38b31fd3a712e4710f30de28dc24662440debb",
+      "local_sha256": "6f7cea6c9c53d6ee45388d896b38b31fd3a712e4710f30de28dc24662440debb",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/vits/__init__.py",
+      "destination": "app/models/TTS/auk/vae/modules/vits/__init__.py",
+      "upstream_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "local_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/auk/vae/modules/vits/flows.py",
+      "destination": "app/models/TTS/auk/vae/modules/vits/flows.py",
+      "upstream_sha256": "a10d61a3028c1745a7b3e6d3942def0435bd293761d518281fbccb0c31105065",
+      "local_sha256": "a10d61a3028c1745a7b3e6d3942def0435bd293761d518281fbccb0c31105065",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/yue2_ar.json",
+      "destination": "app/models/TTS/yue2/yue2_ar.json",
+      "upstream_sha256": "0a557c044c484a25db36b8a013ec4d14fadd3c4aab04e6103e550baabce01d87",
+      "local_sha256": "0a557c044c484a25db36b8a013ec4d14fadd3c4aab04e6103e550baabce01d87",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/__init__.py",
+      "destination": "app/models/TTS/yue2/__init__.py",
+      "upstream_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "local_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/yue2/sampling.py",
+      "destination": "app/models/TTS/yue2/sampling.py",
+      "upstream_sha256": "c6358f4be96f552bded2b0f12fa6f67b315cd12b746e80459cd38e2531727e45",
+      "local_sha256": "c6358f4be96f552bded2b0f12fa6f67b315cd12b746e80459cd38e2531727e45",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/protocol.py",
+      "destination": "app/models/TTS/yue2/protocol.py",
+      "upstream_sha256": "9be9d95e874ce5637a918ff82d1475d7f7a803cb43f60890743088f570f2bf73",
+      "local_sha256": "9be9d95e874ce5637a918ff82d1475d7f7a803cb43f60890743088f570f2bf73",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/yue2.json",
+      "destination": "app/models/TTS/yue2/yue2.json",
+      "upstream_sha256": "193fe985de592472afd981611501289035b66174e657678b80c9f4200d34a6ef",
+      "local_sha256": "193fe985de592472afd981611501289035b66174e657678b80c9f4200d34a6ef",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/pipeline.py",
+      "destination": "app/models/TTS/yue2/pipeline.py",
+      "upstream_sha256": "839407aa45075d4a61348f87800bb361048bba5af7544cf87e4cfe2b26a8bb9b",
+      "local_sha256": "1be20660d4a6edc4ae5d6422119332f7de71c69c1e3b5768bbb72b0868be7b5c",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/yue2/MODEL_LICENSE",
+      "destination": "app/models/TTS/yue2/MODEL_LICENSE",
+      "upstream_sha256": "623b5b238853e2ab79d87933ee5ea7ff474ec31e348f128ca4063cda64b901bc",
+      "local_sha256": "623b5b238853e2ab79d87933ee5ea7ff474ec31e348f128ca4063cda64b901bc",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/transformer.py",
+      "destination": "app/models/TTS/yue2/transformer.py",
+      "upstream_sha256": "0aebeb88f841ca7644e980fda3e21c803760e09ba249ca6d3624d82a20aee1d3",
+      "local_sha256": "d844ff1650626c18061a870c416d4400d43c0928e2488ebf4d6787f3d659c5fd",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/yue2/THIRD_PARTY_NOTICES.md",
+      "destination": "app/models/TTS/yue2/THIRD_PARTY_NOTICES.md",
+      "upstream_sha256": "8e619bbee89d740a6c8651a3f7b5b8ea495844a72228f0ad37f5254d3ac7205e",
+      "local_sha256": "8e619bbee89d740a6c8651a3f7b5b8ea495844a72228f0ad37f5254d3ac7205e",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/vae.py",
+      "destination": "app/models/TTS/yue2/vae.py",
+      "upstream_sha256": "2d478918c9b30ed9c9d82ab21bf7f0d2d28291593a37657347a9da9191d19501",
+      "local_sha256": "2d478918c9b30ed9c9d82ab21bf7f0d2d28291593a37657347a9da9191d19501",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/prompt_enhancers.py",
+      "destination": "app/models/TTS/yue2/prompt_enhancers.py",
+      "upstream_sha256": "c63018ebf4eb5c07ffe1fa1209d8c3a3e2c1b2cba46e3e91b608da22a087c0db",
+      "local_sha256": "c63018ebf4eb5c07ffe1fa1209d8c3a3e2c1b2cba46e3e91b608da22a087c0db",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/LICENSE",
+      "destination": "app/models/TTS/yue2/LICENSE",
+      "upstream_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "local_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/yue2_handler.py",
+      "destination": "app/models/TTS/yue2/yue2_handler.py",
+      "upstream_sha256": "803ea172df24218f8a937c2a2c2cb4c7a3d761f72947fa2b958d3e587f6a193b",
+      "local_sha256": "3b523b5ecc25c2571a6d0740fca90b49cbf640556a4c85206dc6ef1a16dbf486",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/yue2/modules.py",
+      "destination": "app/models/TTS/yue2/modules.py",
+      "upstream_sha256": "8b2bbcfc88506fa0f1e45d77c6b8235306555780e2c3054df1ecd420bdd0b008",
+      "local_sha256": "fba8f3efb26e893990086071daa50b2f9e13469d0c6cb9fc2cd002a2578d5c93",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/yue2/tokenization_yue2.py",
+      "destination": "app/models/TTS/yue2/tokenization_yue2.py",
+      "upstream_sha256": "bee355abe76fef621761a01482957f97618db9f79dde9e7932e817f935bd417a",
+      "local_sha256": "fe6cdfc17d1ba78bc397fccfce1289f3e705531f4be57eca3ff070b3c2aef6d7",
+      "adapted": true
+    },
+    {
+      "source": "models/TTS/yue2/licenses/SnakeBeta-NVIDIA-MIT.txt",
+      "destination": "app/models/TTS/yue2/licenses/SnakeBeta-NVIDIA-MIT.txt",
+      "upstream_sha256": "e2f86126a8a56dfd0882e9112e282c7599a34d2c4479f6f5c461b8c2121a579f",
+      "local_sha256": "e2f86126a8a56dfd0882e9112e282c7599a34d2c4479f6f5c461b8c2121a579f",
+      "adapted": false
+    },
+    {
+      "source": "models/TTS/yue2/licenses/stable-audio-tools-MIT.txt",
+      "destination": "app/models/TTS/yue2/licenses/stable-audio-tools-MIT.txt",
+      "upstream_sha256": "a1fac33b7bcd791b74fb33aeb439f825e7277e239fc119fb7d2ab6f084a0c101",
+      "local_sha256": "a1fac33b7bcd791b74fb33aeb439f825e7277e239fc119fb7d2ab6f084a0c101",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/__init__.py",
+      "destination": "app/shared/wangp1300/llm_engines/__init__.py",
+      "upstream_sha256": "297e97eff977ad8b8989a9a7e0c98ce4d96fe8a70110bd01819a3c6990c49f9f",
+      "local_sha256": "297e97eff977ad8b8989a9a7e0c98ce4d96fe8a70110bd01819a3c6990c49f9f",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/cudagraph_kit.py",
+      "destination": "app/shared/wangp1300/llm_engines/cudagraph_kit.py",
+      "upstream_sha256": "743e2c2667a437b2b6cbde086ffade5727c192e9206c254a7913ba55f7008ae3",
+      "local_sha256": "743e2c2667a437b2b6cbde086ffade5727c192e9206c254a7913ba55f7008ae3",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/snapshot_cache.py",
+      "destination": "app/shared/wangp1300/llm_engines/snapshot_cache.py",
+      "upstream_sha256": "c8fec9c3bc520516ad338073dc235ad96d8edc1fbc1c32dc665cece4cad01136",
+      "local_sha256": "c8fec9c3bc520516ad338073dc235ad96d8edc1fbc1c32dc665cece4cad01136",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/__init__.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/__init__.py",
+      "upstream_sha256": "865b3a90dea576c2fc749a842a4d6278edb0200b5fdd218df736bb7ccd053b7a",
+      "local_sha256": "865b3a90dea576c2fc749a842a4d6278edb0200b5fdd218df736bb7ccd053b7a",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/sampling_params.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/sampling_params.py",
+      "upstream_sha256": "30796154b8dc841f823f3891bdece8730e8d3e0164605eab4d3f79bd6b1e24ae",
+      "local_sha256": "30796154b8dc841f823f3891bdece8730e8d3e0164605eab4d3f79bd6b1e24ae",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/token_generation.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/token_generation.py",
+      "upstream_sha256": "44aa6e2caf3577a10ad879241ab07b0b0c719fa6a69aada56453daf1fb4b4b7f",
+      "local_sha256": "44aa6e2caf3577a10ad879241ab07b0b0c719fa6a69aada56453daf1fb4b4b7f",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/llm.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/llm.py",
+      "upstream_sha256": "a2c884255dba76691cc206ee39f96048a6c04ccd80823d9c7f8f5535193cf30f",
+      "local_sha256": "a2c884255dba76691cc206ee39f96048a6c04ccd80823d9c7f8f5535193cf30f",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/config.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/config.py",
+      "upstream_sha256": "edaceb44505a58627b37672f2ee167d0f767cd9a9bb5b949322c7f81cfb09285",
+      "local_sha256": "edaceb44505a58627b37672f2ee167d0f767cd9a9bb5b949322c7f81cfb09285",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/vllm_support.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/vllm_support.py",
+      "upstream_sha256": "21f79e5b4e43f78d934c33bddf6a5723740b934975630de031bd7b7685a73258",
+      "local_sha256": "f743db857c2cca8adfa8f7d8eb39ab348bf87b0a39c388f1433f7948ddce622d",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/layers/attention_sm120.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/layers/attention_sm120.py",
+      "upstream_sha256": "ea764322b5aaaf59bd4902f897b81ad287161b2d772679959d04c0bd7824abaa",
+      "local_sha256": "e659447c48e1fa4e9c8ad9a61bd0345dd7d1e48e05ea561dae49676a2277c782",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/layers/attention.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/layers/attention.py",
+      "upstream_sha256": "17d63439d50f6b2da990b9b1c13c5166c88cbfb59e4dfe0e47a855219e6e6c63",
+      "local_sha256": "4bfc4a2d01acac00e20fc63e0a29a9807d0d402cee21a0ea5f50f894d5717dea",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/layers/speculative_state.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/layers/speculative_state.py",
+      "upstream_sha256": "e36a95d56123094fc3f588cc163db378d8f4461228a53a5b79f12c3bb59711a0",
+      "local_sha256": "3ba0e5e77baf32008c86092271deb1fe0aabc53ad2be3e1e85b7fc391245ca0b",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/layers/activation.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/layers/activation.py",
+      "upstream_sha256": "caf64dbeebcd86235d77a1947aa4439b32f56c1ce348848a1de12fcf7c3f9a31",
+      "local_sha256": "5896b507dc01c8cec02f3b2f81ee4787e771a8e7b8ba1fb38a8a68b00c648e47",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/layers/linear.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/layers/linear.py",
+      "upstream_sha256": "d015f3acf00459de1801c54d4dd8df359cef59d9b554f84f99a4346b552179f5",
+      "local_sha256": "d015f3acf00459de1801c54d4dd8df359cef59d9b554f84f99a4346b552179f5",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/layers/rotary_embedding.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/layers/rotary_embedding.py",
+      "upstream_sha256": "907d6092ac8360778c6347fc78ff8cdf23ab587f4a461d719dcce6235ef7253a",
+      "local_sha256": "c61f18c807a231e93c2ad7c11f02057d5cb3c68ca380c0af50338c98014f7f40",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/layers/sampler.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/layers/sampler.py",
+      "upstream_sha256": "1c29fc8ff943038dac3a3fb33c9ebf54bbd068f63fd8d808fb34df468567e23c",
+      "local_sha256": "d8c75520c0a072fdaa9823ee28efa70e81264395a3a8ccfd8c26b5c271f3693f",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/layers/layernorm.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/layers/layernorm.py",
+      "upstream_sha256": "c491e116106a461bc48aaa675314bc0776d9775570d8a7e47b150fd0a3382093",
+      "local_sha256": "1fe1ae7be2db3a54122268db40c98a5c4c84685fcb34bbc8cfae939032eb8ea2",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/layers/embed_head.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/layers/embed_head.py",
+      "upstream_sha256": "d83cf82969237ecabf9cf4d6047f2bbab9ed2aa00fb3aba1aebfd5b38933a123",
+      "local_sha256": "d83cf82969237ecabf9cf4d6047f2bbab9ed2aa00fb3aba1aebfd5b38933a123",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/models/qwen2_5_vl.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/models/qwen2_5_vl.py",
+      "upstream_sha256": "90d13bf56d2598f6774d73405680da3bec9c193666df5c4bedbd3236b0f0562e",
+      "local_sha256": "90d13bf56d2598f6774d73405680da3bec9c193666df5c4bedbd3236b0f0562e",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/models/__init__.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/models/__init__.py",
+      "upstream_sha256": "7055d65793f7e5917a9b462e81161eba6a24e05f6052f33a53303186fda7b95b",
+      "local_sha256": "7055d65793f7e5917a9b462e81161eba6a24e05f6052f33a53303186fda7b95b",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/models/qwen3.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/models/qwen3.py",
+      "upstream_sha256": "9cdc16bd79dad275f9af63107b3b2a03539b9263c8e8d7a667f1dc6453ab5ecb",
+      "local_sha256": "0a304fcd12dbaed24f9de0916b588e381ccf465feb1551390eeaa9e973a591f6",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/models/qwen3_5.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/models/qwen3_5.py",
+      "upstream_sha256": "a28c6d5c6f8742e5a7cfa9d6fe3c77cbe5cf914a3bb82e2189719cf54c155dbd",
+      "local_sha256": "946cdcfd5fdf494c76a8f22aa11ce35e0bc10b0d5c3a1196f4e50330e3749661",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/engine/sequence.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/engine/sequence.py",
+      "upstream_sha256": "23c85f78cad692bedccd11d550bbcd49e9b51285173bc32b36c795594b4d82ad",
+      "local_sha256": "23c85f78cad692bedccd11d550bbcd49e9b51285173bc32b36c795594b4d82ad",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/engine/llm_engine.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/engine/llm_engine.py",
+      "upstream_sha256": "e45679e42ad37e90cced2294933f26c8412364498dd37d2ca5f87a6de3752fe6",
+      "local_sha256": "aab214f577498ed0f9c7277b35671c8610167d204569ac50d98932c082d03617",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/engine/block_manager.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/engine/block_manager.py",
+      "upstream_sha256": "3be04f75a40c779a39c6463679237a848435f3afb358ab36f6fb11685bd16639",
+      "local_sha256": "3be04f75a40c779a39c6463679237a848435f3afb358ab36f6fb11685bd16639",
+      "adapted": false
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/engine/scheduler.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/engine/scheduler.py",
+      "upstream_sha256": "4529e6c1cb591f94c47120e7fd7cbf6f983da65cab19168f77d7634e99c54620",
+      "local_sha256": "ec8cd56d96e06c218cd4647ee9189e3b2dc37dae82deb33662c7c50bad7b9697",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/engine/model_runner.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/engine/model_runner.py",
+      "upstream_sha256": "b3372a923d3ae2b64b1fdf4afad9b43601bf7ec3538e5cdbfdb40c8352ed65d3",
+      "local_sha256": "941d21a007873e5f7bafe31a759a9b2249dc249771eaaa9088796242280a1c5e",
+      "adapted": true
+    },
+    {
+      "source": "shared/llm_engines/nanovllm/utils/context.py",
+      "destination": "app/shared/wangp1300/llm_engines/nanovllm/utils/context.py",
+      "upstream_sha256": "860636463341b1e81573cf7482421846ae8b3a7a2ae389ce3ce1e030ed97abfe",
+      "local_sha256": "860636463341b1e81573cf7482421846ae8b3a7a2ae389ce3ce1e030ed97abfe",
+      "adapted": false
+    },
+    {
+      "source": "shared/utils/cancellation.py",
+      "destination": "app/shared/wangp1300/utils/cancellation.py",
+      "upstream_sha256": "ad5423bb691881c66b4a029b90b54903501462ffc0e94afc1822f5541f5c0cf5",
+      "local_sha256": "ad5423bb691881c66b4a029b90b54903501462ffc0e94afc1822f5541f5c0cf5",
+      "adapted": false
+    },
+    {
+      "source": "shared/prompt_enhancer/streaming.py",
+      "destination": "app/shared/wangp1300/prompt_enhancer/streaming.py",
+      "upstream_sha256": "c1822537e9876599069be2194c5082ffc8f3daec30ab91594193c988d840a4d6",
+      "local_sha256": "c1822537e9876599069be2194c5082ffc8f3daec30ab91594193c988d840a4d6",
+      "adapted": false
+    },
+    {
+      "source": "shared/kernels/triton_compilation_log.py",
+      "destination": "app/shared/wangp1300/kernels/triton_compilation_log.py",
+      "upstream_sha256": "ba817b9461a5e33b5602b8aa89b0b0fa6286e0119abdf6b58194a135dc1f4202",
+      "local_sha256": "ba817b9461a5e33b5602b8aa89b0b0fa6286e0119abdf6b58194a135dc1f4202",
+      "adapted": false
+    },
+    {
+      "source": "LICENSE.txt",
+      "destination": "app/licenses/wangp-1300.txt",
+      "upstream_sha256": "67c8e68389c945423c560c13936f0a960e5d2ffdcc5bb2ded4122fe1b095960f",
+      "local_sha256": "67c8e68389c945423c560c13936f0a960e5d2ffdcc5bb2ded4122fe1b095960f",
+      "adapted": false
+    },
+    {
+      "source": "defaults/auk.json",
+      "destination": "app/defaults/auk.json",
+      "upstream_sha256": "e462cb05ad7e7681b11f886b614741924615193f73e0d4ffd5a3c7f1a48d3988",
+      "local_sha256": "96ee02c680280a4eecc58a39f7649eddba80fc9f141fd4e4add001ca0a44cc93",
+      "adapted": true
+    },
+    {
+      "source": "defaults/auk_flash.json",
+      "destination": "app/defaults/auk_flash.json",
+      "upstream_sha256": "476a73baa37ccf8b5449d013a53f6fa05a5f43626dbe2a62809ea3479c3df9e5",
+      "local_sha256": "dd1511d42c73c3acde3016872a4e712a0bfb138d5799aa0b258a8fc6415c6c7f",
+      "adapted": true
+    },
+    {
+      "source": "defaults/yue2.json",
+      "destination": "app/defaults/yue2.json",
+      "upstream_sha256": "8af502b3fa35326359521e20f18ade0d0b394ae18ebe54231ae77484a5cbd188",
+      "local_sha256": "f04a639ab1c4c002d8500c06ff3720e1587768c2eeea71fa51a80fc0f281f85d",
+      "adapted": true
+    }
+  ]
+}
