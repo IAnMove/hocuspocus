@@ -870,3 +870,38 @@ These routes always use the server active output folder. They do not accept `?wo
 Operator notes: `docs/tools/HOWUSEIT.md`, `docs/video-editor/HOWUSEIT.md`, `docs/workspaces/HOWUSEIT.md`, and `docs/character-kits/HOWUSEIT.md`.
 
 Character Kit `restPose` optionally contains `{asset, fingerprint}`: a derived resting still for reference consumers. The original `base` remains the animation rig source. Speech analysis accepts both PCM WAV bytes and a bounded JSON envelope with `wavBase64`, `dialogue`, and `language`; see [2D speech quality](../../docs/character-kits/SPEECH_QUALITY.md).
+
+## Video background removal
+
+The existing `POST /api/v1/tools/remove-background` also accepts a video asset
+ID or canonical file/upload source. Source kind is resolved from the exact asset
+and its location. It retains the original, processes every frame through the
+shared U2Net session, and publishes a VP9 WebM with alpha and its original audio
+(re-encoded to Opus). Image inputs continue to produce PNGs.
+
+```json
+{
+  "source": "/api/v1/file/walking-knight.mp4",
+  "source_workspace": "default",
+  "workspace": "default",
+  "temporal_smoothing": true
+}
+```
+
+The response identifies a normal queued Tools job; poll `/api/v1/status/{job_id}`
+and cancel through `/api/v1/cancel/{job_id}`. Progress counts processed frames.
+A failed or cancelled operation removes temporary output. Memory holds the current
+and previous frame; it does not write an image sequence to disk. Output lineage
+records the source, dimensions, frame rate, frame count, duration, alpha and audio.
+
+Limits: 60 seconds, 1800 frames, up to 60 fps, output long edge at most 1920 px.
+The source display orientation is respected; variable frame rates are normalized
+to the reported average. `temporal_smoothing` defaults to true and damps small
+matte changes where adjacent source pixels agree; it does not track objects or
+preserve an occluded subject. Review fine details and fast motion after removal.
+`instruction` records a note; it does not steer U2Net.
+
+In the UI use **Studio → Tools → Remove background**, select/upload a video and
+run. For a separate actor in Video 3D, assign the result under **Animate this layer**
+and enable **Preserve transparency**. Background video has its own clock and depth.
+Exported MP4 compositions are opaque; the source WebM remains reusable with alpha.

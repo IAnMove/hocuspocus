@@ -1,0 +1,1565 @@
+{
+  "generatedWith": "HocusPocus MiniMax Image-01; native World3D compositor for clips",
+  "assets": [
+    {
+      "file": "../creative/amber-ice.jpg",
+      "sha256": "5cefeb694b42baf37e96a35255dd7f0bb3af2badec413569ae13766e5591e1f0",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "An amber glass polar station with enormous geometric orange door frames, cobalt blue glacier beyond the windows, ice crystals, pale cyan floor. Layered repeated portals create powerful depth. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-5dee7d6738bf",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.386241,
+          "updatedAt": 1789456917.386241,
+          "taskId": "task-minimax-image-minimax-image-5dee7d6738bf",
+          "rootTaskId": "task-minimax-image-minimax-image-5dee7d6738bf"
+        },
+        "status": {
+          "jobId": "minimax-image-5dee7d6738bf",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h22m15s_minimax-comic_d91fbe21.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-8b67a58fbd80",
+              "name": "2026-09-15-09h22m15s_minimax-comic_d91fbe21.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h22m15s_minimax-comic_d91fbe21.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h22m15s_minimax-comic_d91fbe21.jpg",
+              "prompt": "An amber glass polar station with enormous geometric orange door frames, cobalt blue glacier beyond the windows, ice crystals, pale cyan floor. Layered repeated portals create powerful depth. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:22:15Z",
+              "metadata": {
+                "jobId": "minimax-image-5dee7d6738bf",
+                "taskId": "task-minimax-image-minimax-image-5dee7d6738bf",
+                "rootTaskId": "task-minimax-image-minimax-image-5dee7d6738bf",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.386241,
+          "updatedAt": 1789456935.600032,
+          "taskId": "task-minimax-image-minimax-image-5dee7d6738bf",
+          "rootTaskId": "task-minimax-image-minimax-image-5dee7d6738bf",
+          "startedAt": 1789456917.398558,
+          "finishedAt": 1789456935.6000268
+        }
+      }
+    },
+    {
+      "file": "../creative/apricot-cable.jpg",
+      "sha256": "765efcdb61bcb7a5c42b24f4922d9a61b31ba8e1c4c15dc524ca10959c0662b2",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "An apricot and vermilion mountain cable-car terminus, open platforms with railings and copper beams at different depths, ultramarine alpine valley far away, pale orange stone foreground, crisp late-afternoon light. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-3ddeaec35dd8",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.5259035,
+          "updatedAt": 1789456917.5259035,
+          "taskId": "task-minimax-image-minimax-image-3ddeaec35dd8",
+          "rootTaskId": "task-minimax-image-minimax-image-3ddeaec35dd8"
+        },
+        "status": {
+          "jobId": "minimax-image-3ddeaec35dd8",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h25m15s_minimax-comic_0fa9f4e0.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-f9a12d6e3e4d",
+              "name": "2026-09-15-09h25m15s_minimax-comic_0fa9f4e0.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h25m15s_minimax-comic_0fa9f4e0.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h25m15s_minimax-comic_0fa9f4e0.jpg",
+              "prompt": "An apricot and vermilion mountain cable-car terminus, open platforms with railings and copper beams at different depths, ultramarine alpine valley far away, pale orange stone foreground, crisp late-afternoon light. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:25:15Z",
+              "metadata": {
+                "jobId": "minimax-image-3ddeaec35dd8",
+                "taskId": "task-minimax-image-minimax-image-3ddeaec35dd8",
+                "rootTaskId": "task-minimax-image-minimax-image-3ddeaec35dd8",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.5259035,
+          "updatedAt": 1789457115.956963,
+          "taskId": "task-minimax-image-minimax-image-3ddeaec35dd8",
+          "rootTaskId": "task-minimax-image-minimax-image-3ddeaec35dd8",
+          "startedAt": 1789457099.3315978,
+          "finishedAt": 1789457115.9569595
+        }
+      }
+    },
+    {
+      "file": "../creative/arctic-spin.jpg",
+      "sha256": "3677df68efe01020abfd16377753db6bd873269d0115148aeb1d6f6aab0cd826",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A cheerful mustard-yellow laundromat at an Arctic outpost, enormous teal circular washing-machine doors receding down one wall, ice-blue landscape visible through distant windows, glossy dark turquoise foreground floor. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-ead084aa99f7",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.6706579,
+          "updatedAt": 1789456917.6706579,
+          "taskId": "task-minimax-image-minimax-image-ead084aa99f7",
+          "rootTaskId": "task-minimax-image-minimax-image-ead084aa99f7"
+        },
+        "status": {
+          "jobId": "minimax-image-ead084aa99f7",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h29m47s_minimax-comic_7cc944c4.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-fcd719b2b81d",
+              "name": "2026-09-15-09h29m47s_minimax-comic_7cc944c4.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h29m47s_minimax-comic_7cc944c4.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h29m47s_minimax-comic_7cc944c4.jpg",
+              "prompt": "A cheerful mustard-yellow laundromat at an Arctic outpost, enormous teal circular washing-machine doors receding down one wall, ice-blue landscape visible through distant windows, glossy dark turquoise foreground floor. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:29:48Z",
+              "metadata": {
+                "jobId": "minimax-image-ead084aa99f7",
+                "taskId": "task-minimax-image-minimax-image-ead084aa99f7",
+                "rootTaskId": "task-minimax-image-minimax-image-ead084aa99f7",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.6706579,
+          "updatedAt": 1789457388.8234797,
+          "taskId": "task-minimax-image-minimax-image-ead084aa99f7",
+          "rootTaskId": "task-minimax-image-minimax-image-ead084aa99f7",
+          "startedAt": 1789457365.921857,
+          "finishedAt": 1789457388.8234756
+        }
+      }
+    },
+    {
+      "file": "../creative/brass-mirage.jpg",
+      "sha256": "9dd45751076a63fa614a6b4da8ee1b8fba7ef1eeafa2e35725165a470425d2a1",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A black volcanic desert courtyard with tall polished brass reflecting monoliths arranged at different depths, a distant warm ochre dune, enormous pale yellow sun, black basalt paving in foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-60b4aae59522",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.4563508,
+          "updatedAt": 1789456917.4563508,
+          "taskId": "task-minimax-image-minimax-image-60b4aae59522",
+          "rootTaskId": "task-minimax-image-minimax-image-60b4aae59522"
+        },
+        "status": {
+          "jobId": "minimax-image-60b4aae59522",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h24m11s_minimax-comic_55ae371a.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-3c89b05a6fec",
+              "name": "2026-09-15-09h24m11s_minimax-comic_55ae371a.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h24m11s_minimax-comic_55ae371a.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h24m11s_minimax-comic_55ae371a.jpg",
+              "prompt": "A black volcanic desert courtyard with tall polished brass reflecting monoliths arranged at different depths, a distant warm ochre dune, enormous pale yellow sun, black basalt paving in foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:24:11Z",
+              "metadata": {
+                "jobId": "minimax-image-60b4aae59522",
+                "taskId": "task-minimax-image-minimax-image-60b4aae59522",
+                "rootTaskId": "task-minimax-image-minimax-image-60b4aae59522",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.4563508,
+          "updatedAt": 1789457051.3682356,
+          "taskId": "task-minimax-image-minimax-image-60b4aae59522",
+          "rootTaskId": "task-minimax-image-minimax-image-60b4aae59522",
+          "startedAt": 1789457030.9359188,
+          "finishedAt": 1789457051.3682308
+        }
+      }
+    },
+    {
+      "file": "../creative/chrome-bloom.jpg",
+      "sha256": "11ec61df82f93c7c556b04dd462af3b45e7d7eaaa87a67ab80f59dc8b193063e",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A futuristic magenta chrome botanical garage, giant metallic flower sculptures reflecting turquoise strip lights, open geometric bays receding toward a brilliant cyan background, dark reflective plum foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-d5aa76c85244",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.6565847,
+          "updatedAt": 1789456917.6565847,
+          "taskId": "task-minimax-image-minimax-image-d5aa76c85244",
+          "rootTaskId": "task-minimax-image-minimax-image-d5aa76c85244"
+        },
+        "status": {
+          "jobId": "minimax-image-d5aa76c85244",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h29m24s_minimax-comic_b166e825.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-8f5f4f8b94bc",
+              "name": "2026-09-15-09h29m24s_minimax-comic_b166e825.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h29m24s_minimax-comic_b166e825.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h29m24s_minimax-comic_b166e825.jpg",
+              "prompt": "A futuristic magenta chrome botanical garage, giant metallic flower sculptures reflecting turquoise strip lights, open geometric bays receding toward a brilliant cyan background, dark reflective plum foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:29:25Z",
+              "metadata": {
+                "jobId": "minimax-image-d5aa76c85244",
+                "taskId": "task-minimax-image-minimax-image-d5aa76c85244",
+                "rootTaskId": "task-minimax-image-minimax-image-d5aa76c85244",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.6565847,
+          "updatedAt": 1789457365.922107,
+          "taskId": "task-minimax-image-minimax-image-d5aa76c85244",
+          "rootTaskId": "task-minimax-image-minimax-image-d5aa76c85244",
+          "startedAt": 1789457341.73526,
+          "finishedAt": 1789457365.9221025
+        }
+      }
+    },
+    {
+      "file": "../creative/clockwork-glass.jpg",
+      "sha256": "a8f617a4b57927e1be14c562e256b63f0fa53175275aa09da88234a6f80bfe91",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A whimsical clockwork greenhouse with huge pastel pink gears, emerald fern walls, amber glass roof, lime green mechanical watering pipes, cream and jade patterned dry stone foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-593f294f9191",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.5537765,
+          "updatedAt": 1789456917.5537765,
+          "taskId": "task-minimax-image-minimax-image-593f294f9191",
+          "rootTaskId": "task-minimax-image-minimax-image-593f294f9191"
+        },
+        "status": {
+          "jobId": "minimax-image-593f294f9191",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h26m42s_minimax-comic_2ca2f01b.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-e2709e7c8b8f",
+              "name": "2026-09-15-09h26m42s_minimax-comic_2ca2f01b.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h26m42s_minimax-comic_2ca2f01b.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h26m42s_minimax-comic_2ca2f01b.jpg",
+              "prompt": "A whimsical clockwork greenhouse with huge pastel pink gears, emerald fern walls, amber glass roof, lime green mechanical watering pipes, cream and jade patterned dry stone foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:26:42Z",
+              "metadata": {
+                "jobId": "minimax-image-593f294f9191",
+                "taskId": "task-minimax-image-minimax-image-593f294f9191",
+                "rootTaskId": "task-minimax-image-minimax-image-593f294f9191",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.5537765,
+          "updatedAt": 1789457202.5830145,
+          "taskId": "task-minimax-image-minimax-image-593f294f9191",
+          "rootTaskId": "task-minimax-image-minimax-image-593f294f9191",
+          "startedAt": 1789457185.3399296,
+          "finishedAt": 1789457202.5830097
+        }
+      }
+    },
+    {
+      "file": "../creative/cobalt-crater.jpg",
+      "sha256": "454e8ee25926c290d02bbc02d899303079ba10931f9d25662f826fefbe0c1c02",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A cobalt-blue volcanic crater observatory with bright orange molten light contained in a distant circular caldera, black and ultramarine basalt terraces descending in layers, safe broad dark blue foreground platform. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-b265428cc72b",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.5900333,
+          "updatedAt": 1789456917.5900333,
+          "taskId": "task-minimax-image-minimax-image-b265428cc72b",
+          "rootTaskId": "task-minimax-image-minimax-image-b265428cc72b"
+        },
+        "status": {
+          "jobId": "minimax-image-b265428cc72b",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h28m11s_minimax-comic_d30926da.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-55fd87eeca86",
+              "name": "2026-09-15-09h28m11s_minimax-comic_d30926da.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h28m11s_minimax-comic_d30926da.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h28m11s_minimax-comic_d30926da.jpg",
+              "prompt": "A cobalt-blue volcanic crater observatory with bright orange molten light contained in a distant circular caldera, black and ultramarine basalt terraces descending in layers, safe broad dark blue foreground platform. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:28:11Z",
+              "metadata": {
+                "jobId": "minimax-image-b265428cc72b",
+                "taskId": "task-minimax-image-minimax-image-b265428cc72b",
+                "rootTaskId": "task-minimax-image-minimax-image-b265428cc72b",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.5900333,
+          "updatedAt": 1789457291.9857237,
+          "taskId": "task-minimax-image-minimax-image-b265428cc72b",
+          "rootTaskId": "task-minimax-image-minimax-image-b265428cc72b",
+          "startedAt": 1789457219.9753358,
+          "finishedAt": 1789457291.98572
+        }
+      }
+    },
+    {
+      "file": "../creative/coral-radio.jpg",
+      "sha256": "4c5af468d0e472113c1e5dfea11021d16cfb06c0b9910062433b79ca8d7e9208",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "An underwater retro radio station seen from inside a dry turquoise observation lounge, coral-orange branching shapes outside huge rounded windows, warm butter-yellow console alcoves in the distance, deep blue green terrazzo foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-2be22db89f8e",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.7183619,
+          "updatedAt": 1789456917.7183619,
+          "taskId": "task-minimax-image-minimax-image-2be22db89f8e",
+          "rootTaskId": "task-minimax-image-minimax-image-2be22db89f8e"
+        },
+        "status": {
+          "jobId": "minimax-image-2be22db89f8e",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h31m39s_minimax-comic_d0f562d3.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-38300696332a",
+              "name": "2026-09-15-09h31m39s_minimax-comic_d0f562d3.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h31m39s_minimax-comic_d0f562d3.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h31m39s_minimax-comic_d0f562d3.jpg",
+              "prompt": "An underwater retro radio station seen from inside a dry turquoise observation lounge, coral-orange branching shapes outside huge rounded windows, warm butter-yellow console alcoves in the distance, deep blue green terrazzo foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:31:40Z",
+              "metadata": {
+                "jobId": "minimax-image-2be22db89f8e",
+                "taskId": "task-minimax-image-minimax-image-2be22db89f8e",
+                "rootTaskId": "task-minimax-image-minimax-image-2be22db89f8e",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.7183619,
+          "updatedAt": 1789457500.3834562,
+          "taskId": "task-minimax-image-minimax-image-2be22db89f8e",
+          "rootTaskId": "task-minimax-image-minimax-image-2be22db89f8e",
+          "startedAt": 1789457477.7288544,
+          "finishedAt": 1789457500.3834493
+        }
+      }
+    },
+    {
+      "file": "../creative/domino-garden.jpg",
+      "sha256": "dcb42b6a58897b7d41e9cb736d15a1fe078d0f5457e102b4022444d88ae57443",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "An elegant surreal architectural garden made of black and ivory domino-like slabs, a single huge scarlet red arch, checkerboard paths receding in layers, sparse pale green grass, broad ivory stone foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-0538a5c3dfaf",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.6886046,
+          "updatedAt": 1789456917.6886046,
+          "taskId": "task-minimax-image-minimax-image-0538a5c3dfaf",
+          "rootTaskId": "task-minimax-image-minimax-image-0538a5c3dfaf"
+        },
+        "status": {
+          "jobId": "minimax-image-0538a5c3dfaf",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h30m21s_minimax-comic_167465b9.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-509931b6e32b",
+              "name": "2026-09-15-09h30m21s_minimax-comic_167465b9.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h30m21s_minimax-comic_167465b9.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h30m21s_minimax-comic_167465b9.jpg",
+              "prompt": "An elegant surreal architectural garden made of black and ivory domino-like slabs, a single huge scarlet red arch, checkerboard paths receding in layers, sparse pale green grass, broad ivory stone foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:30:24Z",
+              "metadata": {
+                "jobId": "minimax-image-0538a5c3dfaf",
+                "taskId": "task-minimax-image-minimax-image-0538a5c3dfaf",
+                "rootTaskId": "task-minimax-image-minimax-image-0538a5c3dfaf",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.6886046,
+          "updatedAt": 1789457424.4553201,
+          "taskId": "task-minimax-image-minimax-image-0538a5c3dfaf",
+          "rootTaskId": "task-minimax-image-minimax-image-0538a5c3dfaf",
+          "startedAt": 1789457388.8236217,
+          "finishedAt": 1789457424.4553165
+        }
+      }
+    },
+    {
+      "file": "../creative/glass-orchard.jpg",
+      "sha256": "64f7fc7bc98db63e8a1ab4e7ee7d0ded0afb6424012f498021aacb518d76d162",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A surreal orchard of tall translucent mint glass trees in mauve mist, hanging pale coral glass fruit, charcoal plum trunks arranged in receding rows, soft lilac and mint gravel foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-24118bd372f8",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.6239104,
+          "updatedAt": 1789456917.6239104,
+          "taskId": "task-minimax-image-minimax-image-24118bd372f8",
+          "rootTaskId": "task-minimax-image-minimax-image-24118bd372f8"
+        },
+        "status": {
+          "jobId": "minimax-image-24118bd372f8",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h28m45s_minimax-comic_3e4a8996.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-ce408a04a9b0",
+              "name": "2026-09-15-09h28m45s_minimax-comic_3e4a8996.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h28m45s_minimax-comic_3e4a8996.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h28m45s_minimax-comic_3e4a8996.jpg",
+              "prompt": "A surreal orchard of tall translucent mint glass trees in mauve mist, hanging pale coral glass fruit, charcoal plum trunks arranged in receding rows, soft lilac and mint gravel foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:28:45Z",
+              "metadata": {
+                "jobId": "minimax-image-24118bd372f8",
+                "taskId": "task-minimax-image-minimax-image-24118bd372f8",
+                "rootTaskId": "task-minimax-image-minimax-image-24118bd372f8",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.6239104,
+          "updatedAt": 1789457325.2798085,
+          "taskId": "task-minimax-image-minimax-image-24118bd372f8",
+          "rootTaskId": "task-minimax-image-minimax-image-24118bd372f8",
+          "startedAt": 1789457307.6965816,
+          "finishedAt": 1789457325.279805
+        }
+      }
+    },
+    {
+      "file": "../creative/jade-cinema.jpg",
+      "sha256": "74a7fa6d114ac7bf0ddb45e6c4ab3c6bec79f7c0cd9e98b5bb3271eb1aa35c0a",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "An abandoned art deco cinema lobby in deep jade and emerald green, an immense ivory illuminated arch leading to coral-red auditorium doors, dramatic receding columns, glossy dark green checkerboard foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-52c4320da032",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.4779065,
+          "updatedAt": 1789456917.4779065,
+          "taskId": "task-minimax-image-minimax-image-52c4320da032",
+          "rootTaskId": "task-minimax-image-minimax-image-52c4320da032"
+        },
+        "status": {
+          "jobId": "minimax-image-52c4320da032",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h24m59s_minimax-comic_8a9cca19.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-9ef550ef8742",
+              "name": "2026-09-15-09h24m59s_minimax-comic_8a9cca19.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h24m59s_minimax-comic_8a9cca19.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h24m59s_minimax-comic_8a9cca19.jpg",
+              "prompt": "An abandoned art deco cinema lobby in deep jade and emerald green, an immense ivory illuminated arch leading to coral-red auditorium doors, dramatic receding columns, glossy dark green checkerboard foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:24:59Z",
+              "metadata": {
+                "jobId": "minimax-image-52c4320da032",
+                "taskId": "task-minimax-image-minimax-image-52c4320da032",
+                "rootTaskId": "task-minimax-image-minimax-image-52c4320da032",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.4779065,
+          "updatedAt": 1789457099.3318112,
+          "taskId": "task-minimax-image-minimax-image-52c4320da032",
+          "rootTaskId": "task-minimax-image-minimax-image-52c4320da032",
+          "startedAt": 1789457051.368705,
+          "finishedAt": 1789457099.3318067
+        }
+      }
+    },
+    {
+      "file": "../creative/midnight-bakery.jpg",
+      "sha256": "8f31466dc57cf28ca940c23604a73a15468ec19e4beaa55713aa42b35f78a77a",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A deserted artisan bakery with a radiant amber bread oven, wheat-gold tiled counter along the sides, deep ultramarine walls, a cobalt-blue moonlit back window, empty terracotta floor, cozy theatrical chiaroscuro. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-fd47c55832ef",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.701682,
+          "updatedAt": 1789456917.701682,
+          "taskId": "task-minimax-image-minimax-image-fd47c55832ef",
+          "rootTaskId": "task-minimax-image-minimax-image-fd47c55832ef"
+        },
+        "status": {
+          "jobId": "minimax-image-fd47c55832ef",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h31m06s_minimax-comic_77d9f915.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-280c3f6e61ae",
+              "name": "2026-09-15-09h31m06s_minimax-comic_77d9f915.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h31m06s_minimax-comic_77d9f915.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h31m06s_minimax-comic_77d9f915.jpg",
+              "prompt": "A deserted artisan bakery with a radiant amber bread oven, wheat-gold tiled counter along the sides, deep ultramarine walls, a cobalt-blue moonlit back window, empty terracotta floor, cozy theatrical chiaroscuro. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:31:17Z",
+              "metadata": {
+                "jobId": "minimax-image-fd47c55832ef",
+                "taskId": "task-minimax-image-minimax-image-fd47c55832ef",
+                "rootTaskId": "task-minimax-image-minimax-image-fd47c55832ef",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.701682,
+          "updatedAt": 1789457477.7286355,
+          "taskId": "task-minimax-image-minimax-image-fd47c55832ef",
+          "rootTaskId": "task-minimax-image-minimax-image-fd47c55832ef",
+          "startedAt": 1789457424.455799,
+          "finishedAt": 1789457477.7286298
+        }
+      }
+    },
+    {
+      "file": "../creative/paper-monsoon.jpg",
+      "sha256": "73d3bd7615f75b80352e668750b53854798aa37aa0ceac38125f7ee7c0649e84",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A cinematic cut-paper city alley in indigo and warm coral, angular paper awnings layered overhead, blue rain outside the covered arcade, orange lantern shapes without writing, broad sheltered navy pavement. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-5964791da2a5",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.5693803,
+          "updatedAt": 1789456917.5693803,
+          "taskId": "task-minimax-image-minimax-image-5964791da2a5",
+          "rootTaskId": "task-minimax-image-minimax-image-5964791da2a5"
+        },
+        "status": {
+          "jobId": "minimax-image-5964791da2a5",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h26m59s_minimax-comic_62dccdff.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-7b6c978f01cb",
+              "name": "2026-09-15-09h26m59s_minimax-comic_62dccdff.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h26m59s_minimax-comic_62dccdff.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h26m59s_minimax-comic_62dccdff.jpg",
+              "prompt": "A cinematic cut-paper city alley in indigo and warm coral, angular paper awnings layered overhead, blue rain outside the covered arcade, orange lantern shapes without writing, broad sheltered navy pavement. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:26:59Z",
+              "metadata": {
+                "jobId": "minimax-image-5964791da2a5",
+                "taskId": "task-minimax-image-minimax-image-5964791da2a5",
+                "rootTaskId": "task-minimax-image-minimax-image-5964791da2a5",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.5693803,
+          "updatedAt": 1789457219.9752057,
+          "taskId": "task-minimax-image-minimax-image-5964791da2a5",
+          "rootTaskId": "task-minimax-image-minimax-image-5964791da2a5",
+          "startedAt": 1789457202.5833962,
+          "finishedAt": 1789457219.9752028
+        }
+      }
+    },
+    {
+      "file": "../creative/pearl-spores.jpg",
+      "sha256": "3ad9acfa01215302a258c346445ae8e60073fd3c91f396687c4147b45bde4f56",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A pearl-white mushroom conservatory, gigantic delicate lavender mushroom gills overhead, lime glass specimen cases along the sides, pale mint stone floor, radiant violet daylight from far arches. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-c29b92ccf5fa",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.4063787,
+          "updatedAt": 1789456917.4063787,
+          "taskId": "task-minimax-image-minimax-image-c29b92ccf5fa",
+          "rootTaskId": "task-minimax-image-minimax-image-c29b92ccf5fa"
+        },
+        "status": {
+          "jobId": "minimax-image-c29b92ccf5fa",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h22m51s_minimax-comic_e4b4b09a.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-e77346f795eb",
+              "name": "2026-09-15-09h22m51s_minimax-comic_e4b4b09a.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h22m51s_minimax-comic_e4b4b09a.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h22m51s_minimax-comic_e4b4b09a.jpg",
+              "prompt": "A pearl-white mushroom conservatory, gigantic delicate lavender mushroom gills overhead, lime glass specimen cases along the sides, pale mint stone floor, radiant violet daylight from far arches. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:22:51Z",
+              "metadata": {
+                "jobId": "minimax-image-c29b92ccf5fa",
+                "taskId": "task-minimax-image-minimax-image-c29b92ccf5fa",
+                "rootTaskId": "task-minimax-image-minimax-image-c29b92ccf5fa",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.4063787,
+          "updatedAt": 1789456971.371147,
+          "taskId": "task-minimax-image-minimax-image-c29b92ccf5fa",
+          "rootTaskId": "task-minimax-image-minimax-image-c29b92ccf5fa",
+          "startedAt": 1789456952.519622,
+          "finishedAt": 1789456971.3711433
+        }
+      }
+    },
+    {
+      "file": "../creative/rose-orbit.jpg",
+      "sha256": "3dbc02e25841feba7262db296257371aab87da04a945c4ec3052e625924241c9",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A retrofuturist rose-pink observation chapel on a space station, towering open circular windows framing inky outer space and a pearl crescent planet, magenta velvet walls, pale warm pink terrazzo foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-0690e636f28f",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.4390073,
+          "updatedAt": 1789456917.4390073,
+          "taskId": "task-minimax-image-minimax-image-0690e636f28f",
+          "rootTaskId": "task-minimax-image-minimax-image-0690e636f28f"
+        },
+        "status": {
+          "jobId": "minimax-image-0690e636f28f",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h23m50s_minimax-comic_72e92a67.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-90202bc18979",
+              "name": "2026-09-15-09h23m50s_minimax-comic_72e92a67.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h23m50s_minimax-comic_72e92a67.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h23m50s_minimax-comic_72e92a67.jpg",
+              "prompt": "A retrofuturist rose-pink observation chapel on a space station, towering open circular windows framing inky outer space and a pearl crescent planet, magenta velvet walls, pale warm pink terrazzo foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:23:50Z",
+              "metadata": {
+                "jobId": "minimax-image-0690e636f28f",
+                "taskId": "task-minimax-image-minimax-image-0690e636f28f",
+                "rootTaskId": "task-minimax-image-minimax-image-0690e636f28f",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.4390073,
+          "updatedAt": 1789457030.9357479,
+          "taskId": "task-minimax-image-minimax-image-0690e636f28f",
+          "rootTaskId": "task-minimax-image-minimax-image-0690e636f28f",
+          "startedAt": 1789456990.725736,
+          "finishedAt": 1789457030.9357448
+        }
+      }
+    },
+    {
+      "file": "../creative/saffron-lens.jpg",
+      "sha256": "504d6b96a5a70768620379d5522ce5e160b8754e6efe7f284c0998b6d1992a7b",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A huge saffron-yellow astronomical observatory with concentric circular telescope arches, midnight-blue sky and tiny stars, warm yellow walls fading into blue darkness, deep ochre stone foreground floor. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-d5bc5f760bb7",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.6070316,
+          "updatedAt": 1789456917.6070316,
+          "taskId": "task-minimax-image-minimax-image-d5bc5f760bb7",
+          "rootTaskId": "task-minimax-image-minimax-image-d5bc5f760bb7"
+        },
+        "status": {
+          "jobId": "minimax-image-d5bc5f760bb7",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h28m27s_minimax-comic_f35ae5c0.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-5ceb35bf9e79",
+              "name": "2026-09-15-09h28m27s_minimax-comic_f35ae5c0.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h28m27s_minimax-comic_f35ae5c0.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h28m27s_minimax-comic_f35ae5c0.jpg",
+              "prompt": "A huge saffron-yellow astronomical observatory with concentric circular telescope arches, midnight-blue sky and tiny stars, warm yellow walls fading into blue darkness, deep ochre stone foreground floor. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:28:27Z",
+              "metadata": {
+                "jobId": "minimax-image-d5bc5f760bb7",
+                "taskId": "task-minimax-image-minimax-image-d5bc5f760bb7",
+                "rootTaskId": "task-minimax-image-minimax-image-d5bc5f760bb7",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.6070316,
+          "updatedAt": 1789457307.6963925,
+          "taskId": "task-minimax-image-minimax-image-d5bc5f760bb7",
+          "rootTaskId": "task-minimax-image-minimax-image-d5bc5f760bb7",
+          "startedAt": 1789457291.9862082,
+          "finishedAt": 1789457307.6963892
+        }
+      }
+    },
+    {
+      "file": "../creative/scarlet-tide.jpg",
+      "sha256": "26265f14a7d9063f3a7651f70b782fc17ee201d1757b3773e481ba09e33f4ae6",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A scarlet concrete causeway leading toward a tiny turquoise lighthouse, jade coastal water on both sides, a massive red circular arch in the distance, dry broad vermilion stone foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-63b1e71e7c4f",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.396717,
+          "updatedAt": 1789456917.396717,
+          "taskId": "task-minimax-image-minimax-image-63b1e71e7c4f",
+          "rootTaskId": "task-minimax-image-minimax-image-63b1e71e7c4f"
+        },
+        "status": {
+          "jobId": "minimax-image-63b1e71e7c4f",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h22m32s_minimax-comic_c2288e12.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-d26abfd617fb",
+              "name": "2026-09-15-09h22m32s_minimax-comic_c2288e12.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h22m32s_minimax-comic_c2288e12.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h22m32s_minimax-comic_c2288e12.jpg",
+              "prompt": "A scarlet concrete causeway leading toward a tiny turquoise lighthouse, jade coastal water on both sides, a massive red circular arch in the distance, dry broad vermilion stone foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:22:32Z",
+              "metadata": {
+                "jobId": "minimax-image-63b1e71e7c4f",
+                "taskId": "task-minimax-image-minimax-image-63b1e71e7c4f",
+                "rootTaskId": "task-minimax-image-minimax-image-63b1e71e7c4f",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.396717,
+          "updatedAt": 1789456952.5202343,
+          "taskId": "task-minimax-image-minimax-image-63b1e71e7c4f",
+          "rootTaskId": "task-minimax-image-minimax-image-63b1e71e7c4f",
+          "startedAt": 1789456935.6002111,
+          "finishedAt": 1789456952.5202312
+        }
+      }
+    },
+    {
+      "file": "../creative/terracotta-radio.jpg",
+      "sha256": "1710f33ce299cf6dea9a7d388ddf2fca721716f4f844cc4c722932a68464be6a",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "An intimate terracotta listening room with monumental rounded acoustic niches, plum-purple velvet inserts, a far circular apricot window, orange oak shelves with sculptural speakers, warm dark clay floor. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-843648d5d130",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.6392477,
+          "updatedAt": 1789456917.6392477,
+          "taskId": "task-minimax-image-minimax-image-843648d5d130",
+          "rootTaskId": "task-minimax-image-minimax-image-843648d5d130"
+        },
+        "status": {
+          "jobId": "minimax-image-843648d5d130",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h29m00s_minimax-comic_26165444.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-c3ce29a4af8a",
+              "name": "2026-09-15-09h29m00s_minimax-comic_26165444.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h29m00s_minimax-comic_26165444.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h29m00s_minimax-comic_26165444.jpg",
+              "prompt": "An intimate terracotta listening room with monumental rounded acoustic niches, plum-purple velvet inserts, a far circular apricot window, orange oak shelves with sculptural speakers, warm dark clay floor. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:29:01Z",
+              "metadata": {
+                "jobId": "minimax-image-843648d5d130",
+                "taskId": "task-minimax-image-minimax-image-843648d5d130",
+                "rootTaskId": "task-minimax-image-minimax-image-843648d5d130",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.6392477,
+          "updatedAt": 1789457341.7350657,
+          "taskId": "task-minimax-image-minimax-image-843648d5d130",
+          "rootTaskId": "task-minimax-image-minimax-image-843648d5d130",
+          "startedAt": 1789457325.280067,
+          "finishedAt": 1789457341.735059
+        }
+      }
+    },
+    {
+      "file": "../creative/ultramarine-forge.jpg",
+      "sha256": "ee84fee37b3a426f336f32175a54578aeaae6e8c5ebf3fc04eda29b17fdb07de",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "A monumental ultramarine ceramic foundry, huge cobalt kilns and suspended golden brass circular forms, saffron light pouring from one distant furnace, empty deep navy stone foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-9b556d73d9db",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.4257255,
+          "updatedAt": 1789456917.4257255,
+          "taskId": "task-minimax-image-minimax-image-9b556d73d9db",
+          "rootTaskId": "task-minimax-image-minimax-image-9b556d73d9db"
+        },
+        "status": {
+          "jobId": "minimax-image-9b556d73d9db",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h23m10s_minimax-comic_b1b2b43f.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-2ff4de24dc1b",
+              "name": "2026-09-15-09h23m10s_minimax-comic_b1b2b43f.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h23m10s_minimax-comic_b1b2b43f.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h23m10s_minimax-comic_b1b2b43f.jpg",
+              "prompt": "A monumental ultramarine ceramic foundry, huge cobalt kilns and suspended golden brass circular forms, saffron light pouring from one distant furnace, empty deep navy stone foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:23:10Z",
+              "metadata": {
+                "jobId": "minimax-image-9b556d73d9db",
+                "taskId": "task-minimax-image-minimax-image-9b556d73d9db",
+                "rootTaskId": "task-minimax-image-minimax-image-9b556d73d9db",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.4257255,
+          "updatedAt": 1789456990.725442,
+          "taskId": "task-minimax-image-minimax-image-9b556d73d9db",
+          "rootTaskId": "task-minimax-image-minimax-image-9b556d73d9db",
+          "startedAt": 1789456971.3718233,
+          "finishedAt": 1789456990.725437
+        }
+      }
+    },
+    {
+      "file": "../creative/violet-baths.jpg",
+      "sha256": "69f325490755fc7425411a2c8e6c6f08490348292a42a05f63b3f610130ded00",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "An empty monumental violet tiled bathhouse, turquoise water confined to narrow pools at the sides, a far saffron-yellow doorway, lavender steam, broad dry plum tiled walkway filling the center foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-1fdb20a23828",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789456917.5405338,
+          "updatedAt": 1789456917.5405338,
+          "taskId": "task-minimax-image-minimax-image-1fdb20a23828",
+          "rootTaskId": "task-minimax-image-minimax-image-1fdb20a23828"
+        },
+        "status": {
+          "jobId": "minimax-image-1fdb20a23828",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-15-09h26m25s_minimax-comic_69fb61ce.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-91beb78d308b",
+              "name": "2026-09-15-09h26m25s_minimax-comic_69fb61ce.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-15-09h26m25s_minimax-comic_69fb61ce.jpg",
+              "thumbnail": "/api/v1/file/2026-09-15-09h26m25s_minimax-comic_69fb61ce.jpg",
+              "prompt": "An empty monumental violet tiled bathhouse, turquoise water confined to narrow pools at the sides, a far saffron-yellow doorway, lavender steam, broad dry plum tiled walkway filling the center foreground. Museum-quality painted animation environment, graphic architectural illustration with tactile gouache surfaces, daring complementary color contrast, striking vertical composition. Architecture and scenery only, deserted environment. Clear unobstructed central foreground extending to the bottom edge for later compositing. Three distinct depth planes, readable broad shapes, subtle atmospheric perspective. Portrait 9:16, level horizon, camera at human eye height, clean artwork.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-15T07:26:25Z",
+              "metadata": {
+                "jobId": "minimax-image-1fdb20a23828",
+                "taskId": "task-minimax-image-minimax-image-1fdb20a23828",
+                "rootTaskId": "task-minimax-image-minimax-image-1fdb20a23828",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789456917.5405338,
+          "updatedAt": 1789457185.3397381,
+          "taskId": "task-minimax-image-minimax-image-1fdb20a23828",
+          "rootTaskId": "task-minimax-image-minimax-image-1fdb20a23828",
+          "startedAt": 1789457115.957446,
+          "finishedAt": 1789457185.3397334
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,9102 @@
+{
+  "creative-neon-diner": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-neon-diner",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#17262d",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/neon-diner.jpg",
+        "position": [
+          0,
+          -9.553457523830275,
+          -11
+        ],
+        "scale": 13.653457523830275,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/courier.png",
+        "position": [
+          -0.35,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.57,
+        3.45,
+        9.8
+      ],
+      "look": [
+        -0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333333,
+          1.090909090909091,
+          5.93939393939394
+        ],
+        "to": [
+          0.1090909090909091,
+          1.090909090909091,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff583d",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 31,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-sun-orchard": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-sun-orchard",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#284737",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/sun-orchard.jpg",
+        "position": [
+          0,
+          -9.956849364287809,
+          -11
+        ],
+        "scale": 14.05684936428781,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/gardener.png",
+        "position": [
+          0.2,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "far-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.5,
+          0,
+          -2
+        ],
+        "scale": 1.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.42000000000000004,
+        3.6,
+        10.05
+      ],
+      "look": [
+        0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.13333333333333336,
+          1.1818181818181819,
+          6.090909090909092
+        ],
+        "to": [
+          -0.1090909090909091,
+          1.1818181818181819,
+          5.787878787878789
+        ],
+        "lookFrom": [
+          -0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          -0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#fca967",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 32,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-vermilion-museum": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-vermilion-museum",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#33333a",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/vermilion-museum.jpg",
+        "position": [
+          0,
+          -10.17498571137212,
+          -11
+        ],
+        "scale": 14.274985711372121,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/sculptor.png",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.22,
+        3.75,
+        10.3
+      ],
+      "look": [
+        0.0,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333333,
+          1.272727272727273,
+          6.242424242424243
+        ],
+        "to": [
+          0.1090909090909091,
+          1.272727272727273,
+          5.93939393939394
+        ],
+        "lookFrom": [
+          0.0,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.0,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff4f24",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 33,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-cobalt-moon": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-cobalt-moon",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#202c3c",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/cobalt-moon.jpg",
+        "position": [
+          0,
+          -9.748852473035992,
+          -11
+        ],
+        "scale": 13.848852473035993,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          0.35,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.57,
+        3.45,
+        10.55
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.13333333333333333,
+          1.090909090909091,
+          6.3939393939393945
+        ],
+        "to": [
+          -0.1090909090909091,
+          1.090909090909091,
+          6.090909090909092
+        ],
+        "lookFrom": [
+          -0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          -0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#74b5ff",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 34,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-coral-caravan": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-coral-caravan",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#b67755",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/coral-caravan.jpg",
+        "position": [
+          0,
+          -9.851791164018195,
+          -11
+        ],
+        "scale": 13.951791164018195,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          -0.2,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.35,
+          0,
+          -1.6
+        ],
+        "scale": 0.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.42000000000000004,
+        3.6,
+        9.8
+      ],
+      "look": [
+        -0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333336,
+          1.1818181818181819,
+          5.93939393939394
+        ],
+        "to": [
+          0.1090909090909091,
+          1.1818181818181819,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffa86c",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 35,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-emerald-hotel": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-emerald-hotel",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#1c3033",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/emerald-hotel.jpg",
+        "position": [
+          0,
+          -10.019380405389526,
+          -11
+        ],
+        "scale": 14.119380405389526,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/singer.png",
+        "position": [
+          -0.35,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "far-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.5,
+          0,
+          -2
+        ],
+        "scale": 1.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.12999999999999998,
+        3.75,
+        10.05
+      ],
+      "look": [
+        -0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.13333333333333333,
+          1.272727272727273,
+          6.090909090909092
+        ],
+        "to": [
+          -0.10909090909090913,
+          1.272727272727273,
+          5.787878787878789
+        ],
+        "lookFrom": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f2bd54",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 36,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-mint-pool": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-mint-pool",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#4b7677",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/mint-pool.jpg",
+        "position": [
+          0,
+          -9.618211380426931,
+          -11
+        ],
+        "scale": 13.718211380426931,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/sculptor.png",
+        "position": [
+          0.2,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.01999999999999999,
+        3.45,
+        10.3
+      ],
+      "look": [
+        0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333333,
+          1.090909090909091,
+          6.242424242424243
+        ],
+        "to": [
+          0.1090909090909091,
+          1.090909090909091,
+          5.93939393939394
+        ],
+        "lookFrom": [
+          -0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          -0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f7adbd",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 37,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-indigo-shrine": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-indigo-shrine",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#172936",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/indigo-shrine.jpg",
+        "position": [
+          0,
+          -10.000898768994372,
+          -11
+        ],
+        "scale": 14.100898768994373,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.22,
+        3.6,
+        10.55
+      ],
+      "look": [
+        0.0,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.13333333333333333,
+          1.1818181818181819,
+          6.3939393939393945
+        ],
+        "to": [
+          -0.1090909090909091,
+          1.1818181818181819,
+          6.090909090909092
+        ],
+        "lookFrom": [
+          0.0,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.0,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ef8655",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 38,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-ocean-window": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-ocean-window",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#172f3e",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ocean-window.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "psx": 1.1
+        },
+        "screen": {
+          "sourceUrl": "/examples/creative/ocean-window.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 4,
+          "height": 3,
+          "style": "monitor",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          0.35,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.35,
+          0,
+          -1.6
+        ],
+        "scale": 0.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333333,
+          1.272727272727273,
+          5.93939393939394
+        ],
+        "to": [
+          0.10909090909090913,
+          1.272727272727273,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          -0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          -0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#2cddd5",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 39,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-velvet-theatre": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-velvet-theatre",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#321e33",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/velvet-theatre.jpg",
+        "position": [
+          0,
+          -9.490378273436118,
+          -11
+        ],
+        "scale": 13.590378273436118,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/singer.png",
+        "position": [
+          -0.2,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "far-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.5,
+          0,
+          -2
+        ],
+        "scale": 1.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.01999999999999999,
+        3.45,
+        10.05
+      ],
+      "look": [
+        -0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.13333333333333333,
+          1.090909090909091,
+          6.090909090909092
+        ],
+        "to": [
+          -0.1090909090909091,
+          1.090909090909091,
+          5.787878787878789
+        ],
+        "lookFrom": [
+          0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff9f75",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 40,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-ochre-terminal": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-ochre-terminal",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#52362e",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ochre-terminal.jpg",
+        "position": [
+          0,
+          -9.947697917907263,
+          -11
+        ],
+        "scale": 14.047697917907264,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/courier.png",
+        "position": [
+          -0.35,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.57,
+        3.6,
+        10.3
+      ],
+      "look": [
+        -0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333333,
+          1.1818181818181819,
+          6.242424242424243
+        ],
+        "to": [
+          0.1090909090909091,
+          1.1818181818181819,
+          5.93939393939394
+        ],
+        "lookFrom": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffb752",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 41,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-ceramic-room": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-ceramic-room",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#263e69",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic-room.jpg",
+        "position": [
+          0,
+          -10.28466135446661,
+          -11
+        ],
+        "scale": 14.38466135446661,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          0.2,
+          0,
+          0
+        ],
+        "scale": 1.25,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.42000000000000004,
+        3.75,
+        10.55
+      ],
+      "look": [
+        0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.17600000000000002,
+          2.0,
+          8.440000000000001
+        ],
+        "to": [
+          -0.144,
+          2.0,
+          8.040000000000001
+        ],
+        "lookFrom": [
+          -0.096,
+          0.7600000000000001,
+          -0.4
+        ],
+        "lookTo": [
+          -0.096,
+          0.7600000000000001,
+          -0.4
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f5d565",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 42,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-tangerine-market": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-tangerine-market",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#483548",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/tangerine-market.jpg",
+        "position": [
+          0,
+          -9.583627581454866,
+          -11
+        ],
+        "scale": 13.683627581454868,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/gardener.png",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.22,
+        3.45,
+        9.8
+      ],
+      "look": [
+        0.0,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333333,
+          1.090909090909091,
+          5.93939393939394
+        ],
+        "to": [
+          0.1090909090909091,
+          1.090909090909091,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          0.0,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.0,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffac48",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 43,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-botanical-hangar": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-botanical-hangar",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#253438",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/botanical-hangar.jpg",
+        "position": [
+          0,
+          -9.931302430085545,
+          -11
+        ],
+        "scale": 14.031302430085544,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          0.35,
+          0,
+          0
+        ],
+        "scale": 1.25,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "far-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.5,
+          0,
+          -2
+        ],
+        "scale": 1.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          1.35,
+          0,
+          -1.6
+        ],
+        "scale": 0.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.57,
+        3.6,
+        10.05
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.176,
+          1.8800000000000001,
+          8.040000000000001
+        ],
+        "to": [
+          -0.144,
+          1.8800000000000001,
+          7.640000000000001
+        ],
+        "lookFrom": [
+          -0.16799999999999998,
+          0.7600000000000001,
+          -0.4
+        ],
+        "lookTo": [
+          -0.16799999999999998,
+          0.7600000000000001,
+          -0.4
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#acf59d",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 44,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-ink-mountain": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-ink-mountain",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#333743",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ink-mountain.jpg",
+        "position": [
+          0,
+          -10.239201409565087,
+          -11
+        ],
+        "scale": 14.339201409565089,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          -0.2,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.42000000000000004,
+        3.75,
+        10.3
+      ],
+      "look": [
+        -0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333336,
+          1.272727272727273,
+          6.242424242424243
+        ],
+        "to": [
+          0.1090909090909091,
+          1.272727272727273,
+          5.93939393939394
+        ],
+        "lookFrom": [
+          0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ee593f",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 45,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-submerged-archive": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-submerged-archive",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#274444",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/submerged-archive.jpg",
+        "position": [
+          0,
+          -9.663596992197451,
+          -11
+        ],
+        "scale": 13.763596992197451,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/sculptor.png",
+        "position": [
+          -0.35,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.12999999999999998,
+        3.45,
+        10.55
+      ],
+      "look": [
+        -0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.13333333333333333,
+          1.090909090909091,
+          6.3939393939393945
+        ],
+        "to": [
+          -0.10909090909090913,
+          1.090909090909091,
+          6.090909090909092
+        ],
+        "lookFrom": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#77ddce",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 46,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-sunset-court": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-sunset-court",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#343657",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/sunset-court.jpg",
+        "position": [
+          0,
+          -9.70487151565817,
+          -11
+        ],
+        "scale": 13.804871515658169,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/courier.png",
+        "position": [
+          0.2,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.01999999999999999,
+        3.6,
+        9.8
+      ],
+      "look": [
+        0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333333,
+          1.1818181818181819,
+          5.93939393939394
+        ],
+        "to": [
+          0.1090909090909091,
+          1.1818181818181819,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          -0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          -0.07272727272727272,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#fa7884",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 47,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-kinetic-gold": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-kinetic-gold",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#253c59",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/kinetic-gold.jpg",
+        "position": [
+          0,
+          -10.060203443700548,
+          -11
+        ],
+        "scale": 14.16020344370055,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/singer.png",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "far-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.5,
+          0,
+          -2
+        ],
+        "scale": 1.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          1.35,
+          0,
+          -1.6
+        ],
+        "scale": 0.9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.22,
+        3.75,
+        10.05
+      ],
+      "look": [
+        0.0,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.13333333333333333,
+          1.272727272727273,
+          6.090909090909092
+        ],
+        "to": [
+          -0.1090909090909091,
+          1.272727272727273,
+          5.787878787878789
+        ],
+        "lookFrom": [
+          0.0,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.0,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f4cc65",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 48,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-lunar-garden": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-lunar-garden",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#353249",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lunar-garden.jpg",
+        "position": [
+          0,
+          -9.538734561221297,
+          -11
+        ],
+        "scale": 13.638734561221296,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          0.35,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.45,
+        10.3
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333333,
+          1.090909090909091,
+          6.242424242424243
+        ],
+        "to": [
+          0.10909090909090913,
+          1.090909090909091,
+          5.93939393939394
+        ],
+        "lookFrom": [
+          -0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          -0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#dd97fc",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 49,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-peach-laundry": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-peach-laundry",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#244953",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/peach-laundry.jpg",
+        "position": [
+          0,
+          -9.946734209920322,
+          -11
+        ],
+        "scale": 14.046734209920322,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -0.2,
+          0,
+          0
+        ],
+        "scale": 1.25,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          -1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.01999999999999999,
+        3.6,
+        10.55
+      ],
+      "look": [
+        -0.08000000000000002,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.176,
+          1.8800000000000001,
+          8.440000000000001
+        ],
+        "to": [
+          -0.144,
+          1.8800000000000001,
+          8.040000000000001
+        ],
+        "lookFrom": [
+          0.096,
+          0.7600000000000001,
+          -0.4
+        ],
+        "lookTo": [
+          0.096,
+          0.7600000000000001,
+          -0.4
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffb4a0",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 50,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-amber-ice": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-amber-ice",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#073e61",
+      "floorSourceHeight": 0.38
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/amber-ice.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.6,
+          0,
+          2.25
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffb444",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 311,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-scarlet-tide": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-scarlet-tide",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#572d36",
+      "floorSourceHeight": 0.39999999999999997
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/scarlet-tide.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          -1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 1.3
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.12,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#3ce7d1",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 312,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-pearl-spores": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-pearl-spores",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#424865",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/pearl-spores.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "psx": 1.0
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/gardener.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.6,
+          0,
+          2.0
+        ],
+        "scale": 1.6,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.16,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#dceab0",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 313,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-ultramarine-forge": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-ultramarine-forge",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#152f64",
+      "floorSourceHeight": 0.36
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ultramarine-forge.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/sculptor.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          -1.6,
+          0,
+          2.25
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          -0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffd166",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 314,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-rose-orbit": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-rose-orbit",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#9a5b70",
+      "floorSourceHeight": 0.38
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/rose-orbit.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#aaf2f1",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 315,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-brass-mirage": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-brass-mirage",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#171822",
+      "floorSourceHeight": 0.39999999999999997
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/brass-mirage.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          -1.6,
+          0,
+          2.0
+        ],
+        "scale": 1.6,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.12,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#eecb61",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 316,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-jade-cinema": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-jade-cinema",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#123a34",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/jade-cinema.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/singer.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.6,
+          0,
+          2.25
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 1.3
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.16,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff936b",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 317,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-apricot-cable": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-apricot-cable",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#885335",
+      "floorSourceHeight": 0.36
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/apricot-cable.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "psx": 1.0
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/courier.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          -0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#699bd5",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 318,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-violet-baths": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-violet-baths",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#493458",
+      "floorSourceHeight": 0.38
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/violet-baths.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/sculptor.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.6,
+          0,
+          2.0
+        ],
+        "scale": 1.6,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f8c760",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 319,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-clockwork-glass": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-clockwork-glass",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#4c6950",
+      "floorSourceHeight": 0.39999999999999997
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/clockwork-glass.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/gardener.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          -1.6,
+          0,
+          2.25
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 1.3
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.12,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#eea898",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 320,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-paper-monsoon": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-paper-monsoon",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#172d49",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/paper-monsoon.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/courier.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.16,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff956b",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 321,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-cobalt-crater": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-cobalt-crater",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#16274b",
+      "floorSourceHeight": 0.36
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/cobalt-crater.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.6,
+          0,
+          2.0
+        ],
+        "scale": 1.6,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          -0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff8142",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 322,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-saffron-lens": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-saffron-lens",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#624831",
+      "floorSourceHeight": 0.38
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/saffron-lens.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "psx": 1.0
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.6,
+          0,
+          2.25
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#b6d7fa",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 323,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-glass-orchard": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-glass-orchard",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#59656a",
+      "floorSourceHeight": 0.39999999999999997
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/glass-orchard.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/gardener.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          -1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.12,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ecaea4",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 324,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-terracotta-radio": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-terracotta-radio",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#69483e",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/terracotta-radio.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/singer.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.6,
+          0,
+          2.0
+        ],
+        "scale": 1.6,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 1.3
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.16,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#bb8bce",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 325,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-chrome-bloom": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-chrome-bloom",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#34213e",
+      "floorSourceHeight": 0.36
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/chrome-bloom.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/sculptor.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.6,
+          0,
+          2.25
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          -0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#4fdfde",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 326,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-arctic-spin": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-arctic-spin",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#26505a",
+      "floorSourceHeight": 0.38
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/arctic-spin.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "psx": 1.0
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/courier.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#e5bc52",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 327,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-domino-garden": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-domino-garden",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#b7b7a5",
+      "floorSourceHeight": 0.39999999999999997
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/domino-garden.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          -1.6,
+          0,
+          2.0
+        ],
+        "scale": 1.6,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 1.3
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.12,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#dc4c50",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 328,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-midnight-bakery": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-midnight-bakery",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#4b3344",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/midnight-bakery.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/singer.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.6,
+          0,
+          2.25
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.16,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#efb95e",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 329,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-coral-radio": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-coral-radio",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#144852",
+      "floorSourceHeight": 0.36
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/coral-radio.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 1.3
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          -0.16,
+          1.23,
+          5.7
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f99467",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 330,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-scarlet-tide-motion": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-scarlet-tide-motion",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#572d36",
+      "floorSourceHeight": 0.18
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/scarlet-window-frame.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.2361111111111111,
+                0.146875
+              ],
+              [
+                0.7736111111111111,
+                0.146875
+              ],
+              [
+                0.7736111111111111,
+                0.70546875
+              ],
+              [
+                0.2361111111111111,
+                0.70703125
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          -1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 0.8
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.07698848554843345,
+          -6.460620546229439,
+          -14
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/creative/scarlet-tide-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 13.620362929025763,
+          "height": 25.234625891760906,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.16,
+          1.23,
+          5.968
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#3ce7d1",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 312,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-rose-orbit-motion": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-rose-orbit-motion",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#9a5b70",
+      "floorSourceHeight": 0.38
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/rose-orbit.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.30694444444444446,
+                0.2875
+              ],
+              [
+                0.30859606148477825,
+                0.2733256713136038
+              ],
+              [
+                0.3135226529803049,
+                0.25939386932089814
+              ],
+              [
+                0.32163992358462656,
+                0.24594297101660353
+              ],
+              [
+                0.33280898454717084,
+                0.23320312500000004
+              ],
+              [
+                0.34683873013821986,
+                0.22139231356858424
+              ],
+              [
+                0.3634891075209304,
+                0.21071262298052335
+              ],
+              [
+                0.3824752241219275,
+                0.20134678570274872
+              ],
+              [
+                0.4034722222222221,
+                0.19345505380778366
+              ],
+              [
+                0.42612083736285056,
+                0.1871724570163525
+              ],
+              [
+                0.45003354545937446,
+                0.1826064923014215
+              ],
+              [
+                0.4748011934464067,
+                0.17983528458518777
+              ],
+              [
+                0.5,
+                0.17890625
+              ],
+              [
+                0.5251988065535932,
+                0.17983528458518777
+              ],
+              [
+                0.5499664545406254,
+                0.18260649230142148
+              ],
+              [
+                0.5738791626371492,
+                0.18717245701635243
+              ],
+              [
+                0.5965277777777777,
+                0.19345505380778358
+              ],
+              [
+                0.6175247758780724,
+                0.20134678570274867
+              ],
+              [
+                0.6365108924790696,
+                0.21071262298052335
+              ],
+              [
+                0.65316126986178,
+                0.22139231356858424
+              ],
+              [
+                0.6671910154528292,
+                0.23320312500000004
+              ],
+              [
+                0.6783600764153733,
+                0.24594297101660345
+              ],
+              [
+                0.6864773470196951,
+                0.25939386932089814
+              ],
+              [
+                0.6914039385152217,
+                0.2733256713136037
+              ],
+              [
+                0.6930555555555555,
+                0.2875
+              ],
+              [
+                0.6930555555555555,
+                0.5078125
+              ],
+              [
+                0.6930555555555555,
+                0.5078125
+              ],
+              [
+                0.6914039385152217,
+                0.5221907758617401
+              ],
+              [
+                0.6864773470196951,
+                0.5363230354370746
+              ],
+              [
+                0.6783600764153733,
+                0.5499674718464669
+              ],
+              [
+                0.6671910154528291,
+                0.562890625
+              ],
+              [
+                0.6531612698617801,
+                0.5748713761642419
+              ],
+              [
+                0.6365108924790696,
+                0.5857047313650806
+              ],
+              [
+                0.6175247758780724,
+                0.5952053288914564
+              ],
+              [
+                0.5965277777777778,
+                0.6032106108856296
+              ],
+              [
+                0.5738791626371492,
+                0.6095836047531964
+              ],
+              [
+                0.5499664545406255,
+                0.6142152668021552
+              ],
+              [
+                0.5251988065535933,
+                0.6170263480107088
+              ],
+              [
+                0.5,
+                0.61796875
+              ],
+              [
+                0.4748011934464067,
+                0.6170263480107088
+              ],
+              [
+                0.45003354545937446,
+                0.6142152668021552
+              ],
+              [
+                0.4261208373628507,
+                0.6095836047531964
+              ],
+              [
+                0.40347222222222223,
+                0.6032106108856296
+              ],
+              [
+                0.3824752241219275,
+                0.5952053288914564
+              ],
+              [
+                0.3634891075209304,
+                0.5857047313650806
+              ],
+              [
+                0.3468387301382199,
+                0.5748713761642419
+              ],
+              [
+                0.33280898454717084,
+                0.562890625
+              ],
+              [
+                0.32163992358462656,
+                0.549967471846467
+              ],
+              [
+                0.3135226529803049,
+                0.5363230354370746
+              ],
+              [
+                0.3085960614847783,
+                0.5221907758617401
+              ],
+              [
+                0.30694444444444446,
+                0.5078125
+              ],
+              [
+                0.30694444444444446,
+                0.2875
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.0,
+          -2.930148566079829,
+          -14
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/creative/rose-orbit-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 9.784136677698092,
+          "height": 19.779441772900455,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          0.00799999999999998,
+          1.23,
+          5.84
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#aaf2f1",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 315,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-glass-orchard-motion": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-glass-orchard-motion",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#59656a",
+      "floorSourceHeight": 0.12
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/orchard-window-frame.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.2638888888888889,
+                0.14453125
+              ],
+              [
+                0.46805555555555556,
+                0.14453125
+              ],
+              [
+                0.46805555555555556,
+                0.73671875
+              ],
+              [
+                0.2638888888888889,
+                0.73671875
+              ]
+            ],
+            [
+              [
+                0.5277777777777778,
+                0.14453125
+              ],
+              [
+                0.7291666666666666,
+                0.14453125
+              ],
+              [
+                0.7291666666666666,
+                0.73671875
+              ],
+              [
+                0.5277777777777778,
+                0.73671875
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/gardener.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          -1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 0.8
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.054991775391738176,
+          -7.5670550671112125,
+          -14
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/creative/glass-orchard-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 11.790236643988706,
+          "height": 26.677610078040118,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.16,
+          1.23,
+          5.968
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ecaea4",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 324,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-amber-ice-motion": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-amber-ice-motion",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#073e61",
+      "floorSourceHeight": 0.38
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/amber-ice.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.3541666666666667,
+                0.38125
+              ],
+              [
+                0.42916666666666664,
+                0.3546875
+              ],
+              [
+                0.5875,
+                0.3546875
+              ],
+              [
+                0.6625,
+                0.38125
+              ],
+              [
+                0.6625,
+                0.68984375
+              ],
+              [
+                0.6375,
+                0.71640625
+              ],
+              [
+                0.37777777777777777,
+                0.71640625
+              ],
+              [
+                0.3541666666666667,
+                0.690625
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          -0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/ceramic.png",
+        "position": [
+          1.6,
+          0,
+          2.25
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.13198026094017162,
+          -5.048431754169593,
+          -14
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/creative/amber-ice-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 7.813231447658187,
+          "height": 16.295162884079915,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          0.00799999999999998,
+          1.23,
+          5.84
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffb444",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 311,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-coral-radio-motion": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-coral-radio-motion",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#144852",
+      "floorSourceHeight": 0.36
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/coral-radio.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.5208333333333334,
+                0.5609375
+              ],
+              [
+                0.5236111111111111,
+                0.54453125
+              ],
+              [
+                0.5333333333333333,
+                0.528125
+              ],
+              [
+                0.5555555555555556,
+                0.5109375
+              ],
+              [
+                0.5847222222222223,
+                0.4984375
+              ],
+              [
+                0.6166666666666667,
+                0.49296875
+              ],
+              [
+                0.6277777777777778,
+                0.4921875
+              ],
+              [
+                0.6305555555555555,
+                0.56171875
+              ]
+            ],
+            [
+              [
+                0.6458333333333334,
+                0.49296875
+              ],
+              [
+                0.675,
+                0.49609375
+              ],
+              [
+                0.7041666666666667,
+                0.50546875
+              ],
+              [
+                0.7263888888888889,
+                0.51953125
+              ],
+              [
+                0.7416666666666667,
+                0.5359375
+              ],
+              [
+                0.7513888888888889,
+                0.55078125
+              ],
+              [
+                0.7527777777777778,
+                0.56171875
+              ],
+              [
+                0.6472222222222223,
+                0.56171875
+              ]
+            ],
+            [
+              [
+                0.5208333333333334,
+                0.57734375
+              ],
+              [
+                0.6319444444444444,
+                0.57734375
+              ],
+              [
+                0.6333333333333333,
+                0.6640625
+              ],
+              [
+                0.5361111111111111,
+                0.66328125
+              ]
+            ],
+            [
+              [
+                0.6486111111111111,
+                0.57734375
+              ],
+              [
+                0.7541666666666667,
+                0.57734375
+              ],
+              [
+                0.7527777777777778,
+                0.6640625
+              ],
+              [
+                0.6486111111111111,
+                0.6640625
+              ]
+            ],
+            [
+              [
+                0.4777777777777778,
+                0.5765625
+              ],
+              [
+                0.4986111111111111,
+                0.5765625
+              ],
+              [
+                0.5138888888888888,
+                0.6625
+              ],
+              [
+                0.4777777777777778,
+                0.66171875
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 0.8
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          1.836725298084062,
+          -1.9710920032479158,
+          -14
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/creative/coral-radio-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 7.003752513891799,
+          "height": 7.742841975156764,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          -0.00799999999999998,
+          1.23,
+          5.84
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f99467",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 330,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-cobalt-crater-motion": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-cobalt-crater-motion",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#16274b",
+      "floorSourceHeight": 0.2
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/cobalt-moon.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.24861111111111112,
+                0.33125
+              ],
+              [
+                0.7569444444444444,
+                0.33125
+              ],
+              [
+                0.7972222222222223,
+                0.36015625
+              ],
+              [
+                0.8347222222222223,
+                0.40234375
+              ],
+              [
+                0.8527777777777777,
+                0.4453125
+              ],
+              [
+                0.85,
+                0.490625
+              ],
+              [
+                0.8305555555555556,
+                0.53515625
+              ],
+              [
+                0.7958333333333333,
+                0.578125
+              ],
+              [
+                0.7430555555555556,
+                0.6203125
+              ],
+              [
+                0.6819444444444445,
+                0.6578125
+              ],
+              [
+                0.6166666666666667,
+                0.68828125
+              ],
+              [
+                0.5541666666666667,
+                0.70703125
+              ],
+              [
+                0.4986111111111111,
+                0.715625
+              ],
+              [
+                0.44305555555555554,
+                0.71328125
+              ],
+              [
+                0.3861111111111111,
+                0.6984375
+              ],
+              [
+                0.3277777777777778,
+                0.67109375
+              ],
+              [
+                0.27361111111111114,
+                0.63515625
+              ],
+              [
+                0.22777777777777777,
+                0.590625
+              ],
+              [
+                0.19305555555555556,
+                0.546875
+              ],
+              [
+                0.16944444444444445,
+                0.50234375
+              ],
+              [
+                0.16111111111111112,
+                0.45703125
+              ],
+              [
+                0.16944444444444445,
+                0.41484375
+              ],
+              [
+                0.19583333333333333,
+                0.3765625
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/astronaut.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "psx": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/robot.png",
+        "position": [
+          -1.6,
+          0,
+          2.0
+        ],
+        "scale": 1.6,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72
+        }
+      },
+      {
+        "id": "companion",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/planter.png",
+        "position": [
+          1.25,
+          0,
+          -2.2
+        ],
+        "scale": 0.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.10998355078347635,
+          -5.217806422376148,
+          -14
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/creative/cobalt-crater-exterior.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 17.526978652854854,
+          "height": 17.31581023535058,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          6.05
+        ],
+        "to": [
+          -0.00799999999999998,
+          1.23,
+          5.84
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff8142",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 322,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "creative-motion-skate-coast": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-motion-skate-coast",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.02,
+      "floorStyle": "none",
+      "floorColor": "#222233"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-coast-0.png",
+        "position": [
+          0,
+          -6,
+          -8
+        ],
+        "scale": 9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-coast.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.32,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.65,
+          "tint": "#ffffff"
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        3,
+        10
+      ],
+      "look": [
+        0,
+        3,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81dfc9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 926,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "effects": []
+  },
+  "creative-motion-skate-neon": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-motion-skate-neon",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.02,
+      "floorStyle": "none",
+      "floorColor": "#222233"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-neon-0.png",
+        "position": [
+          0,
+          -6,
+          -8
+        ],
+        "scale": 9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-neon.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.4,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.65,
+          "tint": "#f0d7fa"
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        3,
+        10
+      ],
+      "look": [
+        0,
+        3,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81dfc9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 926,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "effects": []
+  },
+  "creative-motion-skate-clouds": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-motion-skate-clouds",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.02,
+      "floorStyle": "none",
+      "floorColor": "#222233"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-clouds-0.png",
+        "position": [
+          0,
+          -6,
+          -8
+        ],
+        "scale": 9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-clouds.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 0.65,
+          "loop": false,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0,
+          0.4,
+          0
+        ],
+        "scale": 1.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.65,
+          "tint": "#ffffff"
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        3,
+        10
+      ],
+      "look": [
+        0,
+        3,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81dfc9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 926,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "effects": []
+  },
+  "creative-motion-skate-portal": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-motion-skate-portal",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#283b42",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-black-tide-frame.jpg",
+        "position": [
+          0,
+          -7.1846875,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.30277777777777776,
+                0.7046875
+              ],
+              [
+                0.6958333333333333,
+                0.7046875
+              ],
+              [
+                0.6958333333333333,
+                0.35703125
+              ],
+              [
+                0.6930555555555555,
+                0.32890625
+              ],
+              [
+                0.6805555555555556,
+                0.30390625
+              ],
+              [
+                0.6611111111111111,
+                0.27890625
+              ],
+              [
+                0.6291666666666667,
+                0.2578125
+              ],
+              [
+                0.5930555555555556,
+                0.24140625
+              ],
+              [
+                0.5527777777777778,
+                0.23046875
+              ],
+              [
+                0.5097222222222222,
+                0.22421875
+              ],
+              [
+                0.46944444444444444,
+                0.22578125
+              ],
+              [
+                0.42777777777777776,
+                0.23359375
+              ],
+              [
+                0.3902777777777778,
+                0.246875
+              ],
+              [
+                0.35833333333333334,
+                0.26328125
+              ],
+              [
+                0.33194444444444443,
+                0.28203125
+              ],
+              [
+                0.3125,
+                0.3046875
+              ],
+              [
+                0.2986111111111111,
+                0.3296875
+              ],
+              [
+                0.29444444444444445,
+                0.3609375
+              ],
+              [
+                0.2972222222222222,
+                0.68203125
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0.35,
+          0,
+          0.4
+        ],
+        "scale": 1.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.65,
+          "tint": "#ffffff",
+          "psx": 0.85
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.06726562499999976,
+          -0.8655625000000002,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-coast.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 6.442893749999999,
+          "height": 13.71065625,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 0.8,
+          "loop": false,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.93,
+        10.959999999999999
+      ],
+      "look": [
+        0,
+        3.93,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81dfc9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 926,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

@@ -1,0 +1,234 @@
+{
+  "renderer": "HocusPocus World3D native export",
+  "workspace": "default",
+  "clips": [
+    {
+      "id": "creative-scarlet-tide-motion",
+      "sha256": "f7257eaebdde66a1502aff2963c314973dee55b32fe5a0d50fb0552d29d29bb4",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "fullDecode": "passed",
+      "nativePublication": {
+        "clip": 1,
+        "title": "Marea tras el muro",
+        "saved": {
+          "name": "2026-09-15-14h47m15s_world3d-creative-scarlet-tide-motion_a43997.mp4",
+          "url": "/api/v1/file/2026-09-15-14h47m15s_world3d-creative-scarlet-tide-motion_a43997.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2304056,
+        "elapsedSeconds": 72.6,
+        "scene": {
+          "name": "Ventanas-a-mundos-vivos-01-Marea-tras-el-muro-79d61063b22d441bb96f67b5c80f7488.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Ventanas-a-mundos-vivos-01-Marea-tras-el-muro-79d61063b22d441bb96f67b5c80f7488.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Ventanas-a-mundos-vivos-01-Marea-tras-el-muro-79d61063b22d441bb96f67b5c80f7488.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-rose-orbit-motion",
+      "sha256": "8cda4f71acb892fc943b0085d568964d9ad2edb6aca8a998c35ec2a57de5cbb3",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "fullDecode": "passed",
+      "nativePublication": {
+        "clip": 2,
+        "title": "Órbita de terciopelo",
+        "saved": {
+          "name": "2026-09-15-14h59m52s_world3d-creative-rose-orbit-motion_78d998.mp4",
+          "url": "/api/v1/file/2026-09-15-14h59m52s_world3d-creative-rose-orbit-motion_78d998.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1780938,
+        "elapsedSeconds": 72.27,
+        "scene": {
+          "name": "Ventanas-a-mundos-vivos-02-rbita-de-terciopelo-9082cdcb073a4d37ac9ae7a1afe3f849.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Ventanas-a-mundos-vivos-02-rbita-de-terciopelo-9082cdcb073a4d37ac9ae7a1afe3f849.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Ventanas-a-mundos-vivos-02-rbita-de-terciopelo-9082cdcb073a4d37ac9ae7a1afe3f849.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-glass-orchard-motion",
+      "sha256": "b14307022ac4bd775033fcbdf9deff3640579f6f8c696e8e691a0aff689b9a0a",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "fullDecode": "passed",
+      "nativePublication": {
+        "clip": 3,
+        "title": "La casa del huerto",
+        "saved": {
+          "name": "2026-09-15-15h01m09s_world3d-creative-glass-orchard-motion_3f9e6c.mp4",
+          "url": "/api/v1/file/2026-09-15-15h01m09s_world3d-creative-glass-orchard-motion_3f9e6c.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1855057,
+        "elapsedSeconds": 78.3,
+        "scene": {
+          "name": "Ventanas-a-mundos-vivos-03-La-casa-del-huerto-63821fcd97984f3999ed80b617e51bd9.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Ventanas-a-mundos-vivos-03-La-casa-del-huerto-63821fcd97984f3999ed80b617e51bd9.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Ventanas-a-mundos-vivos-03-La-casa-del-huerto-63821fcd97984f3999ed80b617e51bd9.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-amber-ice-motion",
+      "sha256": "ddd187eb833ce4e4a1257811e1384147d1a6453105349dc18199028cd6c802ad",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "fullDecode": "passed",
+      "nativePublication": {
+        "clip": 4,
+        "title": "Ventana al deshielo",
+        "saved": {
+          "name": "2026-09-15-15h02m22s_world3d-creative-amber-ice-motion_157069.mp4",
+          "url": "/api/v1/file/2026-09-15-15h02m22s_world3d-creative-amber-ice-motion_157069.mp4",
+          "workspace": "default"
+        },
+        "bytes": 1660468,
+        "elapsedSeconds": 72.27,
+        "scene": {
+          "name": "Ventanas-a-mundos-vivos-04-Ventana-al-deshielo-643375f246a445bbb9191cee5a4dd29e.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Ventanas-a-mundos-vivos-04-Ventana-al-deshielo-643375f246a445bbb9191cee5a4dd29e.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Ventanas-a-mundos-vivos-04-Ventana-al-deshielo-643375f246a445bbb9191cee5a4dd29e.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-coral-radio-motion",
+      "sha256": "f2dac558eaf9ea6352924b20320db0cd87371b1b2d32170eb3df3c0aa9a83aef",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "fullDecode": "passed",
+      "nativePublication": {
+        "clip": 5,
+        "title": "Radio de las mareas",
+        "saved": {
+          "name": "2026-09-15-15h03m37s_world3d-creative-coral-radio-motion_4e8d5b.mp4",
+          "url": "/api/v1/file/2026-09-15-15h03m37s_world3d-creative-coral-radio-motion_4e8d5b.mp4",
+          "workspace": "default"
+        },
+        "bytes": 2016708,
+        "elapsedSeconds": 75.28,
+        "scene": {
+          "name": "Ventanas-a-mundos-vivos-05-Radio-de-las-mareas-8a0aa9de1b5441c9aaf75349bcfb2f5e.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Ventanas-a-mundos-vivos-05-Radio-de-las-mareas-8a0aa9de1b5441c9aaf75349bcfb2f5e.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Ventanas-a-mundos-vivos-05-Radio-de-las-mareas-8a0aa9de1b5441c9aaf75349bcfb2f5e.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    },
+    {
+      "id": "creative-cobalt-crater-motion",
+      "sha256": "1d71c5a0537832a96a172da64d34196ed3f125b29726179adaee9cf74a848a4b",
+      "media": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000"
+        }
+      },
+      "fullDecode": "passed",
+      "nativePublication": {
+        "clip": 6,
+        "title": "Observatorio del núcleo",
+        "saved": {
+          "name": "2026-09-15-15h05m02s_world3d-creative-cobalt-crater-motion_915fff.mp4",
+          "url": "/api/v1/file/2026-09-15-15h05m02s_world3d-creative-cobalt-crater-motion_915fff.mp4",
+          "workspace": "default"
+        },
+        "bytes": 3108554,
+        "elapsedSeconds": 84.33,
+        "scene": {
+          "name": "Ventanas-a-mundos-vivos-06-Observatorio-del-n-cleo-47d4ecce4b2a49279d4258b2a8d51120.world3d.scene.json",
+          "type": "scene",
+          "workspace_id": "default",
+          "url": "/api/v1/file/Ventanas-a-mundos-vivos-06-Observatorio-del-n-cleo-47d4ecce4b2a49279d4258b2a8d51120.world3d.scene.json?workspace=default",
+          "thumbnail_url": "/api/v1/file/Ventanas-a-mundos-vivos-06-Observatorio-del-n-cleo-47d4ecce4b2a49279d4258b2a8d51120.world3d.scene.preview.png?workspace=default"
+        }
+      }
+    }
+  ]
+}

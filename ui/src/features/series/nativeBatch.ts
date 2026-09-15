@@ -17,6 +17,7 @@ import { nativeGenerationPlan, type NativeGenerationMode } from './nativeGenerat
 import { seriesAssetUrl } from './referenceImages'
 import { releaseStoredSceneCopy } from '../../lib/sceneRecovery'
 import i18n from '../../i18n'
+import { withCharacterPoseDimensions } from '../../lib/characterPoseDimensions'
 
 export { nativeDraftCandidates } from './nativeGenerationPlan'
 
@@ -57,6 +58,12 @@ async function renderNativeShot(workspace: string, seriesId: string, episodeId: 
   const bodySources = await cleanShotCharacters(workspace, seriesId, episodeId, shotId, kits, policy)
   const { series, episode } = source(workspace, seriesId, episodeId)
   const shot = episode.shots.find(item => item.id === shotId)!
+  for (const id of shot.visibleCharacterIds) {
+    const ref = series.characters.find(character => character.id === id)?.voiceProfile?.characterKitRef
+    if (ref?.workspace === workspace && kits.kits[ref.id]) {
+      kits.kits[ref.id] = await withCharacterPoseDimensions(kits.kits[ref.id], workspace)
+    }
+  }
   useSeriesNativeBatch.setState({ phase: 'voices' })
   const prepared = mode !== 'missing' && latestNativeTake(series, shot)
     ? await updateSavedLipSync(workspace, series, episode, shot, kits, bodySources)

@@ -68,17 +68,26 @@ function read(src: Uint8ClampedArray, width: number, height: number, x: number, 
 }
 
 function pixelate(src: Uint8ClampedArray, width: number, height: number, cols: number, rows: number, map: (r: number, g: number, b: number, x: number, y: number) => RGB) {
+  // Shade each low-resolution cell once. Shading every output pixel repeats
+  // palette searches and allocates millions of RGB arrays per vertical frame.
+  const cells = new Uint8ClampedArray(cols * 3)
+  let previousRow = -1
   const out = new Uint8ClampedArray(src.length)
   for (let y = 0; y < height; y++) {
     const cy = Math.min(rows - 1, Math.floor(y * rows / height))
+    let previousColumn = -1
     for (let x = 0; x < width; x++) {
       const cx = Math.min(cols - 1, Math.floor(x * cols / width))
-      const sx = Math.floor((cx + 0.5) * width / cols)
-      const sy = Math.floor((cy + 0.5) * height / rows)
-      const [r, g, b] = map(...read(src, width, height, sx, sy), cx, cy)
+      const cell = cx * 3
+      if (cy !== previousRow && cx !== previousColumn) {
+        const sx = Math.floor((cx + .5) * width / cols), sy = Math.floor((cy + .5) * height / rows)
+        cells.set(map(...read(src, width, height, sx, sy), cx, cy), cell)
+        previousColumn = cx
+      }
       const i = (y * width + x) * 4
-      out[i] = r; out[i + 1] = g; out[i + 2] = b; out[i + 3] = src[i + 3]
+      out[i] = cells[cell]; out[i + 1] = cells[cell + 1]; out[i + 2] = cells[cell + 2]; out[i + 3] = src[i + 3]
     }
+    previousRow = cy
   }
   src.set(out)
 }
@@ -153,7 +162,9 @@ function crt(src: Uint8ClampedArray, width: number, height: number, intensity: n
 function psxJitter(src: Uint8ClampedArray, width: number, height: number, cols: number, intensity: number, time: number) {
   const rows = Math.max(36, Math.round(cols * height / Math.max(1, width)))
   pixelate(src, width, height, cols, rows, (r, g, b, x, y) => {
-    const t = bayer(x, y) * (18 * intensity)
+    // Stay near a 5-bit quantization step: large noise becomes a checkerboard
+    // over dark art instead of the subtle ordered dither of a PSX framebuffer.
+    const t = bayer(x, y) * (6 * intensity)
     const wobble = Math.sin((y + time * 9) * 0.7) * intensity
     return [
       quantize(r + wobble * 4, 32, t),

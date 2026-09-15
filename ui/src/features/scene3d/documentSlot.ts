@@ -1,4 +1,5 @@
 import { parseAppearance } from './cinematicSettings'
+import { parseImageLook } from './imageLook'
 import { parseClipPlayback, parseMotion } from './performance.ts'
 import { parseSpeech } from './speech/track'
 import { parseCharacterKitRef, parseCharacterVoice } from '../../lib/characterVoice'
@@ -37,7 +38,8 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     media: slot.media === 'image' ? 'image' : slot.media === 'screen' ? 'screen' : 'model3d', screen: parseMediaScreen(slot.screen),
     loop: parseScene3DLoop(slot.loop), clipPlayback: parseClipPlayback(slot.clipPlayback), motion: parseMotion(slot.motion),
     appearance: parseAppearance(slot.appearance),
-    surface: slot.surface === 'environment' || slot.surface === 'floor' || slot.surface === 'wall' ? slot.surface : undefined,
+    imageLook: slot.media === 'image' && slot.surface === 'cutout' ? parseImageLook(slot.imageLook) : undefined,
+    surface: slot.surface === 'environment' || slot.surface === 'floor' || slot.surface === 'wall' || slot.surface === 'cutout' ? slot.surface : undefined,
     grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat),
     performance: slot.performance === 'typing' || slot.performance === 'idle' ? slot.performance : undefined,
   }

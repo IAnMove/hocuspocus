@@ -1,0 +1,79 @@
+{
+  "name": "Portal Ride · Tres mundos vertical",
+  "workspace": "default",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "clips": [
+    {
+      "name": "CLIP 01 — 01 · La chispa encuentra al patinador",
+      "source": "/api/v1/file/2026-09-15-23h21m10s_world3d-scene_d16d26.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 2.4,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 02 — 02 · El salto abre el cielo",
+      "source": "/api/v1/file/2026-09-15-23h21m48s_world3d-scene_6d0ca5.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 1.6666666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 03 — 03 · Otro salto sobre las nubes",
+      "source": "/api/v1/file/2026-09-15-23h22m33s_world3d-scene_3fbb49.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 2.0,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 04 — 04 · Aterrizar en el neón",
+      "source": "/api/v1/file/2026-09-15-23h23m17s_world3d-scene_a5b440.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 1.6666666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 05 — 05 · La puerta de neón",
+      "source": "/api/v1/file/2026-09-15-23h23m59s_world3d-scene_527a3c.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 2.0,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 06 — 06 · Volver por el último portal",
+      "source": "/api/v1/file/2026-09-15-23h24m36s_world3d-scene_94f85e.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 1.6666666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 07 — 07 · De vuelta, ruedas en el suelo",
+      "source": "/api/v1/file/2026-09-15-23h25m09s_world3d-scene_bcefa6.mp4?workspace=default",
+      "trim_start": 0,
+      "trim_end": 1.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    }
+  ]
+}

@@ -20,6 +20,9 @@ export interface CharacterKitAsset {
   prompt?: string
   model?: string
   workspace?: string
+  /** Intrinsic raster dimensions, resolved when mounting the pose. */
+  width?: number
+  height?: number
   facePatch?: FacePatchMetadata
 }
 
@@ -255,7 +258,26 @@ export function characterKitAssetFromLayer(
   }
 }
 
-export function captureCharacterFaceAnchor(pose: SceneLayer, face: SceneLayer): CharacterFaceAnchor {
+export function captureCharacterKitFaceAnchor(kit: CharacterKit, poseId: string, pose: SceneLayer,
+  face: SceneLayer, viewport: { width: number; height: number }): CharacterFaceAnchor {
+  const asset = poseId === 'base' ? kit.base : kit.poses[poseId]
+  const dimensions = asset?.width && asset.height ? { width: asset.width, height: asset.height } : undefined
+  return captureCharacterFaceAnchor(pose, face, dimensions, viewport)
+}
+
+export function captureCharacterFaceAnchor(pose: SceneLayer, face: SceneLayer,
+  source?: { width: number; height: number }, viewport?: { width: number; height: number }): CharacterFaceAnchor {
+  if (source && viewport) {
+    const fit = Math.min(viewport.width / source.width, viewport.height / source.height) * Math.max(.001, pose.transform.scale)
+    const edge = Math.max(source.width, source.height) * fit
+    const dx = (face.transform.x - pose.transform.x) * viewport.width / 100
+    const dy = (face.transform.y - pose.transform.y) * viewport.height / 100
+    const angle = (pose.transform.rotation ?? 0) * Math.PI / 180
+    return { offsetX: (dx * Math.cos(angle) + dy * Math.sin(angle)) * 100 / edge,
+      offsetY: (-dx * Math.sin(angle) + dy * Math.cos(angle)) * 100 / edge,
+      scale: face.transform.scale * Math.min(viewport.width, viewport.height) / edge,
+      rotation: (face.transform.rotation ?? 0) - (pose.transform.rotation ?? 0) }
+  }
   const poseScale = Math.max(.001, pose.transform.scale)
   return {
     offsetX: (face.transform.x - pose.transform.x) / poseScale,
@@ -280,6 +302,19 @@ export function appliedCharacterFaceTransform(
   }
 }
 
+/** Character Creator anchors use a square around the source, not scene percentages. */
+export function fittedCharacterFaceTransform(pose: SceneLayer['transform'], anchor: CharacterFaceAnchor,
+  source: { width: number; height: number }, viewport: { width: number; height: number }): SceneLayer['transform'] {
+  const fit = Math.min(viewport.width / source.width, viewport.height / source.height) * pose.scale
+  const edge = Math.max(source.width, source.height) * fit
+  const angle = (pose.rotation ?? 0) * Math.PI / 180
+  const dx = anchor.offsetX * edge / 100, dy = anchor.offsetY * edge / 100
+  return { x: pose.x + (dx * Math.cos(angle) - dy * Math.sin(angle)) * 100 / viewport.width,
+    y: pose.y + (dx * Math.sin(angle) + dy * Math.cos(angle)) * 100 / viewport.height,
+    scale: anchor.scale * edge / Math.min(viewport.width, viewport.height), opacity: 1,
+    rotation: (pose.rotation ?? 0) + anchor.rotation }
+}
+
 const stateForBinding = (state: CharacterMouthState): SceneFaceBindingState => state
 
 export function mountCharacterKitLayers(
@@ -301,7 +336,9 @@ export function mountCharacterKitLayers(
   }
   const anchors = kit.anchors[poseId] ?? kit.anchors.base
   const mouthAnchor = anchors?.mouth ?? DEFAULT_CHARACTER_MOUTH_ANCHOR
-  const faceTransform = (anchor: CharacterFaceAnchor) => appliedCharacterFaceTransform(transform, anchor)
+  const faceTransform = (anchor: CharacterFaceAnchor) => poseAsset.width && poseAsset.height
+    ? fittedCharacterFaceTransform(transform, anchor, { width: poseAsset.width, height: poseAsset.height }, viewport)
+    : appliedCharacterFaceTransform(transform, anchor)
   const layers: SceneLayer[] = [pose]
   let z = 21
   for (const state of CHARACTER_MOUTH_STATES) {

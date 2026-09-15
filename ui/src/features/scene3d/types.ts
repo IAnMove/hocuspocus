@@ -1,4 +1,6 @@
 import { CINEMATIC_TEMPLATE_IDS } from './cinematicTemplateIds'
+import { DARK_FANTASY_IDS } from './darkFantasyIds'
+import { CREATIVE_TEMPLATE_IDS } from './creativeTemplateIds'
 import { SPEECH_TEMPLATE_IDS } from './speech/templateIds'
 import type { Scene3DSpeech, Scene3DSoundtrack } from './speech/types'
 import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
@@ -6,6 +8,7 @@ import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
 export type Vec3 = readonly [number, number, number]
 
 export type Scene3DCameraFamily =
+  | 'fixed'
   | 'establishment'
   | 'follow'
   | 'orbit'
@@ -66,6 +69,8 @@ export const SCENE3D_TEMPLATE_IDS = [
   'coder-room',
   'clone-chase',
   ...CINEMATIC_TEMPLATE_IDS,
+  ...DARK_FANTASY_IDS,
+  ...CREATIVE_TEMPLATE_IDS,
   ...MEDIA_TEMPLATE_IDS,
   'reflective-stage',
   'character-materialization',
@@ -165,7 +170,8 @@ export type Scene3DSlot = {
   speech?: Scene3DSpeech
   media: Scene3DSlotMedia
   screen?: import('./mediaScreen').MediaScreen
-  surface?: 'wall' | 'floor' | 'environment'
+  surface?: 'wall' | 'floor' | 'environment' | 'cutout'
+  imageLook?: import('./imageLook').ImageLook
   appearance?: { start: number; duration: number; color: string }
   textureRepeat?: number
   performance?: 'typing' | 'idle'
@@ -232,7 +238,7 @@ export type Scene3DDocument = {
   templateId: Scene3DTemplateId
   camera: Scene3DCamera
   light: Scene3DLight
-  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number }
+  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road'; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number }
   dressing?: Scene3DDressing
   workshopScreen?: 'code' | 'error' | 'success'
   slots: Scene3DSlot[]

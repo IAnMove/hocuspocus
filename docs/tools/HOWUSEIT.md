@@ -26,7 +26,7 @@ Related: [Video Editor](../video-editor/HOWUSEIT.md) (cut, do not regenerate),
 |---|---|---|---|
 | **Upscale / processors** | Image or video, depending on processor | FlashVSR, Lanczos and available native processors | New `_upscaled` PNG or video |
 | **Revoice** | Video + 1–2 voice refs | SeedVC | New `_revoiced` clip (same container) |
-| **Remove background** | Image | rembg U2Net | New `{stem}.no-background-{id}.png` |
+| **Remove background** | Image or video | rembg U2Net with edge matting | New transparent PNG or VP9 WebM |
 
 Use Tools when the pixels (or voices) are already good and you need a
 derivative. Use Studio generate when you need a new image/clip. Use Video
@@ -60,8 +60,8 @@ collection ID. Uploads use the virtual scope `__uploads__`. See
 4. **Conflicting aliases.** The native upscale/revoice endpoints accept
    `source`, `source_path`, and legacy `video_path`. Different values return
    `409`. The version 2 upscale contract accepts only `params.source`.
-5. **Kind gates.** Revoice is video-only. Remove-background is image-only
-   (`.png`, `.jpg`, `.jpeg`, `.webp`). Upscale images also allow
+5. **Kind gates.** Revoice is video-only. Remove-background accepts images
+   (`.png`, `.jpg`, `.jpeg`, `.webp`) and videos. Upscale images also allow
    `.bmp`, `.gif`, `.tif`, `.tiff`. Videos:
    `.avi`, `.m4v`, `.mkv`, `.mov`, `.mp4`, `.mpeg`, `.mpg`, `.webm`, `.wmv`.
 6. **Instruction is metadata.** Remove-background accepts `instruction`
@@ -195,7 +195,21 @@ curl -X POST "$HOCUSPOCUS_URL/api/v1/tools/remove-background" \
 
 Accepted immediately with `job_id`, `task_id`, `root_task_id`, and frozen
 `generation_details.model_type: rembg-u2net`. The sidecar records source
-lineage, timings, and transparent-PNG metrics (`width`, `height`, `alpha`).
+lineage, timings and transparency metrics (`width`, `height`, `alpha`).
+
+For video, choose a clip in the same source selector or supply a video asset ID.
+The app removes the background from each frame, refines foreground colors at
+the edges and gently stabilizes small matte changes. It writes a new **WebM with
+alpha**, preserving audio as Opus. Progress shows frames processed. Limits are
+60 seconds, 1800 frames and 60 fps; the output long edge is capped at 1920 px.
+Frames are streamed through memory instead of written as temporary PNGs.
+
+Use the result in **Video 3D → Animate this layer**, with **Preserve transparency**
+enabled. The actor and background have independent position, depth and playback
+speed. Download reusable examples from the [Moving Cutouts gallery](../../ui/public/examples/moving-cutouts/README.md).
+Check thin objects, hair and fast motion against a contrasting background; this
+frame matte does not track a selected person through occlusions. The output is
+normalized to the source's average frame rate, with its display orientation kept.
 
 Face Rig overlay cleanup is a **different** endpoint
 (`POST /api/v1/character-kits/face-rig/cleanup`) that also uses rembg U2Net

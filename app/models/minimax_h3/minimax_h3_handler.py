@@ -2134,6 +2134,10 @@ class family_handler:
                 }
             ]
         )
+        # Both VAEs are resolved by full filename, not by loading a folder.
+        # Reuse linked weights even when another VAE variant exists locally.
+        for group in vae_downloads:
+            group["independent_files"] = True
         attribution_downloads = (
             [
                 {

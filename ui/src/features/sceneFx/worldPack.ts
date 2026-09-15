@@ -1,6 +1,6 @@
 import {
-  BufferAttribute, BufferGeometry, CircleGeometry, Color, DoubleSide, Group, Mesh,
-  PlaneGeometry, Points, ShaderMaterial, SphereGeometry, SRGBColorSpace, Texture, TextureLoader, VideoTexture,
+  BufferAttribute, BufferGeometry, CircleGeometry, Color, Vector2, DoubleSide, Group, Mesh,
+  PlaneGeometry, Points, ShaderMaterial, SphereGeometry,
 } from 'three'
 import { energyMaterial, ENERGY_NOISE, softSparkMaterial } from './energyShaders'
 import { fxRandom } from './types'
@@ -113,20 +113,26 @@ export function portalMediaMaterial(color: string) {
     name: 'cinematic-portal-media',
     uniforms: {
       uTime: { value: 0 }, uPower: { value: 1 }, uSeed: { value: 1 }, uProgress: { value: 0 },
+      uViewport: { value: new Vector2(1, 1) }, uScreenSpace: { value: 0 },
       uColor: { value: new Color(color) }, uMap: { value: null }, uHasMap: { value: 0 },
     },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-    fragmentShader: `varying vec2 vUv; uniform float uTime,uPower,uSeed,uHasMap; uniform vec3 uColor; uniform sampler2D uMap;
+    fragmentShader: `varying vec2 vUv; uniform float uTime,uPower,uSeed,uHasMap,uScreenSpace; uniform vec2 uViewport; uniform vec3 uColor; uniform sampler2D uMap;
       ${ENERGY_NOISE}
       void main() {
         vec2 p=(vUv-.5)*2.; float r=length(p*vec2(1.,1.22)); float a=atan(p.y,p.x);
         float n=fbm(vec2(a*2.2, r*7.-uTime*.8)+uSeed);
         float hole=smoothstep(.97,.7,r);
-        vec2 uv=clamp(vUv+(n-.5)*.018,0.,1.);
+        vec2 uv=uScreenSpace>0.5 ? gl_FragCoord.xy/uViewport : clamp(vUv+(n-.5)*.018,0.,1.);
         vec3 media=uHasMap>0.5 ? texture2D(uMap, uv).rgb : mix(vec3(.02,.05,.1), uColor*.2, n);
         float rim=exp(-abs(r-.78)*34.);
         vec3 color=mix(media, uColor*2.8, rim);
         gl_FragColor=vec4(color*uPower, hole*(.96+rim));
+        if(uScreenSpace>0.5) {
+          gl_FragColor=vec4(mix(media,uColor*2.8*uPower,clamp(rim,0.,1.)),hole);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
       }`,
     transparent: true, side: DoubleSide, depthWrite: false,
   })
@@ -159,57 +165,4 @@ export function buildPackedEffect(kind: WorldSfxKind, color: string): Group | nu
     case 'media_portal': return mediaPortal(color)
     default: return null
   }
-}
-
-const textures = new Map<string, Texture>()
-
-export function applyPortalMedia(root: Group, url?: string) {
-  const mesh = root.children.find(child => child.userData.kind === 'portalMedia')
-  if (!(mesh instanceof Mesh) || !(mesh.material instanceof ShaderMaterial)) return
-  const uniforms = mesh.material.uniforms
-  if (typeof document === 'undefined') return
-  if (!url) {
-    uniforms.uMap.value = null
-    uniforms.uHasMap.value = 0
-    return
-  }
-  const cached = textures.get(url)
-  if (cached) {
-    uniforms.uMap.value = cached
-    uniforms.uHasMap.value = 1
-    return
-  }
-  if (/\.(mp4|webm|mov|mkv)(\?|$)/i.test(url) || url.startsWith('blob:')) {
-    const video = document.createElement('video')
-    video.src = url
-    video.crossOrigin = 'anonymous'
-    video.loop = true
-    video.muted = true
-    video.playsInline = true
-    video.autoplay = true
-    const bind = () => {
-      const texture = new VideoTexture(video)
-      texture.colorSpace = SRGBColorSpace
-      textures.set(url, texture)
-      uniforms.uMap.value = texture
-      uniforms.uHasMap.value = 1
-      void video.play().catch(() => undefined)
-    }
-    video.addEventListener('loadeddata', bind, { once: true })
-    if (!/\.(mp4|webm|mov|mkv)(\?|$)/i.test(url)) {
-      new TextureLoader().load(url, texture => {
-        texture.colorSpace = SRGBColorSpace
-        textures.set(url, texture)
-        uniforms.uMap.value = texture
-        uniforms.uHasMap.value = 1
-      }, undefined, () => undefined)
-    }
-    return
-  }
-  new TextureLoader().load(url, texture => {
-    texture.colorSpace = SRGBColorSpace
-    textures.set(url, texture)
-    uniforms.uMap.value = texture
-    uniforms.uHasMap.value = 1
-  }, undefined, () => undefined)
 }

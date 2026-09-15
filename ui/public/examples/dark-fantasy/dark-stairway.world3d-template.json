@@ -1,0 +1,148 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "dark-stairway",
+  "title": "Dark Fantasy · La escalera imposible",
+  "description": "Horizonte estable, desplazamiento suave, figuras apoyadas en suelo y sombras de contacto. Capas editables.",
+  "createdAt": "2026-09-14T17:00:00Z",
+  "includeAssets": true,
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-stairway",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.45,
+        -0.45,
+        -0.8
+      ],
+      "intensity": 2.3,
+      "color": "#accbff"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.2,
+      "floorStyle": "backdrop",
+      "floorColor": "#28222d",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "sourceUrl": "/examples/dark-fantasy/03-stairs.jpg",
+        "clip": null,
+        "position": [
+          0,
+          1.75,
+          -12
+        ],
+        "rotationY": 0,
+        "scale": 24
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/actor-oracle.png",
+        "clip": null,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.35,
+        "rotationY": 0,
+        "imageLook": {
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "worldSfx": [
+      {
+        "id": "gold-sigil",
+        "kind": "magic_circle",
+        "position": {
+          "x": 0,
+          "y": -0.16999999999999993,
+          "z": -0.3
+        },
+        "color": "#edb664",
+        "scale": 1.6,
+        "intensity": 0.7,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      },
+      {
+        "id": "gold-dust",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 0.75,
+          "z": -1
+        },
+        "color": "#e0a564",
+        "scale": 2,
+        "intensity": 0.35,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "eye": [
+        -0.12,
+        2.7,
+        9.24
+      ],
+      "look": [
+        0.0,
+        1.7500000000000004,
+        0.0
+      ],
+      "fov": 43,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.08888888888888888,
+          1.0,
+          6.844444444444444
+        ],
+        "to": [
+          0.16296296296296295,
+          1.0,
+          6.488888888888888
+        ],
+        "lookFrom": [
+          0.0,
+          0.29629629629629656,
+          0.0
+        ],
+        "lookTo": [
+          0.0,
+          0.29629629629629656,
+          0.0
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false,
+        "orbitTurns": 0
+      }
+    }
+  }
+}

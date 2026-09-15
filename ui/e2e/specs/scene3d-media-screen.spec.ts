@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { gotoApp, closeApp } from '../helpers/gotoApp'
+import { applyScene3DTemplate } from '../../src/features/scene3d/templates'
 
 test('a screen upload, dimensions and fit survive saving and reopening the shot', async ({ page }, testInfo) => {
   const session = await gotoApp(page)
@@ -39,5 +40,59 @@ test('a screen upload, dimensions and fit survive saving and reopening the shot'
   await workspace.getByRole('button', { name: 'Play', exact: true }).click()
   await expect(controls.getByLabel('Content fit', { exact: true })).toBeDisabled()
   await expect(workspace.getByRole('button', { name: 'Add screen', exact: true })).toBeDisabled()
+  await closeApp(page, session)
+})
+
+test('a cutout background keeps its geometry and PSX look with seekable video through save and export', async ({ page }, testInfo) => {
+  const session = await gotoApp(page)
+  await page.getByRole('tab', { name: 'Video 3D', exact: true }).click()
+  await page.getByRole('button', { name: 'Close Ask to the Wizard' }).click()
+  const workspace = page.getByTestId('scene3d-workspace')
+  const scene = applyScene3DTemplate('creative-ocean-window')
+  scene.duration = 1
+  // A fixed camera and a single background isolate media movement from camera/actors.
+  scene.slots = scene.slots.filter(slot => slot.id === 'background')
+  scene.camera.framing = undefined
+  await workspace.getByLabel('Open shot JSON').setInputFiles({ name: 'ocean.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(scene)) })
+  const controls = workspace.getByTestId('scene3d-screen-controls')
+  await controls.getByLabel('Animate this layer').check()
+  const url = '/api/v1/uploads/background-motion.webm'
+  const video = await readFile(new URL('../../public/rig-previews/animation-jump.webm', import.meta.url))
+  await page.route('**/api/v1/upload', route => route.fulfill({ json: { filename: 'background-motion.webm', path: url, url, kind: 'video' } }))
+  await page.route(`**${url}*`, route => route.fulfill({ contentType: 'video/webm', body: video }))
+  await controls.getByTestId('asset-input-file').setInputFiles({ name: 'background-motion.webm', mimeType: 'video/webm', buffer: video })
+  await expect(controls.getByText('background-motion.webm', { exact: true })).toBeVisible()
+  await expect(controls.getByLabel('Content fit', { exact: true })).toHaveValue('cover')
+  const downloaded = page.waitForEvent('download')
+  await workspace.getByRole('button', { name: 'Save shot JSON', exact: true }).click()
+  const path = testInfo.outputPath('animated-background.world3d.json')
+  await (await downloaded).saveAs(path)
+  const document = JSON.parse(await readFile(path, 'utf8'))
+  const slot = document.slots[0]
+  expect(slot).toMatchObject({ media: 'image', surface: 'cutout', position: scene.slots[0].position, scale: scene.slots[0].scale, imageLook: scene.slots[0].imageLook })
+  expect(slot.screen).toMatchObject({ sourceUrl: url, media: 'video', fit: 'cover', loop: true })
+  await controls.getByLabel('Animate this layer').uncheck()
+  await workspace.getByLabel('Open shot JSON').setInputFiles({ name: 'animated-background.world3d.json', mimeType: 'application/json', buffer: await readFile(path) })
+  await expect(controls.getByLabel('Animate this layer')).toBeChecked()
+  await expect(controls.getByText('background-motion.webm', { exact: true })).toBeVisible()
+  await page.route('**/api/v1/scenes/recordings', route => route.fulfill({ json: { name: 'animated-background.mp4', type: 'video', url: '/api/v1/file/animated-background.mp4' } }))
+  await workspace.getByTestId('world3d-export').click()
+  await expect(workspace.getByTestId('world3d-export-note')).toContainText('animated-background.mp4', { timeout: 30_000 })
+  const difference = await page.evaluate(async () => {
+    const blob = (window as Window & { __world3dLastMp4?: Blob }).__world3dLastMp4!
+    const url = URL.createObjectURL(blob), video = document.createElement('video')
+    const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 32
+    const ctx = canvas.getContext('2d')!
+    try {
+      await new Promise<void>((resolve, reject) => { video.onloadeddata = () => resolve(); video.onerror = () => reject(new Error('Background export cannot be decoded')); video.src = url })
+      const sample = async (seconds: number) => {
+        await new Promise<void>(resolve => { video.onseeked = () => resolve(); video.currentTime = seconds })
+        ctx.drawImage(video, 0, 0, 32, 32); return ctx.getImageData(0, 0, 32, 32).data
+      }
+      const first = await sample(.05), last = await sample(.8)
+      return first.reduce((sum, value, index) => sum + Math.abs(value - last[index]), 0) / first.length
+    } finally { video.removeAttribute('src'); video.load(); URL.revokeObjectURL(url) }
+  })
+  expect(difference).toBeGreaterThan(1)
   await closeApp(page, session)
 })

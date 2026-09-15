@@ -64,7 +64,7 @@ test('Tools exposes exact library images for background removal', { concurrency:
     assert.equal(runButton.disabled, true)
     assert.ok(buttonByText('From HocusPocus'))
     assert.ok(buttonByText('From my computer'))
-    assert.match(document.querySelector('[role="status"]')?.textContent || '', /Choose an image from the library/i)
+    assert.match(document.querySelector('[role="status"]')?.textContent || '', /Choose an image or video from the library/i)
   } finally {
     cleanup()
     globalThis.fetch = previousFetch
@@ -278,17 +278,19 @@ test('video tools can run only with a video source', { concurrency: false }, asy
     fireEvent.click(screen.getByRole('button', { name: 'Revoice' }))
     assert.equal(screen.getByRole('button', { name: 'Replace Voice' }).disabled, false)
     fireEvent.click(screen.getByRole('button', { name: /^Remove background$/ }))
-    assert.equal(screen.getByRole('button', { name: /^Remove Background$/ }).disabled, true)
+    assert.equal(screen.getByRole('button', { name: /^Remove Background$/ }).disabled, false)
   } finally {
     cleanup()
     globalThis.fetch = previousFetch
   }
 })
 
-test('Tools submits background removal only once while the request is pending', { concurrency: false }, async () => {
+for (const kind of ['image', 'video'] as const) {
+test(`Tools submits ${kind} background removal only once while pending`, { concurrency: false }, async () => {
   const { useStore } = await import('../src/stores/useStore.ts')
   const previousFetch = globalThis.fetch
   const previousSetInterval = globalThis.setInterval
+  const filename = kind === 'video' ? 'hero.mp4' : 'hero.png'
   let submissions = 0
   let release!: (response: Response) => void
   const pending = new Promise<Response>(resolve => { release = resolve })
@@ -302,9 +304,9 @@ test('Tools submits background removal only once while the request is pending', 
   }
   globalThis.setInterval = (() => 1) as unknown as typeof setInterval
   useStore.setState({
-    toolsTool: 'remove_background', toolsSourcePath: 'hero.png', toolsSourceName: 'hero.png',
-    toolsSourceUrl: '/api/v1/file/hero.png?workspace=default', toolsSourceAssetId: 'asset-hero',
-    toolsSourceWorkspace: 'default', toolsSourceKind: 'image', toolsSubmitting: false,
+    toolsTool: 'remove_background', toolsSourcePath: filename, toolsSourceName: filename,
+    toolsSourceUrl: `/api/v1/file/${filename}?workspace=default`, toolsSourceAssetId: 'asset-hero',
+    toolsSourceWorkspace: 'default', toolsSourceKind: kind, toolsSubmitting: false,
     activeWorkspace: 'default', jobs: [],
   } as never)
   try {
@@ -323,6 +325,7 @@ test('Tools submits background removal only once while the request is pending', 
     useStore.setState({ toolsSubmitting: false, jobs: [] } as never)
   }
 })
+}
 
 test('remote catalog picks past the local 100-item cache keep workspace identity', async () => {
   const { resolveToolSource } = await import('../src/lib/toolSource.ts')

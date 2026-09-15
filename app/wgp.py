@@ -3681,7 +3681,7 @@ def get_local_model_filename(model_filename, use_locator = True, extra_paths = N
     
 
 
-def process_files_def(repoId = None, sourceFolderList = None, fileList = None, targetFolderList = None, revision = None):
+def process_files_def(repoId = None, sourceFolderList = None, fileList = None, targetFolderList = None, revision = None, independent_files = False):
     if targetFolderList is None:
         targetFolderList = [None] * len(sourceFolderList)
     for targetFolder, sourceFolder, files in zip(targetFolderList, sourceFolderList,fileList ):
@@ -3699,6 +3699,18 @@ def process_files_def(repoId = None, sourceFolderList = None, fileList = None, t
                 )
         else:
             folder_parts = [p for p in (targetFolder, sourceFolder) if p]
+            if independent_files:
+                # Standalone weights loaded with locate_file need not share a
+                # directory. An unrelated local variant must not force a second
+                # download of weights already present in a linked model root.
+                for onefile in files:
+                    key = os.path.join(*folder_parts, onefile)
+                    if fl.locate_file(key, error_if_none=False) is None:
+                        kwargs = dict(repo_id=repoId, revision=revision, filename=onefile, local_dir=local_dir)
+                        if sourceFolder:
+                            kwargs['subfolder'] = sourceFolder
+                        hf_download_with_public_fallback(**kwargs)
+                continue
             if folder_parts:
                 # Folder-based file sets must stay self-contained within ONE
                 # root. A per-file check across all roots would download only

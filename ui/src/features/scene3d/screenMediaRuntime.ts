@@ -1,6 +1,8 @@
 import { CanvasTexture, DoubleSide, Mesh, MeshBasicMaterial, SRGBColorSpace, type Object3D } from 'three'
 import { mediaScreenRect, mediaScreenTime, type MediaScreen } from './mediaScreen.ts'
 import { SCREEN_PLANE_NAME, attachScreenPlane, detachScreenPlane, screenUsesPlane } from './screenPlane.ts'
+import { applyPsxImageMaterial, type ImageLook } from './imageLook'
+import { loadImagePoses } from './imagePoseRuntime'
 
 export type ScreenMediaRuntime = {
   ready: boolean
@@ -22,26 +24,48 @@ function waitMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', sign
   })
 }
 
-/** Video is paused and sought from the scene clock, including during export. */
-export async function bindScreenMedia(root: Object3D, screen: MediaScreen, standalone: boolean, signal: AbortSignal, onFrame: () => void = () => {}): Promise<ScreenMediaRuntime> {
-  const plane = screenUsesPlane(screen, standalone)
+function resolveScreenTarget(root: Object3D, screen: MediaScreen, standalone: boolean, imagePlate: boolean) {
+  const plane = !imagePlate && screenUsesPlane(screen, standalone)
   const attachedPlane = plane ? attachScreenPlane(root, screen) : undefined
   const targetName = standalone ? 'SCREEN_CONTENT' : plane ? SCREEN_PLANE_NAME : screen.targetMesh
   const targets: Mesh[] = []
-  root.traverse(child => { if (child instanceof Mesh && child.name === targetName) targets.push(child) })
+  if (imagePlate && root instanceof Mesh) targets.push(root)
+  else root.traverse(child => { if (child instanceof Mesh && child.name === targetName) targets.push(child) })
   if (targets.length !== 1) {
     if (attachedPlane) detachScreenPlane(root, attachedPlane)
     throw new Error(targets.length ? 'screen-mesh-ambiguous' : 'screen-mesh-missing')
   }
+  return { target: targets[0], attachedPlane, plane }
+}
+
+function screenSurfaceAspect(target: Mesh, screen: MediaScreen, imagePlate: boolean) {
+  const geometry = target.geometry as { parameters?: { width?: number; height?: number } }
+  return imagePlate && geometry.parameters?.width && geometry.parameters.height
+    ? geometry.parameters.width / geometry.parameters.height : screen.width / screen.height
+}
+
+function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: boolean, imagePlate?: { look?: ImageLook }) {
+  const { target, attachedPlane, plane } = resolveScreenTarget(root, screen, standalone, Boolean(imagePlate))
   const canvas = document.createElement('canvas')
-  const aspect = screen.width / screen.height
+  const previous = target.material
+  const aspect = screenSurfaceAspect(target, screen, Boolean(imagePlate))
   canvas.width = Math.max(2, Math.round(Math.min(1920, 1080 * aspect))); canvas.height = Math.max(2, Math.round(canvas.width / aspect))
   const context = canvas.getContext('2d')!
-  const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace; texture.flipY = standalone || plane ? !screen.flipY : screen.flipY
-  const material = new MeshBasicMaterial({ map: texture, toneMapped: false, side: DoubleSide })
-  const target = targets[0], previous = target.material
+  const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace; texture.flipY = imagePlate || standalone || plane ? !screen.flipY : screen.flipY
+  const material = imagePlate && !Array.isArray(previous) && 'map' in previous ? previous.clone() as MeshBasicMaterial
+    : new MeshBasicMaterial({ toneMapped: false, side: DoubleSide })
+  material.map = texture
+  if (screen.transparent || screen.poseSequence) { material.transparent = true; material.alphaTest = .05; material.depthWrite = true }
+  if (imagePlate?.look?.psx) applyPsxImageMaterial(material, texture, imagePlate.look.psx)
+  return { attachedPlane, target, previous, canvas, context, texture, material }
+}
+
+/** Video is paused and sought from the scene clock, including during export. */
+export async function bindScreenMedia(root: Object3D, screen: MediaScreen, standalone: boolean, signal: AbortSignal, onFrame: () => void = () => {}, imagePlate?: { look?: ImageLook }): Promise<ScreenMediaRuntime> {
+  const { attachedPlane, target, previous, canvas, context, texture, material } = prepareScreenSurface(root, screen, standalone, imagePlate)
   const video = screen.media === 'video' ? document.createElement('video') : null
-  const image = video ? null : new Image()
+  const image = video || screen.poseSequence ? null : new Image()
+  let poses: Awaited<ReturnType<typeof loadImagePoses>> | undefined
   const abort = new AbortController()
   let released = false
   const runtime: ScreenMediaRuntime = { ready: false, error: null, seek: async () => {}, dispose: () => {
@@ -49,20 +73,26 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
     released = true
     abort.abort(); if (video) { video.pause(); video.removeAttribute('src'); video.load() }
     if (image) image.src = ''; target.material = previous; texture.dispose(); material.dispose()
+    poses?.dispose()
     if (attachedPlane) detachScreenPlane(root, attachedPlane)
   } }
   const disposed = () => runtime.dispose()
   signal.addEventListener('abort', disposed, { once: true })
   const paint = () => {
+    if (poses) { poses.paint(context, screen, 0); texture.needsUpdate = true; onFrame(); return }
     const source = video ?? image!, width = video?.videoWidth ?? image!.naturalWidth, height = video?.videoHeight ?? image!.naturalHeight
     if (!width || !height || abort.signal.aborted) return
     const r = mediaScreenRect(canvas.width, canvas.height, width, height, screen.fit)
-    context.fillStyle = '#080c13'; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(source, r.x, r.y, r.width, r.height); texture.needsUpdate = true
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    if (!screen.transparent) { context.fillStyle = '#080c13'; context.fillRect(0, 0, canvas.width, canvas.height) }
+    context.drawImage(source, r.x, r.y, r.width, r.height); texture.needsUpdate = true
     onFrame()
   }
   try {
     if (signal.aborted) throw new Error('screen-media-disposed')
-    if (video) {
+    if (screen.poseSequence) {
+      poses = await loadImagePoses(screen.poseSequence, abort.signal)
+    } else if (video) {
       video.crossOrigin = 'anonymous'; video.muted = true; video.playsInline = true; video.preload = 'auto'
       const loaded = waitMedia(video, 'loadeddata', abort.signal); video.src = screen.sourceUrl; video.load(); await loaded
     } else {
@@ -73,6 +103,7 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
     let pending: Promise<void> | null = null, desired = 0, settled = 0
     runtime.seek = async (seconds, current) => {
       if (runtime.error) throw runtime.error
+      if (poses && !abort.signal.aborted) { poses.paint(context, current, seconds); texture.needsUpdate = true; onFrame(); return }
       if (!video || abort.signal.aborted) return
       desired = mediaScreenTime(seconds, video.duration, current)
       // Browsers snap to a frame; retrying the same clock time never lands exactly and hangs export.

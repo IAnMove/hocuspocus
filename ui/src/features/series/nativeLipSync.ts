@@ -53,9 +53,9 @@ export function seriesLipSyncIssues(workspace: string, series: SeriesProject, sh
 /** Only rendering inputs matter; saving unrelated voice/description fields does not stale a take. */
 export function seriesLipSyncFingerprint(workspace: string, series: SeriesProject, shot: SeriesShot, library: CharacterKitLibrary) {
   const speakers = [...shot.visibleCharacterIds].sort()
-  return JSON.stringify([3, shot.dialogueBeats, speakers, speakers.map(id => {
+  return JSON.stringify([4, shot.dialogueBeats, speakers, speakers.map(id => {
     const kit = seriesSpeakerKit(workspace, series, id, library)
-    return [id, kit?.id, kit?.base, kit?.mouth, kit?.anchors.base]
+    return [id, kit?.id, kit?.base && { ...kit.base, width: undefined, height: undefined }, kit?.mouth, kit?.anchors.base]
   })])
 }
 

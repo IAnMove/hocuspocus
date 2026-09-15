@@ -179,6 +179,22 @@ test('keep-objects restores each control-room screen by slot id', () => {
   }
 })
 
+test('layout-only stillness export keeps pose frames after the still is stripped', () => {
+  const document = applyScene3DTemplate('dark-still-time-wounds')
+  const pack = createUserTemplate({ document, title: 'Still knight', includeAssets: false, id: 'user-still' })
+  assert.ok(pack)
+  const hero = pack.document.slots.find(slot => slot.id === 'hero')
+  assert.equal(hero.sourceUrl, '')
+  assert.equal(hero.screen.poseSequence.length, 7)
+  assert.equal(hero.screen.sourceUrl, document.slots.find(slot => slot.id === 'hero').screen.poseSequence[0].sourceUrl)
+  const imported = parseUserTemplate(JSON.parse(JSON.stringify(pack)))
+  assert.ok(imported)
+  assert.equal(imported.document.slots.find(slot => slot.id === 'hero').screen.poseSequence.length, 7)
+  const applied = remountUserTemplate(imported, createDefaultScene3DDocument(), false)
+  assert.equal(applied.slots.find(slot => slot.id === 'hero').sourceUrl, '')
+  assert.ok(applied.slots.find(slot => slot.id === 'hero').screen.sourceUrl)
+})
+
 test('wrapping a screen-only shot keeps the durable screen URL', () => {
   const shot = applyScene3DTemplate('monitor-detail')
   shot.slots[0].screen.sourceUrl = '/api/v1/uploads/spot.mp4'

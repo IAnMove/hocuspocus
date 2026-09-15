@@ -1,4 +1,6 @@
 import { effectsTemplateDocument, EFFECTS_TEMPLATES } from './effectsTemplates'
+import { darkFantasyTemplateDocument, DARK_FANTASY_TEMPLATES, DARK_FANTASY_CATEGORIES } from './darkFantasyTemplates'
+import { creativeTemplateDocument, CREATIVE_TEMPLATES, CREATIVE_CATEGORIES } from './creativeTemplates'
 import { cinematicDocument, CINEMATIC_TEMPLATES, CINEMATIC_CATEGORIES } from './cinematicTemplates'
 import { speechTemplateDocument, SPEECH_TEMPLATES, SPEECH_CATEGORIES } from './speech/templates'
 import { mediaTemplateDocument, MEDIA_TEMPLATES, MEDIA_CATEGORIES } from './mediaTemplates'
@@ -15,10 +17,16 @@ export type Scene3DTemplate = {
   camera: Scene3DCameraFamily
   duration: number
   slots: Scene3DSlotId[]
+  tags?: readonly Scene3DTemplateTag[]
+  frameFormat?: 'landscape' | 'portrait'
 }
 
+export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative' | 'perspective' | 'animated'
 export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
+export type Scene3DTemplateFilter = Scene3DTemplateCategory | Scene3DTemplateTag
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
+  ...DARK_FANTASY_CATEGORIES,
+  ...CREATIVE_CATEGORIES,
   ...CINEMATIC_CATEGORIES,
   ...SPEECH_CATEGORIES,
   ...MEDIA_CATEGORIES,
@@ -157,6 +165,8 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   { id: 'coder-room', camera: 'establishment', duration: 7, slots: ['subject_1', 'background'] },
   { id: 'clone-chase', camera: 'follow', duration: 7, slots: ['subject_1', 'subject_2', 'prop', 'background'] },
   ...CINEMATIC_TEMPLATES,
+  ...DARK_FANTASY_TEMPLATES,
+  ...CREATIVE_TEMPLATES,
   ...SPEECH_TEMPLATES,
   ...MEDIA_TEMPLATES,
   ...EFFECTS_TEMPLATES,
@@ -354,6 +364,10 @@ function emptySlot(id: Scene3DSlotId): Scene3DSlot {
 }
 
 export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
+  const creative = creativeTemplateDocument(id)
+  if (creative) return creative
+  const fantasy = darkFantasyTemplateDocument(id)
+  if (fantasy) return fantasy
   const action = actionTemplateDocument(id)
   if (action) return action
   const campaign = campaignTemplateDocument(id)
@@ -468,7 +482,7 @@ const DRESSING_BY_TEMPLATE: Partial<Record<Scene3DTemplateId, Scene3DDocument['d
 export function patchScene3DSlot(
   document: Scene3DDocument,
   slotId: string,
-  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance'>>,
+  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance' | 'imageLook'>>,
 ): Scene3DDocument {
   return {
     ...document,
@@ -533,8 +547,10 @@ export function remountScene3DTemplate(id: Scene3DTemplateId, previous: Scene3DD
   next.soundtrack = previous.soundtrack ? structuredClone(previous.soundtrack) : undefined
   if (previous.production) next.duration = previous.duration
   next.texts = previous.texts ? structuredClone(previous.texts) : undefined
-  next.width = previous.width
-  next.height = previous.height
+  if (!SCENE3D_TEMPLATES.find(template => template.id === id)?.frameFormat) {
+    next.width = previous.width
+    next.height = previous.height
+  }
   next.fps = previous.fps
   next.camera = adaptAuthoredCameraToFrame(next.camera, next.width, next.height)
   if (!keepAssets) return next

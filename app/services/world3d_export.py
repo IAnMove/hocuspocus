@@ -21,6 +21,7 @@ import threading
 import time
 import uuid
 import zlib
+from urllib.parse import unquote, urlsplit
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -314,6 +315,13 @@ def unsupported_capabilities(document: dict) -> list[str]:
 
 
 def _ref_from_url(slot: dict, url: str, workspace: str) -> dict:
+    # Shipped template assets are served by the UI, not stored in a workspace.
+    # Preserve the same URL the editor uses instead of inventing an output filename.
+    if url.startswith("/examples/"):
+        path = unquote(urlsplit(url).path)
+        if ".." in path.split("/") or "\\" in path or "\x00" in path:
+            raise http_error(422, "missing_ref", "Use a valid bundled example URL")
+        return {"slotId": slot["id"], "url": url, "kind": slot.get("media") or "model3d"}
     path, ref_workspace = parse_media_ref(url, workspace)
     filename = os.path.basename((path or "").replace("\\", "/"))
     if not filename:

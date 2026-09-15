@@ -1,0 +1,248 @@
+{
+  "version": 1,
+  "units": "meters",
+  "up": "y",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "duration": 6,
+  "templateId": "creative-amber-ice-motion",
+  "light": {
+    "kind": "directional",
+    "direction": [
+      -0.5,
+      -0.6,
+      -0.8
+    ],
+    "intensity": 2,
+    "color": "#fff2e4"
+  },
+  "environment": {
+    "reflectiveFloor": false,
+    "platform": false,
+    "bloom": 0.06,
+    "floorStyle": "backdrop",
+    "floorColor": "#073e61",
+    "floorSourceHeight": 0.38
+  },
+  "slots": [
+    {
+      "id": "background",
+      "slot": "background",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/creative/amber-ice.jpg",
+      "position": [
+        0,
+        -9.977894500285021,
+        -11
+      ],
+      "scale": 14.077894500285023,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "windows": [
+          [
+            [
+              0.3541666666666667,
+              0.38125
+            ],
+            [
+              0.42916666666666664,
+              0.3546875
+            ],
+            [
+              0.5875,
+              0.3546875
+            ],
+            [
+              0.6625,
+              0.38125
+            ],
+            [
+              0.6625,
+              0.68984375
+            ],
+            [
+              0.6375,
+              0.71640625
+            ],
+            [
+              0.37777777777777777,
+              0.71640625
+            ],
+            [
+              0.3541666666666667,
+              0.690625
+            ]
+          ]
+        ],
+        "unlit": true
+      }
+    },
+    {
+      "id": "hero",
+      "slot": "subject_1",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/creative/astronaut.png",
+      "position": [
+        -0.3,
+        0,
+        0
+      ],
+      "scale": 1.65,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.8,
+        "psx": 0.8
+      }
+    },
+    {
+      "id": "near-prop",
+      "slot": "prop",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/creative/ceramic.png",
+      "position": [
+        1.6,
+        0,
+        2.25
+      ],
+      "scale": 1.75,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.72
+      }
+    },
+    {
+      "id": "companion",
+      "slot": "prop",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/creative/robot.png",
+      "position": [
+        -1.25,
+        0,
+        -2.2
+      ],
+      "scale": 0.85,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.82
+      }
+    },
+    {
+      "id": "exterior-video",
+      "slot": "prop",
+      "media": "screen",
+      "sourceUrl": "",
+      "clip": null,
+      "position": [
+        0.13198026094017162,
+        -5.048431754169593,
+        -14
+      ],
+      "rotationY": 0,
+      "scale": 1,
+      "screen": {
+        "sourceUrl": "/examples/creative/amber-ice-exterior.mp4",
+        "media": "video",
+        "mode": "mesh",
+        "targetMesh": "SCREEN_CONTENT",
+        "anchor": "",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "pitch": 0,
+        "yaw": 0,
+        "roll": 0,
+        "width": 7.813231447658187,
+        "height": 16.295162884079915,
+        "style": "frameless",
+        "fit": "cover",
+        "start": 0,
+        "speed": 1,
+        "loop": true,
+        "flipY": false
+      }
+    }
+  ],
+  "camera": {
+    "family": "establishment",
+    "frameFormat": "portrait",
+    "eye": [
+      0.12999999999999998,
+      3.75,
+      9.8
+    ],
+    "look": [
+      0.13999999999999999,
+      2.2,
+      -0.5
+    ],
+    "fov": 47,
+    "framing": {
+      "targetSlot": "hero",
+      "anchor": "center",
+      "from": [
+        -0.22,
+        1.23,
+        6.05
+      ],
+      "to": [
+        0.00799999999999998,
+        1.23,
+        5.84
+      ],
+      "lookFrom": [
+        0,
+        0.35,
+        -0.3
+      ],
+      "lookTo": [
+        0,
+        0.35,
+        -0.3
+      ],
+      "rollFrom": 0,
+      "rollTo": 0,
+      "relativeToFacing": false
+    }
+  },
+  "worldSfx": [
+    {
+      "id": "ambient-motes",
+      "kind": "dust",
+      "position": {
+        "x": 0,
+        "y": 1.5,
+        "z": -1.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#ffb444",
+      "scale": 2,
+      "intensity": 0.12,
+      "seed": 311,
+      "start": 0,
+      "end": 6,
+      "sound": false,
+      "volume": 0
+    }
+  ]
+}

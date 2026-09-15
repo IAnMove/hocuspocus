@@ -1,6 +1,6 @@
 import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
-import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES, type Scene3DTemplate, type Scene3DTemplateCategory, type Scene3DTemplateId } from './templates'
+import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES, type Scene3DTemplate, type Scene3DTemplateFilter, type Scene3DTemplateId } from './templates'
 import type { Scene3DDressing } from './types.ts'
 
 export const TEMPLATE_SETTINGS = [
@@ -31,7 +31,7 @@ export function templateSetting(id: Scene3DTemplateId): TemplateSetting {
 }
 
 export function filterScene3DTemplates(input: {
-  category: 'all' | Scene3DTemplateCategory
+  category: 'all' | Scene3DTemplateFilter
   setting: 'all' | TemplateSetting
   query: string
   locale: 'en' | 'es'
@@ -39,11 +39,11 @@ export function filterScene3DTemplates(input: {
 }): Scene3DTemplate[] {
   const needle = input.query.trim().toLocaleLowerCase()
   return SCENE3D_TEMPLATES.filter(item => {
-    if (input.category !== 'all' && TEMPLATE_CATEGORIES[item.id] !== input.category) return false
+    if (input.category !== 'all' && TEMPLATE_CATEGORIES[item.id] !== input.category && !item.tags?.some(tag => tag === input.category)) return false
     if (input.setting !== 'all' && templateSetting(item.id) !== input.setting) return false
     if (!needle) return true
     const card = campaignCard(item.id, input.locale) ?? actionCard(item.id, input.locale)
-    const haystack = `${input.titleOf(item.id)} ${card?.description ?? ''} ${card?.requirements.join(' ') ?? ''} ${item.id} ${templateSetting(item.id)}`
+    const haystack = `${input.titleOf(item.id)} ${card?.description ?? ''} ${card?.requirements.join(' ') ?? ''} ${item.id} ${item.tags?.join(' ').replaceAll('-', ' ') ?? ''} ${templateSetting(item.id)}`
     return haystack.toLocaleLowerCase().includes(needle)
   })
 }

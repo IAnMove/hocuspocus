@@ -296,7 +296,13 @@
   "speedHelp": "Se aplica a la reproducción y al MP4 exportado.",
   "outputDuration": "Resultado: {{seconds}} s",
   "camera": "Cámara",
-  "objects": "Objetos",
+  "objects": {
+    "title": "Objetos de la escena",
+    "hint": "Selecciona cualquier objeto, aunque esté detrás de otro.",
+    "image": "Imagen",
+    "model3d": "Modelo 3D",
+    "screen": "Imagen / vídeo"
+  },
   "translate": "Mover",
   "rotate": "Girar Y",
   "scale": "Escalar",
@@ -339,7 +345,12 @@
     "product": "Producto",
     "music": "Videoclip",
     "space": "Espacio",
-    "drive": "Conducción"
+    "drive": "Conducción",
+    "dark-fantasy": "Dark Fantasy",
+    "psx": "PSX",
+    "creative": "Creativas",
+    "perspective": "Perspectivas",
+    "animated": "Fondos vivos"
   },
   "setting": {
     "sea": "Mar",
@@ -358,6 +369,46 @@
     "stage": "Escenario"
   },
   "template": {
+    "dark-cathedral": {
+      "title": "Dark Fantasy · La catedral del eclipse",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-forest": {
+      "title": "Dark Fantasy · El bosque que respira",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-stairway": {
+      "title": "Dark Fantasy · La escalera imposible",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-moonlake": {
+      "title": "Dark Fantasy · El lago de dos lunas",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-portal": {
+      "title": "Dark Fantasy · La puerta del otro mundo",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-throne": {
+      "title": "Dark Fantasy · El trono de ceniza",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-library": {
+      "title": "Dark Fantasy · La biblioteca del vacío",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-ice": {
+      "title": "Dark Fantasy · La santa de hielo",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-abyss": {
+      "title": "Dark Fantasy · El puente del abismo",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-eclipse": {
+      "title": "Dark Fantasy · El último sol",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
     "speech-portrait": {
       "title": "Retrato hablando",
       "description": "Primer plano con voz, boca integrada y expresiones."
@@ -833,6 +884,406 @@
     "voxel-talk": {
       "title": "Charla voxel",
       "description": "Una cabeza cubo y un cráneo voxel se turnan en la azotea, ojos anime sobre caras de bloques."
+    },
+    "dark-vertical-ivory-gate": {
+      "title": "Dark Fantasy · La puerta de marfil",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-saffron-well": {
+      "title": "Dark Fantasy · El pozo del sol",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-crimson-tide": {
+      "title": "Dark Fantasy · La marea carmesí",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-frozen-bell": {
+      "title": "Dark Fantasy · La campana de hielo",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-bone-stair": {
+      "title": "Dark Fantasy · La escalera de hueso",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-jade-rift": {
+      "title": "Dark Fantasy · La grieta de jade",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-ashen-rose": {
+      "title": "Dark Fantasy · La rosa de ceniza",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-violet-gravity": {
+      "title": "Dark Fantasy · Gravedad violeta",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-ember-totem": {
+      "title": "Dark Fantasy · El tótem de brasas",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-vertical-white-abyss": {
+      "title": "Dark Fantasy · El abismo blanco",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto."
+    },
+    "dark-psx-ivory-gate": {
+      "title": "PSX · La puerta de marfil · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-saffron-well": {
+      "title": "PSX · El pozo del sol · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-crimson-tide": {
+      "title": "PSX · La marea carmesí · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-frozen-bell": {
+      "title": "PSX · La campana de hielo · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-bone-stair": {
+      "title": "PSX · La escalera de hueso · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-jade-rift": {
+      "title": "PSX · La grieta de jade · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-ashen-rose": {
+      "title": "PSX · La rosa de ceniza · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-violet-gravity": {
+      "title": "PSX · Gravedad violeta · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-ember-totem": {
+      "title": "PSX · El tótem de brasas · escena completa",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "dark-psx-white-abyss": {
+      "title": "PSX · El abismo blanco · solo personajes",
+      "description": "Perspectiva por capas, cámara suave con horizonte estable, apoyo real y sombras de contacto. PSX por capas."
+    },
+    "creative-neon-diner": {
+      "title": "Último ramen",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-sun-orchard": {
+      "title": "El jardín del mañana",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-vermilion-museum": {
+      "title": "Museo bermellón",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en el fondo."
+    },
+    "creative-cobalt-moon": {
+      "title": "Turno en la luna",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-coral-caravan": {
+      "title": "Caravana de papel",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-emerald-hotel": {
+      "title": "Hotel Esmeralda",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-mint-pool": {
+      "title": "Piscina de las seis",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-indigo-shrine": {
+      "title": "Lluvia de índigo",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-ocean-window": {
+      "title": "Estación abisal",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en el fondo."
+    },
+    "creative-velvet-theatre": {
+      "title": "El teatro silencioso",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-ochre-terminal": {
+      "title": "Andén del sol",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-ceramic-room": {
+      "title": "La sala de cobalto",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-tangerine-market": {
+      "title": "Mercado mandarina",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en el fondo."
+    },
+    "creative-botanical-hangar": {
+      "title": "Hangar botánico",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-ink-mountain": {
+      "title": "El valle de tinta",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-submerged-archive": {
+      "title": "Archivo azul",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-sunset-court": {
+      "title": "Última partida",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-kinetic-gold": {
+      "title": "Equilibrio dorado",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en el fondo."
+    },
+    "creative-lunar-garden": {
+      "title": "Invernadero orbital",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en personajes."
+    },
+    "creative-peach-laundry": {
+      "title": "Lavandería de medianoche",
+      "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-amber-ice": {
+      "title": "La estación del deshielo",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-scarlet-tide": {
+      "title": "La marea roja",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-pearl-spores": {
+      "title": "El vivero de perlas",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-ultramarine-forge": {
+      "title": "La fundición azul",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-rose-orbit": {
+      "title": "Capilla en órbita",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-brass-mirage": {
+      "title": "El espejismo de latón",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-jade-cinema": {
+      "title": "La última sesión verde",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-apricot-cable": {
+      "title": "Último funicular",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-violet-baths": {
+      "title": "Baños ultravioleta",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-clockwork-glass": {
+      "title": "El jardín mecánico",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-paper-monsoon": {
+      "title": "Monzón de papel",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-cobalt-crater": {
+      "title": "El cráter de cobalto",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-saffron-lens": {
+      "title": "El ojo del desierto",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-glass-orchard": {
+      "title": "La cosecha de cristal",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-terracotta-radio": {
+      "title": "La habitación que escucha",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-chrome-bloom": {
+      "title": "Flores de cromo",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-arctic-spin": {
+      "title": "Centrifugado polar",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-domino-garden": {
+      "title": "El jardín dominó",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-midnight-bakery": {
+      "title": "Pan de medianoche",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-coral-radio": {
+      "title": "Radio arrecife",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-scarlet-tide-motion": {
+      "title": "Marea tras el muro",
+      "description": "Mar animado tras una ventana escarlata. Pared y marco estáticos, personaje y objetos en otras profundidades."
+    },
+    "creative-rose-orbit-motion": {
+      "title": "Órbita de terciopelo",
+      "description": "Espacio animado detrás de una abertura ovalada. La habitación rosa conserva cada detalle."
+    },
+    "creative-glass-orchard-motion": {
+      "title": "La casa del huerto",
+      "description": "Hojas y pétalos tras los dos cristales de una casa. El marco central, la pared y el suelo permanecen estáticos."
+    },
+    "creative-amber-ice-motion": {
+      "title": "Ventana al deshielo",
+      "description": "Nieve y nubes tras un portal de ámbar. Arquitectura estática con profundidad independiente."
+    },
+    "creative-coral-radio-motion": {
+      "title": "Radio de las mareas",
+      "description": "Olas detrás de cinco cristales. Los marcos turquesa, el interior y los personajes son capas separadas."
+    },
+    "creative-cobalt-crater-motion": {
+      "title": "Observatorio del núcleo",
+      "description": "Lava animada al otro lado de un observatorio. Ventanal, interior y personajes en capas independientes."
+    },
+    "dark-living-sleeping-titan": {
+      "title": "El titán dormido",
+      "description": "Marfil contra musgo; un caballero ante una criatura del tamaño de una montaña."
+    },
+    "dark-living-bell-of-ash": {
+      "title": "La campana de ceniza",
+      "description": "Un campanario carbonizado se abre sobre un desierto de ceniza y oro."
+    },
+    "dark-living-antler-moon": {
+      "title": "La luna entre astas",
+      "description": "Raíces negras, luna azul y un ciervo imposible emergiendo de la niebla."
+    },
+    "dark-living-drowned-king": {
+      "title": "El rey sumergido",
+      "description": "Oleaje turquesa detrás de un palacio hundido, con una corona gigantesca."
+    },
+    "dark-living-red-pilgrim": {
+      "title": "El peregrino rojo",
+      "description": "Un portal de arenisca encuadra la marcha lenta de un gigante remoto."
+    },
+    "dark-living-last-aqueduct": {
+      "title": "El último acueducto",
+      "description": "Ruinas blancas y agua azul suspendidas sobre un abismo."
+    },
+    "dark-living-ember-heart": {
+      "title": "Corazón de brasa",
+      "description": "Un santuario negro protege el corazón vivo de una montaña."
+    },
+    "dark-living-violet-oracle": {
+      "title": "El oráculo violeta",
+      "description": "Amatista y hueso frente a un cielo donde flotan medusas colosales."
+    },
+    "dark-living-winter-shoulder": {
+      "title": "Sobre el hombro del invierno",
+      "description": "Una fortaleza parece diminuta junto a un guardián helado."
+    },
+    "dark-living-thorn-crown": {
+      "title": "La corona de espinas",
+      "description": "Espinas oscuras contra un jardín rojo que todavía respira."
+    },
+    "dark-living-black-tide": {
+      "title": "La marea negra",
+      "description": "Ventanas de hueso y un leviatán bajo el agua luminosa."
+    },
+    "dark-living-golden-ruin": {
+      "title": "La ruina dorada",
+      "description": "Un observatorio de azufre contempla un sol atrapado en anillos de piedra."
+    },
+    "dark-living-hollow-saint": {
+      "title": "El santo hueco",
+      "description": "Una figura vacía custodia montañas cubiertas de nubes."
+    },
+    "dark-living-fungal-throne": {
+      "title": "El trono del micelio",
+      "description": "Un reino subterráneo mezcla hongos luminosos y piedra funeraria."
+    },
+    "dark-living-storm-bridge": {
+      "title": "El puente de la tormenta",
+      "description": "Una pasarela firme frente a nubes enormes y rayos lejanos."
+    },
+    "dark-living-sand-library": {
+      "title": "Los nombres bajo la arena",
+      "description": "Una cámara sellada mira hacia libros de piedra de escala imposible."
+    },
+    "dark-living-jade-dragon": {
+      "title": "El dragón de jade",
+      "description": "Un pabellón oscuro ante montañas verdes y un dragón petrificado."
+    },
+    "dark-living-moon-grave": {
+      "title": "La tumba de la luna",
+      "description": "Piedra oscura y una luna caída que ilumina la nieve."
+    },
+    "dark-living-copper-trees": {
+      "title": "El bosque de cobre",
+      "description": "Troncos negros, hojas metálicas y un centinela oculto entre la niebla."
+    },
+    "dark-living-final-gate": {
+      "title": "La puerta del último gigante",
+      "description": "Un último caballero frente al coloso que sostiene el horizonte."
+    },
+    "dark-still-salt-sea": {
+      "title": "Sal sobre el mar",
+      "description": "Cámara fija; la espuma turquesa se mueve detrás del arco y la viuda de sal."
+    },
+    "dark-still-still-flame": {
+      "title": "La llama inmóvil",
+      "description": "Basalto oscuro delante, piedra en el centro y lava dorada al fondo."
+    },
+    "dark-still-winter-vigil": {
+      "title": "La vigilia blanca",
+      "description": "La figura y el marco permanecen quietos mientras pasan la nieve y la niebla."
+    },
+    "dark-still-moth-moon": {
+      "title": "La polilla y la luna",
+      "description": "Una silueta de tinta y marfil ante un lago violeta en movimiento."
+    },
+    "dark-still-ivory-fire": {
+      "title": "Marfil contra incendio",
+      "description": "Experimento: armadura clara y cercana, arquitectura negra y horizonte rojo."
+    },
+    "dark-still-two-distances": {
+      "title": "Dos distancias",
+      "description": "Experimento: una figura oscura muy cerca y otra pequeña iluminada al fondo."
+    },
+    "dark-still-copper-night": {
+      "title": "Cobre sobre violeta",
+      "description": "Experimento: personaje PSX, cobre intermedio y niebla violeta suave al fondo."
+    },
+    "dark-still-time-wounds": {
+      "title": "El tiempo pesa",
+      "description": "El caballero cede, se apoya en el suelo y vuelve a levantarse en fragmentos. El ambiente fluye."
+    },
+    "dark-motion-knight-passage": {
+      "title": "El caminante de ceniza",
+      "description": "El caballero avanza con su capa y sus pasos; el pasillo y la niebla tienen otro movimiento."
+    },
+    "dark-motion-knight-embers": {
+      "title": "Hacia las brasas",
+      "description": "La misma marcha frente a lava viva, detrás de arquitectura quieta."
+    },
+    "creative-motion-skate-coast": {
+      "title": "Sal y velocidad",
+      "description": "Ilustración en movimiento sobre mar turquesa y costa coral; el horizonte se desliza."
+    },
+    "creative-motion-skate-neon": {
+      "title": "La ciudad pasa",
+      "description": "La chaqueta respira mientras la ciudad violeta corre por detrás."
+    },
+    "creative-motion-skate-clouds": {
+      "title": "Carretera de nubes",
+      "description": "Una tabla, un camino imposible y nubes enormes a otra velocidad."
+    },
+    "creative-motion-skate-portal": {
+      "title": "El mar al otro lado",
+      "description": "Personaje con filtro PSX, piedra inmóvil y un horizonte que se mueve detrás del arco."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -868,6 +1319,7 @@
     "ease": "Entrada y salida suaves",
     "distance": "Distancia recta: {{distance}} m · {{speed}} m/s",
     "floor": "Usar imagen como textura de suelo",
+    "cutout": "Personaje / recorte con transparencia",
     "surface": "Uso de la imagen",
     "backdrop": "Fondo",
     "wall": "Textura de pared",
@@ -927,11 +1379,14 @@
     "height": "Alto / proporción",
     "flipY": "Invertir verticalmente",
     "start": "Inicio del vídeo (s)",
-    "speed": "Velocidad del vídeo",
+    "speed": "Velocidad de reproducción",
     "loop": "Repetir vídeo",
     "clockHelp": "El vídeo sigue el tiempo de la escena. Su audio está silenciado.",
     "remove": "Quitar pantalla",
-    "failed": "No se pudo cargar la pantalla. Comprueba la malla y el archivo."
+    "failed": "No se pudo cargar la pantalla. Comprueba la malla y el archivo.",
+    "animateImage": "Animar esta capa",
+    "transparent": "Conservar transparencia",
+    "transparentHelp": "Usa una imagen o un vídeo con canal alfa (por ejemplo, WebM transparente). Esta opción conserva el recorte; no elimina el fondo de un vídeo opaco."
   },
   "library": {
     "name": "Nombre de la escena",
@@ -946,6 +1401,10 @@
   },
   "cinematic": {
     "title": "Entorno cinematográfico",
+    "floorStyle": "Acabado del suelo",
+    "tiles": "Baldosas",
+    "mirror": "Superficie continua",
+    "noFloor": "Sin suelo",
     "floor": "Suelo metálico reflectante",
     "platform": "Tarima de materialización",
     "bloom": "Resplandor",
@@ -956,6 +1415,61 @@
     "color": "Color de energía",
     "idle": "Mantener una pose viva",
     "idleHelp": "Usa la animación elegida en su punto de inicio con un movimiento corporal sutil. Elige un fotograma relajado de reposo o de andar; no se transfieren animaciones entre rigs.",
-    "background": "Fondo de escena completo"
-  }
+    "background": "Fondo de escena completo",
+    "floorColor": "Color del suelo",
+    "backdropFloor": "Suelo del escenario",
+    "floorSourceHeight": "Porción inferior del fondo usada como suelo",
+    "road": "Calzada infinita",
+    "road_speed": "Velocidad (m/s)",
+    "road_slope": "Pendiente (°)",
+    "road_offset": "Continuidad (s)"
+  },
+  "imageLook": {
+    "title": "Aspecto de la imagen",
+    "tint": "Tinte",
+    "unlit": "Conservar iluminación original",
+    "psx": "PSX solo en esta capa",
+    "intensity": "Intensidad PSX",
+    "grounded": "Ajustar apoyo a los pies",
+    "shadow": "Sombra de contacto",
+    "roll": "Inclinación (°)"
+  },
+  "preview": {
+    "title": "Vista previa",
+    "expand": "Ampliar vídeo",
+    "exit": "Salir de pantalla completa"
+  },
+  "perspectiveReview": "Ver y evaluar las 20 nuevas",
+  "livingReview": "Ver los 6 fondos vivos",
+  "windows": {
+    "title": "Ventanas transparentes ({{count}})",
+    "help": "Marca puntos alrededor del hueco y pulsa Guardar ventana. Arrastra los puntos para ajustar el contorno. Pon una capa de vídeo detrás: el marco, la pared y los objetos conservan su imagen original. La imagen no se modifica.",
+    "image": "Imagen de la capa estática",
+    "draw": "Dibujar el contorno de la ventana",
+    "save": "Guardar ventana",
+    "undo": "Quitar último punto",
+    "cancel": "Descartar contorno",
+    "item": "Ventana {{number}}",
+    "edit": "Editar contorno",
+    "remove": "Cerrar hueco"
+  },
+  "darkLivingReview": "Ver los 20 mundos dark fantasy",
+  "poses": {
+    "enable": "Poses a saltos",
+    "help": "Cada pose se mantiene durante su intervalo. El ambiente sigue animándose. Usa imágenes PNG recortadas; ajusta la altura y la posición para conservar el tamaño del personaje y su apoyo en el suelo.",
+    "number": "Pose {{count}}",
+    "image": "Imagen de la pose",
+    "choose": "Seleccionar una imagen sin fondo",
+    "duration": "Duración (s)",
+    "height": "Altura relativa",
+    "x": "Desplazamiento horizontal",
+    "lift": "Elevación desde el suelo",
+    "earlier": "Mover antes",
+    "later": "Mover después",
+    "remove": "Quitar pose",
+    "add": "Añadir pose"
+  },
+  "stillnessReview": "Ver cámara fija y poses",
+  "movingCutoutsReview": "Personajes en movimiento · 6 clips ↗",
+  "portalRidesReview": "Ver calzada y dragón"
 }

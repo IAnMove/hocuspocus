@@ -1,7 +1,7 @@
 import { validFraming } from './framing'
 import type { Scene3DCamera, Scene3DDocument, Scene3DLight, Scene3DSlot } from './types.ts'
 
-const CAMERA_FAMILIES = new Set(['establishment', 'follow', 'orbit', 'reveal', 'encounter', 'pursuit', 'product', 'musical', 'side', 'front', 'chase', 'hood', 'wing'])
+const CAMERA_FAMILIES = new Set(['fixed', 'establishment', 'follow', 'orbit', 'reveal', 'encounter', 'pursuit', 'product', 'musical', 'side', 'front', 'chase', 'hood', 'wing'])
 const SLOT_ROLES = new Set(['subject_1', 'subject_2', 'prop', 'background'])
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 const positive = (value: unknown): value is number => finite(value) && value > 0

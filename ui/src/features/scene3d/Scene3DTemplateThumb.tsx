@@ -1,13 +1,19 @@
+import { isCutoutMotionTemplate } from './cutoutMotionIds'
 import { useEffect, useRef } from 'react'
 import type { Scene3DTemplateId } from './types.ts'
 import { subscribeTemplateThumb } from './templatePreview.ts'
+import { isDarkFantasyTemplate } from './darkFantasyIds'
+import { isCreativeTemplate } from './creativeTemplateIds'
 
-export function Scene3DTemplateThumb({ id }: { id: Scene3DTemplateId }) {
+export function Scene3DTemplateThumb({ id, portrait = false }: { id: Scene3DTemplateId; portrait?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null)
+  const bundled = isCutoutMotionTemplate(id) ? 'moving-cutouts' : id.startsWith('dark-still-') ? 'dark-stillness' : isDarkFantasyTemplate(id) ? 'dark-fantasy' : isCreativeTemplate(id) ? 'creative' : null
   useEffect(() => {
-    if (!canvas.current) return
+    if (!canvas.current || bundled) return
     return subscribeTemplateThumb(id, canvas.current)
-  }, [id])
+  }, [id, bundled])
+  if (bundled) return <img src={`/examples/${bundled}/${id}.png`} alt="" loading="lazy"
+    className={`${portrait ? 'h-44' : 'h-[104px]'} w-full rounded-md bg-[#10131c] object-contain`} data-testid={`world3d-template-thumb-${id}`} />
   return <canvas
     ref={canvas}
     width={320}
