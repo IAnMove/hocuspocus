@@ -1,10 +1,10 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Points, Scene, ShaderMaterial, Vector3, VideoTexture } from 'three'
 import { buildEnergyEffect } from './energyObjects'
-import { applyPortalMedia } from './worldPack'
+import { bindPortalMedia, type PortalMediaRuntime } from './portalMediaRuntime'
 import { fxRandom } from './types'
 import { WORLD_BEAM_KINDS, type WorldSfx, type WorldSfxAnchor, type WorldVec3 } from './world'
 
-export type WorldSfxGpu = { root: Group; kind: WorldSfx['kind']; color: string; sourceUrl?: string }
+export type WorldSfxGpu = { root: Group; kind: WorldSfx['kind']; color: string; sourceUrl?: string; media?: PortalMediaRuntime }
 export type WorldSlotPose = {
   id: string
   position: readonly [number, number, number]
@@ -229,16 +229,17 @@ export function syncWorldSfx(
   for (const [id, gpu] of nodes) {
     if (live.has(id)) continue
     scene.remove(gpu.root)
+    gpu.media?.dispose()
     disposeRoot(gpu.root)
     nodes.delete(id)
   }
   for (const cue of cues ?? []) {
     let gpu = nodes.get(cue.id)
     if (!gpu || gpu.kind !== cue.kind || gpu.color !== cue.color || gpu.sourceUrl !== cue.sourceUrl) {
-      if (gpu) { scene.remove(gpu.root); disposeRoot(gpu.root) }
+      if (gpu) { scene.remove(gpu.root); gpu.media?.dispose(); disposeRoot(gpu.root) }
       gpu = { root: build(cue.kind, cue.color), kind: cue.kind, color: cue.color, sourceUrl: cue.sourceUrl }
       gpu.root.userData.worldSfxId = cue.id
-      if (cue.kind === 'media_portal') applyPortalMedia(gpu.root, cue.sourceUrl)
+      if (cue.kind === 'media_portal') gpu.media = bindPortalMedia(gpu.root, cue.sourceUrl)
       scene.add(gpu.root)
       nodes.set(cue.id, gpu)
     }
@@ -256,6 +257,7 @@ export function syncWorldSfx(
     else if (cue.kind === 'arcane_missiles') poseMissiles(gpu.root, cue, origin.point, destination.point, Math.max(0, seconds - cue.start), Math.max(0.001, cue.end - cue.start))
     else if (WORLD_BEAM_KINDS.has(cue.kind)) poseBeam(gpu.root, cue, origin.point, destination.point, seconds)
     else poseFixed(gpu.root, cue, origin.point)
+    if (gpu.media) void gpu.media.seek(worldSfxMediaTime(cue, seconds)).catch(error => { gpu!.media!.error = error })
     if (active) animate(gpu.root, cue, seconds)
   }
 }
@@ -271,4 +273,23 @@ export function worldSfxIdFromObject(object: { userData?: { worldSfxId?: string 
 
 export function worldSfxWorldPosition(cue: WorldSfx): Vector3 {
   return scratch.set(cue.position.x, cue.position.y, cue.position.z)
+}
+
+/** Hold before/after the cue; seeking backwards restores the same media frame. */
+export function worldSfxMediaTime(cue: WorldSfx, seconds: number) {
+  return Math.max(0, Math.min(seconds - cue.start, cue.end - cue.start))
+}
+
+export function worldSfxMediaReady(nodes: Map<string, WorldSfxGpu> | undefined, cues: readonly WorldSfx[] = []) {
+  return cues.every(cue => {
+    if (cue.kind !== 'media_portal' || !cue.sourceUrl) return true
+    const gpu = nodes?.get(cue.id)
+    if (!gpu || gpu.sourceUrl !== cue.sourceUrl || gpu.kind !== cue.kind) return false
+    if (gpu.media?.error) throw gpu.media.error
+    return Boolean(gpu.media?.ready)
+  })
+}
+
+export async function prepareWorldSfxMedia(nodes: Map<string, WorldSfxGpu> | undefined, cues: readonly WorldSfx[] = [], seconds: number) {
+  await Promise.all(cues.map(cue => nodes?.get(cue.id)?.media?.seek(worldSfxMediaTime(cue, seconds))))
 }

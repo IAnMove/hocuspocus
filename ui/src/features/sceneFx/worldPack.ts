@@ -1,6 +1,6 @@
 import {
   BufferAttribute, BufferGeometry, CircleGeometry, Color, DoubleSide, Group, Mesh,
-  PlaneGeometry, Points, ShaderMaterial, SphereGeometry, SRGBColorSpace, Texture, TextureLoader, VideoTexture,
+  PlaneGeometry, Points, ShaderMaterial, SphereGeometry,
 } from 'three'
 import { energyMaterial, ENERGY_NOISE, softSparkMaterial } from './energyShaders'
 import { fxRandom } from './types'
@@ -159,57 +159,4 @@ export function buildPackedEffect(kind: WorldSfxKind, color: string): Group | nu
     case 'media_portal': return mediaPortal(color)
     default: return null
   }
-}
-
-const textures = new Map<string, Texture>()
-
-export function applyPortalMedia(root: Group, url?: string) {
-  const mesh = root.children.find(child => child.userData.kind === 'portalMedia')
-  if (!(mesh instanceof Mesh) || !(mesh.material instanceof ShaderMaterial)) return
-  const uniforms = mesh.material.uniforms
-  if (typeof document === 'undefined') return
-  if (!url) {
-    uniforms.uMap.value = null
-    uniforms.uHasMap.value = 0
-    return
-  }
-  const cached = textures.get(url)
-  if (cached) {
-    uniforms.uMap.value = cached
-    uniforms.uHasMap.value = 1
-    return
-  }
-  if (/\.(mp4|webm|mov|mkv)(\?|$)/i.test(url) || url.startsWith('blob:')) {
-    const video = document.createElement('video')
-    video.src = url
-    video.crossOrigin = 'anonymous'
-    video.loop = true
-    video.muted = true
-    video.playsInline = true
-    video.autoplay = true
-    const bind = () => {
-      const texture = new VideoTexture(video)
-      texture.colorSpace = SRGBColorSpace
-      textures.set(url, texture)
-      uniforms.uMap.value = texture
-      uniforms.uHasMap.value = 1
-      void video.play().catch(() => undefined)
-    }
-    video.addEventListener('loadeddata', bind, { once: true })
-    if (!/\.(mp4|webm|mov|mkv)(\?|$)/i.test(url)) {
-      new TextureLoader().load(url, texture => {
-        texture.colorSpace = SRGBColorSpace
-        textures.set(url, texture)
-        uniforms.uMap.value = texture
-        uniforms.uHasMap.value = 1
-      }, undefined, () => undefined)
-    }
-    return
-  }
-  new TextureLoader().load(url, texture => {
-    texture.colorSpace = SRGBColorSpace
-    textures.set(url, texture)
-    uniforms.uMap.value = texture
-    uniforms.uHasMap.value = 1
-  }, undefined, () => undefined)
 }

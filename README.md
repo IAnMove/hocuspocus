@@ -284,6 +284,8 @@ In **Studios → Video 3D → Shot library**, **Perspectives** adds 20 new verti
 
 **Video background removal** is available in **Studio → Tools → Remove background**. Choose a video to create a reusable transparent WebM with audio. The [Moving Cutouts gallery](ui/public/examples/moving-cutouts/README.md) adds six native compositions: a walking knight and an illustrated skater over independently moving backgrounds. Their editable templates are included in the shot library.
 
+The [Skate Portal study](ui/public/examples/skate-portal/README.md) joins four editable shots into a vertical jump between the coast and a cloud road. Portal videos follow the scene clock, including backward scrubbing and export; each portal owns and releases its media independently.
+
 The preview fits portrait scenes between black sidebars while keeping editor controls readable. **Expand video** shows just the picture fullscreen. Select covered characters, props or backgrounds in **Scene objects**, then move, rotate or scale them. For a cutout layer, enable **Animate this layer** and choose a video from the gallery or upload one; its depth and individual PSX treatment are retained in saved scenes and native exports.
 
 For a stationary viewpoint, select **Fixed camera**. Image cutouts can use **Held poses** with per-pose duration, relative height and ground placement. **Preserve transparency** supports images and videos that already have alpha, including transparent WebM; it does not segment an opaque video. These controls remain editable in saved scenes and portable templates.

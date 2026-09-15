@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { bindScreenMedia } from './screenMediaRuntime'
+import { prepareWorldSfxMedia, worldSfxMediaReady } from '../sceneFx/worldRuntime'
 import { namedSceneMeshes, namedSceneNodes } from './screenPlane'
 import { slotMountKey } from './backdrop'
 import { createTransformGizmo, type TransformMode, type TransformPatch } from './transformGizmo.ts'
@@ -177,6 +178,7 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     async prepareFrame(seconds, frozen) {
       const world = worldRef.current
       if (!world) return
+      await prepareWorldSfxMedia(world.worldSfx, frozen.worldSfx, seconds)
       await Promise.all(frozen.slots.map(slot => slot.screen ? world.slots.get(slot.id)?.screen?.seek(seconds, slot.screen) : undefined))
     },
     paint(seconds, frozen) {
@@ -187,7 +189,7 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     },
     ready(slots) {
       const world = worldRef.current
-      return Boolean(world && worldAssetsReady(world, slots))
+      return Boolean(world && worldAssetsReady(world, slots) && worldSfxMediaReady(world.worldSfx, (exportLockRef.current ?? documentRef.current).worldSfx))
     },
     setExportSize(width, height) {
       const world = worldRef.current

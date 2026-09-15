@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Salto entre mundos · HocusPocus</title>
+  <link rel="stylesheet" href="../perspective-lab/review.css">
+  <link rel="stylesheet" href="../moving-cutouts/dark.css"
+  <link rel="stylesheet" href="portal.css">
+  <script type="module" src="../perspective-lab/review.js"></script>
+</head>
+<body data-review-key="hocuspocus:skate-portal-review:v1" data-collection="hocuspocus-skate-portal-20260915" data-report-filename="mis-valoraciones-salto-entre-mundos.json">
+  <header>
+    <nav><a class="brand" href="/">✦ HOCUSPOCUS</a><a href="../moving-cutouts/">Ver las composiciones anteriores ↗</a></nav>
+    <div class="intro"><div><p class="eyebrow">UN PATINADOR · DOS MUNDOS · CUATRO PLANOS</p><h1>Un salto.<br>Otro mundo.</h1></div>
+      <div class="lead"><p>Del mar a una carretera en el cielo.</p><p>El mismo personaje atraviesa una ventana entre dos paisajes en movimiento. El salto se ralentiza; la cámara cambia de escala; cada capa sigue su propio ritmo.</p><p><a href="#film">Ver el montaje ↓</a> · <a href="#actors">Ver el movimiento recortado ↓</a></p></div>
+    </div>
+    <div class="instructions"><span>01 <b>Reproduce</b> y mira el fondo.</span><span>02 <b>Valora</b> el movimiento y la composición.</span><span>03 <b>Descarga</b> tus notas o el plano editable.</span></div>
+  </header>
+  <main>
+    <section id="film" class="feature-film"><video data-review-video controls loop playsinline preload="metadata" poster="film-poster.png" src="salto-entre-mundos.mp4" aria-label="Salto entre mundos, montaje completo"></video><div><p class="eyebrow">EL MONTAJE COMPLETO</p><h2>La costa queda al otro lado.</h2><p>Acercarse. Saltar. Cambiar de mundo. Aterrizar.</p><p>Vídeo vertical de 7,6 segundos, sin sonido. El fondo del portal también es un vídeo: se puede ver el destino antes de cruzarlo.</p><p><a href="salto-entre-mundos.mp4" download>Descargar el vídeo ↓</a></p><p><a href="montaje.json" download>Ver los cortes y ajustes (JSON) ↓</a></p><p>Debajo están los cuatro planos editables. Puedes cambiar los mundos, la trayectoria o la velocidad del patinador. Para volver a montarlos, añade los cuatro MP4 en orden al Editor de vídeo. El JSON es un registro de ajustes.</p></div></section>
+    <div class="toolbar">
+      <label>Mostrar<select id="filter"><option value="all">Los 4 planos</option><option value="pending">Sin evaluar</option><option value="keep">Me encantan</option><option value="refine">Para retocar</option><option value="discard">Descartadas</option></select></label>
+      <label>PSX<select id="style"><option value="all">Cualquier pieza</option><option value="personaje">En el personaje</option><option value="sin filtro">Sin filtro PSX</option></select></label>
+      <span id="progress" role="status">Cargando colección…</span>
+      <button id="export" class="export">Descargar mis valoraciones ↓</button>
+    </div>
+    <p id="storage" class="storage">Las valoraciones se guardan en este navegador. Descárgalas para conservar una copia o compartirlas.</p>
+    <div id="grid" class="grid" aria-label="Planos del salto para evaluar"></div>
+    <p id="empty" hidden>No hay propuestas con estos filtros.</p>
+    <section class="edit-help"><span class="eyebrow">HECHO CON LAS HERRAMIENTAS DE HOCUSPOCUS</span><h2>Un movimiento, varias capas.</h2><p>El salto se generó con MiniMax H3 Fused Turbo y se recortó con <b>Herramientas → Quitar fondo</b>. Vídeo 3D combina ese WebM transparente con la costa, las nubes y un portal con vídeo. El Editor de vídeo une los cuatro planos.</p><p>Descarga <b>Plano</b> y ábrelo con <b>Vídeo 3D → Cargar plano</b>, o importa la <b>Plantilla reutilizable</b> en Mis escenarios. En <b>Animar esta capa</b> puedes modificar inicio y velocidad; en movimiento, la trayectoria. El portal usa el reloj de la escena al reproducir y exportar.</p><p>La limpieza es automática: junto a las ruedas puede quedar una pequeña sombra del original. La trayectoria añade altura al salto para hacerlo expresivo; sigue siendo una composición de ilustración, con la perspectiva de su toma original.</p></section>
+    <section id="actors" class="edit-help"><span class="eyebrow">DEL ORIGINAL A UNA CAPA INDEPENDIENTE</span><h2>El salto antes de componer.</h2><div class="actors">
+      <article><h3>Original generado</h3><video data-review-video class="actor-clip" src="skate-jump-original.mp4" controls muted loop playsinline preload="metadata"></video></article>
+      <article><h3>Movimiento transparente</h3><video data-review-video class="actor-clip" src="skate-jump.webm" controls muted loop playsinline preload="metadata"></video><p><a href="skate-jump.webm" download>Descargar WebM transparente ↓</a></p></article>
+    </div></section>
+  </main>
+  <footer><a href="/">Volver a HocusPocus ↗</a><span>Movimiento y fondos generados en HocusPocus · recorte de vídeo y composición con sus herramientas nativas.</span></footer>
+  <dialog id="viewer" aria-label="Vista ampliada de la plantilla">
+    <div class="viewer-head"><h2 id="viewer-title"></h2><button id="close" aria-label="Cerrar vista ampliada">Cerrar ✕</button></div>
+    <video id="large-video" controls loop playsinline preload="none"></video>
+    <div class="viewer-foot"><button id="previous">← Anterior</button><span id="viewer-count"></span><button id="next">Siguiente →</button></div>
+  </dialog>
+</body>
+</html>
