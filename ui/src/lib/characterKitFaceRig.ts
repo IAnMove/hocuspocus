@@ -417,7 +417,7 @@ export function previewPercentToImagePixel(
   }
 }
 
-/** Fill an elliptical mouth box with sampled nearby skin. Leaves the rest of the pose intact. */
+/** Reconstruct nearby skin shading inside the selected box, preserving the pose's alpha. */
 function mouthWipeDistance(nx: number, ny: number, shape?: 'ellipse' | 'rectangle') {
   return shape === 'rectangle' ? Math.max(nx * nx, ny * ny) : nx * nx + ny * ny
 }
@@ -434,44 +434,37 @@ export function wipeMouthRegion(
   const next = new Uint8ClampedArray(rgba)
   const rx = Math.max(1, region.rx)
   const ry = Math.max(1, region.ry)
-  const samples: number[] = []
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const nx = (x - region.cx) / rx
-      const ny = (y - region.cy) / ry
-      const d = mouthWipeDistance(nx, ny, region.shape)
-      if (d < 1.05 || d > 1.45) continue
-      const i = (y * width + x) * 4
-      if (next[i + 3] < 16) continue
-      samples.push(next[i], next[i + 1], next[i + 2])
-    }
+  const samples: { x: number; y: number; r: number; g: number; b: number }[] = []
+  // Sampling all around the boundary retains cheek/jaw illumination. One
+  // median colour used to leave a conspicuous flat rectangle on shaded faces.
+  for (let step = 0; step < 48; step++) {
+    const angle = step * Math.PI * 2 / 48, cos = Math.cos(angle), sin = Math.sin(angle)
+    const radius = 1.12 / (region.shape === 'rectangle' ? Math.max(Math.abs(cos), Math.abs(sin)) : 1)
+    const x = Math.round(region.cx + cos * rx * radius), y = Math.round(region.cy + sin * ry * radius)
+    if (x < 0 || x >= width || y < 0 || y >= height) continue
+    const i = (y * width + x) * 4
+    if (rgba[i + 3] < 128) continue
+    samples.push({ x, y, r: rgba[i], g: rgba[i + 1], b: rgba[i + 2] })
   }
-  let fillR = 210
-  let fillG = 170
-  let fillB = 140
-  if (samples.length >= 12) {
-    const channel = (offset: number) => {
-      const values = []
-      for (let index = offset; index < samples.length; index += 3) values.push(samples[index])
-      values.sort((a, b) => a - b)
-      return values[Math.floor(values.length / 2)]
-    }
-    fillR = channel(0)
-    fillG = channel(1)
-    fillB = channel(2)
-  }
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
+  if (!samples.length) return next
+  for (let y = Math.max(0, Math.floor(region.cy - ry)); y <= Math.min(height - 1, Math.ceil(region.cy + ry)); y += 1) {
+    for (let x = Math.max(0, Math.floor(region.cx - rx)); x <= Math.min(width - 1, Math.ceil(region.cx + rx)); x += 1) {
       const nx = (x - region.cx) / rx
       const ny = (y - region.cy) / ry
       const d = mouthWipeDistance(nx, ny, region.shape)
       if (d > 1) continue
       const i = (y * width + x) * 4
+      if (!rgba[i + 3]) continue
+      let total = 0, fillR = 0, fillG = 0, fillB = 0
+      for (const sample of samples) {
+        const weight = 1 / Math.max(1, (x - sample.x) ** 2 + (y - sample.y) ** 2)
+        total += weight; fillR += sample.r * weight; fillG += sample.g * weight; fillB += sample.b * weight
+      }
+      fillR /= total; fillG /= total; fillB /= total
       const mix = d > .72 ? (1 - d) / .28 : 1
       next[i] = Math.round(next[i] * (1 - mix) + fillR * mix)
       next[i + 1] = Math.round(next[i + 1] * (1 - mix) + fillG * mix)
       next[i + 2] = Math.round(next[i + 2] * (1 - mix) + fillB * mix)
-      if (next[i + 3] > 0) next[i + 3] = 255
     }
   }
   return next

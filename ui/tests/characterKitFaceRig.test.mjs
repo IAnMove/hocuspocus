@@ -223,6 +223,20 @@ test('wiping a mouth region fills the ellipse without touching distant pixels', 
   assert.equal(kit.provenance.at(-1).method, 'character-kit-mouth-wipe')
 })
 
+test('mouth removal follows cheek shading and preserves transparency instead of painting a flat box', () => {
+  const width = 80, height = 60, rgba = new Uint8ClampedArray(width * height * 4)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = (y * width + x) * 4, mouth = x > 27 && x < 53 && y > 26 && y < 34
+    rgba.set([mouth ? 20 : 90 + x * 2, mouth ? 0 : 60 + x, mouth ? 0 : 50 + x, x === 40 ? 0 : 180], i)
+  }
+  const wiped = wipeMouthRegion(rgba, width, height, { cx: 40, cy: 30, rx: 20, ry: 10, shape: 'rectangle' })
+  const left = (30 * width + 27) * 4, right = (30 * width + 53) * 4
+  assert.ok(wiped[right] - wiped[left] > 20, 'the cheek illumination should vary across the repaired skin')
+  assert.ok(wiped[(30 * width + 35) * 4] > 120, 'remove the original dark mouth')
+  for (let i = 3; i < rgba.length; i += 4) assert.equal(wiped[i], rgba[i], 'alpha must be preserved')
+  assert.deepEqual(wiped.slice(0, width * 4), rgba.slice(0, width * 4), 'pixels outside the mask are untouched')
+})
+
 test('locking mouth placement copies one calibration onto every viseme', () => {
   const kit = { ...createCharacterKit('Luna'), base: pose }
   const locked = lockFaceRigMouthPlacement(kit, 'base', { offsetX: 1, offsetY: -14, scale: .05, rotation: 0 })
