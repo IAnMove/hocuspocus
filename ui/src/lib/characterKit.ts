@@ -20,6 +20,9 @@ export interface CharacterKitAsset {
   prompt?: string
   model?: string
   workspace?: string
+  /** Intrinsic raster dimensions, resolved when mounting the pose. */
+  width?: number
+  height?: number
   facePatch?: FacePatchMetadata
 }
 
@@ -279,6 +282,19 @@ export function appliedCharacterFaceTransform(
   }
 }
 
+/** Character Creator anchors use a square around the source, not scene percentages. */
+export function fittedCharacterFaceTransform(pose: SceneLayer['transform'], anchor: CharacterFaceAnchor,
+  source: { width: number; height: number }, viewport: { width: number; height: number }): SceneLayer['transform'] {
+  const fit = Math.min(viewport.width / source.width, viewport.height / source.height) * pose.scale
+  const edge = Math.max(source.width, source.height) * fit
+  const angle = (pose.rotation ?? 0) * Math.PI / 180
+  const dx = anchor.offsetX * edge / 100, dy = anchor.offsetY * edge / 100
+  return { x: pose.x + (dx * Math.cos(angle) - dy * Math.sin(angle)) * 100 / viewport.width,
+    y: pose.y + (dx * Math.sin(angle) + dy * Math.cos(angle)) * 100 / viewport.height,
+    scale: anchor.scale * edge / Math.min(viewport.width, viewport.height), opacity: 1,
+    rotation: (pose.rotation ?? 0) + anchor.rotation }
+}
+
 const stateForBinding = (state: CharacterMouthState): SceneFaceBindingState => state
 
 export function mountCharacterKitLayers(
@@ -300,7 +316,9 @@ export function mountCharacterKitLayers(
   }
   const anchors = kit.anchors[poseId] ?? kit.anchors.base
   const mouthAnchor = anchors?.mouth ?? DEFAULT_CHARACTER_MOUTH_ANCHOR
-  const faceTransform = (anchor: CharacterFaceAnchor) => appliedCharacterFaceTransform(transform, anchor)
+  const faceTransform = (anchor: CharacterFaceAnchor) => poseAsset.width && poseAsset.height
+    ? fittedCharacterFaceTransform(transform, anchor, { width: poseAsset.width, height: poseAsset.height }, viewport)
+    : appliedCharacterFaceTransform(transform, anchor)
   const layers: SceneLayer[] = [pose]
   let z = 21
   for (const state of CHARACTER_MOUTH_STATES) {

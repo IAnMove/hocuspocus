@@ -241,3 +241,21 @@ test('identity still prefers identityReference then base, and TTS prefers the ki
   })
   assert.equal(resolvedCharacterTts().source, 'none')
 })
+
+test('calibrated mouths align with source pixels in portrait, landscape and rotated shots', () => {
+  for (const viewport of [{ width: 720, height: 1280 }, { width: 1280, height: 720 }]) {
+    for (const rotation of [0, 35]) {
+      const kit = { ...createCharacterKit('Calibrated'), base: { ...asset('body'), kind: 'image', width: 864, height: 1152 },
+        mouth: { closed: asset('closed'), wide: asset('wide') }, eyes: {},
+        anchors: { base: { mouth: { offsetX: -1, offsetY: -22.5, scale: .095, rotation: 0 } } } }
+      const pose = { x: 50, y: 68, scale: .7, opacity: 1, rotation }
+      const mouth = mountCharacterKitLayers(kit, 'base', pose, 3, viewport)[1]
+      // The same source point used by Character Creator and the saved resting face.
+      const fit = Math.min(viewport.width / 864, viewport.height / 1152) * pose.scale
+      const dx = -.01 * 1152 * fit, dy = -.225 * 1152 * fit, angle = rotation * Math.PI / 180
+      assert.ok(Math.abs((mouth.transform.x - pose.x) * viewport.width / 100 - (dx * Math.cos(angle) - dy * Math.sin(angle))) < 1e-8)
+      assert.ok(Math.abs((mouth.transform.y - pose.y) * viewport.height / 100 - (dx * Math.sin(angle) + dy * Math.cos(angle))) < 1e-8)
+      assert.ok(Math.abs(mouth.transform.scale * Math.min(viewport.width, viewport.height) - .095 * 1152 * fit) < 1e-8)
+    }
+  }
+})

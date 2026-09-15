@@ -1,3 +1,4 @@
+import { withCharacterPoseDimensions } from '../../lib/characterPoseDimensions'
 import { sceneAudioWav, supportsSceneAac } from '../../features/sceneFx/audioExport'
 import { paintSceneFx } from '../../features/sceneFx/paint'
 import { waitForSceneImages } from '../../lib/sceneMediaReady'
@@ -2413,12 +2414,15 @@ export function SceneAnimatorPanel() {
       await persistCharacterKitDraft(characterKitDraft, true)
     } finally { setCharacterKitBusy(false) }
   }
-  const mountCharacterKit = () => {
+  const mountCharacterKit = async () => {
     if (!characterKitDraft) return
     try {
       const poseId = characterKitPoseId.trim() || 'base'
+      const fittedKit = await withCharacterPoseDimensions(characterKitDraft, workspace, poseId)
+      setCharacterKitDraft(fittedKit)
+      setCharacterKitLibrary(current => ({ ...current, kits: { ...current.kits, [fittedKit.id]: fittedKit } }))
       const mounted = ensureCutoutFacePlayback(
-        mountCharacterKitLayers(characterKitDraft, poseId, undefined, scene.duration, scene),
+        mountCharacterKitLayers(fittedKit, poseId, undefined, scene.duration, scene),
         scene.duration,
         fps,
         [],
@@ -2427,7 +2431,7 @@ export function SceneAnimatorPanel() {
       const mountedIds = new Set(mounted.map(layer => layer.id))
       if (scene.layers.some(layer => mountedIds.has(layer.id))) {
         updateScene(current => {
-          const synced = syncMountedCharacterKitLayers(current.layers, characterKitDraft, poseId, current) as AnimatorLayer[]
+          const synced = syncMountedCharacterKitLayers(current.layers, fittedKit, poseId, current) as AnimatorLayer[]
           const layers = ensureCutoutFacePlayback(synced, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
           return { ...current, layers }
         })
