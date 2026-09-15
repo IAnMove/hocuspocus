@@ -3,10 +3,11 @@ import assert from 'node:assert/strict'
 import { imagePoseAtTime, imagePoseBounds, imagePoseRect, parseImagePoses } from '../src/features/scene3d/imagePoseSequence.ts'
 import { defaultMediaScreen, parseMediaScreen, mediaScreenMountKey } from '../src/features/scene3d/mediaScreen.ts'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
-import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
+import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { slotMountKey } from '../src/features/scene3d/backdrop.ts'
 import { worldAssetsReady } from '../src/features/scene3d/gpu.ts'
 import { cameraEyeAtTime, cameraLookAtTime } from '../src/features/scene3d/camera.ts'
+import { createUserTemplate, remountUserTemplate } from '../src/features/scene3d/userTemplates.ts'
 
 const poses = () => parseImagePoses([
   { sourceUrl: '/examples/standing.png', duration: 1, height: .9 },
@@ -66,4 +67,28 @@ test('pose sources, durations, placement and alpha survive native scene reopenin
   assert.equal(worldAssetsReady(world, [{ ...slot, screen: changed }]), false)
   gpu.screenError = new Error('pose-sequence-load-timeout')
   assert.throws(() => worldAssetsReady(world, [slot]), /pose-sequence-load-timeout/)
+})
+
+test('a layout-only scenario still exposes pose media after the still is stripped', () => {
+  const pack = createUserTemplate({
+    document: applyScene3DTemplate('dark-still-time-wounds'),
+    title: 'Wounds layout',
+    includeAssets: false,
+    id: 'user-wounds',
+  })
+  assert.ok(pack)
+  const hero = pack.document.slots.find(slot => slot.id === 'hero')
+  assert.equal(hero.sourceUrl, '')
+  assert.equal(hero.screen.sourceUrl, '/examples/dark-stillness/wounded-knight.png')
+  assert.equal(hero.screen.poseSequence.length, 7)
+  const applied = remountUserTemplate(pack, createDefaultScene3DDocument(), false)
+  const live = applied.slots.find(slot => slot.id === 'hero')
+  assert.equal(live.sourceUrl, '')
+  assert.ok(live.screen.sourceUrl)
+  assert.equal(live.screen.poseSequence.length, 7)
+  const gpu = { mountKey: slotMountKey(live), loaded: true }
+  const world = { dressingReady: true, slots: new Map([[live.id, gpu]]) }
+  assert.equal(worldAssetsReady(world, [live]), false)
+  gpu.screen = { ready: true }
+  assert.equal(worldAssetsReady(world, [live]), true)
 })

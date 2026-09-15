@@ -124,7 +124,7 @@ function loadSlotImage(
   repaint: () => void,
 ) {
   const url = slot.sourceUrl
-  if (!url) return
+  if (!url) { repaint(); return }
   new TextureLoader().load(
     url,
     (texture: import('three').Texture) => {
