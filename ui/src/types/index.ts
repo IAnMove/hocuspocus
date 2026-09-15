@@ -158,6 +158,7 @@ export interface GenerateParams {
   pause_seconds?: number
   temperature?: number
   custom_settings?: Record<string, unknown>
+  model_mode?: number | string
   // Loose params: backend accepts additional optional fields. Declared
   // explicitly here so TypeScript narrows JSX children correctly (an
   // index signature widens explicit fields to `unknown` in some contexts).

@@ -1,3 +1,4 @@
+import { Yue2Controls } from './Yue2Controls'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Music, Sparkles, Loader2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -130,6 +131,7 @@ export function MusicControls() {
 
   return (
     <div className="space-y-3">
+      <Yue2Controls />
       {/* Header + instrumental toggle */}
       <div className="flex items-center justify-between">
         <label className="text-[11px] text-text-muted uppercase tracking-wider flex items-center gap-1.5">

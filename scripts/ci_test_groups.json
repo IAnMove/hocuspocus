@@ -137,6 +137,7 @@
         "tests/test_video_generation_spec.py",
         "tests/test_voice_reference_settings.py",
         "tests/test_wangp1272_runtime.py",
+        "tests/test_wangp1300_audio.py",
         "tests/test_wizard_conversations.py",
         "tests/test_wizard_mcp_corpus.py",
         "tests/test_wizard_workflows.py",

@@ -34,6 +34,10 @@ vigentes antes de integrar; la evidencia local no equivale a publicación.
 
 ## Lectura mínima
 
+YuE2 y AuK (WanGP 13.00): contrato de adopción y resultados de la investigación
+de Deepy móvil en [WANGP_1300_AUDIO](WANGP_1300_AUDIO.md). Consultar el PR y su
+HEAD antes de integrar; una rama de implementación no equivale a publicación.
+
 Lee este documento y el contrato del dominio que vas a modificar. Para contribuir,
 consulta [BRANCHING](BRANCHING.md) y [AGENT_QA_POLICY](AGENT_QA_POLICY.md).
 La [cola](SLICE_QUEUE.md) contiene solo pendientes. No leas todo `docs/` ni el
