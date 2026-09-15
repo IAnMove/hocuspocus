@@ -32,6 +32,9 @@ function definitionKit(library: CharacterKitLibrary | undefined, id: string, see
   if (seed?.id !== id) return saved
   return saved ? { ...saved, base: saved.base ?? seed.base, identityReference: saved.identityReference ?? seed.identityReference } : seed
 }
+function isDefinitionDirty(kit: CharacterKit | undefined, name: string, voice: CharacterVoice | undefined, model: ApiOutput | undefined) {
+  return Boolean(kit && (name !== kit.name || JSON.stringify(voice) !== JSON.stringify(kit.voice) || model))
+}
 function canSaveDefinition(library: CharacterKitLibrary | undefined, name: string, slot: Scene3DSlot | undefined) {
   if (!library || !name.trim()) return false
   return slot ? Boolean(slot.speech?.face && slot.sourceRef) : true
@@ -87,7 +90,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
   const alive = useRef(true)
   const hasSlot = Boolean(slot)
   const kit = definitionKit(library, id, initialKit)
-  const dirty = Boolean(kit && (name !== kit.name || JSON.stringify(voice) !== JSON.stringify(kit.voice) || model))
+  const dirty = isDefinitionDirty(kit, name, voice, model)
   useEffect(() => { onBusyChange?.(busy || speechBusy); return () => onBusyChange?.(false) }, [busy, speechBusy, onBusyChange])
   useEffect(() => { onDirtyChange?.(dirty || workshopDirty); return () => onDirtyChange?.(false) }, [dirty, workshopDirty, onDirtyChange])
   useEffect(() => { onDraftChange?.({ name, voice, model }) }, [name, voice, model, onDraftChange])
