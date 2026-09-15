@@ -7,6 +7,7 @@ export function Scene3DImageLookControls({ value = {}, disabled, onChange }: {
   const { t } = useUiTranslation('scene3dEditor')
   return <fieldset disabled={disabled} className="my-2 flex flex-wrap items-center gap-3 rounded border border-border p-2 text-xs">
     <legend className="px-1">{t('imageLook.title')}</legend>
+    <label className="flex min-h-9 items-center gap-2">{t('imageLook.roll')}<input className="w-20 rounded border border-border bg-bg-tertiary p-2" type="number" min="-180" max="180" step="1" value={value.roll ?? 0} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) onChange({ ...value, roll: Math.max(-180, Math.min(180, e.target.valueAsNumber)) }) }} /></label>
     <label className="flex min-h-9 items-center gap-2"><input type="color" value={value.tint ?? '#ffffff'} onChange={event => onChange({ ...value, tint: event.target.value })} />{t('imageLook.tint')}</label>
     <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={value.unlit === true} onChange={event => onChange({ ...value, unlit: event.target.checked })} />{t('imageLook.unlit')}</label>
     <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={value.grounded === true} onChange={event => onChange({ ...value, grounded: event.target.checked, shadow: value.shadow ?? .45 })} />{t('imageLook.grounded')}</label>

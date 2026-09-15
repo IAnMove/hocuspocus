@@ -1347,7 +1347,11 @@
     "background": "Full scene background",
     "floorColor": "Floor color",
     "backdropFloor": "Floor from backdrop",
-    "floorSourceHeight": "Lower backdrop portion used as floor"
+    "floorSourceHeight": "Lower backdrop portion used as floor",
+    "road": "Endless road",
+    "road_speed": "Speed (m/s)",
+    "road_slope": "Slope (°)",
+    "road_offset": "Continuity (s)"
   },
   "imageLook": {
     "title": "Image appearance",
@@ -1356,7 +1360,8 @@
     "psx": "PSX on this layer only",
     "intensity": "PSX intensity",
     "grounded": "Align ground to visible feet",
-    "shadow": "Contact shadow"
+    "shadow": "Contact shadow",
+    "roll": "Tilt (°)"
   },
   "preview": {
     "title": "Preview",
@@ -1394,5 +1399,6 @@
     "add": "Add pose"
   },
   "stillnessReview": "Review fixed cameras and poses",
-  "movingCutoutsReview": "Moving characters · 6 clips ↗"
+  "movingCutoutsReview": "Moving characters · 6 clips ↗",
+  "portalRidesReview": "Review downhill and dragon"
 }

@@ -1347,7 +1347,11 @@
     "background": "Fondo de escena completo",
     "floorColor": "Color del suelo",
     "backdropFloor": "Suelo del escenario",
-    "floorSourceHeight": "Porción inferior del fondo usada como suelo"
+    "floorSourceHeight": "Porción inferior del fondo usada como suelo",
+    "road": "Calzada infinita",
+    "road_speed": "Velocidad (m/s)",
+    "road_slope": "Pendiente (°)",
+    "road_offset": "Continuidad (s)"
   },
   "imageLook": {
     "title": "Aspecto de la imagen",
@@ -1356,7 +1360,8 @@
     "psx": "PSX solo en esta capa",
     "intensity": "Intensidad PSX",
     "grounded": "Ajustar apoyo a los pies",
-    "shadow": "Sombra de contacto"
+    "shadow": "Sombra de contacto",
+    "roll": "Inclinación (°)"
   },
   "preview": {
     "title": "Vista previa",
@@ -1394,5 +1399,6 @@
     "add": "Añadir pose"
   },
   "stillnessReview": "Ver cámara fija y poses",
-  "movingCutoutsReview": "Personajes en movimiento · 6 clips ↗"
+  "movingCutoutsReview": "Personajes en movimiento · 6 clips ↗",
+  "portalRidesReview": "Ver calzada y dragón"
 }

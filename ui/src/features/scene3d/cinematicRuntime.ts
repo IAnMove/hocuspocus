@@ -1,3 +1,4 @@
+import { EndlessRoad } from './endlessRoad'
 import { ACESFilmicToneMapping, Color, CylinderGeometry, Group, Mesh, MeshStandardMaterial, NoToneMapping, PlaneGeometry, PointLight, ShaderMaterial, TorusGeometry, UniformsUtils, Vector2, type IUniform, type Texture } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
@@ -11,6 +12,7 @@ import { BackdropFloor } from './backdropFloor'
 
 /** Shared preview/export pipeline. No frame delta, random state or private assets. */
 export class CinematicRuntime {
+  private road?: EndlessRoad
   private mirror?: Reflector
   private platform?: Group
   private composer?: EffectComposer
@@ -89,7 +91,7 @@ export class CinematicRuntime {
   private syncStage(doc: Scene3DDocument) {
     if (doc.environment?.reflectiveFloor && !this.mirror) this.createMirror()
     if (this.mirror) {
-      this.mirror.visible = doc.environment?.reflectiveFloor === true && doc.environment.floorStyle !== 'none'
+      this.mirror.visible = doc.environment?.reflectiveFloor === true && doc.environment.floorStyle !== 'none' && doc.environment.floorStyle !== 'road'
       ;(this.mirror.material as ShaderMaterial).uniforms.tileStrength.value = doc.environment?.floorStyle === 'mirror' ? 0 : 1
     }
     this.backdropFloor.sync(doc)
@@ -102,7 +104,7 @@ export class CinematicRuntime {
     const { world } = this
     const active = Boolean(doc?.environment || doc?.worldSfx?.length)
     world.renderer.toneMapping = active ? ACESFilmicToneMapping : NoToneMapping
-    if (!active) return
+    if (!active) { this.road?.sync(false, undefined, seconds); return }
     if (!this.composer) {
       this.composer = new EffectComposer(world.renderer)
       this.composer.addPass(new RenderPass(world.scene, world.camera))
@@ -112,6 +114,9 @@ export class CinematicRuntime {
       for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
     }
     this.bloom!.strength = doc.environment?.bloom ?? .48
+    if (doc.environment?.floorStyle === 'road' && !this.road) this.road = new EndlessRoad(world.scene)
+    this.road?.sync(doc.environment?.floorStyle === 'road', doc.environment?.road, seconds)
+    if (doc.environment?.floorStyle === 'road') world.floor.visible = false
     this.syncLights(doc, seconds)
   }
   private syncLights(doc: Scene3DDocument, seconds: number) {
@@ -135,6 +140,7 @@ export class CinematicRuntime {
     } else { this.lights.forEach(light => { light.intensity = 0 }); renderer.render(scene, camera) }
   }
   dispose() {
+    this.road?.dispose()
     this.backdropFloor.dispose()
     this.background?.dispose()
     this.composer?.passes.forEach(pass => pass.dispose()); this.composer?.dispose()

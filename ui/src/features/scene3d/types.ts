@@ -238,7 +238,7 @@ export type Scene3DDocument = {
   templateId: Scene3DTemplateId
   camera: Scene3DCamera
   light: Scene3DLight
-  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop'; floorColor?: string; floorSourceHeight?: number }
+  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road'; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number }
   dressing?: Scene3DDressing
   workshopScreen?: 'code' | 'error' | 'success'
   slots: Scene3DSlot[]

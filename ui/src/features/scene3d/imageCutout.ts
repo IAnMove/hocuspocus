@@ -39,7 +39,10 @@ function groundImageCutout(mesh: Mesh, slot: Scene3DSlot, texture: Texture | nul
 
 export function poseImageCutout(root: Object3D, slot: Scene3DSlot) {
   const scale = Math.max(.05, slot.scale)
-  root.position.set(slot.position[0], slot.position[1] + scale, slot.position[2])
-  root.rotation.set(0, slot.rotationY, 0)
+  const roll = (slot.imageLook?.roll ?? 0) * Math.PI / 180
+  root.rotation.set(0, slot.rotationY, roll, 'YXZ')
+  // Rotate around the foot anchor, so tilting a cutout cannot lift its board/feet.
+  root.position.set(0, scale, 0).applyEuler(root.rotation)
+  root.position.x += slot.position[0]; root.position.y += slot.position[1]; root.position.z += slot.position[2]
   root.scale.setScalar(scale)
 }

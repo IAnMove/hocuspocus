@@ -1,0 +1,327 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "portal-rides-ash-rider",
+  "title": "Ash Rider · Del hielo al fuego",
+  "description": "Un caballero cruza una puerta de ceniza sobre su dragón. Nieve, abismos, niebla y una ciudad de lava en capas independientes.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T23:01:46.370242+00:00",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 5.1,
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.05,
+      "floorStyle": "none",
+      "floorColor": "#222233"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/dark-still-winter-vigil.png",
+        "position": [
+          0,
+          -5.203072599586523,
+          -8
+        ],
+        "scale": 8.203072599586523,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/still-snow.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/portal-rides/dragon-reference.jpg",
+        "position": [
+          -0.35,
+          0.5,
+          0
+        ],
+        "scale": 2.4,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/portal-rides/dragon-48fps.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 2.4,
+          "speed": 0.8,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        },
+        "motion": {
+          "to": [
+            0.15,
+            0.65,
+            0
+          ],
+          "via": [
+            0.6,
+            1.2,
+            0
+          ],
+          "easing": "smooth",
+          "faceTravel": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        3,
+        10
+      ],
+      "look": [
+        0,
+        3,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "world-window",
+        "kind": "media_portal",
+        "label": "Puerta de ceniza",
+        "position": {
+          "x": -1.5,
+          "y": 5.8,
+          "z": -1.2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#efae71",
+        "scale": 0,
+        "intensity": 0.48,
+        "seed": 414,
+        "start": 0,
+        "end": 5.1,
+        "sound": false,
+        "volume": 0,
+        "sourceUrl": "/examples/dark-stillness/still-furnace.mp4",
+        "motion": [
+          {
+            "time": 0,
+            "position": {
+              "x": -1.5,
+              "y": 5.8,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": 0,
+            "easing": "smooth"
+          },
+          {
+            "time": 0.5,
+            "position": {
+              "x": -1.4,
+              "y": 5.7,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": 0.12,
+            "easing": "smooth"
+          },
+          {
+            "time": 1.1,
+            "position": {
+              "x": 1,
+              "y": 5.2,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 180
+            },
+            "scale": 0.55,
+            "easing": "smooth"
+          },
+          {
+            "time": 2,
+            "position": {
+              "x": 1.5,
+              "y": 3.25,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 400
+            },
+            "scale": 1.5,
+            "easing": "smooth"
+          },
+          {
+            "time": 2.7,
+            "position": {
+              "x": 1.3,
+              "y": 3.25,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 480
+            },
+            "scale": 2.1,
+            "easing": "smooth"
+          },
+          {
+            "time": 3.1,
+            "position": {
+              "x": 0.7,
+              "y": 3.1,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 490
+            },
+            "scale": 5,
+            "easing": "smooth"
+          },
+          {
+            "time": 3.7,
+            "position": {
+              "x": 0,
+              "y": 3,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 500
+            },
+            "scale": 24,
+            "easing": "smooth"
+          },
+          {
+            "time": 5.1,
+            "position": {
+              "x": 0,
+              "y": 3,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 500
+            },
+            "scale": 24,
+            "easing": "smooth"
+          }
+        ],
+        "mediaProjection": "screen",
+        "mediaPlayback": {
+          "start": 0,
+          "speed": 1,
+          "loop": true
+        }
+      },
+      {
+        "id": "near-mist",
+        "kind": "fog",
+        "label": "Bruma en primer plano",
+        "position": {
+          "x": 0,
+          "y": -0.4,
+          "z": 1.8
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": 4,
+        "intensity": 0.22,
+        "color": "#b4c4da",
+        "seed": 872,
+        "start": 0,
+        "end": 5.1,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "effects": []
+  }
+}

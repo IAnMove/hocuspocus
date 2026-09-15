@@ -25,6 +25,7 @@ export function Scene3DTemplateBrowser({ selected, disabled, onSelect }: {
       <h2 className="text-sm font-semibold text-text-primary">{t('templates')}
         <span className="ml-1 text-text-muted">{t('filterCount', { shown: templates.length, total: SCENE3D_TEMPLATES.length })}</span>
       </h2>
+      <a href="/examples/portal-rides/" target="_blank" rel="noopener noreferrer" className="min-h-10 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">{t('portalRidesReview')}</a>
       <a href="/examples/dark-worlds/" target="_blank" rel="noopener noreferrer" className="min-h-10 rounded-lg border border-amber-300/40 px-3 py-2 text-sm text-amber-200">{t('darkLivingReview')}</a>
       <a href="/examples/moving-cutouts/" target="_blank" rel="noopener noreferrer" className="min-h-10 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">{t('movingCutoutsReview')}</a>
       <a href="/examples/dark-stillness/" target="_blank" rel="noopener noreferrer" className="min-h-10 rounded-lg border border-amber-300/40 px-3 py-2 text-sm text-amber-200">{t('stillnessReview')}</a>
