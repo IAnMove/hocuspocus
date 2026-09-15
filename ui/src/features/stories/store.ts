@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import * as api from '../../api/client'
+import { createTijeralStoryProject, TIJERAL_STORY_ID } from '../cutPaper/storyProject'
 import { changedSections, createStoryProject, normalizeStoryProject } from './model'
 import { mergeStoryLibraries } from './library'
 import type { StoryLibraryConflict, StoryLibraryData } from './library'
@@ -315,6 +316,7 @@ interface StoryState {
   beginProjectOperation: (id: string) => void
   endProjectOperation: (id: string) => void
   newProject: (projectType?: StoryProjectType) => void
+  loadTijeralExample: (workspace?: string) => void
   duplicateProject: (id?: string) => void
   openProject: (id: string) => void
   deleteProject: (id: string) => void
@@ -510,6 +512,24 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
     return {
       activeProjectOperations: { ...state.activeProjectOperations, [id]: count - 1 },
+    }
+  }),
+  loadTijeralExample: (workspace = 'default') => set(state => {
+    const existing = Object.values(state.projects).find(item => item.id === TIJERAL_STORY_ID)
+    const fresh = createTijeralStoryProject(workspace)
+    const project = existing
+      ? {
+        ...existing,
+        characters: existing.characters.map(character => {
+          const bundled = fresh.characters.find(item => item.id === character.id)
+          return character.characterKitRef || !bundled ? character : { ...character, characterKitRef: bundled.characterKitRef }
+        }),
+      }
+      : fresh
+    return {
+      project,
+      projects: { ...state.projects, [project.id]: project },
+      dirty: true,
     }
   }),
   newProject: projectType => set(state => {

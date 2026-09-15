@@ -63,8 +63,17 @@ def run_server() -> None:
         app_dir = _app_directory()
         if app_dir not in sys.path:
             sys.path.insert(0, app_dir)
+        from services.platform_capabilities import (
+            PROFILE_MACOS_ARM64,
+            host_machine,
+            host_platform,
+            resolve_profile,
+        )
         from services.ui_distribution import report_identity
         report_identity()
+        if resolve_profile(host_platform(), host_machine()) == PROFILE_MACOS_ARM64:
+            runpy.run_module("core_runtime", run_name="__main__")
+            return
         runpy.run_module("_launch_runtime", run_name="__main__")
     finally:
         sys.path[:] = previous_path

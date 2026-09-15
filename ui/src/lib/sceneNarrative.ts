@@ -75,7 +75,7 @@ export type NarrativeTemplateInput = {
   foreground?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string }
   width?: number
   height?: number
-  fps?: 30 | 60
+  fps?: 24 | 30 | 60
   duration?: number
   controls?: NarrativeSceneControls
 }

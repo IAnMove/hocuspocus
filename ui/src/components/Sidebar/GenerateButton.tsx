@@ -6,13 +6,14 @@ import { splitPromptSchedule } from '../../lib/promptScheduler'
 import { newUserGenerationContext } from '../../features/studio/generationProvenance'
 import { useViggleGenerationGuard } from '../../lib/useViggleGenerationGuard'
 import { isGenerationJobActive } from '../../lib/generationJobState'
+import { usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
+import { generateBlockedCopy, isRemoteMiniMaxImage } from '../../lib/generateButtonGate'
 
 export function GenerateButton() {
   const { t } = useUiTranslation('studio')
   const { t: tCommon } = useUiTranslation('common')
   const jobs = useStore(s => s.jobs)
   const startGeneration = useStore(s => s.startGeneration)
-  const setSidebarOpen = useStore(s => s.setSidebarOpen)
   const [submitting, setSubmitting] = useState(false)
   const [submissionError, setSubmissionError] = useState('')
   const submissionPending = useRef(false)
@@ -51,7 +52,11 @@ export function GenerateButton() {
   const schedulerApplies = promptSchedulerEnabled && generationMode === 'video' && imageMode === 0
   const scheduledVideoCount = schedulerApplies ? splitPromptSchedule(prompt).length : 0
   const needsScheduledPrompts = schedulerApplies && scheduledVideoCount === 0
-  const blocked = needsImage || needsReference || needsOutpaintSource || needsOutpaintArea || needsScheduledPrompts
+  const modelType = useStore(s => s.params.model_type)
+  const imageProvider = useStore(s => s.productionProfile?.image?.provider)
+  const localUnavailable = usePlatformCapabilities()?.capabilities.wangp_local?.state === 'hidden'
+    && !isRemoteMiniMaxImage(generationMode, modelType, imageProvider)
+  const blocked = localUnavailable || needsImage || needsReference || needsOutpaintSource || needsOutpaintArea || needsScheduledPrompts
 
   const handleClick = async () => {
     if (blocked || submissionPending.current) return
@@ -63,7 +68,6 @@ export function GenerateButton() {
       // Keep the visible command panel mounted through preparation/admission.
       // A click or a resolved legacy return value is not a queue receipt.
       await startGeneration(undefined, newUserGenerationContext())
-      setSidebarOpen(false)
     } catch (error) {
       setSubmissionError(error instanceof Error ? error.message : tCommon('status.failed'))
     } finally {
@@ -75,20 +79,9 @@ export function GenerateButton() {
   const queueCount = jobs.filter(job => isGenerationJobActive(job.status)).length
 
   if (blocked) {
-    const label = needsImage
-      ? t('generate.needImage')
-      : needsReference
-        ? t('generate.needReference')
-      : needsOutpaintSource
-        ? t('generate.needSource')
-      : needsOutpaintArea
-        ? t('generate.chooseCanvas')
-        : t('generate.addPrompt')
-    const title = needsOutpaintArea
-      ? t('generate.outpaintAreaHint')
-      : needsReference
-        ? t('generate.referenceHint')
-        : undefined
+    const { label, title } = generateBlockedCopy({
+      localUnavailable, needsImage, needsReference, needsOutpaintSource, needsOutpaintArea, t,
+    })
     return (
       <button
         disabled

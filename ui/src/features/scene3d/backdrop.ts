@@ -27,7 +27,7 @@ export function isImageBackdrop(slot: Pick<Scene3DSlot, 'media'>): boolean {
 }
 
 export function isCylinderBackdrop(slot: Pick<Scene3DSlot, 'media' | 'loop' | 'surface'>): boolean {
-  return slot.media === 'image' && slot.surface !== 'floor' && slot.loop?.cylinder === true
+  return slot.media === 'image' && slot.surface !== 'floor' && slot.surface !== 'environment' && slot.loop?.cylinder === true
 }
 
 export function slotMountKey(slot: Pick<Scene3DSlot, 'sourceUrl' | 'media' | 'loop' | 'surface' | 'textureRepeat' | 'screen'>): string {

@@ -17,6 +17,7 @@ SCHEMA_NAME = "hocuspocus.music-generation-spec"
 
 ACE_DEFAULT = "ace_step_v1_5_xl_sft_lm_4b"
 MUSIC3_LOCAL = "minimax_music3"
+YUE2_LOCAL = "yue2"
 REMOTE_DEFAULT = "music-3.0"
 
 ACE_PROMPT_LIMIT = 8000
@@ -98,6 +99,17 @@ def _music3_profile() -> dict[str, Any]:
     }
 
 
+def _yue2_profile() -> dict[str, Any]:
+    return {
+        "id": YUE2_LOCAL, "family": "yue2", "route": "local",
+        "downloadable": True, "community": False,
+        "prompt_limit": 8000, "lyrics_limit": 8000,
+        "duration_min": DURATION_MIN, "duration_max": 600, "count_max": 1,
+        "modes": ("original", "instrumental"), "caption_format": "music_style",
+        "lyrics_format": "section_tags", "backend": "generateMusic",
+    }
+
+
 def _remote_profile(model_id: str) -> dict[str, Any]:
     cover = model_id in COVER_MODELS
     return {
@@ -142,6 +154,8 @@ def catalog_entry(model: str | None) -> dict[str, Any] | None:
     token = _clean(model)
     if not token:
         return None
+    if token == YUE2_LOCAL:
+        return _yue2_profile()
     if token == MUSIC3_LOCAL:
         return _music3_profile()
     if token in COMMUNITY_MODELS:

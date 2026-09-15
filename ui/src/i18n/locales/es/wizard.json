@@ -14,6 +14,7 @@
   "outputs": "Salidas: {{names}}",
   "assets": "Recursos: {{ids}}",
   "openTarget": "Abrir destino",
+  "viewInActivity": "Ver en Actividad",
   "viewErrors": "Ver errores",
   "retryPending": "Reintentar pendientes",
   "removeBackgroundTitle": "Eliminar fondo",
@@ -68,6 +69,7 @@
     "reported": "Informado"
   },
   "rejectionReason": {
+    "invalid_intent": "El asistente no devolvió una interpretación válida de tu intención. Reintenta la petición.",
     "invalid_action": "Acción desconocida, parámetros obligatorios ausentes o valores inválidos.",
     "invalid_action_list": "Las acciones propuestas deben ser una lista.",
     "action_limit": "La propuesta supera el número de acciones permitido por turno.",

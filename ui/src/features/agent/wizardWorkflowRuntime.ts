@@ -3,6 +3,7 @@ import {
   saveWizardWorkflows,
   type WizardWorkflowCollectionPayload,
 } from '../../api/client'
+import { BASE } from '../../api/http'
 import type { CanonicalTaskEvent } from '../../lib/canonicalTaskEvents'
 import { cardFromReport, type WizardExecutionCard } from './executionCards'
 import { executionKey, executionReport } from './agentContract'
@@ -61,6 +62,25 @@ export interface WizardWorkflowAnswerOptions {
   stepId?: string
 }
 
+export const SERVER_WORKFLOW_OWNER = 'server'
+
+export class WizardWorkflowAnswerConflict extends Error {
+  readonly recoverable = true
+  readonly expectedRevision?: number
+  readonly currentRevision?: number
+
+  constructor(message: string, expected?: number, current?: number) {
+    super(message)
+    this.name = 'WizardWorkflowAnswerConflict'
+    this.expectedRevision = expected
+    this.currentRevision = current
+  }
+}
+
+export function isServerOwnedWorkflow(workflow: Pick<WizardWorkflowRecord, 'executorOwner'>): boolean {
+  return workflow.executorOwner === SERVER_WORKFLOW_OWNER
+}
+
 export interface WizardWorkflowStepRecord {
   stepId: string
   kind: string
@@ -99,6 +119,9 @@ export interface WizardWorkflowRecord {
   cancelRequested: boolean
   resumeRequested: boolean
   pendingInput: WizardWorkflowPendingInput | null
+  executorOwner: string
+  leaseToken: string
+  leaseExpiresAt: number
 }
 
 export interface WizardWorkflowCollection {
@@ -396,6 +419,9 @@ function normalizeWorkflow(value: unknown): WizardWorkflowRecord | null {
     cancelRequested: raw.cancelRequested === true,
     resumeRequested: raw.resumeRequested === true,
     pendingInput,
+    executorOwner: String(raw.executorOwner || ''),
+    leaseToken: String(raw.leaseToken || ''),
+    leaseExpiresAt: Math.max(0, Number(raw.leaseExpiresAt) || 0),
   }
 }
 
@@ -486,6 +512,7 @@ export class WizardWorkflowRuntime {
     if (this.opened) {
       for (const workflow of this.collection.workflows) {
         if (workflow.type !== definition.type || workflow.workspace !== this.workspace) continue
+        if (isServerOwnedWorkflow(workflow)) continue
         const step = workflow.steps[workflow.currentStep]
         if (workflow.state === 'prepared' || workflow.state === 'retrying'
           || (workflow.state === 'running' && step?.state !== 'waiting' && step?.state !== 'awaiting_input')) {
@@ -553,6 +580,7 @@ export class WizardWorkflowRuntime {
       processedEventIds: [], attempts: 0, createdAt: now, updatedAt: now,
       recoverableError: '', cancelRequested: false, resumeRequested: false,
       pendingInput: null,
+      executorOwner: '', leaseToken: '', leaseExpiresAt: 0,
     }
     this.collection.workflows.push(workflow)
     await this.persist()
@@ -569,6 +597,7 @@ export class WizardWorkflowRuntime {
     const matches = this.collection.workflows.filter(workflow => {
       const step = workflow.steps[workflow.currentStep]
       return workflow.workspace === this.workspace
+        && !isServerOwnedWorkflow(workflow)
         && step?.state === 'waiting'
         && step.taskId === event.task_id
         && !workflow.processedEventIds.includes(event.event_id)
@@ -647,6 +676,10 @@ export class WizardWorkflowRuntime {
       }
       if (!isRecord(answer)) throw new Error('Input answer must be a JSON object.')
       validateInputAnswer(pending, answer)
+      if (isServerOwnedWorkflow(workflow)) {
+        await this.answerOnServer(workflow, answer, answerOptions)
+        return
+      }
 
       const now = Date.now()
       step.input = applyDeclaredFields(step.input, pending.fields, answer)
@@ -669,6 +702,45 @@ export class WizardWorkflowRuntime {
       await this.advanceUnlocked(workflowId)
     })
     return this.get(workflowId) as WizardWorkflowRecord
+  }
+
+  private async answerOnServer(
+    workflow: WizardWorkflowRecord,
+    answer: Record<string, unknown>,
+    options: WizardWorkflowAnswerOptions | undefined,
+  ): Promise<void> {
+    const response = await fetch(`${BASE}/api/v1/wizard/workflows/executor/answer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspace: workflow.workspace,
+        workflowId: workflow.workflowId,
+        expectedRevision: this.collection.revision,
+        stepId: options?.stepId || workflow.pendingInput?.stepId,
+        answerVersion: options?.version,
+        answer,
+      }),
+    })
+    const payload = await response.json().catch(() => null) as {
+      detail?: { message?: string; expectedRevision?: number; currentRevision?: number }
+      workflow?: unknown
+      revision?: number
+    } | null
+    if (response.status === 409) {
+      throw new WizardWorkflowAnswerConflict(
+        String(payload?.detail?.message || 'Wizard workflow revision conflict'),
+        payload?.detail?.expectedRevision,
+        payload?.detail?.currentRevision,
+      )
+    }
+    if (!response.ok) throw new Error('Could not answer the server-owned Wizard workflow.')
+    const record = normalizeWorkflow(payload?.workflow)
+    if (!record) throw new Error('Could not answer the server-owned Wizard workflow.')
+    this.collection.revision = Math.max(0, Number(payload?.revision) || this.collection.revision)
+    const index = this.collection.workflows.findIndex(item => item.workflowId === record.workflowId)
+    if (index >= 0) this.collection.workflows[index] = record
+    else this.collection.workflows.push(record)
+    this.emit(record)
   }
 
   async resume(

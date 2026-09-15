@@ -394,10 +394,13 @@ class TestJobLifecycleWiring(unittest.TestCase):
             command = next(c for c in commands if "-filter_complex" in c)
             filter_value = command[command.index("-filter_complex") + 1]
             self.assertIn(
-                "[1:a]atrim=start=2.000000,asetpts=PTS-STARTPTS[outa]",
+                "[1:a]atrim=start=2.000000,asetpts=PTS-STARTPTS,apad,"
+                "atrim=duration=3.000000[outa]",
                 filter_value,
             )
             self.assertIn("[outa]", command)
+            self.assertIn("-shortest", command)
+            self.assertNotIn("atrim=duration=2.100000", filter_value)
 
     def test_multiclip_concat_can_be_cancelled_during_ffmpeg(self):
         concatenate = _load_isolated_function(

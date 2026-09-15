@@ -360,16 +360,46 @@
     "camera-dolly": "Dolly reveal"
   },
   "photoPresets": {
-    "photo-documentary-push": { "label": "Documentary push-in", "description": "A restrained slow move toward the subject." },
-    "photo-ken-burns-left": { "label": "Ken Burns · left", "description": "Classic archival pan from right to left." },
-    "photo-ken-burns-right": { "label": "Ken Burns · right", "description": "Classic archival pan from left to right." },
-    "photo-portrait-rise": { "label": "Portrait rise", "description": "Starts low and slowly discovers the face." },
-    "photo-reveal-pullback": { "label": "Reveal pull-back", "description": "Opens from a detail into the full photograph." },
-    "photo-diagonal-discovery": { "label": "Diagonal discovery", "description": "Elegant diagonal travel for landscapes and art." },
-    "photo-intimate-closeup": { "label": "Intimate close-up", "description": "A gentle asymmetric move for emotional beats." },
-    "photo-dutch-tension": { "label": "Dutch tension", "description": "Slow roll and push for mystery or conflict." },
-    "photo-handheld-memory": { "label": "Memory drift", "description": "Subtle smooth drift for memories and reportage." },
-    "photo-rostrum-scan": { "label": "Rostrum scan", "description": "A measured top-to-bottom move for documents and maps." }
+    "photo-documentary-push": {
+      "label": "Documentary push-in",
+      "description": "A restrained slow move toward the subject."
+    },
+    "photo-ken-burns-left": {
+      "label": "Ken Burns · left",
+      "description": "Classic archival pan from right to left."
+    },
+    "photo-ken-burns-right": {
+      "label": "Ken Burns · right",
+      "description": "Classic archival pan from left to right."
+    },
+    "photo-portrait-rise": {
+      "label": "Portrait rise",
+      "description": "Starts low and slowly discovers the face."
+    },
+    "photo-reveal-pullback": {
+      "label": "Reveal pull-back",
+      "description": "Opens from a detail into the full photograph."
+    },
+    "photo-diagonal-discovery": {
+      "label": "Diagonal discovery",
+      "description": "Elegant diagonal travel for landscapes and art."
+    },
+    "photo-intimate-closeup": {
+      "label": "Intimate close-up",
+      "description": "A gentle asymmetric move for emotional beats."
+    },
+    "photo-dutch-tension": {
+      "label": "Dutch tension",
+      "description": "Slow roll and push for mystery or conflict."
+    },
+    "photo-handheld-memory": {
+      "label": "Memory drift",
+      "description": "Subtle smooth drift for memories and reportage."
+    },
+    "photo-rostrum-scan": {
+      "label": "Rostrum scan",
+      "description": "A measured top-to-bottom move for documents and maps."
+    }
   },
   "motionPresets": {
     "turntable": "Product turntable",
@@ -418,9 +448,9 @@
     "fullHdLandscape": "Full HD landscape",
     "fourKLandscape": "4K landscape",
     "square": "Square",
-    "hdPortrait": "HD portrait",
-    "fullHdPortrait": "Full HD portrait",
-    "fourKPortrait": "4K portrait"
+    "hdPortrait": "HD portrait · mobile 9:16",
+    "fullHdPortrait": "Full HD portrait · mobile 9:16",
+    "fourKPortrait": "4K portrait · mobile 9:16"
   },
   "layerTypes": {
     "camera": "camera",
@@ -924,6 +954,10 @@
     "exportProgress": "3D frame {{index}} / {{total}}",
     "exported": "3D MP4 saved in Videos as {{name}}",
     "exportFailed": "Could not export the 3D scene.",
+    "exportCancel": "Cancel 3D export",
+    "exportCancelled": "3D export cancelled. The shot is editable again.",
+    "previewQuality": "Preview · lower resolution, no shadows",
+    "exportQualityHint": "Preview is lighter. Export uses the full frame, shadows, 24/30/60 fps and stereo audio. You can cancel; this shot stays locked until it finishes.",
     "assetsNotReady": "The 3D assets did not finish loading.",
     "stageNotReady": "The 3D stage is not ready to export.",
     "cannotEncode": "This browser cannot encode a deterministic H.264 MP4.",
@@ -1112,5 +1146,46 @@
       "background": "Background",
       "prop_1": "Prop 1"
     }
+  },
+  "history": {
+    "undo": "Undo",
+    "redo": "Redo",
+    "checkpoint": "Mark saved",
+    "saved": "Saved",
+    "unsaved": "Unsaved changes",
+    "saving": "Saving…",
+    "locked": "Locked while exporting",
+    "conflict": "This scene was edited in another tab.",
+    "keepMine": "Keep this tab",
+    "takeTheirs": "Load the other tab",
+    "persist-error": "Could not store the local draft; the last valid copy was kept."
+  },
+  "inspector": {
+    "object": "Object",
+    "scene": "Scene",
+    "previewHint": "The 3D preview stays above this panel. Hide this inspector to give it more room.",
+    "showPreview": "Show preview",
+    "hidePreview": "Hide preview",
+    "empty": "Select an object to inspect it.",
+    "position": "Inspector position",
+    "yaw": "Inspector rotation Y (°)",
+    "scale": "Inspector scale",
+    "source": "Inspector GLB or media URL",
+    "mouth": "Inspector mouth",
+    "addLips": "Add lips in inspector",
+    "addScreen": "Add object screen",
+    "addSfx": "Add inspector SFX",
+    "advanced": "Advanced",
+    "advancedHint": "Screen, light and environment details stay folded until you need them.",
+    "screenEmpty": "No screen media yet.",
+    "camera": "Camera",
+    "cameraEye": "Inspector camera position",
+    "cameraLook": "Inspector look at",
+    "fov": "Inspector field of view",
+    "environment": "Cinematic environment",
+    "floor": "Reflective floor",
+    "platform": "Platform",
+    "bloom": "Bloom",
+    "light": "Light color"
   }
 }

@@ -1,3 +1,4 @@
+import { parseAppearance } from './cinematicSettings'
 import { parseClipPlayback, parseMotion } from './performance.ts'
 import { parseSpeech } from './speech/track'
 import { parseCharacterKitRef, parseCharacterVoice } from '../../lib/characterVoice'
@@ -6,7 +7,7 @@ import { parseScene3DLoop } from './backdrop.ts'
 import { durableScene3DSourceUrl, parseScene3DSourceRef } from './slotSource.ts'
 import type { Scene3DDressing, Scene3DSlot } from './types.ts'
 
-const DRESSINGS = new Set<Scene3DDressing>(['street', 'space', 'treadmill', 'cafe', 'drive-city', 'drive-coast', 'drive-tunnel', 'citadel', 'workshop', 'chase-street', 'retro-lab', 'observatory', 'broadcast-plaza'])
+const DRESSINGS = new Set<Scene3DDressing>(['street', 'space', 'treadmill', 'cafe', 'drive-city', 'drive-coast', 'drive-tunnel', 'citadel', 'workshop', 'chase-street', 'retro-lab', 'observatory', 'broadcast-plaza', 'open-sea', 'lunar', 'rooftop', 'hangar', 'desert', 'train', 'space-lane', 'jungle', 'snow', 'casino'])
 export const parseDressing = (value?: Scene3DDressing) => DRESSINGS.has(value!) ? value : undefined
 
 function textureRepeat(value: unknown) {
@@ -35,8 +36,9 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     speech: slot.media === 'image' || slot.media === 'screen' ? undefined : parseSpeech(slot.speech),
     media: slot.media === 'image' ? 'image' : slot.media === 'screen' ? 'screen' : 'model3d', screen: parseMediaScreen(slot.screen),
     loop: parseScene3DLoop(slot.loop), clipPlayback: parseClipPlayback(slot.clipPlayback), motion: parseMotion(slot.motion),
-    surface: slot.surface === 'floor' || slot.surface === 'wall' ? slot.surface : undefined,
+    appearance: parseAppearance(slot.appearance),
+    surface: slot.surface === 'environment' || slot.surface === 'floor' || slot.surface === 'wall' ? slot.surface : undefined,
     grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat),
-    performance: slot.performance === 'typing' ? 'typing' : undefined,
+    performance: slot.performance === 'typing' || slot.performance === 'idle' ? slot.performance : undefined,
   }
 }

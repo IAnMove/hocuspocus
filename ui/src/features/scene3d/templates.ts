@@ -1,6 +1,10 @@
+import { effectsTemplateDocument, EFFECTS_TEMPLATES } from './effectsTemplates'
 import { cinematicDocument, CINEMATIC_TEMPLATES, CINEMATIC_CATEGORIES } from './cinematicTemplates'
 import { speechTemplateDocument, SPEECH_TEMPLATES, SPEECH_CATEGORIES } from './speech/templates'
 import { mediaTemplateDocument, MEDIA_TEMPLATES, MEDIA_CATEGORIES } from './mediaTemplates'
+import { campaignTemplateDocument, CAMPAIGN_TEMPLATES, CAMPAIGN_CATEGORIES } from './campaignTemplates'
+import { adaptAuthoredCameraToFrame } from './frameFormat.ts'
+import { actionTemplateDocument, ACTION_TEMPLATES, ACTION_CATEGORIES } from './actionTemplates'
 import { createDefaultScene3DDocument } from './document.ts'
 import { SCENE3D_TEMPLATE_IDS, type Scene3DCamera, type Scene3DCameraFamily, type Scene3DDocument, type Scene3DSlot, type Scene3DSlotId, type Scene3DTemplateId } from './types.ts'
 
@@ -13,11 +17,16 @@ export type Scene3DTemplate = {
   slots: Scene3DSlotId[]
 }
 
-export type Scene3DTemplateCategory = 'cinema' | 'product' | 'music' | 'space' | 'drive'
+export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
   ...CINEMATIC_CATEGORIES,
   ...SPEECH_CATEGORIES,
   ...MEDIA_CATEGORIES,
+  ...CAMPAIGN_CATEGORIES,
+  ...ACTION_CATEGORIES,
+  'reflective-stage': 'cinema',
+  'character-materialization': 'cinema',
+  'blast-stage': 'cinema',
   'coder-room': 'cinema',
   'clone-chase': 'cinema',
   'siege-ring': 'cinema',
@@ -150,6 +159,9 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   ...CINEMATIC_TEMPLATES,
   ...SPEECH_TEMPLATES,
   ...MEDIA_TEMPLATES,
+  ...EFFECTS_TEMPLATES,
+  ...CAMPAIGN_TEMPLATES,
+  ...ACTION_TEMPLATES,
 ]
 
 const LAYOUTS: Partial<Record<Scene3DTemplateId, Partial<Record<Scene3DSlotId, Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale'>>>>> = {
@@ -342,6 +354,12 @@ function emptySlot(id: Scene3DSlotId): Scene3DSlot {
 }
 
 export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {
+  const action = actionTemplateDocument(id)
+  if (action) return action
+  const campaign = campaignTemplateDocument(id)
+  if (campaign) return campaign
+  const effects = effectsTemplateDocument(id)
+  if (effects) return effects
   const speech = speechTemplateDocument(id)
   if (speech) return speech
   const media = mediaTemplateDocument(id)
@@ -450,11 +468,59 @@ const DRESSING_BY_TEMPLATE: Partial<Record<Scene3DTemplateId, Scene3DDocument['d
 export function patchScene3DSlot(
   document: Scene3DDocument,
   slotId: string,
-  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character'>>,
+  patch: Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale' | 'sourceUrl' | 'sourceRef' | 'media' | 'clip' | 'clipPlayback' | 'motion' | 'loop' | 'surface' | 'performance' | 'grounded' | 'textureRepeat' | 'speech' | 'screen' | 'character' | 'appearance'>>,
 ): Scene3DDocument {
   return {
     ...document,
     slots: document.slots.map(slot => slot.id === slotId ? { ...slot, ...patch } : slot),
+  }
+}
+
+export function slotHasKeepableAsset(slot: Scene3DSlot) {
+  return Boolean(slot.sourceUrl || slot.screen?.sourceUrl)
+}
+
+function takePreviousSlot(
+  previous: readonly Scene3DSlot[],
+  used: Set<string>,
+  predicate: (item: Scene3DSlot) => boolean,
+): Scene3DSlot | undefined {
+  const found = previous.find(item => !used.has(item.id) && predicate(item))
+  if (found) used.add(found.id)
+  return found
+}
+
+/** One previous slot per destination. Same id wins, then unused same role+media. */
+export function takeKeptSlot(
+  slot: Scene3DSlot,
+  previous: readonly Scene3DSlot[],
+  used: Set<string>,
+): Scene3DSlot | undefined {
+  return takePreviousSlot(previous, used, item => item.id === slot.id && item.media === slot.media && slotHasKeepableAsset(item))
+    ?? takePreviousSlot(previous, used, item => item.slot === slot.slot && item.media === slot.media && slotHasKeepableAsset(item))
+}
+
+export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefined): Scene3DSlot {
+  if (!old) return slot
+  const keptScreenUrl = slot.screen?.sourceUrl || old.screen?.sourceUrl || ''
+  const screen = slot.screen
+    ? {
+        ...slot.screen,
+        sourceUrl: keptScreenUrl,
+        sourceRef: slot.screen.sourceRef || old.screen?.sourceRef,
+        media: slot.screen.sourceUrl ? slot.screen.media : (old.screen?.media || slot.screen.media),
+      }
+    : (old.speech?.facePack && old.screen ? structuredClone(old.screen) : slot.screen)
+  if (slot.sourceUrl) return { ...slot, screen }
+  return {
+    ...slot,
+    character: old.character,
+    sourceUrl: old.sourceUrl,
+    sourceRef: old.sourceRef,
+    clip: old.clip,
+    clipPlayback: old.clipPlayback,
+    speech: old.speech ? structuredClone(old.speech) : undefined,
+    screen,
   }
 }
 
@@ -470,14 +536,9 @@ export function remountScene3DTemplate(id: Scene3DTemplateId, previous: Scene3DD
   next.width = previous.width
   next.height = previous.height
   next.fps = previous.fps
+  next.camera = adaptAuthoredCameraToFrame(next.camera, next.width, next.height)
   if (!keepAssets) return next
-  next.slots = next.slots.map(slot => {
-    if (slot.screen) {
-      const oldScreen = previous.slots.find(item => item.id === slot.id && item.screen?.sourceUrl) ?? previous.slots.find(item => item.screen?.sourceUrl)
-      if (oldScreen?.screen) slot.screen = { ...slot.screen, sourceUrl: oldScreen.screen.sourceUrl, sourceRef: oldScreen.screen.sourceRef, media: oldScreen.screen.media }
-    }
-    const old = previous.slots.find(item => item.slot === slot.slot && item.media === slot.media && item.sourceUrl)
-    return old ? { ...slot, character: old.character, sourceUrl: old.sourceUrl, sourceRef: old.sourceRef, clip: old.clip, clipPlayback: old.clipPlayback, speech: old.speech ? structuredClone(old.speech) : undefined } : slot
-  })
+  const used = new Set<string>()
+  next.slots = next.slots.map(slot => applyKeptSlotAssets(slot, takeKeptSlot(slot, previous.slots, used)))
   return next
 }

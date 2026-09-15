@@ -1447,7 +1447,10 @@ def test_failed_validation_clears_only_failed_checkpoint_for_resume(
 ):
     wgp = _wgp_stub(tmp_path, fps=10)
 
-    def concatenate(_inputs, destination, _audio):
+    concat_calls: list[dict] = []
+
+    def concatenate(_inputs, destination, _audio, **kwargs):
+        concat_calls.append(kwargs)
         with open(destination, "wb") as handle:
             handle.write(b"joined")
         return True
@@ -1583,6 +1586,8 @@ def test_failed_validation_clears_only_failed_checkpoint_for_resume(
         assert director_pipeline._pipelines[pid]["_clip_video_files"] == (
             exact_names
         )
+        assert concat_calls, "comic assembly must call concatenate"
+        assert concat_calls[-1].get("audio_duration_sec") == pytest.approx(2.0)
     finally:
         director_pipeline._pipelines.pop(pid, None)
 

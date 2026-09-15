@@ -5,6 +5,9 @@ export const WORLD_SFX_KINDS = [
   'portal', 'magic_circle', 'summoning_gate',
   'lightning', 'energy_beam', 'laser',
   'energy_orb', 'anime_aura', 'arcane_missiles', 'shockwave',
+  'smoke', 'sparks', 'explosion',
+  'fire', 'rain', 'snow', 'fog', 'shield', 'tornado', 'splash', 'dust', 'ice_burst', 'black_hole',
+  'media_portal',
 ] as const
 export type WorldSfxKind = (typeof WORLD_SFX_KINDS)[number]
 export const WORLD_BEAM_KINDS = new Set<WorldSfxKind>(['lightning', 'energy_beam', 'laser', 'arcane_missiles'])
@@ -33,11 +36,38 @@ export type WorldSfx = {
   anchor?: WorldSfxAnchor
   target?: WorldSfxAnchor
   targetPosition?: WorldVec3
+  sourceUrl?: string
 }
 
 const PRESETS = Object.fromEntries(catalog.map(item => [item.id, item]))
+const WORLD_DEFAULTS: Partial<Record<WorldSfxKind, { y: number; scale: number }>> = {
+  magic_circle: { y: 0.02, scale: 1.4 },
+  shockwave: { y: 0.02, scale: 1.4 },
+  splash: { y: 0.02, scale: 1.4 },
+  dust: { y: 0.02, scale: 1.4 },
+  portal: { y: 1.15, scale: 1.4 },
+  summoning_gate: { y: 1.15, scale: 1.4 },
+  media_portal: { y: 1.15, scale: 1.7 },
+  explosion: { y: 0.42, scale: 1.65 },
+  ice_burst: { y: 0.42, scale: 1.4 },
+  rain: { y: 0.05, scale: 2.1 },
+  snow: { y: 0.05, scale: 2.1 },
+  fog: { y: 0.05, scale: 2.1 },
+  fire: { y: 0.15, scale: 1.4 },
+  tornado: { y: 0.05, scale: 1.4 },
+  laser: { y: 1, scale: 0.7 },
+}
 const number = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback
+
+const TRANSIENT_MEDIA = /^(javascript|blob|file|filesystem):/i
+
+/** Persistable portal media only. Blob/file URLs cannot be saved with the scene. */
+export function worldMediaUrl(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const url = raw.trim()
+  return url && !TRANSIENT_MEDIA.test(url) ? url.slice(0, 2000) : undefined
+}
 
 export function worldAnchorOffsetFromWorldPoint(
   slot: { position: readonly [number, number, number]; rotationY: number },
@@ -101,17 +131,17 @@ export function parseWorldSfx(raw: unknown): WorldSfx[] {
     if (end <= start || ids.has(id)) return []
     ids.add(id)
     const preset = PRESETS[value.kind]
-    const floor = value.kind === 'magic_circle' || value.kind === 'shockwave'
-    const standing = value.kind === 'portal' || value.kind === 'summoning_gate'
+    const layout = WORLD_DEFAULTS[value.kind] ?? { y: 1, scale: 1.4 }
+    const sourceUrl = worldMediaUrl(value.sourceUrl)
     return [{
       id,
       kind: value.kind,
       ...(typeof value.label === 'string' ? { label: value.label.slice(0, 80) } : {}),
       start,
       end,
-      position: worldVec3(value.position, { x: 0, y: floor ? 0.02 : standing ? 1.1 : 1.0, z: 0 }, -50, 50),
+      position: worldVec3(value.position, { x: 0, y: layout.y, z: 0 }, -50, 50),
       rotation: worldVec3(value.rotation, { x: 0, y: 0, z: 0 }, -180, 180),
-      scale: number(value.scale, value.kind === 'laser' ? 0.7 : 1.4, 0.05, 20),
+      scale: number(value.scale, layout.scale, 0.05, 20),
       intensity: number(value.intensity, 1, 0.1, 2),
       color: typeof value.color === 'string' && /^#[\da-f]{6}$/i.test(value.color) ? value.color : preset.color,
       seed: Math.round(number(value.seed, index + 21, 1, 1000000)),
@@ -120,6 +150,7 @@ export function parseWorldSfx(raw: unknown): WorldSfx[] {
       ...(parseAnchor(value.anchor) ? { anchor: parseAnchor(value.anchor) } : {}),
       ...(parseAnchor(value.target) ? { target: parseAnchor(value.target) } : {}),
       ...(value.targetPosition ? { targetPosition: worldVec3(value.targetPosition, { x: 0, y: 1.2, z: 1.6 }, -50, 50) } : {}),
+      ...(sourceUrl ? { sourceUrl } : {}),
     }]
   })
 }
@@ -143,14 +174,13 @@ export function createWorldSfx(kind: WorldSfxKind, duration: number, taken: Iter
   let id = `world-${kind}`
   let n = 1
   while (used.has(id)) { n += 1; id = `world-${kind}-${n}` }
-  const floor = kind === 'magic_circle' || kind === 'shockwave'
   const beam = WORLD_BEAM_KINDS.has(kind)
+  const blast = kind === 'explosion' || kind === 'ice_burst' || kind === 'splash'
   return parseWorldSfx([{
     id,
     kind,
     start: 0,
-    end: Math.min(8, Math.max(1, duration)),
-    position: floor ? { x: 0, y: 0.02, z: 0.2 } : { x: 0, y: 1.1, z: -1.2 },
+    end: Math.min(blast ? 2.6 : 8, Math.max(1, duration)),
     ...(beam ? { targetPosition: { x: 0, y: 1.2, z: 1.8 } } : {}),
     sound: true,
   }])[0]
@@ -182,6 +212,7 @@ export const WORLD_SFX_SCHEMA = {
         offset: { type: 'object', additionalProperties: false, properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } },
       }, required: ['slotId'] },
       targetPosition: { type: 'object', additionalProperties: false, properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } }, required: ['x', 'y', 'z'] },
+      sourceUrl: { type: 'string', maxLength: 2000 },
     },
     required: ['id', 'kind', 'start', 'end'],
   },

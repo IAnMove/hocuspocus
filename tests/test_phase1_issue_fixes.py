@@ -1766,10 +1766,20 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
                 "GenerateButton.tsx",
             )
         )
+        generate_gate = _read(
+            os.path.join(
+                _ROOT,
+                "ui",
+                "src",
+                "lib",
+                "generateButtonGate.ts",
+            )
+        )
         studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn("needsOutpaintArea", generate_button)
-        self.assertIn("t('generate.chooseCanvas')", generate_button)
-        self.assertIn("t('generate.outpaintAreaHint')", generate_button)
+        self.assertIn("generateBlockedCopy", generate_button)
+        self.assertIn("t('generate.chooseCanvas')", generate_gate)
+        self.assertIn("t('generate.outpaintAreaHint')", generate_gate)
         self.assertEqual(studio["generate"]["chooseCanvas"], "Choose canvas")
         self.assertIn("area for Outpaint to generate", studio["generate"]["outpaintAreaHint"])
 

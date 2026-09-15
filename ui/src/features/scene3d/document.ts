@@ -1,3 +1,4 @@
+import { parseEnvironment } from './cinematicSettings'
 import { parseSceneFx } from '../sceneFx/types'
 import { parseWorldSfx } from '../sceneFx/world'
 import { parseKineticTexts } from '../../lib/kineticText.ts'
@@ -101,5 +102,5 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const dressing = parseDressing(value.dressing)
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
-  return { ...value, ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
+  return { ...value, environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }

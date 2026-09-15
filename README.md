@@ -6,6 +6,8 @@ HocusPocus is an experimental, **non-commercial** fork of [Blizaine/Maestro](htt
 
 The **HocusPocus** mark is a quill shaping a cube: imagination becoming a buildable world. The UI is English and Spanish.
 
+Open **Help / Ayuda** next to Settings for the in-app tutorial, with screenshots of the layout, generation, studios and queue. Its ES/EN selector changes the UI language. Use Tab and Shift+Tab to navigate the dialog; Escape closes it and returns focus to Help.
+
 <p align="center">
   <img src="docs/images/readme/gandalf-hero.jpg" alt="Gandalf and Tentri in a HocusPocus Video 3D scene" />
 </p>
@@ -96,11 +98,37 @@ Gandalf speaking in that world (image lips on the mesh, not a baked video):
 
 The **Wizard** is an in-app director: “open the concert scene”, “prepare a 3D showcase”, “make a 5-second clip of the cube in the rain”. **MCP** exposes the same jobs to external agents (image, video, SFX, scenes, receipts). Switching the footer workspace while a Wizard scene is still loading will **not** stomp the compositor or wipe undo.
 
+Connect through **Settings → Integrations → Hocuspocus MCP**, using the app's address plus `/api/v1/mcp` and the MCP Bearer token. This is Hocuspocus's shared tool server, including generation, assets, collections and scenes supported by the installation. The historical `/api/v1/wangp/mcp` URL remains an alias for existing clients. See the [MCP connection guide](docs/development/SCENE_EFFECTS_AND_MCP.md#enable-and-connect-mcp).
+
 **Example.** In 3D Video, ask the Wizard to open a saved scene by name and select a layer. If you change output folder mid-load, it aborts instead of importing into the wrong world.
+
+Wizard interprets your intended outcome using the conversation and current project. Describe what you want in your own words: it can explain, ask for essential missing context, or plan supported actions. Questions remain visible even when it also opens a lab. Once a series request has creative direction, Wizard can propose missing titles and plot details and save a first episode draft without another interview. Its receipt includes the saved series and episode premises. Opening Series Lab alone does not generate an episode's media.
+
+In **Series Lab → Canon**, generate reference images from each character or location's description and the series style. Use **Shots → Generate all missing references** to prepare the episode's characters and environments in a batch. Approve the images with the canon, then click **Use approved references in this episode** directly in Shots. Existing series images are reused without another generation. **Setup → Allowed production methods** lets you combine AI video, 2D animation, 3D scenes and imported clips; each shot has its own method and production controls. See [Series production and references](docs/series-lab/IMPLEMENTATION.md#reference-images-and-mixed-production).
+
+For 2D/3D animation, prepare both environments and characters. Each shot shows its environment selector and reference previews, and opens the editor once the episode has approved images for the environment and every visible character. Preparation shortcuts lead directly to the corresponding Bible cards. An establishing shot can use just its environment.
+
+**Generate all / Regenerate all** in **Series Lab → Shots** prepares editable 2D scenes and MP4 takes. Each shot also has **Regenerate this shot**. The app removes character backgrounds, uses saved voices and synchronizes mouths to each isolated recording with the offline Rhubarb engine. English recordings also use the script; other languages use phonetic recognition. New speaking-shot preparation requires all nine mouth positions; previously rendered clips and imported four-mouth scenes remain usable. The **20 mouth styles** provide complete nine-position packs, and Character Creator shows missing slots before generation. Download individual styles or all 20 as PNG packs from Character Creator. Saving a character creates a reusable resting still with the selected mouth while retaining the mouthless animation base. Configured listeners and silent shots use that resting mouth too.
+
+Regeneration preserves saved motion and audio and appends unapproved versions; approved takes remain available. Save the character workshop, return to Shots and click **Regenerate all** to update existing scenes. Missing setup links directly to the character. Keep the tab open during the batch. Completed shots release their temporary recovery copies after the editable scene and video are saved; unsaved editor changes and failed preparations retain their backups. Install/Update prepares the pinned offline engine; **Pinokio → Advanced → Repair offline lip sync** repairs it separately. See [2D speech quality and mouth packs](docs/character-kits/SPEECH_QUALITY.md).
+
+**Results** separates approved references from pending video takes and links to each incomplete item. **Generate AI draft takes** leaves its outputs awaiting review; 2D/3D and imported shots have their own production shortcuts.
+
+You can also enable production methods directly in **Series Lab → Shots**. For an existing episode, select an enabled method and use **Apply to shots without a take** to assign it across unfinished shots; completed and active takes are preserved.
+
+Location image prompts describe empty environments. Series Lab separates the physical setting and rendering style from character design and narrative occupants before generating. Use **Prepare environment prompt** in the location card to review the exact prompt first.
+
+Character Creator identifies each Qwen3 preset by its original language/profile and timbre. The nine presets can speak several languages, but none is natively Spanish. Use **Generate voice sample** with a Spanish or English sentence to hear the selected voice before saving or preparing mouths. Changing the voice cancels only that audition and stops the previous sample.
+
+Choose **Add your own voice: import or record** to use **Qwen3 Base** with a clean 3–30 second recording (up to 20 MB). Import an audio file or record with the microphone, name the voice, enter the exact recording transcript, and choose the language for new dialogue. Audition it, then **Save everything** on the character. Saved custom voices appear in the voice selector for other characters; new or regenerated native 2D/3D dialogue uses the stored recording and transcript. Existing takes remain available. Recording requires a browser with microphone support on HTTPS or localhost; importing also works over LAN HTTP. Audio samples are stored as persistent local uploads, and character metadata stores public references rather than machine-specific paths. No new model or recording is generated merely by selecting or saving a voice.
+
+Each **Canon → Characters** card also shows voice, 2D lip-sync and 3D lip-sync readiness. **Configure in Character Creator** opens a dedicated view for that exact character, carries over its reference image, and links the saved configuration by ID. The Series card keeps its library selector. **Save everything and return to Series Lab** saves voice, mouth images and placement together, then returns to the source character. A failed save retains the draft and keeps the editor open; a fully saved session can yield to the next character even after switching tabs. A voice can be saved without a 3D model. Save the character before opening its 2D mouth workshop or 3D face calibration. The mouth workshop has a rectangle whose width and height can be adjusted independently, a visible mouth-pack catalog with previews, explicit AI generation buttons, and a one-click prerecorded English voice sample for previewing mouth movement without generating speech. **Apply placement to all mouths** copies the current position, scale and rotation to all nine mouth shapes. **Try with their voice** previews the full isolated recording with the same phonetic analyzer as native shots, including pauses and resting-mouth closure; the separate quick text preview is approximate. Eyes and blinking are optional: keep the original drawing unless you want to add overlays. Review the cleaned base and mouth variants, then save the speech character. Dialogue shots open Character Creator directly; the advanced voice table links to the character card. AI video with native audio continues to use its generator's voice; the reusable TTS preset is used in the speech editor.
 
 ### Finish without regenerating
 
 **Video Editor** trims, splits and reorders clips you already like (H3 MP4s, compositor exports, series handoffs). Export is a queued FFmpeg job. Guide: [Video Editor](docs/video-editor/HOWUSEIT.md).
+
+**Studio Tools** post-process an existing image or clip (FlashVSR/Lanczos upscale, SeedVC revoice, rembg) and always write a new file. Guide: [Studio Tools](docs/tools/HOWUSEIT.md).
 
 **Edits** (experimental): retake a section, outpaint a frame, prompt-driven replace. **Multi-clip** is for longer prompt-by-prompt sequences with overlapping continuity.
 
@@ -111,7 +139,7 @@ The **Wizard** is an in-app director: “open the concert scene”, “prepare a
 - **CivitAI LoRA browser** with one-click install, update badges, and auto-written prompting guides from CivitAI / Hugging Face cards.
 - **Local LLM** (Gemma 4 / Qwen GGUF via llama.cpp) or external OpenAI / Anthropic / compatible endpoints. Unloads after idle so VRAM goes back to generation.
 - **Themes:** Golden Hour, Classic, Onyx.
-- **LAN:** optional share on the local network; optional token auth (`LOREFRAME_LAN_AUTH`).
+- **LAN:** optional share on the local network; optional token auth (`LOREFRAME_LAN_AUTH`). Creating series drafts, characters and speech clips also works from plain HTTP network URLs. After updating, reload the browser; Wizard can continue an empty series draft with the same title after a failed creation attempt.
 - **NSFW** and experimental gates are opt-in.
 
 Operator index: [docs/HOWUSEIT.md](docs/HOWUSEIT.md).

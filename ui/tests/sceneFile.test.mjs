@@ -21,6 +21,11 @@ test('parseSceneFile round-trips a serialized scene', () => {
   assert.equal(parsed.fps, 30)
 })
 
+test('parseSceneFile keeps cinematic 24 fps', () => {
+  const parsed = parseSceneFile(serializeSceneFile({ ...valid, fps: 24 }))
+  assert.equal(parsed.fps, 24)
+})
+
 test('parseSceneFile fills missing size/duration and rejects broken layers', () => {
   const parsed = parseSceneFile(JSON.stringify({
     version: 1,

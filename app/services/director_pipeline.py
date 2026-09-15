@@ -2192,8 +2192,10 @@ def _backfill_clip_video_attempts(state: dict, state_dir: str) -> dict:
             selected = ""
         clip["selected_video_filename"] = selected or None
         if selected:
+            # A Studio selection is the playback authority, but it does not
+            # refresh inputs. Image reruns keep video_stale so Rejoin/export
+            # cannot assemble a take that no longer matches the start frame.
             clip["video_filename"] = selected
-            clip["video_stale"] = False
         clip["video_attempts"] = sorted(
             attempts_by_clip[index].values(),
             key=lambda item: (float(item.get("created_at") or 0), item["filename"]),
@@ -4356,6 +4358,19 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
     state = _ensure_h3_segment_state(state)
     clips = state.get("clips", [])
     video_files = []
+    # Image reruns keep video_stale on the clip even when a Studio selection or
+    # H3 segment list still points at playable files. Gate Rejoin before the
+    # H3 branch, which otherwise treats those files as current.
+    stale_clip_numbers = [
+        str(index + 1)
+        for index, clip in enumerate(clips)
+        if clip.get("video_stale")
+    ]
+    if stale_clip_numbers:
+        raise ValueError(
+            "Regenerate stale video clip(s) "
+            f"{', '.join(stale_clip_numbers)} before rejoining."
+        )
     legacy_h3_segments = (
         _is_sequential_h3_model(state.get("video_model"))
         and any(clip.get("h3_segments") for clip in clips)
@@ -4390,17 +4405,6 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
         if stale:
             raise ValueError("Regenerate stale H3 continuations before rejoining the final video")
     else:
-        stale_clip_numbers = [
-            str(index + 1)
-            for index, clip in enumerate(clips)
-            if clip.get("video_stale")
-        ]
-        if stale_clip_numbers:
-            raise ValueError(
-                "Regenerate stale video clip(s) "
-                f"{', '.join(stale_clip_numbers)} before rejoining."
-            )
-
         if shot_images_required(_saved_pipeline_shot_image_policy(state)):
             invalid_start_numbers = _invalid_saved_media_numbers(
                 [clip.get("start_image_filename") for clip in clips],
@@ -12425,10 +12429,15 @@ def _run_comic_renderer_pipeline(
         "concatenate_multi_clip_videos",
         None,
     )
+    # Comic assembly is hard-cut only (see comic_edit_transition forced to
+    # "none" below). Recast/repaint/outpaint pass audio_duration_sec so
+    # concatenate() skips freeze-tail + crossfade. Without that lock, two
+    # shots become hold+xfade and the timeline is longer than the storyboard.
     if not callable(concatenate) or not concatenate(
         clip_paths,
         final_path,
         None,
+        audio_duration_sec=sum(durations),
     ):
         raise RuntimeError(
             "All comic shots passed validation, but final hard-cut assembly "

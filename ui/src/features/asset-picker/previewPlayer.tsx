@@ -2,8 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Play } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import type { PickerItem } from './types.ts'
-
-const PREVIEW_BYTE_LIMIT = 80 * 1024 * 1024
+import {
+  PREVIEW_BYTE_LIMIT,
+  getSharedPreviewPool,
+  needsFullPreview,
+  type PreviewResourcePool,
+  type PreviewSession,
+} from './previewResources.ts'
 
 function pauseMedia(element: HTMLMediaElement | null) {
   if (!element) return
@@ -25,17 +30,48 @@ function GlbPreview({ url }: { url: string }) {
     return () => { cancelled = true }
   }, [url])
   if (!ready) return <p className="p-2 text-center text-[10px] text-text-muted">{t('explorer.loading')}</p>
-  return <model-viewer src={url} camera-controls className="h-full w-full" />
+  return <model-viewer key={url} src={url} camera-controls className="h-full w-full" data-testid="asset-preview-glb" />
 }
 
-export function AssetPreviewPlayer({ item }: { item: PickerItem }) {
+export function AssetPreviewPlayer({
+  item,
+  pool,
+}: {
+  item: PickerItem
+  pool?: PreviewResourcePool
+}) {
+  return <PreviewPlayerBody key={`${item.ref.workspaceId}:${item.url}`} item={item} pool={pool} />
+}
+
+function PreviewPlayerBody({
+  item,
+  pool,
+}: {
+  item: PickerItem
+  pool?: PreviewResourcePool
+}) {
   const { t } = useUiTranslation('common')
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
-  const [armedUrl, setArmedUrl] = useState('')
+  const sessionRef = useRef<PreviewSession | null>(null)
+  const resources = pool ?? getSharedPreviewPool()
+  const [armed, setArmed] = useState(false)
+  const [playUrl, setPlayUrl] = useState(item.url)
   const [failed, setFailed] = useState(false)
-  const armed = armedUrl === item.url
   const large = item.sizeBytes > PREVIEW_BYTE_LIMIT
+  const sourceUrl = item.url
+  const workspaceId = item.ref.workspaceId
+  const mediaKind = item.kind
+  const sizeBytes = item.sizeBytes
+
+  useEffect(() => {
+    const session = resources.createSession({ scope: 'picker' })
+    sessionRef.current = session
+    return () => {
+      session.dispose()
+      sessionRef.current = null
+    }
+  }, [resources])
 
   useEffect(() => {
     const video = videoRef.current
@@ -44,7 +80,27 @@ export function AssetPreviewPlayer({ item }: { item: PickerItem }) {
       pauseMedia(video)
       pauseMedia(audio)
     }
-  }, [item.url, armed])
+  }, [armed, playUrl])
+
+  useEffect(() => {
+    const session = sessionRef.current
+    if (!session || !needsFullPreview({ kind: mediaKind }, armed)) return
+    let cancelled = false
+    void session.acquire({
+      sourceUrl,
+      workspaceId,
+      layer: 'full',
+      mediaKind,
+      sizeBytes,
+    }).then(lease => {
+      if (cancelled || !lease) return
+      setPlayUrl(lease.playUrl)
+    })
+    return () => {
+      cancelled = true
+      session.cancelCurrent()
+    }
+  }, [armed, sourceUrl, workspaceId, mediaKind, sizeBytes, resources])
 
   if (failed) {
     return <p className="p-2 text-center text-[10px] text-text-muted">{t('explorer.previewFailed')}</p>
@@ -63,7 +119,7 @@ export function AssetPreviewPlayer({ item }: { item: PickerItem }) {
         type="button"
         data-testid="asset-preview-arm"
         aria-label={item.kind === 'model3d' ? t('explorer.view3d') : t('explorer.playPreview')}
-        onClick={() => { setFailed(false); setArmedUrl(item.url) }}
+        onClick={() => { setFailed(false); setArmed(true); setPlayUrl(item.url) }}
         className="relative flex h-full w-full items-center justify-center"
       >
         {item.thumbnailUrl ? <img src={item.thumbnailUrl} alt="" className="absolute inset-0 h-full w-full object-contain opacity-70" /> : null}
@@ -79,7 +135,8 @@ export function AssetPreviewPlayer({ item }: { item: PickerItem }) {
       <video
         ref={videoRef}
         data-testid="asset-preview-video"
-        src={item.url}
+        data-preview-src={playUrl}
+        src={playUrl}
         controls
         playsInline
         preload="metadata"
@@ -94,7 +151,8 @@ export function AssetPreviewPlayer({ item }: { item: PickerItem }) {
         <audio
           ref={audioRef}
           data-testid="asset-preview-audio"
-          src={item.url}
+          data-preview-src={playUrl}
+          src={playUrl}
           controls
           preload="metadata"
           className="w-full"
@@ -104,7 +162,7 @@ export function AssetPreviewPlayer({ item }: { item: PickerItem }) {
     )
   }
   if (item.kind === 'model3d') {
-    return <GlbPreview url={item.url} />
+    return <GlbPreview url={playUrl} />
   }
   return <p className="p-2 text-center text-[10px] text-text-muted">{t('explorer.selectHint')}</p>
 }

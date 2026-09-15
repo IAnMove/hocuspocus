@@ -37,8 +37,8 @@ test('3D templates, playback speed and object transforms work in the editor', as
 
   // Drag the real X handle in the WebGL viewport, then verify the document field.
   const scene = applyScene3DTemplate('two-shot')
-  const canvas = workspace.locator('canvas').first()
   const viewport = workspace.getByRole('region', { name: '3D scene', exact: true })
+  const canvas = viewport.locator('canvas[data-engine]')
   await viewport.focus()
   await page.keyboard.press('r')
   await expect(workspace.getByRole('button', { name: 'Rotate Y', exact: true })).toHaveAttribute('aria-pressed', 'true')

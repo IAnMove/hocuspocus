@@ -82,7 +82,7 @@ test('runs Remove Background from direct Tools and exposes the derived asset', a
     await page.getByRole('button', { name: 'Remove background', exact: true }).click()
     await page.getByRole('button', { name: 'Clear', exact: true }).click()
     await chooseLibraryFile(page, 'hero-no-background.png')
-    await expect(page.locator('aside').getByRole('img', { name: 'hero-no-background.png', exact: true })).toBeVisible()
+    await expect(page.getByTestId('direct-generation-workspace').getByRole('img', { name: 'hero-no-background.png', exact: true })).toBeVisible()
   } finally {
     await closeApp(page, session)
   }

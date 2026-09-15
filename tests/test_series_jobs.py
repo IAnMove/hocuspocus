@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import types
+import pytest
 from pathlib import Path
 
 from services.series_jobs import SeriesJobStore
@@ -42,6 +43,29 @@ def test_render_queue_survives_store_recreation(tmp_path):
     loaded = second.load("series-render-1")
     assert loaded["providerTaskId"] == "remote-1"
     assert second.recoverable()[0]["jobId"] == "series-render-1"
+
+
+def test_render_endpoint_and_resumption_cannot_bypass_series_production_permissions():
+    from fastapi import HTTPException
+    shot = {'id':'shot-1', 'productionMethod':'generated_video', 'attempts':[]}
+    episode = {'id':'episode-1', 'shots':[shot]}
+    series = {'id':'series-1', 'allowedProductionMethods':['animation_2d'], 'episodesById':{'episode-1':episode}}
+    namespace = {'copy':copy, 'HTTPException':HTTPException, '_series_library_lock':threading.RLock(),
+        '_series_library_workspace':lambda value: 'default',
+        '_read_series_workspace':lambda workspace: {'seriesById':{'series-1':series}},
+        '_series_project_or_404':lambda library, key: library['seriesById'][key],
+        '_active_series_render_for_episode':lambda *args: None,
+        '_series_render_candidates':lambda episode, body: episode['shots'],
+    }
+    _load_launch_functions('start_series_episode_render', '_series_render_context', namespace=namespace)
+    with pytest.raises(HTTPException, match='not permitted') as denied:
+        namespace['start_series_episode_render']('series-1', 'episode-1', {})
+    assert denied.value.status_code == 400
+    with pytest.raises(ValueError, match='not permitted'):
+        namespace['_series_render_context']({'workspace':'default','seriesId':'series-1','episodeId':'episode-1'}, {'shotId':'shot-1'})
+    shot['productionMethod'] = 'animation_2d'
+    with pytest.raises(HTTPException, match='No permitted'):
+        namespace['start_series_episode_render']('series-1', 'episode-1', {})
 
 
 def test_discard_removes_checkpoint_not_output(tmp_path):

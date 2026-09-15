@@ -65,6 +65,23 @@ test('changing template can retain selected screen content without copying its g
   assert.equal(next.slots[1].screen.media, 'video')
 })
 
+test('keep-objects assigns each control-room wall once when IDs change', () => {
+  const room = applyScene3DTemplate('control-room')
+  const walls = room.slots.filter(slot => slot.media === 'screen')
+  walls.forEach((slot, index) => {
+    slot.screen.sourceUrl = `/api/v1/uploads/wall-${index}.mp4`
+    slot.screen.media = 'video'
+  })
+  const next = remountScene3DTemplate('topic-travelling', room)
+  const kept = next.slots.filter(slot => slot.media === 'screen').map(slot => slot.screen.sourceUrl)
+  assert.deepEqual(kept, [
+    '/api/v1/uploads/wall-0.mp4',
+    '/api/v1/uploads/wall-1.mp4',
+    '/api/v1/uploads/wall-2.mp4',
+  ])
+  assert.equal(new Set(kept).size, 3)
+})
+
 test('export readiness rejects pending, stale and failed screen bindings', () => {
   const slot = applyScene3DTemplate('monitor-detail').slots[0]
   slot.screen.sourceUrl = '/api/v1/uploads/show.mp4'

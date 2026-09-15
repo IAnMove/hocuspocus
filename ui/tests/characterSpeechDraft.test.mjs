@@ -15,6 +15,25 @@ Object.assign(globalThis, {
   document: dom.window.document,
 })
 
+test('character-specific speech drafts preserve other characters and the general workshop draft', () => {
+  const first = createCharacterKit('First'), second = createCharacterKit('Second')
+  writeSpeechDraft('scoped-voices', { baseRevision: 2, kit: first })
+  writeSpeechDraft('scoped-voices', { baseRevision: 3, kit: first }, first.id)
+  writeSpeechDraft('scoped-voices', { baseRevision: 4, kit: second }, second.id)
+  assert.equal(readSpeechDraft('scoped-voices')?.baseRevision, 2)
+  assert.equal(readSpeechDraft('scoped-voices', first.id)?.baseRevision, 3)
+  assert.equal(readSpeechDraft('scoped-voices', second.id)?.baseRevision, 4)
+  clearSpeechDraft('scoped-voices', first.id)
+  assert.equal(readSpeechDraft('scoped-voices', first.id), null)
+  assert.equal(readSpeechDraft('scoped-voices', second.id)?.kit.id, second.id)
+  assert.equal(readSpeechDraft('scoped-voices')?.kit.id, first.id)
+  assert.throws(() => writeSpeechDraft('scoped-voices', { baseRevision: 4, kit: first }, second.id), /another character/)
+  assert.equal(readSpeechDraft('scoped-voices', ''), null)
+  assert.throws(() => writeSpeechDraft('scoped-voices', { baseRevision: 5, kit: first }, ''), /kit id is invalid/)
+  clearSpeechDraft('scoped-voices', '')
+  assert.equal(readSpeechDraft('scoped-voices')?.kit.id, first.id)
+})
+
 const asset = (id, reviewState = 'pending', source = `/${id}.png`, kind = 'overlay') => ({
   id,
   name: id,
@@ -59,6 +78,15 @@ function sampleKit() {
   }
   return kit
 }
+
+test('nine-mouth kits and their resting composite survive the scoped recovery draft', () => {
+  const kit = sampleKit()
+  for (const state of ['pressed', 'medium', 'pucker', 'bite', 'tongue']) kit.mouth[state] = asset(state)
+  kit.restPose = { asset: asset('rest', 'pending', '/rest.png', 'image'), fingerprint: 'saved-base-and-mouth' }
+  writeSpeechDraft('extended', { baseRevision: 7, kit }, kit.id)
+  assert.deepEqual(readSpeechDraft('extended', kit.id)?.kit, kit)
+  clearSpeechDraft('extended', kit.id)
+})
 
 function resetStorage() {
   dom.window.sessionStorage.clear()

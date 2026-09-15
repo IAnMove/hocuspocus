@@ -1,0 +1,26 @@
+HocusPocus Studio 20 — reusable mouth collection
+
+20 original generated styles; 9 transparent PNG sprites per style, 512 x 512.
+Created with OpenAI imagegen for HocusPocus. You may use, modify and redistribute
+these new Studio 20 assets in personal and commercial animation projects.
+This permission covers the Studio 20 artwork, not third-party character likenesses.
+
+Slot / Rhubarb / sound
+closed  X  relaxed resting mouth (use also for listeners and silent scenes)
+pressed A  M/B/P, lips pressed together
+small   B  EE and narrow consonants
+medium  C  EH, moderate opening / transition
+wide    D  AH, open jaw
+round   E  O, rounded opening
+pucker  F  OO/W, narrow rounded lips
+bite    G  F/V, upper teeth on lower lip
+tongue  H  L, tongue raised behind teeth
+
+All nine images use a shared square frame and centered pivot. Keep that frame:
+do not trim each sprite independently or stretch a closed mouth to the height
+of an open one. Calibrate one mouth box on the character, then apply placement
+to all states. The base used for animation must have its old mouth removed.
+Saving the character also creates a resting still, leaving the rig base intact.
+
+The six older four-state packs are retained for compatibility and are outside
+this new Studio 20 collection. Four-state rigs still work through phonetic fallbacks.

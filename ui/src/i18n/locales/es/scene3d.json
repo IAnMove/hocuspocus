@@ -360,16 +360,46 @@
     "camera-dolly": "Dolly de revelado"
   },
   "photoPresets": {
-    "photo-documentary-push": { "label": "Acercamiento documental", "description": "Un movimiento lento y contenido hacia el sujeto." },
-    "photo-ken-burns-left": { "label": "Ken Burns · izquierda", "description": "Paneo de archivo clásico de derecha a izquierda." },
-    "photo-ken-burns-right": { "label": "Ken Burns · derecha", "description": "Paneo de archivo clásico de izquierda a derecha." },
-    "photo-portrait-rise": { "label": "Ascenso de retrato", "description": "Empieza bajo y descubre el rostro con lentitud." },
-    "photo-reveal-pullback": { "label": "Alejamiento de revelado", "description": "Abre desde un detalle hasta la fotografía completa." },
-    "photo-diagonal-discovery": { "label": "Descubrimiento diagonal", "description": "Recorrido diagonal elegante para paisajes y arte." },
-    "photo-intimate-closeup": { "label": "Primer plano íntimo", "description": "Un movimiento asimétrico suave para tiempos emocionales." },
-    "photo-dutch-tension": { "label": "Tensión holandesa", "description": "Balanceo y acercamiento lentos para misterio o conflicto." },
-    "photo-handheld-memory": { "label": "Deriva de memoria", "description": "Deriva sutil y suave para recuerdos y reportaje." },
-    "photo-rostrum-scan": { "label": "Barrido de rostrum", "description": "Un movimiento medido de arriba abajo para documentos y mapas." }
+    "photo-documentary-push": {
+      "label": "Acercamiento documental",
+      "description": "Un movimiento lento y contenido hacia el sujeto."
+    },
+    "photo-ken-burns-left": {
+      "label": "Ken Burns · izquierda",
+      "description": "Paneo de archivo clásico de derecha a izquierda."
+    },
+    "photo-ken-burns-right": {
+      "label": "Ken Burns · derecha",
+      "description": "Paneo de archivo clásico de izquierda a derecha."
+    },
+    "photo-portrait-rise": {
+      "label": "Ascenso de retrato",
+      "description": "Empieza bajo y descubre el rostro con lentitud."
+    },
+    "photo-reveal-pullback": {
+      "label": "Alejamiento de revelado",
+      "description": "Abre desde un detalle hasta la fotografía completa."
+    },
+    "photo-diagonal-discovery": {
+      "label": "Descubrimiento diagonal",
+      "description": "Recorrido diagonal elegante para paisajes y arte."
+    },
+    "photo-intimate-closeup": {
+      "label": "Primer plano íntimo",
+      "description": "Un movimiento asimétrico suave para tiempos emocionales."
+    },
+    "photo-dutch-tension": {
+      "label": "Tensión holandesa",
+      "description": "Balanceo y acercamiento lentos para misterio o conflicto."
+    },
+    "photo-handheld-memory": {
+      "label": "Deriva de memoria",
+      "description": "Deriva sutil y suave para recuerdos y reportaje."
+    },
+    "photo-rostrum-scan": {
+      "label": "Barrido de rostrum",
+      "description": "Un movimiento medido de arriba abajo para documentos y mapas."
+    }
   },
   "motionPresets": {
     "turntable": "Plato giratorio de producto",
@@ -418,9 +448,9 @@
     "fullHdLandscape": "Full HD horizontal",
     "fourKLandscape": "4K horizontal",
     "square": "Cuadrado",
-    "hdPortrait": "HD vertical",
-    "fullHdPortrait": "Full HD vertical",
-    "fourKPortrait": "4K vertical"
+    "hdPortrait": "HD vertical · móvil 9:16",
+    "fullHdPortrait": "Full HD vertical · móvil 9:16",
+    "fourKPortrait": "4K vertical · móvil 9:16"
   },
   "layerTypes": {
     "camera": "cámara",
@@ -924,6 +954,10 @@
     "exportProgress": "Fotograma 3D {{index}} / {{total}}",
     "exported": "MP4 3D guardado en Vídeos como {{name}}",
     "exportFailed": "No se pudo exportar la escena 3D.",
+    "exportCancel": "Cancelar exportación 3D",
+    "exportCancelled": "Exportación 3D cancelada. El plano vuelve a ser editable.",
+    "previewQuality": "Vista previa · menor resolución, sin sombras",
+    "exportQualityHint": "La vista previa es más ligera. La exportación usa el encuadre completo, sombras, 24/30/60 fps y audio estéreo. Puedes cancelar; este plano permanece bloqueado hasta que termine.",
     "assetsNotReady": "Los recursos 3D no terminaron de cargar.",
     "stageNotReady": "El escenario 3D no está listo para exportar.",
     "cannotEncode": "Este navegador no puede codificar un MP4 H.264 determinista.",
@@ -1112,5 +1146,46 @@
       "background": "Fondo",
       "prop_1": "Accesorio 1"
     }
+  },
+  "history": {
+    "undo": "Deshacer",
+    "redo": "Rehacer",
+    "checkpoint": "Marcar como guardado",
+    "saved": "Guardado",
+    "unsaved": "Cambios sin guardar",
+    "saving": "Guardando…",
+    "locked": "Bloqueado durante la exportación",
+    "conflict": "Esta escena se editó en otra pestaña.",
+    "keepMine": "Conservar esta pestaña",
+    "takeTheirs": "Cargar la otra pestaña",
+    "persist-error": "No se pudo guardar el borrador local; se conservó la última copia válida."
+  },
+  "inspector": {
+    "object": "Objeto",
+    "scene": "Escena",
+    "previewHint": "La vista previa 3D permanece encima de este panel. Ocúltalo para dejarle más espacio.",
+    "showPreview": "Mostrar vista previa",
+    "hidePreview": "Ocultar vista previa",
+    "empty": "Selecciona un objeto para inspeccionarlo.",
+    "position": "Posición del inspector",
+    "yaw": "Giro Y del inspector (°)",
+    "scale": "Escala del inspector",
+    "source": "URL de GLB o medio (inspector)",
+    "mouth": "Boca del inspector",
+    "addLips": "Añadir labios en el inspector",
+    "addScreen": "Añadir pantalla al objeto",
+    "addSfx": "Añadir SFX en el inspector",
+    "advanced": "Avanzado",
+    "advancedHint": "Los detalles de pantalla, luz y entorno quedan plegados hasta que los necesites.",
+    "screenEmpty": "Todavía no hay medio en la pantalla.",
+    "camera": "Cámara",
+    "cameraEye": "Cámara del inspector",
+    "cameraLook": "Mirar a (inspector)",
+    "fov": "Campo de visión del inspector",
+    "environment": "Entorno cinematográfico",
+    "floor": "Suelo reflectante",
+    "platform": "Plataforma",
+    "bloom": "Bloom",
+    "light": "Color de luz"
   }
 }

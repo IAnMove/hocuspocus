@@ -3,6 +3,26 @@
 The editor deliberately stores only references to uploads/workspace outputs.
 Path validation remains the responsibility of the API layer; every path passed
 to this module must already be resolved to a permitted local file.
+
+Frame / PTS contract
+--------------------
+Assembly is counted in integer frames at the integer output fps
+``{24, 25, 30, 50, 60}``. Seconds are the rational ``frames / fps``; they are
+never rounded to 4 decimals and then multiplied back by fps.
+
+Each source frame ``i`` covers the half-open interval ``[i/fps, (i+1)/fps)``.
+Trim endpoints snap to the nearest source frame. A full-span clip whose
+source fps matches the output fps keeps every decoded source frame: a
+193-frame 30fps file stays 193 frames, not 192. The historical 589-from-590
+export came from ``round(duration, 4)`` (6.4333s for 193/30) feeding ``-t``,
+which stopped short of the last frame before concat.
+
+Crossfades subtract ``round(overlap_seconds * fps)`` frames. Interstitial
+time cards add ``round(card_seconds * fps)`` frames. Audio is padded to the
+video span and compared by decoded samples / stream duration, not by
+container duration alone. Export writes a staging file and replaces the
+destination only after that validation; failures and cancels leave any
+previous output untouched.
 """
 
 from __future__ import annotations
@@ -11,19 +31,37 @@ import json
 import math
 import os
 import random
-import shutil
 import subprocess
 import tempfile
-from collections.abc import Callable
 from typing import Any
 
-
-ProgressCallback = Callable[[int, str], None]
+from services.video_editor_frames import (
+    AbortCallback,
+    MIN_TRIM_SECONDS,
+    ProgressCallback,
+    SUPPORTED_FPS,
+    VideoEditorCancelled,
+    VideoEditorError,
+    _check_abort,
+    _concat_with_transitions,
+    _concat_without_transition,
+    _expected_concat_frames,
+    _layout_filter,
+    _normalise_clip,
+    _promote_output,
+    _run,
+    _seconds_for_ffmpeg,
+    _validate_export_artifact,
+    count_decoded_video_frames,
+    plan_clip_frames,
+    plan_transition_frames,
+    probe_assembly_source,
+    probe_audio_timing,
+)
 
 INTERSTITIAL_TRANSITIONS = frozenset(
     {"later-clock", "later-tropical", "later-cinematic"}
 )
-
 SOURCE_SIDECAR_LIMIT_BYTES = 4 * 1024 * 1024
 
 
@@ -100,21 +138,6 @@ def build_source_provenance_manifest(
 def is_interstitial_transition(transition: str) -> bool:
     """Return whether a transition inserts a full time-card between clips."""
     return transition in INTERSTITIAL_TRANSITIONS
-
-
-def _run(command: list[str], *, timeout: int, label: str) -> None:
-    result = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "Unknown FFmpeg error").strip()
-        raise RuntimeError(f"{label} failed: {detail[-1200:]}")
-
 
 def probe_media(path: str) -> dict[str, Any]:
     """Return the timing and primary stream information needed by the editor."""
@@ -229,13 +252,20 @@ def _mix_soundtrack(
         (
             f"[1:a:0]atrim=duration={mix_duration:.6f},"
             f"asetpts=PTS-STARTPTS,volume={volume:.4f}[music];"
-            "[0:a:0][music]amix=inputs=2:duration=first:dropout_transition=0[mixed]"
+            "[0:a:0][music]amix=inputs=2:duration=first:dropout_transition=0,"
+            f"apad,atrim=duration={duration:.6f}[mixed]"
         ),
         "-map", "0:v:0", "-map", "[mixed]",
         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart", output_path,
     ])
-    _run(command, timeout=1800, label="Mixing editor soundtrack")
+    _run(
+        command,
+        timeout=1800,
+        label="Mixing editor soundtrack",
+        phase="soundtrack",
+        output={"path": os.path.basename(output_path)},
+    )
 
 
 def extract_frame(
@@ -291,185 +321,7 @@ def extract_frame(
 
 
 def _video_filter(width: int, height: int, fps: int, fit: str) -> str:
-    if fit == "fill":
-        sizing = (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height}"
-        )
-    else:
-        sizing = (
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black"
-        )
-    return f"{sizing},fps={fps},setsar=1,format=yuv420p"
-
-
-def _normalise_clip(
-    source: str,
-    destination: str,
-    clip: dict[str, Any],
-    width: int,
-    height: int,
-    fps: int,
-) -> float:
-    media = probe_media(source)
-    source_duration = float(media["duration"])
-    trim_start = max(0.0, min(float(clip.get("trim_start") or 0), source_duration - 0.05))
-    requested_end = float(clip.get("trim_end") or source_duration)
-    trim_end = max(trim_start + 0.05, min(requested_end, source_duration))
-    duration = trim_end - trim_start
-    volume = 0.0 if clip.get("muted") else max(0.0, min(float(clip.get("volume", 1)), 2.0))
-    fit = "fill" if clip.get("fit") == "fill" else "fit"
-
-    command = ["ffmpeg", "-y", "-ss", f"{trim_start:.6f}", "-i", source]
-    if not media["has_audio"]:
-        command.extend(
-            ["-f", "lavfi", "-t", f"{duration:.6f}", "-i", "anullsrc=r=48000:cl=stereo"]
-        )
-
-    command.extend(["-t", f"{duration:.6f}", "-map", "0:v:0"])
-    command.extend(["-map", "0:a:0" if media["has_audio"] else "1:a:0"])
-    command.extend(
-        [
-            "-vf",
-            _video_filter(width, height, fps, fit),
-            "-af",
-            f"aresample=48000:async=1:first_pts=0,volume={volume:.4f},apad",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "18",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            "-shortest",
-            destination,
-        ]
-    )
-    _run(command, timeout=max(300, int(duration * 20)), label=f"Preparing {os.path.basename(source)}")
-    return duration
-
-
-def _concat_without_transition(segments: list[str], output_path: str) -> None:
-    if len(segments) == 1:
-        shutil.copy2(segments[0], output_path)
-        return
-
-    list_path = os.path.join(os.path.dirname(segments[0]), "concat.txt")
-    with open(list_path, "w", encoding="utf-8") as handle:
-        for segment in segments:
-            escaped = os.path.abspath(segment).replace("\\", "/").replace("'", "'\\''")
-            handle.write(f"file '{escaped}'\n")
-    _run(
-        [
-            "ffmpeg",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            list_path,
-            "-c",
-            "copy",
-            "-movflags",
-            "+faststart",
-            output_path,
-        ],
-        timeout=1200,
-        label="Joining clips",
-    )
-
-
-def _concat_with_transitions(
-    segments: list[str],
-    durations: list[float],
-    output_path: str,
-    transitions: list[dict[str, Any]],
-) -> None:
-    command = ["ffmpeg", "-y"]
-    for segment in segments:
-        command.extend(["-i", segment])
-
-    filters: list[str] = []
-    video_label = "0:v"
-    audio_label = "0:a"
-    running_duration = durations[0]
-    for index in range(1, len(segments)):
-        out_video = f"v{index}"
-        out_audio = f"a{index}"
-        transition = transitions[index - 1]
-        transition_type = str(transition.get("type") or "none")
-        fade_duration = float(transition.get("duration") or 0)
-        if transition_type == "none" or fade_duration <= 0:
-            filters.append(
-                f"[{video_label}][{index}:v]concat=n=2:v=1:a=0[{out_video}]"
-            )
-            filters.append(
-                f"[{audio_label}][{index}:a]concat=n=2:v=0:a=1[{out_audio}]"
-            )
-            running_duration += durations[index]
-        else:
-            transition_name = {
-                "crossfade": "fade",
-                "fade-black": "fadeblack",
-                "wipe-left": "wipeleft",
-                "slide-left": "slideleft",
-                "slide-right": "slideright",
-                "circle-open": "circleopen",
-                "dissolve": "dissolve",
-                "pixelize": "pixelize",
-                "blur": "hblur",
-                "zoom-in": "zoomin",
-            }.get(transition_type, "fade")
-            offset = max(0.0, running_duration - fade_duration)
-            filters.append(
-                f"[{video_label}][{index}:v]xfade=transition={transition_name}:"
-                f"duration={fade_duration:.6f}:offset={offset:.6f}[{out_video}]"
-            )
-            filters.append(
-                f"[{audio_label}][{index}:a]acrossfade=d={fade_duration:.6f}:"
-                f"c1=tri:c2=tri[{out_audio}]"
-            )
-            running_duration += durations[index] - fade_duration
-        video_label = out_video
-        audio_label = out_audio
-
-    command.extend(
-        [
-            "-filter_complex",
-            ";".join(filters),
-            "-map",
-            f"[{video_label}]",
-            "-map",
-            f"[{audio_label}]",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "medium",
-            "-crf",
-            "18",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-movflags",
-            "+faststart",
-            output_path,
-        ]
-    )
-    _run(
-        command,
-        timeout=max(1200, int(sum(durations) * 30)),
-        label="Rendering transitions",
-    )
+    return f"{_layout_filter(width, height, fit)},fps={fps}"
 
 
 def _load_time_card_font(size: int, *, bold: bool = True):
@@ -795,19 +647,28 @@ def _render_time_card_segment(
         width=width,
         height=height,
     )
+    frames = max(1, int(round(float(duration) * fps)))
+    span = _seconds_for_ffmpeg(frames, fps)
     _run(
         [
             "ffmpeg", "-y", "-loop", "1", "-i", card_path,
-            "-f", "lavfi", "-t", f"{duration:.6f}",
+            "-f", "lavfi", "-t", span,
             "-i", "anullsrc=r=48000:cl=stereo",
-            "-t", f"{duration:.6f}", "-map", "0:v:0", "-map", "1:a:0",
-            "-vf", f"fps={fps},setsar=1,format=yuv420p",
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-vf", (
+                f"fps={fps},tpad=stop_mode=clone:stop=2,"
+                f"trim=end_frame={frames},setpts=N/{fps}/TB,setsar=1,format=yuv420p"
+            ),
+            "-frames:v", str(frames),
+            "-fps_mode", "cfr", "-r", str(fps),
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-            "-shortest", destination,
+            destination,
         ],
-        timeout=max(180, int(duration * 30)),
+        timeout=max(180, int(frames / fps * 30) + 30),
         label="Rendering time-card transition",
+        phase="time_card",
+        output={"frames": frames, "fps": fps},
     )
 
 
@@ -862,6 +723,7 @@ def render_project(
     fps: int,
     soundtrack: dict[str, Any] | None = None,
     progress: ProgressCallback | None = None,
+    abort_callback: AbortCallback | None = None,
 ) -> dict[str, Any]:
     """Normalise, trim and assemble clips into a shareable H.264 MP4."""
     if not clips:
@@ -870,33 +732,40 @@ def render_project(
         raise ValueError("Output resolution must be between 240 and 3840 pixels")
     if width % 2 or height % 2:
         raise ValueError("Output width and height must be even numbers")
-    if fps not in (24, 25, 30, 50, 60):
+    if fps not in SUPPORTED_FPS:
         raise ValueError("Unsupported frame rate")
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    destination = os.path.abspath(output_path)
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
     total_stages = len(clips) + 1
-    with tempfile.TemporaryDirectory(prefix=".video_editor_", dir=os.path.dirname(output_path)) as temp_dir:
+    with tempfile.TemporaryDirectory(
+        prefix=".video_editor_",
+        dir=os.path.dirname(destination),
+    ) as temp_dir:
         segments: list[str] = []
+        clip_frames: list[int] = []
         durations: list[float] = []
         for index, clip in enumerate(clips):
+            _check_abort(abort_callback, phase="normalise")
             if progress:
                 progress(
                     round((index / total_stages) * 100),
                     f"Preparing clip {index + 1} of {len(clips)}…",
                 )
             segment = os.path.join(temp_dir, f"segment_{index:04d}.mp4")
-            durations.append(
-                _normalise_clip(
-                    str(clip["resolved_path"]),
-                    segment,
-                    clip,
-                    width,
-                    height,
-                    fps,
-                )
+            frames = _normalise_clip(
+                str(clip["resolved_path"]),
+                segment,
+                clip,
+                width,
+                height,
+                fps,
             )
+            clip_frames.append(frames)
+            durations.append(frames / fps)
             segments.append(segment)
 
+        _check_abort(abort_callback, phase="concat")
         if progress:
             progress(
                 round((len(clips) / total_stages) * 100),
@@ -908,12 +777,17 @@ def render_project(
             requested_duration = float(clips[index].get("transition_duration") or 0.4)
             actual_duration = max(0.5, min(requested_duration, 5.0)) if is_interstitial_transition(transition_type) else (
                 max(
-                    0.05,
+                    MIN_TRIM_SECONDS,
                     min(requested_duration, durations[index] * 0.45, durations[index + 1] * 0.45),
                 )
                 if transition_type != "none"
                 else 0.0
             )
+            if transition_type != "none" and not is_interstitial_transition(transition_type):
+                fade_frames = plan_transition_frames(
+                    actual_duration, fps, clip_frames[index], clip_frames[index + 1],
+                )
+                actual_duration = fade_frames / fps if fade_frames else 0.0
             transitions.append({
                 "type": transition_type,
                 "duration": actual_duration,
@@ -936,34 +810,60 @@ def render_project(
         else:
             render_segments, render_durations, render_transitions = segments, durations, transitions
 
-        assembled_path = os.path.join(temp_dir, "assembled.mp4") if soundtrack else output_path
+        render_frame_counts = [
+            max(1, int(round(float(duration) * fps))) for duration in render_durations
+        ]
+        expected_frames = _expected_concat_frames(render_frame_counts, render_transitions, fps)
+        assembled_path = os.path.join(temp_dir, "assembled.mp4")
         if not any(item["type"] != "none" for item in render_transitions) or len(render_segments) == 1:
-            _concat_without_transition(render_segments, assembled_path)
+            _concat_without_transition(
+                render_segments,
+                assembled_path,
+                fps=fps,
+                expected_frames=expected_frames,
+                frame_counts=render_frame_counts,
+            )
         else:
             _concat_with_transitions(
                 render_segments,
                 render_durations,
                 assembled_path,
                 render_transitions,
+                fps=fps,
+                frame_counts=render_frame_counts,
             )
 
-        duration = sum(durations) + sum(
-            float(item["duration"])
-            if is_interstitial_transition(item["type"])
-            else -float(item["duration"])
-            for item in transitions
-        )
+        staging_path = assembled_path
+        duration_seconds = expected_frames / fps
         if soundtrack:
+            _check_abort(abort_callback, phase="soundtrack")
             if progress:
                 progress(96, "Mixing external soundtrack…")
-            _mix_soundtrack(assembled_path, output_path, soundtrack, duration)
+            mixed_path = os.path.join(temp_dir, "final.mp4")
+            _mix_soundtrack(assembled_path, mixed_path, soundtrack, duration_seconds)
+            staging_path = mixed_path
+
+        if progress:
+            progress(98, "Validating exported frames and audio…")
+        accounting = _validate_export_artifact(
+            staging_path,
+            expected_frames=expected_frames,
+            fps=fps,
+            expect_audio=True,
+            phase="validate",
+        )
+        _check_abort(abort_callback, phase="validate")
+        _promote_output(staging_path, destination)
 
     if progress:
         progress(100, "Video export complete")
     return {
-        "duration": round(duration, 3),
+        "duration": round(duration_seconds, 3),
+        "frames": expected_frames,
+        "fps": fps,
         "clip_count": len(clips),
         "transitions": transitions,
+        "audio_seconds": accounting.get("audio_seconds"),
     }
 
 
@@ -1024,18 +924,24 @@ def _render_still_segment(
         fps=fps,
         motion=motion,
     )
+    frames = max(2, round(duration * fps))
+    span = _seconds_for_ffmpeg(frames, fps)
     _run(
         [
             "ffmpeg", "-y", "-loop", "1", "-i", source,
-            "-f", "lavfi", "-t", f"{duration:.6f}",
+            "-f", "lavfi", "-t", span,
             "-i", "anullsrc=r=48000:cl=stereo",
-            "-t", f"{duration:.6f}", "-map", "0:v:0", "-map", "1:a:0",
+            "-map", "0:v:0", "-map", "1:a:0",
             "-vf", video_filter,
+            "-frames:v", str(frames),
+            "-fps_mode", "cfr", "-r", str(fps),
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-            "-c:a", "aac", "-b:a", "128k", "-shortest", destination,
+            "-c:a", "aac", "-b:a", "128k", destination,
         ],
-        timeout=max(180, int(duration * 30)),
+        timeout=max(180, int(frames / fps * 30) + 30),
         label=f"Animating {os.path.basename(source)}",
+        phase="animatic",
+        output={"path": os.path.basename(source), "frames": frames, "fps": fps},
     )
 
 
@@ -1049,42 +955,84 @@ def render_comic_animatic(
     transition: str = "none",
     transition_duration: float = 0.35,
     progress: ProgressCallback | None = None,
+    abort_callback: AbortCallback | None = None,
 ) -> dict[str, Any]:
     """Render ordered, already-lettered comic panels as a cinematic animatic."""
     if not panels:
         raise ValueError("The comic has no panels to animate")
     if width < 240 or height < 240 or width > 3840 or height > 3840 or width % 2 or height % 2:
         raise ValueError("Invalid animatic resolution")
-    if fps not in (24, 25, 30, 50, 60):
+    if fps not in SUPPORTED_FPS:
         raise ValueError("Unsupported animatic frame rate")
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".comic_animatic_", dir=os.path.dirname(output_path)) as temp_dir:
+    destination = os.path.abspath(output_path)
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=".comic_animatic_",
+        dir=os.path.dirname(destination),
+    ) as temp_dir:
         segments: list[str] = []
         durations: list[float] = []
+        frame_counts: list[int] = []
         for index, panel in enumerate(panels):
+            _check_abort(abort_callback, phase="animatic")
             if progress:
                 progress(round(index / (len(panels) + 1) * 100), f"Animating panel {index + 1} of {len(panels)}…")
             duration = max(0.8, min(float(panel.get("duration") or 3.0), 20.0))
-            destination = os.path.join(temp_dir, f"panel_{index:04d}.mp4")
+            frames = max(2, round(duration * fps))
+            panel_path = os.path.join(temp_dir, f"panel_{index:04d}.mp4")
             _render_still_segment(
-                str(panel["resolved_path"]), destination, duration=duration,
+                str(panel["resolved_path"]), panel_path, duration=duration,
                 width=width, height=height, fps=fps,
                 motion=str(panel.get("motion") or "none"),
             )
-            segments.append(destination)
-            durations.append(duration)
+            segments.append(panel_path)
+            durations.append(frames / fps)
+            frame_counts.append(frames)
         transitions = []
         for index in range(max(0, len(segments) - 1)):
-            duration = max(0.05, min(transition_duration, durations[index] * .45, durations[index + 1] * .45)) if transition != "none" else 0
-            transitions.append({"type": transition, "duration": duration})
+            if transition == "none":
+                fade = 0.0
+            else:
+                fade_frames = plan_transition_frames(
+                    transition_duration, fps, frame_counts[index], frame_counts[index + 1],
+                )
+                fade = fade_frames / fps if fade_frames else 0.0
+            transitions.append({"type": transition, "duration": fade})
+        assembled_path = os.path.join(temp_dir, "assembled.mp4")
+        expected_frames = _expected_concat_frames(frame_counts, transitions, fps)
         if len(segments) == 1 or transition == "none":
-            _concat_without_transition(segments, output_path)
+            _concat_without_transition(
+                segments,
+                assembled_path,
+                fps=fps,
+                expected_frames=expected_frames,
+                frame_counts=frame_counts,
+            )
         else:
-            _concat_with_transitions(segments, durations, output_path, transitions)
+            _concat_with_transitions(
+                segments,
+                durations,
+                assembled_path,
+                transitions,
+                fps=fps,
+                frame_counts=frame_counts,
+            )
+        accounting = _validate_export_artifact(
+            assembled_path,
+            expected_frames=expected_frames,
+            fps=fps,
+            expect_audio=True,
+            phase="validate",
+        )
+        _check_abort(abort_callback, phase="validate")
+        _promote_output(assembled_path, destination)
     if progress:
         progress(100, "Comic animatic complete")
     return {
-        "duration": round(sum(durations) - sum(item["duration"] for item in transitions), 3),
+        "duration": round(expected_frames / fps, 3),
+        "frames": expected_frames,
+        "fps": fps,
         "clip_count": len(segments),
         "transitions": transitions,
+        "audio_seconds": accounting.get("audio_seconds"),
     }

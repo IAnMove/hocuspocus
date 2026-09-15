@@ -65,8 +65,10 @@ test('rate changes output duration and preserves complete timeline coverage and 
     assert.ok(Math.abs(plan.times.at(-1) * speed - scene.duration) <= speed / scene.fps + 1e-8)
     assert.equal(parseScene3DDocument(JSON.parse(JSON.stringify(scene))).playbackSpeed, speed)
   }
-  assert.equal(world3dExportPlan(6, 24).count, 180)
-  assert.equal(world3dExportPlan(6, 24).fps, 30)
+  assert.equal(world3dExportPlan(6, 24).count, 144)
+  assert.equal(world3dExportPlan(6, 24).fps, 24)
+  assert.equal(world3dExportPlan(6, 30).fps, 30)
+  assert.equal(world3dExportPlan(6, 60).fps, 60)
   assert.equal(scene3dPlaybackSpeed(undefined), 1)
   assert.equal(scene3dPlaybackSpeed(NaN), 1)
   assert.equal(scene3dPlaybackSpeed(-1), 0.25)

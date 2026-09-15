@@ -388,6 +388,7 @@
         "approvedReferenceAssetIds"
       ],
       "properties": {
+        "referenceRevision": { "type": "integer", "minimum": 0 },
         "revision": { "type": "integer", "minimum": 0 },
         "worldSummary": { "type": "string" },
         "immutableRules": {
@@ -597,6 +598,7 @@
         "attempts"
       ],
       "properties": {
+        "productionMethod": { "enum": ["generated_video", "animation_2d", "animation_3d", "imported_video"], "default": "generated_video" },
         "id": { "$ref": "#/$defs/id" },
         "sceneId": { "$ref": "#/$defs/id" },
         "order": { "type": "integer", "minimum": 0 },
@@ -782,6 +784,11 @@
         "updatedAt"
       ],
       "properties": {
+        "allowedProductionMethods": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "enum": ["generated_video", "animation_2d", "animation_3d", "imported_video"] },
+          "default": ["generated_video"]
+        },
         "version": { "const": 1 },
         "id": { "$ref": "#/$defs/id" },
         "revision": { "type": "integer", "minimum": 0 },

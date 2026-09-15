@@ -31,7 +31,7 @@ test('a screen upload, dimensions and fit survive saving and reopening the shot'
   expect(slot.screen.sourceRef).toMatchObject({ filename: 'media-screen-test.png', url })
   await controls.getByRole('button', { name: 'Remove screen', exact: true }).click()
   await expect(workspace.getByRole('button', { name: 'Remove screen', exact: true })).toHaveCount(0)
-  await workspace.locator('input[type=file][accept=".json,application/json"]').setInputFiles({ name: 'screen.world3d.json', mimeType: 'application/json', buffer: await readFile(path) })
+  await workspace.getByLabel('Open shot JSON').setInputFiles({ name: 'screen.world3d.json', mimeType: 'application/json', buffer: await readFile(path) })
   await expect(controls.getByLabel('Content fit', { exact: true })).toHaveValue('cover')
   await expect(controls.getByLabel('Screen style', { exact: true })).toHaveValue('billboard')
   await expect(controls.getByLabel('Width / aspect', { exact: true })).toHaveValue('8')

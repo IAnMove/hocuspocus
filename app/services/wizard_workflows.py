@@ -211,6 +211,9 @@ def _clean_workflow(value: Any) -> dict[str, Any] | None:
         "cancelRequested": value.get("cancelRequested") is True,
         "resumeRequested": value.get("resumeRequested") is True,
         "pendingInput": pending_input,
+        "executorOwner": _text(value.get("executorOwner"), 160),
+        "leaseToken": _text(value.get("leaseToken"), 200),
+        "leaseExpiresAt": _integer(value.get("leaseExpiresAt")),
     }
 
 

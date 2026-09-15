@@ -2,13 +2,13 @@
   "speech": {
     "resting": "en silencio",
     "speaking": "hablando",
-    "characterDefinition": "Personaje reutilizable · modelo 3D, cara y voz",
-    "definitionHint": "La ficha guarda el modelo y su cara. Cada escena conserva una copia independiente; sus frases y audios no se guardan en el personaje.",
+    "characterDefinition": "Personaje reutilizable · voz y lipsync",
+    "definitionHint": "Configura su voz y, cuando lo necesites, su boca 2D o su modelo 3D. Las frases y los audios pertenecen a cada escena. Guarda los cambios antes de preparar lipsync.",
     "savedCharacter": "Personaje de la biblioteca",
     "newCharacter": "Crear personaje nuevo",
     "useCharacter": "Usar personaje en este plano",
     "definitionName": "Nombre del personaje",
-    "saveCharacter": "Guardar personaje con cara y voz",
+    "saveCharacter": "Guardar toda la configuración del personaje",
     "characterSaved": "Personaje guardado. Modelo, boca, ojos y voz disponibles en otros planos.",
     "characterApplied": "Personaje aplicado. Los turnos del plano se conservan.",
     "reloadLibrary": "Recargar biblioteca",
@@ -17,13 +17,15 @@
     "libraryVoice": "Voz preferida (opcional)",
     "noPreferredVoice": "Sin voz preferida · usar audio existente",
     "voiceDirection": "Dirección de voz (opcional)",
-    "voiceHint": "Qwen3 CustomVoice local. Idioma detectado por el texto. Requiere el modelo instalado; no se guardan claves ni se genera audio automáticamente.",
+    "voiceHint": "Qwen3 CustomVoice habla varios idiomas, pero ninguna de estas nueve voces originales es nativa española. La pronunciación y el acento varían según el idioma: escucha una muestra antes de elegir. La dirección de voz puede influir en la interpretación; no garantiza cambiar el acento.",
     "generateVoice": "Generar voz de esta frase",
     "attachGeneratedVoice": "Aplicar audio ya generado",
     "existingAudioWins": "Esta frase ya tiene audio: se reutiliza y no se genera otra voz.",
     "explicitGeneration": "Solo este botón genera audio. Se usa el texto literal y luego Rhubarb local calcula los labios.",
     "voiceTooLong": "El audio dura {{seconds}} s y no cabe en este turno. Amplía su fin y pulsa Aplicar audio ya generado. Archivo conservado: {{file}}",
-    "noLinkedCharacter": "Sin vincular · elegir GLB manualmente",
+    "noLinkedCharacter": "Sin vincular",
+    "kitKind2d": "2D",
+    "kitKind3d": "3D",
     "missingCharacter": "Personaje no disponible en la biblioteca",
     "otherWorkspace": "Referencia guardada en {{workspace}}.",
     "textOnlyProduction": "Sin audio: se abrirán los turnos editables. Puedes añadir audio o generar cada frase con la voz del personaje dentro de Vídeo3D.",
@@ -88,6 +90,34 @@
     "offset": "Recortar inicio del audio (s)",
     "gain": "Volumen",
     "needsPlacement": "Añade labios a este sujeto antes de visualizar su voz sobre el modelo.",
+    "facePack": "Cara mascota",
+    "facePackHint": "Caras incluidas para una pantalla de cabeza CRT: visemas y expresiones. Experimental.",
+    "expressionHold": "Expresión al hablar",
+    "expressionHoldHint": "Las vocales solo cambian la boca. Esta expresión se mantiene en toda la frase salvo que añadas cues de expresión.",
+    "facePackMaker": "Montar un pack con stills",
+    "facePackMakerHint": "Las caras de plano-cubo y los labios se montan en Character Creator: prompts, stills y un pack 9×6 con la piel anclada.",
+    "pack": {
+      "tv": "CRT",
+      "skull": "Cráneo",
+      "voxel": "Cubo",
+      "anime": "Anime",
+      "cubeskull": "Cráneo voxel",
+      "felt": "Felt",
+      "clay": "Arcilla",
+      "pixel": "Pixel",
+      "porcelain": "Porcelana",
+      "cat": "Gato",
+      "oni": "Oni",
+      "stencil": "Stencil",
+      "alien": "Alien",
+      "pumpkin": "Calabaza",
+      "ice": "Hielo",
+      "mushroom": "Seta",
+      "vector": "Vector",
+      "halftone": "Halftone",
+      "steampunk": "Steampunk",
+      "gummy": "Gominola"
+    },
     "busy": "Preparando voz o kit…",
     "adjust": "Ajustar boca y expresiones",
     "adjustHint": "X: izquierda/derecha; Y: arriba/abajo; Z: profundidad. Orienta la cara hacia delante (+Z), ajusta anchura/altura y reproduce. El GLB se conserva.",
@@ -143,6 +173,27 @@
     "pickHint": "Haz clic en la boca del sujeto seleccionado. Escape cancela.",
     "pickMissed": "Haz clic en la cara del modelo seleccionado, no en el fondo.",
     "cancelPlacement": "Cancelar colocación",
+    "timeline": {
+      "title": "Línea de gestos",
+      "clocks": "El tiempo de fuente es el archivo de audio. El recorte salta su inicio. El tiempo de escena es inicio + fuente − recorte.",
+      "sourceTime": "Fuente {{seconds}} s",
+      "sceneTime": "Escena {{seconds}} s",
+      "offsetTime": "Recorte de voz {{seconds}} s",
+      "zoom": "Zoom",
+      "loop": "Repetir selección",
+      "reanalyze": "Recalcular selección",
+      "addSilence": "Añadir silencio",
+      "viseme": "Visema",
+      "cueStart": "Inicio del gesto (fuente s)",
+      "cueEnd": "Fin del gesto (fuente s)",
+      "selectStart": "Inicio de selección (fuente s)",
+      "selectEnd": "Fin de selección (fuente s)",
+      "selection": "Selección {{start}}–{{end}} s",
+      "manual": "Manual",
+      "waveform": "Forma de onda",
+      "playback": "Reproducción de la línea de gestos",
+      "noAudio": "Añade una voz para ver la forma de onda. Los gestos importados se pueden editar igual."
+    },
     "isolation": {
       "label": "Aislar voz antes de calcular labios",
       "loading": "Comprobando el modelo local opcional…",
@@ -150,6 +201,81 @@
       "missing": "Modelo opcional no disponible. Necesita audio-separator instalado y el checkpoint BS-RoFormer con su YAML en app/ckpts/roformer. No se descarga nada automáticamente.",
       "error": "No se pudo comprobar el modelo opcional.",
       "retry": "Comprobar de nuevo"
+    },
+    "optionalModel": "Modelo 3D (opcional; no hace falta para voz o personajes 2D)",
+    "configure2d": "Configurar boca y lipsync 2D",
+    "need2dImage": "Para lipsync 2D, añade una imagen al personaje y guarda su ficha. Puedes hacerlo en Personajes o desde su referencia en Series Lab.",
+    "configureLibraryCharacter": "Configurar voz y lipsync de {{name}}",
+    "voiceOrigin": "Idioma/perfil de origen: {{language}}",
+    "voiceOrigins": {
+      "chinese": "Chino",
+      "beijing": "Chino · Pekín",
+      "sichuan": "Chino · Sichuan",
+      "english": "Inglés",
+      "americanEnglish": "Inglés estadounidense",
+      "japanese": "Japonés",
+      "korean": "Coreano"
+    },
+    "voiceProfiles": {
+      "vivian": "Voz femenina joven, brillante y con un punto incisivo.",
+      "serena": "Voz femenina joven, cálida y suave.",
+      "uncle_fu": "Voz masculina madura, grave y aterciopelada.",
+      "dylan": "Voz masculina joven, clara y natural.",
+      "eric": "Voz masculina vivaz, brillante y algo ronca.",
+      "ryan": "Voz masculina dinámica, con ritmo marcado.",
+      "aiden": "Voz masculina luminosa, de registro medio claro.",
+      "ono_anna": "Voz femenina juguetona, ligera y ágil.",
+      "sohee": "Voz femenina cálida y expresiva."
+    },
+    "voiceAudition": {
+      "language": "Idioma de la frase de prueba",
+      "sample": {
+        "es": "Hola, esta es mi voz. Así sueno al contar una historia en español.",
+        "en": "Hello, this is my voice. This is how I sound when telling a story in English."
+      },
+      "generate": "Generar muestra de voz",
+      "generating": "Generando muestra…",
+      "cancel": "Cancelar muestra",
+      "audio": "Muestra de la voz seleccionada",
+      "hint": "Usa esta voz y su dirección actual. Elegir una voz no genera audio. Este botón crea una grabación breve en HocusPocus; no hace falta guardar el personaje ni configurar las bocas."
+    },
+    "customVoice": {
+      "add": "Añadir voz propia: importar o grabar",
+      "selected": "Voz propia",
+      "saved": "Voces propias guardadas en personajes",
+      "name": "Nombre de esta voz",
+      "hint": "Usa una muestra limpia de una sola persona, sin música ni otras voces. Importa o graba entre 3 y 30 segundos; después escribe exactamente lo que dice. El modelo usará su voz para leer diálogos nuevos.",
+      "import": "Importar muestra de audio",
+      "record": "Grabar con el micrófono",
+      "recordHint": "Se guardan hasta 30 segundos. Puedes leer una frase de 5–15 segundos y copiarla en la transcripción.",
+      "referencePreview": "Muestra original de la voz",
+      "transcript": "Texto exacto de la muestra",
+      "transcriptPlaceholder": "Escribe aquí las mismas palabras que se escuchan en el audio. No es el diálogo que se generará.",
+      "language": "Idioma para los nuevos diálogos",
+      "saveHint": "Guarda todo el personaje para conservar esta voz. Podrás elegirla en otros personajes; los planos nuevos o regenerados usarán esa configuración.",
+      "incomplete": "Para probar o guardar esta voz, añade su nombre, una muestra de audio y su transcripción exacta.",
+      "voiceFileSize": "Elige un audio de hasta 20 MB que no esté vacío.",
+      "voiceFileDecode": "El navegador no ha podido leer este audio. Prueba con WAV o MP3.",
+      "voiceFileDuration": "La muestra debe durar entre 3 y 30 segundos. Recorta el audio y conserva el texto exacto del fragmento.",
+      "microphoneUnavailable": "El navegador solo permite el micrófono desde HTTPS o localhost. Abre HocusPocus con una de esas direcciones, o importa un audio aquí.",
+      "states": {
+        "permission": "Permite el acceso al micrófono en el navegador…",
+        "recording": "Grabando · máximo 30 segundos",
+        "uploading": "Guardando muestra de audio…"
+      },
+      "languages": {
+        "auto": "Automático según el texto",
+        "spanish": "Español",
+        "english": "Inglés",
+        "chinese": "Chino",
+        "japanese": "Japonés",
+        "korean": "Coreano",
+        "german": "Alemán",
+        "french": "Francés",
+        "russian": "Ruso",
+        "portuguese": "Portugués",
+        "italian": "Italiano"
+      }
     }
   },
   "title": "Estudio de escenas 3D",
@@ -157,6 +283,10 @@
   "templates": "Biblioteca de planos",
   "search": "Buscar plantillas",
   "all": "Todas",
+  "allSettings": "Cualquier decorado",
+  "filterCategory": "Tipo de plano",
+  "filterSetting": "Decorado",
+  "filterCount": "{{shown}} / {{total}}",
   "noResults": "No hay plantillas para esta búsqueda.",
   "play": "Reproducir",
   "pause": "Pausar",
@@ -181,13 +311,51 @@
   "position": "Posición (m)",
   "yaw": "Giro Y (°)",
   "keepAssets": "Conservar mis objetos al cambiar de plano",
+  "userTemplates": {
+    "title": "Mis escenarios",
+    "help": "Exporta un tipo de escenario (cámara, decorado, disposición, recorrido) como JSON intercambiable. Impórtalo aquí para reutilizarlo. No es el JSON de un plano y no empaqueta los GLB.",
+    "name": "Nombre del escenario",
+    "description": "Descripción (opcional)",
+    "includeAssets": "Incluir URL duraderas de la galería (nunca archivos blob:)",
+    "export": "Exportar plantilla de escenario",
+    "import": "Importar plantilla de escenario",
+    "chooseFile": "Archivo JSON de plantilla de escenario",
+    "exported": "Escenario guardado en este navegador y descargado como archivo .world3d.template.json.",
+    "imported": "Escenario añadido a Mis escenarios. Púlsalo para aplicarlo a este plano.",
+    "removed": "Escenario eliminado de este navegador.",
+    "empty": "Aún no hay escenarios importados. Exporta el plano actual o importa un archivo .world3d.template.json.",
+    "noDescription": "Cámara, decorado y disposición de objetos de un escenario compartido.",
+    "remove": "Quitar",
+    "needTitle": "Pon un nombre al escenario antes de exportarlo.",
+    "invalid": "No se pudo importar: el archivo no es una plantilla de escenario de Video 3D.",
+    "tooLarge": "El archivo de plantilla supera 1,5 MB.",
+    "saveFailed": "No se pudo guardar el escenario en este navegador (almacenamiento lleno o bloqueado).",
+    "openAsShot": "Este archivo es una plantilla de escenario. Impórtalo desde Mis escenarios, no como JSON de plano."
+  },
   "cameraHelp": "Puedes cambiar la cámara; tus objetos conservan su identidad.",
   "category": {
     "cinema": "Cine",
+    "action": "Acción",
     "product": "Producto",
     "music": "Videoclip",
     "space": "Espacio",
     "drive": "Conducción"
+  },
+  "setting": {
+    "sea": "Mar",
+    "city": "Ciudad",
+    "rooftop": "Azotea",
+    "hangar": "Hangar",
+    "desert": "Desierto",
+    "train": "Tren",
+    "moon": "Luna",
+    "space": "Espacio",
+    "jungle": "Selva",
+    "snow": "Nieve",
+    "casino": "Casino",
+    "studio": "Estudio",
+    "street": "Calle",
+    "stage": "Escenario"
   },
   "template": {
     "speech-portrait": {
@@ -481,6 +649,190 @@
     "tv-head-walk": {
       "title": "Caminata cabeza CRT",
       "description": "Humanoide generado (piernas, cuerpo, brazos) con un televisor CRT antiguo de cabeza. El plano de la cara va en el hueso headfront."
+    },
+    "reflective-stage": {
+      "title": "Escenario reflectante",
+      "description": "Suelo metálico, portal de energía y niebla suave."
+    },
+    "character-materialization": {
+      "title": "Materialización de personaje",
+      "description": "Fotos detrás, rayo y personaje animado centrado sobre una tarima."
+    },
+    "blast-stage": {
+      "title": "Explosión en suelo",
+      "description": "Explosión cinematográfica sobre el metal: destello, bola de fuego, onda, escombros y humo."
+    },
+    "server-inspection": {
+      "title": "Inspección de servidor",
+      "description": "Una grúa baja hacia el rack mientras el inspector entra por el pasillo."
+    },
+    "coding-desk": {
+      "title": "Mesa de código",
+      "description": "El programador se sienta en el taller; el monitor es una pantalla intercambiable."
+    },
+    "tracking-chase": {
+      "title": "Persecución en travelling",
+      "description": "Un travelling lateral sigue a dos corredores; entran por la izquierda y salen por la derecha."
+    },
+    "character-presentation": {
+      "title": "Presentación de personaje",
+      "description": "Una órbita alrededor del héroe que materializa sobre una tarima reflectante."
+    },
+    "screen-alert": {
+      "title": "Alerta en pantalla",
+      "description": "El operador corre hacia el mural de alerta cuando el rayo golpea el cristal."
+    },
+    "product-comparison": {
+      "title": "Comparación de producto",
+      "description": "Dos productos entran desde lados opuestos mientras la cámara orbita el par."
+    },
+    "topic-travelling": {
+      "title": "Travelling temático",
+      "description": "La guía recorre un pasillo de plaza junto a pantallas de tema intercambiables."
+    },
+    "heroic-close": {
+      "title": "Cierre heroico",
+      "description": "Un empuje bajo a la cara mientras el héroe entra en primer plano."
+    },
+    "sea-deck": {
+      "title": "Cubierta en el mar",
+      "description": "Dos protagonistas recorren la cubierta de un barco en mar abierto mientras el agua golpea la proa."
+    },
+    "lunar-outpost": {
+      "title": "Puesto lunar",
+      "description": "Un astronauta cruza el regolito hacia el hábitat con la Tierra en el cielo."
+    },
+    "car-chase": {
+      "title": "Persecución en coche",
+      "description": "Un travelling lateral se pega a dos coches a toda velocidad por la ciudad."
+    },
+    "ship-chase": {
+      "title": "Persecución de naves",
+      "description": "Dos naves cruzan un pasillo de asteroides mientras los láseres cortan la oscuridad."
+    },
+    "rooftop-run": {
+      "title": "Carrera en azotea",
+      "description": "La cámara de persecución sigue a dos corredores por la azotea hacia el helipuerto."
+    },
+    "alley-motorcycle": {
+      "title": "Moto en callejón",
+      "description": "Una carrera a ras de faro por una calle estrecha con el objetivo al frente."
+    },
+    "hangar-standoff": {
+      "title": "Enfrentamiento en hangar",
+      "description": "Dos figuras cierran distancias en un hangar hasta quedarse a pocos metros."
+    },
+    "train-roof": {
+      "title": "Techo del tren",
+      "description": "Dos luchadores se cierran en el techo de un tren en marcha mientras el paisaje vuela."
+    },
+    "desert-convoy": {
+      "title": "Convoy en el desierto",
+      "description": "Una cámara de seguimiento monta tres vehículos por un cañón entre dunas."
+    },
+    "night-rain-pursuit": {
+      "title": "Persecución bajo la lluvia",
+      "description": "Persecución de frente por una calle inundada cuando cae el rayo."
+    },
+    "dock-ambush": {
+      "title": "Emboscada en el muelle",
+      "description": "Un paseo por el muelle acaba en explosión cuando sale la segunda figura."
+    },
+    "bridge-standoff": {
+      "title": "Enfrentamiento en el puente",
+      "description": "Dos figuras recorren un puente aéreo desde extremos opuestos y se detienen en el centro."
+    },
+    "cockpit-pursuit": {
+      "title": "Persecución desde cabina",
+      "description": "Vista de cabina mientras la nave enemiga llena el cristal."
+    },
+    "helicopter-extract": {
+      "title": "Extracción en helicóptero",
+      "description": "Una grúa baja al helipuerto mientras el protagonista entra a la carrera."
+    },
+    "warehouse-breach": {
+      "title": "Asalto al almacén",
+      "description": "La puerta salta y el protagonista entra mientras el guardia busca cobertura."
+    },
+    "canyon-run": {
+      "title": "Carrera en el cañón",
+      "description": "Dos vehículos se cuelan por un cañón del desierto con la arena saltando de las paredes."
+    },
+    "jungle-ambush": {
+      "title": "Emboscada en la selva",
+      "description": "Dos figuras se cierran en un claro en ruinas mientras la copa se traga la luz."
+    },
+    "snow-compound": {
+      "title": "Complejo en la nieve",
+      "description": "Un agente cruza el ventisquero hacia el refugio mientras la nieve se come el horizonte."
+    },
+    "casino-heist": {
+      "title": "Atraco al casino",
+      "description": "Dos jugadores se cierran sobre una mesa de tapete bajo luz dorada."
+    },
+    "bank-vault": {
+      "title": "Cámara acorazada",
+      "description": "Una grúa baja a la cámara mientras el ladrón entra con el soplete."
+    },
+    "skyscraper-ledge": {
+      "title": "Cornisa del rascacielos",
+      "description": "Una persecución por el pretil con la ciudad cayendo al vacío."
+    },
+    "oil-rig": {
+      "title": "Plataforma petrolífera",
+      "description": "Una grúa sobre mar abierto mientras el fuego lame la torre."
+    },
+    "subway-brawl": {
+      "title": "Pelea en el metro",
+      "description": "Dos luchadores se cierran en un vagón mientras los raíles echan chispas."
+    },
+    "freeway-overpass": {
+      "title": "Autopista y paso elevado",
+      "description": "Un travelling alto de dos vehículos bajo lámparas de sodio."
+    },
+    "prison-break": {
+      "title": "Fuga de prisión",
+      "description": "El protagonista cruza el patio mientras el guardia gira demasiado tarde."
+    },
+    "arctic-chase": {
+      "title": "Persecución ártica",
+      "description": "Dos vehículos cortan un páramo blanco mientras la nieve ciega al que sigue."
+    },
+    "clock-tower": {
+      "title": "Torre del reloj",
+      "description": "Una órbita alrededor del trepador en la torre mientras la ciudad gira abajo."
+    },
+    "mansion-infil": {
+      "title": "Infiltración en la mansión",
+      "description": "El infiltrado cruza un salón de mármol hacia la puerta interior."
+    },
+    "cargo-hold": {
+      "title": "Bodega de carga",
+      "description": "Una carrera de frente por la bodega mientras la rampa se abre detrás."
+    },
+    "jungle-river": {
+      "title": "Río en la selva",
+      "description": "Un travelling de dos embarcaciones en un río de niebla bajo la copa."
+    },
+    "red-carpet": {
+      "title": "Alfombra roja",
+      "description": "Una órbita lenta mientras la estrella recorre el suelo dorado hasta el primer plano."
+    },
+    "volcano-ridge": {
+      "title": "Cresta del volcán",
+      "description": "Una grúa sobre dos figuras en la cresta mientras la caldera respira fuego."
+    },
+    "hangar-talk": {
+      "title": "Charla en hangar",
+      "description": "Cabeza CRT y un cráneo básico se turnan con vocales sintéticas, visemas y expresiones."
+    },
+    "sea-talk": {
+      "title": "Charla en cubierta",
+      "description": "Los mismos mascotas CRT y cráneo hacen lipsync en la cubierta, en un plano más cerrado."
+    },
+    "voxel-talk": {
+      "title": "Charla voxel",
+      "description": "Una cabeza cubo y un cráneo voxel se turnan en la azotea, ojos anime sobre caras de bloques."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -499,6 +851,10 @@
   "animationFitHint": "Reproduce una vez la animación restante durante la duración actual del plano (velocidad 0,1–4×). Aplícalo de nuevo si cambias la duración o el inicio.",
   "clipNumber": "Número de clip",
   "duration": "Duración (s)",
+  "frameFormat": "Formato de encuadre",
+  "frameFormatLandscape": "Horizontal 16:9 (1280×720)",
+  "frameFormatPortrait": "Móvil 9:16 (720×1280)",
+  "frameRate": "Cadencia (fps)",
   "saveDocument": "Guardar plano JSON",
   "loadDocument": "Abrir plano JSON",
   "invalidDocument": "No se pudo abrir: el archivo no es un plano 3D válido.",
@@ -587,5 +943,19 @@
     "previewUnavailable": "Espera a que cargue la vista 3D antes de guardar.",
     "saveFailed": "No se pudo guardar la escena.",
     "cancelLoad": "Cancelar carga"
+  },
+  "cinematic": {
+    "title": "Entorno cinematográfico",
+    "floor": "Suelo metálico reflectante",
+    "platform": "Tarima de materialización",
+    "bloom": "Resplandor",
+    "help": "Elige una imagen de fondo y selecciona Fondo de escena completo en su control Superficie. La imagen llena el encuadre; es un fondo ilustrado, no arquitectura 3D.",
+    "appearance": "Materializar personaje",
+    "start": "Inicio (s)",
+    "duration": "Aparición (s)",
+    "color": "Color de energía",
+    "idle": "Mantener una pose viva",
+    "idleHelp": "Usa la animación elegida en su punto de inicio con un movimiento corporal sutil. Elige un fotograma relajado de reposo o de andar; no se transfieren animaciones entre rigs.",
+    "background": "Fondo de escena completo"
   }
 }

@@ -25,6 +25,7 @@ export async function speechApp(page: Page) {
     }
     await route.fulfill({ json: library })
   })
+  await page.route('**/api/v1/character-kits/speech/digest*', route => route.fulfill({ json: { digest: '0'.repeat(64), bytes: 12 } }))
   await page.route('**/api/v1/character-kits/speech/profiles/**', route => route.fulfill({ status: 404, json: {} }))
   await page.route('**/api/v1/file/speech-test.glb*', route => route.fulfill({ contentType: 'model/gltf-binary', body: glb }))
   await page.route('**/api/v1/file/speech-test.wav*', route => route.fulfill({ contentType: 'audio/wav', body: wav }))

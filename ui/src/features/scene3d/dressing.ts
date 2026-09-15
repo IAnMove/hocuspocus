@@ -13,6 +13,7 @@ import {
 import { cafeGroup, type CafeMaps } from './cafeSet.ts'
 import { citadelGroup } from './citadelSet.ts'
 import { driveGroup, isDriveDressing, type DriveMaps } from './driveSet.ts'
+import { actionGroup, applyActionAtmosphere, isActionDressing } from './actionSets.ts'
 import { clearDrive } from './driveMotion.ts'
 import type { GpuWorld } from './gpu.ts'
 import type { Scene3DDressing } from './types.ts'
@@ -73,13 +74,16 @@ export function syncDressing(
 ) {
   dropDressing(world)
   clearDrive(world)
-  world.floor.visible = kind !== 'space' && kind !== 'treadmill' && kind !== 'cafe' && !isDriveDressing(kind)
+  applyActionAtmosphere(world.scene, kind)
+  world.floor.visible = kind !== 'space' && kind !== 'treadmill' && kind !== 'cafe' && !isDriveDressing(kind) && !isActionDressing(kind)
+  world.floor.position.y = world.floor.visible ? 0 : -80
   if (kind === 'street') world.dressing = streetGroup()
   if (kind === 'retro-lab' || kind === 'observatory' || kind === 'broadcast-plaza') world.dressing = mediaSet(kind)
   if (kind === 'workshop') world.dressing = workshopGroup()
   if (kind === 'chase-street') world.dressing = chaseGroup()
   if (kind === 'citadel') world.dressing = citadelGroup()
   if (kind === 'space') world.dressing = spaceGroup()
+  if (isActionDressing(kind)) world.dressing = actionGroup(kind)
   if (kind === 'cafe') world.dressing = cafeGroup(maps?.cafe ?? { facade: null, floor: null, back: null })
   if (isDriveDressing(kind)) {
     const built = driveGroup(kind, maps?.drive ?? { paint: null, glass: null, front: null, rear: null, road: null, building: null })

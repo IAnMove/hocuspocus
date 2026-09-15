@@ -28,6 +28,8 @@ import {
   prepareBackdropTexture,
   pruneSlots,
   resizeWorld,
+  renderWorld,
+  setWorldExportQuality,
   setWorldSize,
   slotNeedsReload,
   syncSlotClip,
@@ -52,7 +54,9 @@ export type Scene3DStageHandle = {
   paint: (seconds: number, document?: Scene3DDocument) => HTMLCanvasElement | null
   ready: (slots: readonly Scene3DSlot[]) => boolean
   setExportSize: (width: number, height: number) => void
+  setExportQuality: (enabled: boolean) => void
   restoreSize: () => void
+  canvas: () => HTMLCanvasElement | null
   beginExport: (document: Scene3DDocument) => void
   endExport: () => void
   facePlacement?: (slotId: string, profile: PlacementMode) => FacePlacement | undefined
@@ -62,10 +66,10 @@ export type Scene3DStageHandle = {
 
 function loadScreen(world: GpuWorld, slot: Scene3DSlot, onError: (message: string) => void, onReady: () => void) {
   const gpu = world.slots.get(slot.id), screen = slot.screen
-  if (!gpu || !screen?.sourceUrl) return
+  if (!gpu || !screen?.sourceUrl || slot.speech?.facePack) return
   const abort = new AbortController(); gpu.screenAbort = abort
   void bindScreenMedia(gpu.root, screen, slot.media === 'screen', abort.signal, () => {
-    if (!abort.signal.aborted && world.slots.get(slot.id) === gpu) world.renderer.render(world.scene, world.camera)
+    if (!abort.signal.aborted && world.slots.get(slot.id) === gpu) renderWorld(world)
   }).then(media => {
     if (world.slots.get(slot.id) !== gpu || abort.signal.aborted) { media.dispose(); return }
     gpu.screen = media
@@ -187,10 +191,17 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       const world = worldRef.current
       if (world) setWorldSize(world, width, height)
     },
+    setExportQuality(enabled) {
+      const world = worldRef.current
+      if (world) setWorldExportQuality(world, enabled)
+    },
     restoreSize() {
       const world = worldRef.current
       const host = hostRef.current
       if (world && host) resizeWorld(world, host)
+    },
+    canvas() {
+      return worldRef.current?.renderer.domElement ?? null
     },
     facePlacement(slotId, profile) {
       const placement = worldRef.current?.slots.get(slotId)?.root.userData.speechPlacements?.[profile] as FacePlacement | undefined

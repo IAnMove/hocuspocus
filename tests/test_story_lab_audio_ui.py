@@ -74,9 +74,13 @@ def test_chained_music_and_director_workflows_expose_cancel_controls():
     assert "cancelMusicQueue" in story
     assert "music.cancellingRequest" in music
     assert "cancelStoryMusicCandidatesJob(jobId)" in story
-    assert "api.cancelCanonicalTask(taskId, workspace)" in activity
-    assert "active && task.cancelable" in activity
-    assert "Cancelling…" in activity
+    activity_ui = activity + "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "ui" / "src" / "features" / "activity").glob("*.ts*"))
+    ) + (ROOT / "ui" / "src" / "i18n" / "locales" / "en" / "activity.json").read_text(encoding="utf-8")
+    assert "api.cancelCanonicalTask(taskId, workspace)" in activity_ui
+    assert "active && task.cancelable" in activity_ui
+    assert "Cancelling…" in activity_ui
 
 
 def test_story_lab_frontend_wrappers_reach_terminal_state_before_dismissal():

@@ -55,6 +55,35 @@ fi
 echo "[code-health] HEAD=${HEAD_SHA:-unknown}" >&2
 echo "[code-health] base=$BASE_SHA" >&2
 
+RELEASE_INTEGRATION=false
+if [[ "${BASE_BRANCH:-}" == "main" && "${SOURCE_BRANCH:-}" == "development" \
+    && -n "${GITHUB_REPOSITORY:-}" \
+    && "${BASE_REPOSITORY:-}" == "$GITHUB_REPOSITORY" \
+    && "${SOURCE_REPOSITORY:-}" == "$GITHUB_REPOSITORY" ]]; then
+  if [[ ! "${SOURCE_HEAD_SHA:-}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo '[code-health] release requires the exact source HEAD SHA' >&2
+    exit 2
+  fi
+  if [[ "$(git -C "$ROOT" rev-parse --is-shallow-repository)" == "true" ]]; then
+    git -C "$ROOT" fetch --no-tags --unshallow origin "$SOURCE_HEAD_SHA" "$BASE_SHA"
+  fi
+  RELEASE_INTEGRATION=true
+elif [[ "${GITHUB_EVENT_NAME:-}" == "push" && "${GITHUB_REF:-}" == "refs/heads/main" \
+    && -n "${GITHUB_REPOSITORY:-}" && "${EVENT_REPOSITORY:-}" == "$GITHUB_REPOSITORY" \
+    && "${GITHUB_SHA:-}" == "$HEAD_SHA" \
+    && "$HEAD_SHA" == "$(git -C "$ROOT" rev-parse HEAD)" ]]; then
+  if [[ "$(git -C "$ROOT" rev-parse --is-shallow-repository)" == "true" ]]; then
+    git -C "$ROOT" fetch --no-tags --unshallow origin "$HEAD_SHA" "$BASE_SHA"
+  fi
+  git -C "$ROOT" fetch --no-tags origin refs/heads/development:refs/remotes/origin/development
+  SOURCE_HEAD_SHA="$(cd "$ROOT/scripts" && "$PYTHON" -c \
+    'import sys; from code_health_integration import main_push_source; print(main_push_source(*sys.argv[1:]) or "")' \
+    "$BASE_SHA" "$HEAD_SHA" refs/remotes/origin/development)"
+  if [[ -n "$SOURCE_HEAD_SHA" ]]; then
+    RELEASE_INTEGRATION=true
+  fi
+fi
+
 BASE_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/hocus-health-base.XXXXXX")"
 BASE_DIR="$BASE_PARENT/repo"
 cleanup() {
@@ -75,7 +104,14 @@ if ! (cd "$BASE_DIR" && "$PYTHON" scripts/code_health.py --json) > "$BASE_DIR/co
   echo "[code-health] analyzer failed on base $BASE_SHA" >&2
   exit 1
 fi
-"$PYTHON" "$ROOT/scripts/code_health.py" --check --markdown \
-  --baseline "$BASE_DIR/code-health-base.json" \
-  --score-baseline "$BASE_DIR/code-health-base.json" \
-  --score-baseline-label "PR base"
+if [[ "$RELEASE_INTEGRATION" == "true" ]]; then
+  "$PYTHON" "$ROOT/scripts/code_health_integration.py" \
+    --base "$BASE_SHA" --head "$SOURCE_HEAD_SHA" \
+    --baseline "$BASE_DIR/code-health-base.json" \
+    --evidence "$ROOT/code-health-integration.json"
+else
+  "$PYTHON" "$ROOT/scripts/code_health.py" --check --markdown \
+    --baseline "$BASE_DIR/code-health-base.json" \
+    --score-baseline "$BASE_DIR/code-health-base.json" \
+    --score-baseline-label "PR base"
+fi

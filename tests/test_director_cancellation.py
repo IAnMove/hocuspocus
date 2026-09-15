@@ -1153,6 +1153,46 @@ class TestDirectorCancellation(unittest.TestCase):
 
         concatenate.assert_not_called()
 
+    def test_rejoin_rejects_stale_video_even_when_a_take_is_selected(self):
+        pid = "pipe-stale-selected-rejoin"
+        record = self._add_pipeline(pid, "completed")
+        record["clip_plans"] = [
+            {"image_prompt": "one", "video_prompt": "one"},
+            {"image_prompt": "two", "video_prompt": "two"},
+        ]
+        record["_clip_video_files"] = ["one.mp4", "two.mp4"]
+        for filename in record["_clip_video_files"]:
+            self._write_media(filename, b"video")
+        self.assertTrue(pipeline._save_pipeline_state(pid))
+
+        def mark_selected_stale(state):
+            clip = state["clips"][0]
+            clip["selected_video_filename"] = clip["video_filename"]
+            clip["video_stale"] = True
+
+        pipeline._update_saved_pipeline(self.temp_dir.name, pid, mark_selected_stale)
+        loaded = pipeline.load_pipeline_state(self.temp_dir.name, pid)
+        self.assertTrue(loaded["clips"][0]["video_stale"])
+        self.assertEqual(loaded["clips"][0]["selected_video_filename"], "one.mp4")
+
+        def keep_notes(state):
+            state["clips"][0]["review_notes"] = "keep stale"
+
+        pipeline._update_saved_pipeline(self.temp_dir.name, pid, keep_notes)
+        raw_path = pipeline._find_pipeline_file(self.temp_dir.name, pid)
+        with open(raw_path, encoding="utf-8") as handle:
+            saved = json.load(handle)
+        self.assertTrue(saved["clips"][0]["video_stale"])
+        self.assertEqual(saved["clips"][0]["review_notes"], "keep stale")
+
+        concatenate = Mock(return_value=True)
+        pipeline._wgp.concatenate_multi_clip_videos = concatenate
+        with self.assertRaisesRegex(
+            ValueError, "stale video clip.*1.*before rejoining",
+        ):
+            pipeline.rejoin_clips(self.temp_dir.name, pid)
+        concatenate.assert_not_called()
+
     def test_rejoin_rejects_clip_whose_start_image_is_missing(self):
         pid = "pipe-missing-rejoin-start"
         record = self._add_pipeline(pid, "completed")

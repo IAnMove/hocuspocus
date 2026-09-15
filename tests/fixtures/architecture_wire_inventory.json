@@ -80,6 +80,12 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
+      "file": "tests/test_custom_character_voice.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "symbol_importable",
+      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
+    },
+    {
       "file": "tests/test_director_model_compat.py",
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
@@ -296,6 +302,12 @@
       "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
+      "file": "tests/test_scene_packages.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
       "file": "tests/test_series_jobs.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -416,10 +428,28 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
+      "file": "tests/test_wizard_workflow_executor.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
       "file": "tests/test_wizard_workflows.py",
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
+      "file": "tests/test_world3d_export.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
+      "file": "ui/tests/activityFooter.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
       "file": "ui/tests/agentActions.test.mjs",
@@ -512,6 +542,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/helpOverlay.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/hunyuan3DGalleryPicker.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
@@ -560,6 +596,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/productionReviewRuntime.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/recastRestylePicker.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
@@ -572,7 +614,37 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/seriesCharacterSpeech.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/seriesEpisodeReferences.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/seriesProduction.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/seriesRenderMethods.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/seriesResponsive.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/seriesWizardDraft.test.ts",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
@@ -681,6 +753,12 @@
     },
     {
       "file": "ui/tests/viggleWorkflow.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/wan1300Audio.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."

@@ -6,6 +6,9 @@ import { useStoryLabVisuals } from './storyLabVisuals'
 import { ReferenceGallery } from './ReferenceGallery'
 import type { StoryCharacter, StoryProject } from './types'
 import { CharacterKitLink } from '../characters/CharacterKitLink'
+import { CharacterKitSummary } from '../characters/CharacterKitSummary'
+import { useCharacterKitLibrary } from '../characters/useCharacterKitLibrary'
+import { useStore } from '../../stores/useStore'
 
 export function CharacterEditor({
   character, index, total, project, update,
@@ -18,6 +21,8 @@ export function CharacterEditor({
 }) {
   const { t } = useUiTranslation('storyLab')
   const { imageBusy, generateVisual, requestUpload, removeReference } = useStoryLabVisuals()
+  const workspace = useStore(s => s.activeWorkspace)
+  const { kits, error } = useCharacterKitLibrary(workspace)
   const set = (patch: Partial<StoryCharacter>) => update(current => {
     current.characters = current.characters.map(item => item.id === character.id ? { ...item, approval: 'draft', ...patch } : item)
     return current
@@ -61,7 +66,10 @@ export function CharacterEditor({
         <Field label={t('characters.fields.flaw')} value={character.flaw} onChange={flaw => set({ flaw })} rows={3} />
         <Field label={t('characters.fields.conflict')} value={character.conflict} onChange={conflict => set({ conflict })} rows={3} />
         <Field label={t('characters.fields.arc')} value={character.arc} onChange={arc => set({ arc })} rows={3} />
-        <Field label={t('characters.fields.voice')} value={character.voice} onChange={voice => set({ voice })} rows={3} />
+        <div className="space-y-1">
+          <Field label={t('characters.fields.voice')} value={character.voice} onChange={voice => set({ voice })} rows={3} />
+          <p className="text-[10px] text-text-muted">{t('characters.fields.voiceHint')}</p>
+        </div>
         <Field label={t('characters.fields.appearance')} value={character.appearance} onChange={appearance => set({ appearance })} rows={3} />
         <Field label={t('characters.fields.wardrobe')} value={character.wardrobe} onChange={wardrobe => set({ wardrobe })} rows={3} />
         <Field label={t('characters.fields.visualPrompt')} value={character.visualPrompt} onChange={visualPrompt => set({ visualPrompt })} rows={4} />
@@ -74,7 +82,8 @@ export function CharacterEditor({
         <button className={button} onClick={() => requestUpload({ kind: 'character', id: character.id })}><Upload size={13} /> {t('characters.upload')}</button>
       </div>
       <ReferenceGallery ids={character.referenceAssetIds} assets={project.assets} primaryId={character.primaryReferenceAssetId} onPrimary={id => set({ primaryReferenceAssetId: id })} onRemove={id => removeReference('character', character.id, id)} />
-      <CharacterKitLink value={character.characterKitRef} onChange={characterKitRef => set({ characterKitRef })} />
+      <CharacterKitLink value={character.characterKitRef} onChange={characterKitRef => set({ characterKitRef })} kits={kits} error={error} />
+      <CharacterKitSummary kit={character.characterKitRef ? kits.find(kit => kit.id === character.characterKitRef?.id) : undefined} />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { Object3D, Raycaster, Vector2 } from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { worldAnchorOffsetFromSlotRoot, worldSfxIdFromObject } from '../sceneFx/worldRuntime'
-import type { GpuWorld } from './gpu'
+import { renderWorld, type GpuWorld } from './gpu'
 import type { Scene3DSlot } from './types'
 import type { WorldSfx } from '../sceneFx/world'
 
@@ -37,7 +37,7 @@ export function createTransformGizmo(world: GpuWorld, onChange: (id: string, pat
   let allowed = true
   let mode: TransformMode = 'translate'
   let attachedAnchorSlotId: string | undefined
-  const redraw = () => world.renderer.render(world.scene, world.camera)
+  const redraw = () => renderWorld(world)
   let uniformScale = 1
   const objectChange = () => {
     if (!allowed || !selectedId) return

@@ -1088,6 +1088,7 @@ def _resolve_request_media_path(
             uploads_root=os.path.join(os.getcwd(), "uploads"),
             workspace_root=_workspace_dir(workspace),
             kinds=kinds,
+            workspace_name=workspace or _get_active_workspace(),
         )
     except MediaPathNotAllowed:
         raise HTTPException(status_code=400, detail="Media path is not allowed") from None
@@ -9043,6 +9044,7 @@ _AUDIO_ANALYSIS_STEPS = {
     "extracting_vocals": 5,
     "loading_transcription_model": 5,
     "transcribing": 6,
+    "aligning_lyrics": 7,
     "loading_diarization_model": 7,
     "identifying_speakers": 8,
     "finalizing": 9,
@@ -9511,6 +9513,16 @@ async def director_classify_sections(request: Request):
         return {"sections": sections, "method": "heuristic"}
 
     try:
+        timed_structure = audio_analysis.structure_from_aligned_lyrics(
+            analysis.get("lyric_timeline") or []
+        )
+        if timed_structure:
+            updated = audio_analysis.replace_sections_with_structure(analysis, timed_structure)
+            return {
+                "sections": updated["sections"],
+                "song_structure": timed_structure,
+                "method": "lyrics_timeline",
+            }
         tagged_structure = llm_service.structure_from_tagged_lyrics(lyrics_hint, duration)
         if tagged_structure:
             updated = audio_analysis.replace_sections_with_structure(analysis, tagged_structure)
@@ -9935,6 +9947,9 @@ def director_pipeline_resume(pid: str):
 
 
 # ── Director Pipeline Dashboard ───────────────────────────────────────────
+
+from routers.director_review import create_director_review_router
+api.include_router(create_director_review_router(_workspace_dir))
 
 @api.get("/api/v1/director/pipelines")
 def list_saved_pipelines(limit: int = 0, offset: int = 0):
@@ -28546,6 +28561,7 @@ def delete_series_episode_endpoint(series_id: str, episode_id: str, workspace: s
 def import_series_asset_endpoint(series_id: str, body: dict):
     """Copy a Maestro upload into the authoritative workspace asset tree."""
     import shutil
+    from services.series_production import attach_series_import, existing_generated_reference
 
     workspace = _series_library_workspace(body.get("workspace"))
     source = _story_import_upload_path(str(body.get("uploadPath") or ""))
@@ -28569,6 +28585,9 @@ def import_series_asset_endpoint(series_id: str, body: dict):
         library = _read_series_workspace(workspace)
         series = copy.deepcopy(_series_project_or_404(library, series_id))
         entity = None
+        existing = existing_generated_reference(series, owner_type, owner_id, extra_metadata)
+        if existing and body.get("asTake") is not True:
+            return {"asset": existing, "series": series}
         collection_name = {
             "character": "characters", "location": "locations", "prop": "props",
         }.get(owner_type)
@@ -28586,8 +28605,6 @@ def import_series_asset_endpoint(series_id: str, body: dict):
             for shot in episode.get("shots", []) if isinstance(shot, dict)
         ):
             raise HTTPException(status_code=404, detail="Series shot not found")
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        shutil.copy2(source, destination)
         asset = {
             "id": asset_id, "workspaceId": workspace, "kind": kind,
             "uri": relative, "ownerType": owner_type, "ownerId": owner_id,
@@ -28603,15 +28620,12 @@ def import_series_asset_endpoint(series_id: str, body: dict):
                 }),
             },
         }
-        series.setdefault("assets", {})[asset_id] = asset
-        if entity is not None:
-            refs = entity.get("referenceAssetIds") if isinstance(entity.get("referenceAssetIds"), list) else []
-            entity["referenceAssetIds"] = [*refs, asset_id]
-            if owner_type == "character" and not entity.get("primaryReferenceAssetId"):
-                entity["primaryReferenceAssetId"] = asset_id
-            entity["approval"] = "draft"
-            series.setdefault("canon", {})["approval"] = "draft"
-            series["canon"]["approvedAt"] = ""
+        try:
+            attach_series_import(series, asset, as_take=body.get("asTake") is True, source_path=source)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        shutil.copy2(source, destination)
         now = _series_iso_now()
         series["revision"] = int(series.get("revision") or 1) + 1
         series["updatedAt"] = now
@@ -28658,6 +28672,26 @@ def commit_series_canon_endpoint(series_id: str, episode_id: str, body: dict):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/references/refresh")
+def refresh_series_episode_references(series_id: str, episode_id: str, body: dict):
+    from services.series_library import SeriesConflictError
+    from services.series_production import refresh_episode_references
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        try:
+            series = refresh_episode_references(_series_project_or_404(library, series_id), episode_id, int(body.get("baseRevision", -1)))
+        except SeriesConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        series["updatedAt"] = _series_iso_now()
+        series["episodesById"][episode_id]["updatedAt"] = series["updatedAt"]
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    return stored["seriesById"][series_id]
 
 
 @api.post("/api/v1/series/{series_id}/canon/approve")
@@ -29745,6 +29779,7 @@ def _series_asset_local_path(workspace: str, asset: dict) -> str:
 
 def _series_render_context(job: dict, item: dict) -> tuple[dict, dict, dict, dict]:
     from services.series_library import series_for_episode_snapshot
+    from services.series_production import series_shot_method
     workspace = str(job["workspace"])
     with _series_library_lock:
         library = _read_series_workspace(workspace)
@@ -29758,6 +29793,8 @@ def _series_render_context(job: dict, item: dict) -> tuple[dict, dict, dict, dic
         ), None)
         if not isinstance(shot, dict):
             raise ValueError("Series shot no longer exists")
+        if series_shot_method(series, shot) != "generated_video":
+            raise ValueError("This shot no longer permits model video generation")
         attempt = next((
             value for value in shot.get("attempts", [])
             if isinstance(value, dict) and value.get("id") == item.get("attemptId")
@@ -30096,6 +30133,7 @@ def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
 
 @api.post("/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
 def start_series_episode_render(series_id: str, episode_id: str, body: dict):
+    from services.series_production import series_shot_method
     from services.series_library import append_shot_render_attempt, series_for_episode_snapshot
     from services.series_reference_router import route_shot_references
     from services.series_render import (
@@ -30123,10 +30161,11 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         routing_series = series_for_episode_snapshot(series, episode)
         try:
             candidates = _series_render_candidates(episode, body)
+            candidates = [shot for shot in candidates if series_shot_method(series, shot) == "generated_video"]
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not candidates:
-            raise HTTPException(status_code=400, detail="No unapproved Series shots match this render request")
+            raise HTTPException(status_code=400, detail="No permitted unapproved generated-video shots match this request. Prepare animation shots in their editor or import a completed take.")
         if any(bool(shot.get("dialogueBeats")) for shot in candidates) and not series.get(
             "bestEffortLipSyncAcknowledged"
         ):
@@ -36913,6 +36952,15 @@ from services.scene_commands import SceneCommands, command_catalog as scene_comm
 from routers.scene_commands import create_scene_commands_router
 _scene_commands = SceneCommands(_workspace_dir)
 api.include_router(create_scene_commands_router(_scene_commands))
+from routers.world3d_export import create_world3d_export_router, bind_world3d_renderer_origin
+from services.world3d_export import World3DExportService, command_catalog as world3d_export_catalog, command_handlers as world3d_export_handlers
+_world3d_export = World3DExportService(
+    workspace_dir=_workspace_dir,
+    registry_for=_task_registry,
+    app_url=os.environ.get("HOCUS_APP_URL", ""),
+)
+bind_world3d_renderer_origin(api, _world3d_export)
+api.include_router(create_world3d_export_router(_world3d_export))
 
 from services.mcp_access import McpAccess
 from routers.mcp_access import create_mcp_access_router
@@ -36921,15 +36969,30 @@ api.include_router(create_mcp_access_router(_mcp_access))
 
 _image_generation_commands = create_image_generation_commands(globals())
 api.include_router(create_image_generation_commands_router(_image_generation_commands))
+from routers.wizard_workflow_executor import create_wizard_workflow_executor_router
+from services.wizard_workflow_executor import WizardWorkflowExecutor, catalog as wizard_workflow_catalog, command_handlers as wizard_workflow_command_handlers
+_wizard_workflow_executor = WizardWorkflowExecutor(
+    workspace_dir=_workspace_dir,
+    submit_command=_image_generation_commands.submit,
+    command_receipt=_image_generation_commands.receipt,
+    get_task=lambda workspace, task_id: _task_registry(workspace).get(task_id),
+)
+api.include_router(create_wizard_workflow_executor_router(_wizard_workflow_executor, list_workspaces=_list_workspaces))
 api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token,
     handlers={"models": lambda args: get_model_options(args['model_type']) if args.get('model_type') else list_models(), "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **_scene_commands.handlers()},
+              **wangp_agent_handlers(api), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **_scene_commands.handlers()},
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     command_operations=[*scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values())],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog()],
 ))
+from routers.system_capabilities import create_system_capabilities_router
+api.include_router(create_system_capabilities_router())
+
+# Optional production renderer: pass a callable that drives the existing
+# Video 3D exportFlow through a process-owned headless browser. Closing a
+# user tab must not join or kill that worker.
 
 # ============================================================================
 # Serve React build at /

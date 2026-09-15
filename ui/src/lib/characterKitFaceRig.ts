@@ -1,4 +1,6 @@
 import { planCutoutDialogue } from './cutoutDialogue'
+import { CHARACTER_MOUTH_STATES, MOUTH_STATE_FALLBACK, PHONETIC_MOUTH_STATE } from './characterMouthStates'
+import { parseMouthCues } from '../features/scene3d/speech/track'
 import {
   DEFAULT_CHARACTER_BLINK_ANCHOR,
   DEFAULT_CHARACTER_MOUTH_ANCHOR,
@@ -9,7 +11,7 @@ import {
   type CharacterMouthState,
 } from './characterKit'
 
-export const CHARACTER_FACE_RIG_STATES = ['closed', 'small', 'wide', 'round', 'open-eyes', 'blink'] as const
+export const CHARACTER_FACE_RIG_STATES = [...CHARACTER_MOUTH_STATES, 'open-eyes', 'blink'] as const
 export type CharacterKitFaceRigState = typeof CHARACTER_FACE_RIG_STATES[number]
 
 export function facePatchControls(kit: CharacterKit, asset: CharacterKitAsset | undefined, disabled: boolean | undefined, busy: unknown) {
@@ -275,6 +277,7 @@ export function lockFaceRigMouthPlacement(
     small: nextAnchor,
     wide: nextAnchor,
     round: nextAnchor,
+    pressed: nextAnchor, medium: nextAnchor, pucker: nextAnchor, bite: nextAnchor, tongue: nextAnchor,
   }
   return {
     ...kit,
@@ -415,11 +418,15 @@ export function previewPercentToImagePixel(
 }
 
 /** Fill an elliptical mouth box with sampled nearby skin. Leaves the rest of the pose intact. */
+function mouthWipeDistance(nx: number, ny: number, shape?: 'ellipse' | 'rectangle') {
+  return shape === 'rectangle' ? Math.max(nx * nx, ny * ny) : nx * nx + ny * ny
+}
+
 export function wipeMouthRegion(
   rgba: Uint8ClampedArray,
   width: number,
   height: number,
-  region: { cx: number; cy: number; rx: number; ry: number },
+  region: { cx: number; cy: number; rx: number; ry: number; shape?: 'ellipse' | 'rectangle' },
 ): Uint8ClampedArray {
   if (!(rgba instanceof Uint8ClampedArray) || rgba.length !== width * height * 4) {
     return new Uint8ClampedArray(rgba)
@@ -432,7 +439,7 @@ export function wipeMouthRegion(
     for (let x = 0; x < width; x += 1) {
       const nx = (x - region.cx) / rx
       const ny = (y - region.cy) / ry
-      const d = nx * nx + ny * ny
+      const d = mouthWipeDistance(nx, ny, region.shape)
       if (d < 1.05 || d > 1.45) continue
       const i = (y * width + x) * 4
       if (next[i + 3] < 16) continue
@@ -457,7 +464,7 @@ export function wipeMouthRegion(
     for (let x = 0; x < width; x += 1) {
       const nx = (x - region.cx) / rx
       const ny = (y - region.cy) / ry
-      const d = nx * nx + ny * ny
+      const d = mouthWipeDistance(nx, ny, region.shape)
       if (d > 1) continue
       const i = (y * width + x) * 4
       const mix = d > .72 ? (1 - d) / .28 : 1
@@ -497,6 +504,7 @@ export interface FaceRigMouthPresetPack {
   style?: string
   notes?: string
   states: Partial<Record<CharacterMouthState, { file: string }>>
+  collection?: string
 }
 
 /** Attach a reusable viseme pack as pending overlays. Does not approve placement. */
@@ -506,8 +514,8 @@ export function applyFaceRigMouthPreset(
   workspace?: string,
 ): CharacterKit {
   if (!pack.id.trim()) throw new Error('Choose a mouth style pack first.')
-  let next = kit
-  for (const state of FACE_RIG_MOUTH_STATES) {
+  let next = { ...kit, mouth: {} } as CharacterKit
+  for (const state of CHARACTER_MOUTH_STATES) {
     const file = pack.states[state]?.file
     if (!file) continue
     const source = `${FACE_RIG_PRESET_ROOT}/${file.replace(/^\/+/, '')}`
@@ -527,7 +535,7 @@ export function applyFaceRigMouthPreset(
       methodHint: 'character-kit-face-rig-preset',
     })
   }
-  if (next === kit) throw new Error(`Pack “${pack.label}” has no closed/small/wide/round overlays.`)
+  if (!Object.keys(next.mouth).length) throw new Error(`Pack “${pack.label}” has no closed/small/wide/round overlays.`)
   return next
 }
 export const FACE_RIG_DIALOGUE_MIN_SECONDS = 2
@@ -556,8 +564,8 @@ export function clampFaceRigDialogueDuration(value: number): number {
 }
 
 function mouthAvailability(kit: CharacterKit): { available: CharacterMouthState[]; missing: CharacterMouthState[]; fallback?: CharacterMouthState } {
-  const available = FACE_RIG_MOUTH_STATES.filter(state => Boolean(kit.mouth[state]?.source))
-  const missing = FACE_RIG_MOUTH_STATES.filter(state => !kit.mouth[state]?.source)
+  const available = CHARACTER_MOUTH_STATES.filter(state => Boolean(kit.mouth[state]?.source))
+  const missing = CHARACTER_MOUTH_STATES.filter(state => !kit.mouth[state]?.source)
   const fallback = (['wide', 'small', 'round', 'closed'] as const).find(state => available.includes(state))
   return { available, missing, fallback }
 }
@@ -578,7 +586,8 @@ function withMouthFallback(
     missing,
     visemes: visemes.map(beat => {
       const has = available.includes(beat.state)
-      const sourceState = has ? beat.state : fallback ?? beat.state
+      const basic = MOUTH_STATE_FALLBACK[beat.state]
+      const sourceState = has ? beat.state : available.includes(basic) ? basic : fallback ?? beat.state
       return { ...beat, sourceState, fallback: !has && sourceState !== beat.state }
     }),
   }
@@ -609,9 +618,25 @@ export function previewFaceRigDialogueFromAudio(
   return withMouthFallback(kit, text.trim() || usable.map(unit => unit.text).join(' '), visemes, 0, end)
 }
 
+/** Use the isolated recording's phonetic clock, including silence and the full tail. */
+export function previewFaceRigDialogueFromCues(kit: CharacterKit, text: string, data: unknown, duration: number): FaceRigDialoguePreview {
+  if (!Number.isFinite(duration) || duration <= 0 || duration > 90) throw new Error('Use a speech preview up to 90 seconds.')
+  const visemes: Array<{ start: number; end: number; state: CharacterMouthState }> = []
+  let cursor = 0
+  for (const cue of parseMouthCues(data)) {
+    if (cue.end > duration + .1) throw new Error('Mouth cues exceed the recorded voice.')
+    const start = Math.min(duration, Math.max(cursor, cue.start)), end = Math.min(duration, cue.end)
+    if (start > cursor) visemes.push({ start: cursor, end: start, state: 'closed' })
+    if (end > start) visemes.push({ start, end, state: PHONETIC_MOUTH_STATE[cue.viseme] })
+    cursor = Math.max(cursor, end)
+  }
+  if (cursor < duration) visemes.push({ start: cursor, end: duration, state: 'closed' })
+  return withMouthFallback(kit, text.trim(), visemes, 0, duration)
+}
+
 export function faceRigVisemeAt(preview: FaceRigDialoguePreview, time: number): FaceRigDialogueViseme | undefined {
   if (!preview.visemes.length) return undefined
-  return preview.visemes.find(beat => time >= beat.start && time < beat.end) ?? preview.visemes[preview.visemes.length - 1]
+  return preview.visemes.find(beat => time >= beat.start && time < beat.end)
 }
 
 /** Warn when an overlay is far from the face or obviously the wrong size. Never auto-approves. */

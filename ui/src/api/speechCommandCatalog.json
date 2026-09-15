@@ -1905,6 +1905,8 @@
       "minimax_h3_references"
     ],
     "speech_model_types": [
+      "auk",
+      "auk_flash",
       "chatterbox",
       "dramabox_audio",
       "index_tts2",

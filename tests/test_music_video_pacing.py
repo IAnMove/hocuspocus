@@ -1,6 +1,7 @@
 """Regression tests for music-video pacing and structured Story lyrics."""
 
 from app.services.audio_analysis import plan_clip_structure
+from app.services.director.planners.music_video import MusicVideoPlanner
 from app.services.llm_service import structure_from_tagged_lyrics
 
 
@@ -68,6 +69,44 @@ def test_zero_duration_uses_a_safe_non_empty_fallback_timeline():
     assert clips
     assert clips[0]["start"] == 0.0
     assert clips[-1]["end"] == 180.0
+
+
+def test_source_audio_events_are_assigned_to_clip_with_exact_offset():
+    analysis = _analysis(duration=30.0, section_count=3)
+    analysis["lyric_timeline"] = [{
+        "start": 18.3, "end": 20.42, "text": "Gandalf ha entrado al chat.",
+        "source": "aligned_lyrics", "confidence": 1.0,
+    }]
+    analysis["visual_events"] = [{
+        "time": 19.16, "end": 19.7, "kind": "entrance", "cue_index": 0,
+        "lyric": "Gandalf ha entrado al chat.", "trigger": "entrado",
+        "rule": "The visual action starts here; do not reveal its result earlier.",
+    }]
+
+    clips = plan_clip_structure(analysis, pacing_profile="balanced")
+    event_clip = next(clip for clip in clips if clip["visual_events"])
+    event = event_clip["visual_events"][0]
+
+    assert event["time"] == 19.16
+    assert event["offset"] == round(19.16 - event_clip["start"], 3)
+    assert event_clip["start"] <= 19.16 < event_clip["end"]
+
+
+def test_music_planner_receives_mandatory_in_clip_action_time():
+    clip = {
+        "start": 16.0, "end": 22.0, "label": "verse", "beat_count": 12,
+        "lyric_cues": [{"offset": 2.3, "text": "Gandalf ha entrado al chat."}],
+        "visual_events": [{"offset": 3.16, "kind": "entrance", "trigger": "entrado"}],
+    }
+
+    contexts = MusicVideoPlanner._build_clip_contexts(
+        MusicVideoPlanner.__new__(MusicVideoPlanner),
+        [clip], [], {}, {}, {}, [{}],
+    )
+
+    assert '+2.300s "Gandalf ha entrado al chat."' in contexts[0]
+    assert '+3.160s entrance on "entrado"' in contexts[0]
+    assert "must not be visible earlier" in contexts[0]
 
 
 def test_structured_story_lyrics_are_authoritative():

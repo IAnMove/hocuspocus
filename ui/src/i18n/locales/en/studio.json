@@ -1,4 +1,11 @@
 {
+  "groups": {
+    "help": "Fill input and instructions, then run. Results stay beside this form when there is room.",
+    "input": "Input and references",
+    "instructions": "Instructions",
+    "model": "Model and options",
+    "run": "Run"
+  },
   "chrome": {
     "uploading": "Uploading…",
     "optional": "Optional",
@@ -48,7 +55,9 @@
     "referenceHint": "Add at least one image or video reference. Audio cannot be the only reference.",
     "queuedCount": "{{count}} queued",
     "queueCount": "Queue {{count}}",
-    "goCount": "Go ({{count}})"
+    "goCount": "Go ({{count}})",
+    "localUnavailable": "Local generation needs NVIDIA",
+    "localUnavailableHint": "This Mac runs editing and remote providers. Open the project on a Windows/Linux NVIDIA host to generate locally."
   },
   "prompt": {
     "placeholderImage": "Describe your image...",
@@ -821,6 +830,49 @@
     "unmeasured": "This variant was not measured in the current comparison.",
     "audioLimit": "These tests contained invented speech at the end. Fast mode does not guarantee clean dialogue."
   },
+  "modelCatalog": {
+    "prunedHint": "Pruned · Reduced model. Smaller weights than Full; memory use depends on settings.",
+    "fullHint": "Full · Complete model. Advanced option: may increase RAM pressure without necessarily improving results.",
+    "fastHint": "Fast · Speed recipe. Generates in fewer steps; may lose some quality.",
+    "legacyHint": "Legacy · Previous implementation for compatibility.",
+    "distilledHint": "Distilled · Accelerated variant. Fewer steps than the full model; may lose some quality.",
+    "quantizedHint": "Quantized · Smaller weights (INT8/FP8/INT4). Lower VRAM; slight quality trade-off.",
+    "ggufHint": "GGUF · Community quantized weights. Lower VRAM than the full checkpoint.",
+    "nvfp4Hint": "NVFP4 · 4-bit NVIDIA format. Fastest on RTX 50-series; other GPUs may be slower.",
+    "smallHint": "Compact · Smaller parameter count. Lower VRAM; less detail than the large variant.",
+    "editHint": "Edit · Changes an existing image or video instead of generating from scratch.",
+    "standardHint": "Standard · Default weights for this family. Memory use depends on settings.",
+    "toolHint": "Tool · Helper weights, not a generation model. Used for tasks such as rigging.",
+    "requirements": "Minimum requirements",
+    "vramBadge": "~{{vram}} GB VRAM",
+    "vram": "VRAM ~{{vram}} GB with a memory-offload profile.",
+    "vramComfort": "About {{vram}} GB VRAM is more comfortable and faster.",
+    "ram": "System RAM ~{{ram}} GB.",
+    "storage": "Disk ~{{storage}} GB for the first weight download.",
+    "limit": "Typical minima with quantization and offload, not a measured peak. Usage varies with resolution, duration, encoder and profile. An NVIDIA GPU with CUDA is required.",
+    "capability": {
+      "videoT2v": "Text-to-video. Writes a clip from the prompt alone.",
+      "videoI2v": "Image-to-video. Animates a start frame.",
+      "videoBoth": "Video from text or from a start frame.",
+      "videoFirstLast": "Video from a first frame, a last frame, or both.",
+      "videoAudio": "Video with a native soundtrack from the prompt.",
+      "videoAudioI2v": "Video and native audio from a start frame and the prompt.",
+      "videoAudioFirstLast": "Video and native audio from a first frame, a last frame, or both.",
+      "videoTalking": "Talking-head or avatar video. Lip-syncs a character to speech or a driving video.",
+      "videoEdit": "Video edit. Changes a character, style or region while keeping source motion.",
+      "videoControl": "Controlled video. Follows a guide video, pose or composition input.",
+      "image": "Text-to-image. Creates a still from the prompt.",
+      "imageEdit": "Image edit. Changes an existing picture from an instruction or control map.",
+      "imageRefs": "Image generation with reference images for identity or style.",
+      "music": "Music generation. Creates a song from lyrics and a style caption.",
+      "speech": "Speech synthesis. Turns text into a spoken voice.",
+      "sfx": "Sound effects. Creates audio that matches a video or a text description.",
+      "model3d": "3D mesh from text or an image. Exports GLB for 3D Video and animation.",
+      "model3dImage": "3D mesh from a single image. Text prompts are not used.",
+      "model3dMultiview": "3D mesh from front, left, right and back views.",
+      "tool": "Helper model. It does not generate a clip; it prepares another asset (for example a skeleton)."
+    }
+  },
   "characterReplacement": {
     "title": "Replace a character",
     "intro": "Choose a clear frame from the video, create an image with the replacement character, then use it to transform the video with Viggle.",
@@ -995,5 +1047,29 @@
     "panelUnavailable": "The sound effect panel is unavailable. Open Audio → SFX and try again.",
     "duration": "Duration: {{seconds}} s",
     "videoDuration": "The output video uses the source video’s duration and replaces its audio."
+  },
+  "yue2": {
+    "planning": "Composition planning",
+    "chords": "Melody and chords",
+    "melody": "Melody only",
+    "direct": "Direct generation",
+    "durationHint": "Duration is an upper limit: the song may finish earlier. Enter the lyrics and describe the sound in Music Style.",
+    "license": "CC BY-NC 4.0 weights: non-commercial use."
+  },
+  "auk": {
+    "mode": "AuK mode",
+    "textMode": "Create speech from instructions",
+    "sourceMode": "Clone, edit or clean a recording",
+    "source": "Reference audio or original recording",
+    "hint": "Write the complete task in the prompt. Start with 5 seconds; source audio uses the start of the clip and the result cannot exceed its duration. AuK creates a new recording: review the words and voice.",
+    "examples": "Example instructions",
+    "create": "Say \"Welcome back.\" in a warm, calm female voice.",
+    "clone": "Say the following with the same voice: \"Welcome back.\"",
+    "edit": "Replace \"tomorrow\" with \"next week\", keeping the same speaker and tone.",
+    "clean": "Remove background noise and reverberation while preserving all spoken words and speakers.",
+    "separate": "Keep only the second speaker in order of appearance and remove the other speakers.",
+    "language": "The provider documents English and Chinese; Spanish is not validated. The Qwen component has research/evaluation terms; check its license for commercial use.",
+    "steps": "Synthesis steps",
+    "guidance": "Instruction guidance"
   }
 }
