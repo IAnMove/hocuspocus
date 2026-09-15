@@ -54,7 +54,7 @@ test('grounding options and floor palette remain optional and reject invalid sav
   assert.equal(parseEnvironment({ ...environment, floorSourceHeight: Infinity }).floorSourceHeight, undefined)
 })
 
-test('all 76 curated compositions keep planted silhouettes and a gentle level camera', () => {
+test('all curated compositions keep planted silhouettes and a gentle level camera', () => {
   assert.equal(CREATIVE_TEMPLATE_IDS.length, 46)
   for (const id of [...DARK_FANTASY_IDS, ...CREATIVE_TEMPLATE_IDS]) {
     const doc = applyScene3DTemplate(id), f = doc.camera.framing

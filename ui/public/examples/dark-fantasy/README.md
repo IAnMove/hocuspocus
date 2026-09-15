@@ -1,9 +1,12 @@
-# Dark Fantasy · 30 editable perspective templates
+# Dark Fantasy · 50 editable perspective templates
 
 Open **Studios → Video 3D → Shot library** and select the **Dark Fantasy** filter.
-The collection contains ten landscape studies, ten new 720 × 1280 vertical
-compositions, and ten vertical PSX variants. The **PSX** filter also includes the
-twenty mixed-style scenes in the [Creative collection](../creative/README.md).
+The collection contains ten landscape studies, ten 720 × 1280 vertical
+compositions, ten vertical PSX variants, and twenty new layered scenes with
+animated distant landscapes. Play and rate the new collection at
+`/examples/dark-worlds/`; see the [Living Dark Fantasy guide](../dark-worlds/README.md).
+The **PSX** filter also includes mixed-style scenes in the
+[Creative collection](../creative/README.md).
 Vertical presets open in 9:16 automatically, with their authored camera framing.
 Each six-second scene includes its original generated images, transparent character
 cutouts, camera movement, lighting, atmospheric effects and floor finish. No model
@@ -17,7 +20,7 @@ Replace a character image and choose **Character / transparent cutout** under it
 surface control. The image retains its aspect ratio and alpha. Position, scale,
 camera framing and effects remain editable. **Align visible feet to the ground**
 ignores transparent bottom margins; **Contact shadow** reinforces their support.
-All thirty presets now use grounded cutouts, stationary figures and slow, level
+All fifty presets use grounded cutouts, stationary foreground figures and slow, level
 camera moves. Their horizon does not roll or turn vertically.
 
 Cinematic floor finishes include the original tiles, a seamless reflective surface,

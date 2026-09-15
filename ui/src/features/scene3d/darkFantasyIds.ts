@@ -1,4 +1,7 @@
+import { DARK_LIVING_IDS } from './darkLivingIds'
+
 export const DARK_FANTASY_IDS = [
+  ...DARK_LIVING_IDS,
   "dark-cathedral",
   "dark-forest",
   "dark-stairway",

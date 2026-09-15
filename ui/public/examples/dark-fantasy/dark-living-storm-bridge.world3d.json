@@ -1,0 +1,315 @@
+{
+  "version": 1,
+  "units": "meters",
+  "up": "y",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "duration": 6,
+  "templateId": "dark-living-storm-bridge",
+  "light": {
+    "kind": "directional",
+    "direction": [
+      -0.5,
+      -0.6,
+      -0.8
+    ],
+    "intensity": 2,
+    "color": "#fff2e4"
+  },
+  "environment": {
+    "reflectiveFloor": false,
+    "platform": false,
+    "bloom": 0.07,
+    "floorStyle": "backdrop",
+    "floorColor": "#30334e",
+    "floorSourceHeight": 1
+  },
+  "slots": [
+    {
+      "id": "background",
+      "slot": "background",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/dark-living-storm-bridge-frame.jpg",
+      "position": [
+        0,
+        -3.47546875,
+        -11
+      ],
+      "scale": 12.3,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "windows": [
+          [
+            [
+              0.3263888888888889,
+              0.85546875
+            ],
+            [
+              0.6625,
+              0.85546875
+            ],
+            [
+              0.6638888888888889,
+              0.834375
+            ],
+            [
+              0.675,
+              0.82265625
+            ],
+            [
+              0.675,
+              0.44140625
+            ],
+            [
+              0.6583333333333333,
+              0.42734375
+            ],
+            [
+              0.6652777777777777,
+              0.415625
+            ],
+            [
+              0.6694444444444444,
+              0.40546875
+            ],
+            [
+              0.6791666666666667,
+              0.40390625
+            ],
+            [
+              0.6722222222222223,
+              0.375
+            ],
+            [
+              0.6583333333333333,
+              0.3484375
+            ],
+            [
+              0.6375,
+              0.3234375
+            ],
+            [
+              0.6111111111111112,
+              0.30078125
+            ],
+            [
+              0.5763888888888888,
+              0.27734375
+            ],
+            [
+              0.5402777777777777,
+              0.25859375
+            ],
+            [
+              0.49722222222222223,
+              0.2421875
+            ],
+            [
+              0.45694444444444443,
+              0.2578125
+            ],
+            [
+              0.41944444444444445,
+              0.27890625
+            ],
+            [
+              0.3861111111111111,
+              0.3015625
+            ],
+            [
+              0.35833333333333334,
+              0.3265625
+            ],
+            [
+              0.33611111111111114,
+              0.35390625
+            ],
+            [
+              0.32083333333333336,
+              0.3828125
+            ],
+            [
+              0.31527777777777777,
+              0.40390625
+            ],
+            [
+              0.325,
+              0.40546875
+            ],
+            [
+              0.3333333333333333,
+              0.425
+            ],
+            [
+              0.32083333333333336,
+              0.4390625
+            ],
+            [
+              0.3125,
+              0.4421875
+            ],
+            [
+              0.3125,
+              0.82109375
+            ],
+            [
+              0.3263888888888889,
+              0.834375
+            ]
+          ]
+        ],
+        "unlit": true
+      }
+    },
+    {
+      "id": "hero",
+      "slot": "subject_1",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/ivory-knight.png",
+      "position": [
+        0.55,
+        0,
+        -0.1
+      ],
+      "scale": 1.25,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.88,
+        "tint": "#c9cbd0"
+      }
+    },
+    {
+      "id": "near-prop",
+      "slot": "prop",
+      "media": "image",
+      "surface": "cutout",
+      "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+      "position": [
+        -2.6,
+        0,
+        3
+      ],
+      "scale": 2.8,
+      "rotationY": 0,
+      "clip": null,
+      "imageLook": {
+        "unlit": true,
+        "grounded": true,
+        "shadow": 0.8,
+        "tint": "#68717e",
+        "psx": 0.22
+      }
+    },
+    {
+      "id": "exterior-video",
+      "slot": "prop",
+      "media": "screen",
+      "sourceUrl": "",
+      "clip": null,
+      "position": [
+        -0.0576562499999998,
+        -1.1269374999999995,
+        -12.5
+      ],
+      "rotationY": 0,
+      "scale": 1,
+      "screen": {
+        "sourceUrl": "/examples/dark-fantasy/dark-living-storm-bridge-exterior.mp4",
+        "media": "video",
+        "mode": "mesh",
+        "targetMesh": "SCREEN_CONTENT",
+        "anchor": "",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "pitch": 0,
+        "yaw": 0,
+        "roll": 0,
+        "width": 5.88555,
+        "height": 17.50059375,
+        "style": "frameless",
+        "fit": "cover",
+        "start": 0,
+        "speed": 1,
+        "loop": true,
+        "flipY": false
+      }
+    }
+  ],
+  "camera": {
+    "family": "establishment",
+    "frameFormat": "portrait",
+    "eye": [
+      -0.18,
+      1.2,
+      10.959999999999999
+    ],
+    "look": [
+      0,
+      3.75,
+      -0.5
+    ],
+    "fov": 49,
+    "framing": {
+      "targetSlot": "hero",
+      "anchor": "feet",
+      "from": [
+        -0.584,
+        0.96,
+        8.767999999999999
+      ],
+      "to": [
+        -0.40800000000000003,
+        0.96,
+        8.552
+      ],
+      "lookFrom": [
+        -0.44000000000000006,
+        3.0,
+        -0.4
+      ],
+      "lookTo": [
+        -0.44000000000000006,
+        3.0,
+        -0.4
+      ],
+      "rollFrom": 0,
+      "rollTo": 0,
+      "relativeToFacing": false,
+      "orbitTurns": 0
+    }
+  },
+  "worldSfx": [
+    {
+      "id": "atmosphere",
+      "kind": "dust",
+      "position": {
+        "x": 0,
+        "y": 1.5,
+        "z": -1.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#baa7fa",
+      "scale": 2,
+      "intensity": 0.1,
+      "seed": 930,
+      "start": 0,
+      "end": 6,
+      "sound": false,
+      "volume": 0
+    }
+  ]
+}

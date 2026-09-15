@@ -1077,6 +1077,86 @@
     "creative-cobalt-crater-motion": {
       "title": "Observatorio del núcleo",
       "description": "Lava animada al otro lado de un observatorio. Ventanal, interior y personajes en capas independientes."
+    },
+    "dark-living-sleeping-titan": {
+      "title": "El titán dormido",
+      "description": "Marfil contra musgo; un caballero ante una criatura del tamaño de una montaña."
+    },
+    "dark-living-bell-of-ash": {
+      "title": "La campana de ceniza",
+      "description": "Un campanario carbonizado se abre sobre un desierto de ceniza y oro."
+    },
+    "dark-living-antler-moon": {
+      "title": "La luna entre astas",
+      "description": "Raíces negras, luna azul y un ciervo imposible emergiendo de la niebla."
+    },
+    "dark-living-drowned-king": {
+      "title": "El rey sumergido",
+      "description": "Oleaje turquesa detrás de un palacio hundido, con una corona gigantesca."
+    },
+    "dark-living-red-pilgrim": {
+      "title": "El peregrino rojo",
+      "description": "Un portal de arenisca encuadra la marcha lenta de un gigante remoto."
+    },
+    "dark-living-last-aqueduct": {
+      "title": "El último acueducto",
+      "description": "Ruinas blancas y agua azul suspendidas sobre un abismo."
+    },
+    "dark-living-ember-heart": {
+      "title": "Corazón de brasa",
+      "description": "Un santuario negro protege el corazón vivo de una montaña."
+    },
+    "dark-living-violet-oracle": {
+      "title": "El oráculo violeta",
+      "description": "Amatista y hueso frente a un cielo donde flotan medusas colosales."
+    },
+    "dark-living-winter-shoulder": {
+      "title": "Sobre el hombro del invierno",
+      "description": "Una fortaleza parece diminuta junto a un guardián helado."
+    },
+    "dark-living-thorn-crown": {
+      "title": "La corona de espinas",
+      "description": "Espinas oscuras contra un jardín rojo que todavía respira."
+    },
+    "dark-living-black-tide": {
+      "title": "La marea negra",
+      "description": "Ventanas de hueso y un leviatán bajo el agua luminosa."
+    },
+    "dark-living-golden-ruin": {
+      "title": "La ruina dorada",
+      "description": "Un observatorio de azufre contempla un sol atrapado en anillos de piedra."
+    },
+    "dark-living-hollow-saint": {
+      "title": "El santo hueco",
+      "description": "Una figura vacía custodia montañas cubiertas de nubes."
+    },
+    "dark-living-fungal-throne": {
+      "title": "El trono del micelio",
+      "description": "Un reino subterráneo mezcla hongos luminosos y piedra funeraria."
+    },
+    "dark-living-storm-bridge": {
+      "title": "El puente de la tormenta",
+      "description": "Una pasarela firme frente a nubes enormes y rayos lejanos."
+    },
+    "dark-living-sand-library": {
+      "title": "Los nombres bajo la arena",
+      "description": "Una cámara sellada mira hacia libros de piedra de escala imposible."
+    },
+    "dark-living-jade-dragon": {
+      "title": "El dragón de jade",
+      "description": "Un pabellón oscuro ante montañas verdes y un dragón petrificado."
+    },
+    "dark-living-moon-grave": {
+      "title": "La tumba de la luna",
+      "description": "Piedra oscura y una luna caída que ilumina la nieve."
+    },
+    "dark-living-copper-trees": {
+      "title": "El bosque de cobre",
+      "description": "Troncos negros, hojas metálicas y un centinela oculto entre la niebla."
+    },
+    "dark-living-final-gate": {
+      "title": "La puerta del último gigante",
+      "description": "Un último caballero frente al coloso que sostiene el horizonte."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1238,5 +1318,6 @@
     "item": "Ventana {{number}}",
     "edit": "Editar contorno",
     "remove": "Cerrar hueco"
-  }
+  },
+  "darkLivingReview": "Ver los 20 mundos dark fantasy"
 }

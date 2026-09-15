@@ -1077,6 +1077,86 @@
     "creative-cobalt-crater-motion": {
       "title": "Core Observatory",
       "description": "Animated lava beyond an observatory window. Frame, interior and characters stay on independent layers."
+    },
+    "dark-living-sleeping-titan": {
+      "title": "The Sleeping Titan",
+      "description": "Ivory and moss: a lone knight faces a mountain-sized guardian beyond an ancient arch."
+    },
+    "dark-living-bell-of-ash": {
+      "title": "The Ash Bell",
+      "description": "A charred bell tower opens onto black ash dunes and slow gold embers."
+    },
+    "dark-living-antler-moon": {
+      "title": "Moon Among Antlers",
+      "description": "Black roots frame a moonlit stag, rippling water and drifting silver mist."
+    },
+    "dark-living-drowned-king": {
+      "title": "The Drowned King",
+      "description": "Waves roll around an enormous crowned head beyond a green sea palace."
+    },
+    "dark-living-red-pilgrim": {
+      "title": "The Red Pilgrim",
+      "description": "A red sandstone portal frames a distant giant in windblown terracotta dunes."
+    },
+    "dark-living-last-aqueduct": {
+      "title": "The Last Aqueduct",
+      "description": "White ruins, silver waterfalls and a guardian carved into a blue mountain chasm."
+    },
+    "dark-living-ember-heart": {
+      "title": "Heart of Embers",
+      "description": "An obsidian sanctuary opens onto the glowing heart of a volcanic mountain."
+    },
+    "dark-living-violet-oracle": {
+      "title": "The Violet Oracle",
+      "description": "Amethyst and bone frame giant luminous spirits above a violet valley."
+    },
+    "dark-living-winter-shoulder": {
+      "title": "On Winter’s Shoulder",
+      "description": "A frozen fortress looks tiny on the shoulder of an ancient ice guardian."
+    },
+    "dark-living-thorn-crown": {
+      "title": "The Thorn Crown",
+      "description": "Dark thorns frame crimson flowers and an immense crown on a distant hill."
+    },
+    "dark-living-black-tide": {
+      "title": "The Black Tide",
+      "description": "Ivory stone frames slow turquoise waves above a hidden leviathan."
+    },
+    "dark-living-golden-ruin": {
+      "title": "The Golden Ruin",
+      "description": "A bronze observatory looks onto a golden sun inside a monumental stone ring."
+    },
+    "dark-living-hollow-saint": {
+      "title": "The Hollow Saint",
+      "description": "Clouds pass through a hollow giant between distant grey mountain peaks."
+    },
+    "dark-living-fungal-throne": {
+      "title": "The Mycelium Throne",
+      "description": "Roots and burial stone frame a throne of glowing mushrooms and drifting spores."
+    },
+    "dark-living-storm-bridge": {
+      "title": "The Storm Bridge",
+      "description": "A gothic gatehouse frames a broken bridge and distant violet storm clouds."
+    },
+    "dark-living-sand-library": {
+      "title": "Names Beneath the Sand",
+      "description": "An ochre archive opens onto giant stone tablets and dunes of moving sand."
+    },
+    "dark-living-jade-dragon": {
+      "title": "The Jade Dragon",
+      "description": "A jade pavilion overlooks a petrified dragon, waterfalls and drifting mountain mist."
+    },
+    "dark-living-moon-grave": {
+      "title": "The Moon’s Tomb",
+      "description": "A basalt burial chamber frames a fallen moon and slow luminous snow."
+    },
+    "dark-living-copper-trees": {
+      "title": "The Copper Forest",
+      "description": "Black roots frame copper leaves and a stone sentinel hidden in teal forest mist."
+    },
+    "dark-living-final-gate": {
+      "title": "The Last Giant’s Gate",
+      "description": "A final knight stands before the giant that holds a broken gate above the horizon."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1238,5 +1318,6 @@
     "item": "Window {{number}}",
     "edit": "Edit outline",
     "remove": "Close opening"
-  }
+  },
+  "darkLivingReview": "Explore 20 living dark fantasy worlds"
 }
