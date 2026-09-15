@@ -1,5 +1,6 @@
 import catalog from '../../../../app/shared/scene_effects.json' with { type: 'json' }
 import { parseSceneFx, type SceneFx } from './types'
+import { parseWorldMotion, parsePortalPlayback, type WorldSfxKeyframe, type PortalPlayback } from './worldMotion'
 
 export const WORLD_SFX_KINDS = [
   'portal', 'magic_circle', 'summoning_gate',
@@ -37,6 +38,9 @@ export type WorldSfx = {
   target?: WorldSfxAnchor
   targetPosition?: WorldVec3
   sourceUrl?: string
+  motion?: WorldSfxKeyframe[]
+  mediaProjection?: 'screen'
+  mediaPlayback?: PortalPlayback
 }
 
 const PRESETS = Object.fromEntries(catalog.map(item => [item.id, item]))
@@ -151,6 +155,9 @@ export function parseWorldSfx(raw: unknown): WorldSfx[] {
       ...(parseAnchor(value.target) ? { target: parseAnchor(value.target) } : {}),
       ...(value.targetPosition ? { targetPosition: worldVec3(value.targetPosition, { x: 0, y: 1.2, z: 1.6 }, -50, 50) } : {}),
       ...(sourceUrl ? { sourceUrl } : {}),
+      ...(parseWorldMotion(value.motion) ? { motion: parseWorldMotion(value.motion) } : {}),
+      ...(value.mediaProjection === 'screen' ? { mediaProjection: 'screen' as const } : {}),
+      ...(parsePortalPlayback(value.mediaPlayback) ? { mediaPlayback: parsePortalPlayback(value.mediaPlayback) } : {}),
     }]
   })
 }

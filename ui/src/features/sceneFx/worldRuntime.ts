@@ -1,10 +1,11 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Points, Scene, ShaderMaterial, Vector3, VideoTexture } from 'three'
 import { buildEnergyEffect } from './energyObjects'
 import { bindPortalMedia, type PortalMediaRuntime } from './portalMediaRuntime'
+import { worldSfxAtTime } from './worldMotion'
 import { fxRandom } from './types'
 import { WORLD_BEAM_KINDS, type WorldSfx, type WorldSfxAnchor, type WorldVec3 } from './world'
 
-export type WorldSfxGpu = { root: Group; kind: WorldSfx['kind']; color: string; sourceUrl?: string; media?: PortalMediaRuntime }
+export type WorldSfxGpu = { root: Group; kind: WorldSfx['kind']; color: string; sourceUrl?: string; media?: PortalMediaRuntime; mediaProjection?: string; mediaAspect?: number }
 export type WorldSlotPose = {
   id: string
   position: readonly [number, number, number]
@@ -217,34 +218,30 @@ function animate(root: Group, cue: WorldSfx, seconds: number) {
   })
 }
 
-export function syncWorldSfx(
-  scene: Scene,
-  nodes: Map<string, WorldSfxGpu> | undefined,
-  cues: readonly WorldSfx[] | undefined,
-  seconds: number,
-  slots: readonly WorldSlotPose[],
-) {
-  if (!scene || !nodes || typeof nodes.set !== 'function') return
-  const live = new Set((cues ?? []).map(cue => cue.id))
-  for (const [id, gpu] of nodes) {
-    if (live.has(id)) continue
-    scene.remove(gpu.root)
-    gpu.media?.dispose()
-    disposeRoot(gpu.root)
-    nodes.delete(id)
-  }
-  for (const cue of cues ?? []) {
-    let gpu = nodes.get(cue.id)
-    if (!gpu || gpu.kind !== cue.kind || gpu.color !== cue.color || gpu.sourceUrl !== cue.sourceUrl) {
-      if (gpu) { scene.remove(gpu.root); gpu.media?.dispose(); disposeRoot(gpu.root) }
-      gpu = { root: build(cue.kind, cue.color), kind: cue.kind, color: cue.color, sourceUrl: cue.sourceUrl }
-      gpu.root.userData.worldSfxId = cue.id
-      if (cue.kind === 'media_portal') gpu.media = bindPortalMedia(gpu.root, cue.sourceUrl)
-      scene.add(gpu.root)
-      nodes.set(cue.id, gpu)
-    }
-    const active = seconds >= cue.start && seconds < cue.end
-    gpu.root.visible = active
+function sameWorldMedia(gpu: WorldSfxGpu, cue: WorldSfx, aspect: number) {
+  return gpu.kind === cue.kind && gpu.color === cue.color && gpu.sourceUrl === cue.sourceUrl
+    && gpu.mediaProjection === cue.mediaProjection && Math.abs((gpu.mediaAspect ?? 1) - aspect) <= .005
+}
+
+function ensureWorldSfx(scene: Scene, nodes: Map<string, WorldSfxGpu>, cue: WorldSfx, mediaAspect: number) {
+  const previous = nodes.get(cue.id)
+  if (previous && sameWorldMedia(previous, cue, mediaAspect)) return previous
+  if (previous) { scene.remove(previous.root); previous.media?.dispose(); disposeRoot(previous.root) }
+  const gpu: WorldSfxGpu = { root: build(cue.kind, cue.color), kind: cue.kind, color: cue.color, sourceUrl: cue.sourceUrl, mediaProjection: cue.mediaProjection, mediaAspect }
+  gpu.root.userData.worldSfxId = cue.id
+  if (cue.kind === 'media_portal') gpu.media = bindPortalMedia(gpu.root, cue.sourceUrl, mediaAspect)
+  scene.add(gpu.root); nodes.set(cue.id, gpu)
+  return gpu
+}
+
+function syncPortalProjection(gpu: WorldSfxGpu, cue: WorldSfx, viewport: { width: number; height: number }) {
+  const glass = gpu.root.children.find(child => child.userData.kind === 'portalMedia')
+  if (!(glass instanceof Mesh) || !(glass.material instanceof ShaderMaterial)) return
+  glass.material.uniforms.uViewport.value.set(viewport.width, viewport.height)
+  glass.material.uniforms.uScreenSpace.value = cue.mediaProjection === 'screen' ? 1 : 0
+}
+
+function poseWorldCue(gpu: WorldSfxGpu, cue: WorldSfx, seconds: number, slots: readonly WorldSlotPose[]) {
     const origin = resolvePoint(cue.anchor, cue.position, slots)
     const destination = WORLD_BEAM_KINDS.has(cue.kind)
       ? resolvePoint(cue.target, cue.targetPosition ?? { x: cue.position.x, y: cue.position.y, z: cue.position.z + 2.2 }, slots)
@@ -257,7 +254,35 @@ export function syncWorldSfx(
     else if (cue.kind === 'arcane_missiles') poseMissiles(gpu.root, cue, origin.point, destination.point, Math.max(0, seconds - cue.start), Math.max(0.001, cue.end - cue.start))
     else if (WORLD_BEAM_KINDS.has(cue.kind)) poseBeam(gpu.root, cue, origin.point, destination.point, seconds)
     else poseFixed(gpu.root, cue, origin.point)
-    if (gpu.media) void gpu.media.seek(worldSfxMediaTime(cue, seconds)).catch(error => { gpu!.media!.error = error })
+}
+
+export function syncWorldSfx(
+  scene: Scene,
+  nodes: Map<string, WorldSfxGpu> | undefined,
+  cues: readonly WorldSfx[] | undefined,
+  seconds: number,
+  slots: readonly WorldSlotPose[],
+  viewport = { width: 1, height: 1 },
+) {
+  if (!scene || !nodes || typeof nodes.set !== 'function') return
+  const entries = cues ?? []
+  const live = new Set(entries.map(cue => cue.id))
+  for (const [id, gpu] of nodes) {
+    if (live.has(id)) continue
+    scene.remove(gpu.root)
+    gpu.media?.dispose()
+    disposeRoot(gpu.root)
+    nodes.delete(id)
+  }
+  for (const sourceCue of entries) {
+    const cue = worldSfxAtTime(sourceCue, seconds)
+    const mediaAspect = cue.mediaProjection === 'screen' ? viewport.width / viewport.height : 1
+    const gpu = ensureWorldSfx(scene, nodes, cue, mediaAspect)
+    syncPortalProjection(gpu, cue, viewport)
+    const active = seconds >= cue.start && seconds < cue.end
+    gpu.root.visible = active
+    poseWorldCue(gpu, cue, seconds, slots)
+    if (gpu.media) void gpu.media.seek(worldSfxMediaTime(cue, seconds), cue.mediaPlayback).catch(error => { gpu.media!.error = error })
     if (active) animate(gpu.root, cue, seconds)
   }
 }
@@ -284,12 +309,12 @@ export function worldSfxMediaReady(nodes: Map<string, WorldSfxGpu> | undefined, 
   return cues.every(cue => {
     if (cue.kind !== 'media_portal' || !cue.sourceUrl) return true
     const gpu = nodes?.get(cue.id)
-    if (!gpu || gpu.sourceUrl !== cue.sourceUrl || gpu.kind !== cue.kind) return false
+    if (!gpu || gpu.sourceUrl !== cue.sourceUrl || gpu.kind !== cue.kind || gpu.mediaProjection !== cue.mediaProjection) return false
     if (gpu.media?.error) throw gpu.media.error
     return Boolean(gpu.media?.ready)
   })
 }
 
 export async function prepareWorldSfxMedia(nodes: Map<string, WorldSfxGpu> | undefined, cues: readonly WorldSfx[] = [], seconds: number) {
-  await Promise.all(cues.map(cue => nodes?.get(cue.id)?.media?.seek(worldSfxMediaTime(cue, seconds))))
+  await Promise.all(cues.map(cue => nodes?.get(cue.id)?.media?.seek(worldSfxMediaTime(cue, seconds), cue.mediaPlayback)))
 }

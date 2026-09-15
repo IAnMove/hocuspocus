@@ -72,14 +72,18 @@ export class CinematicRuntime {
       if (this.background) this.background.needsUpdate = true
     }
     world.scene.background = this.background ?? new Color(0x10141c)
+    this.fitBackground()
+    for (const s of doc.slots) if (s.surface === 'environment') {
+      const gpu = world.slots.get(s.id); if (gpu) gpu.root.visible = false
+    }
+  }
+  private fitBackground() {
+    const { world } = this
     if (this.background) {
       const image = this.background.image as { width?: number; height?: number }
       const aspect = (image.width ?? 16) / (image.height ?? 9), cameraAspect = world.camera.aspect
       this.background.repeat.set(Math.min(1, cameraAspect / aspect), Math.min(1, aspect / cameraAspect))
       this.background.offset.set((1 - this.background.repeat.x) / 2, (1 - this.background.repeat.y) / 2)
-    }
-    for (const s of doc.slots) if (s.surface === 'environment') {
-      const gpu = world.slots.get(s.id); if (gpu) gpu.root.visible = false
     }
   }
   private syncStage(doc: Scene3DDocument) {

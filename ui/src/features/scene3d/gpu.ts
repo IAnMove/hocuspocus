@@ -431,7 +431,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
       rotationY: slot.rotationY,
       scale: slot.scale,
       root: world.slots.get(slot.id)?.root,
-    })))
+    })), { width: world.renderer.domElement?.width ?? document.width, height: world.renderer.domElement?.height ?? document.height })
   }
   if (world.cinema || document.environment || document.worldSfx?.length || document.slots.some(s => s.surface === 'environment')) {
     world.cinema ??= new CinematicRuntime(world)

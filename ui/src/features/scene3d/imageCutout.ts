@@ -13,6 +13,12 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
   const material = slot.imageLook?.unlit ? new MeshBasicMaterial(options) : new MeshStandardMaterial({ ...options, roughness: .9 })
   if (texture && slot.imageLook?.psx) applyPsxImageMaterial(material, texture, slot.imageLook.psx)
   const mesh = new Mesh(imageWindowGeometry(aspect, slot.imageLook?.windows), material)
+  groundImageCutout(mesh, slot, texture, aspect)
+  poseImageCutout(mesh, slot)
+  return mesh
+}
+
+function groundImageCutout(mesh: Mesh, slot: Scene3DSlot, texture: Texture | null, aspect: number) {
   if (slot.imageLook?.grounded) {
     const foot = textureFootprint(texture)
     if (foot) {
@@ -29,8 +35,6 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
       if (slot.imageLook.shadow) mesh.add(imageContactShadow(foot, aspect, slot.imageLook.shadow))
     }
   }
-  poseImageCutout(mesh, slot)
-  return mesh
 }
 
 export function poseImageCutout(root: Object3D, slot: Scene3DSlot) {

@@ -1,31 +1,32 @@
 import { Group, Mesh, MeshBasicMaterial, PlaneGeometry, ShaderMaterial } from 'three'
+import type { PortalPlayback } from './worldMotion'
 import { defaultMediaScreen } from '../scene3d/mediaScreen'
 import { bindScreenMedia, type ScreenMediaRuntime } from '../scene3d/screenMediaRuntime'
 
 export type PortalMediaRuntime = {
   ready: boolean
   error: Error | null
-  seek: (seconds: number) => Promise<void>
+  seek: (seconds: number, playback?: PortalPlayback) => Promise<void>
   dispose: () => void
 }
 
 /** Each portal owns a paused, scene-clock-driven source, just like a video layer. */
-export function bindPortalMedia(root: Group, sourceUrl?: string): PortalMediaRuntime | undefined {
+export function bindPortalMedia(root: Group, sourceUrl?: string, aspect = 1): PortalMediaRuntime | undefined {
   const glass = root.children.find(child => child.userData.kind === 'portalMedia')
   if (!sourceUrl || typeof document === 'undefined' || !(glass instanceof Mesh) || !(glass.material instanceof ShaderMaterial)) return
   const uniforms = glass.material.uniforms
-  const surface = new Mesh(new PlaneGeometry(2, 2), new MeshBasicMaterial())
+  const surface = new Mesh(new PlaneGeometry(2 * aspect, 2), new MeshBasicMaterial())
   const original = surface.material
   const abort = new AbortController()
-  const screen = { ...defaultMediaScreen(), sourceUrl, width: 1, height: 1, fit: 'cover' as const,
+  const screen = { ...defaultMediaScreen(), sourceUrl, width: aspect, height: 1, fit: 'cover' as const,
     media: /\.(mp4|webm|mov|mkv)(\?|$)/i.test(sourceUrl) ? 'video' as const : 'image' as const }
   let media: ScreenMediaRuntime | undefined, released = false
   const runtime: PortalMediaRuntime = {
     ready: false, error: null,
-    async seek(seconds) {
+    async seek(seconds, playback) {
       await loaded
       if (runtime.error) throw runtime.error
-      if (!released) await media?.seek(seconds, screen)
+      if (!released) await media?.seek(seconds, { ...screen, ...playback })
     },
     dispose() {
       if (released) return

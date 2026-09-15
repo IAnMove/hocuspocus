@@ -90,5 +90,25 @@
   "anchor": "Follow slot id",
   "anchorNone": "None — stays in the world",
   "worldTarget": "Aim at slot id",
-  "worldTargetPosition": "Aim (m)"
+  "worldTargetPosition": "Aim (m)",
+  "motion": {
+    "title": "Animated path",
+    "help": "Position, rotation and size at specific scene times. Points override the fixed pose. Use size 0 to appear from nothing and 360° for a complete rotation.",
+    "detach": "Remove the anchor to animate position in the scene.",
+    "time": "Scene time (s)",
+    "scale": "Size",
+    "easing": "Movement to the next point",
+    "smooth": "Smooth",
+    "linear": "Linear",
+    "add": "Add point",
+    "clear": "Remove path"
+  },
+  "portalPlayback": {
+    "title": "Landscape inside the portal",
+    "screen": "Window into the next world",
+    "help": "Keeps the landscape aligned with the frame as the portal grows. Continue with the same camera and video time in the next scene.",
+    "start": "Video start (s)",
+    "speed": "Speed",
+    "loop": "Loop video"
+  }
 }

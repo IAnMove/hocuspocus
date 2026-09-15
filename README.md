@@ -289,3 +289,5 @@ The [Skate Portal study](ui/public/examples/skate-portal/README.md) joins four e
 The preview fits portrait scenes between black sidebars while keeping editor controls readable. **Expand video** shows just the picture fullscreen. Select covered characters, props or backgrounds in **Scene objects**, then move, rotate or scale them. For a cutout layer, enable **Animate this layer** and choose a video from the gallery or upload one; its depth and individual PSX treatment are retained in saved scenes and native exports.
 
 For a stationary viewpoint, select **Fixed camera**. Image cutouts can use **Held poses** with per-pose duration, relative height and ground placement. **Preserve transparency** supports images and videos that already have alpha, including transparent WebM; it does not segment an opaque video. These controls remain editable in saved scenes and portable templates.
+
+The [Portal Ride study](ui/public/examples/skate-portal-v2/README.md) expands that experiment to three continuous world changes. Native world effects now support editable position/rotation/scale keyframes and screen-projected portal video with its own start, speed and loop controls.

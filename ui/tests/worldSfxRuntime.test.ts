@@ -124,3 +124,35 @@ test('world gizmo exposes XYZ rotation instead of yaw-only', () => {
   assert.equal(Number(rotation[0].toFixed(4)), 0.2)
   assert.equal(transformPatch(proxy, 'rotate', 'Y', false).rotationY, 0.4)
 })
+
+test('animated portals preserve full rotations, zero-size birth and reversible seeking', async () => {
+  const { worldSfxAtTime, setWorldMotionPose, parseWorldMotion } = await import('../src/features/sceneFx/worldMotion')
+  const pose = (time: number, scale: number, z: number) => ({ time, scale, position: { x: time, y: 2, z: -1 }, rotation: { x: 0, y: 0, z }, easing: 'linear' })
+  const cue = parseWorldSfx([{ id: 'jump', kind: 'media_portal', start: 0, end: 4,
+    motion: [pose(2, 20, 720), pose(0, 0, 0), pose(2, 24, 720), { time: NaN }],
+    mediaProjection: 'screen', mediaPlayback: { start: 2.4, speed: .6, loop: false },
+  }])[0]
+  assert.equal(cue.motion?.length, 2)
+  assert.equal(worldSfxAtTime(cue, -1).scale, 0)
+  assert.equal(worldSfxAtTime(cue, 1).rotation.z, 360)
+  assert.equal(worldSfxAtTime(cue, 1).scale, 12)
+  assert.equal(worldSfxAtTime(cue, 5).scale, 24)
+  assert.deepEqual(parseWorldSfx(JSON.parse(JSON.stringify([cue])))[0], cue)
+  const nodes = new Map(), scene = new Scene()
+  syncWorldSfx(scene, nodes, [cue], 1, [], { width: 720, height: 1280 })
+  const root = nodes.get(cue.id).root
+  assert.equal(root.scale.x, 12)
+  assert.equal(root.rotation.z, Math.PI * 2)
+  const glass = root.children.find(child => child.userData.kind === 'portalMedia')
+  assert.deepEqual(glass.material.uniforms.uViewport.value.toArray(), [720, 1280])
+  assert.equal(glass.material.uniforms.uScreenSpace.value, 1)
+  syncWorldSfx(scene, nodes, [cue], 0, [])
+  assert.equal(nodes.get(cue.id).root.scale.x, 0)
+  const edited = setWorldMotionPose(cue, 1, { ...worldSfxAtTime(cue, 1), scale: 7 })
+  assert.equal(edited.motion?.length, 3)
+  assert.equal(worldSfxAtTime(edited, 1).scale, 7)
+  assert.equal(worldSfxAtTime(edited, 2).scale, 24)
+  assert.equal(parseWorldMotion([pose(700, 100, 720)])?.[0].time, 600)
+  assert.equal(parseWorldMotion([pose(0, 100, 720)])?.[0].scale, 64)
+  syncWorldSfx(scene, nodes, [], 0, [])
+})

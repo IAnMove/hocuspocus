@@ -38,13 +38,17 @@ function resolveScreenTarget(root: Object3D, screen: MediaScreen, standalone: bo
   return { target: targets[0], attachedPlane, plane }
 }
 
+function screenSurfaceAspect(raw: unknown, screen: MediaScreen, imagePlate: boolean) {
+  const geometry = raw as { parameters?: { width?: number; height?: number } }
+  return imagePlate && geometry.parameters?.width && geometry.parameters.height
+    ? geometry.parameters.width / geometry.parameters.height : screen.width / screen.height
+}
+
 function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: boolean, imagePlate?: { look?: ImageLook }) {
   const { target, attachedPlane, plane } = resolveScreenTarget(root, screen, standalone, Boolean(imagePlate))
   const canvas = document.createElement('canvas')
   const previous = target.material
-  const geometry = target.geometry as { parameters?: { width?: number; height?: number } }
-  const aspect = imagePlate && geometry.parameters?.width && geometry.parameters.height
-    ? geometry.parameters.width / geometry.parameters.height : screen.width / screen.height
+  const aspect = screenSurfaceAspect(target.geometry, screen, Boolean(imagePlate))
   canvas.width = Math.max(2, Math.round(Math.min(1920, 1080 * aspect))); canvas.height = Math.max(2, Math.round(canvas.width / aspect))
   const context = canvas.getContext('2d')!
   const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace; texture.flipY = imagePlate || standalone || plane ? !screen.flipY : screen.flipY
