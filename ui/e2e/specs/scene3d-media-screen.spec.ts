@@ -72,7 +72,7 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
   expect(slot).toMatchObject({ media: 'image', surface: 'cutout', position: scene.slots[0].position, scale: scene.slots[0].scale, imageLook: scene.slots[0].imageLook })
   expect(slot.screen).toMatchObject({ sourceUrl: url, media: 'video', fit: 'cover', loop: true })
   await controls.getByLabel('Animate this layer').uncheck()
-  await workspace.getByLabel('Open shot JSON').setInputFiles(path)
+  await workspace.getByLabel('Open shot JSON').setInputFiles({ name: 'animated-background.world3d.json', mimeType: 'application/json', buffer: await readFile(path) })
   await expect(controls.getByLabel('Animate this layer')).toBeChecked()
   await expect(controls.getByText('background-motion.webm', { exact: true })).toBeVisible()
   await page.route('**/api/v1/scenes/recordings', route => route.fulfill({ json: { name: 'animated-background.mp4', type: 'video', url: '/api/v1/file/animated-background.mp4' } }))

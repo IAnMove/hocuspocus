@@ -3,7 +3,9 @@ import { parseImageWindows, type ImageWindow } from './imageWindows'
 
 export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; windows?: ImageWindow[] }
 
-const positiveNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0
+function isPositiveFinite(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
 
 export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (!raw || typeof raw !== 'object') return undefined
@@ -14,8 +16,8 @@ export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (typeof value.tint === 'string' && /^#[\da-f]{6}$/i.test(value.tint)) look.tint = value.tint
   if (value.unlit === true) look.unlit = true
   if (value.grounded === true) look.grounded = true
-  if (positiveNumber(value.shadow)) look.shadow = Math.min(1, value.shadow)
-  if (positiveNumber(value.psx)) look.psx = Math.max(.5, Math.min(2, value.psx))
+  if (isPositiveFinite(value.shadow)) look.shadow = Math.min(1, value.shadow)
+  if (isPositiveFinite(value.psx)) look.psx = Math.max(.5, Math.min(2, value.psx))
   return Object.keys(look).length ? look : undefined
 }
 
