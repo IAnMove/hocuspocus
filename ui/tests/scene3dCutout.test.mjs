@@ -54,7 +54,7 @@ test('optional floor finishes survive save/reopen and preserve old defaults', ()
 })
 
 test('all fantasy presets reopen with bundled resources and independent camera/effect documents', () => {
-  assert.equal(DARK_FANTASY_IDS.length, 58)
+  assert.equal(DARK_FANTASY_IDS.length, 60)
   const cameras = new Set()
   for (const id of DARK_FANTASY_IDS) {
     assert.ok(SCENE3D_TEMPLATES.some(template => template.id === id))
@@ -68,7 +68,7 @@ test('all fantasy presets reopen with bundled resources and independent camera/e
     for (const cue of doc.worldSfx) assert.ok(Number.isFinite(cue.rotation.x))
     for (const slot of parsed.slots) {
       const source = slot.media === 'screen' ? slot.screen.sourceUrl : slot.sourceUrl
-      assert.ok(source.startsWith('/examples/dark-fantasy/') || source.startsWith('/examples/dark-stillness/'))
+      assert.ok(source.startsWith('/examples/dark-fantasy/') || source.startsWith('/examples/dark-stillness/') || source.startsWith('/examples/moving-cutouts/'))
       assert.ok(fs.existsSync(new URL('../public' + source, import.meta.url)))
     }
     cameras.add(JSON.stringify(parsed.camera))

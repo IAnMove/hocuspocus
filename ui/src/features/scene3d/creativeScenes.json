@@ -8362,5 +8362,741 @@
         "volume": 0
       }
     ]
+  },
+  "creative-motion-skate-coast": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-motion-skate-coast",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.02,
+      "floorStyle": "none",
+      "floorColor": "#222233"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-coast-0.png",
+        "position": [
+          0,
+          -6,
+          -8
+        ],
+        "scale": 9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-coast.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.32,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.65,
+          "tint": "#ffffff"
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        3,
+        10
+      ],
+      "look": [
+        0,
+        3,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81dfc9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 926,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "effects": []
+  },
+  "creative-motion-skate-neon": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-motion-skate-neon",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.02,
+      "floorStyle": "none",
+      "floorColor": "#222233"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-neon-0.png",
+        "position": [
+          0,
+          -6,
+          -8
+        ],
+        "scale": 9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-neon.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1.4,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.65,
+          "tint": "#f0d7fa"
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        3,
+        10
+      ],
+      "look": [
+        0,
+        3,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81dfc9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 926,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "effects": []
+  },
+  "creative-motion-skate-clouds": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-motion-skate-clouds",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.02,
+      "floorStyle": "none",
+      "floorColor": "#222233"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-clouds-0.png",
+        "position": [
+          0,
+          -6,
+          -8
+        ],
+        "scale": 9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-clouds.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 0.65,
+          "loop": false,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0,
+          0.4,
+          0
+        ],
+        "scale": 1.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.65,
+          "tint": "#ffffff"
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        3,
+        10
+      ],
+      "look": [
+        0,
+        3,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81dfc9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 926,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ],
+    "effects": []
+  },
+  "creative-motion-skate-portal": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-motion-skate-portal",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#283b42",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-black-tide-frame.jpg",
+        "position": [
+          0,
+          -7.1846875,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.30277777777777776,
+                0.7046875
+              ],
+              [
+                0.6958333333333333,
+                0.7046875
+              ],
+              [
+                0.6958333333333333,
+                0.35703125
+              ],
+              [
+                0.6930555555555555,
+                0.32890625
+              ],
+              [
+                0.6805555555555556,
+                0.30390625
+              ],
+              [
+                0.6611111111111111,
+                0.27890625
+              ],
+              [
+                0.6291666666666667,
+                0.2578125
+              ],
+              [
+                0.5930555555555556,
+                0.24140625
+              ],
+              [
+                0.5527777777777778,
+                0.23046875
+              ],
+              [
+                0.5097222222222222,
+                0.22421875
+              ],
+              [
+                0.46944444444444444,
+                0.22578125
+              ],
+              [
+                0.42777777777777776,
+                0.23359375
+              ],
+              [
+                0.3902777777777778,
+                0.246875
+              ],
+              [
+                0.35833333333333334,
+                0.26328125
+              ],
+              [
+                0.33194444444444443,
+                0.28203125
+              ],
+              [
+                0.3125,
+                0.3046875
+              ],
+              [
+                0.2986111111111111,
+                0.3296875
+              ],
+              [
+                0.29444444444444445,
+                0.3609375
+              ],
+              [
+                0.2972222222222222,
+                0.68203125
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0.35,
+          0,
+          0.4
+        ],
+        "scale": 1.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.65,
+          "tint": "#ffffff",
+          "psx": 0.85
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.06726562499999976,
+          -0.8655625000000002,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-coast.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 6.442893749999999,
+          "height": 13.71065625,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 0.8,
+          "loop": false,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.93,
+        10.959999999999999
+      ],
+      "look": [
+        0,
+        3.93,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81dfc9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 926,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
   }
 }

@@ -55,7 +55,7 @@ test('grounding options and floor palette remain optional and reject invalid sav
 })
 
 test('all curated compositions keep planted silhouettes and a gentle level camera', () => {
-  assert.equal(CREATIVE_TEMPLATE_IDS.length, 46)
+  assert.equal(CREATIVE_TEMPLATE_IDS.length, 50)
   for (const id of [...DARK_FANTASY_IDS, ...CREATIVE_TEMPLATE_IDS]) {
     const doc = applyScene3DTemplate(id), f = doc.camera.framing
     if (doc.camera.family === 'fixed') {
@@ -70,9 +70,28 @@ test('all curated compositions keep planted silhouettes and a gentle level camer
     assert.ok(Math.hypot(...f.to.map((v, i) => (v - f.from[i]) * hero.scale)) <= 1, id)
     assert.deepEqual(f.lookFrom, f.lookTo, id)
     }
-    assert.notEqual(doc.environment.floorStyle, 'none', id)
+    if (!id.includes('-motion-')) assert.notEqual(doc.environment.floorStyle, 'none', id)
     for (const slot of doc.slots.filter(slot => slot.media === 'image' && slot.id !== 'background')) {
-      assert.equal(slot.position[1], 0, id); assert.equal(slot.imageLook.grounded, true, id); assert.equal(slot.motion, undefined, id)
+      // A road painted inside the background video has an authored height;
+      // only actual 3D floors have a universal ground plane at y=0.
+      if (doc.environment.floorStyle !== 'none') assert.equal(slot.position[1], 0, id)
+      assert.equal(slot.imageLook.grounded, true, id); assert.equal(slot.motion, undefined, id)
     }
   }
+})
+
+test('video cutouts keep full frame UVs and align the reference footline without stretching', () => {
+  const previous = globalThis.document
+  globalThis.document = { createElement: () => ({ getContext: () => ({ drawImage() {}, getImageData: () => ({ data: paddedFeet() }) }) }) }
+  try {
+    const texture = new Texture({ width, height })
+    const slot = { position: [0, 0, 0], scale: 1, rotationY: 0, imageLook: { grounded: true }, screen: { sourceUrl: '/actor.webm', media: 'video' } }
+    const mesh = imageCutoutMesh(slot, texture), uv = mesh.geometry.getAttribute('uv'), positions = mesh.geometry.getAttribute('position')
+    assert.equal(Math.min(...Array.from({ length: uv.count }, (_, i) => uv.getY(i))), 0)
+    assert.equal(Math.max(...Array.from({ length: uv.count }, (_, i) => uv.getY(i))), 1)
+    const ys = Array.from({ length: positions.count }, (_, i) => positions.getY(i))
+    assert.equal(Math.max(...ys) - Math.min(...ys), 2)
+    assert.equal(Math.min(...ys) + .25 * 2 + mesh.position.y, 0)
+    mesh.geometry.dispose(); mesh.material.dispose(); texture.dispose()
+  } finally { globalThis.document = previous }
 })

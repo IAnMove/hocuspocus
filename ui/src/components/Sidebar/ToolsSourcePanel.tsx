@@ -34,13 +34,13 @@ type SourceProps = {
 }
 
 const SOURCE_KINDS: Record<ToolsPanelTool, readonly AssetKind[]> = {
-  remove_background: ['image'],
+  remove_background: ['image', 'video'],
   upscale: ['image', 'video'],
   revoice: ['video'],
 }
 
 const SOURCE_ACCEPT: Record<ToolsPanelTool, string> = {
-  remove_background: 'image/*',
+  remove_background: 'image/*,video/*',
   upscale: 'image/*,video/*',
   revoice: 'video/*',
 }
@@ -48,15 +48,13 @@ const SOURCE_ACCEPT: Record<ToolsPanelTool, string> = {
 export function ToolsSourcePanel(props: SourceProps) {
   const { t } = useUiTranslation('studio')
   const workspaceId = useStore(s => s.activeWorkspace)
-  const label = props.tool === 'remove_background'
-    ? t('tools.sourceImage')
-    : props.tool === 'upscale' ? t('tools.sourceMedia') : t('tools.sourceClip')
+  const label = props.tool === 'revoice' ? t('tools.sourceClip') : t('tools.sourceMedia')
   const value = sourceValue(props)
   return (
     <div className="space-y-2">
       <AssetInput
         label={label}
-        placeholder={t('tools.selectGalleryImage')}
+        placeholder={props.tool === 'revoice' ? t('tools.selectGallery') : t('tools.selectLibraryMedia')}
         items={props.items}
         value={value}
         accept={SOURCE_ACCEPT[props.tool]}
@@ -79,16 +77,14 @@ export function ToolsSourcePanel(props: SourceProps) {
           {props.currentIsImage ? t('tools.useGalleryImage') : t('tools.selectGalleryImage')}
         </button>
       )}
-      {props.tool !== 'remove_background' && (
-        <button
-          type="button"
-          onClick={props.useCurrentClip}
-          disabled={!props.currentIsVideo}
-          className="w-full text-[11px] py-1.5 rounded-md border border-border bg-bg-tertiary text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          {props.currentIsVideo ? t('tools.useGallery') : t('tools.selectGallery')}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={props.useCurrentClip}
+        disabled={!props.currentIsVideo}
+        className="w-full text-[11px] py-1.5 rounded-md border border-border bg-bg-tertiary text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        {props.currentIsVideo ? t('tools.useGallery') : t('tools.selectGallery')}
+      </button>
     </div>
   )
 }
@@ -133,5 +129,5 @@ function SourcePreview({ url, kind, name }: { url: string; kind: ToolSource['kin
     ? <div className="overflow-hidden rounded-md bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px]">
       <img src={url} alt={name} className="w-full max-h-64 object-contain" />
     </div>
-    : <video src={url} className="w-full rounded-md max-h-64 bg-black" muted controls playsInline />
+    : <div className="rounded-md bg-[conic-gradient(#1c2330_25%,#343d4c_0_50%,#1c2330_0_75%,#343d4c_0)] bg-[length:16px_16px]"><video src={url} className="w-full rounded-md max-h-64" muted controls playsInline /></div>
 }

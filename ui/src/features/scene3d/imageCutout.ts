@@ -17,7 +17,11 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
     const foot = textureFootprint(texture)
     if (foot) {
       // Trim only the empty rows below the feet and retain original pixel scale.
-      if (!slot.screen?.poseSequence) {
+      if (slot.screen?.sourceUrl && !slot.screen.poseSequence) {
+        // A moving matte needs the complete video canvas. Keep its UVs and
+        // scale, translating the reference footline onto the ground instead.
+        mesh.geometry.translate(0, -2 * foot.bottom, 0)
+      } else if (!slot.screen?.poseSequence) {
         mesh.geometry.scale(1, 1 - foot.bottom, 1).translate(0, -foot.bottom, 0)
         const uv = mesh.geometry.getAttribute('uv')
         for (let i = 0; i < uv.count; i++) uv.setY(i, foot.bottom + uv.getY(i) * (1 - foot.bottom))
