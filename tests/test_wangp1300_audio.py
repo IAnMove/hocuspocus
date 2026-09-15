@@ -1,19 +1,38 @@
 """Audio adoption boundaries: real handler metadata, native requests and small CPU math."""
 from copy import deepcopy
+import importlib
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
-from models.TTS.auk.auk_handler import family_handler as AuK
-from models.TTS.yue2.yue2_handler import family_handler as YuE2
 from services.studio_music_preparation import prepare_studio_music
 from services.studio_music_spec import freeze_studio_music_spec
 from services.studio_speech_preparation import prepare_studio_speech
 from services.studio_speech_spec import freeze_studio_speech_spec
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_model_package(name):
+    # Load the actual model package without TTS.__init__ eagerly importing every
+    # unrelated Gradio handler. CI deliberately installs a lightweight runtime.
+    path = ROOT / "app/models/TTS" / name
+    alias = f"_wangp1300_test_{name}"
+    spec = importlib.util.spec_from_file_location(
+        alias, path / "__init__.py", submodule_search_locations=[str(path)],
+    )
+    package = importlib.util.module_from_spec(spec)
+    sys.modules[alias] = package
+    spec.loader.exec_module(package)
+    return importlib.import_module(f"{alias}.{name}_handler").family_handler
+
+
+AuK = _load_model_package("auk")
+YuE2 = _load_model_package("yue2")
 
 
 class Resources:
@@ -111,7 +130,7 @@ def test_weight_sources_are_pinned_and_yue2_does_not_download_cover_models():
 
 def test_auk_tiny_transformer_reference_and_cfg_cpu():
     import torch
-    from models.TTS.auk.transformer import Flux2Edit
+    Flux2Edit = importlib.import_module("_wangp1300_test_auk.transformer").Flux2Edit
     model = Flux2Edit(dim=64, heads=2, text_hidden_dim=16, latent_dim=8,
                       num_layers=1, num_single_layers=1).eval()
     audio, text = torch.randn(1, 5, 8), torch.randn(1, 3, 16)
