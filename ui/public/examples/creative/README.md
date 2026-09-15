@@ -1,4 +1,4 @@
-# Creative · 20 editable vertical perspective templates
+# Creative · 40 editable vertical perspective templates
 
 Open **Studios → Video 3D → Shot library → Creative**. Each template is a six-second
 720 × 1280 scene with original artwork, separate transparent characters and props,
@@ -8,6 +8,19 @@ thumbnails. Apply a template, edit its layers and choose **Export video**.
 These are 2.5D compositions: image planes arranged in a 3D stage. They use real
 perspective and occlusion, but the figures have no skeleton or unseen 3D back.
 Rendering uses HocusPocus's native compositor, without an AI video generator.
+
+## New Perspectives collection
+
+**Shot library → Perspectives** contains 20 additional scenes. Open
+**View and rate the 20 new clips** in the library, or visit
+`/examples/perspective-lab/` on your installation. Each card plays a native
+six-second export, opens a larger player, downloads its editable shot/template,
+and stores ratings and notes locally. See the [review guide](../perspective-lab/README.md).
+
+**Estación abisal** now includes an animated ocean background generated through
+HocusPocus with the installed MiniMax H3 model. Its characters, props, background
+depth and selective PSX controls remain editable. Disable **Animate this background
+with a video** to return to the still image.
 
 ## Styles you can mix
 

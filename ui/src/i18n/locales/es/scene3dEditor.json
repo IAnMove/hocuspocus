@@ -277,7 +277,8 @@
     "drive": "Conducción",
     "dark-fantasy": "Dark Fantasy",
     "psx": "PSX",
-    "creative": "Creativas"
+    "creative": "Creativas",
+    "perspective": "Perspectivas"
   },
   "setting": {
     "sea": "Mar",
@@ -971,6 +972,86 @@
     "creative-peach-laundry": {
       "title": "Lavandería de medianoche",
       "description": "9:16 · Horizonte estable, suelo y sombras de contacto. PSX en objetos."
+    },
+    "creative-amber-ice": {
+      "title": "La estación del deshielo",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-scarlet-tide": {
+      "title": "La marea roja",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-pearl-spores": {
+      "title": "El vivero de perlas",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-ultramarine-forge": {
+      "title": "La fundición azul",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-rose-orbit": {
+      "title": "Capilla en órbita",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-brass-mirage": {
+      "title": "El espejismo de latón",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-jade-cinema": {
+      "title": "La última sesión verde",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-apricot-cable": {
+      "title": "Último funicular",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-violet-baths": {
+      "title": "Baños ultravioleta",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-clockwork-glass": {
+      "title": "El jardín mecánico",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-paper-monsoon": {
+      "title": "Monzón de papel",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-cobalt-crater": {
+      "title": "El cráter de cobalto",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-saffron-lens": {
+      "title": "El ojo del desierto",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-glass-orchard": {
+      "title": "La cosecha de cristal",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-terracotta-radio": {
+      "title": "La habitación que escucha",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-chrome-bloom": {
+      "title": "Flores de cromo",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-arctic-spin": {
+      "title": "Centrifugado polar",
+      "description": "Fondo PSX y personaje limpio. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-domino-garden": {
+      "title": "El jardín dominó",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-midnight-bakery": {
+      "title": "Pan de medianoche",
+      "description": "Personaje PSX y escenario pictórico. Tres distancias, sombras de contacto y desplazamiento lateral suave."
+    },
+    "creative-coral-radio": {
+      "title": "Radio arrecife",
+      "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1118,5 +1199,6 @@
     "title": "Vista previa",
     "expand": "Ampliar vídeo",
     "exit": "Salir de pantalla completa"
-  }
+  },
+  "perspectiveReview": "Ver y evaluar las 20 nuevas"
 }

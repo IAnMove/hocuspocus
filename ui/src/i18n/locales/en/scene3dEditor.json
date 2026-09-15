@@ -277,7 +277,8 @@
     "drive": "Driving",
     "dark-fantasy": "Dark Fantasy",
     "psx": "PSX",
-    "creative": "Creative"
+    "creative": "Creative",
+    "perspective": "Perspectives"
   },
   "setting": {
     "sea": "Sea",
@@ -971,6 +972,86 @@
     "creative-peach-laundry": {
       "title": "Midnight laundry",
       "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-amber-ice": {
+      "title": "Thaw Station",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-scarlet-tide": {
+      "title": "Scarlet Tide",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-pearl-spores": {
+      "title": "Pearl Nursery",
+      "description": "PSX setting, clean character. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-ultramarine-forge": {
+      "title": "Blue Foundry",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-rose-orbit": {
+      "title": "Orbital Chapel",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-brass-mirage": {
+      "title": "Brass Mirage",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-jade-cinema": {
+      "title": "Last Green Screening",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-apricot-cable": {
+      "title": "Last Cable Car",
+      "description": "PSX setting, clean character. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-violet-baths": {
+      "title": "Ultraviolet Baths",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-clockwork-glass": {
+      "title": "Clockwork Garden",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-paper-monsoon": {
+      "title": "Paper Monsoon",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-cobalt-crater": {
+      "title": "Cobalt Crater",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-saffron-lens": {
+      "title": "Desert Eye",
+      "description": "PSX setting, clean character. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-glass-orchard": {
+      "title": "Glass Harvest",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-terracotta-radio": {
+      "title": "The Listening Room",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-chrome-bloom": {
+      "title": "Chrome Blossom",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-arctic-spin": {
+      "title": "Polar Spin",
+      "description": "PSX setting, clean character. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-domino-garden": {
+      "title": "Domino Garden",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-midnight-bakery": {
+      "title": "Midnight Bread",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-coral-radio": {
+      "title": "Reef Radio",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1118,5 +1199,6 @@
     "title": "Preview",
     "expand": "Expand video",
     "exit": "Exit fullscreen"
-  }
+  },
+  "perspectiveReview": "Watch and rate the new 20"
 }

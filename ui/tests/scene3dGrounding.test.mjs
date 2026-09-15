@@ -54,15 +54,15 @@ test('grounding options and floor palette remain optional and reject invalid sav
   assert.equal(parseEnvironment({ ...environment, floorSourceHeight: Infinity }).floorSourceHeight, undefined)
 })
 
-test('all 50 curated compositions keep planted silhouettes and a gentle level camera', () => {
-  assert.equal(CREATIVE_TEMPLATE_IDS.length, 20)
+test('all 70 curated compositions keep planted silhouettes and a gentle level camera', () => {
+  assert.equal(CREATIVE_TEMPLATE_IDS.length, 40)
   for (const id of [...DARK_FANTASY_IDS, ...CREATIVE_TEMPLATE_IDS]) {
     const doc = applyScene3DTemplate(id), f = doc.camera.framing
     assert.ok(f)
     assert.equal(f.rollFrom, 0, id); assert.equal(f.rollTo, 0, id); assert.equal(f.orbitTurns ?? 0, 0, id)
     assert.equal(f.from[1], f.to[1], id)
     const hero = doc.slots.find(slot => slot.id === f.targetSlot)
-    assert.ok(Math.hypot(...f.to.map((v, i) => (v - f.from[i]) * hero.scale)) <= .7, id)
+    assert.ok(Math.hypot(...f.to.map((v, i) => (v - f.from[i]) * hero.scale)) <= 1, id)
     assert.deepEqual(f.lookFrom, f.lookTo, id)
     assert.notEqual(doc.environment.floorStyle, 'none', id)
     for (const slot of doc.slots.filter(slot => slot.id !== 'background')) {

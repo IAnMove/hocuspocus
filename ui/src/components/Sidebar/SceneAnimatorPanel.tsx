@@ -54,7 +54,7 @@ import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { applySceneRhythmToLayer, buildSceneRhythmMap, type SceneRhythmCueSource, type SceneRhythmProfile } from '../../lib/sceneRhythm'
 import { applyCutoutDialogue, bindCutoutFaceToPose, ensureCutoutFacePlayback, findCutoutMouthLayers, isCutoutFaceLayer, normalizeAlignedCutoutUnits, normalizeFaceBinding, planAlignedCutoutDialogue, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
-import { captureCharacterFaceAnchor, characterKitAssetFromLayer, claimUnusedCharacterKitId, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, syncMountedCharacterKitLayers, syncSceneCharacterKits, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
+import { captureCharacterKitFaceAnchor, characterKitAssetFromLayer, claimUnusedCharacterKitId, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, syncMountedCharacterKitLayers, syncSceneCharacterKits, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
 import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } from '../../lib/characterKitHandoff'
 import { rememberCharacterKitLibrary, rememberVideo3dScene } from '../../features/agent/wizardLabSession'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
@@ -2368,9 +2368,7 @@ export function SceneAnimatorPanel() {
     const pose = scene.layers.find(layer => layer.id === poseLayerId)
     if (!pose) { setCharacterKitError(t('animator.bindBeforeAnchor')); return }
     const poseId = characterKitPoseId.trim() || 'base'
-    const asset = poseId === 'base' ? characterKitDraft.base : characterKitDraft.poses[poseId]
-    const dimensions = asset?.width && asset.height ? { width: asset.width, height: asset.height } : undefined
-    const anchor = captureCharacterFaceAnchor(pose, selected, dimensions, scene)
+    const anchor = captureCharacterKitFaceAnchor(characterKitDraft, poseId, pose, selected, scene)
     const role = selected.faceBinding?.role ?? (/eye|blink/i.test(selected.name) ? 'blink' : 'mouth')
     setCharacterKitDraft(current => current ? {
       ...current,

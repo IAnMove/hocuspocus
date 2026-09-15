@@ -2812,6 +2812,80 @@
           "finishedAt": 1789412618.9253812
         }
       }
+    },
+    {
+      "file": "ocean-window.mp4",
+      "sha256": "d9c16266ed97494c65ac0bd77d66737c2b5f72c09a2a3ebe76a80ee81afb21cd",
+      "generation": {
+        "job_id": "db4b2e54",
+        "task_id": "task-generation-db4b2e54",
+        "root_task_id": "task-generation-db4b2e54",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done",
+        "output_files": [
+          "2026-09-15-09h37m09s_seed482915_Locked-off fixed camera. Keep this exact composition and architectural room completely unchanged. Be.mp4"
+        ],
+        "error": null,
+        "task_timings": [
+          {
+            "panel_no": 1,
+            "panel_total": 1,
+            "prompt_preview": "Locked-off fixed camera. Keep this exact composition and arc",
+            "status": "completed",
+            "phase_timings": [
+              {
+                "phase": "Loading model H3 First / Last — Pruned...",
+                "seconds": 19.131
+              },
+              {
+                "phase": "Model loaded",
+                "seconds": 0.203
+              },
+              {
+                "phase": "Encoding Prompt",
+                "seconds": 5.994
+              },
+              {
+                "phase": "Denoising",
+                "seconds": 981.124
+              },
+              {
+                "phase": "VAE Decoding",
+                "seconds": 15.932
+              }
+            ],
+            "total_seconds": 1022.818
+          }
+        ],
+        "created_at": 1789456807.2469082,
+        "started_at": 1789456807.4186993,
+        "finished_at": 1789457830.300196,
+        "processing_time_sec": 1022.88,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "minimax_h3",
+          "model_name": "H3 First / Last — Pruned",
+          "execution_mode": "real",
+          "simulated": false,
+          "resolution": "576x1024",
+          "seed": 482915,
+          "steps": 20,
+          "guidance": 1.0,
+          "frames": 145,
+          "repeat": 1,
+          "flow_shift": 5,
+          "prompt": "Locked-off fixed camera. Keep this exact composition and architectural room completely unchanged. Beyond the large window, powerful blue ocean waves roll and crash in slow, graceful continuous motion, white seafoam ripples and recedes, small sunlight glints on moving water. Only the ocean water outside the window moves. The window frame, room, floor and all objects remain perfectly still. No people appear. Serene cinematic seamless ocean background plate.",
+          "cache": false,
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      },
+      "sourceImage": "ocean-window.jpg"
     }
   ],
   "groundingEdits": [

@@ -1,0 +1,164 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "creative-scarlet-tide",
+  "title": "La marea roja",
+  "description": "Atrezzo PSX y figuras limpias. Tres distancias, sombras de contacto y desplazamiento lateral suave.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T07:30:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-scarlet-tide",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.06,
+      "floorStyle": "backdrop",
+      "floorColor": "#572d36",
+      "floorSourceHeight": 0.39999999999999997
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/scarlet-tide.jpg",
+        "position": [
+          0,
+          -9.977894500285021,
+          -11
+        ],
+        "scale": 14.077894500285023,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/nomad.png",
+        "position": [
+          0.3,
+          0,
+          0
+        ],
+        "scale": 1.75,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          -1.6,
+          0,
+          2.5
+        ],
+        "scale": 1.9000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.72,
+          "psx": 1.3
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0.12999999999999998,
+        3.75,
+        9.8
+      ],
+      "look": [
+        0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          0.22,
+          1.23,
+          5.8
+        ],
+        "to": [
+          0.12,
+          1.23,
+          6.08
+        ],
+        "lookFrom": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "lookTo": [
+          0,
+          0.35,
+          -0.3
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#3ce7d1",
+        "scale": 2,
+        "intensity": 0.12,
+        "seed": 312,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

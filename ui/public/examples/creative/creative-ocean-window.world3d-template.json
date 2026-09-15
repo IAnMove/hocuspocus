@@ -3,7 +3,7 @@
   "version": 1,
   "id": "creative-ocean-window",
   "title": "Estación abisal",
-  "description": "Composición vertical con apoyo, cámara suave y PSX selectivo en background.",
+  "description": "Estación vertical con oleaje animado tras los ventanales, personajes editables y PSX selectivo.",
   "includeAssets": true,
   "createdAt": "2026-09-14T19:00:00Z",
   "document": {
@@ -51,6 +51,29 @@
         "imageLook": {
           "unlit": true,
           "psx": 1.1
+        },
+        "screen": {
+          "sourceUrl": "/examples/creative/ocean-window.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 4,
+          "height": 3,
+          "style": "monitor",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
         }
       },
       {

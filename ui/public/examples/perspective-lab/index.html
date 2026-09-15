@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Perspectivas · HocusPocus</title>
+  <link rel="stylesheet" href="review.css">
+  <script type="module" src="review.js"></script>
+</head>
+<body>
+  <header>
+    <nav><a class="brand" href="/">✦ HOCUSPOCUS</a><span>COLECCIÓN 02 / ESTUDIO DE PERSPECTIVA</span></nav>
+    <div class="intro"><div><p class="eyebrow">20 ESCENARIOS · 6 SEGUNDOS · 9:16</p><h1>Un lugar.<br>Otra perspectiva.</h1></div>
+      <div class="lead"><p>Veinte pequeños mundos para jugar con el color, la distancia y la luz.</p><p>Personajes con apoyo, cámaras suaves y PSX aplicado por pieza. Todos son escenarios editables de HocusPocus.</p></div>
+    </div>
+    <div class="instructions"><span>01 <b>Reproduce</b> y mira el movimiento.</span><span>02 <b>Valora</b> y anota qué cambiarías.</span><span>03 <b>Exporta</b> tus notas para compartirlas.</span></div>
+  </header>
+  <main>
+    <div class="toolbar">
+      <label>Mostrar<select id="filter"><option value="all">Las 20 propuestas</option><option value="pending">Sin evaluar</option><option value="keep">Me encantan</option><option value="refine">Para retocar</option><option value="discard">Descartadas</option></select></label>
+      <label>PSX<select id="style"><option value="all">Cualquier pieza</option><option value="personaje">En el personaje</option><option value="atrezzo">En el atrezzo</option><option value="fondo">En el fondo</option></select></label>
+      <span id="progress" role="status">Cargando colección…</span>
+      <button id="export" class="export">Descargar mis valoraciones ↓</button>
+    </div>
+    <p id="storage" class="storage">Las valoraciones se guardan en este navegador. Descárgalas para conservar una copia o compartirlas.</p>
+    <div id="grid" class="grid" aria-label="Plantillas para evaluar"></div>
+    <p id="empty" hidden>No hay propuestas con estos filtros.</p>
+    <section class="ocean-feature" id="ocean"><div><p class="eyebrow">ACTUALIZADA · ESTACIÓN ABISAL</p><h2>El mar, en movimiento.</h2><p>El oleaje pasa tras los ventanales. El personaje y las piezas del primer plano siguen siendo editables.</p><a href="../creative/creative-ocean-window.world3d.json" download>Descargar el plano del mar ↓</a></div><video id="ocean-video" controls loop playsinline preload="none" poster="../creative/creative-ocean-window.png" src="ocean-window.mp4" aria-label="Estación abisal con el mar animado"></video></section>
+    <section class="edit-help"><span class="eyebrow">SIGUE CREANDO</span><h2>Llévate el escenario al editor.</h2><p>En HocusPocus: <b>Estudios → Vídeo 3D → Biblioteca de planos → Perspectivas</b>. Elige una plantilla para cambiar sus piezas, su cámara o sus efectos.</p><p>También puedes descargar su archivo y abrirlo con <b>Abrir plano JSON</b>. La opción <b>Plantilla reutilizable</b> se importa desde Mis escenarios. Los recursos están incluidos en esta colección de la aplicación.</p></section>
+  </main>
+  <footer><a href="/">Volver a HocusPocus ↗</a><span>Fondos creados en HocusPocus · clips renderizados con su compositor 3D.</span></footer>
+  <dialog id="viewer" aria-label="Vista ampliada de la plantilla">
+    <div class="viewer-head"><h2 id="viewer-title"></h2><button id="close" aria-label="Cerrar vista ampliada">Cerrar ✕</button></div>
+    <video id="large-video" controls loop playsinline preload="none"></video>
+    <div class="viewer-foot"><button id="previous">← Anterior</button><span id="viewer-count"></span><button id="next">Siguiente →</button></div>
+  </dialog>
+</body>
+</html>

@@ -257,6 +257,13 @@ export function characterKitAssetFromLayer(
   }
 }
 
+export function captureCharacterKitFaceAnchor(kit: CharacterKit, poseId: string, pose: SceneLayer,
+  face: SceneLayer, viewport: { width: number; height: number }): CharacterFaceAnchor {
+  const asset = poseId === 'base' ? kit.base : kit.poses[poseId]
+  const dimensions = asset?.width && asset.height ? { width: asset.width, height: asset.height } : undefined
+  return captureCharacterFaceAnchor(pose, face, dimensions, viewport)
+}
+
 export function captureCharacterFaceAnchor(pose: SceneLayer, face: SceneLayer,
   source?: { width: number; height: number }, viewport?: { width: number; height: number }): CharacterFaceAnchor {
   if (source && viewport) {

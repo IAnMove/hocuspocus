@@ -21,7 +21,7 @@ export type Scene3DTemplate = {
   frameFormat?: 'landscape' | 'portrait'
 }
 
-export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative'
+export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative' | 'perspective'
 export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
 export type Scene3DTemplateFilter = Scene3DTemplateCategory | Scene3DTemplateTag
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
