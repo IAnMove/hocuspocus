@@ -163,7 +163,8 @@ def _fill_guidance(working: dict[str, Any], model_type: str,
                    definition: Mapping[str, Any]) -> int:
     if working.get("guidance_scale") is None:
         working["guidance_scale"] = _MODEL_DEFAULTS[model_type]["guidance_scale"]
-    _finite(working["guidance_scale"], "guidance_scale", minimum=1 if model_type == YUE2_LOCAL else 0, maximum=1000)
+    _finite(working["guidance_scale"], "guidance_scale", minimum=1 if model_type == YUE2_LOCAL else 0,
+            maximum=20 if model_type == YUE2_LOCAL else 1000)
     if definition.get("lock_guidance_scale") and model_type == MUSIC3_LOCAL:
         expected = _MODEL_DEFAULTS[model_type]["guidance_scale"]
         if float(working["guidance_scale"]) != expected:

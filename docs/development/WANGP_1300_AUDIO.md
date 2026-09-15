@@ -53,9 +53,11 @@ rechazan la admisión si faltan los archivos requeridos.
 
 YuE2 conserva `prompt` como letra y `alt_prompt` como estilo. `model_mode` es
 0/1/2. La duración de 1–600 segundos es un máximo, no una duración garantizada.
-El contrato Story mantiene su mínimo editorial de 20 segundos; Studio admite el
+El guidance admitido es 1–20. El contrato Story mantiene su mínimo editorial de 20 segundos; Studio admite el
 mínimo nativo de un segundo. Esta adopción cubre generación desde letra/estilo;
 no expone covers mediante SheetSage2, importación ABC ni exportación ABC/MIDI.
+
+Recargar una salida conserva el modo y muestreo guardados de YuE2 y el guidance cero de AuK. Al cambiar de pestaña se conserva la referencia propia de voz; seleccionar otro modelo explícitamente limpia referencias incompatibles.
 
 AuK conserva la instrucción exacta, sin convertir nombres en `Speaker N:`.
 El selector admite texto (`audio_prompt_type=""`) o una fuente (`"A"`). La

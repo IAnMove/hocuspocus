@@ -92,8 +92,8 @@ class family_handler:
             return "This YuE2 adapter supports lyrics and style; source audio and scores are not supported."
         if not 1 <= inputs.get("duration_seconds", 0) <= 600:
             return "YuE2 maximum duration must be between 1 and 600 seconds."
-        if inputs.get("guidance_scale", 0) < 1:
-            return "YuE2 guidance must be at least 1."
+        if not 1 <= inputs.get("guidance_scale", 0) <= 20:
+            return "YuE2 guidance must be between 1 and 20."
         if inputs.get("model_mode", 0) not in (0, 1, 2):
             return "Choose melody and chords, melody only, or direct generation."
         return None

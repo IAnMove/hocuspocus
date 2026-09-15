@@ -1,3 +1,4 @@
+import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
 import { isInstructionSpeechModel, applyInstructionSpeechParams } from '../lib/instructionSpeech'
 import { h3ModelSwitchSettings, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
 import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
@@ -1612,7 +1613,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice {
   setSettingsTab: (tab: SettingsTab) => void
 
   // Select model (triggers side effects)
-  selectModel: (modelType: string) => void
+  selectModel: (modelType: string, preserveAudioReferences?: boolean) => void
 
   // Workspaces
   workspaces: Array<{ name: string; path: string; file_count?: number }>
@@ -2693,7 +2694,7 @@ export const useStore = create<AppState>((set, get) => {
       audioSubMode: subMode, selectedModelPerAudioSubMode: savedModels, audioReferenceStash,
     })
     if (targetModel && models.some(m => m.model_type === targetModel)) {
-      get().selectModel(targetModel)
+      get().selectModel(targetModel, true)
     }
   },
   selectedModelPerMode: {},
@@ -6343,8 +6344,6 @@ export const useStore = create<AppState>((set, get) => {
       if (modelType === 'yue2' || isInstructionSpeechModel(modelType)) {
         Object.assign(paramUpdates, {
           negative_prompt: '', prompt_enhancer: '', activated_loras: [], loras_multipliers: '',
-          audio_prompt_type: '', audio_guide: undefined, audio_guide2: undefined,
-          audio_guide3: undefined, audio_guide4: undefined, audio_guide5: undefined, audio_guide6: undefined,
           custom_settings: undefined, model_mode: modelType === 'yue2' ? 0 : undefined,
           sample_solver: '', audio_scale: undefined, alt_guidance_scale: undefined,
           temperature: modelType === 'yue2' ? 1 : undefined,
@@ -8658,12 +8657,15 @@ export const useStore = create<AppState>((set, get) => {
     }
   },
 
-  selectModel: (modelType) => {
+  selectModel: (modelType, preserveAudioReferences) => {
+    const audioSelection = wan1300AudioSelection(modelType, preserveAudioReferences)
     const currentMode = get().generationMode
     _globalModelSelectionModes.delete(currentMode)
     set(s => ({
+      ...audioSelection,
       params: {
         ...s.params,
+        ...audioSelection.params,
         model_type: modelType,
         ...h3ModelSwitchSettings(s.params, modelType),
         activated_loras: [],
@@ -8929,6 +8931,7 @@ export const useStore = create<AppState>((set, get) => {
     (newParams as Record<string, unknown>).keyframe_conditioning_mode = (p.keyframe_conditioning_mode as string) ?? undefined;
     (newParams as Record<string, unknown>).keyframe_inject_mode = (p.keyframe_inject_mode as string) ?? undefined;
     (newParams as Record<string, unknown>).temperature = (p.temperature as number) ?? undefined;
+    Object.assign(newParams, restoreWan1300AudioRecipe(modelType, p));
     (newParams as Record<string, unknown>).audio_guidance_scale = (p.audio_guidance_scale as number) ?? undefined
     newParams.minimax_h3_window_storyboard = (p.minimax_h3_window_storyboard as boolean) ?? undefined
     const restoredH3WindowPlan = (

@@ -276,7 +276,7 @@
       "source": "models/TTS/yue2/yue2_handler.py",
       "destination": "app/models/TTS/yue2/yue2_handler.py",
       "upstream_sha256": "803ea172df24218f8a937c2a2c2cb4c7a3d761f72947fa2b958d3e587f6a193b",
-      "local_sha256": "3b523b5ecc25c2571a6d0740fca90b49cbf640556a4c85206dc6ef1a16dbf486",
+      "local_sha256": "56313e4a8087efbbe674d1e783bb5edd7470ba5b2dca21da9e0e31a5356f674e",
       "adapted": true
     },
     {

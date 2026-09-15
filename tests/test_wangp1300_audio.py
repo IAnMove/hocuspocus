@@ -146,3 +146,13 @@ def test_yue2_and_auk_keep_separate_engine_classes_from_existing_models():
     from shared.wangp1300.llm_engines.nanovllm.models.qwen3 import Qwen3ForCausalLM as New
     from shared.llm_engines.nanovllm.models.qwen3 import Qwen3ForCausalLM as Existing
     assert New is not Existing
+
+
+def test_yue2_cfg_boundary_rejects_before_resolving_resources():
+    assert prepare("yue2", guidance_scale=20)[0]["guidance_scale"] == 20
+    resources = Resources()
+    with pytest.raises(HTTPException):
+        prepare_studio_music({"model_type": "yue2", "prompt": "Keep these words", "alt_prompt": "Acoustic pop",
+                              "guidance_scale": 21}, model_definition={"yue2": definition("yue2")},
+                             model_downloaded=lambda _: True, resources=resources, execution_policy=lambda _: None)
+    assert resources.calls == []
