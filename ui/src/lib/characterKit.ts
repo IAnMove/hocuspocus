@@ -104,13 +104,14 @@ export function characterKitStillSource(kit: CharacterKit): string | undefined {
 export function resolvedCharacterTts(
   kit?: CharacterKit,
   fallback?: { provider?: string; voiceId?: string },
-): { source: 'kit' | 'profile' | 'none'; voiceId?: string; provider?: string; instructions?: string } {
+): { source: 'kit' | 'profile' | 'none'; voiceId?: string; voiceName?: string; provider?: string; instructions?: string } {
   if (kit?.voice) {
     return {
       source: 'kit',
       voiceId: kit.voice.voiceId,
+      ...(kit.voice.model === 'qwen3_tts_base' ? { voiceName: kit.voice.name } : {}),
       provider: kit.voice.provider,
-      instructions: kit.voice.instructions,
+      instructions: kit.voice.model === 'qwen3_tts_customvoice' ? kit.voice.instructions : undefined,
     }
   }
   if (fallback?.voiceId) {

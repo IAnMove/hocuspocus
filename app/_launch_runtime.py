@@ -1088,6 +1088,7 @@ def _resolve_request_media_path(
             uploads_root=os.path.join(os.getcwd(), "uploads"),
             workspace_root=_workspace_dir(workspace),
             kinds=kinds,
+            workspace_name=workspace or _get_active_workspace(),
         )
     except MediaPathNotAllowed:
         raise HTTPException(status_code=400, detail="Media path is not allowed") from None

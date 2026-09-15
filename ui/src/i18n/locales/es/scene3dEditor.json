@@ -17,7 +17,7 @@
     "libraryVoice": "Voz preferida (opcional)",
     "noPreferredVoice": "Sin voz preferida · usar audio existente",
     "voiceDirection": "Dirección de voz (opcional)",
-    "voiceHint": "Qwen3 CustomVoice local. Idioma detectado por el texto. Requiere el modelo instalado; no se guardan claves ni se genera audio automáticamente.",
+    "voiceHint": "Qwen3 CustomVoice habla varios idiomas, pero ninguna de estas nueve voces originales es nativa española. La pronunciación y el acento varían según el idioma: escucha una muestra antes de elegir. La dirección de voz puede influir en la interpretación; no garantiza cambiar el acento.",
     "generateVoice": "Generar voz de esta frase",
     "attachGeneratedVoice": "Aplicar audio ya generado",
     "existingAudioWins": "Esta frase ya tiene audio: se reutiliza y no se genera otra voz.",
@@ -205,7 +205,78 @@
     "optionalModel": "Modelo 3D (opcional; no hace falta para voz o personajes 2D)",
     "configure2d": "Configurar boca y lipsync 2D",
     "need2dImage": "Para lipsync 2D, añade una imagen al personaje y guarda su ficha. Puedes hacerlo en Personajes o desde su referencia en Series Lab.",
-    "configureLibraryCharacter": "Configurar voz y lipsync de {{name}}"
+    "configureLibraryCharacter": "Configurar voz y lipsync de {{name}}",
+    "voiceOrigin": "Idioma/perfil de origen: {{language}}",
+    "voiceOrigins": {
+      "chinese": "Chino",
+      "beijing": "Chino · Pekín",
+      "sichuan": "Chino · Sichuan",
+      "english": "Inglés",
+      "americanEnglish": "Inglés estadounidense",
+      "japanese": "Japonés",
+      "korean": "Coreano"
+    },
+    "voiceProfiles": {
+      "vivian": "Voz femenina joven, brillante y con un punto incisivo.",
+      "serena": "Voz femenina joven, cálida y suave.",
+      "uncle_fu": "Voz masculina madura, grave y aterciopelada.",
+      "dylan": "Voz masculina joven, clara y natural.",
+      "eric": "Voz masculina vivaz, brillante y algo ronca.",
+      "ryan": "Voz masculina dinámica, con ritmo marcado.",
+      "aiden": "Voz masculina luminosa, de registro medio claro.",
+      "ono_anna": "Voz femenina juguetona, ligera y ágil.",
+      "sohee": "Voz femenina cálida y expresiva."
+    },
+    "voiceAudition": {
+      "language": "Idioma de la frase de prueba",
+      "sample": {
+        "es": "Hola, esta es mi voz. Así sueno al contar una historia en español.",
+        "en": "Hello, this is my voice. This is how I sound when telling a story in English."
+      },
+      "generate": "Generar muestra de voz",
+      "generating": "Generando muestra…",
+      "cancel": "Cancelar muestra",
+      "audio": "Muestra de la voz seleccionada",
+      "hint": "Usa esta voz y su dirección actual. Elegir una voz no genera audio. Este botón crea una grabación breve en HocusPocus; no hace falta guardar el personaje ni configurar las bocas."
+    },
+    "customVoice": {
+      "add": "Añadir voz propia: importar o grabar",
+      "selected": "Voz propia",
+      "saved": "Voces propias guardadas en personajes",
+      "name": "Nombre de esta voz",
+      "hint": "Usa una muestra limpia de una sola persona, sin música ni otras voces. Importa o graba entre 3 y 30 segundos; después escribe exactamente lo que dice. El modelo usará su voz para leer diálogos nuevos.",
+      "import": "Importar muestra de audio",
+      "record": "Grabar con el micrófono",
+      "recordHint": "Se guardan hasta 30 segundos. Puedes leer una frase de 5–15 segundos y copiarla en la transcripción.",
+      "referencePreview": "Muestra original de la voz",
+      "transcript": "Texto exacto de la muestra",
+      "transcriptPlaceholder": "Escribe aquí las mismas palabras que se escuchan en el audio. No es el diálogo que se generará.",
+      "language": "Idioma para los nuevos diálogos",
+      "saveHint": "Guarda todo el personaje para conservar esta voz. Podrás elegirla en otros personajes; los planos nuevos o regenerados usarán esa configuración.",
+      "incomplete": "Para probar o guardar esta voz, añade su nombre, una muestra de audio y su transcripción exacta.",
+      "voiceFileSize": "Elige un audio de hasta 20 MB que no esté vacío.",
+      "voiceFileDecode": "El navegador no ha podido leer este audio. Prueba con WAV o MP3.",
+      "voiceFileDuration": "La muestra debe durar entre 3 y 30 segundos. Recorta el audio y conserva el texto exacto del fragmento.",
+      "microphoneUnavailable": "El navegador solo permite el micrófono desde HTTPS o localhost. Abre HocusPocus con una de esas direcciones, o importa un audio aquí.",
+      "states": {
+        "permission": "Permite el acceso al micrófono en el navegador…",
+        "recording": "Grabando · máximo 30 segundos",
+        "uploading": "Guardando muestra de audio…"
+      },
+      "languages": {
+        "auto": "Automático según el texto",
+        "spanish": "Español",
+        "english": "Inglés",
+        "chinese": "Chino",
+        "japanese": "Japonés",
+        "korean": "Coreano",
+        "german": "Alemán",
+        "french": "Francés",
+        "russian": "Ruso",
+        "portuguese": "Portugués",
+        "italian": "Italiano"
+      }
+    }
   },
   "title": "Estudio de escenas 3D",
   "subtitle": "Elige un plano, coloca tus objetos y pulsa Reproducir.",

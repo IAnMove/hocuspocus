@@ -166,6 +166,7 @@
         "tests/test_code_health.py",
         "tests/test_core_runtime.py",
         "tests/test_core_series_assembly.py",
+        "tests/test_custom_character_voice.py",
         "tests/test_debug_trace.py",
         "tests/test_development_branch_policy.py",
         "tests/test_director_h3_identity_continuity.py",
