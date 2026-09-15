@@ -7,7 +7,7 @@ import { SCENE3D_TEMPLATES, type Scene3DTemplateFilter, type Scene3DTemplateId }
 import { filterScene3DTemplates, settingsIn, type TemplateSetting } from './templateFilters'
 import { Scene3DTemplateThumb } from './Scene3DTemplateThumb'
 
-const categories = ['perspective', 'creative', 'dark-fantasy', 'psx', 'action', 'cinema', 'drive', 'space', 'music', 'product'] as const
+const categories = ['animated', 'perspective', 'creative', 'dark-fantasy', 'psx', 'action', 'cinema', 'drive', 'space', 'music', 'product'] as const
 
 export function Scene3DTemplateBrowser({ selected, disabled, onSelect }: {
   selected?: Scene3DTemplateId; disabled: boolean; onSelect: (id: Scene3DTemplateId) => void
@@ -25,6 +25,7 @@ export function Scene3DTemplateBrowser({ selected, disabled, onSelect }: {
       <h2 className="text-sm font-semibold text-text-primary">{t('templates')}
         <span className="ml-1 text-text-muted">{t('filterCount', { shown: templates.length, total: SCENE3D_TEMPLATES.length })}</span>
       </h2>
+      <a href="/examples/living-worlds/" target="_blank" rel="noopener noreferrer" className="min-h-10 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">{t('livingReview')}</a>
       <a href="/examples/perspective-lab/" target="_blank" rel="noopener noreferrer" className="min-h-10 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">{t('perspectiveReview')}</a>
       <label className="flex min-h-10 items-center gap-2 rounded-lg border border-border bg-bg-primary px-3 text-text-muted"><Search size={16} />
         <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('search')} aria-label={t('search')} className="min-w-0 bg-transparent text-sm text-text-primary outline-none" />

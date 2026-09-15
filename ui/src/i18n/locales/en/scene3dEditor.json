@@ -278,7 +278,8 @@
     "dark-fantasy": "Dark Fantasy",
     "psx": "PSX",
     "creative": "Creative",
-    "perspective": "Perspectives"
+    "perspective": "Perspectives",
+    "animated": "Living backgrounds"
   },
   "setting": {
     "sea": "Sea",
@@ -1052,6 +1053,30 @@
     "creative-coral-radio": {
       "title": "Reef Radio",
       "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-scarlet-tide-motion": {
+      "title": "Tide Behind the Wall",
+      "description": "Moving sea behind a scarlet window. Static wall and frame, with character and props at separate depths."
+    },
+    "creative-rose-orbit-motion": {
+      "title": "Velvet Orbit",
+      "description": "Animated outer space behind an oval opening. Every detail of the pink room stays still."
+    },
+    "creative-glass-orchard-motion": {
+      "title": "The Orchard House",
+      "description": "Leaves and petals behind two window panes. The central frame, wall and floor remain static."
+    },
+    "creative-amber-ice-motion": {
+      "title": "Window on the Thaw",
+      "description": "Snow and clouds beyond an amber portal. Static architecture with independent depth."
+    },
+    "creative-coral-radio-motion": {
+      "title": "Tidal Radio",
+      "description": "Waves behind five window panes. Turquoise frames, interior and characters remain separate layers."
+    },
+    "creative-cobalt-crater-motion": {
+      "title": "Core Observatory",
+      "description": "Animated lava beyond an observatory window. Frame, interior and characters stay on independent layers."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1200,5 +1225,18 @@
     "expand": "Expand video",
     "exit": "Exit fullscreen"
   },
-  "perspectiveReview": "Watch and rate the new 20"
+  "perspectiveReview": "Watch and rate the new 20",
+  "livingReview": "Watch the 6 living backgrounds",
+  "windows": {
+    "title": "Transparent windows ({{count}})",
+    "help": "Click around the opening and choose Save window. Drag points to refine the outline. Place a video layer behind it: the frame, wall and props keep their original image. The source image is unchanged.",
+    "image": "Static layer image",
+    "draw": "Draw the window outline",
+    "save": "Save window",
+    "undo": "Remove last point",
+    "cancel": "Discard outline",
+    "item": "Window {{number}}",
+    "edit": "Edit outline",
+    "remove": "Close opening"
+  }
 }

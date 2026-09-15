@@ -1,11 +1,14 @@
 import { NearestFilter, Vector2, type MeshBasicMaterial, type MeshStandardMaterial, type Texture } from 'three'
+import { parseImageWindows, type ImageWindow } from './imageWindows'
 
-export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number }
+export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; windows?: ImageWindow[] }
 
 export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as ImageLook
   const look: ImageLook = {}
+  const windows = parseImageWindows(value.windows)
+  if (windows) look.windows = windows
   if (typeof value.tint === 'string' && /^#[\da-f]{6}$/i.test(value.tint)) look.tint = value.tint
   if (value.unlit === true) look.unlit = true
   if (value.grounded === true) look.grounded = true

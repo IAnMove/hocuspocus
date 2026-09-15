@@ -3,6 +3,7 @@ import test from 'node:test'
 import { Mesh, MeshBasicMaterial, PlaneGeometry, Texture, Vector3 } from 'three'
 import { BackdropFloor } from '../src/features/scene3d/backdropFloor.ts'
 import { createDefaultScene3DDocument } from '../src/features/scene3d/document.ts'
+import { imageWindowGeometry } from '../src/features/scene3d/imageWindows.ts'
 
 function fixture(psx) {
   const texture = new Texture({ width: 600, height: 900 })
@@ -49,5 +50,19 @@ test('selective PSX on the backdrop continues onto its floor without changing ot
   assert.ok(shader.uniforms.hpPsxGrid)
   assert.ok(shader.fragmentShader.includes('floor(hpGroundUv * hpPsxGrid)'))
   assert.equal(original.map, null)
+  runtime.dispose(); floor.geometry.dispose(); original.dispose(); plate.geometry.dispose(); plate.material.dispose(); texture.dispose()
+})
+
+test('opening a window keeps the projected original floor instead of falling back to a solid color', () => {
+  const { doc, texture, floor, plate, world } = fixture(), original = floor.material
+  plate.geometry.dispose()
+  plate.geometry = imageWindowGeometry(.6, [[[.2, .2], [.8, .2], [.8, .6], [.2, .6]]])
+  const runtime = new BackdropFloor(world)
+  runtime.sync(doc)
+  assert.notEqual(floor.material, original)
+  assert.equal(floor.material.map, texture)
+  const shader = { uniforms: {}, vertexShader: '#include <project_vertex>', fragmentShader: 'void main() {\n#include <map_fragment>\n}' }
+  floor.material.onBeforeCompile(shader, {})
+  assert.deepEqual(shader.uniforms.hpGroundSize.value.toArray(), [1.2, 2])
   runtime.dispose(); floor.geometry.dispose(); original.dispose(); plate.geometry.dispose(); plate.material.dispose(); texture.dispose()
 })

@@ -29,7 +29,9 @@ export class BackdropFloor {
     const slot = doc.slots.find(s => s.slot === 'background' && s.media === 'image' && (!s.surface || s.surface === 'cutout'))
     const root = slot && this.world.slots.get(slot.id)?.root
     const texture = root instanceof Mesh && (root.material as MeshBasicMaterial).map
-    if (doc.environment?.floorStyle !== 'backdrop' || !slot || !(root instanceof Mesh) || !(root.geometry instanceof PlaneGeometry) || !texture) return
+    if (doc.environment?.floorStyle !== 'backdrop' || !slot || !(root instanceof Mesh) || !texture) return
+    const planeSize = root.geometry instanceof PlaneGeometry ? root.geometry.parameters : root.geometry.userData.imagePlaneSize
+    if (!planeSize || !(planeSize.width > 0) || !(planeSize.height > 0)) return
     if (this.texture !== texture || this.psx !== slot.imageLook?.psx) this.create(texture, slot.imageLook?.psx)
     root.updateMatrixWorld(true)
     const frame = doc.camera.framing, target = doc.slots.find(s => s.id === frame?.targetSlot)
@@ -43,7 +45,7 @@ export class BackdropFloor {
     root.getWorldPosition(u.hpGroundOrigin.value)
     u.hpGroundNormal.value.set(0, 0, 1).transformDirection(root.matrixWorld)
     u.hpGroundInverse.value.copy(root.matrixWorld).invert()
-    u.hpGroundSize.value.set(root.geometry.parameters.width, root.geometry.parameters.height)
+    u.hpGroundSize.value.set(planeSize.width, planeSize.height)
     this.world.floor.material = this.material!
   }
 

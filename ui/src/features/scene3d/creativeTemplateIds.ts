@@ -1,5 +1,7 @@
+import { MOTION_TEMPLATE_IDS } from './motionTemplateIds'
 import { PERSPECTIVE_TEMPLATE_IDS } from './perspectiveTemplateIds'
 export const CREATIVE_TEMPLATE_IDS = [
+  ...MOTION_TEMPLATE_IDS,
   ...PERSPECTIVE_TEMPLATE_IDS,
   "creative-neon-diner",
   "creative-sun-orchard",

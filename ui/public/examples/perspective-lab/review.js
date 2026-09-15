@@ -1,4 +1,4 @@
-const key = 'hocuspocus:perspective-review:v1'
+const key = document.body.dataset.reviewKey || 'hocuspocus:perspective-review:v1'
 const $ = id => document.getElementById(id)
 const ratings = [['keep', 'Me encanta'], ['refine', 'Retocar'], ['discard', 'Descartar']]
 let notes = {}, items = [], current = 0
@@ -49,7 +49,7 @@ function card(item, index) {
   video.poster = item.poster; video.src = item.video; video.setAttribute('aria-label', `Reproducir ${item.title}`)
   video.addEventListener('play', () => pauseOthers(video))
   video.addEventListener('error', () => { picture.querySelector('.number').textContent = 'Vídeo no disponible'; })
-  picture.append(video, node('span', 'number', `${String(item.number).padStart(2, '0')} / 6 s`))
+  picture.append(video, node('span', 'number', `${String(item.number).padStart(2, '0')} / ${item.duration} s`))
   const body = node('div', 'card-body'), title = node('div', 'title-row'), palette = node('span', 'palette')
   palette.setAttribute('aria-hidden', 'true')
   for (const color of item.colors) { const dot = node('i'); dot.style.backgroundColor = color; palette.append(dot) }
@@ -58,6 +58,13 @@ function card(item, index) {
   const actions = node('div', 'actions'), expand = node('button', '', 'Ver en grande ↗'), scene = node('a', '', 'Descargar plano ↓')
   expand.addEventListener('click', () => watch(index)); scene.href = item.scene; scene.download = ''
   actions.append(expand, scene); body.append(actions)
+  if (item.backgroundVideo && item.staticLayer) {
+    const layers = node('div', 'actions')
+    for (const [label, url] of [['Solo vídeo exterior ↗', item.backgroundVideo], ['Imagen estática ↗', item.staticLayer]]) {
+      const link = node('a', '', label); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; layers.append(link)
+    }
+    body.append(layers)
+  }
   const choices = node('div', 'ratings'); choices.setAttribute('role', 'group'); choices.setAttribute('aria-label', `Valorar ${item.title}`)
   for (const [value, label] of ratings) {
     const button = node('button', '', label); button.dataset.value = value
@@ -77,16 +84,16 @@ function card(item, index) {
 }
 $('filter').addEventListener('change', refresh); $('style').addEventListener('change', refresh)
 $('export').addEventListener('click', () => {
-  const report = { collection: 'hocuspocus-perspectives-20260915', version: 1, exportedAt: new Date().toISOString(),
+  const report = { collection: document.body.dataset.collection || 'hocuspocus-perspectives-20260915', version: 1, exportedAt: new Date().toISOString(),
     items: items.map(item => ({ id: item.id, title: item.title, rating: notes[item.id]?.rating || 'pending', note: notes[item.id]?.note || '', updatedAt: notes[item.id]?.updatedAt })) }
   const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }))
-  const link = node('a'); link.href = url; link.download = 'mis-valoraciones-perspectivas.json'; link.click()
+  const link = node('a'); link.href = url; link.download = document.body.dataset.reportFilename || 'mis-valoraciones-perspectivas.json'; link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 })
 $('close').addEventListener('click', () => $('viewer').close())
 $('viewer').addEventListener('close', () => { $('large-video').pause(); $('large-video').removeAttribute('src'); $('large-video').load() })
 $('large-video').addEventListener('play', () => pauseOthers($('large-video')))
-$('ocean-video').addEventListener('play', () => pauseOthers($('ocean-video')))
+$('ocean-video')?.addEventListener('play', () => pauseOthers($('ocean-video')))
 $('previous').addEventListener('click', () => watch(current - 1)); $('next').addEventListener('click', () => watch(current + 1))
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseOthers(null) })
 try {

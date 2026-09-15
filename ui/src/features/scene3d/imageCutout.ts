@@ -1,5 +1,6 @@
-import { DoubleSide, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, type Object3D, type Texture } from 'three'
+import { DoubleSide, Mesh, MeshBasicMaterial, MeshStandardMaterial, type Object3D, type Texture } from 'three'
 import { applyPsxImageMaterial } from './imageLook'
+import { imageWindowGeometry } from './imageWindows'
 import { imageContactShadow, textureFootprint } from './imageGrounding'
 import type { Scene3DSlot } from './types'
 
@@ -11,7 +12,7 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
     transparent: true, alphaTest: .05, depthWrite: true }
   const material = slot.imageLook?.unlit ? new MeshBasicMaterial(options) : new MeshStandardMaterial({ ...options, roughness: .9 })
   if (texture && slot.imageLook?.psx) applyPsxImageMaterial(material, texture, slot.imageLook.psx)
-  const mesh = new Mesh(new PlaneGeometry(2 * aspect, 2), material)
+  const mesh = new Mesh(imageWindowGeometry(aspect, slot.imageLook?.windows), material)
   if (slot.imageLook?.grounded) {
     const foot = textureFootprint(texture)
     if (foot) {

@@ -49,6 +49,7 @@ import { exportWorld3DDocument } from './exportFlow.ts'
 import { Scene3DStage, type Scene3DStageHandle } from './Scene3DStage.tsx'
 import { applyScene3DTemplate, patchScene3DSlot, remountScene3DTemplate, type Scene3DTemplateId } from './templates.ts'
 import { Scene3DImageLookControls } from './Scene3DImageLookControls'
+import { Scene3DWindowControls } from './Scene3DWindowControls'
 import { commitSlotSourceChoice, pickerOutputFromSlot, type SlotSourceCapture } from './slotSource.ts'
 import type { Scene3DCameraFamily, Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLoop, Scene3DSlot } from './types.ts'
 import { documentFromWorld3DRequest, listenForWorld3DWorkflow } from './world3dAgent.ts'
@@ -566,6 +567,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
                 onChange={patch => applyScene(current => patchScene3DSlot(current, slot.id, patch))} />
               {slot.media === 'image' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => applyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}
               {slot.media === 'image' && slot.surface === 'cutout' && <Scene3DImageLookControls value={slot.imageLook} disabled={exporting} onChange={imageLook => applyScene(current => patchScene3DSlot(current, slot.id, { imageLook }))} />}
+              {slot.media === 'image' && slot.surface === 'cutout' && slot.sourceUrl && <Scene3DWindowControls key={`${slot.id}:${slot.sourceUrl}`} sourceUrl={slot.sourceUrl} windows={slot.imageLook?.windows} disabled={exporting} onChange={windows => applyScene(current => patchScene3DSlot(current, slot.id, { imageLook: { ...slot.imageLook, windows } }))} />}
               {slot.media === 'image' && (slot.surface === 'floor' || slot.surface === 'wall') && numberField(editorT('travel.repeat'), slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2), value => applyScene(current => patchScene3DSlot(current, slot.id, { textureRepeat: Math.max(1, Math.min(16, value)) })), 1, exporting)}
               {slot.slot === 'background' && !slot.surface && (
                 <InfiniteBackdropControls
