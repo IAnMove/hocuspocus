@@ -257,7 +257,19 @@ export function characterKitAssetFromLayer(
   }
 }
 
-export function captureCharacterFaceAnchor(pose: SceneLayer, face: SceneLayer): CharacterFaceAnchor {
+export function captureCharacterFaceAnchor(pose: SceneLayer, face: SceneLayer,
+  source?: { width: number; height: number }, viewport?: { width: number; height: number }): CharacterFaceAnchor {
+  if (source && viewport) {
+    const fit = Math.min(viewport.width / source.width, viewport.height / source.height) * Math.max(.001, pose.transform.scale)
+    const edge = Math.max(source.width, source.height) * fit
+    const dx = (face.transform.x - pose.transform.x) * viewport.width / 100
+    const dy = (face.transform.y - pose.transform.y) * viewport.height / 100
+    const angle = (pose.transform.rotation ?? 0) * Math.PI / 180
+    return { offsetX: (dx * Math.cos(angle) + dy * Math.sin(angle)) * 100 / edge,
+      offsetY: (-dx * Math.sin(angle) + dy * Math.cos(angle)) * 100 / edge,
+      scale: face.transform.scale * Math.min(viewport.width, viewport.height) / edge,
+      rotation: (face.transform.rotation ?? 0) - (pose.transform.rotation ?? 0) }
+  }
   const poseScale = Math.max(.001, pose.transform.scale)
   return {
     offsetX: (face.transform.x - pose.transform.x) / poseScale,

@@ -54,6 +54,7 @@
         "tests/test_h3_preplan_job_contract.py",
         "tests/test_h3_semantic_bridge.py",
         "tests/test_image_generation_commands.py",
+        "tests/test_independent_model_downloads.py",
         "tests/test_integration_audit_regressions.py",
         "tests/test_job_lifecycle.py",
         "tests/test_job_lifecycle_wiring.py",

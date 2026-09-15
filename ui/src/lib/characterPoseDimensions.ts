@@ -6,8 +6,14 @@ const sizes = new Map<string, Promise<{ width: number; height: number }>>()
 export async function withCharacterPoseDimensions(kit: CharacterKit, workspace: string, poseId = 'base'): Promise<CharacterKit> {
   const pose = poseId === 'base' ? kit.base : kit.poses[poseId]
   if (!pose) return kit
-  const url = /^(https?:|\/)/.test(pose.source) ? pose.source
-    : `/api/v1/file/${encodeURIComponent(pose.source)}?workspace=${encodeURIComponent(workspace)}`
+  const sourceWorkspace = pose.workspace || workspace
+  let url = /^(https?:|\/)/.test(pose.source) ? pose.source
+    : `/api/v1/file/${encodeURIComponent(pose.source)}?workspace=${encodeURIComponent(sourceWorkspace)}`
+  if (url.startsWith('/api/v1/file/')) {
+    const [path, query] = url.split('?'), params = new URLSearchParams(query)
+    if (!params.has('workspace')) params.set('workspace', sourceWorkspace)
+    url = `${path}?${params}`
+  }
   let pending = sizes.get(url)
   if (!pending) {
     pending = (async () => {

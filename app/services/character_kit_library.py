@@ -56,6 +56,17 @@ def _text(value: Any, label: str, maximum: int, *, required: bool = False) -> st
     return text
 
 
+def _asset_dimensions(value: dict[str, Any], label: str) -> dict[str, int]:
+    result: dict[str, int] = {}
+    if "width" in value or "height" in value:
+        for dimension in ("width", "height"):
+            number = value.get(dimension)
+            if isinstance(number, bool) or not isinstance(number, int) or not 1 <= number <= 65536:
+                raise ValueError(f"{label} {dimension} must be a positive pixel dimension")
+            result[dimension] = number
+    return result
+
+
 def _asset(value: Any, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be an object")
@@ -86,6 +97,7 @@ def _asset(value: Any, label: str) -> dict[str, Any]:
     }
     if face_patch is not None:
         result["facePatch"] = face_patch
+    result.update(_asset_dimensions(value, label))
     for key, maximum in (("prompt", 4000), ("model", 240), ("workspace", 120)):
         text = _text(value.get(key), f"{label} {key}", maximum)
         if text:

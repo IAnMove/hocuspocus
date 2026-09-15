@@ -23,8 +23,7 @@ function waitMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', sign
   })
 }
 
-/** Video is paused and sought from the scene clock, including during export. */
-export async function bindScreenMedia(root: Object3D, screen: MediaScreen, standalone: boolean, signal: AbortSignal, onFrame: () => void = () => {}, imagePlate?: { look?: ImageLook }): Promise<ScreenMediaRuntime> {
+function resolveScreenTarget(root: Object3D, screen: MediaScreen, standalone: boolean, imagePlate: boolean) {
   const plane = !imagePlate && screenUsesPlane(screen, standalone)
   const attachedPlane = plane ? attachScreenPlane(root, screen) : undefined
   const targetName = standalone ? 'SCREEN_CONTENT' : plane ? SCREEN_PLANE_NAME : screen.targetMesh
@@ -35,8 +34,13 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
     if (attachedPlane) detachScreenPlane(root, attachedPlane)
     throw new Error(targets.length ? 'screen-mesh-ambiguous' : 'screen-mesh-missing')
   }
+  return { target: targets[0], attachedPlane, plane }
+}
+
+function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: boolean, imagePlate?: { look?: ImageLook }) {
+  const { target, attachedPlane, plane } = resolveScreenTarget(root, screen, standalone, Boolean(imagePlate))
   const canvas = document.createElement('canvas')
-  const target = targets[0], previous = target.material
+  const previous = target.material
   const geometry = target.geometry as { parameters?: { width?: number; height?: number } }
   const aspect = imagePlate && geometry.parameters?.width && geometry.parameters.height
     ? geometry.parameters.width / geometry.parameters.height : screen.width / screen.height
@@ -47,6 +51,12 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
     : new MeshBasicMaterial({ toneMapped: false, side: DoubleSide })
   material.map = texture
   if (imagePlate?.look?.psx) applyPsxImageMaterial(material, texture, imagePlate.look.psx)
+  return { attachedPlane, target, previous, canvas, context, texture, material }
+}
+
+/** Video is paused and sought from the scene clock, including during export. */
+export async function bindScreenMedia(root: Object3D, screen: MediaScreen, standalone: boolean, signal: AbortSignal, onFrame: () => void = () => {}, imagePlate?: { look?: ImageLook }): Promise<ScreenMediaRuntime> {
+  const { attachedPlane, target, previous, canvas, context, texture, material } = prepareScreenSurface(root, screen, standalone, imagePlate)
   const video = screen.media === 'video' ? document.createElement('video') : null
   const image = video ? null : new Image()
   const abort = new AbortController()

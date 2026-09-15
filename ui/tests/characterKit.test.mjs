@@ -256,6 +256,8 @@ test('calibrated mouths align with source pixels in portrait, landscape and rota
       assert.ok(Math.abs((mouth.transform.x - pose.x) * viewport.width / 100 - (dx * Math.cos(angle) - dy * Math.sin(angle))) < 1e-8)
       assert.ok(Math.abs((mouth.transform.y - pose.y) * viewport.height / 100 - (dx * Math.sin(angle) + dy * Math.cos(angle))) < 1e-8)
       assert.ok(Math.abs(mouth.transform.scale * Math.min(viewport.width, viewport.height) - .095 * 1152 * fit) < 1e-8)
+      const captured = captureCharacterFaceAnchor({ transform: pose }, mouth, kit.base, viewport)
+      for (const key of ['offsetX', 'offsetY', 'scale', 'rotation']) assert.ok(Math.abs(captured[key] - kit.anchors.base.mouth[key]) < 1e-8, key)
     }
   }
 })
