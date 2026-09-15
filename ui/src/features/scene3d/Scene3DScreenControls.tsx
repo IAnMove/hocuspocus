@@ -10,7 +10,7 @@ export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, dis
   onChange: (screen: MediaScreen | undefined) => void; onChoose: (item: ApiOutput | null) => void; onRemove: () => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
-  if (slot.media === 'image') return null
+  if (slot.media === 'image' && (slot.surface !== 'cutout' || slot.slot !== 'background')) return null
   const screen = slot.screen
   const patch = (value: Partial<MediaScreen>) => onChange({ ...(slot.media === 'model3d' ? defaultModelScreen(nodes, meshes) : defaultMediaScreen()), ...screen, ...value })
   const field = (key: 'width' | 'height' | 'start' | 'speed', min: number, max: number) => <label className="flex items-center justify-between gap-2 text-xs">{t(`screens.${key}`)}
@@ -18,6 +18,7 @@ export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, dis
       onChange={event => { const value = Number(event.target.value); if (event.target.value && Number.isFinite(value)) patch({ [key]: Math.max(min, Math.min(max, value)) }) }} className="min-h-9 w-20 rounded border border-border bg-bg-primary p-1" /></label>
   const offset = screen?.offset ?? [0, 0, 0]
   return <section className="mt-3 space-y-3 rounded-lg border border-border p-3" data-testid="scene3d-screen-controls">
+    {slot.media === 'image' && <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" disabled={disabled} checked={Boolean(screen)} onChange={event => onChange(event.target.checked ? { ...defaultMediaScreen(), media: 'video', fit: 'cover' } : undefined)} />{t('screens.animateImage')}</label>}
     {slot.media === 'model3d' ? <label className="flex min-h-9 items-center gap-2"><input type="checkbox" disabled={disabled || !nodes.length} checked={Boolean(screen)} onChange={event => onChange(event.target.checked ? defaultModelScreen(nodes, meshes) : undefined)} />{t('screens.attach')}</label> : <strong>{t('screens.title')}</strong>}
     {screen && <>
       {slot.media === 'model3d' && <>
@@ -62,7 +63,7 @@ export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, dis
         <option value="contain">{t('screens.contain')}</option><option value="cover">{t('screens.cover')}</option></select></label>
       {slot.media === 'screen' && <label className="flex items-center justify-between gap-2">{t('screens.style')}<select aria-label={t('screens.style')} disabled={disabled} value={screen.style} onChange={event => patch({ style: event.target.value as MediaScreen['style'] })} className="min-h-9 rounded border border-border bg-bg-primary px-2">
         {(['monitor', 'billboard', 'frameless'] as const).map(style => <option key={style} value={style}>{t(`screens.${style}`)}</option>)}</select></label>}
-      <div className="grid grid-cols-2 gap-3">{field('width', .02, 80)}{field('height', .02, 80)}</div>
+      {slot.media !== 'image' && <div className="grid grid-cols-2 gap-3">{field('width', .02, 80)}{field('height', .02, 80)}</div>}
       <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={screen.flipY} disabled={disabled} onChange={event => patch({ flipY: event.target.checked })} />{t('screens.flipY')}</label>
       {screen.media === 'video' && <><div className="grid grid-cols-2 gap-3">{field('start', 0, 86400)}{field('speed', .05, 8)}</div>
         <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={screen.loop} disabled={disabled} onChange={event => patch({ loop: event.target.checked })} />{t('screens.loop')}</label><p className="text-xs text-text-muted">{t('screens.clockHelp')}</p></>}

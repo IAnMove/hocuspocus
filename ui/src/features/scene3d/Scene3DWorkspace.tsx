@@ -35,6 +35,8 @@ import { Scene3DAnimationControls } from './Scene3DAnimationControls'
 import { Scene3DDocumentControls } from './Scene3DDocumentControls'
 import { Scene3DTransport } from './Scene3DTransport'
 import { Scene3DTransformPanel } from './Scene3DTransformPanel'
+import { Scene3DPreview } from './Scene3DPreview'
+import { Scene3DObjectList } from './Scene3DObjectList'
 import { Scene3DInteraction } from './Scene3DInteraction'
 import type { TransformMode } from './transformGizmo'
 import { clipBindingError, resolveScene3DClip, retainSlotClipCatalogs } from './clips.ts'
@@ -65,7 +67,7 @@ function revokeIfBlob(url: string) {
 
 function numberField(label: string, value: number, onChange: (value: number) => void, step = 0.05, disabled = false) {
   return (
-    <label className="flex items-center gap-1 text-[8px] text-text-muted">
+    <label className="flex items-center gap-1 text-sm text-text-muted">
       {label}
       <input
         type="number"
@@ -76,7 +78,7 @@ function numberField(label: string, value: number, onChange: (value: number) => 
           const next = Number(event.target.value)
           if (Number.isFinite(next)) onChange(next)
         }}
-        className="w-16 rounded border border-border bg-bg-tertiary px-1 py-0.5 text-[9px] text-text-primary disabled:opacity-40"
+        className="w-16 rounded border border-border bg-bg-tertiary px-1 py-0.5 text-sm text-text-primary disabled:opacity-40"
       />
     </label>
   )
@@ -399,8 +401,10 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         onToggle={() => { if (canMutateWorld3DScene(exportingRef.current)) { setPickTarget(undefined); setPlaying(current => !current) } }}
         onSeek={time => { if (exportingRef.current) return; setPlaying(false); setFrame(Math.min(count - 1, Math.max(0, Math.round(time * fps)))) }}
         onSpeed={playbackSpeed => applyScene(current => ({ ...current, playbackSpeed }))} />
-      <div className={`grid items-start gap-3 ${speechVisible ? 'xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
-      <Scene3DInteraction enabled={!playing && !exporting && (Boolean(selectedWorldSfxId) || (Boolean(selected) && selected.media !== 'image'))}
+      <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
+      <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <Scene3DPreview width={sceneDoc.width} height={sceneDoc.height}>
+      <Scene3DInteraction enabled={!playing && !exporting && (Boolean(selectedWorldSfxId) || Boolean(selected))}
         width={sceneDoc.width} height={sceneDoc.height} onMode={setTransformMode}>
         <Scene3DStage
           ref={stageRef}
@@ -437,6 +441,17 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
           <span className="mt-1 block text-[10px] text-amber-100/90">{t('stage.previewQuality')}</span>
         </div>
       </Scene3DInteraction>
+      </Scene3DPreview>
+      <div className="min-w-0 space-y-3">
+        <Scene3DObjectList slots={sceneDoc.slots} selectedId={selectedWorldSfxId ? undefined : selectedId} onSelect={selectSlot} />
+      {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
+        onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
+        onReset={() => {
+          const pose = applyScene3DTemplate(sceneDoc.templateId).slots.find(slot => slot.id === selected.id)
+          if (pose) applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
+        }} />}
+      </div>
+      </div>
       <SceneObjectInspector
         document={sceneDoc}
         selectedId={selectedId}
@@ -492,12 +507,6 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         >{t('stage.exportCancel')}</button>}
       </div>
       <p className="text-xs text-text-muted">{t('stage.exportQualityHint')}</p>
-      {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
-        onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
-        onReset={() => {
-          const pose = applyScene3DTemplate(sceneDoc.templateId).slots.find(slot => slot.id === selected.id)
-          if (pose) applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
-        }} />}
       {selected && (selected.media !== 'image' || selected.surface === 'cutout') && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))} />}
       <button type="button" disabled={editingLocked || sceneDoc.slots.length >= 64} className="min-h-11 self-start rounded-lg border border-cyan-400/50 px-4 text-sm text-text-primary" onClick={() => {
         if (!canMutateWorld3DScene(exportingRef.current)) return
@@ -599,7 +608,7 @@ function InfiniteBackdropControls({
   const speed = loop?.speed ?? 0.18
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1">
-      <label className="flex items-center gap-1 text-[8px] text-text-muted">
+      <label className="flex items-center gap-1 text-sm text-text-muted">
         <input
           type="checkbox"
           data-testid="scene3d-infinite"

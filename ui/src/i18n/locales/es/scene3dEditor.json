@@ -225,7 +225,13 @@
   "speedHelp": "Se aplica a la reproducción y al MP4 exportado.",
   "outputDuration": "Resultado: {{seconds}} s",
   "camera": "Cámara",
-  "objects": "Objetos",
+  "objects": {
+    "title": "Objetos de la escena",
+    "hint": "Selecciona cualquier objeto, aunque esté detrás de otro.",
+    "image": "Imagen",
+    "model3d": "Modelo 3D",
+    "screen": "Imagen / vídeo"
+  },
   "translate": "Mover",
   "rotate": "Girar Y",
   "scale": "Escalar",
@@ -1064,7 +1070,8 @@
     "loop": "Repetir vídeo",
     "clockHelp": "El vídeo sigue el tiempo de la escena. Su audio está silenciado.",
     "remove": "Quitar pantalla",
-    "failed": "No se pudo cargar la pantalla. Comprueba la malla y el archivo."
+    "failed": "No se pudo cargar la pantalla. Comprueba la malla y el archivo.",
+    "animateImage": "Animar este fondo con un vídeo"
   },
   "library": {
     "name": "Nombre de la escena",
@@ -1106,5 +1113,10 @@
     "intensity": "Intensidad PSX",
     "grounded": "Ajustar apoyo a los pies",
     "shadow": "Sombra de contacto"
+  },
+  "preview": {
+    "title": "Vista previa",
+    "expand": "Ampliar vídeo",
+    "exit": "Salir de pantalla completa"
   }
 }

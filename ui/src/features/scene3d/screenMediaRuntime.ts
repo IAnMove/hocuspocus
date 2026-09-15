@@ -1,6 +1,7 @@
 import { CanvasTexture, DoubleSide, Mesh, MeshBasicMaterial, SRGBColorSpace, type Object3D } from 'three'
 import { mediaScreenRect, mediaScreenTime, type MediaScreen } from './mediaScreen.ts'
 import { SCREEN_PLANE_NAME, attachScreenPlane, detachScreenPlane, screenUsesPlane } from './screenPlane.ts'
+import { applyPsxImageMaterial, type ImageLook } from './imageLook'
 
 export type ScreenMediaRuntime = {
   ready: boolean
@@ -23,23 +24,29 @@ function waitMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', sign
 }
 
 /** Video is paused and sought from the scene clock, including during export. */
-export async function bindScreenMedia(root: Object3D, screen: MediaScreen, standalone: boolean, signal: AbortSignal, onFrame: () => void = () => {}): Promise<ScreenMediaRuntime> {
-  const plane = screenUsesPlane(screen, standalone)
+export async function bindScreenMedia(root: Object3D, screen: MediaScreen, standalone: boolean, signal: AbortSignal, onFrame: () => void = () => {}, imagePlate?: { look?: ImageLook }): Promise<ScreenMediaRuntime> {
+  const plane = !imagePlate && screenUsesPlane(screen, standalone)
   const attachedPlane = plane ? attachScreenPlane(root, screen) : undefined
   const targetName = standalone ? 'SCREEN_CONTENT' : plane ? SCREEN_PLANE_NAME : screen.targetMesh
   const targets: Mesh[] = []
-  root.traverse(child => { if (child instanceof Mesh && child.name === targetName) targets.push(child) })
+  if (imagePlate && root instanceof Mesh) targets.push(root)
+  else root.traverse(child => { if (child instanceof Mesh && child.name === targetName) targets.push(child) })
   if (targets.length !== 1) {
     if (attachedPlane) detachScreenPlane(root, attachedPlane)
     throw new Error(targets.length ? 'screen-mesh-ambiguous' : 'screen-mesh-missing')
   }
   const canvas = document.createElement('canvas')
-  const aspect = screen.width / screen.height
+  const target = targets[0], previous = target.material
+  const geometry = target.geometry as { parameters?: { width?: number; height?: number } }
+  const aspect = imagePlate && geometry.parameters?.width && geometry.parameters.height
+    ? geometry.parameters.width / geometry.parameters.height : screen.width / screen.height
   canvas.width = Math.max(2, Math.round(Math.min(1920, 1080 * aspect))); canvas.height = Math.max(2, Math.round(canvas.width / aspect))
   const context = canvas.getContext('2d')!
-  const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace; texture.flipY = standalone || plane ? !screen.flipY : screen.flipY
-  const material = new MeshBasicMaterial({ map: texture, toneMapped: false, side: DoubleSide })
-  const target = targets[0], previous = target.material
+  const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace; texture.flipY = imagePlate || standalone || plane ? !screen.flipY : screen.flipY
+  const material = imagePlate && !Array.isArray(previous) && 'map' in previous ? previous.clone() as MeshBasicMaterial
+    : new MeshBasicMaterial({ toneMapped: false, side: DoubleSide })
+  material.map = texture
+  if (imagePlate?.look?.psx) applyPsxImageMaterial(material, texture, imagePlate.look.psx)
   const video = screen.media === 'video' ? document.createElement('video') : null
   const image = video ? null : new Image()
   const abort = new AbortController()

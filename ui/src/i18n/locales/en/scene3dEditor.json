@@ -225,7 +225,13 @@
   "speedHelp": "Applies to playback and MP4 export.",
   "outputDuration": "Output: {{seconds}} s",
   "camera": "Camera",
-  "objects": "Objects",
+  "objects": {
+    "title": "Scene objects",
+    "hint": "Select any object, even when another is in front.",
+    "image": "Image",
+    "model3d": "3D model",
+    "screen": "Image / video"
+  },
   "translate": "Move",
   "rotate": "Rotate Y",
   "scale": "Scale",
@@ -1064,7 +1070,8 @@
     "loop": "Loop video",
     "clockHelp": "Video follows the scene clock. Its audio is muted.",
     "remove": "Remove screen",
-    "failed": "The screen could not load. Check the mesh and media file."
+    "failed": "The screen could not load. Check the mesh and media file.",
+    "animateImage": "Animate this background with a video"
   },
   "library": {
     "name": "Scene name",
@@ -1106,5 +1113,10 @@
     "intensity": "PSX intensity",
     "grounded": "Align ground to visible feet",
     "shadow": "Contact shadow"
+  },
+  "preview": {
+    "title": "Preview",
+    "expand": "Expand video",
+    "exit": "Exit fullscreen"
   }
 }

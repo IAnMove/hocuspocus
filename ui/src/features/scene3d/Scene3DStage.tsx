@@ -70,7 +70,7 @@ function loadScreen(world: GpuWorld, slot: Scene3DSlot, onError: (message: strin
   const abort = new AbortController(); gpu.screenAbort = abort
   void bindScreenMedia(gpu.root, screen, slot.media === 'screen', abort.signal, () => {
     if (!abort.signal.aborted && world.slots.get(slot.id) === gpu) renderWorld(world)
-  }).then(media => {
+  }, slot.media === 'image' ? { look: slot.imageLook } : undefined).then(media => {
     if (world.slots.get(slot.id) !== gpu || abort.signal.aborted) { media.dispose(); return }
     gpu.screen = media
     onReady()
@@ -119,6 +119,7 @@ function loadSlotImage(
   slot: Scene3DSlot,
   cancelled: () => boolean,
   liveSlot: () => Scene3DSlot | undefined,
+  repaint: () => void,
 ) {
   const url = slot.sourceUrl
   if (!url) return
@@ -130,12 +131,13 @@ function loadSlotImage(
         return
       }
       const live = liveSlot()
-      if (!live || live.sourceUrl !== url || live.media !== 'image') {
+      if (!live || slotMountKey(live) !== slotMountKey(slot) || live.media !== 'image') {
         texture.dispose()
         return
       }
       prepareBackdropTexture(texture)
       placeSlot(world, live, imageBackdropMesh(live, texture), [], 1, true)
+      repaint()
     },
     undefined,
     () => undefined,
@@ -198,7 +200,7 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     restoreSize() {
       const world = worldRef.current
       const host = hostRef.current
-      if (world && host) resizeWorld(world, host)
+      if (world && host) { resizeWorld(world, host); paintWorld(world, documentRef.current, secondsRef.current) }
     },
     canvas() {
       return worldRef.current?.renderer.domElement ?? null
@@ -231,6 +233,7 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     const resize = () => {
       if (exportLockRef.current) return
       resizeWorld(world, host)
+      paintWorld(world, documentRef.current, secondsRef.current)
     }
     resize()
     const observer = new ResizeObserver(resize)
@@ -306,7 +309,7 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       const live = () => documentRef.current.slots.find(item => item.id === slot.id)
       const gone = () => worldRef.current !== world
       if (slot.media === 'image') {
-        loadSlotImage(world, slot, gone, live)
+        loadSlotImage(world, slot, gone, live, () => { bindScreen(live() ?? slot); repaint() })
         continue
       }
       loadSlotGltf(world, slot, loader, gone, live, (slotId, clips) => {
