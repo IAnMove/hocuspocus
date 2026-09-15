@@ -10980,5 +10980,2397 @@
         "volume": 0
       }
     ]
+  },
+  "dark-still-salt-sea": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-still-salt-sea",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#283b42",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-black-tide-frame.jpg",
+        "position": [
+          0,
+          -7.1846875,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.30277777777777776,
+                0.7046875
+              ],
+              [
+                0.6958333333333333,
+                0.7046875
+              ],
+              [
+                0.6958333333333333,
+                0.35703125
+              ],
+              [
+                0.6930555555555555,
+                0.32890625
+              ],
+              [
+                0.6805555555555556,
+                0.30390625
+              ],
+              [
+                0.6611111111111111,
+                0.27890625
+              ],
+              [
+                0.6291666666666667,
+                0.2578125
+              ],
+              [
+                0.5930555555555556,
+                0.24140625
+              ],
+              [
+                0.5527777777777778,
+                0.23046875
+              ],
+              [
+                0.5097222222222222,
+                0.22421875
+              ],
+              [
+                0.46944444444444444,
+                0.22578125
+              ],
+              [
+                0.42777777777777776,
+                0.23359375
+              ],
+              [
+                0.3902777777777778,
+                0.246875
+              ],
+              [
+                0.35833333333333334,
+                0.26328125
+              ],
+              [
+                0.33194444444444443,
+                0.28203125
+              ],
+              [
+                0.3125,
+                0.3046875
+              ],
+              [
+                0.2986111111111111,
+                0.3296875
+              ],
+              [
+                0.29444444444444445,
+                0.3609375
+              ],
+              [
+                0.2972222222222222,
+                0.68203125
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/salt-widow.png",
+        "position": [
+          0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.5120000000000002,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.85,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.06726562499999976,
+          -0.8655625000000002,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/still-sea.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 6.442893749999999,
+          "height": 13.71065625,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.93,
+        10.959999999999999
+      ],
+      "look": [
+        0,
+        3.93,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81dfc9",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 926,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-still-still-flame": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-still-still-flame",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#302425",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-ember-heart-frame.jpg",
+        "position": [
+          0,
+          -5.704843749999999,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.275,
+                0.76484375
+              ],
+              [
+                0.7263888888888889,
+                0.76484375
+              ],
+              [
+                0.7236111111111111,
+                0.35625
+              ],
+              [
+                0.5013888888888889,
+                0.25234375
+              ],
+              [
+                0.2777777777777778,
+                0.3546875
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/basalt-monk.png",
+        "position": [
+          0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.4560000000000002,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.85,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.009609374999999967,
+          -0.9285999999999985,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/still-furnace.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 7.245468749999999,
+          "height": 14.6247,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.84,
+        10.959999999999999
+      ],
+      "look": [
+        0,
+        4.06,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff783b",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 922,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-still-winter-vigil": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-still-winter-vigil",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#364552",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-winter-shoulder-frame.jpg",
+        "position": [
+          0,
+          -6.146875000000001,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.2986111111111111,
+                0.746875
+              ],
+              [
+                0.7013888888888888,
+                0.746875
+              ],
+              [
+                0.7013888888888888,
+                0.42734375
+              ],
+              [
+                0.6847222222222222,
+                0.41015625
+              ],
+              [
+                0.6958333333333333,
+                0.38359375
+              ],
+              [
+                0.6930555555555555,
+                0.35390625
+              ],
+              [
+                0.6819444444444445,
+                0.32421875
+              ],
+              [
+                0.6625,
+                0.296875
+              ],
+              [
+                0.6333333333333333,
+                0.27109375
+              ],
+              [
+                0.5972222222222222,
+                0.24921875
+              ],
+              [
+                0.5527777777777778,
+                0.228125
+              ],
+              [
+                0.5013888888888889,
+                0.2109375
+              ],
+              [
+                0.45416666666666666,
+                0.22734375
+              ],
+              [
+                0.41388888888888886,
+                0.24609375
+              ],
+              [
+                0.375,
+                0.26875
+              ],
+              [
+                0.34444444444444444,
+                0.29375
+              ],
+              [
+                0.3236111111111111,
+                0.31953125
+              ],
+              [
+                0.30972222222222223,
+                0.3484375
+              ],
+              [
+                0.3055555555555556,
+                0.38203125
+              ],
+              [
+                0.3138888888888889,
+                0.40234375
+              ],
+              [
+                0.2986111111111111,
+                0.4234375
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/bell-nun.png",
+        "position": [
+          0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.4000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.85,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.0,
+          -0.9747249999999994,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/still-snow.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 6.465187499999999,
+          "height": 15.293512499999999,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.75,
+        10.719999999999999
+      ],
+      "look": [
+        0,
+        3.75,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#a4eaff",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 924,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-still-moth-moon": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-still-moth-moon",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#252e46",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-antler-moon-frame.jpg",
+        "position": [
+          0,
+          -6.2621875000000005,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.36527777777777776,
+                0.7421875
+              ],
+              [
+                0.6388888888888888,
+                0.7421875
+              ],
+              [
+                0.6638888888888889,
+                0.7109375
+              ],
+              [
+                0.6833333333333333,
+                0.67265625
+              ],
+              [
+                0.6958333333333333,
+                0.6359375
+              ],
+              [
+                0.7111111111111111,
+                0.60234375
+              ],
+              [
+                0.7194444444444444,
+                0.565625
+              ],
+              [
+                0.7166666666666667,
+                0.5265625
+              ],
+              [
+                0.7236111111111111,
+                0.50703125
+              ],
+              [
+                0.7138888888888889,
+                0.4875
+              ],
+              [
+                0.7208333333333333,
+                0.465625
+              ],
+              [
+                0.7125,
+                0.43046875
+              ],
+              [
+                0.7027777777777777,
+                0.4015625
+              ],
+              [
+                0.6805555555555556,
+                0.37265625
+              ],
+              [
+                0.6583333333333333,
+                0.34921875
+              ],
+              [
+                0.6388888888888888,
+                0.328125
+              ],
+              [
+                0.6069444444444444,
+                0.309375
+              ],
+              [
+                0.5722222222222222,
+                0.296875
+              ],
+              [
+                0.5319444444444444,
+                0.290625
+              ],
+              [
+                0.4861111111111111,
+                0.2890625
+              ],
+              [
+                0.44722222222222224,
+                0.2890625
+              ],
+              [
+                0.41388888888888886,
+                0.30078125
+              ],
+              [
+                0.37916666666666665,
+                0.31640625
+              ],
+              [
+                0.3472222222222222,
+                0.3375
+              ],
+              [
+                0.3236111111111111,
+                0.35546875
+              ],
+              [
+                0.30277777777777776,
+                0.38203125
+              ],
+              [
+                0.2875,
+                0.41328125
+              ],
+              [
+                0.2777777777777778,
+                0.4421875
+              ],
+              [
+                0.2791666666666667,
+                0.475
+              ],
+              [
+                0.26944444444444443,
+                0.50625
+              ],
+              [
+                0.2722222222222222,
+                0.53828125
+              ],
+              [
+                0.27361111111111114,
+                0.575
+              ],
+              [
+                0.2875,
+                0.61015625
+              ],
+              [
+                0.3,
+                0.640625
+              ],
+              [
+                0.31805555555555554,
+                0.67421875
+              ],
+              [
+                0.3388888888888889,
+                0.709375
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/moth-oracle.png",
+        "position": [
+          0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.4000000000000001,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.85,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 3.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.04804687499999983,
+          -0.8117500000000009,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/still-moon.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 7.290056249999999,
+          "height": 12.930375000000002,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.75,
+        10.959999999999999
+      ],
+      "look": [
+        0,
+        3.75,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#81d9e8",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 918,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-still-ivory-fire": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-still-ivory-fire",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#482a28",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-red-pilgrim-frame.jpg",
+        "position": [
+          0,
+          -6.0315625,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.2513888888888889,
+                0.7515625
+              ],
+              [
+                0.7375,
+                0.7515625
+              ],
+              [
+                0.7402777777777778,
+                0.73046875
+              ],
+              [
+                0.7402777777777778,
+                0.36796875
+              ],
+              [
+                0.7166666666666667,
+                0.3421875
+              ],
+              [
+                0.7333333333333333,
+                0.3203125
+              ],
+              [
+                0.7416666666666667,
+                0.31015625
+              ],
+              [
+                0.7375,
+                0.28125
+              ],
+              [
+                0.7208333333333333,
+                0.253125
+              ],
+              [
+                0.6930555555555555,
+                0.23046875
+              ],
+              [
+                0.6569444444444444,
+                0.21015625
+              ],
+              [
+                0.6152777777777778,
+                0.19375
+              ],
+              [
+                0.5680555555555555,
+                0.18203125
+              ],
+              [
+                0.5222222222222223,
+                0.1765625
+              ],
+              [
+                0.48194444444444445,
+                0.17578125
+              ],
+              [
+                0.43194444444444446,
+                0.18046875
+              ],
+              [
+                0.38472222222222224,
+                0.1890625
+              ],
+              [
+                0.3416666666666667,
+                0.203125
+              ],
+              [
+                0.30416666666666664,
+                0.221875
+              ],
+              [
+                0.2777777777777778,
+                0.24453125
+              ],
+              [
+                0.2569444444444444,
+                0.2703125
+              ],
+              [
+                0.24722222222222223,
+                0.29609375
+              ],
+              [
+                0.24583333333333332,
+                0.31484375
+              ],
+              [
+                0.2638888888888889,
+                0.32265625
+              ],
+              [
+                0.28194444444444444,
+                0.3421875
+              ],
+              [
+                0.25972222222222224,
+                0.36015625
+              ],
+              [
+                0.25277777777777777,
+                0.73125
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/copper-falconer.png",
+        "position": [
+          -0.75,
+          0,
+          0.8
+        ],
+        "scale": 1.85,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.85,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#29252d",
+          "psx": 0.22
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.0864843749999997,
+          -1.0531374999999983,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/still-furnace.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 7.95886875,
+          "height": 16.43049375,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.93,
+        10.719999999999999
+      ],
+      "look": [
+        0,
+        3.93,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#e79366",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 920,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-still-two-distances": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-still-two-distances",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#3e3d46",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-final-gate-frame.jpg",
+        "position": [
+          0,
+          -3.840625000000001,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.21944444444444444,
+                0.840625
+              ],
+              [
+                0.7694444444444445,
+                0.840625
+              ],
+              [
+                0.7694444444444445,
+                0.82421875
+              ],
+              [
+                0.7611111111111111,
+                0.81015625
+              ],
+              [
+                0.7736111111111111,
+                0.79140625
+              ],
+              [
+                0.7736111111111111,
+                0.3859375
+              ],
+              [
+                0.7638888888888888,
+                0.37421875
+              ],
+              [
+                0.7777777777777778,
+                0.36015625
+              ],
+              [
+                0.7597222222222222,
+                0.346875
+              ],
+              [
+                0.7444444444444445,
+                0.3375
+              ],
+              [
+                0.7569444444444444,
+                0.31640625
+              ],
+              [
+                0.7708333333333334,
+                0.30234375
+              ],
+              [
+                0.7583333333333333,
+                0.27421875
+              ],
+              [
+                0.7361111111111112,
+                0.2484375
+              ],
+              [
+                0.7069444444444445,
+                0.22734375
+              ],
+              [
+                0.6694444444444444,
+                0.20859375
+              ],
+              [
+                0.6277777777777778,
+                0.19296875
+              ],
+              [
+                0.5833333333333334,
+                0.18125
+              ],
+              [
+                0.5388888888888889,
+                0.17421875
+              ],
+              [
+                0.5388888888888889,
+                0.1765625
+              ],
+              [
+                0.45416666666666666,
+                0.17578125
+              ],
+              [
+                0.4513888888888889,
+                0.171875
+              ],
+              [
+                0.4041666666666667,
+                0.17890625
+              ],
+              [
+                0.3597222222222222,
+                0.190625
+              ],
+              [
+                0.31805555555555554,
+                0.20625
+              ],
+              [
+                0.28194444444444444,
+                0.2265625
+              ],
+              [
+                0.25277777777777777,
+                0.24921875
+              ],
+              [
+                0.23194444444444445,
+                0.27421875
+              ],
+              [
+                0.2222222222222222,
+                0.3015625
+              ],
+              [
+                0.22083333333333333,
+                0.31484375
+              ],
+              [
+                0.24027777777777778,
+                0.3390625
+              ],
+              [
+                0.21805555555555556,
+                0.35703125
+              ],
+              [
+                0.2,
+                0.3671875
+              ],
+              [
+                0.2152777777777778,
+                0.38359375
+              ],
+              [
+                0.2152777777777778,
+                0.79375
+              ],
+              [
+                0.23194444444444445,
+                0.8109375
+              ],
+              [
+                0.21666666666666667,
+                0.825
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/copper-falconer.png",
+        "position": [
+          0.85,
+          0,
+          -2.5
+        ],
+        "scale": 0.95,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.85,
+          "tint": "#ffffff"
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/raven-knight.png",
+        "position": [
+          2.6,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#68717e"
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.15374999999999947,
+          -1.2360999999999969,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/still-snow.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 9.274199999999999,
+          "height": 19.083449999999996,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      },
+      {
+        "id": "near-witness",
+        "slot": "subject_2",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/bell-nun.png",
+        "position": [
+          -1.7,
+          0,
+          2.8
+        ],
+        "scale": 2.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.85,
+          "tint": "#4a3a42"
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0.18,
+        1.6,
+        10.6
+      ],
+      "look": [
+        0,
+        3.93,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#efca92",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 935,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-still-copper-night": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "dark-still-copper-night",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#44352c",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-copper-trees-frame.jpg",
+        "position": [
+          0,
+          -6.435156250000001,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.3875,
+                0.73515625
+              ],
+              [
+                0.6111111111111112,
+                0.73515625
+              ],
+              [
+                0.6361111111111111,
+                0.721875
+              ],
+              [
+                0.6652777777777777,
+                0.70703125
+              ],
+              [
+                0.6763888888888889,
+                0.68671875
+              ],
+              [
+                0.6791666666666667,
+                0.6609375
+              ],
+              [
+                0.6708333333333333,
+                0.63671875
+              ],
+              [
+                0.6763888888888889,
+                0.6109375
+              ],
+              [
+                0.675,
+                0.5828125
+              ],
+              [
+                0.6833333333333333,
+                0.55546875
+              ],
+              [
+                0.6805555555555556,
+                0.5265625
+              ],
+              [
+                0.6736111111111112,
+                0.496875
+              ],
+              [
+                0.6777777777777778,
+                0.47265625
+              ],
+              [
+                0.6708333333333333,
+                0.44921875
+              ],
+              [
+                0.6805555555555556,
+                0.428125
+              ],
+              [
+                0.6694444444444444,
+                0.4078125
+              ],
+              [
+                0.6791666666666667,
+                0.3859375
+              ],
+              [
+                0.6680555555555555,
+                0.36171875
+              ],
+              [
+                0.6666666666666666,
+                0.3453125
+              ],
+              [
+                0.6583333333333333,
+                0.32265625
+              ],
+              [
+                0.6652777777777777,
+                0.303125
+              ],
+              [
+                0.6583333333333333,
+                0.2796875
+              ],
+              [
+                0.6444444444444445,
+                0.2578125
+              ],
+              [
+                0.6319444444444444,
+                0.2359375
+              ],
+              [
+                0.6069444444444444,
+                0.21640625
+              ],
+              [
+                0.5875,
+                0.196875
+              ],
+              [
+                0.5611111111111111,
+                0.18671875
+              ],
+              [
+                0.5319444444444444,
+                0.17734375
+              ],
+              [
+                0.5069444444444444,
+                0.1609375
+              ],
+              [
+                0.4930555555555556,
+                0.159375
+              ],
+              [
+                0.4777777777777778,
+                0.165625
+              ],
+              [
+                0.4513888888888889,
+                0.165625
+              ],
+              [
+                0.43333333333333335,
+                0.17734375
+              ],
+              [
+                0.41388888888888886,
+                0.1828125
+              ],
+              [
+                0.3958333333333333,
+                0.19609375
+              ],
+              [
+                0.37777777777777777,
+                0.2078125
+              ],
+              [
+                0.3486111111111111,
+                0.2234375
+              ],
+              [
+                0.33194444444444443,
+                0.2421875
+              ],
+              [
+                0.33055555555555555,
+                0.2640625
+              ],
+              [
+                0.33611111111111114,
+                0.28359375
+              ],
+              [
+                0.3277777777777778,
+                0.30234375
+              ],
+              [
+                0.32222222222222224,
+                0.3265625
+              ],
+              [
+                0.325,
+                0.35078125
+              ],
+              [
+                0.3194444444444444,
+                0.37421875
+              ],
+              [
+                0.3277777777777778,
+                0.39921875
+              ],
+              [
+                0.3263888888888889,
+                0.42734375
+              ],
+              [
+                0.3333333333333333,
+                0.44921875
+              ],
+              [
+                0.32222222222222224,
+                0.47421875
+              ],
+              [
+                0.325,
+                0.4984375
+              ],
+              [
+                0.3194444444444444,
+                0.5234375
+              ],
+              [
+                0.32916666666666666,
+                0.546875
+              ],
+              [
+                0.3236111111111111,
+                0.57578125
+              ],
+              [
+                0.31666666666666665,
+                0.596875
+              ],
+              [
+                0.32083333333333336,
+                0.62265625
+              ],
+              [
+                0.325,
+                0.646875
+              ],
+              [
+                0.32083333333333336,
+                0.6703125
+              ],
+              [
+                0.3263888888888889,
+                0.69375
+              ],
+              [
+                0.34305555555555556,
+                0.7140625
+              ],
+              [
+                0.3680555555555556,
+                0.725
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/moth-oracle.png",
+        "position": [
+          0.55,
+          0,
+          -0.1
+        ],
+        "scale": 1.7,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.85,
+          "tint": "#cff8ff",
+          "psx": 0.65
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/prop-tree.png",
+        "position": [
+          -2.6,
+          0,
+          3
+        ],
+        "scale": 3.5,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#51272f",
+          "psx": 0.22
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          0.0,
+          -1.0531374999999992,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/still-moon.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 5.88555,
+          "height": 16.430493749999997,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.18,
+        3.84,
+        10.959999999999999
+      ],
+      "look": [
+        0,
+        3.84,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#f3a768",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 934,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  },
+  "dark-still-time-wounds": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 8,
+    "templateId": "dark-still-time-wounds",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.07,
+      "floorStyle": "backdrop",
+      "floorColor": "#30334e",
+      "floorSourceHeight": 1
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/dark-living-storm-bridge-frame.jpg",
+        "position": [
+          0,
+          -3.47546875,
+          -11
+        ],
+        "scale": 12.3,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "windows": [
+            [
+              [
+                0.3263888888888889,
+                0.85546875
+              ],
+              [
+                0.6625,
+                0.85546875
+              ],
+              [
+                0.6638888888888889,
+                0.834375
+              ],
+              [
+                0.675,
+                0.82265625
+              ],
+              [
+                0.675,
+                0.44140625
+              ],
+              [
+                0.6583333333333333,
+                0.42734375
+              ],
+              [
+                0.6652777777777777,
+                0.415625
+              ],
+              [
+                0.6694444444444444,
+                0.40546875
+              ],
+              [
+                0.6791666666666667,
+                0.40390625
+              ],
+              [
+                0.6722222222222223,
+                0.375
+              ],
+              [
+                0.6583333333333333,
+                0.3484375
+              ],
+              [
+                0.6375,
+                0.3234375
+              ],
+              [
+                0.6111111111111112,
+                0.30078125
+              ],
+              [
+                0.5763888888888888,
+                0.27734375
+              ],
+              [
+                0.5402777777777777,
+                0.25859375
+              ],
+              [
+                0.49722222222222223,
+                0.2421875
+              ],
+              [
+                0.45694444444444443,
+                0.2578125
+              ],
+              [
+                0.41944444444444445,
+                0.27890625
+              ],
+              [
+                0.3861111111111111,
+                0.3015625
+              ],
+              [
+                0.35833333333333334,
+                0.3265625
+              ],
+              [
+                0.33611111111111114,
+                0.35390625
+              ],
+              [
+                0.32083333333333336,
+                0.3828125
+              ],
+              [
+                0.31527777777777777,
+                0.40390625
+              ],
+              [
+                0.325,
+                0.40546875
+              ],
+              [
+                0.3333333333333333,
+                0.425
+              ],
+              [
+                0.32083333333333336,
+                0.4390625
+              ],
+              [
+                0.3125,
+                0.4421875
+              ],
+              [
+                0.3125,
+                0.82109375
+              ],
+              [
+                0.3263888888888889,
+                0.834375
+              ]
+            ]
+          ],
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-stillness/wounded-knight.png",
+        "position": [
+          0,
+          0,
+          0.6
+        ],
+        "scale": 2.15,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#e6e1dc"
+        },
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/wounded-knight.png",
+          "media": "image",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true,
+          "poseSequence": [
+            {
+              "sourceUrl": "/examples/dark-stillness/wounded-knight.png",
+              "duration": 0.8,
+              "height": 0.9,
+              "x": -0.07,
+              "lift": 0
+            },
+            {
+              "sourceUrl": "/examples/dark-stillness/knight-06-rising.png",
+              "duration": 1,
+              "height": 0.72,
+              "x": -0.045000000000000005,
+              "lift": 0
+            },
+            {
+              "sourceUrl": "/examples/dark-stillness/knight-07-grounded.png",
+              "duration": 1.4,
+              "height": 0.66,
+              "x": -0.020000000000000004,
+              "lift": 0
+            },
+            {
+              "sourceUrl": "/examples/dark-stillness/knight-04-low.png",
+              "duration": 1.2,
+              "height": 0.59,
+              "x": 0.0050000000000000044,
+              "lift": 0
+            },
+            {
+              "sourceUrl": "/examples/dark-stillness/knight-07-grounded.png",
+              "duration": 1.4,
+              "height": 0.66,
+              "x": 0.03,
+              "lift": 0
+            },
+            {
+              "sourceUrl": "/examples/dark-stillness/knight-06-rising.png",
+              "duration": 1.4,
+              "height": 0.72,
+              "x": 0.05499999999999999,
+              "lift": 0
+            },
+            {
+              "sourceUrl": "/examples/dark-stillness/wounded-knight.png",
+              "duration": 0.8,
+              "height": 0.9,
+              "x": 0.08000000000000002,
+              "lift": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/dark-fantasy/bone-arch.png",
+        "position": [
+          -3.2,
+          0,
+          3
+        ],
+        "scale": 2.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.8,
+          "tint": "#222330",
+          "psx": 0.22
+        }
+      },
+      {
+        "id": "exterior-video",
+        "slot": "prop",
+        "media": "screen",
+        "sourceUrl": "",
+        "clip": null,
+        "position": [
+          -0.0576562499999998,
+          -1.1269374999999995,
+          -12.5
+        ],
+        "rotationY": 0,
+        "scale": 1,
+        "screen": {
+          "sourceUrl": "/examples/dark-stillness/still-snow.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 5.88555,
+          "height": 17.50059375,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 0.75,
+          "loop": false,
+          "flipY": false
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        1.2,
+        10.5
+      ],
+      "look": [
+        0,
+        3.7,
+        -0.5
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "atmosphere",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#baa7fa",
+        "scale": 2,
+        "intensity": 0.1,
+        "seed": 930,
+        "start": 0,
+        "end": 8,
+        "sound": false,
+        "volume": 0
+      }
+    ]
   }
 }

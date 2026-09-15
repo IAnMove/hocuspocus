@@ -412,7 +412,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds)
-  const framing = document.camera.framing
+  const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing
   const target = posedSlots.find(slot => slot.id === framing?.targetSlot)
   const root = target && world.slots.get(target.id)?.root
   const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor), target, sceneSeconds, document.duration) : null

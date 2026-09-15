@@ -5,9 +5,9 @@ import type { Scene3DTemplate } from './templates'
 import { parseScene3DDocument } from './document'
 
 export const DARK_FANTASY_TEMPLATES: Scene3DTemplate[] = DARK_FANTASY_IDS.map(id => ({
-  id, camera: 'establishment' as const, duration: 6,
+  id, camera: id.startsWith('dark-still-') ? 'fixed' as const : 'establishment' as const, duration: scenes[id].duration,
   slots: ['subject_1', 'background', 'prop'] as Scene3DSlotId[],
-  tags: id.startsWith('dark-living-') ? ['dark-fantasy', 'animated', 'psx'] : id.startsWith('dark-psx-') ? ['dark-fantasy', 'psx'] : ['dark-fantasy'],
+  tags: id.startsWith('dark-still-') ? (id === 'dark-still-copper-night' ? ['dark-fantasy', 'animated', 'psx'] : ['dark-fantasy', 'animated']) : id.startsWith('dark-living-') ? ['dark-fantasy', 'animated', 'psx'] : id.startsWith('dark-psx-') ? ['dark-fantasy', 'psx'] : ['dark-fantasy'],
   frameFormat: scenes[id].height > scenes[id].width ? 'portrait' : 'landscape',
 }))
 

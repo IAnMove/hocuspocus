@@ -1157,6 +1157,38 @@
     "dark-living-final-gate": {
       "title": "The Last Giant’s Gate",
       "description": "A final knight stands before the giant that holds a broken gate above the horizon."
+    },
+    "dark-still-salt-sea": {
+      "title": "Salt Above the Sea",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-still-flame": {
+      "title": "The Motionless Flame",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-winter-vigil": {
+      "title": "The White Vigil",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-moth-moon": {
+      "title": "The Moth and the Moon",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-ivory-fire": {
+      "title": "Ivory Against Fire",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-two-distances": {
+      "title": "Two Distances",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-copper-night": {
+      "title": "Copper Over Violet",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-time-wounds": {
+      "title": "Time Has Weight",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1252,12 +1284,14 @@
     "height": "Height / aspect",
     "flipY": "Flip vertically",
     "start": "Video start (s)",
-    "speed": "Video speed",
+    "speed": "Playback speed",
     "loop": "Loop video",
     "clockHelp": "Video follows the scene clock. Its audio is muted.",
     "remove": "Remove screen",
     "failed": "The screen could not load. Check the mesh and media file.",
-    "animateImage": "Animate this background with a video"
+    "animateImage": "Animate this layer",
+    "transparent": "Preserve transparency",
+    "transparentHelp": "Use an image or video with an alpha channel, such as transparent WebM. This keeps existing transparency; it does not remove an opaque video background."
   },
   "library": {
     "name": "Scene name",
@@ -1319,5 +1353,21 @@
     "edit": "Edit outline",
     "remove": "Close opening"
   },
-  "darkLivingReview": "Explore 20 living dark fantasy worlds"
+  "darkLivingReview": "Explore 20 living dark fantasy worlds",
+  "poses": {
+    "enable": "Held poses",
+    "help": "Each pose holds for its interval while the environment keeps moving. Use transparent PNG cutouts; adjust height and position to keep the character size and ground contact consistent.",
+    "number": "Pose {{count}}",
+    "image": "Pose image",
+    "choose": "Choose a transparent image",
+    "duration": "Duration (s)",
+    "height": "Relative height",
+    "x": "Horizontal offset",
+    "lift": "Lift from ground",
+    "earlier": "Move earlier",
+    "later": "Move later",
+    "remove": "Remove pose",
+    "add": "Add pose"
+  },
+  "stillnessReview": "Review fixed cameras and poses"
 }

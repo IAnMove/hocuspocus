@@ -8,6 +8,7 @@ import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
 export type Vec3 = readonly [number, number, number]
 
 export type Scene3DCameraFamily =
+  | 'fixed'
   | 'establishment'
   | 'follow'
   | 'orbit'

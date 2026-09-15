@@ -8,7 +8,7 @@ import { patchScene3DSlot } from './templates.ts'
 import type { Scene3DCameraFamily, Scene3DDocument, Scene3DSlot, Vec3 } from './types.ts'
 import type { Scene3DSaveState } from './documentHistory.ts'
 
-const FAMILIES = ['establishment', 'orbit', 'follow', 'pursuit', 'side', 'front', 'chase', 'hood', 'wing', 'product', 'reveal', 'encounter', 'musical'] as const satisfies readonly Scene3DCameraFamily[]
+const FAMILIES = ['fixed', 'establishment', 'orbit', 'follow', 'pursuit', 'side', 'front', 'chase', 'hood', 'wing', 'product', 'reveal', 'encounter', 'musical'] as const satisfies readonly Scene3DCameraFamily[]
 
 const DEFAULT_FACE: FacePlacement = {
   meshIndex: 0,
@@ -200,7 +200,7 @@ function ScenePanel({ document, locked, onChange }: {
       <label className="flex items-center gap-2">{t('inspector.camera')}
         <select aria-label={t('inspector.camera')} className={fieldClass} value={document.camera.family}
           onChange={event => onChange({ ...document, camera: { ...document.camera, family: event.target.value as Scene3DCameraFamily, framing: undefined } })}>
-          {FAMILIES.map(family => <option key={family} value={family}>{family}</option>)}
+          {FAMILIES.map(family => <option key={family} value={family}>{t(`stage.family.${family}`)}</option>)}
         </select>
       </label>
       <AxisFields label={t('inspector.cameraEye')} values={document.camera.eye} onChange={(eye, group) => onChange({ ...document, camera: { ...document.camera, eye } }, group)} group="camera-eye" />

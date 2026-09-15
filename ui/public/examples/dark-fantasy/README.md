@@ -1,14 +1,14 @@
-# Dark Fantasy · 50 editable perspective templates
+# Dark Fantasy · 58 editable perspective templates
 
 Open **Studios → Video 3D → Shot library** and select the **Dark Fantasy** filter.
 The collection contains ten landscape studies, ten 720 × 1280 vertical
 compositions, ten vertical PSX variants, and twenty new layered scenes with
-animated distant landscapes. Play and rate the new collection at
+animated distant landscapes, plus eight fixed-camera studies. Play and rate the new collection at
 `/examples/dark-worlds/`; see the [Living Dark Fantasy guide](../dark-worlds/README.md).
 The **PSX** filter also includes mixed-style scenes in the
 [Creative collection](../creative/README.md).
 Vertical presets open in 9:16 automatically, with their authored camera framing.
-Each six-second scene includes its original generated images, transparent character
+Each six-second scene (eight seconds for the wounded knight) includes its original generated images, transparent character
 cutouts, camera movement, lighting, atmospheric effects and floor finish. No model
 inference or AI video generator is required to render these templates.
 
@@ -20,8 +20,8 @@ Replace a character image and choose **Character / transparent cutout** under it
 surface control. The image retains its aspect ratio and alpha. Position, scale,
 camera framing and effects remain editable. **Align visible feet to the ground**
 ignores transparent bottom margins; **Contact shadow** reinforces their support.
-All fifty presets use grounded cutouts, stationary foreground figures and slow, level
-camera moves. Their horizon does not roll or turn vertically.
+The original fifty presets use grounded cutouts, stationary foreground figures and slow, level
+camera moves. The eight new studies keep the camera fixed; one uses held transparent poses while the landscape continues moving. See [Time Has Weight](../dark-stillness/README.md).
 
 Cinematic floor finishes include the original tiles, a seamless reflective surface,
 no floor, and **Floor from backdrop**. The latter projects the painted backdrop

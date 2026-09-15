@@ -54,7 +54,7 @@ import { commitSlotSourceChoice, pickerOutputFromSlot, type SlotSourceCapture } 
 import type { Scene3DCameraFamily, Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLoop, Scene3DSlot } from './types.ts'
 import { documentFromWorld3DRequest, listenForWorld3DWorkflow } from './world3dAgent.ts'
 
-const FAMILIES = ['establishment', 'orbit', 'follow', 'pursuit', 'side', 'front', 'chase', 'hood', 'wing', 'product', 'reveal', 'encounter', 'musical'] as const satisfies readonly Scene3DCameraFamily[]
+const FAMILIES = ['fixed', 'establishment', 'orbit', 'follow', 'pursuit', 'side', 'front', 'chase', 'hood', 'wing', 'product', 'reveal', 'encounter', 'musical'] as const satisfies readonly Scene3DCameraFamily[]
 
 type Props = {
   width: number
@@ -483,7 +483,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       </div>}
       </div>
       {sceneDoc.dressing === 'workshop' && <label className="flex items-center gap-2 text-xs">{editorT('travel.screen')}<select disabled={exporting} value={sceneDoc.workshopScreen ?? 'code'} onChange={event => applyScene(current => ({ ...current, workshopScreen: event.target.value as 'code' | 'error' | 'success' }))} className="min-h-10 rounded border border-border bg-bg-tertiary px-2">{(['code', 'error', 'success'] as const).map(state => <option key={state} value={state}>{editorT(`travel.${state}`)}</option>)}</select></label>}
-      <Scene3DFramingControls framing={sceneDoc.camera.framing} slots={sceneDoc.slots} disabled={editingLocked} onChange={framing => applyScene(current => ({ ...current, camera: { ...current.camera, framing } }))} />
+      <Scene3DFramingControls framing={sceneDoc.camera.framing} slots={sceneDoc.slots} disabled={editingLocked || sceneDoc.camera.family === 'fixed'} onChange={framing => applyScene(current => ({ ...current, camera: { ...current.camera, framing } }))} />
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-text-primary">{editorT('camera')}
           <select disabled={exporting} value={sceneDoc.camera.family} onChange={event => applyScene(current => ({ ...current, camera: { ...current.camera, family: event.target.value as Scene3DCameraFamily, framing: undefined } }))}
@@ -548,7 +548,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
                   onChoose={item => assignChoice(slot, capture, item)}
                 />
               </div>}
-              <Scene3DScreenControls slot={slot} meshes={screenTargets[slot.id]?.meshes ?? []} nodes={screenTargets[slot.id]?.nodes ?? []} items={[...imageItems, ...videoItems]} disabled={editingLocked}
+              <Scene3DScreenControls slot={slot} meshes={screenTargets[slot.id]?.meshes ?? []} nodes={screenTargets[slot.id]?.nodes ?? []} items={[...imageItems, ...videoItems]} disabled={editingLocked} workspace={workspace}
                 onChange={screen => applyScene(current => patchScene3DSlot(current, slot.id, { screen }))}
                 onChoose={item => {
                   if (item && item.type !== 'image' && item.type !== 'video') return
@@ -558,7 +558,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
                     const live = current.slots.find(value => value.id === slot.id)
                     if (!live?.screen) return current
                     return patchScene3DSlot(current, slot.id, { screen: { ...live.screen, sourceUrl: commit.action === 'clear' ? '' : commit.sourceUrl,
-                      sourceRef: commit.action === 'clear' ? undefined : commit.sourceRef, media: item?.type === 'video' ? 'video' : 'image' } })
+                      sourceRef: commit.action === 'clear' ? undefined : commit.sourceRef, poseSequence: undefined, media: item?.type === 'video' ? 'video' : 'image' } })
                   })
                 }}
                 onRemove={() => { generationRef.current += 1; applyScene(current => ({ ...current, slots: current.slots.filter(value => value.id !== slot.id), camera: current.camera.framing?.targetSlot === slot.id ? { ...current.camera, framing: undefined } : current.camera })) }} />

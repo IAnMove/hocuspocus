@@ -1,6 +1,8 @@
 import { DARK_LIVING_IDS } from './darkLivingIds'
+import { DARK_STILLNESS_IDS } from './darkStillnessIds'
 
 export const DARK_FANTASY_IDS = [
+  ...DARK_STILLNESS_IDS,
   ...DARK_LIVING_IDS,
   "dark-cathedral",
   "dark-forest",

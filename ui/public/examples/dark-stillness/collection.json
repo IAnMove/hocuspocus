@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "title": "El tiempo pesa",
+  "items": [
+    {
+      "id": "dark-still-salt-sea",
+      "number": 1,
+      "title": "Sal sobre el mar",
+      "titleEn": "Salt Above the Sea",
+      "description": "Cámara fija; la espuma turquesa se mueve detrás del arco y la viuda de sal.",
+      "colors": [
+        "#77dccc",
+        "#0c2229"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "dark-still-salt-sea.mp4",
+      "poster": "dark-still-salt-sea.png",
+      "template": "dark-still-salt-sea.world3d-template.json",
+      "scene": "dark-still-salt-sea.world3d.json",
+      "backgroundVideo": "still-sea.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-black-tide-frame.jpg",
+      "tag": "Cámara fija · ambiente en movimiento"
+    },
+    {
+      "id": "dark-still-still-flame",
+      "number": 2,
+      "title": "La llama inmóvil",
+      "titleEn": "The Motionless Flame",
+      "description": "Basalto oscuro delante, piedra en el centro y lava dorada al fondo.",
+      "colors": [
+        "#fcca6d",
+        "#43181a"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "dark-still-still-flame.mp4",
+      "poster": "dark-still-still-flame.png",
+      "template": "dark-still-still-flame.world3d-template.json",
+      "scene": "dark-still-still-flame.world3d.json",
+      "backgroundVideo": "still-furnace.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-ember-heart-frame.jpg",
+      "tag": "Cámara fija · ambiente en movimiento"
+    },
+    {
+      "id": "dark-still-winter-vigil",
+      "number": 3,
+      "title": "La vigilia blanca",
+      "titleEn": "The White Vigil",
+      "description": "La figura y el marco permanecen quietos mientras pasan la nieve y la niebla.",
+      "colors": [
+        "#e4e2d5",
+        "#182331"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "dark-still-winter-vigil.mp4",
+      "poster": "dark-still-winter-vigil.png",
+      "template": "dark-still-winter-vigil.world3d-template.json",
+      "scene": "dark-still-winter-vigil.world3d.json",
+      "backgroundVideo": "still-snow.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-winter-shoulder-frame.jpg",
+      "tag": "Cámara fija · ambiente en movimiento"
+    },
+    {
+      "id": "dark-still-moth-moon",
+      "number": 4,
+      "title": "La polilla y la luna",
+      "titleEn": "The Moth and the Moon",
+      "description": "Una silueta de tinta y marfil ante un lago violeta en movimiento.",
+      "colors": [
+        "#b6a3e8",
+        "#15142d"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "dark-still-moth-moon.mp4",
+      "poster": "dark-still-moth-moon.png",
+      "template": "dark-still-moth-moon.world3d-template.json",
+      "scene": "dark-still-moth-moon.world3d.json",
+      "backgroundVideo": "still-moon.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-antler-moon-frame.jpg",
+      "tag": "Cámara fija · ambiente en movimiento"
+    },
+    {
+      "id": "dark-still-ivory-fire",
+      "number": 5,
+      "title": "Marfil contra incendio",
+      "titleEn": "Ivory Against Fire",
+      "description": "Experimento: armadura clara y cercana, arquitectura negra y horizonte rojo.",
+      "colors": [
+        "#ffdec0",
+        "#6b171a"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "dark-still-ivory-fire.mp4",
+      "poster": "dark-still-ivory-fire.png",
+      "template": "dark-still-ivory-fire.world3d-template.json",
+      "scene": "dark-still-ivory-fire.world3d.json",
+      "backgroundVideo": "still-furnace.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-red-pilgrim-frame.jpg",
+      "tag": "Cámara fija · contraste entre niveles"
+    },
+    {
+      "id": "dark-still-two-distances",
+      "number": 6,
+      "title": "Dos distancias",
+      "titleEn": "Two Distances",
+      "description": "Experimento: una figura oscura muy cerca y otra pequeña iluminada al fondo.",
+      "colors": [
+        "#fff0c2",
+        "#17131e"
+      ],
+      "psx": "sin filtro",
+      "duration": 6,
+      "video": "dark-still-two-distances.mp4",
+      "poster": "dark-still-two-distances.png",
+      "template": "dark-still-two-distances.world3d-template.json",
+      "scene": "dark-still-two-distances.world3d.json",
+      "backgroundVideo": "still-snow.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-final-gate-frame.jpg",
+      "tag": "Cámara fija · contraste entre niveles"
+    },
+    {
+      "id": "dark-still-copper-night",
+      "number": 7,
+      "title": "Cobre sobre violeta",
+      "titleEn": "Copper Over Violet",
+      "description": "Experimento: personaje PSX, cobre intermedio y niebla violeta suave al fondo.",
+      "colors": [
+        "#ec985b",
+        "#514584"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-still-copper-night.mp4",
+      "poster": "dark-still-copper-night.png",
+      "template": "dark-still-copper-night.world3d-template.json",
+      "scene": "dark-still-copper-night.world3d.json",
+      "backgroundVideo": "still-moon.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-copper-trees-frame.jpg",
+      "tag": "Cámara fija · contraste entre niveles"
+    },
+    {
+      "id": "dark-still-time-wounds",
+      "number": 8,
+      "title": "El tiempo pesa",
+      "titleEn": "Time Has Weight",
+      "description": "El caballero cede, se apoya en el suelo y vuelve a levantarse en fragmentos. El ambiente fluye.",
+      "colors": [
+        "#c9d6e5",
+        "#612928"
+      ],
+      "psx": "sin filtro",
+      "duration": 8,
+      "video": "dark-still-time-wounds.mp4",
+      "poster": "dark-still-time-wounds.png",
+      "template": "dark-still-time-wounds.world3d-template.json",
+      "scene": "dark-still-time-wounds.world3d.json",
+      "backgroundVideo": "still-snow.mp4",
+      "staticLayer": "/examples/dark-fantasy/dark-living-storm-bridge-frame.jpg",
+      "tag": "Cámara fija · poses a saltos"
+    }
+  ]
+}

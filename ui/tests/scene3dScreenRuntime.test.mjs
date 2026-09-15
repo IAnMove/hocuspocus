@@ -13,13 +13,24 @@ function mediaHarness() {
   Object.assign(video, { currentTime: 0, duration: 6, videoWidth: 320, videoHeight: 180,
     pause() {}, removeAttribute() {}, load() { queueMicrotask(() => video.dispatchEvent(new Event('loadeddata'))) } })
   const frames = []
-  const context = { fillRect() {}, drawImage(source) { frames.push(source.currentTime) } }
+  const paint = { clears: 0, fills: 0 }
+  const context = { clearRect() { paint.clears++ }, fillRect() { paint.fills++ }, drawImage(source) { frames.push(source.currentTime) } }
   globalThis.document = { createElement: kind => kind === 'video' ? video : { getContext: () => context } }
   const root = new Group(), original = new MeshBasicMaterial(), mesh = new Mesh(undefined, original)
   mesh.name = 'SCREEN_CONTENT'; root.add(mesh)
-  return { video, frames, root, mesh, original, finishSeek() { video.dispatchEvent(new Event('seeked')) },
+  return { video, frames, root, mesh, original, paint, finishSeek() { video.dispatchEvent(new Event('seeked')) },
     restore() { globalThis.document = previous; original.dispose() } }
 }
+
+test('transparent videos retain alpha instead of painting an opaque matte underneath', async () => {
+  const h = mediaHarness(), screen = { ...defaultMediaScreen(), media: 'video', sourceUrl: '/actor.webm', transparent: true }
+  const runtime = await bindScreenMedia(h.root, screen, true, new AbortController().signal)
+  try {
+    assert.equal(h.mesh.material.transparent, true)
+    assert.equal(h.mesh.material.alphaTest, .05)
+    assert.equal(h.paint.clears, 1); assert.equal(h.paint.fills, 0)
+  } finally { runtime.dispose(); h.restore() }
+})
 
 test('no-op and same-target requests await decoded content and repaint on backward seek', async () => {
   const h = mediaHarness(), screen = { ...defaultMediaScreen(), media: 'video', sourceUrl: '/test.mp4' }

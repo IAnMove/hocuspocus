@@ -1,5 +1,6 @@
 import { durableScene3DSourceUrl, parseScene3DSourceRef } from './slotSource.ts'
 import type { Scene3DSourceRef } from './types.ts'
+import { parseImagePoses, type ImagePose } from './imagePoseSequence'
 
 export type MediaScreen = {
   sourceUrl: string
@@ -20,6 +21,8 @@ export type MediaScreen = {
   speed: number
   loop: boolean
   flipY: boolean
+  transparent?: boolean
+  poseSequence?: ImagePose[]
 }
 
 export const defaultMediaScreen = (): MediaScreen => ({
@@ -63,7 +66,8 @@ export function defaultModelScreen(nodeNames: readonly string[] = [], meshNames:
 export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as Partial<MediaScreen>, defaults = defaultMediaScreen()
-  const sourceUrl = durableScene3DSourceUrl(value.sourceUrl ?? '')
+  const poseSequence = value.media === 'video' ? undefined : parseImagePoses(value.poseSequence)
+  const sourceUrl = poseSequence?.[0].sourceUrl || durableScene3DSourceUrl(value.sourceUrl ?? '')
   const mode = value.mode === 'plane' ? 'plane' : 'mesh'
   const plane = mode === 'plane'
   return {
@@ -79,6 +83,8 @@ export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
     fit: value.fit === 'cover' ? 'cover' : 'contain',
     start: bounded(value.start, 0, 0, 86400), speed: bounded(value.speed, 1, 0.05, 8),
     loop: value.loop !== false, flipY: value.flipY === true,
+    ...(value.transparent || poseSequence ? { transparent: true } : {}),
+    ...(poseSequence ? { poseSequence } : {}),
   }
 }
 
@@ -98,5 +104,6 @@ export function mediaScreenMountKey(screen?: MediaScreen) {
   return JSON.stringify([
     screen.sourceUrl, screen.media, screen.mode, screen.targetMesh, screen.anchor,
     screen.offset, screen.pitch, screen.yaw, screen.roll, screen.width, screen.height, screen.style, screen.fit, screen.flipY,
+    screen.transparent, screen.poseSequence?.map(pose => pose.sourceUrl),
   ])
 }

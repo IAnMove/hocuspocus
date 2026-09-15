@@ -54,7 +54,7 @@ function card(item, index) {
   palette.setAttribute('aria-hidden', 'true')
   for (const color of item.colors) { const dot = node('i'); dot.style.backgroundColor = color; palette.append(dot) }
   title.append(node('h2', '', item.title), palette)
-  body.append(title, node('p', 'tag', `PSX · ${item.psx}`), node('p', 'description', item.description))
+  body.append(title, node('p', 'tag', item.tag || `PSX · ${item.psx}`), node('p', 'description', item.description))
   const actions = node('div', 'actions'), expand = node('button', '', 'Ver en grande ↗'), scene = node('a', '', 'Descargar plano ↓')
   expand.addEventListener('click', () => watch(index)); scene.href = item.scene; scene.download = ''
   actions.append(expand, scene); body.append(actions)

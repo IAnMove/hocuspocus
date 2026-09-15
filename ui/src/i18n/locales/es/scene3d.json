@@ -993,7 +993,8 @@
       "chase": "Cámara de persecución",
       "hood": "Cámara de capó",
       "wing": "Cámara de aleta",
-      "musical": "Órbita musical"
+      "musical": "Órbita musical",
+      "fixed": "Cámara fija"
     },
     "template": {
       "two-shot": "Plano de dos",

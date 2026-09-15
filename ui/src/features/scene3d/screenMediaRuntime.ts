@@ -2,6 +2,7 @@ import { CanvasTexture, DoubleSide, Mesh, MeshBasicMaterial, SRGBColorSpace, typ
 import { mediaScreenRect, mediaScreenTime, type MediaScreen } from './mediaScreen.ts'
 import { SCREEN_PLANE_NAME, attachScreenPlane, detachScreenPlane, screenUsesPlane } from './screenPlane.ts'
 import { applyPsxImageMaterial, type ImageLook } from './imageLook'
+import { loadImagePoses } from './imagePoseRuntime'
 
 export type ScreenMediaRuntime = {
   ready: boolean
@@ -50,6 +51,7 @@ function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: b
   const material = imagePlate && !Array.isArray(previous) && 'map' in previous ? previous.clone() as MeshBasicMaterial
     : new MeshBasicMaterial({ toneMapped: false, side: DoubleSide })
   material.map = texture
+  if (screen.transparent || screen.poseSequence) { material.transparent = true; material.alphaTest = .05; material.depthWrite = true }
   if (imagePlate?.look?.psx) applyPsxImageMaterial(material, texture, imagePlate.look.psx)
   return { attachedPlane, target, previous, canvas, context, texture, material }
 }
@@ -58,7 +60,8 @@ function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: b
 export async function bindScreenMedia(root: Object3D, screen: MediaScreen, standalone: boolean, signal: AbortSignal, onFrame: () => void = () => {}, imagePlate?: { look?: ImageLook }): Promise<ScreenMediaRuntime> {
   const { attachedPlane, target, previous, canvas, context, texture, material } = prepareScreenSurface(root, screen, standalone, imagePlate)
   const video = screen.media === 'video' ? document.createElement('video') : null
-  const image = video ? null : new Image()
+  const image = video || screen.poseSequence ? null : new Image()
+  let poses: Awaited<ReturnType<typeof loadImagePoses>> | undefined
   const abort = new AbortController()
   let released = false
   const runtime: ScreenMediaRuntime = { ready: false, error: null, seek: async () => {}, dispose: () => {
@@ -66,20 +69,26 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
     released = true
     abort.abort(); if (video) { video.pause(); video.removeAttribute('src'); video.load() }
     if (image) image.src = ''; target.material = previous; texture.dispose(); material.dispose()
+    poses?.dispose()
     if (attachedPlane) detachScreenPlane(root, attachedPlane)
   } }
   const disposed = () => runtime.dispose()
   signal.addEventListener('abort', disposed, { once: true })
   const paint = () => {
+    if (poses) { poses.paint(context, screen, 0); texture.needsUpdate = true; onFrame(); return }
     const source = video ?? image!, width = video?.videoWidth ?? image!.naturalWidth, height = video?.videoHeight ?? image!.naturalHeight
     if (!width || !height || abort.signal.aborted) return
     const r = mediaScreenRect(canvas.width, canvas.height, width, height, screen.fit)
-    context.fillStyle = '#080c13'; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(source, r.x, r.y, r.width, r.height); texture.needsUpdate = true
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    if (!screen.transparent) { context.fillStyle = '#080c13'; context.fillRect(0, 0, canvas.width, canvas.height) }
+    context.drawImage(source, r.x, r.y, r.width, r.height); texture.needsUpdate = true
     onFrame()
   }
   try {
     if (signal.aborted) throw new Error('screen-media-disposed')
-    if (video) {
+    if (screen.poseSequence) {
+      poses = await loadImagePoses(screen.poseSequence, abort.signal)
+    } else if (video) {
       video.crossOrigin = 'anonymous'; video.muted = true; video.playsInline = true; video.preload = 'auto'
       const loaded = waitMedia(video, 'loadeddata', abort.signal); video.src = screen.sourceUrl; video.load(); await loaded
     } else {
@@ -90,6 +99,7 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
     let pending: Promise<void> | null = null, desired = 0, settled = 0
     runtime.seek = async (seconds, current) => {
       if (runtime.error) throw runtime.error
+      if (poses && !abort.signal.aborted) { poses.paint(context, current, seconds); texture.needsUpdate = true; onFrame(); return }
       if (!video || abort.signal.aborted) return
       desired = mediaScreenTime(seconds, video.duration, current)
       // Browsers snap to a frame; retrying the same clock time never lands exactly and hangs export.

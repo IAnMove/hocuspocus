@@ -58,12 +58,18 @@ test('all curated compositions keep planted silhouettes and a gentle level camer
   assert.equal(CREATIVE_TEMPLATE_IDS.length, 46)
   for (const id of [...DARK_FANTASY_IDS, ...CREATIVE_TEMPLATE_IDS]) {
     const doc = applyScene3DTemplate(id), f = doc.camera.framing
+    if (doc.camera.family === 'fixed') {
+      assert.equal(f, undefined, id)
+      assert.ok(doc.camera.eye.every(Number.isFinite), id)
+      assert.ok(doc.camera.look.every(Number.isFinite), id)
+    } else {
     assert.ok(f)
     assert.equal(f.rollFrom, 0, id); assert.equal(f.rollTo, 0, id); assert.equal(f.orbitTurns ?? 0, 0, id)
     assert.equal(f.from[1], f.to[1], id)
     const hero = doc.slots.find(slot => slot.id === f.targetSlot)
     assert.ok(Math.hypot(...f.to.map((v, i) => (v - f.from[i]) * hero.scale)) <= 1, id)
     assert.deepEqual(f.lookFrom, f.lookTo, id)
+    }
     assert.notEqual(doc.environment.floorStyle, 'none', id)
     for (const slot of doc.slots.filter(slot => slot.media === 'image' && slot.id !== 'background')) {
       assert.equal(slot.position[1], 0, id); assert.equal(slot.imageLook.grounded, true, id); assert.equal(slot.motion, undefined, id)

@@ -17,9 +17,11 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
     const foot = textureFootprint(texture)
     if (foot) {
       // Trim only the empty rows below the feet and retain original pixel scale.
-      mesh.geometry.scale(1, 1 - foot.bottom, 1).translate(0, -foot.bottom, 0)
-      const uv = mesh.geometry.getAttribute('uv')
-      for (let i = 0; i < uv.count; i++) uv.setY(i, foot.bottom + uv.getY(i) * (1 - foot.bottom))
+      if (!slot.screen?.poseSequence) {
+        mesh.geometry.scale(1, 1 - foot.bottom, 1).translate(0, -foot.bottom, 0)
+        const uv = mesh.geometry.getAttribute('uv')
+        for (let i = 0; i < uv.count; i++) uv.setY(i, foot.bottom + uv.getY(i) * (1 - foot.bottom))
+      }
       if (slot.imageLook.shadow) mesh.add(imageContactShadow(foot, aspect, slot.imageLook.shadow))
     }
   }

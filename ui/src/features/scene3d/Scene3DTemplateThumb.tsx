@@ -6,7 +6,7 @@ import { isCreativeTemplate } from './creativeTemplateIds'
 
 export function Scene3DTemplateThumb({ id, portrait = false }: { id: Scene3DTemplateId; portrait?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const bundled = isDarkFantasyTemplate(id) ? 'dark-fantasy' : isCreativeTemplate(id) ? 'creative' : null
+  const bundled = id.startsWith('dark-still-') ? 'dark-stillness' : isDarkFantasyTemplate(id) ? 'dark-fantasy' : isCreativeTemplate(id) ? 'creative' : null
   useEffect(() => {
     if (!canvas.current || bundled) return
     return subscribeTemplateThumb(id, canvas.current)

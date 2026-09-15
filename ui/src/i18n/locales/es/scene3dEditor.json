@@ -1157,6 +1157,38 @@
     "dark-living-final-gate": {
       "title": "La puerta del último gigante",
       "description": "Un último caballero frente al coloso que sostiene el horizonte."
+    },
+    "dark-still-salt-sea": {
+      "title": "Sal sobre el mar",
+      "description": "Cámara fija; la espuma turquesa se mueve detrás del arco y la viuda de sal."
+    },
+    "dark-still-still-flame": {
+      "title": "La llama inmóvil",
+      "description": "Basalto oscuro delante, piedra en el centro y lava dorada al fondo."
+    },
+    "dark-still-winter-vigil": {
+      "title": "La vigilia blanca",
+      "description": "La figura y el marco permanecen quietos mientras pasan la nieve y la niebla."
+    },
+    "dark-still-moth-moon": {
+      "title": "La polilla y la luna",
+      "description": "Una silueta de tinta y marfil ante un lago violeta en movimiento."
+    },
+    "dark-still-ivory-fire": {
+      "title": "Marfil contra incendio",
+      "description": "Experimento: armadura clara y cercana, arquitectura negra y horizonte rojo."
+    },
+    "dark-still-two-distances": {
+      "title": "Dos distancias",
+      "description": "Experimento: una figura oscura muy cerca y otra pequeña iluminada al fondo."
+    },
+    "dark-still-copper-night": {
+      "title": "Cobre sobre violeta",
+      "description": "Experimento: personaje PSX, cobre intermedio y niebla violeta suave al fondo."
+    },
+    "dark-still-time-wounds": {
+      "title": "El tiempo pesa",
+      "description": "El caballero cede, se apoya en el suelo y vuelve a levantarse en fragmentos. El ambiente fluye."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1252,12 +1284,14 @@
     "height": "Alto / proporción",
     "flipY": "Invertir verticalmente",
     "start": "Inicio del vídeo (s)",
-    "speed": "Velocidad del vídeo",
+    "speed": "Velocidad de reproducción",
     "loop": "Repetir vídeo",
     "clockHelp": "El vídeo sigue el tiempo de la escena. Su audio está silenciado.",
     "remove": "Quitar pantalla",
     "failed": "No se pudo cargar la pantalla. Comprueba la malla y el archivo.",
-    "animateImage": "Animar este fondo con un vídeo"
+    "animateImage": "Animar esta capa",
+    "transparent": "Conservar transparencia",
+    "transparentHelp": "Usa una imagen o un vídeo con canal alfa (por ejemplo, WebM transparente). Esta opción conserva el recorte; no elimina el fondo de un vídeo opaco."
   },
   "library": {
     "name": "Nombre de la escena",
@@ -1319,5 +1353,21 @@
     "edit": "Editar contorno",
     "remove": "Cerrar hueco"
   },
-  "darkLivingReview": "Ver los 20 mundos dark fantasy"
+  "darkLivingReview": "Ver los 20 mundos dark fantasy",
+  "poses": {
+    "enable": "Poses a saltos",
+    "help": "Cada pose se mantiene durante su intervalo. El ambiente sigue animándose. Usa imágenes PNG recortadas; ajusta la altura y la posición para conservar el tamaño del personaje y su apoyo en el suelo.",
+    "number": "Pose {{count}}",
+    "image": "Imagen de la pose",
+    "choose": "Seleccionar una imagen sin fondo",
+    "duration": "Duración (s)",
+    "height": "Altura relativa",
+    "x": "Desplazamiento horizontal",
+    "lift": "Elevación desde el suelo",
+    "earlier": "Mover antes",
+    "later": "Mover después",
+    "remove": "Quitar pose",
+    "add": "Añadir pose"
+  },
+  "stillnessReview": "Ver cámara fija y poses"
 }
