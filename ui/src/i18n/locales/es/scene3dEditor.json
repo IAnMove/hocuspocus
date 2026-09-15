@@ -1189,6 +1189,30 @@
     "dark-still-time-wounds": {
       "title": "El tiempo pesa",
       "description": "El caballero cede, se apoya en el suelo y vuelve a levantarse en fragmentos. El ambiente fluye."
+    },
+    "dark-motion-knight-passage": {
+      "title": "El caminante de ceniza",
+      "description": "El caballero avanza con su capa y sus pasos; el pasillo y la niebla tienen otro movimiento."
+    },
+    "dark-motion-knight-embers": {
+      "title": "Hacia las brasas",
+      "description": "La misma marcha frente a lava viva, detrás de arquitectura quieta."
+    },
+    "creative-motion-skate-coast": {
+      "title": "Sal y velocidad",
+      "description": "Ilustración en movimiento sobre mar turquesa y costa coral; el horizonte se desliza."
+    },
+    "creative-motion-skate-neon": {
+      "title": "La ciudad pasa",
+      "description": "La chaqueta respira mientras la ciudad violeta corre por detrás."
+    },
+    "creative-motion-skate-clouds": {
+      "title": "Carretera de nubes",
+      "description": "Una tabla, un camino imposible y nubes enormes a otra velocidad."
+    },
+    "creative-motion-skate-portal": {
+      "title": "El mar al otro lado",
+      "description": "Personaje con filtro PSX, piedra inmóvil y un horizonte que se mueve detrás del arco."
     }
   },
   "gallerySearch": "Buscar en el catálogo",
@@ -1369,5 +1393,6 @@
     "remove": "Quitar pose",
     "add": "Añadir pose"
   },
-  "stillnessReview": "Ver cámara fija y poses"
+  "stillnessReview": "Ver cámara fija y poses",
+  "movingCutoutsReview": "Personajes en movimiento · 6 clips ↗"
 }

@@ -1,6 +1,8 @@
+import { CREATIVE_CUTOUT_MOTION_IDS } from './cutoutMotionIds'
 import { MOTION_TEMPLATE_IDS } from './motionTemplateIds'
 import { PERSPECTIVE_TEMPLATE_IDS } from './perspectiveTemplateIds'
 export const CREATIVE_TEMPLATE_IDS = [
+  ...CREATIVE_CUTOUT_MOTION_IDS,
   ...MOTION_TEMPLATE_IDS,
   ...PERSPECTIVE_TEMPLATE_IDS,
   "creative-neon-diner",

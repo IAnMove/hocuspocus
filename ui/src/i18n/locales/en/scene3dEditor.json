@@ -1189,6 +1189,30 @@
     "dark-still-time-wounds": {
       "title": "Time Has Weight",
       "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-motion-knight-passage": {
+      "title": "The Ash Walker",
+      "description": "An independently animated walking knight over a moving misty passage."
+    },
+    "dark-motion-knight-embers": {
+      "title": "Toward the Embers",
+      "description": "The same walking performance in front of molten lava and static architecture."
+    },
+    "creative-motion-skate-coast": {
+      "title": "Salt and Speed",
+      "description": "An illustrated skater above a moving turquoise coast and coral cliffs."
+    },
+    "creative-motion-skate-neon": {
+      "title": "The City Passes",
+      "description": "A moving jacket and board over an independently sliding violet city."
+    },
+    "creative-motion-skate-clouds": {
+      "title": "Cloud Road",
+      "description": "A longboard over impossible blue stone and slower peach clouds."
+    },
+    "creative-motion-skate-portal": {
+      "title": "The Sea Beyond",
+      "description": "A PSX actor, static stonework and a moving sea horizon behind the arch."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -1369,5 +1393,6 @@
     "remove": "Remove pose",
     "add": "Add pose"
   },
-  "stillnessReview": "Review fixed cameras and poses"
+  "stillnessReview": "Review fixed cameras and poses",
+  "movingCutoutsReview": "Moving characters · 6 clips ↗"
 }

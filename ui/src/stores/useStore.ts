@@ -3984,7 +3984,7 @@ export const useStore = create<AppState>((set, get) => {
       .filter((r): r is { filename: string; path: string } => !!r && !!r.path)
       .map(r => r.path)
     if (tool === 'revoice' && refPaths.length === 0) return
-    if (tool === 'remove_background' && s.toolsSourceKind !== 'image') return
+    if (tool === 'remove_background' && s.toolsSourceKind !== 'image' && s.toolsSourceKind !== 'video') return
     if (tool === 'upscale' && s.toolsSourceKind !== 'image' && s.toolsSourceKind !== 'video') return
     if (tool === 'revoice' && s.toolsSourceKind !== 'video') return
     set({ toolsSubmitting: true })

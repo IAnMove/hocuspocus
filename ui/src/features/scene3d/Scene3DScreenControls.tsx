@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { ApiOutput } from '../../api/client'
 import { AssetInput } from '../asset-picker/AssetInput'
 import { useUiTranslation } from '../../i18n'
@@ -22,23 +23,42 @@ export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, dis
     {slot.media === 'model3d' ? <label className="flex min-h-9 items-center gap-2"><input type="checkbox" disabled={disabled || !nodes.length} checked={Boolean(screen)} onChange={event => onChange(event.target.checked ? defaultModelScreen(nodes, meshes) : undefined)} />{t('screens.attach')}</label> : slot.media === 'screen' ? <strong>{t('screens.title')}</strong> : null}
     {screen && <>
       {slot.media === 'model3d' && <ModelScreenPlacement screen={screen} nodes={nodes} meshes={meshes} disabled={disabled} patch={patch} />}
-      {!screen.poseSequence && <AssetInput label={t('screens.content')} placeholder={t('screens.chooseContent')} items={items}
-        value={pickerOutputFromSlot(screen.sourceUrl, screen.media, screen.sourceRef)} accept="image/*,video/*" optional disabled={disabled}
-        constraints={{ kinds: ['image', 'video'], maxCount: 1, optional: true }} onChoose={onChoose} />}
+      {!screen.poseSequence && <ScreenSourceControls screen={screen} items={items} disabled={disabled} onChoose={onChoose} patch={patch} />}
       {slot.media === 'image' && <Scene3DPoseSequenceControls key={`${slot.id}:${slot.sourceUrl}`} screen={screen} baseUrl={slot.sourceUrl} items={items} disabled={disabled} workspace={workspace} onChange={onChange} />}
-      {!screen.poseSequence && <label className="flex min-h-9 items-center gap-2"><input type="checkbox" disabled={disabled} checked={Boolean(screen.transparent)} onChange={event => patch({ transparent: event.target.checked })} />{t('screens.transparent')}</label>}
-      {screen.transparent && !screen.poseSequence && <p className="text-xs text-text-muted">{t('screens.transparentHelp')}</p>}
-      {!screen.poseSequence && <label className="flex items-center justify-between gap-2">{t('screens.fit')}<select aria-label={t('screens.fit')} value={screen.fit} disabled={disabled} onChange={event => patch({ fit: event.target.value as MediaScreen['fit'] })} className="min-h-9 rounded border border-border bg-bg-primary px-2">
-        <option value="contain">{t('screens.contain')}</option><option value="cover">{t('screens.cover')}</option></select></label>}
       {slot.media === 'screen' && <label className="flex items-center justify-between gap-2">{t('screens.style')}<select aria-label={t('screens.style')} disabled={disabled} value={screen.style} onChange={event => patch({ style: event.target.value as MediaScreen['style'] })} className="min-h-9 rounded border border-border bg-bg-primary px-2">
         {(['monitor', 'billboard', 'frameless'] as const).map(style => <option key={style} value={style}>{t(`screens.${style}`)}</option>)}</select></label>}
       {slot.media !== 'image' && <div className="grid grid-cols-2 gap-3">{field('width', .02, 80)}{field('height', .02, 80)}</div>}
       <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={screen.flipY} disabled={disabled} onChange={event => patch({ flipY: event.target.checked })} />{t('screens.flipY')}</label>
-      {(screen.media === 'video' || screen.poseSequence) && <><div className="grid grid-cols-2 gap-3">{field('start', 0, 86400)}{field('speed', .05, 8)}</div>
-        <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={screen.loop} disabled={disabled} onChange={event => patch({ loop: event.target.checked })} />{t('screens.loop')}</label>{screen.media === 'video' && <p className="text-xs text-text-muted">{t('screens.clockHelp')}</p>}</>}
+      <ScreenPlaybackControls screen={screen} disabled={disabled} patch={patch} field={field} />
     </>}
     {slot.media === 'screen' && <button type="button" disabled={disabled} onClick={onRemove} className="min-h-9 rounded border border-border px-3">{t('screens.remove')}</button>}
   </section>
+}
+
+function ScreenSourceControls({ screen, items, disabled, onChoose, patch }: {
+  screen: MediaScreen; items: ApiOutput[]; disabled: boolean
+  onChoose: (item: ApiOutput | null) => void; patch: (value: Partial<MediaScreen>) => void
+}) {
+  const { t } = useUiTranslation('scene3dEditor')
+  return <>
+    <AssetInput label={t('screens.content')} placeholder={t('screens.chooseContent')} items={items}
+      value={pickerOutputFromSlot(screen.sourceUrl, screen.media, screen.sourceRef)} accept="image/*,video/*" optional disabled={disabled}
+      constraints={{ kinds: ['image', 'video'], maxCount: 1, optional: true }} onChoose={onChoose} />
+    <label className="flex min-h-9 items-center gap-2"><input type="checkbox" disabled={disabled} checked={Boolean(screen.transparent)} onChange={event => patch({ transparent: event.target.checked })} />{t('screens.transparent')}</label>
+    {screen.transparent && <p className="text-xs text-text-muted">{t('screens.transparentHelp')}</p>}
+    <label className="flex items-center justify-between gap-2">{t('screens.fit')}<select aria-label={t('screens.fit')} value={screen.fit} disabled={disabled} onChange={event => patch({ fit: event.target.value as MediaScreen['fit'] })} className="min-h-9 rounded border border-border bg-bg-primary px-2">
+      <option value="contain">{t('screens.contain')}</option><option value="cover">{t('screens.cover')}</option></select></label>
+  </>
+}
+
+function ScreenPlaybackControls({ screen, disabled, patch, field }: {
+  screen: MediaScreen; disabled: boolean; patch: (value: Partial<MediaScreen>) => void
+  field: (key: 'start' | 'speed', min: number, max: number) => ReactNode
+}) {
+  const { t } = useUiTranslation('scene3dEditor')
+  if (screen.media !== 'video' && !screen.poseSequence) return null
+  return <><div className="grid grid-cols-2 gap-3">{field('start', 0, 86400)}{field('speed', .05, 8)}</div>
+    <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={screen.loop} disabled={disabled} onChange={event => patch({ loop: event.target.checked })} />{t('screens.loop')}</label>{screen.media === 'video' && <p className="text-xs text-text-muted">{t('screens.clockHelp')}</p>}</>
 }
 
 function supportsScreenControls(slot: Scene3DSlot) {

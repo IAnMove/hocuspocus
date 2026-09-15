@@ -350,16 +350,18 @@
     "upscaleClip": "Escalar clip",
     "upscaleImage": "Escalar imagen",
     "replaceVoiceAction": "Sustituir voz",
-    "removeBackgroundInstruction": "Instrucción opcional",
-    "removeBackgroundInstructionPlaceholder": "Por ejemplo: conserva el pelo fino y los bordes transparentes",
-    "removeBackgroundHint": "Crea una copia PNG transparente y mantiene intacta la imagen original.",
-    "removeBackgroundNeedsSource": "Elige una imagen de la biblioteca o sube una antes de ejecutar esta herramienta.",
+    "removeBackgroundInstruction": "Notas (se guardan con el resultado)",
+    "removeBackgroundInstructionPlaceholder": "Notas opcionales sobre este recorte; no controlan el modelo de segmentación.",
+    "removeBackgroundHint": "Crea un PNG transparente de una imagen o un WebM transparente de un vídeo. Conserva el original y el audio del vídeo. Puedes colocar el resultado sobre otras escenas.",
+    "removeBackgroundNeedsSource": "Elige una imagen o un vídeo de la biblioteca, o súbelo, antes de ejecutar la herramienta.",
     "removeBackgroundAction": "Quitar fondo",
     "submittingRemoveBackground": "Enviando la eliminación de fondo…",
     "queuedRemoveBackground": "Eliminación de fondo en cola…",
     "removeBackgroundFailed": "Falló la eliminación de fondo",
     "imageAssetsFailed": "No se pudo cargar la biblioteca de imágenes.",
-    "sourceUploadFailed": "Elige un archivo de imagen o vídeo compatible."
+    "sourceUploadFailed": "Elige un archivo de imagen o vídeo compatible.",
+    "removeBackgroundVideoHint": "Vídeo: se procesa cada fotograma y se estabilizan suavemente pequeños cambios del recorte. Hasta 60 segundos / 1800 fotogramas; lado máximo de salida: 1920 px. Revisa pelo, telas y objetos pequeños sobre un fondo de contraste.",
+    "selectLibraryMedia": "Elige una imagen o un vídeo"
   },
   "post": {
     "title": "Posprocesado",

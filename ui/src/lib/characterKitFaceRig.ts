@@ -422,18 +422,10 @@ function mouthWipeDistance(nx: number, ny: number, shape?: 'ellipse' | 'rectangl
   return shape === 'rectangle' ? Math.max(nx * nx, ny * ny) : nx * nx + ny * ny
 }
 
-export function wipeMouthRegion(
-  rgba: Uint8ClampedArray,
-  width: number,
-  height: number,
-  region: { cx: number; cy: number; rx: number; ry: number; shape?: 'ellipse' | 'rectangle' },
-): Uint8ClampedArray {
-  if (!(rgba instanceof Uint8ClampedArray) || rgba.length !== width * height * 4) {
-    return new Uint8ClampedArray(rgba)
-  }
-  const next = new Uint8ClampedArray(rgba)
-  const rx = Math.max(1, region.rx)
-  const ry = Math.max(1, region.ry)
+function mouthBoundarySamples(
+  rgba: Uint8ClampedArray, width: number, height: number,
+  region: { cx: number; cy: number; shape?: 'ellipse' | 'rectangle' }, rx: number, ry: number,
+) {
   const samples: { x: number; y: number; r: number; g: number; b: number }[] = []
   // Sampling all around the boundary retains cheek/jaw illumination. One
   // median colour used to leave a conspicuous flat rectangle on shaded faces.
@@ -446,6 +438,22 @@ export function wipeMouthRegion(
     if (rgba[i + 3] < 128) continue
     samples.push({ x, y, r: rgba[i], g: rgba[i + 1], b: rgba[i + 2] })
   }
+  return samples
+}
+
+export function wipeMouthRegion(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  region: { cx: number; cy: number; rx: number; ry: number; shape?: 'ellipse' | 'rectangle' },
+): Uint8ClampedArray {
+  if (!(rgba instanceof Uint8ClampedArray) || rgba.length !== width * height * 4) {
+    return new Uint8ClampedArray(rgba)
+  }
+  const next = new Uint8ClampedArray(rgba)
+  const rx = Math.max(1, region.rx)
+  const ry = Math.max(1, region.ry)
+  const samples = mouthBoundarySamples(rgba, width, height, region, rx, ry)
   if (!samples.length) return next
   for (let y = Math.max(0, Math.floor(region.cy - ry)); y <= Math.min(height - 1, Math.ceil(region.cy + ry)); y += 1) {
     for (let x = Math.max(0, Math.floor(region.cx - rx)); x <= Math.min(width - 1, Math.ceil(region.cx + rx)); x += 1) {

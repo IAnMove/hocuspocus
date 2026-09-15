@@ -93,7 +93,8 @@ function finishSource(
   const fallbackName = sourceBasename(source)
   const name = assetSource?.asset.filename || fallbackName
   const sourceWorkspace = explicitSourceWorkspace(action) || assetSource?.sourceWorkspace
-  return { source, name, url: sourceUrl(source, sourceWorkspace, workspace), assetId, sourceWorkspace }
+  const kind = assetSource?.asset.kind === 'video' || /\.(?:mp4|webm|mov|mkv|avi|m4v|mpeg|mpg|wmv)$/i.test(sourceBasename(source)) ? 'video' : 'image'
+  return { source, name, url: sourceUrl(source, sourceWorkspace, workspace), assetId, sourceWorkspace, kind }
 }
 
 async function resolveAssetSource(
@@ -102,7 +103,7 @@ async function resolveAssetSource(
   workspace: string,
 ): Promise<{ asset: api.AssetCatalogItem; source: string; sourceWorkspace: string }> {
   const asset = await api.fetchAsset(assetId)
-  if (asset.kind !== 'image') throw new Error(i18n.t('removeBackgroundInvalidAsset', { ns: 'wizard' }))
+  if (asset.kind !== 'image' && asset.kind !== 'video') throw new Error(i18n.t('removeBackgroundInvalidAsset', { ns: 'wizard' }))
   const location = asset.locations.find(item => item.workspace_id === preferredWorkspace)
     || asset.locations.find(item => item.workspace_id === workspace)
     || asset.locations[0]
@@ -198,7 +199,7 @@ async function showSource(navigate: Navigate, source: ResolvedSource): Promise<v
   state.setToolsTool('remove_background')
   state.setToolsSource({
     path: source.source, name: source.name, url: source.url,
-    assetId: source.assetId || null, workspace: source.sourceWorkspace || null, kind: 'image',
+    assetId: source.assetId || null, workspace: source.sourceWorkspace || null, kind: source.kind || 'image',
   })
 }
 

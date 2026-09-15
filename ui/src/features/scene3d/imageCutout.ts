@@ -13,11 +13,21 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
   const material = slot.imageLook?.unlit ? new MeshBasicMaterial(options) : new MeshStandardMaterial({ ...options, roughness: .9 })
   if (texture && slot.imageLook?.psx) applyPsxImageMaterial(material, texture, slot.imageLook.psx)
   const mesh = new Mesh(imageWindowGeometry(aspect, slot.imageLook?.windows), material)
+  groundImageCutout(mesh, slot, texture, aspect)
+  poseImageCutout(mesh, slot)
+  return mesh
+}
+
+function groundImageCutout(mesh: Mesh, slot: Scene3DSlot, texture: Texture | null, aspect: number) {
   if (slot.imageLook?.grounded) {
     const foot = textureFootprint(texture)
     if (foot) {
       // Trim only the empty rows below the feet and retain original pixel scale.
-      if (!slot.screen?.poseSequence) {
+      if (slot.screen?.sourceUrl && !slot.screen.poseSequence) {
+        // A moving matte needs the complete video canvas. Keep its UVs and
+        // scale, translating the reference footline onto the ground instead.
+        mesh.geometry.translate(0, -2 * foot.bottom, 0)
+      } else if (!slot.screen?.poseSequence) {
         mesh.geometry.scale(1, 1 - foot.bottom, 1).translate(0, -foot.bottom, 0)
         const uv = mesh.geometry.getAttribute('uv')
         for (let i = 0; i < uv.count; i++) uv.setY(i, foot.bottom + uv.getY(i) * (1 - foot.bottom))
@@ -25,8 +35,6 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
       if (slot.imageLook.shadow) mesh.add(imageContactShadow(foot, aspect, slot.imageLook.shadow))
     }
   }
-  poseImageCutout(mesh, slot)
-  return mesh
 }
 
 export function poseImageCutout(root: Object3D, slot: Scene3DSlot) {

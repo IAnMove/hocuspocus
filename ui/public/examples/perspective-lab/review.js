@@ -65,6 +65,10 @@ function card(item, index) {
     }
     body.append(layers)
   }
+  if (item.actorVideo) {
+    const layers = node('div', 'actions'), actor = node('a', '', 'Personaje transparente ↓')
+    actor.href = item.actorVideo; actor.download = ''; layers.append(actor); body.append(layers)
+  }
   const choices = node('div', 'ratings'); choices.setAttribute('role', 'group'); choices.setAttribute('aria-label', `Valorar ${item.title}`)
   for (const [value, label] of ratings) {
     const button = node('button', '', label); button.dataset.value = value
@@ -102,3 +106,5 @@ try {
   items = (await response.json()).items
   $('grid').replaceChildren(...items.map(card)); refresh()
 } catch { $('progress').textContent = 'No se pudo cargar la colección. Recarga la página.' }
+
+document.querySelectorAll('[data-review-video]').forEach(video => video.addEventListener('play', () => pauseOthers(video)))

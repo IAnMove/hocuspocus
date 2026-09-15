@@ -1,3 +1,4 @@
+import { isCutoutMotionTemplate } from './cutoutMotionIds'
 import { useEffect, useRef } from 'react'
 import type { Scene3DTemplateId } from './types.ts'
 import { subscribeTemplateThumb } from './templatePreview.ts'
@@ -6,7 +7,7 @@ import { isCreativeTemplate } from './creativeTemplateIds'
 
 export function Scene3DTemplateThumb({ id, portrait = false }: { id: Scene3DTemplateId; portrait?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const bundled = id.startsWith('dark-still-') ? 'dark-stillness' : isDarkFantasyTemplate(id) ? 'dark-fantasy' : isCreativeTemplate(id) ? 'creative' : null
+  const bundled = isCutoutMotionTemplate(id) ? 'moving-cutouts' : id.startsWith('dark-still-') ? 'dark-stillness' : isDarkFantasyTemplate(id) ? 'dark-fantasy' : isCreativeTemplate(id) ? 'creative' : null
   useEffect(() => {
     if (!canvas.current || bundled) return
     return subscribeTemplateThumb(id, canvas.current)

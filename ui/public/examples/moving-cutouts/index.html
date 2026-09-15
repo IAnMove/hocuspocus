@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Fuera del lienzo · HocusPocus</title>
+  <link rel="stylesheet" href="../perspective-lab/review.css">
+  <link rel="stylesheet" href="dark.css">
+  <script type="module" src="../perspective-lab/review.js"></script>
+</head>
+<body data-review-key="hocuspocus:moving-cutouts-review:v1" data-collection="hocuspocus-moving-cutouts-20260915" data-report-filename="mis-valoraciones-fuera-del-lienzo.json">
+  <header>
+    <nav><a class="brand" href="/">✦ HOCUSPOCUS</a><a href="../dark-worlds/">Ver los 20 mundos anteriores ↗</a></nav>
+    <div class="intro"><div><p class="eyebrow">6 ESCENAS · VÍDEOS SIN FONDO · MOVIMIENTOS REUTILIZABLES</p><h1>Fuera del<br>lienzo.</h1></div>
+      <div class="lead"><p>Un movimiento. Mundos diferentes.</p><p>Un caballero que camina y un patinador ilustrado. Sus movimientos recortados se combinan con mar, niebla, ciudad y nubes que tienen otra profundidad y otro ritmo.</p><p><a href="#actors">Ver y descargar los vídeos transparentes ↓</a></p></div>
+    </div>
+    <div class="instructions"><span>01 <b>Reproduce</b> y mira el fondo.</span><span>02 <b>Valora</b> el movimiento y la composición.</span><span>03 <b>Descarga</b> tus notas o el plano editable.</span></div>
+  </header>
+  <main>
+    <div class="toolbar">
+      <label>Mostrar<select id="filter"><option value="all">Las 6 propuestas</option><option value="pending">Sin evaluar</option><option value="keep">Me encantan</option><option value="refine">Para retocar</option><option value="discard">Descartadas</option></select></label>
+      <label>PSX<select id="style"><option value="all">Cualquier pieza</option><option value="personaje">En el personaje</option><option value="sin filtro">Sin filtro PSX</option></select></label>
+      <span id="progress" role="status">Cargando colección…</span>
+      <button id="export" class="export">Descargar mis valoraciones ↓</button>
+    </div>
+    <p id="storage" class="storage">Las valoraciones se guardan en este navegador. Descárgalas para conservar una copia o compartirlas.</p>
+    <div id="grid" class="grid" aria-label="Plantillas con fondos animados para evaluar"></div>
+    <p id="empty" hidden>No hay propuestas con estos filtros.</p>
+    <section class="edit-help"><span class="eyebrow">REMOVE BACKGROUND · TAMBIÉN PARA VÍDEOS</span><h2>El personaje tiene su propia capa.</h2><p>En <b>Estudio → Herramientas → Quitar fondo</b>, elige un vídeo de la biblioteca o súbelo. La aplicación procesa sus fotogramas, conserva el original y guarda un <b>WebM transparente con audio</b>.</p><p>En <b>Vídeo 3D → Animar esta capa</b>, selecciona ese WebM y activa <b>Conservar transparencia</b>. Cambia su posición y profundidad, o ajusta su velocidad por separado de la del escenario. Las seis composiciones están en <b>Fondos animados</b>, Dark Fantasy y Creativo.</p><p>Descarga el <b>Plano</b> para abrirlo en el editor, o la <b>Plantilla reutilizable</b> para importarla en Mis escenarios. Las demostraciones finales son silenciosas; los WebM conservan el audio generado de sus vídeos originales.</p><p>El recorte automático puede necesitar revisión en pelo, telas y objetos finos. Los ejemplos se han revisado sobre fondos de contraste. En algunos fotogramas del patinador queda un resto fino del suelo junto a las ruedas. Cada trabajo admite hasta 60 segundos / 1800 fotogramas, con un lado máximo de salida de 1920 px.</p></section>
+<section id="actors" class="edit-help"><span class="eyebrow">EL MISMO VÍDEO EN DISTINTOS MUNDOS</span><h2>Dos movimientos fuera del fondo.</h2><div class="actors">
+<article><h3>El caballero</h3><video data-review-video class="actor-clip" src="walking-knight-motion.webm" controls muted loop playsinline preload="metadata"></video><p><a href="walking-knight-motion.webm" download>Descargar WebM transparente ↓</a> · <a href="walking-knight-motion.mp4" target="_blank" rel="noopener">Ver original ↗</a></p></article>
+<article><h3>El patinador</h3><video data-review-video class="actor-clip" src="skate-illustration-motion.webm" controls muted loop playsinline preload="metadata"></video><p><a href="skate-illustration-motion.webm" download>Descargar WebM transparente ↓</a> · <a href="skate-illustration-motion.mp4" target="_blank" rel="noopener">Ver original ↗</a></p></article>
+</div></section>
+  </main>
+  <footer><a href="/">Volver a HocusPocus ↗</a><span>Movimiento y fondos generados en HocusPocus · recorte de vídeo y composición con sus herramientas nativas.</span></footer>
+  <dialog id="viewer" aria-label="Vista ampliada de la plantilla">
+    <div class="viewer-head"><h2 id="viewer-title"></h2><button id="close" aria-label="Cerrar vista ampliada">Cerrar ✕</button></div>
+    <video id="large-video" controls loop playsinline preload="none"></video>
+    <div class="viewer-foot"><button id="previous">← Anterior</button><span id="viewer-count"></span><button id="next">Siguiente →</button></div>
+  </dialog>
+</body>
+</html>

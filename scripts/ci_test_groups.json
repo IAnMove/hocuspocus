@@ -233,6 +233,7 @@
         "tests/test_provenance_3d_director.py",
         "tests/test_recipes_router.py",
         "tests/test_remove_background_tool.py",
+        "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",
         "tests/test_safety_scan.py",
         "tests/test_scail2_workflows.py",
