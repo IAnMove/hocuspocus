@@ -17,7 +17,7 @@
       "source": "models/TTS/auk/auk_handler.py",
       "destination": "app/models/TTS/auk/auk_handler.py",
       "upstream_sha256": "0674421dee9247fc10fab8ef8ae3c0bad47b6c9115ac7c110c8b8363f633156f",
-      "local_sha256": "fa108f111473d7a7a4a71e832b53b2774cb194f672732d8d7183ec90ed028a08",
+      "local_sha256": "2d9b78f0962ebe26228b532a35ed35b70d354bb3576ff77ae30e858059017b73",
       "adapted": true
     },
     {

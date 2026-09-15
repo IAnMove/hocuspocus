@@ -98,8 +98,31 @@ su catálogo omite la estimación genérica.
 Las pruebas dirigidas cubren los handlers reales, el registro de comandos,
 la conservación de letra/instrucciones, los modos, límites, recetas Flash,
 referencias canónicas, controles React y cálculo de un transformer AuK pequeño
-en CPU. Los pipelines se importan con el entorno WanGP instalado. Estas pruebas
-no utilizan los pesos de producción y no certifican calidad de voz/canciones,
-tiempo de inferencia, consumo de VRAM ni ejecución en Windows. La web móvil de
-Deepy se ha investigado mediante documentación y código upstream, sin ejecutarla
-ni cambiar los servicios de la máquina.
+en CPU. La suite UI completa pasa 1.832 pruebas y el recorrido de navegador
+pasa 46 pruebas con API simulada. La suite Python obtuvo 3.515 pases y dos skips;
+el único fallo fue una entrada de inventario arquitectónico pendiente para el
+nuevo test del store. Tras añadir esa entrada explícita, las cinco pruebas de
+arquitectura y las 22 de audio pasan. No se regeneraron baselines de métricas.
+
+Se ejecutaron tres generaciones con pesos reales fijados a la revisión anterior,
+en Linux, RTX 4090, Torch 2.7, Transformers 4.57.1 y MMGP 3.7.6, usando BF16 y
+perfil de offload 3. Los pesos y resultados están en el directorio local ignorado
+`outputs/yue2-auk-adoption/` del worktree de implementación.
+
+| Prueba real | Resultado |
+| --- | --- |
+| AuK Flash, instrucción de voz en inglés | WAV mono, 24 kHz, 5 s; RMS 0,0608 |
+| AuK Flash, instrucción de limpieza con la muestra anterior como fuente | WAV mono, 24 kHz, 5 s; RMS 0,0565 |
+| YuE2, letra/estilo en inglés, melodía y acordes, límite 8 s | WAV estéreo, 48 kHz, 7,999 s; RMS 0,1239 |
+
+Todos los resultados tienen muestras finitas y señal no nula. YuE2 agotó el
+límite de tokens de esos ocho segundos: el fragmento no demuestra una canción
+completa. Estas pruebas llaman los pipelines directamente; no certifican la
+cola HTTP y publicación en galería con esos pesos, fidelidad de palabras,
+calidad perceptual, clonación, edición concreta, una mejora audible de limpieza,
+AuK Base, duración máxima, español, Windows ni los motores acelerados de YuE2.
+Las cargas iniciales estuvieron afectadas por E/S; no se presenta un benchmark
+ni una estimación de memoria mínima.
+
+La web móvil de Deepy se ha investigado mediante documentación y código upstream,
+sin ejecutarla ni cambiar los servicios de la máquina.

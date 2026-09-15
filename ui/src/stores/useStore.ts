@@ -6342,6 +6342,7 @@ export const useStore = create<AppState>((set, get) => {
       }
       if (modelType === 'yue2' || isInstructionSpeechModel(modelType)) {
         Object.assign(paramUpdates, {
+          negative_prompt: '', prompt_enhancer: '', activated_loras: [], loras_multipliers: '',
           audio_prompt_type: '', audio_guide: undefined, audio_guide2: undefined,
           audio_guide3: undefined, audio_guide4: undefined, audio_guide5: undefined, audio_guide6: undefined,
           custom_settings: undefined, model_mode: modelType === 'yue2' ? 0 : undefined,

@@ -80,7 +80,7 @@ class family_handler:
 
     @staticmethod
     def update_default_settings(base_model_type, model_def, ui_defaults):
-        ui_defaults.update({'prompt': 'Say "Welcome back. It is wonderful to hear from you." in a warm, calm female voice.', 'audio_prompt_type': '', 'duration_seconds': 5, 'num_inference_steps': 4 if model_def.get('auk_flash', False) else 32, 'guidance_phases': 0 if model_def.get('auk_flash', False) else 1, 'guidance_scale': 0 if model_def.get('auk_flash', False) else 2, 'negative_prompt': '', 'repeat_generation': 1, 'prompt_enhancer': '', 'video_length': 0, 'multi_prompts_gen_type': 'FG'})
+        ui_defaults.update({'prompt': 'Say "Welcome back. It is wonderful to hear from you." in a warm, calm female voice.', 'audio_prompt_type': '', 'duration_seconds': 5, 'num_inference_steps': 4 if model_def.get('auk_flash', False) else 32, 'guidance_phases': 0 if model_def.get('auk_flash', False) else 1, 'guidance_scale': 0 if model_def.get('auk_flash', False) else 2, 'negative_prompt': '', 'repeat_generation': 1, 'prompt_enhancer': '', 'video_length': 0, 'multi_prompts_gen_type': 2})
 
     @staticmethod
     def validate_generative_settings(base_model_type, model_def, inputs):
