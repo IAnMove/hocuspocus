@@ -27,6 +27,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from services.asset_manifest import publish_generation_sidecar
+from services import resource_scheduler
+from services.world3d_media_cache import prepare_media_snapshot
 from services.media_refs import parse_media_ref
 from services.scene_commands import DocumentInput, command_error as scene_error
 from services.scene_recording import SceneRecordingTranscodeError, validate_scene_recording_output
@@ -114,7 +116,30 @@ const appUrl = process.env.HOCUS_APP_URL;
 if (!appUrl) process.exit(2);
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
-const browser = await chromium.launch({ headless: true });
+async function launchRenderer() {
+  if (process.platform === 'linux') {
+    let accelerated;
+    try {
+      accelerated = await chromium.launch({ headless: true, args: [
+        '--enable-gpu', '--use-angle=vulkan', '--enable-features=Vulkan', '--disable-vulkan-surface',
+      ] });
+      const probe = await accelerated.newPage();
+      const renderer = await probe.evaluate(() => {
+        const gl = document.createElement('canvas').getContext('webgl2');
+        const info = gl?.getExtension('WEBGL_debug_renderer_info');
+        return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
+      });
+      await probe.close();
+      if (renderer && !/swiftshader|llvmpipe|software/i.test(renderer)) {
+        console.log(`World3D hardware renderer: ${renderer}`);
+        return accelerated;
+      }
+    } catch (error) { console.log(`World3D GPU unavailable: ${error.message}`); }
+    await accelerated?.close().catch(() => {});
+  }
+  return chromium.launch({ headless: true });
+}
+const browser = await launchRenderer();
 const page = await browser.newPage();
 const frames = `${staging}/frames`;
 fs.mkdirSync(frames, { recursive: true });
@@ -523,7 +548,7 @@ class World3DExportService:
             "title": "Video 3D export", "status": "queued", "phase": "queued",
             "message": "Queued for Video 3D export", "workspace": workspace,
             "backend_job_id": job_id, "current": 0, "total": plan["count"],
-            "resource_requirements": ["local_cpu:ffmpeg"], "cancelable": True,
+            "resource_requirements": ["local_gpu:0", "local_cpu:ffmpeg"], "cancelable": True,
             "resumable": True, "recoverable": True,
             "metadata": {"operation": OPERATION},
         }
@@ -592,8 +617,16 @@ class World3DExportService:
     def _run_worker(self, intent_id: str, task_id: str, workspace: str) -> None:
         registry = self.registry_for(workspace)
         try:
-            self._export(registry, intent_id, task_id, workspace)
-        except World3DExportCancelled:
+            token = get_cancellation_token(registry.workspace_dir, task_id)
+            self._ensure_active(token, registry, task_id)
+            registry.update(task_id, status="waiting_resource", phase="waiting_resource", message="Waiting for the render GPU")
+            with resource_scheduler.coordinator.acquire(
+                resource_scheduler.local_gpu_lane(0), task_id=task_id,
+                description="Video 3D export", cancelled=lambda: token.is_cancelled()
+                or (registry.get(task_id) or {}).get("status") == "cancelled",
+            ):
+                self._export(registry, intent_id, task_id, workspace)
+        except (World3DExportCancelled, resource_scheduler.ResourceAcquireCancelled):
             self._finish(registry, task_id, "cancelled", phase="cancelled", message="Export cancelled")
         except World3DExportPending as error:
             self._finish(registry, task_id, "failed", phase="pending", message=str(error),
@@ -634,7 +667,10 @@ class World3DExportService:
         module = playwright_module()
         if not self.app_url or module is None or not shutil.which("node"):
             raise World3DExportPending("real-render pending: playwright/ffmpeg headless export is not configured")
-        frames = run_owned_browser(snapshot, staging, cancelled, app_url=self.app_url, module=module)
+        rendered = prepare_media_snapshot(snapshot, app_root=Path(__file__).resolve().parents[1],
+                                          workspace_root=Path(self.workspace_dir(snapshot["workspace"])), cancelled=cancelled)
+        (staging / "snapshot.json").write_text(json.dumps(rendered, ensure_ascii=False), encoding="utf-8")
+        frames = run_owned_browser(rendered, staging, cancelled, app_url=self.app_url, module=module)
         progress(len(frames), snapshot["plan"]["count"])
         return frames
 

@@ -6,6 +6,7 @@ import { defaultMediaScreen, defaultModelScreen, pickScreenAnchor, type MediaScr
 import { pickerOutputFromSlot } from './slotSource'
 import type { Scene3DSlot } from './types'
 import { Scene3DPoseSequenceControls } from './Scene3DPoseSequenceControls'
+import { Scene3DLoopControls } from './Scene3DLoopControls'
 
 export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, disabled, workspace, onChange, onChoose, onRemove }: {
   slot: Scene3DSlot; meshes: string[]; nodes?: string[]; items: ApiOutput[]; disabled: boolean; workspace?: string
@@ -30,6 +31,7 @@ export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, dis
       {slot.media !== 'image' && <div className="grid grid-cols-2 gap-3">{field('width', .02, 80)}{field('height', .02, 80)}</div>}
       <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={screen.flipY} disabled={disabled} onChange={event => patch({ flipY: event.target.checked })} />{t('screens.flipY')}</label>
       <ScreenPlaybackControls screen={screen} disabled={disabled} patch={patch} field={field} />
+      <Scene3DLoopControls screen={screen} disabled={disabled} patch={patch} />
     </>}
     {slot.media === 'screen' && <button type="button" disabled={disabled} onClick={onRemove} className="min-h-9 rounded border border-border px-3">{t('screens.remove')}</button>}
   </section>

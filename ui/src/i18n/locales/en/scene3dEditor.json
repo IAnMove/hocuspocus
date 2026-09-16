@@ -1386,7 +1386,14 @@
     "failed": "The screen could not load. Check the mesh and media file.",
     "animateImage": "Animate this layer",
     "transparent": "Preserve transparency",
-    "transparentHelp": "Use an image or video with an alpha channel, such as transparent WebM. This keeps existing transparency; it does not remove an opaque video background."
+    "transparentHelp": "Use an image or video with an alpha channel, such as transparent WebM. This keeps existing transparency; it does not remove an opaque video background.",
+    "loopDetails": "Continuity between shots",
+    "pingPong": "Loop forwards and backwards",
+    "loopRange": "Loop only a source interval",
+    "loopStart": "Interval start (s)",
+    "loopEnd": "Interval end (s)",
+    "timeOffset": "Elapsed time across shots (s)",
+    "loopDetailsHelp": "Back-and-forth playback avoids a reset jump and reverses the motion. Use elapsed time to continue the same animation in the next shot."
   },
   "library": {
     "name": "Scene name",
@@ -1471,5 +1478,6 @@
   },
   "stillnessReview": "Review fixed cameras and poses",
   "movingCutoutsReview": "Moving characters · 6 clips ↗",
-  "portalRidesReview": "Review downhill and dragon"
+  "portalRidesReview": "Review downhill and dragon",
+  "kingdomRoadReview": "Journeys and music film"
 }

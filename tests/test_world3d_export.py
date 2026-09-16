@@ -20,6 +20,7 @@ from routers.wangp_mcp import create_wangp_mcp_router
 from routers.world3d_export import create_world3d_export_router
 from services.scene_recording import probe_scene_recording_output
 from services.task_manager import TaskRegistry, forget_task_registry
+from services import resource_scheduler
 from services.world3d_export import (
     OPERATION,
     World3DExportCancelled,
@@ -243,10 +244,27 @@ def test_admit_freezes_snapshot_as_one_canonical_task(tmp_path):
     assert snapshot["document"]["templateId"] == "two-shot"
     assert snapshot["plan"]["count"] == 2
     task = registry.get(receipt["taskIds"][0])
-    assert task["status"] in {"queued", "running"}
+    assert task["status"] in {"queued", "waiting_resource", "running"}
     assert task["cancelable"] is True
     gate.set()
     _wait(registry, task["id"], {"completed", "failed"})
+    forget_task_registry(registry.workspace_dir)
+
+
+def test_render_waits_for_music_gpu_and_cancellation_does_not_need_the_lease(tmp_path):
+    painted = []
+    service = _service(tmp_path, renderer=lambda *a, **kw: _paint(*a, calls=painted, **kw))
+    with resource_scheduler.coordinator.acquire(resource_scheduler.local_gpu_lane(0), task_id="music-in-progress"):
+        receipt = service.submit(_command("waiting-render"))["receipt"]
+        registry = service._registry(WORKSPACE)
+        task_id = receipt["taskIds"][0]
+        _wait(registry, task_id, {"waiting_resource"})
+        assert painted == []
+        service.cancel(WORKSPACE, "waiting-render")
+        service._workers["waiting-render"].join(timeout=2)
+        assert not service._workers["waiting-render"].is_alive()
+        assert painted == []
+        assert registry.get(task_id)["status"] == "cancelled"
     forget_task_registry(registry.workspace_dir)
 
 

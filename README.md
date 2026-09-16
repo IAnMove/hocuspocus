@@ -290,6 +290,8 @@ In **Studios → Video 3D → Shot library**, **Perspectives** adds 20 new verti
 
 The [Skate Portal study](ui/public/examples/skate-portal/README.md) joins four editable shots into a vertical jump between the coast and a cloud road. Portal videos follow the scene clock, including backward scrubbing and export; each portal owns and releases its media independently.
 
+The [Kingdom Road collection](ui/public/examples/kingdom-road/README.md) extends the skater and PSX dragon journeys across 35 animated backgrounds. It also includes a Spanish YuE2 song with a beat-aligned music film, editable scene archives and downloadable media. Video layers expose source intervals, forward/backward looping and sequence time offsets under **Continuity between shots**. Native exports reuse a bounded local video cache for faster seeks, preserve transparent characters, and share the GPU queue with generation.
+
 The preview fits portrait scenes between black sidebars while keeping editor controls readable. **Expand video** shows just the picture fullscreen. Select covered characters, props or backgrounds in **Scene objects**, then move, rotate or scale them. For a cutout layer, enable **Animate this layer** and choose a video from the gallery or upload one; its depth and individual PSX treatment are retained in saved scenes and native exports.
 
 For a stationary viewpoint, select **Fixed camera**. Image cutouts can use **Held poses** with per-pose duration, relative height and ground placement. **Preserve transparency** supports images and videos that already have alpha, including transparent WebM; it does not segment an opaque video. These controls remain editable in saved scenes and portable templates.

@@ -1,0 +1,517 @@
+{
+  "name": "Que tu veas el alba - YuE2 - 40 mundos",
+  "workspace": "default",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "clips": [
+    {
+      "name": "CLIP 01 — El titán dormido",
+      "source": "/api/v1/file/2026-09-15-18h47m08s_world3d-dark-living-sleeping-titan_83f0f2.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.1333333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 02 — La campana de ceniza",
+      "source": "/api/v1/file/2026-09-15-16h38m39s_world3d-dark-living-bell-of-ash_063208.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.8666666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 03 — La luna entre astas",
+      "source": "/api/v1/file/2026-09-15-16h39m44s_world3d-dark-living-antler-moon_bd5432.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.033333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 04 — El rey sumergido",
+      "source": "/api/v1/file/2026-09-15-16h40m56s_world3d-dark-living-drowned-king_e1b2ed.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.1666666666666665,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 05 — El peregrino rojo",
+      "source": "/api/v1/file/2026-09-15-17h40m18s_world3d-dark-living-red-pilgrim_c94cbe.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.066666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 06 — El último acueducto",
+      "source": "/api/v1/file/2026-09-15-17h41m30s_world3d-dark-living-last-aqueduct_46fa80.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.033333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 07 — El oráculo violeta",
+      "source": "/api/v1/file/2026-09-15-18h07m10s_world3d-dark-living-violet-oracle_46a8ef.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.2,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 08 — La corona de espinas",
+      "source": "/api/v1/file/2026-09-15-18h09m40s_world3d-dark-living-thorn-crown_469e92.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.2,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 09 — El santo hueco",
+      "source": "/api/v1/file/2026-09-15-18h20m39s_world3d-dark-living-hollow-saint_610bf7.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 10 — El trono del micelio",
+      "source": "/api/v1/file/2026-09-15-18h21m55s_world3d-dark-living-fungal-throne_68f573.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 11 — La princesa cautiva",
+      "source": "/api/v1/file/2026-09-16-02h59m57s_seed916510_Locked%20camera%2C%20no%20zoom%2C%20no%20pan.%20The%20captive%20princess%20waits%20behind%20the%20tower%20window%2C%20her%20hair%20and%20dre.mp4?workspace=default",
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.541666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 12 — El caminante de ceniza",
+      "source": "/api/v1/file/2026-09-15-21h26m35s_world3d-dark-motion-knight-passage_b8a175.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 13 — El jinete PSX · Coast",
+      "source": "/api/v1/file/2026-09-16-02h57m08s_world3d-scene_0e0e8a.mp4?workspace=default",
+      "trim_start": 1.2,
+      "trim_end": 3.7333333333333334,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 14 — Sobre el hombro del invierno",
+      "source": "/api/v1/file/2026-09-15-18h08m25s_world3d-dark-living-winter-shoulder_54ebe7.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.7666666666666666,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 15 — El bosque de cobre",
+      "source": "/api/v1/file/2026-09-15-18h28m03s_world3d-dark-living-copper-trees_830dba.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 16 — Corazón de brasa",
+      "source": "/api/v1/file/2026-09-15-18h05m56s_world3d-dark-living-ember-heart_3c81b4.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 17 — La puerta del último gigante",
+      "source": "/api/v1/file/2026-09-15-18h29m12s_world3d-dark-living-final-gate_63ed9c.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.9,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 18 — La promesa cumplida",
+      "source": "/api/v1/file/2026-09-16-03h23m16s_seed916521_Locked%20camera.%20The%20knight%20with%20closed%20silver%20helmet%20gently%20guides%20the%20red-haired%20princess%20by%20the%20han.mp4?workspace=default",
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.333333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 19 — El tiempo pesa",
+      "source": "/api/v1/file/2026-09-15-19h42m12s_world3d-dark-still-time-wounds_07403c.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 20 — El jinete PSX · Amber Ice",
+      "source": "/api/v1/file/2026-09-16-03h20m29s_world3d-scene_5c5fdb.mp4?workspace=default",
+      "trim_start": 1.2,
+      "trim_end": 3.8,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 21 — La ruina dorada",
+      "source": "/api/v1/file/2026-09-15-18h19m31s_world3d-dark-living-golden-ruin_d2afb5.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.933333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 22 — El precio del alba",
+      "source": "/api/v1/file/2026-09-16-03h04m40s_seed916512_Locked%20camera%2C%20no%20pan%2C%20no%20zoom.%20A%20peaceful%20poignant%20farewell.%20The%20princess%20gently%20closes%20both%20hands.mp4?workspace=default",
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.166666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 23 — Sal sobre el mar",
+      "source": "/api/v1/file/2026-09-15-19h33m58s_world3d-dark-still-salt-sea_7c36fe.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.1666666666666665,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 24 — El puente de la tormenta",
+      "source": "/api/v1/file/2026-09-15-18h22m57s_world3d-dark-living-storm-bridge_0856b1.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.1666666666666665,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 25 — Los nombres bajo la arena",
+      "source": "/api/v1/file/2026-09-15-18h24m01s_world3d-dark-living-sand-library_2e8a29.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.0,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 26 — El dragón de jade",
+      "source": "/api/v1/file/2026-09-15-18h25m18s_world3d-dark-living-jade-dragon_40db4a.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 27 — El precio del alba",
+      "source": "/api/v1/file/2026-09-16-03h04m40s_seed916512_Locked%20camera%2C%20no%20pan%2C%20no%20zoom.%20A%20peaceful%20poignant%20farewell.%20The%20princess%20gently%20closes%20both%20hands.mp4?workspace=default",
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.125,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 28 — La marea negra",
+      "source": "/api/v1/file/2026-09-15-18h10m48s_world3d-dark-living-black-tide_349452.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 29 — La tumba de la luna",
+      "source": "/api/v1/file/2026-09-15-18h26m35s_world3d-dark-living-moon-grave_d42bfe.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 30 — La llama inmóvil",
+      "source": "/api/v1/file/2026-09-15-19h35m05s_world3d-dark-still-still-flame_078c3c.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.6666666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 31 — La vigilia blanca",
+      "source": "/api/v1/file/2026-09-15-19h36m08s_world3d-dark-still-winter-vigil_369179.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 32 — La polilla y la luna",
+      "source": "/api/v1/file/2026-09-15-19h37m10s_world3d-dark-still-moth-moon_0fc631.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 33 — Marfil contra incendio",
+      "source": "/api/v1/file/2026-09-15-19h38m20s_world3d-dark-still-ivory-fire_3756ac.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.6666666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 34 — Dos distancias",
+      "source": "/api/v1/file/2026-09-15-19h39m24s_world3d-dark-still-two-distances_2e56bc.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.6666666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 35 — Cobre sobre violeta",
+      "source": "/api/v1/file/2026-09-15-19h40m25s_world3d-dark-still-copper-night_577c5f.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 36 — Marea tras el muro",
+      "source": "/api/v1/file/2026-09-15-14h47m15s_world3d-creative-scarlet-tide-motion_a43997.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 37 — Órbita de terciopelo",
+      "source": "/api/v1/file/2026-09-15-14h59m52s_world3d-creative-rose-orbit-motion_78d998.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.4666666666666666,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 38 — La casa del huerto",
+      "source": "/api/v1/file/2026-09-15-15h01m09s_world3d-creative-glass-orchard-motion_3f9e6c.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 39 — El precio del alba",
+      "source": "/api/v1/file/2026-09-16-03h04m40s_seed916512_Locked%20camera%2C%20no%20pan%2C%20no%20zoom.%20A%20peaceful%20poignant%20farewell.%20The%20princess%20gently%20closes%20both%20hands.mp4?workspace=default",
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.333333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 40 — Ella sigue viviendo",
+      "source": "/api/v1/file/2026-09-16-03h21m53s_seed916520_Locked%20camera.%20This%20young%20adult%20woman%20with%20long%20copper%20red%20hair%20holds%20the%20empty%20silver%20helmet%20to%20her.mp4?workspace=default",
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.083333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 41 — Ventana al deshielo",
+      "source": "/api/v1/file/2026-09-15-15h02m22s_world3d-creative-amber-ice-motion_157069.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.033333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 42 — Radio de las mareas",
+      "source": "/api/v1/file/2026-09-15-15h03m37s_world3d-creative-coral-radio-motion_4e8d5b.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.933333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 43 — Observatorio del núcleo",
+      "source": "/api/v1/file/2026-09-15-15h05m02s_world3d-creative-cobalt-crater-motion_915fff.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 44 — Hacia las brasas",
+      "source": "/api/v1/file/2026-09-15-21h28m08s_world3d-dark-motion-knight-embers_28288a.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 45 — Calzada infinita · Neon",
+      "source": "/api/v1/file/2026-09-16-02h56m17s_world3d-scene_ec61f0.mp4?workspace=default",
+      "trim_start": 1.2,
+      "trim_end": 3.7666666666666666,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 46 — Sal y velocidad",
+      "source": "/api/v1/file/2026-09-15-21h29m42s_world3d-creative-motion-skate-coast_7bc813.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 47 — La ciudad pasa",
+      "source": "/api/v1/file/2026-09-15-21h31m23s_world3d-creative-motion-skate-neon_f1fa65.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 1.7333333333333334,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 48 — Carretera de nubes",
+      "source": "/api/v1/file/2026-09-15-21h33m01s_world3d-creative-motion-skate-clouds_d4ee8a.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 3.1333333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 49 — El mar al otro lado",
+      "source": "/api/v1/file/2026-09-15-21h34m21s_world3d-creative-motion-skate-portal_1568ac.mp4?workspace=default",
+      "trim_start": 0.4,
+      "trim_end": 2.966666666666667,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    },
+    {
+      "name": "CLIP 50 — Ella sigue viviendo",
+      "source": "/api/v1/file/2026-09-16-03h21m53s_seed916520_Locked%20camera.%20This%20young%20adult%20woman%20with%20long%20copper%20red%20hair%20holds%20the%20empty%20silver%20helmet%20to%20her.mp4?workspace=default",
+      "trim_start": 0.20833333333333334,
+      "trim_end": 5.958333333333333,
+      "muted": true,
+      "volume": 0,
+      "fit": "contain",
+      "transition": "none"
+    }
+  ],
+  "soundtrack": {
+    "name": "Que tú veas el alba",
+    "source": "/api/v1/file/2026-09-16-02h51m14s_seed916502_%5BVerse%5DEn%20la%20torre%20de%20obsidianauna%20princesa%20espera%20el%20sol.Un%20caballero%20va%20a%20buscarla%2Csin%20ej%C3%A9rci.wav?workspace=default",
+    "trim_start": 0,
+    "trim_end": 129.879,
+    "volume": 1,
+    "loop": false
+  }
+}

@@ -1386,7 +1386,14 @@
     "failed": "No se pudo cargar la pantalla. Comprueba la malla y el archivo.",
     "animateImage": "Animar esta capa",
     "transparent": "Conservar transparencia",
-    "transparentHelp": "Usa una imagen o un vídeo con canal alfa (por ejemplo, WebM transparente). Esta opción conserva el recorte; no elimina el fondo de un vídeo opaco."
+    "transparentHelp": "Usa una imagen o un vídeo con canal alfa (por ejemplo, WebM transparente). Esta opción conserva el recorte; no elimina el fondo de un vídeo opaco.",
+    "loopDetails": "Continuidad entre planos",
+    "pingPong": "Repetir hacia delante y hacia atrás",
+    "loopRange": "Repetir solo un tramo del vídeo",
+    "loopStart": "Inicio del tramo (s)",
+    "loopEnd": "Final del tramo (s)",
+    "timeOffset": "Tiempo acumulado entre planos (s)",
+    "loopDetailsHelp": "Ida y vuelta evita el salto al reiniciar; también invierte el movimiento. Usa el tiempo acumulado para continuar la misma animación en el siguiente plano."
   },
   "library": {
     "name": "Nombre de la escena",
@@ -1471,5 +1478,6 @@
   },
   "stillnessReview": "Ver cámara fija y poses",
   "movingCutoutsReview": "Personajes en movimiento · 6 clips ↗",
-  "portalRidesReview": "Ver calzada y dragón"
+  "portalRidesReview": "Ver calzada y dragón",
+  "kingdomRoadReview": "Viajes y película musical"
 }

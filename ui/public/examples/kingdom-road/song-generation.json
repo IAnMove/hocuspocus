@@ -1,0 +1,101 @@
+{
+  "request": {
+    "model_type": "yue2",
+    "prompt": "[Verse]\nEn la torre de obsidiana\nuna princesa espera el sol.\nUn caballero va a buscarla,\nsin ejército, por amor.\nCruza el mar sobre un dragón,\ncruza hielo, bosque y fuego.\nLleva un nombre en el corazón\ny una promesa contra el miedo.\n\n[Chorus]\nQue tú veas el alba,\nque tú vuelvas al mar.\nSi mi vida compra el día,\nyo la quiero entregar.\n\n[Verse]\nRompe el hierro de su celda,\nella vuelve a respirar.\nUna flecha lo atraviesa\ncuando la logra salvar.\nEl dragón los lleva a casa,\nél ya no puede caminar.\nElla toma sus dos manos,\nél sonríe al verla en paz.\n\n[Bridge]\nNo he perdido, estás viviendo.\nNo me llores, mira el mar.\nSalvé tu vida, estoy contento.\nYa me puedo descansar.\n\n[Outro]\nMuere el caballero sonriendo,\nla princesa ve el amanecer.\nLibre, junto al mar, viviendo,\nguarda su nombre para siempre.",
+    "alt_prompt": "Spanish vocals only, clear male baritone, dark fantasy epic folk rock, driving 112 BPM 4/4 beat, kick drum and snare, galloping bass, acoustic lute, dark synthesizer arpeggios, emotional and heroic, short two-bar instrumental introduction, sing every written line in order, tragic peaceful ending, full song, no extra verses, no spoken words",
+    "duration_seconds": 210,
+    "num_inference_steps": 32,
+    "guidance_scale": 1.0,
+    "temperature": 0.85,
+    "top_k": 100,
+    "top_p": 0.95,
+    "model_mode": 2,
+    "seed": 916502,
+    "generation_mode": "audio",
+    "_audio_sub_mode": "music",
+    "multi_prompts_gen_type": 2,
+    "video_length": 0,
+    "image_mode": 0,
+    "prompt_enhancer": "",
+    "repeat_generation": 1,
+    "batch_size": 1,
+    "override_profile": 3,
+    "lm_decoder_engine": "legacy",
+    "workspace": "default"
+  },
+  "job": {
+    "job_id": "9c7c6c17",
+    "task_id": "task-generation-9c7c6c17",
+    "root_task_id": "task-generation-9c7c6c17",
+    "status": "queued"
+  },
+  "status": {
+    "job_id": "9c7c6c17",
+    "task_id": "task-generation-9c7c6c17",
+    "root_task_id": "task-generation-9c7c6c17",
+    "status": "completed",
+    "progress": 100,
+    "step": 0,
+    "total_steps": 0,
+    "phase": "",
+    "message": "Done",
+    "output_files": [
+      "2026-09-16-02h51m14s_seed916502_[Verse]En la torre de obsidianauna princesa espera el sol.Un caballero va a buscarla,sin ejérci.wav"
+    ],
+    "error": null,
+    "task_timings": [
+      {
+        "panel_no": 1,
+        "panel_total": 1,
+        "prompt_preview": "[Verse]\nEn la torre de obsidiana\nuna princesa espera el sol.",
+        "status": "completed",
+        "phase_timings": [
+          {
+            "phase": "Loading model Music YuE2 3B...",
+            "seconds": 10.857
+          },
+          {
+            "phase": "Model loaded",
+            "seconds": 0.779
+          },
+          {
+            "phase": "Generating Audio",
+            "seconds": 12.679
+          },
+          {
+            "phase": "Denoising",
+            "seconds": 64.358
+          },
+          {
+            "phase": "VAE Decoding",
+            "seconds": 1.628
+          }
+        ],
+        "total_seconds": 90.689
+      }
+    ],
+    "created_at": 1789519784.409581,
+    "started_at": 1789519784.5825093,
+    "finished_at": 1789519875.5548124,
+    "processing_time_sec": 90.97,
+    "queue_position": null,
+    "generation_details": {
+      "model_type": "yue2",
+      "model_name": "Music YuE2 3B",
+      "generation_mode": "audio",
+      "execution_mode": "real",
+      "simulated": false,
+      "seed": 916502,
+      "steps": 32,
+      "guidance": 1.0,
+      "duration_seconds": 210,
+      "repeat": 1,
+      "prompt": "Spanish vocals only, clear male baritone, dark fantasy epic folk rock, driving 112 BPM 4/4 beat, kick drum and snare, galloping bass, acoustic lute, dark synthesizer arpeggios, emotional and heroic, short two-bar instrumental introduction, sing every written line in order, tragic peaceful ending, full song, no extra verses, no spoken words\n\n[Verse]\nEn la torre de obsidiana\nuna princesa espera el sol.\nUn caballero va a buscarla,\nsin ejército, por amor.\nCruza el mar sobre un dragón,\ncruza hielo, bosque y fuego.\nLleva un nombre en el corazón\ny una promesa contra el miedo.\n\n[Chorus]\nQue tú veas el alba,\nque tú vuelvas al mar.\nSi mi vida compra el día,\nyo la quiero entregar.\n\n[Verse]\nRompe el hierro de su celda,\nella vuelve a respirar.\nUna flecha lo atraviesa\ncuando la logra salvar.\nEl dragón los lleva a casa,\nél ya no puede caminar.\nElla toma sus dos manos,\nél sonríe al verla en paz.\n\n[Bridge]\nNo he perdido, estás viviendo.\nNo me llores, mira el mar.\nSalvé tu vida, estoy contento.\nYa me puedo descansar.\n\n[Outro]\nMuere el caballero sonriendo,\nla princesa ve el amanecer.\nLibre, junto al mar, viviendo,\nguarda su nombre para siempre.",
+      "lora_count": 0
+    },
+    "h3_window_plan": null,
+    "oom_info": null
+  },
+  "duration": 129.87866666666667,
+  "filename": "2026-09-16-02h51m14s_seed916502_[Verse]En la torre de obsidianauna princesa espera el sol.Un caballero va a buscarla,sin ejérci.wav"
+}

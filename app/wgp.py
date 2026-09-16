@@ -35,6 +35,7 @@ import json
 import numpy as np
 import importlib
 from shared.utils import notification_sound
+from shared.utils.weight_variants import installed_weight_variant
 from shared.utils.loras_mutipliers import preparse_loras_multipliers, parse_loras_multipliers
 from shared.utils.utils import convert_tensor_to_image, save_image, get_video_info, get_file_creation_date, convert_image_to_video, calculate_new_dimensions, convert_image_to_tensor, calculate_dimensions_and_resize_image, rescale_and_crop, get_video_frame, resize_and_remove_background, rgb_bw_to_rgba_mask, to_rgb_tensor
 from shared.utils.utils import calculate_new_dimensions, get_outpainting_frame_location, get_outpainting_full_area_dimensions
@@ -3133,7 +3134,7 @@ def get_model_filename(model_type, quantization ="int8", dtype_policy = "", modu
         else:
             raw_filename = choices[0]
 
-    return raw_filename
+    return installed_weight_variant(raw_filename, choices, models_def.get(model_type), get_local_model_filename)
 
 def get_transformer_dtype(model_type, transformer_dtype_policy):
     base_model_type = get_base_model_type(model_type)

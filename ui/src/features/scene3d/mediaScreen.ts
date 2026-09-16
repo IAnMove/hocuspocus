@@ -1,8 +1,9 @@
 import { durableScene3DSourceUrl, parseScene3DSourceRef } from './slotSource.ts'
 import type { Scene3DSourceRef } from './types.ts'
 import { parseImagePoses, type ImagePose } from './imagePoseSequence'
+import { loopedMediaTime, parseMediaLoop, type MediaLoop } from './mediaLoop'
 
-export type MediaScreen = {
+export type MediaScreen = MediaLoop & {
   sourceUrl: string
   sourceRef?: Scene3DSourceRef
   media: 'image' | 'video'
@@ -85,12 +86,14 @@ export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
     loop: value.loop !== false, flipY: value.flipY === true,
     ...(value.transparent || poseSequence ? { transparent: true } : {}),
     ...(poseSequence ? { poseSequence } : {}),
+    ...parseMediaLoop(value),
   }
 }
 
-export function mediaScreenTime(seconds: number, duration: number, screen: Pick<MediaScreen, 'start' | 'speed' | 'loop'>) {
+export function mediaScreenTime(seconds: number, duration: number, screen: Pick<MediaScreen, 'start' | 'speed' | 'loop'> & MediaLoop) {
   if (!Number.isFinite(duration) || duration <= 0) return 0
-  const time = screen.start + Math.max(0, seconds) * screen.speed
+  const time = Math.max(screen.start, screen.loopRange?.[0] ?? 0) + (Math.max(0, seconds) + (screen.timeOffset ?? 0)) * screen.speed
+  if (screen.loop && (screen.loopRange || screen.pingPong)) return loopedMediaTime(time, duration, screen)
   return screen.loop ? ((time % duration) + duration) % duration : Math.min(time, Math.max(0, duration - .001))
 }
 

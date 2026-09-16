@@ -3,6 +3,7 @@ from copy import deepcopy
 import importlib
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -33,6 +34,31 @@ def _load_model_package(name):
 
 AuK = _load_model_package("auk")
 YuE2 = _load_model_package("yue2")
+
+
+@pytest.mark.parametrize("handler,model", [(YuE2, "yue2"), (AuK, "auk"), (AuK, "auk_flash")])
+def test_metadata_lora_lookup_uses_native_handler_call_signature(handler, model, tmp_path):
+    # Final metadata publication calls the three-argument WanGP contract.
+    family = "yue2" if model == "yue2" else "auk"
+    assert handler.get_lora_dir(model, object(), str(tmp_path)) == os.path.join(str(tmp_path), family)
+
+
+def test_yue2_reuses_existing_precision_for_acoustic_and_ar(monkeypatch):
+    from shared.utils.weight_variants import installed_weight_variant
+    module = importlib.import_module(YuE2.__module__)
+    monkeypatch.setattr(module.fl, "locate_file", lambda path, **_: path if path.endswith("_bf16.safetensors") else None)
+    native = json.loads((ROOT / "app/defaults/yue2.json").read_text())["model"]
+    definition = YuE2.query_model_def("yue2", native)
+    assert len(definition["text_encoder_URLs"]) == 1
+    assert definition["text_encoder_URLs"][0].endswith("_bf16.safetensors")
+    preferred = native["URLs"][1]
+    assert installed_weight_variant(preferred, native["URLs"], definition, lambda url, **_: url.endswith("_bf16.safetensors")) == native["URLs"][0]
+    assert installed_weight_variant(preferred, native["URLs"], {}, lambda *_, **__: True) == preferred
+    assert installed_weight_variant(preferred, native["URLs"], definition, lambda *_, **__: True) == preferred
+    monkeypatch.setattr(module.fl, "locate_file", lambda *_, **__: None)
+    definition = YuE2.query_model_def("yue2", native)
+    assert len(definition["text_encoder_URLs"]) == 2
+    assert installed_weight_variant(preferred, native["URLs"], definition, lambda *_, **__: False) == preferred
 
 
 class Resources:

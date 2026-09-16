@@ -22,6 +22,12 @@ lines. Put language, genre, instruments, mood, vocal character and tempo in Musi
 Style. Repeat chorus words explicitly. Prompt enhancement is off by default.
 """
 
+
+def installed_variants(urls, folder=""):
+    """Reuse a complete local precision variant before downloading another."""
+    existing = [url for url in urls if fl.locate_file(os.path.join(folder, os.path.basename(url)), error_if_none=False)]
+    return existing or urls
+
 class family_handler:
     @staticmethod
     def query_supported_types():
@@ -40,12 +46,13 @@ class family_handler:
         return {"music": (2195, "Music"), "tts": (2200, "TTS")}
 
     @staticmethod
-    def get_lora_dir(base_model_type):
-        return ARCHITECTURE
+    def get_lora_dir(base_model_type, args, lora_root):
+        return os.path.join(lora_root, ARCHITECTURE)
 
     @staticmethod
     def query_model_def(base_model_type, model_def):
         return {
+            "prefer_installed_variants": True,
             "group": "music", "audio_only": True, "image_outputs": False,
             "sliding_window": False, "guidance_max_phases": 1,
             "no_negative_prompt": True, "inference_steps": True,
@@ -53,7 +60,7 @@ class family_handler:
             "embedded_guidance": False, "image_prompt_types_allowed": "",
             "profiles_dir": [ARCHITECTURE], "compile": False,
             "lm_engines": ["cg", "vllm"], "prompt_class": "Lyrics",
-            "text_encoder_URLs": [f"https://huggingface.co/{REPO_ID}/resolve/{REVISION}/{TEXT_ENCODER_FOLDER}/YuE2_AR_{precision}.safetensors" for precision in ("bf16", "int8_convrot")],
+            "text_encoder_URLs": installed_variants([f"https://huggingface.co/{REPO_ID}/resolve/{REVISION}/{TEXT_ENCODER_FOLDER}/YuE2_AR_{precision}.safetensors" for precision in ("bf16", "int8_convrot")], TEXT_ENCODER_FOLDER),
             "text_encoder_folder": TEXT_ENCODER_FOLDER,
             "alt_prompt": {"label": "Music Style", "placeholder": "Language, genre, instruments, mood, vocal character and tempo", "lines": 3},
             "model_modes": {"choices": [("Melody and chords", 0), ("Melody only", 1), ("Direct generation", 2)], "default": 0, "label": "Composition Planning"},
