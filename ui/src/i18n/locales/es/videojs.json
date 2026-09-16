@@ -1,0 +1,117 @@
+{
+  "title": "Vídeo JS",
+  "experimental": "Experimental",
+  "subtitle": "Pide a un LLM escenas escritas en JavaScript (canvas 2D o 3D con three.js), previsualízalas en directo, ajústalas y exporta un MP4.",
+  "footer": "{{scenes}} escenas · {{seconds}} s · el código de las escenas se ejecuta aislado, sin red ni acceso a HocusPocus.",
+  "toolbar": {
+    "undo": "Deshacer",
+    "new": "Nuevo",
+    "demo": "Demo",
+    "import": "Importar JSON",
+    "export": "Descargar JSON",
+    "videoTitle": "Título del vídeo",
+    "importFailed": "No se pudo importar el archivo: {{message}}"
+  },
+  "stage": {
+    "region": "Previsualización de Vídeo JS",
+    "loading": "Cargando escenas…",
+    "crashed": "El sandbox de escenas se detuvo. Corrige la escena y recarga.",
+    "reload": "Recargar",
+    "play": "Reproducir",
+    "pause": "Pausa",
+    "restart": "Volver al inicio",
+    "timeline": "Posición del vídeo"
+  },
+  "prompt": {
+    "region": "Crear con LLM",
+    "createTitle": "Crear con el LLM",
+    "createLabel": "Describe el vídeo",
+    "createPlaceholder": "Ejemplo: una presentación de 6 diapositivas sobre los resultados trimestrales, estilo oscuro y elegante, gráficos animados y cierre con llamada a la acción.",
+    "create": "Crear vídeo",
+    "createHelp": "Sustituye las escenas actuales (se puede deshacer). Usa el LLM configurado en Ajustes.",
+    "format": "Formato",
+    "fps": "FPS",
+    "adjustTitle": "Ajustar todo el vídeo",
+    "adjustLabel": "Cambio para todo el vídeo",
+    "adjustPlaceholder": "Ejemplo: paleta más cálida, transiciones más rápidas y añade una escena con tres cifras clave.",
+    "adjust": "Ajustar vídeo",
+    "working": "El LLM está escribiendo las escenas. Con vídeos largos puede tardar."
+  },
+  "presets": {
+    "presentation": {
+      "label": "Presentación",
+      "request": "Una presentación de 6 escenas para un producto nuevo: título, problema, solución, tres características clave, una métrica y una llamada a la acción. Estilo oscuro, moderno y elegante con animaciones escalonadas suaves."
+    },
+    "product": {
+      "label": "Promo de producto",
+      "request": "Una promo de producto de 20 segundos, enérgica, con tipografía cinética llamativa, transiciones rápidas, lista de características y un cierre con el título como logotipo."
+    },
+    "data": {
+      "label": "Historia con datos",
+      "request": "Una historia con datos en 5 escenas: una pregunta inicial, tres gráficos animados con contadores y etiquetas, y una conclusión. Estética editorial limpia."
+    },
+    "showcase3d": {
+      "label": "Escaparate 3D",
+      "request": "Un escaparate 3D cinematográfico: formas abstractas brillantes iluminadas como en estudio, cámara orbitando lentamente y textos 2D superpuestos con el mensaje principal."
+    }
+  },
+  "formats": {
+    "landscape": "16:9 horizontal",
+    "portrait": "9:16 vertical",
+    "square": "1:1 cuadrado"
+  },
+  "scenes": {
+    "title": "Escenas",
+    "count_one": "{{count}} escena",
+    "count_other": "{{count}} escenas",
+    "add2d": "Escena 2D",
+    "add3d": "Escena 3D",
+    "moveLeft": "Mover antes",
+    "moveRight": "Mover después",
+    "duplicate": "Duplicar escena",
+    "delete": "Eliminar escena",
+    "hasError": "Esta escena tiene un error"
+  },
+  "editor": {
+    "region": "Editor de escena",
+    "sceneTitle": "Título de la escena",
+    "kind": "Tipo",
+    "duration": "Duración (s)",
+    "transition": "Transición de entrada",
+    "transitionDuration": "Transición (s)",
+    "code": "Código de la escena (JavaScript)",
+    "unsaved": "Cambios sin aplicar · Ctrl+Enter",
+    "run": "Aplicar código",
+    "line": "línea {{line}}",
+    "fix": "Corregir con LLM",
+    "adjustLabel": "Cambio para esta escena",
+    "adjustPlaceholder": "Ajusta esta escena: p. ej. título más grande, añade un fondo sutil de partículas…",
+    "adjust": "Ajustar escena"
+  },
+  "transitions": {
+    "none": "Ninguna",
+    "fade": "Fundido",
+    "slide-left": "Deslizar a la izquierda",
+    "slide-up": "Deslizar hacia arriba",
+    "zoom": "Zoom",
+    "wipe": "Cortinilla"
+  },
+  "errors": {
+    "compile": "El código no compila",
+    "setup": "Falló setup()",
+    "render": "Falló render()",
+    "timeout": "La escena tardó demasiado",
+    "runtime": "Error del sandbox"
+  },
+  "export": {
+    "start": "Renderizar MP4",
+    "rendering": "Renderizando fotograma {{current}} de {{total}}",
+    "publishing": "Guardando MP4 en Vídeos…",
+    "progress": "Progreso de exportación",
+    "cancel": "Cancelar",
+    "done": "Guardado en Vídeos: {{name}}",
+    "failed": "La exportación falló: {{message}}",
+    "blockedErrors": "Corrige los errores de las escenas antes de exportar.",
+    "blockedLoading": "Esperando a que carguen las escenas."
+  }
+}

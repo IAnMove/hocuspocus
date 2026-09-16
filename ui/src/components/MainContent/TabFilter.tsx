@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Activity, BookOpen, Boxes, CircleHelp, Clapperboard, FolderKanban, Languages,
+  Activity, BookOpen, Boxes, CircleHelp, Clapperboard, CodeXml, FolderKanban, Languages,
   Library, MonitorPlay, Search, Settings, Sparkles, Video, WandSparkles, X,
 } from 'lucide-react'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
@@ -243,6 +243,7 @@ export function TabFilter() {
     { value: 'world3d', label: t('tabs.world3d'), description: t('descriptions.world3d'), icon: <Boxes size={15} />, action: () => openFilter('world3d') },
     { value: 'character-replacement', featured: true, label: t('tabs.characterReplacement'), description: t('descriptions.characterReplacement'), icon: <WandSparkles size={15} />, action: () => openFilter('character-replacement') },
     { value: 'animate3d', label: t('tabs.animate3d'), description: t('descriptions.animate3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('animate3d') },
+    { value: 'videojs', label: t('tabs.videojs'), description: t('descriptions.videojs'), icon: <CodeXml size={15} />, action: () => openFilter('videojs') },
   ]
   const productionItems: MenuItem[] = [
     { selected: activeCategory === 'production' && sidebarMode === 'director' && sidebarOpen, label: t('labs.director'), description: t('descriptions.director'), icon: <Clapperboard size={15} />, action: () => {

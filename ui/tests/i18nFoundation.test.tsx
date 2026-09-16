@@ -307,7 +307,7 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
 
 test('resources register the extraInfo, storyLab, videoEditor and help namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'videojs'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)

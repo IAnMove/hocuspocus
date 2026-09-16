@@ -30,6 +30,8 @@ const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
   .then(module => ({ default: module.SceneAnimatorPanel })))
 const Scene3DEditorPanel = lazy(() => import('../../features/scene3d/Scene3DEditorPanel')
   .then(module => ({ default: module.Scene3DEditorPanel })))
+const VideoJsPanel = lazy(() => import('../../features/videojs/VideoJsPanel')
+  .then(module => ({ default: module.VideoJsPanel })))
 const CharacterReplacementWorkspace = lazy(() => import('../../features/characterReplacement/CharacterReplacementWorkspace')
   .then(module => ({ default: module.CharacterReplacementWorkspace })))
 const RigAnimatePanel = lazy(() => import('../Sidebar/RigAnimatePanel')
@@ -645,6 +647,12 @@ export function MainContent() {
           <div className="flex-1 overflow-y-auto p-4 md:p-8">
             <div className="max-w-[1600px] mx-auto">
               <Scene3DEditorPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'videojs' ? (
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
+            <div className="max-w-[1600px] mx-auto">
+              <VideoJsPanel />
             </div>
           </div>
         ) : mediaFilter === 'animate3d' ? (

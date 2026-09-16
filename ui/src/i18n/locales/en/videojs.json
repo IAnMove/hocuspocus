@@ -1,0 +1,117 @@
+{
+  "title": "Video JS",
+  "experimental": "Experimental",
+  "subtitle": "Ask an LLM for scenes written in JavaScript (2D canvas or 3D with three.js), preview them live, adjust them and export an MP4.",
+  "footer": "{{scenes}} scenes · {{seconds}} s · scene code runs isolated, without network or access to HocusPocus.",
+  "toolbar": {
+    "undo": "Undo",
+    "new": "New",
+    "demo": "Demo",
+    "import": "Import JSON",
+    "export": "Download JSON",
+    "videoTitle": "Video title",
+    "importFailed": "Could not import the file: {{message}}"
+  },
+  "stage": {
+    "region": "Video JS preview",
+    "loading": "Loading scenes…",
+    "crashed": "The scene sandbox stopped. Fix the scene and reload.",
+    "reload": "Reload",
+    "play": "Play",
+    "pause": "Pause",
+    "restart": "Back to start",
+    "timeline": "Video position"
+  },
+  "prompt": {
+    "region": "Create with LLM",
+    "createTitle": "Create with the LLM",
+    "createLabel": "Describe the video",
+    "createPlaceholder": "Example: a 6-slide presentation about our quarterly results, dark elegant style, animated charts, ending with a call to action.",
+    "create": "Create video",
+    "createHelp": "Replaces the current scenes (you can undo). Uses the LLM configured in Settings.",
+    "format": "Format",
+    "fps": "FPS",
+    "adjustTitle": "Adjust the whole video",
+    "adjustLabel": "Change request for the whole video",
+    "adjustPlaceholder": "Example: warmer palette, faster transitions and add a scene with three key figures.",
+    "adjust": "Adjust video",
+    "working": "The LLM is writing the scenes. This can take a while with long videos."
+  },
+  "presets": {
+    "presentation": {
+      "label": "Presentation",
+      "request": "A 6-scene presentation introducing a new product: title, problem, solution, three key features, a metric and a call to action. Modern, elegant dark style with smooth staggered animations."
+    },
+    "product": {
+      "label": "Product promo",
+      "request": "A 20-second energetic product promo with bold kinetic typography, quick transitions, a feature list and a final logo-style title card."
+    },
+    "data": {
+      "label": "Data story",
+      "request": "A data story in 5 scenes: an opening question, three animated charts with counters and labels, and a conclusion. Clean editorial look."
+    },
+    "showcase3d": {
+      "label": "3D showcase",
+      "request": "A cinematic 3D showcase: abstract glossy shapes lit like a studio, slow orbiting camera, and 2D captions overlaid with the main message."
+    }
+  },
+  "formats": {
+    "landscape": "16:9 horizontal",
+    "portrait": "9:16 vertical",
+    "square": "1:1 square"
+  },
+  "scenes": {
+    "title": "Scenes",
+    "count_one": "{{count}} scene",
+    "count_other": "{{count}} scenes",
+    "add2d": "2D scene",
+    "add3d": "3D scene",
+    "moveLeft": "Move earlier",
+    "moveRight": "Move later",
+    "duplicate": "Duplicate scene",
+    "delete": "Delete scene",
+    "hasError": "This scene has an error"
+  },
+  "editor": {
+    "region": "Scene editor",
+    "sceneTitle": "Scene title",
+    "kind": "Type",
+    "duration": "Duration (s)",
+    "transition": "Entry transition",
+    "transitionDuration": "Transition (s)",
+    "code": "Scene code (JavaScript)",
+    "unsaved": "Unapplied changes · Ctrl+Enter",
+    "run": "Apply code",
+    "line": "line {{line}}",
+    "fix": "Fix with LLM",
+    "adjustLabel": "Change request for this scene",
+    "adjustPlaceholder": "Adjust this scene: e.g. bigger title, add a subtle particle background…",
+    "adjust": "Adjust scene"
+  },
+  "transitions": {
+    "none": "None",
+    "fade": "Fade",
+    "slide-left": "Slide left",
+    "slide-up": "Slide up",
+    "zoom": "Zoom",
+    "wipe": "Wipe"
+  },
+  "errors": {
+    "compile": "The code does not compile",
+    "setup": "setup() failed",
+    "render": "render() failed",
+    "timeout": "The scene took too long",
+    "runtime": "Sandbox error"
+  },
+  "export": {
+    "start": "Render MP4",
+    "rendering": "Rendering frame {{current}} of {{total}}",
+    "publishing": "Saving MP4 to Videos…",
+    "progress": "Export progress",
+    "cancel": "Cancel",
+    "done": "Saved to Videos: {{name}}",
+    "failed": "Export failed: {{message}}",
+    "blockedErrors": "Fix scene errors before exporting.",
+    "blockedLoading": "Waiting for the scenes to load."
+  }
+}
