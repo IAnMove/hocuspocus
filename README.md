@@ -294,6 +294,8 @@ The [Kingdom Road collection](ui/public/examples/kingdom-road/README.md) extends
 
 The preview fits portrait scenes between black sidebars while keeping editor controls readable. **Expand video** shows just the picture fullscreen. Select covered characters, props or backgrounds in **Scene objects**, then move, rotate or scale them. For a cutout layer, enable **Animate this layer** and choose a video from the gallery or upload one; its depth and individual PSX treatment are retained in saved scenes and native exports.
 
+If automatic background removal leaves color inside a ring, between ropes or along an edge, select the layer and enable **Image appearance → Clean transparency**. Choose the leftover background color, then increase **Tolerance** gradually and adjust **Soft edge**. The cleanup works on still images and animated cutouts, keeps existing transparency, and can be combined with PSX. It is saved with the scene and can be disabled without changing the source file. Colors shared by the object and its background need a more selective mask; keep tolerance low to protect pale details.
+
 For a stationary viewpoint, select **Fixed camera**. Image cutouts can use **Held poses** with per-pose duration, relative height and ground placement. **Preserve transparency** supports images and videos that already have alpha, including transparent WebM; it does not segment an opaque video. These controls remain editable in saved scenes and portable templates.
 
 The [Portal Ride study](ui/public/examples/skate-portal-v2/README.md) expands that experiment to three continuous world changes. Native world effects now support editable position/rotation/scale keyframes and screen-projected portal video with its own start, speed and loop controls.

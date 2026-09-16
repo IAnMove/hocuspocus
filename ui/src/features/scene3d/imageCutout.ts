@@ -1,5 +1,6 @@
 import { DoubleSide, Mesh, MeshBasicMaterial, MeshStandardMaterial, type Object3D, type Texture } from 'three'
 import { applyPsxImageMaterial } from './imageLook'
+import { applyImageColorKey } from './imageColorKey'
 import { imageWindowGeometry } from './imageWindows'
 import { imageContactShadow, textureFootprint } from './imageGrounding'
 import type { Scene3DSlot } from './types'
@@ -12,6 +13,7 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
     transparent: true, alphaTest: .05, depthWrite: true }
   const material = slot.imageLook?.unlit ? new MeshBasicMaterial(options) : new MeshStandardMaterial({ ...options, roughness: .9 })
   if (texture && slot.imageLook?.psx) applyPsxImageMaterial(material, texture, slot.imageLook.psx)
+  if (texture && slot.imageLook?.colorKey) applyImageColorKey(material, slot.imageLook.colorKey)
   const mesh = new Mesh(imageWindowGeometry(aspect, slot.imageLook?.windows), material)
   groundImageCutout(mesh, slot, texture, aspect)
   poseImageCutout(mesh, slot)

@@ -1439,7 +1439,12 @@
     "intensity": "Intensidad PSX",
     "grounded": "Ajustar apoyo a los pies",
     "shadow": "Sombra de contacto",
-    "roll": "Inclinación (°)"
+    "roll": "Inclinación (°)",
+    "cleanTransparency": "Limpiar transparencia",
+    "colorKeyHelp": "Selecciona el color de fondo que queda en los huecos y bordes. Empieza con poca tolerancia para conservar los detalles. Se aplica a esta imagen o capa animada; puedes desactivarlo cuando quieras.",
+    "backgroundColor": "Color de fondo a eliminar",
+    "keyTolerance": "Tolerancia",
+    "keySoftness": "Borde suave"
   },
   "preview": {
     "title": "Vista previa",

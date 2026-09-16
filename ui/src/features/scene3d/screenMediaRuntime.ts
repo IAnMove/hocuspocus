@@ -2,6 +2,7 @@ import { CanvasTexture, DoubleSide, Mesh, MeshBasicMaterial, SRGBColorSpace, typ
 import { mediaScreenRect, mediaScreenTime, type MediaScreen } from './mediaScreen.ts'
 import { SCREEN_PLANE_NAME, attachScreenPlane, detachScreenPlane, screenUsesPlane } from './screenPlane.ts'
 import { applyPsxImageMaterial, type ImageLook } from './imageLook'
+import { applyImageColorKey } from './imageColorKey'
 import { loadImagePoses } from './imagePoseRuntime'
 
 export type ScreenMediaRuntime = {
@@ -57,6 +58,7 @@ function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: b
   material.map = texture
   if (screen.transparent || screen.poseSequence) { material.transparent = true; material.alphaTest = .05; material.depthWrite = true }
   if (imagePlate?.look?.psx) applyPsxImageMaterial(material, texture, imagePlate.look.psx)
+  if (imagePlate?.look?.colorKey) applyImageColorKey(material, imagePlate.look.colorKey)
   return { attachedPlane, target, previous, canvas, context, texture, material }
 }
 
@@ -84,7 +86,7 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
     if (!width || !height || abort.signal.aborted) return
     const r = mediaScreenRect(canvas.width, canvas.height, width, height, screen.fit)
     context.clearRect(0, 0, canvas.width, canvas.height)
-    if (!screen.transparent) { context.fillStyle = '#080c13'; context.fillRect(0, 0, canvas.width, canvas.height) }
+    if (!screen.transparent && !imagePlate?.look?.colorKey) { context.fillStyle = '#080c13'; context.fillRect(0, 0, canvas.width, canvas.height) }
     context.drawImage(source, r.x, r.y, r.width, r.height); texture.needsUpdate = true
     onFrame()
   }

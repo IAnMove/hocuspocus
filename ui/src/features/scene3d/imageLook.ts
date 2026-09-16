@@ -1,7 +1,8 @@
 import { NearestFilter, Vector2, type MeshBasicMaterial, type MeshStandardMaterial, type Texture } from 'three'
 import { parseImageWindows, type ImageWindow } from './imageWindows'
+import { parseImageColorKey, type ImageColorKey } from './imageColorKey'
 
-export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; roll?: number; windows?: ImageWindow[] }
+export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; roll?: number; windows?: ImageWindow[]; colorKey?: ImageColorKey }
 
 function isPositiveFinite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -11,6 +12,8 @@ export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as ImageLook
   const look: ImageLook = {}
+  const colorKey = parseImageColorKey(value.colorKey)
+  if (colorKey) look.colorKey = colorKey
   if (typeof value.roll === 'number' && Number.isFinite(value.roll)) look.roll = Math.max(-180, Math.min(180, value.roll))
   const windows = parseImageWindows(value.windows)
   if (windows) look.windows = windows

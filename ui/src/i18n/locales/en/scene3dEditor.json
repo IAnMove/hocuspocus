@@ -1439,7 +1439,12 @@
     "intensity": "PSX intensity",
     "grounded": "Align ground to visible feet",
     "shadow": "Contact shadow",
-    "roll": "Tilt (°)"
+    "roll": "Tilt (°)",
+    "cleanTransparency": "Clean transparency",
+    "colorKeyHelp": "Select the leftover background color to clear enclosed gaps and edges. Start with low tolerance to preserve details. Applies to this image or moving layer; you can turn it off at any time.",
+    "backgroundColor": "Background color to remove",
+    "keyTolerance": "Tolerance",
+    "keySoftness": "Soft edge"
   },
   "preview": {
     "title": "Preview",

@@ -35,6 +35,22 @@ test('transparent videos retain alpha instead of painting an opaque matte undern
   } finally { runtime.dispose(); h.restore() }
 })
 
+test('color cleanup survives the moving-layer material clone and keeps letterboxing transparent', async () => {
+  const h = mediaHarness(), screen = { ...defaultMediaScreen(), media: 'video', sourceUrl: '/lantern.mp4' }
+  h.mesh.material.map = null
+  const look = { colorKey: { color: '#c2cec5', tolerance: .06, softness: .04 }, psx: 1 }
+  const runtime = await bindScreenMedia(h.mesh, screen, false, new AbortController().signal, () => {}, { look })
+  try {
+    const shader = { uniforms: {}, fragmentShader: '#include <map_fragment>\n#include <alphatest_fragment>' }
+    h.mesh.material.onBeforeCompile(shader)
+    assert.ok(shader.uniforms.hpKeyColor)
+    assert.ok(shader.uniforms.hpPsxGrid)
+    assert.equal(h.mesh.material.transparent, true)
+    assert.equal(h.paint.clears, 1)
+    assert.equal(h.paint.fills, 0, 'cleanup must not add a dark opaque frame around the source')
+  } finally { runtime.dispose(); h.restore() }
+})
+
 test('no-op and same-target requests await decoded content and repaint on backward seek', async () => {
   const h = mediaHarness(), screen = { ...defaultMediaScreen(), media: 'video', sourceUrl: '/test.mp4' }
   const repaints = []
