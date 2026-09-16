@@ -92,3 +92,13 @@ test('export readiness rejects pending, stale and failed screen bindings', () =>
   assert.equal(worldAssetsReady(world, [{ ...slot, screen: { ...slot.screen, sourceUrl: '/different.mp4' } }]), false)
   gpu.screenError = new Error('missing mesh'); assert.throws(() => worldAssetsReady(world, [slot]), /missing mesh/)
 })
+
+test('an explicitly opaque imported video remains ready after document normalization', () => {
+  const slot = applyScene3DTemplate('monitor-detail').slots[0]
+  slot.screen = { ...slot.screen, sourceUrl: '/examples/background.mp4', media: 'video', transparent: false }
+  const normalized = { ...slot, screen: parseMediaScreen(slot.screen) }
+  const gpu = { mountKey: slotMountKey(normalized), loaded: true, screen: { ready: true } }
+  const world = { dressingReady: true, slots: new Map([[slot.id, gpu]]) }
+  assert.equal(worldAssetsReady(world, [slot]), true)
+  assert.equal(worldAssetsReady(world, [{ ...slot, screen: { ...slot.screen, transparent: true } }]), false)
+})

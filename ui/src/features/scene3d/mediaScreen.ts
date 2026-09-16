@@ -107,6 +107,6 @@ export function mediaScreenMountKey(screen?: MediaScreen) {
   return JSON.stringify([
     screen.sourceUrl, screen.media, screen.mode, screen.targetMesh, screen.anchor,
     screen.offset, screen.pitch, screen.yaw, screen.roll, screen.width, screen.height, screen.style, screen.fit, screen.flipY,
-    screen.transparent, screen.poseSequence?.map(pose => pose.sourceUrl),
+    Boolean(screen.transparent), screen.poseSequence?.map(pose => pose.sourceUrl),
   ])
 }
