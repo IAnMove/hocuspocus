@@ -1049,5 +1049,29 @@
     "panelUnavailable": "El panel de efectos de sonido no está disponible. Abre Audio → SFX y vuelve a intentarlo.",
     "duration": "Duración: {{seconds}} s",
     "videoDuration": "El vídeo de salida conserva la duración del vídeo fuente y sustituye su audio."
+  },
+  "yue2": {
+    "planning": "Planificación musical",
+    "chords": "Melodía y acordes",
+    "melody": "Solo melodía",
+    "direct": "Generación directa",
+    "durationHint": "La duración es un límite máximo: la canción puede terminar antes. Escribe la letra y describe el sonido en Estilo musical.",
+    "license": "Pesos CC BY-NC 4.0: uso no comercial."
+  },
+  "auk": {
+    "mode": "Modo AuK",
+    "textMode": "Crear voz desde instrucciones",
+    "sourceMode": "Clonar, editar o limpiar una grabación",
+    "source": "Audio de referencia o grabación original",
+    "hint": "Escribe la tarea completa en el prompt. Empieza con 5 segundos; con audio se usa el inicio del clip y la salida no supera su duración. AuK crea una grabación nueva: revisa las palabras y la voz.",
+    "examples": "Ejemplos de instrucciones",
+    "create": "Say \"Welcome back.\" in a warm, calm female voice.",
+    "clone": "Say the following with the same voice: \"Welcome back.\"",
+    "edit": "Replace \"tomorrow\" with \"next week\", keeping the same speaker and tone.",
+    "clean": "Remove background noise and reverberation while preserving all spoken words and speakers.",
+    "separate": "Keep only the second speaker in order of appearance and remove the other speakers.",
+    "language": "El proveedor documenta inglés y chino; el español no está validado. El componente Qwen tiene condiciones de investigación/evaluación; consulta su licencia para uso comercial.",
+    "steps": "Pasos de síntesis",
+    "guidance": "Intensidad de seguimiento de instrucciones"
   }
 }

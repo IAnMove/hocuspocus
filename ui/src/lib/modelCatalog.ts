@@ -70,8 +70,8 @@ export interface ResolvedModelCatalog {
 
 const IMAGE_FAMILIES = new Set(['flux', 'flux2', 'qwen', 'z_image', 'krea2', 'hidream', 'minimax'])
 const IMAGE_ARCH = /^(flux|pi_flux2|qwen_image|z_image|krea2|hidream|minimax_image)/
-const MUSIC_ARCH = /^(ace_step|minimax_music|heartmula)/
-const SPEECH_ARCH = /^(chatterbox|qwen3_tts|kugelaudio|index_tts2)/
+const MUSIC_ARCH = /^(ace_step|minimax_music|heartmula|yue2)/
+const SPEECH_ARCH = /^(chatterbox|qwen3_tts|kugelaudio|index_tts2|auk)/
 const TALKING = /multitalk|infinitetalk|fantasy|avatar|steadydancer|longcat_avatar|animate/
 const VIDEO_EDIT = /lucy_edit|kiwi_edit|chrono_edit|viggle|scail|recast|wanmove/
 const VIDEO_CONTROL = /vace|standin|mocha|phantom|sky_df|recam|fun_inp|lynx/
@@ -97,6 +97,9 @@ const EXACT_REQUIREMENTS: Record<string, CatalogRequirements> = {
 }
 
 const ARCH_REQUIREMENTS: Array<[string, CatalogRequirements]> = [
+  // No measured memory minima yet. Avoid inventing the generic model estimate.
+  ['yue2', {}],
+  ['auk', {}],
   ['minimax_music3', { vram_gb: 24, ram_gb: 32, storage_gb: 28, comfortable_vram_gb: 24 }],
   ['h3_advanced', { vram_gb: 24, ram_gb: 32, comfortable_vram_gb: 24 }],
   ['minimax_h3', { vram_gb: 24, ram_gb: 32, comfortable_vram_gb: 24 }],

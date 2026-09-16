@@ -11,7 +11,7 @@ import { sourceRefFromOutput } from '../scene3d/slotSource'
 import { characterFromSlot, characterSlotPatch } from '../scene3d/speech/characterBinding'
 import { modelDigest } from '../scene3d/speech/profiles'
 import { CharacterVoiceFields } from './CharacterVoiceFields'
-import type { CharacterVoice } from '../../lib/characterVoice'
+import { isCharacterVoiceReady, type CharacterVoice } from '../../lib/characterVoice'
 import { randomUuid } from '../../lib/uuid'
 import { CharacterDefinitionSpeechTools } from './CharacterDefinitionSpeechTools'
 import type { CharacterDefinitionDraft } from './characterEditorHandoff'
@@ -31,6 +31,9 @@ function definitionKit(library: CharacterKitLibrary | undefined, id: string, see
   const saved = library?.kits[id]
   if (seed?.id !== id) return saved
   return saved ? { ...saved, base: saved.base ?? seed.base, identityReference: saved.identityReference ?? seed.identityReference } : seed
+}
+function isDefinitionDirty(kit: CharacterKit | undefined, name: string, voice: CharacterVoice | undefined, model: ApiOutput | undefined) {
+  return Boolean(kit && (name !== kit.name || JSON.stringify(voice) !== JSON.stringify(kit.voice) || model))
 }
 function canSaveDefinition(library: CharacterKitLibrary | undefined, name: string, slot: Scene3DSlot | undefined) {
   if (!library || !name.trim()) return false
@@ -80,13 +83,15 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
   const [model, setModel] = useState<ApiOutput | undefined>(initialDraft?.model), [items, setItems] = useState<ApiOutput[]>([])
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('')
   const [workshopDirty, setWorkshopDirty] = useState(false), [workshopBusy, setWorkshopBusy] = useState(false)
+  const [voiceBusy, setVoiceBusy] = useState(false)
+  const speechBusy = workshopBusy || voiceBusy
   const workshopSave = useRef<SaveSpeechWorkshop | null>(null)
   const saving = useRef(false)
   const alive = useRef(true)
   const hasSlot = Boolean(slot)
   const kit = definitionKit(library, id, initialKit)
-  const dirty = Boolean(kit && (name !== kit.name || JSON.stringify(voice) !== JSON.stringify(kit.voice) || model))
-  useEffect(() => { onBusyChange?.(busy || workshopBusy); return () => onBusyChange?.(false) }, [busy, workshopBusy, onBusyChange])
+  const dirty = isDefinitionDirty(kit, name, voice, model)
+  useEffect(() => { onBusyChange?.(busy || speechBusy); return () => onBusyChange?.(false) }, [busy, speechBusy, onBusyChange])
   useEffect(() => { onDirtyChange?.(dirty || workshopDirty); return () => onDirtyChange?.(false) }, [dirty, workshopDirty, onDirtyChange])
   useEffect(() => { onDraftChange?.({ name, voice, model }) }, [name, voice, model, onDraftChange])
   useEffect(() => {
@@ -103,7 +108,8 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
     void task().catch(error => { if (alive.current) setNotice(error.message) }).finally(() => { if (alive.current) setBusy(false) })
   }
   const saveAll = async () => {
-    if (saving.current || workshopBusy || !canSaveDefinition(library, name, slot)) throw new Error(t('speech.busy'))
+    if (saving.current || speechBusy || !canSaveDefinition(library, name, slot)) throw new Error(t('speech.busy'))
+    if (!isCharacterVoiceReady(voice)) throw new Error(t('speech.customVoice.incomplete'))
     saving.current = true; setBusy(true); setNotice('')
     try {
       const update = (current?: CharacterKit) => definitionForSave(workspace, name, voice, current, slot, model)
@@ -125,12 +131,12 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
     <h3 className="font-semibold text-text-primary">{t('speech.characterDefinition')}</h3>
     <p className="text-text-muted">{t('speech.definitionHint')}</p>
     <fieldset disabled={disabled || busy || !library} className={spacious ? 'space-y-6' : 'space-y-2'}>
-      <DefinitionIdentity library={library} initialKit={initialKit} id={id} disabled={lockIdentity || workshopDirty || workshopBusy}
+      <DefinitionIdentity library={library} initialKit={initialKit} id={id} disabled={lockIdentity || workshopDirty || speechBusy}
         onSelect={(nextId, next) => {
           setId(nextId); setNotice('')
           if (!slot) { setName(next?.name ?? ''); setVoice(next?.voice); setModel(undefined) }
         }} />
-      {slot && <button data-testid="apply-character" className="min-h-10 rounded border border-border px-3" disabled={!kit?.speech3d}
+      {slot && <button data-testid="apply-character" className="min-h-10 rounded border border-border px-3" disabled={speechBusy || !kit?.speech3d}
         onClick={() => run(async () => {
           const patch = await characterSlotPatch(kit!, workspace, library!.revision, slot)
           if (alive.current) { setVoice(kit!.voice); setName(kit!.name); onApply?.(patch); setNotice(t('speech.characterApplied')) }
@@ -138,14 +144,14 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
       <label className="block">{t('speech.definitionName')}<input data-testid="character-name" maxLength={240}
         className="mt-1 min-h-10 w-full rounded border border-border bg-bg-primary px-2" value={name} onChange={e => setName(e.target.value)} /></label>
       <DefinitionModelInput slot={slot} kit={kit} items={items} model={model} workspace={workspace} onChoose={setModel} />
-      <CharacterVoiceFields value={voice} onChange={next => {
+      <CharacterVoiceFields key={id} workspace={workspace} value={voice} savedKits={Object.values(library?.kits ?? {})} onBusyChange={setVoiceBusy} onChange={next => {
         setVoice(next)
-        if (slot) onApply?.({ character: { id: slot.character?.id ?? slot.id, name: slot.character?.name ?? name, ...slot.character, voice: next } })
+        if (slot && isCharacterVoiceReady(next)) onApply?.({ character: { id: slot.character?.id ?? slot.id, name: slot.character?.name ?? name, ...slot.character, voice: next } })
       }} />
       <button data-testid="save-character" className="min-h-10 rounded border border-border px-3"
-        disabled={workshopBusy || !canSaveDefinition(library, name, slot)}
+        disabled={speechBusy || !isCharacterVoiceReady(voice) || !canSaveDefinition(library, name, slot)}
         onClick={() => { void saveAll().catch(() => undefined) }}>{busy ? t('speech.busy') : t('speech.saveCharacter')}</button>
-      <button className="min-h-10 px-2 underline" disabled={workshopDirty || workshopBusy} onClick={() => run(async () => {
+      <button className="min-h-10 px-2 underline" disabled={workshopDirty || speechBusy} onClick={() => run(async () => {
         const saved = await fetchCharacterKitLibrary(workspace)
         if (!alive.current) return
         setLibrary(saved); setNotice(t('speech.libraryReloaded'))
@@ -157,7 +163,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
       {!slot && <CharacterDefinitionSpeechTools workspace={workspace} kit={library?.kits[id]}
         disabled={busy || dirty} saveRef={workshopSave} onDirtyChange={setWorkshopDirty} onBusyChange={setWorkshopBusy}
         onSaved={async saved => { setLibrary(saved); await onSaved?.(saved.kits[id]) }} />}
-      {!slot && kit?.speech3d && <button data-testid="edit-character-face" className="min-h-10 rounded border border-border px-3" onClick={() => run(async () => {
+      {!slot && kit?.speech3d && <button data-testid="edit-character-face" className="min-h-10 rounded border border-border px-3" disabled={speechBusy} onClick={() => run(async () => {
         const patch = await characterSlotPatch(kit, workspace, library!.revision)
         if (!alive.current) return
         const { buildSpeechProduction } = await import('../scene3d/speech/production')

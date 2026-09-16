@@ -20,7 +20,7 @@ export function CharacterKitSummary({ kit }: { kit?: CharacterKit }) {
         <p className="font-medium text-text-primary">{kit.name}</p>
         <p>
           {tts.source === 'kit'
-            ? t('sheet.ttsVoice', { voiceId: tts.voiceId ?? '' })
+            ? t('sheet.ttsVoice', { voiceId: tts.voiceName ?? tts.voiceId ?? '' })
             : t('sheet.ttsNone')}
         </p>
         {kit.lookNotes?.trim() ? <p className="text-text-muted">{kit.lookNotes}</p> : null}

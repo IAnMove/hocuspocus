@@ -1049,5 +1049,29 @@
     "panelUnavailable": "The sound effect panel is unavailable. Open Audio → SFX and try again.",
     "duration": "Duration: {{seconds}} s",
     "videoDuration": "The output video uses the source video’s duration and replaces its audio."
+  },
+  "yue2": {
+    "planning": "Composition planning",
+    "chords": "Melody and chords",
+    "melody": "Melody only",
+    "direct": "Direct generation",
+    "durationHint": "Duration is an upper limit: the song may finish earlier. Enter the lyrics and describe the sound in Music Style.",
+    "license": "CC BY-NC 4.0 weights: non-commercial use."
+  },
+  "auk": {
+    "mode": "AuK mode",
+    "textMode": "Create speech from instructions",
+    "sourceMode": "Clone, edit or clean a recording",
+    "source": "Reference audio or original recording",
+    "hint": "Write the complete task in the prompt. Start with 5 seconds; source audio uses the start of the clip and the result cannot exceed its duration. AuK creates a new recording: review the words and voice.",
+    "examples": "Example instructions",
+    "create": "Say \"Welcome back.\" in a warm, calm female voice.",
+    "clone": "Say the following with the same voice: \"Welcome back.\"",
+    "edit": "Replace \"tomorrow\" with \"next week\", keeping the same speaker and tone.",
+    "clean": "Remove background noise and reverberation while preserving all spoken words and speakers.",
+    "separate": "Keep only the second speaker in order of appearance and remove the other speakers.",
+    "language": "The provider documents English and Chinese; Spanish is not validated. The Qwen component has research/evaluation terms; check its license for commercial use.",
+    "steps": "Synthesis steps",
+    "guidance": "Instruction guidance"
   }
 }

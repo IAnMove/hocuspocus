@@ -18,6 +18,7 @@ from services.image_generation_commands import command_error
 from services.music_model_contract import (
     ACE_DEFAULT,
     MUSIC3_LOCAL,
+    YUE2_LOCAL,
     MusicModelError,
     assert_enqueue_guard,
     require_catalog_entry,
@@ -28,6 +29,10 @@ from services.studio_music_spec import STUDIO_MUSIC_MODEL_TYPES
 
 
 _MODEL_DEFAULTS: dict[str, dict[str, Any]] = {
+    YUE2_LOCAL: {
+        "duration_seconds": 120.0, "num_inference_steps": 32,
+        "guidance_scale": 1.0, "guidance_phases": 1,
+    },
     ACE_DEFAULT: {
         "duration_seconds": 120.0,
         "num_inference_steps": 8,
@@ -90,6 +95,8 @@ def _validate_model(model_type: str, definition: dict[str, Any], model_downloade
     if definition.get("audio_only") is not True or definition.get("image_outputs"):
         raise ValueError("The selected model is not an audio-only music model")
     architecture = definition.get("architecture")
+    if model_type == YUE2_LOCAL and architecture != YUE2_LOCAL:
+        raise ValueError("The selected model definition does not match YuE2")
     if model_type == MUSIC3_LOCAL and architecture not in (None, MUSIC3_LOCAL):
         raise ValueError("The selected model definition does not match MiniMax-Music3")
     if model_type == ACE_DEFAULT and architecture is not None and "ace_step" not in str(architecture):
@@ -156,7 +163,8 @@ def _fill_guidance(working: dict[str, Any], model_type: str,
                    definition: Mapping[str, Any]) -> int:
     if working.get("guidance_scale") is None:
         working["guidance_scale"] = _MODEL_DEFAULTS[model_type]["guidance_scale"]
-    _finite(working["guidance_scale"], "guidance_scale", minimum=0, maximum=1000)
+    _finite(working["guidance_scale"], "guidance_scale", minimum=1 if model_type == YUE2_LOCAL else 0,
+            maximum=20 if model_type == YUE2_LOCAL else 1000)
     if definition.get("lock_guidance_scale") and model_type == MUSIC3_LOCAL:
         expected = _MODEL_DEFAULTS[model_type]["guidance_scale"]
         if float(working["guidance_scale"]) != expected:
@@ -267,6 +275,10 @@ def _validate_audio_references(working: dict[str, Any], model_type: str,
     mode = working.get("audio_prompt_type") or ""
     refs = {field: working.get(field) for field in _AUDIO_REFERENCE_FIELDS}
     active = {field: value for field, value in refs.items() if value not in (None, "")}
+    if model_type == YUE2_LOCAL:
+        if mode or active:
+            raise ValueError("YuE2 supports lyrics/style generation without reference audio")
+        return
     if model_type == MUSIC3_LOCAL:
         _validate_music3_references(working, mode, refs, active)
         return
