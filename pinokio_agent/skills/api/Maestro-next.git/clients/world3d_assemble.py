@@ -49,7 +49,9 @@ for shot, number in shots:
                   'source': saved['url'] + '?' + urllib.parse.urlencode({'workspace': args.workspace}),
                   'trim_start': shot.get('trim_start', 0),
                   'trim_end': shot.get('trim_end', 0),
-                  'muted': True, 'volume': 0, 'fit': 'contain', 'transition': 'none'})
+                  'muted': True, 'volume': 0, 'fit': 'contain',
+                  'transition': shot.get('transition', 'none'),
+                  'transition_duration': shot.get('transition_duration', .4)})
 body = {'name': args.name or plan['title'], 'workspace': args.workspace,
         'width': 1280, 'height': 720, 'fps': 30, 'clips': clips,
         'soundtrack': {'name': plan['sourceAssets']['song']['format']['tags']['title'],

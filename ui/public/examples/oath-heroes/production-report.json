@@ -1,0 +1,1078 @@
+{
+  "startedAt": "2026-09-16T09:18:18.600279+00:00",
+  "finishedAt": "2026-09-16T11:01:27.232820+00:00",
+  "elapsedSeconds": 6188.6,
+  "stages": [
+    {
+      "label": "Imágenes nuevas",
+      "work": "34 imágenes, incluidas pruebas y correcciones",
+      "processingSeconds": 790.1
+    },
+    {
+      "label": "Movimiento H3",
+      "work": "17 tomas generadas; 9 fuentes retenidas",
+      "processingSeconds": 1564.9
+    },
+    {
+      "label": "Quitar fondos",
+      "work": "30 recortes de imagen y vídeo",
+      "processingSeconds": 1276.6
+    },
+    {
+      "label": "Exportación por capas",
+      "work": "53 planos nativos · EN + ES",
+      "processingSeconds": 777.2
+    },
+    {
+      "label": "Montaje final",
+      "work": "2 vídeos con música y fundidos",
+      "processingSeconds": 54.9
+    }
+  ],
+  "notes": [
+    "Esta revisión conserva las dos canciones anteriores; no incluye otra generación musical.",
+    "Los tiempos incluyen las tomas descartadas durante la revisión.",
+    "El tiempo total incluye preparación, revisión y varias pausas importantes de disco.",
+    "La espera de una exportación detrás de las generaciones se excluye del tiempo de render activo."
+  ],
+  "validation": {
+    "fps": 30,
+    "width": 720,
+    "height": 1280,
+    "crossfadeFrames": 15,
+    "characterActionsPerLanguage": 6,
+    "reversePlayback": false,
+    "characterLoops": false,
+    "exactFinalFrameCounts": true,
+    "fullDecodeBothFilms": true,
+    "nativeSceneFramesValidated": 53,
+    "browserPlaybackAndSeeking": true,
+    "mobileOverflow": false
+  },
+  "images": [
+    {
+      "id": "minimax-image-83cff33e25c5",
+      "asset": "2026-09-16-11h22m54s_minimax-comic_818edcf9.jpg",
+      "seconds": 20.206841230392456,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-7de456c4f437",
+      "asset": "2026-09-16-11h41m29s_minimax-comic_1df26d0e.jpg",
+      "seconds": 17.872889518737793,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-7a3649722b11",
+      "asset": "2026-09-16-11h22m34s_minimax-comic_f181096e.jpg",
+      "seconds": 15.56023120880127,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-f72d7321c6b5",
+      "asset": "2026-09-16-11h20m19s_minimax-comic_ff1f304c.jpg",
+      "seconds": 16.027504205703735,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-4e7457c8875b",
+      "asset": "2026-09-16-11h52m00s_minimax-comic_b584a5bd.jpg",
+      "seconds": 18.7476167678833,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-3c11d4ffb7ac",
+      "asset": "2026-09-16-11h19m30s_minimax-comic_a8121696.jpg",
+      "seconds": 16.588653087615967,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-ba7bcfbd2fa8",
+      "asset": "2026-09-16-11h41m11s_minimax-comic_9eaab684.jpg",
+      "seconds": 28.111330270767212,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-c47063de532a",
+      "asset": "2026-09-16-11h53m39s_minimax-comic_8f994f77.jpg",
+      "seconds": 43.03984093666077,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-00fcdb3516c8",
+      "asset": "2026-09-16-11h41m45s_minimax-comic_b2be4c29.jpg",
+      "seconds": 16.14196228981018,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-e1e3c001bddc",
+      "asset": "2026-09-16-11h40m10s_minimax-comic_2192a01f.jpg",
+      "seconds": 20.480712890625,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-207e0e94e5a9",
+      "asset": "2026-09-16-11h39m29s_minimax-comic_ad291a7b.jpg",
+      "seconds": 20.38689637184143,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-6e7c87cac871",
+      "asset": "2026-09-16-11h52m38s_minimax-comic_91837c27.jpg",
+      "seconds": 17.48253870010376,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-197bd0642797",
+      "asset": "2026-09-16-11h39m09s_minimax-comic_ac5d2e6c.jpg",
+      "seconds": 23.979761600494385,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-a25f00445c91",
+      "asset": "2026-09-16-11h22m18s_minimax-comic_08d941bf.jpg",
+      "seconds": 16.59397315979004,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-62a0e18483b9",
+      "asset": "2026-09-16-11h20m03s_minimax-comic_22065142.jpg",
+      "seconds": 16.164000272750854,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-7ae8c9617f78",
+      "asset": "2026-09-16-11h51m41s_minimax-comic_e3f1b52b.jpg",
+      "seconds": 24.04135251045227,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-dd68b6111ce5",
+      "asset": "2026-09-16-11h18m35s_minimax-comic_934a7aab.jpg",
+      "seconds": 16.38637137413025,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-4cc5093e90e7",
+      "asset": "2026-09-16-11h20m52s_minimax-comic_4fbdbb77.jpg",
+      "seconds": 15.60757851600647,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-916e139453f0",
+      "asset": "2026-09-16-11h21m12s_minimax-comic_d58858a1.jpg",
+      "seconds": 20.390018939971924,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-9e73487961fd",
+      "asset": "2026-09-16-11h20m36s_minimax-comic_9c8f4190.jpg",
+      "seconds": 17.487537622451782,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-6ffa9a0782f0",
+      "asset": "2026-09-16-11h19m47s_minimax-comic_5f74b754.jpg",
+      "seconds": 17.02096128463745,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-f954e7d6bdbb",
+      "asset": "2026-09-16-11h18m56s_minimax-comic_de08c2aa.jpg",
+      "seconds": 21.070312023162842,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-20efe7c961cf",
+      "asset": "2026-09-16-11h23m54s_minimax-comic_26c95789.jpg",
+      "seconds": 21.039974689483643,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-3fcc068f3288",
+      "asset": "2026-09-16-11h39m50s_minimax-comic_ad4bed57.jpg",
+      "seconds": 20.683430671691895,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-5c3863bbec6d",
+      "asset": "2026-09-16-11h40m43s_minimax-comic_bcd9820f.jpg",
+      "seconds": 15.410384178161621,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-7e30a8ee8c33",
+      "asset": "2026-09-16-11h52m20s_minimax-comic_1d658532.jpg",
+      "seconds": 20.585751056671143,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-88fe8b9fbd7e",
+      "asset": "2026-09-16-11h24m31s_minimax-comic_92a92c0d.jpg",
+      "seconds": 149.23128938674927,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-432b4be57f34",
+      "asset": "2026-09-16-11h21m30s_minimax-comic_22682b63.jpg",
+      "seconds": 17.562783241271973,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-fb22a278ea9a",
+      "asset": "2026-09-16-11h40m28s_minimax-comic_4bbc50d4.jpg",
+      "seconds": 17.75424599647522,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-c0d6727c1d32",
+      "asset": "2026-09-16-11h23m33s_minimax-comic_2fa314e5.jpg",
+      "seconds": 20.021404027938843,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-d45b9bedfcb7",
+      "asset": "2026-09-16-11h52m56s_minimax-comic_e00c6150.jpg",
+      "seconds": 17.777854681015015,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-20c1b847f8bf",
+      "asset": "2026-09-16-11h23m13s_minimax-comic_e7a052b7.jpg",
+      "seconds": 19.110751628875732,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-44d741a15aca",
+      "asset": "2026-09-16-11h22m01s_minimax-comic_9ed19c3e.jpg",
+      "seconds": 14.880332708358765,
+      "provider": "MiniMax Image-01"
+    },
+    {
+      "id": "minimax-image-69dd110a17b7",
+      "asset": "2026-09-16-11h21m46s_minimax-comic_cf42fe6b.jpg",
+      "seconds": 16.620370149612427,
+      "provider": "MiniMax Image-01"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "2bb38769",
+      "label": "hero-master-cutout",
+      "asset": "2026-09-16-11h18m35s_minimax-comic_934a7aab.no-background-3b7884c4.png",
+      "seconds": 3.95,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "b5d262cd",
+      "label": "princess-master-cutout",
+      "asset": "2026-09-16-11h18m56s_minimax-comic_de08c2aa.no-background-46f99673.png",
+      "seconds": 1.05,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "c424d0ac",
+      "label": "hero-walk-cutout",
+      "asset": "2026-09-16-11h22m54s_minimax-comic_818edcf9.no-background-bb4230c8.png",
+      "seconds": 0.95,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "e9f2732c",
+      "label": "hero-back-cutout",
+      "asset": "2026-09-16-11h23m13s_minimax-comic_e7a052b7.no-background-6e6169a9.png",
+      "seconds": 0.84,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "1b298846",
+      "label": "hero-oath-cutout",
+      "asset": "2026-09-16-11h23m33s_minimax-comic_2fa314e5.no-background-96aa256f.png",
+      "seconds": 0.87,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "64c29da0",
+      "label": "hero-reach-cutout",
+      "asset": "2026-09-16-11h23m54s_minimax-comic_26c95789.no-background-2e6110a6.png",
+      "seconds": 0.96,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "c0b27a7a",
+      "label": "hero-kneel-cutout",
+      "asset": "2026-09-16-11h24m31s_minimax-comic_92a92c0d.no-background-fed8a3af.png",
+      "seconds": 0.9,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "00f1f049",
+      "label": "pillar-cutout",
+      "asset": "2026-09-16-11h21m30s_minimax-comic_22682b63.no-background-45b603bc.png",
+      "seconds": 1.18,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "216d173d",
+      "label": "branch-cutout",
+      "asset": "2026-09-16-11h21m46s_minimax-comic_cf42fe6b.no-background-abee7c89.png",
+      "seconds": 0.32,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "8b781ad4",
+      "label": "bridge-cutout",
+      "asset": "2026-09-16-11h22m01s_minimax-comic_9ed19c3e.no-background-5825c42d.png",
+      "seconds": 23.21,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "c50a34a4",
+      "label": "grasses-cutout",
+      "asset": "2026-09-16-11h22m34s_minimax-comic_f181096e.no-background-aa383b66.png",
+      "seconds": 0.29,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "3c01ff2f",
+      "label": "princess-free-v2-v3-alpha",
+      "asset": "2026-09-16-12h22m14s_seed917206_LOCKED stationary camera. A single adult HUMAN woman with a chestnut braid. Keep exactly the woman s.no-background-bb98d44a.webm",
+      "seconds": 120.02,
+      "mode": "video",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "d3128570",
+      "label": "hero-walk-motion",
+      "asset": "2026-09-16-11h43m01s_seed916900_Locked stationary camera. Preserve exactly the same human face, costume and painterly illustration..mp4",
+      "seconds": 136.96,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "4c551581",
+      "label": "hero-oath-motion",
+      "asset": "2026-09-16-11h44m15s_seed916901_Locked stationary camera. Preserve exactly the same human face, costume and painterly illustration..mp4",
+      "seconds": 71.77,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "e9787dbe",
+      "label": "hero-reach-motion",
+      "asset": "2026-09-16-11h45m34s_seed916902_Locked stationary camera. Preserve exactly the same human face, costume and painterly illustration..mp4",
+      "seconds": 75.38,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "800d2f61",
+      "label": "hero-kneel-motion",
+      "asset": "2026-09-16-11h46m43s_seed916903_Locked stationary camera. Preserve exactly the same human face, costume and painterly illustration..mp4",
+      "seconds": 67.04,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "e74ce4f9",
+      "label": "walk-forward-v3-alpha",
+      "asset": "2026-09-16-12h02m01s_seed917200_LOCKED stationary camera. A single adult HUMAN MALE knight, dark wavy hair and beard. Keep exactly t.no-background-01732b8b.webm",
+      "seconds": 116.93,
+      "mode": "video",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "07627ef0",
+      "label": "hero-kneel-v2-v3-alpha",
+      "asset": "2026-09-16-12h04m31s_seed917203_LOCKED stationary camera. A single adult HUMAN MALE knight, dark wavy hair and beard. Keep exactly t.no-background-29088eea.webm",
+      "seconds": 125.74,
+      "mode": "video",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "4f251c2c",
+      "label": "hero-smile-v3-alpha",
+      "asset": "2026-09-16-12h12m28s_seed917204_LOCKED stationary camera. A single adult HUMAN MALE knight, dark wavy hair and beard. Keep exactly t.no-background-dba1506c.webm",
+      "seconds": 186.06,
+      "mode": "video",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "be118225",
+      "label": "hero-smile-cutout",
+      "asset": "2026-09-16-11h39m09s_minimax-comic_ac5d2e6c.no-background-ac6cf151.png",
+      "seconds": 1.62,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "a445e478",
+      "label": "princess-captive-cutout",
+      "asset": "2026-09-16-11h39m29s_minimax-comic_ad291a7b.no-background-8d3d9abf.png",
+      "seconds": 1.02,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "145728b3",
+      "label": "princess-free-cutout",
+      "asset": "2026-09-16-11h39m50s_minimax-comic_ad4bed57.no-background-73c431bb.png",
+      "seconds": 1.0,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "7449a8c7",
+      "label": "princess-grief-cutout",
+      "asset": "2026-09-16-11h40m10s_minimax-comic_2192a01f.no-background-6eb42b06.png",
+      "seconds": 0.87,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "42dc0ca2",
+      "label": "king-cutout",
+      "asset": "2026-09-16-11h40m28s_minimax-comic_4bbc50d4.no-background-636d0973.png",
+      "seconds": 1.01,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "88f731d3",
+      "label": "sword-memorial-cutout",
+      "asset": "2026-09-16-11h40m43s_minimax-comic_bcd9820f.no-background-09967ed9.png",
+      "seconds": 0.92,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "543674e5",
+      "label": "chains-cutout",
+      "asset": "2026-09-16-11h41m11s_minimax-comic_9eaab684.no-background-adbd9c35.png",
+      "seconds": 1.11,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "e6b6d994",
+      "label": "valley-clean-motion",
+      "asset": "2026-09-16-11h52m32s_seed917000_Strictly LOCKED stationary camera, no pan, no dolly, no zoom. Preserve this painterly illustration..mp4",
+      "seconds": 74.39,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "d9f4c0ba",
+      "label": "forest-motion",
+      "asset": "2026-09-16-11h53m54s_seed917001_Strictly LOCKED stationary camera, no pan, no dolly, no zoom. Preserve this painterly illustration..mp4",
+      "seconds": 80.88,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "93e58014",
+      "label": "dawn-motion",
+      "asset": "2026-09-16-11h54m59s_seed917002_Strictly LOCKED stationary camera, no pan, no dolly, no zoom. Preserve this painterly illustration..mp4",
+      "seconds": 64.74,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "f4a5f01f",
+      "label": "princess-captive-v2-v3-alpha",
+      "asset": "2026-09-16-12h15m53s_seed917205_LOCKED stationary camera. A single adult HUMAN woman with a chestnut braid. Keep exactly the woman s.no-background-fd85ee06.webm",
+      "seconds": 114.53,
+      "mode": "video",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "bb613505",
+      "label": "walk-forward-v3-motion",
+      "asset": "2026-09-16-12h02m01s_seed917200_LOCKED stationary camera. A single adult HUMAN MALE knight, dark wavy hair and beard. Keep exactly t.mp4",
+      "seconds": 72.71,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "c458f517",
+      "label": "hero-kneel-v2-v3-motion",
+      "asset": "2026-09-16-12h04m31s_seed917203_LOCKED stationary camera. A single adult HUMAN MALE knight, dark wavy hair and beard. Keep exactly t.mp4",
+      "seconds": 338.24,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "2ffe8f0d",
+      "label": "hero-smile-v3-motion",
+      "asset": "2026-09-16-12h12m28s_seed917204_LOCKED stationary camera. A single adult HUMAN MALE knight, dark wavy hair and beard. Keep exactly t.mp4",
+      "seconds": 76.31,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "e82b02b0",
+      "label": "princess-captive-v2-v3-motion",
+      "asset": "2026-09-16-12h15m53s_seed917205_LOCKED stationary camera. A single adult HUMAN woman with a chestnut braid. Keep exactly the woman s.mp4",
+      "seconds": 86.51,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "efa1e88f",
+      "label": "princess-free-v2-v3-motion",
+      "asset": "2026-09-16-12h22m14s_seed917206_LOCKED stationary camera. A single adult HUMAN woman with a chestnut braid. Keep exactly the woman s.mp4",
+      "seconds": 67.18,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "72cef637",
+      "label": "princess-grief-v2-v3-motion",
+      "asset": "2026-09-16-12h25m17s_seed917207_LOCKED stationary camera. A single adult HUMAN woman with a chestnut braid. Keep exactly the woman s.mp4",
+      "seconds": 68.25,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "abd3989e",
+      "label": "princess-grief-v2-v3-alpha",
+      "asset": "2026-09-16-12h25m17s_seed917207_LOCKED stationary camera. A single adult HUMAN woman with a chestnut braid. Keep exactly the woman s.no-background-2960b155.webm",
+      "seconds": 565.58,
+      "mode": "video",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "8026109e",
+      "label": "walk-forward-motion",
+      "asset": "2026-09-16-11h56m08s_seed917100_LOCKED stationary camera. Preserve exactly the same human face, steel armor, yellow sun tabard, blue.mp4",
+      "seconds": 66.94,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "23ff2186",
+      "label": "hero-oath-v2-motion",
+      "asset": "2026-09-16-11h57m23s_seed917101_LOCKED stationary camera. Preserve exactly the same human face, steel armor, yellow sun tabard, blue.mp4",
+      "seconds": 72.88,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "1fd14921",
+      "label": "hero-reach-v2-motion",
+      "asset": "2026-09-16-11h58m34s_seed917102_LOCKED stationary camera. Preserve exactly the same human face, steel armor, yellow sun tabard, blue.mp4",
+      "seconds": 67.08,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "addd1230",
+      "label": "hero-kneel-v2-motion",
+      "asset": "2026-09-16-11h59m54s_seed917103_LOCKED stationary camera. Preserve exactly the same human face, steel armor, yellow sun tabard, blue.mp4",
+      "seconds": 77.64,
+      "mode": null,
+      "capability": null,
+      "model": "minimax_h3_fused_turbo"
+    },
+    {
+      "id": "7ab44e5a",
+      "label": "hero-oath-v2-cutout",
+      "asset": "2026-09-16-11h51m41s_minimax-comic_e3f1b52b.no-background-6159c0ff.png",
+      "seconds": 0.97,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "dec5ad8d",
+      "label": "hero-reach-v2-cutout",
+      "asset": "2026-09-16-11h52m20s_minimax-comic_1d658532.no-background-e7272eec.png",
+      "seconds": 0.95,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "327203a6",
+      "label": "hero-kneel-v2-cutout",
+      "asset": "2026-09-16-11h52m00s_minimax-comic_b584a5bd.no-background-2fb9c214.png",
+      "seconds": 0.94,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "05da3ae6",
+      "label": "princess-captive-v2-cutout",
+      "asset": "2026-09-16-11h52m38s_minimax-comic_91837c27.no-background-a96a701e.png",
+      "seconds": 0.92,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "97b21c37",
+      "label": "princess-free-v2-cutout",
+      "asset": "2026-09-16-11h52m56s_minimax-comic_e00c6150.no-background-98b59ec2.png",
+      "seconds": 0.98,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    },
+    {
+      "id": "3e0369ef",
+      "label": "princess-grief-v2-cutout",
+      "asset": "2026-09-16-11h53m39s_minimax-comic_8f994f77.no-background-019584a7.png",
+      "seconds": 0.9,
+      "mode": "image",
+      "capability": "remove_background",
+      "model": "rembg-u2net"
+    }
+  ],
+  "nativeExports": [
+    {
+      "language": "en",
+      "shot": 1,
+      "id": "world3d-export-437b08a9a614417a",
+      "seconds": 40.87676978111267,
+      "queueSeconds": 0.2924458980560303
+    },
+    {
+      "language": "en",
+      "shot": 2,
+      "id": "world3d-export-aca50650da0a461e",
+      "seconds": 13.410770893096924,
+      "queueSeconds": 0.2211933135986328
+    },
+    {
+      "language": "en",
+      "shot": 3,
+      "id": "world3d-export-971a7840e7d94997",
+      "seconds": 15.012555360794067,
+      "queueSeconds": 1487.9215018749237
+    },
+    {
+      "language": "en",
+      "shot": 4,
+      "id": "world3d-export-b438c10f6f984499",
+      "seconds": 36.12037897109985,
+      "queueSeconds": 0.19397616386413574
+    },
+    {
+      "language": "en",
+      "shot": 5,
+      "id": "world3d-export-b5afb1f7c13e4d0e",
+      "seconds": 10.913157224655151,
+      "queueSeconds": 0.1951146125793457
+    },
+    {
+      "language": "en",
+      "shot": 6,
+      "id": "world3d-export-1047e47b369f45cf",
+      "seconds": 12.723537683486938,
+      "queueSeconds": 0.20519280433654785
+    },
+    {
+      "language": "en",
+      "shot": 7,
+      "id": "world3d-export-32182a0459f24714",
+      "seconds": 11.694045543670654,
+      "queueSeconds": 0.22754812240600586
+    },
+    {
+      "language": "en",
+      "shot": 8,
+      "id": "world3d-export-d445f9ddb2da4a67",
+      "seconds": 13.566853523254395,
+      "queueSeconds": 0.21436738967895508
+    },
+    {
+      "language": "en",
+      "shot": 9,
+      "id": "world3d-export-887ada498b0c4f6b",
+      "seconds": 11.976702451705933,
+      "queueSeconds": 0.1996464729309082
+    },
+    {
+      "language": "en",
+      "shot": 10,
+      "id": "world3d-export-f75e8461887a4c9c",
+      "seconds": 10.221055507659912,
+      "queueSeconds": 0.21405863761901855
+    },
+    {
+      "language": "en",
+      "shot": 11,
+      "id": "world3d-export-05b1b28e21d2473a",
+      "seconds": 9.772674322128296,
+      "queueSeconds": 0.19570398330688477
+    },
+    {
+      "language": "en",
+      "shot": 12,
+      "id": "world3d-export-57922d3e7d4c48cb",
+      "seconds": 11.263607025146484,
+      "queueSeconds": 0.21605515480041504
+    },
+    {
+      "language": "en",
+      "shot": 13,
+      "id": "world3d-export-287e80496efb4d6f",
+      "seconds": 6.728350877761841,
+      "queueSeconds": 0.22032761573791504
+    },
+    {
+      "language": "en",
+      "shot": 14,
+      "id": "world3d-export-86585c56bdcb4651",
+      "seconds": 5.446241855621338,
+      "queueSeconds": 0.22426986694335938
+    },
+    {
+      "language": "en",
+      "shot": 15,
+      "id": "world3d-export-6078cc3215e448c5",
+      "seconds": 7.087387323379517,
+      "queueSeconds": 0.2303311824798584
+    },
+    {
+      "language": "en",
+      "shot": 16,
+      "id": "world3d-export-1ce0bb1884df4ad5",
+      "seconds": 37.41783356666565,
+      "queueSeconds": 0.18409252166748047
+    },
+    {
+      "language": "en",
+      "shot": 17,
+      "id": "world3d-export-c584d71da92e4158",
+      "seconds": 11.030141830444336,
+      "queueSeconds": 0.2034296989440918
+    },
+    {
+      "language": "en",
+      "shot": 18,
+      "id": "world3d-export-2b37c325fa0e489f",
+      "seconds": 38.6638023853302,
+      "queueSeconds": 0.2037360668182373
+    },
+    {
+      "language": "en",
+      "shot": 19,
+      "id": "world3d-export-7e9fcd1b25ed40bc",
+      "seconds": 11.708938837051392,
+      "queueSeconds": 0.1952834129333496
+    },
+    {
+      "language": "en",
+      "shot": 20,
+      "id": "world3d-export-5a640c315681466f",
+      "seconds": 41.43759489059448,
+      "queueSeconds": 0.19307947158813477
+    },
+    {
+      "language": "en",
+      "shot": 21,
+      "id": "world3d-export-139eed60cb004a24",
+      "seconds": 12.576871156692505,
+      "queueSeconds": 0.20556259155273438
+    },
+    {
+      "language": "en",
+      "shot": 22,
+      "id": "world3d-export-3bbde52601694d7f",
+      "seconds": 11.965076684951782,
+      "queueSeconds": 0.2186577320098877
+    },
+    {
+      "language": "en",
+      "shot": 23,
+      "id": "world3d-export-571bdc6b17fc4934",
+      "seconds": 11.914732456207275,
+      "queueSeconds": 0.2048342227935791
+    },
+    {
+      "language": "en",
+      "shot": 24,
+      "id": "world3d-export-b333142022464eca",
+      "seconds": 39.45861887931824,
+      "queueSeconds": 0.20615553855895996
+    },
+    {
+      "language": "en",
+      "shot": 25,
+      "id": "world3d-export-5b62e30a391640f0",
+      "seconds": 13.161723375320435,
+      "queueSeconds": 0.2511115074157715
+    },
+    {
+      "language": "en",
+      "shot": 26,
+      "id": "world3d-export-7508d76b0f124f39",
+      "seconds": 12.414028406143188,
+      "queueSeconds": 0.1992018222808838
+    },
+    {
+      "language": "en",
+      "shot": 27,
+      "id": "world3d-export-258fb8a5e2a64ada",
+      "seconds": 13.12923550605774,
+      "queueSeconds": 0.2046680450439453
+    },
+    {
+      "language": "en",
+      "shot": 28,
+      "id": "world3d-export-572d95b2ea3b499b",
+      "seconds": 11.974468231201172,
+      "queueSeconds": 0.21167325973510742
+    },
+    {
+      "language": "en",
+      "shot": 29,
+      "id": "world3d-export-9bcdb5241cab4647",
+      "seconds": 12.270247220993042,
+      "queueSeconds": 0.20732760429382324
+    },
+    {
+      "language": "es",
+      "shot": 1,
+      "id": "world3d-export-650f87078e0f4246",
+      "seconds": 17.419513463974,
+      "queueSeconds": 0.20328283309936523
+    },
+    {
+      "language": "es",
+      "shot": 2,
+      "id": "world3d-export-2bdf64280d434ebd",
+      "seconds": 12.61914324760437,
+      "queueSeconds": 0.20505833625793457
+    },
+    {
+      "language": "es",
+      "shot": 3,
+      "id": "world3d-export-0c3aede995304891",
+      "seconds": 12.807698011398315,
+      "queueSeconds": 0.19248056411743164
+    },
+    {
+      "language": "es",
+      "shot": 4,
+      "id": "world3d-export-6e65f45ff07e4e06",
+      "seconds": 9.70127248764038,
+      "queueSeconds": 0.23027276992797852
+    },
+    {
+      "language": "es",
+      "shot": 5,
+      "id": "world3d-export-b357960177094070",
+      "seconds": 12.226022958755493,
+      "queueSeconds": 0.19368386268615723
+    },
+    {
+      "language": "es",
+      "shot": 6,
+      "id": "world3d-export-5d64c916de3948ab",
+      "seconds": 12.116756200790405,
+      "queueSeconds": 0.20221471786499023
+    },
+    {
+      "language": "es",
+      "shot": 7,
+      "id": "world3d-export-6062eed4fb4f4d72",
+      "seconds": 12.538324117660522,
+      "queueSeconds": 0.20743942260742188
+    },
+    {
+      "language": "es",
+      "shot": 8,
+      "id": "world3d-export-a9cc2ac4d93044ac",
+      "seconds": 11.518512487411499,
+      "queueSeconds": 0.23624777793884277
+    },
+    {
+      "language": "es",
+      "shot": 9,
+      "id": "world3d-export-13cf961c37ee4387",
+      "seconds": 12.022568225860596,
+      "queueSeconds": 0.21241426467895508
+    },
+    {
+      "language": "es",
+      "shot": 10,
+      "id": "world3d-export-53a704a3663143e7",
+      "seconds": 13.700900316238403,
+      "queueSeconds": 0.2016606330871582
+    },
+    {
+      "language": "es",
+      "shot": 11,
+      "id": "world3d-export-6a72daac66c44fd4",
+      "seconds": 8.638074398040771,
+      "queueSeconds": 0.20134258270263672
+    },
+    {
+      "language": "es",
+      "shot": 12,
+      "id": "world3d-export-afdc264259bf4d09",
+      "seconds": 8.900394678115845,
+      "queueSeconds": 0.20454049110412598
+    },
+    {
+      "language": "es",
+      "shot": 13,
+      "id": "world3d-export-4c985b5e1e2147ab",
+      "seconds": 9.59883427619934,
+      "queueSeconds": 0.21286511421203613
+    },
+    {
+      "language": "es",
+      "shot": 14,
+      "id": "world3d-export-0ed8772dd9b9427e",
+      "seconds": 7.471916198730469,
+      "queueSeconds": 0.19066762924194336
+    },
+    {
+      "language": "es",
+      "shot": 15,
+      "id": "world3d-export-dac980924dd2485d",
+      "seconds": 8.9601149559021,
+      "queueSeconds": 0.22119426727294922
+    },
+    {
+      "language": "es",
+      "shot": 16,
+      "id": "world3d-export-b3c71b99133945e0",
+      "seconds": 12.765374422073364,
+      "queueSeconds": 0.22757863998413086
+    },
+    {
+      "language": "es",
+      "shot": 17,
+      "id": "world3d-export-225d61c604db43c2",
+      "seconds": 15.288339376449585,
+      "queueSeconds": 0.19585752487182617
+    },
+    {
+      "language": "es",
+      "shot": 18,
+      "id": "world3d-export-abacb85d2600414e",
+      "seconds": 10.428787469863892,
+      "queueSeconds": 0.2156825065612793
+    },
+    {
+      "language": "es",
+      "shot": 19,
+      "id": "world3d-export-e9fee3698d7a4e6a",
+      "seconds": 15.557030439376831,
+      "queueSeconds": 0.19349312782287598
+    },
+    {
+      "language": "es",
+      "shot": 20,
+      "id": "world3d-export-d65a61d9685e4355",
+      "seconds": 10.29733157157898,
+      "queueSeconds": 0.20037555694580078
+    },
+    {
+      "language": "es",
+      "shot": 21,
+      "id": "world3d-export-aaa61813878d4bd5",
+      "seconds": 13.999515533447266,
+      "queueSeconds": 0.20809197425842285
+    },
+    {
+      "language": "es",
+      "shot": 22,
+      "id": "world3d-export-496103c7a37a46ed",
+      "seconds": 11.379560708999634,
+      "queueSeconds": 0.22020745277404785
+    },
+    {
+      "language": "es",
+      "shot": 23,
+      "id": "world3d-export-6f8c7cbe68064d8e",
+      "seconds": 10.366417646408081,
+      "queueSeconds": 0.19431018829345703
+    },
+    {
+      "language": "es",
+      "shot": 24,
+      "id": "world3d-export-cf8ba4036fc34a3e",
+      "seconds": 10.901530265808105,
+      "queueSeconds": 0.19750261306762695
+    }
+  ],
+  "assemblies": [
+    {
+      "language": "en",
+      "id": "video-edit-0ea3d6bb6962",
+      "filename": "2026-09-16-12h52m52s_The_Oath_of_Cinders_Heroes.mp4",
+      "url": "/api/v1/file/2026-09-16-12h52m52s_The_Oath_of_Cinders_Heroes.mp4",
+      "seconds": 30.479825735092163,
+      "frames": 3926,
+      "duration": 130.86666666666667,
+      "bytes": 41231643
+    },
+    {
+      "language": "es",
+      "id": "video-edit-02fa55da9892",
+      "filename": "2026-09-16-12h53m24s_El_juramento_de_ceniza_Heroes.mp4",
+      "url": "/api/v1/file/2026-09-16-12h53m24s_El_juramento_de_ceniza_Heroes.mp4",
+      "seconds": 24.412355661392212,
+      "frames": 2976,
+      "duration": 99.2,
+      "bytes": 32921005
+    }
+  ]
+}
