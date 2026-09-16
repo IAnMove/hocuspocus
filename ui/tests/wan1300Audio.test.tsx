@@ -157,3 +157,122 @@ test('AuK keeps its reference across audio tabs but clears foreign references on
     assert.equal(useStore.getState().audioGuideFilename, null)
   } finally { useStore.setState(previous); globalThis.fetch = fetchBefore }
 })
+
+function mockNativeAudioFetches() {
+  return async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const body = url.includes('/model-options/')
+      ? {
+        audio_only: true, max_voice_count: 1, default_num_inference_steps: 32, default_guidance_scale: 1,
+        guidance_max_phases: 1, duration_slider: { min: 1, max: 600, default: 120 },
+        audio_prompt_type_sources: { selection: ['', 'A'], default: '' },
+      }
+      : url.includes('/defaults/')
+        ? { num_inference_steps: 32, guidance_scale: 1, temperature: 1, top_k: 100, top_p: 0.95, model_mode: 0 }
+        : {}
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+}
+
+async function settleNativeAudioLoad(modelType: string) {
+  await waitFor(() => {
+    assert.equal(useStore.getState().params.model_type, modelType)
+    assert.equal(useStore.getState().modelOptionsLoading, false)
+  })
+  await new Promise(resolve => setTimeout(resolve, 20))
+}
+
+test('YuE2 planning and sampling survive a Speech tab return', async () => {
+  const previous = useStore.getState(), fetchBefore = globalThis.fetch
+  globalThis.fetch = mockNativeAudioFetches()
+  useStore.setState({
+    activeWorkspace: 'test', generationMode: 'audio', audioSubMode: 'music',
+    models: [{ model_type: 'auk', family: 'tts' }, { model_type: 'yue2', family: 'tts' }],
+    selectedModelPerAudioSubMode: { speech: 'auk', music: 'yue2' }, selectedModelPerMode: { audio: 'yue2' },
+    audioReferenceStash: {}, loadLoras: async () => {},
+    params: { ...previous.params, model_type: 'yue2', model_mode: 2, top_k: 17, top_p: 0.72,
+      temperature: 0.8, num_inference_steps: 40, guidance_scale: 3 },
+  })
+  try {
+    useStore.getState().setAudioSubMode('speech')
+    await settleNativeAudioLoad('auk')
+    useStore.getState().setAudioSubMode('music')
+    await settleNativeAudioLoad('yue2')
+    const params = useStore.getState().params as unknown as Record<string, unknown>
+    assert.equal(params.model_mode, 2)
+    assert.equal(params.top_k, 17)
+    assert.equal(params.top_p, 0.72)
+    assert.equal(params.temperature, 0.8)
+    assert.equal(params.num_inference_steps, 40)
+    assert.equal(params.guidance_scale, 3)
+  } finally { useStore.setState(previous); globalThis.fetch = fetchBefore }
+})
+
+test('YuE2 planning survives leaving Audio for Video and coming back', async () => {
+  const previous = useStore.getState(), fetchBefore = globalThis.fetch
+  globalThis.fetch = mockNativeAudioFetches()
+  useStore.setState({
+    activeWorkspace: 'test', generationMode: 'audio', audioSubMode: 'music',
+    models: [{ model_type: 'yue2', family: 'tts' }, { model_type: 'wan_2_2', family: 'wan' }],
+    selectedModelPerAudioSubMode: { music: 'yue2' }, selectedModelPerMode: { audio: 'yue2', video: 'wan_2_2' },
+    savedParamsPerMode: {}, audioReferenceStash: {}, loadLoras: async () => {},
+    params: { ...previous.params, model_type: 'yue2', model_mode: 2, top_k: 17, num_inference_steps: 40 },
+  })
+  try {
+    useStore.getState().setGenerationMode('video')
+    await settleNativeAudioLoad('wan_2_2')
+    useStore.getState().setGenerationMode('audio')
+    await settleNativeAudioLoad('yue2')
+    const params = useStore.getState().params as unknown as Record<string, unknown>
+    assert.equal(params.model_mode, 2)
+    assert.equal(params.top_k, 17)
+    assert.equal(params.num_inference_steps, 40)
+  } finally { useStore.setState(previous); globalThis.fetch = fetchBefore }
+})
+
+test('AuK custom sampling survives a Music tab return', async () => {
+  const previous = useStore.getState(), fetchBefore = globalThis.fetch
+  globalThis.fetch = mockNativeAudioFetches()
+  useStore.setState({
+    activeWorkspace: 'test', generationMode: 'audio', audioSubMode: 'speech',
+    models: [{ model_type: 'auk', family: 'tts' }, { model_type: 'yue2', family: 'tts' }],
+    selectedModelPerAudioSubMode: { speech: 'auk', music: 'yue2' }, selectedModelPerMode: { audio: 'auk' },
+    audioReferenceStash: {}, loadLoras: async () => {},
+    params: { ...previous.params, model_type: 'auk', guidance_scale: 2.5, num_inference_steps: 40,
+      audio_prompt_type: 'A', audio_guide: '/api/v1/uploads/reference.wav' },
+    audioGuideFilename: 'reference.wav',
+  })
+  try {
+    useStore.getState().setAudioSubMode('music')
+    await settleNativeAudioLoad('yue2')
+    useStore.getState().setAudioSubMode('speech')
+    await settleNativeAudioLoad('auk')
+    const params = useStore.getState().params as unknown as Record<string, unknown>
+    assert.equal(params.guidance_scale, 2.5)
+    assert.equal(params.num_inference_steps, 40)
+    assert.equal(params.audio_guide, '/api/v1/uploads/reference.wav')
+  } finally { useStore.setState(previous); globalThis.fetch = fetchBefore }
+})
+
+test('explicit YuE2 selection still loads the native leftover recipe', async () => {
+  const previous = useStore.getState(), fetchBefore = globalThis.fetch
+  globalThis.fetch = mockNativeAudioFetches()
+  useStore.setState({
+    activeWorkspace: 'test', generationMode: 'audio', audioSubMode: 'music',
+    models: [{ model_type: 'yue2', family: 'tts' }], selectedModelPerMode: { audio: 'ace_step_v1_5_xl_sft_lm_4b' },
+    audioReferenceStash: {}, loadLoras: async () => {},
+    params: { ...previous.params, model_type: 'ace_step_v1_5_xl_sft_lm_4b', model_mode: 2, top_k: 17,
+      num_inference_steps: 8, guidance_scale: 5 },
+  })
+  try {
+    useStore.getState().selectModel('yue2')
+    await waitFor(() => {
+      const params = useStore.getState().params as unknown as Record<string, unknown>
+      assert.equal(params.model_type, 'yue2')
+      assert.equal(params.model_mode, 0)
+      assert.equal(params.top_k, 100)
+      assert.equal(params.num_inference_steps, 32)
+      assert.equal(params.guidance_scale, 1)
+    })
+  } finally { useStore.setState(previous); globalThis.fetch = fetchBefore }
+})
