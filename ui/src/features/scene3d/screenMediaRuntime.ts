@@ -26,11 +26,11 @@ function waitMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', sign
     const onTime = () => {
       if (event === 'seeked' && target !== undefined && Number.isFinite(video.currentTime) && Math.abs(video.currentTime - target) <= .05) done()
     }
-    // Seeked can fail to fire for short mocked WebM clips. Resolving quickly
-    // keeps export moving; Range-capable responses still paint new frames.
+    // Seeked can miss on short clips. Do not stall export, but give a real
+    // decoder time to land before painting the previous frame.
     const timer = setTimeout(
       () => event === 'seeked' ? finish() : finish(new Error('screen-media-timeout')),
-      event === 'seeked' ? 120 : 15_000,
+      event === 'seeked' ? 2_000 : 15_000,
     )
     video.addEventListener(event, done, { once: true })
     if (event === 'seeked') video.addEventListener('timeupdate', onTime)
