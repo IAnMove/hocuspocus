@@ -6,10 +6,13 @@ only dispatch path.
 """
 from __future__ import annotations
 
+from asyncio import run
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
+from threading import Barrier
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers.wizard_workflow_executor import create_wizard_workflow_executor_router
@@ -112,6 +115,46 @@ def _app(executor, tmp_path):
         token_getter=lambda: "test-token",
     ))
     return TestClient(app)
+
+
+def _peer_executor(native: FakeNative, service, workspace_dir) -> WizardWorkflowExecutor:
+    def get_task(workspace: str, task_id: str):
+        if not task_id:
+            return None
+        return native.registry(workspace).get(task_id)
+
+    return WizardWorkflowExecutor(
+        workspace_dir=workspace_dir,
+        submit_command=service.submit,
+        command_receipt=service.receipt,
+        get_task=get_task,
+    )
+
+
+def _pause_for_upscale(executor, native, workflow_id="wf-question"):
+    started = run(executor.start(_start_body(workflow_id, snapshot=_snapshot(upscaleMethod=""))))
+    _complete(native, WORKSPACE, started["workflow"]["steps"][0]["taskId"], ["choice.png"])
+    paused = run(executor.reconcile(WORKSPACE))[0]
+    assert paused["workflow"]["state"] == "awaiting_input"
+    return paused
+
+
+def _answer_body(workflow_id, revision, method):
+    return {
+        "workspace": WORKSPACE,
+        "workflowId": workflow_id,
+        "expectedRevision": revision,
+        "stepId": STEP_UPSCALE,
+        "answerVersion": 1,
+        "answer": {"upscaleMethod": method},
+    }
+
+
+def _answer_or_conflict(executor, body):
+    try:
+        return run(executor.answer(body))
+    except HTTPException as error:
+        return error
 
 
 def _complete(native: FakeNative, workspace: str, task_id: str, refs: list[str]):
@@ -235,6 +278,142 @@ def test_two_clients_answering_yield_one_winner_and_recoverable_conflict(tmp_pat
     assert winner["steps"][1]["state"] == "waiting"
     assert len(native.dispatch_calls) == 2
     assert native.dispatch_calls[1]["params"]["method"] == "lanczos2"
+
+
+def test_stale_revision_is_rejected_recoverably_without_a_second_effect(tmp_path):
+    executor, native, _service, _workspace_dir = _executor(tmp_path)
+    client = _app(executor, tmp_path)
+    paused = _pause_for_upscale(executor, native, "wf-stale")
+    workflow = paused["workflow"]
+    stale = client.post("/api/v1/wizard/workflows/executor/answer", json=_answer_body(
+        workflow["workflowId"], paused["revision"] - 1, "lanczos2",
+    ))
+    assert stale.status_code == 409, stale.text
+    detail = stale.json()["detail"]
+    assert detail["code"] == "wizard_workflow_revision_conflict"
+    assert detail["recoverable"] is True
+    current = client.get(
+        f"/api/v1/wizard/workflows/executor/{workflow['workflowId']}",
+        params={"workspace": WORKSPACE},
+    ).json()["workflow"]
+    assert current["state"] == "awaiting_input"
+    assert current["pendingInput"]["answer"] is None
+    assert len(native.dispatch_calls) == 1
+
+
+def test_concurrent_answers_from_two_executors_yield_one_effect_and_409(tmp_path, monkeypatch):
+    executor, native, service, workspace_dir = _executor(tmp_path)
+    peer = _peer_executor(native, service, workspace_dir)
+    paused = _pause_for_upscale(executor, native, "wf-race-answer")
+    revision = paused["revision"]
+    workflow_id = paused["workflow"]["workflowId"]
+    barrier = Barrier(2)
+    original = WizardWorkflowExecutor._check_revision
+
+    def racing_check(self, collection, expected):
+        original(self, collection, expected)
+        if expected == revision:
+            barrier.wait(timeout=5)
+
+    monkeypatch.setattr(WizardWorkflowExecutor, "_check_revision", racing_check)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(_answer_or_conflict, executor, _answer_body(workflow_id, revision, "lanczos2"))
+        second = pool.submit(_answer_or_conflict, peer, _answer_body(workflow_id, revision, "lanczos1.5"))
+        results = [first.result(timeout=10), second.result(timeout=10)]
+    winners = [item for item in results if not isinstance(item, HTTPException)]
+    conflicts = [item for item in results if isinstance(item, HTTPException)]
+    assert len(winners) == 1, results
+    assert len(conflicts) == 1, results
+    conflict = conflicts[0]
+    assert conflict.status_code == 409
+    assert conflict.detail["code"] == "wizard_workflow_revision_conflict"
+    assert conflict.detail["recoverable"] is True
+    winner = winners[0]["workflow"]
+    method = winner["pendingInput"]["answer"]["upscaleMethod"]
+    assert method in {"lanczos2", "lanczos1.5"}
+    assert winner["steps"][1]["state"] == "waiting"
+    assert len(native.dispatch_calls) == 2
+    assert native.dispatch_calls[1]["params"]["method"] == method
+
+
+def test_cancel_between_effect_and_persist_does_not_double_apply_on_retry(tmp_path):
+    executor, native, _service, workspace_dir = _executor(tmp_path)
+    started = run(executor.start(_start_body("wf-cancel-gap")))
+    collection = read_workflows(workspace_dir(WORKSPACE))
+    lost = deepcopy(collection)
+    step = lost["workflows"][0]["steps"][0]
+    step["state"] = "running"
+    step["taskId"] = ""
+    step["output"] = {}
+    lost["workflows"][0]["state"] = "running"
+    lost["workflows"][0]["cancelRequested"] = True
+    write_workflows(workspace_dir(WORKSPACE), lost, base_revision=int(collection["revision"]))
+
+    recovered = run(executor.reconcile(WORKSPACE))
+    assert recovered[0]["workflow"]["state"] == "cancelled"
+    assert len(native.dispatch_calls) == 1
+    resumed = run(executor.resume({"workspace": WORKSPACE, "workflowId": "wf-cancel-gap"}))
+    assert resumed["workflow"]["steps"][0]["taskId"] == started["workflow"]["steps"][0]["taskId"]
+    assert resumed["workflow"]["steps"][0]["state"] == "waiting"
+    assert len(native.dispatch_calls) == 1
+
+
+def test_fail_between_effect_and_persist_resume_does_not_double_apply(tmp_path):
+    executor, native, _service, workspace_dir = _executor(tmp_path)
+    started = run(executor.start(_start_body("wf-fail-gap")))
+    task_id = started["workflow"]["steps"][0]["taskId"]
+    collection = read_workflows(workspace_dir(WORKSPACE))
+    lost = deepcopy(collection)
+    step = lost["workflows"][0]["steps"][0]
+    step["state"] = "running"
+    step["taskId"] = ""
+    step["output"] = {}
+    lost["workflows"][0]["state"] = "failed"
+    lost["workflows"][0]["recoverableError"] = "persist lost after admit"
+    write_workflows(workspace_dir(WORKSPACE), lost, base_revision=int(collection["revision"]))
+    native.registry(WORKSPACE).update(task_id, status="failed", force=True)
+
+    resumed = run(executor.resume({"workspace": WORKSPACE, "workflowId": "wf-fail-gap"}))
+    assert resumed["workflow"]["steps"][0]["taskId"] == task_id
+    assert len(native.dispatch_calls) == 1
+
+
+def test_concurrent_resumes_after_failure_share_one_retry_effect(tmp_path, monkeypatch):
+    executor, native, service, workspace_dir = _executor(tmp_path)
+    peer = _peer_executor(native, service, workspace_dir)
+    started = run(executor.start(_start_body("wf-resume-race")))
+    task_id = started["workflow"]["steps"][0]["taskId"]
+    collection = read_workflows(workspace_dir(WORKSPACE))
+    failed = deepcopy(collection)
+    failed["workflows"][0]["steps"][0]["state"] = "failed"
+    failed["workflows"][0]["state"] = "failed"
+    failed["workflows"][0]["recoverableError"] = "image failed"
+    write_workflows(workspace_dir(WORKSPACE), failed, base_revision=int(collection["revision"]))
+    native.registry(WORKSPACE).update(task_id, status="failed", force=True)
+    barrier = Barrier(2)
+    original = WizardWorkflowExecutor._load
+
+    def racing_load(self, workspace, workflow_id):
+        result = original(self, workspace, workflow_id)
+        if result[1].get("state") == "failed":
+            barrier.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(WizardWorkflowExecutor, "_load", racing_load)
+
+    def resume(instance):
+        return run(instance.resume({"workspace": WORKSPACE, "workflowId": "wf-resume-race"}))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(resume, executor)
+        second = pool.submit(resume, peer)
+        results = [first.result(timeout=10), second.result(timeout=10)]
+    keys = {item["workflow"]["steps"][0]["executionKey"] for item in results}
+    task_ids = {item["workflow"]["steps"][0]["taskId"] for item in results}
+    assert len(keys) == 1
+    assert len(task_ids) == 1
+    assert task_id not in task_ids
+    assert len(native.dispatch_calls) == 2
 
 
 def test_mcp_can_start_and_answer_the_same_circuit(tmp_path):
