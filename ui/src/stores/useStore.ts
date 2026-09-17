@@ -594,6 +594,7 @@ function _applyModelDefaults(
   storeGet: () => { selectedModelPerMode: Partial<Record<GenerationMode, string>>; generationMode: GenerationMode; params: GenerateParams },
   storeSet: (fn: (s: { params: GenerateParams }) => { params: GenerateParams }) => void,
   modelType: string,
+  preservedRecipe?: Partial<GenerateParams>,
 ): void {
   api.fetchDefaults(modelType).then((d) => {
     if (!d || typeof d !== 'object') return
@@ -607,6 +608,9 @@ function _applyModelDefaults(
       // Audio references belong to the selected tab. A late defaults response
       // must not disable a restored voice/music reference by resetting its selector.
       if (state.generationMode === 'audio' && field === 'audio_prompt_type') continue
+      // A tab/mode return already restored the native YuE2/AuK recipe.
+      // fetchDefaults would otherwise put planning/sampling back to stock.
+      if (preservedRecipe && field in preservedRecipe) continue
       // A one-click Full -> Pruned Turbo recommendation switches models and
       // then restores the managed 6-step preset. Do not let the asynchronous
       // base-model defaults response race in afterward and put it back at
@@ -1591,7 +1595,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice {
   // Model options
   modelOptions: ModelOptions | null
   modelOptionsLoading: boolean
-  loadModelOptions: (modelType: string) => Promise<void>
+  loadModelOptions: (modelType: string, preservedRecipe?: Partial<GenerateParams>) => Promise<void>
 
   // System config
   systemConfig: SystemConfig | null
@@ -2832,7 +2836,8 @@ export const useStore = create<AppState>((set, get) => {
       loraWeights: sameModel ? restoredLora.loraWeights : {},
       availableLoras: sameModel ? restoredLora.availableLoras : [],
     }))
-    if (newModelType && mode !== 'model3d') get().loadModelOptions(newModelType)
+    const restoredNativeRecipe = restoreWan1300AudioRecipe(newModelType, get().params)
+    if (newModelType && mode !== 'model3d') get().loadModelOptions(newModelType, restoredNativeRecipe)
     if (newModelType && !sfxModelTypes.has(newModelType) && mode !== 'model3d') {
       if (!sameModel) {
         get().loadLoras(newModelType)
@@ -2841,8 +2846,9 @@ export const useStore = create<AppState>((set, get) => {
       // model's defaults so numeric primaries (steps, CFG, flow_shift,
       // sample_solver) match what that model expects rather than what
       // the previous mode's model was using. See _applyModelDefaults
-      // for the field list and rationale.
-      _applyModelDefaults(get, set, newModelType)
+      // for the field list and rationale. Native YuE2/AuK recipes from
+      // the per-mode snapshot win over those defaults.
+      _applyModelDefaults(get, set, newModelType, restoredNativeRecipe)
     }
     // Persist to localStorage
     _saveSettings({
@@ -6217,7 +6223,7 @@ export const useStore = create<AppState>((set, get) => {
   modelOptions: null,
   modelOptionsLoading: false,
 
-  loadModelOptions: async (modelType) => {
+  loadModelOptions: async (modelType, preservedRecipe) => {
     const seq = ++_modelOptionsSeq
     // Virtual SFX has no options endpoint. Still invalidate pending responses
     // and clear the previous model's constraints and Advanced controls.
@@ -6364,6 +6370,9 @@ export const useStore = create<AppState>((set, get) => {
       if (options.default_flow_shift != null) {
         paramUpdates.flow_shift = options.default_flow_shift
       }
+      // Tab/mode return and pencil-adjacent restores pass the native recipe
+      // so leftover cleanup cannot silently switch YuE2 planning or AuK CFG.
+      if (preservedRecipe) Object.assign(paramUpdates, preservedRecipe)
       if (options.minimax_h3_text_encoder_choices?.length) {
         const currentEncoder = get().params.minimax_h3_text_encoder
         const valid = options.minimax_h3_text_encoder_choices.some(
@@ -8677,11 +8686,17 @@ export const useStore = create<AppState>((set, get) => {
       loraWeights: {},
       availableLoras: [],
     }))
-    if (currentMode !== 'model3d') get().loadModelOptions(modelType)
+    const preservedRecipe = preserveAudioReferences
+      ? restoreWan1300AudioRecipe(
+        modelType,
+        get().audioReferenceStash[get().audioSubMode]?.params ?? {},
+      )
+      : undefined
+    if (currentMode !== 'model3d') get().loadModelOptions(modelType, preservedRecipe)
     // Virtual SFX models don't have backend LoRAs or model defaults.
     if (!sfxModelTypes.has(modelType) && currentMode !== 'model3d') {
       get().loadLoras(modelType)
-      _applyModelDefaults(get, set, modelType)
+      _applyModelDefaults(get, set, modelType, preservedRecipe)
     }
     // Persist to localStorage
     const s = get()

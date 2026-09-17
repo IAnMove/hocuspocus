@@ -8,11 +8,12 @@ const RECIPES: Record<string, Record<string, number>> = {
 }
 
 /** Saved native audio settings win over the defaults loaded with model options. */
-export function restoreWan1300AudioRecipe(model: string, saved: Record<string, unknown>): Partial<GenerateParams> {
+export function restoreWan1300AudioRecipe(model: string, saved: object): Partial<GenerateParams> {
   const defaults = RECIPES[model]
   if (!defaults) return {}
   if (model === 'auk_flash') return { ...defaults }
-  return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, saved[key] ?? fallback]))
+  const values = saved as unknown as Record<string, unknown>
+  return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, values[key] ?? fallback]))
 }
 
 /** Explicit model selection clears references; a tab return already restored its own stash. */
