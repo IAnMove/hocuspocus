@@ -31,6 +31,7 @@ test('world SFX demos occupy the 3D stage and keep screen overlays', async ({ pa
 
 test('portal depth demo exports a decodable MP4 when the encoder exists', async ({ page }, info) => {
   test.setTimeout(120_000)
+  test.skip(process.platform !== 'win32', 'Native MP4 is the Windows Edge job')
   const { session, workspace } = await openVideo3d(page)
   const available = await page.evaluate(async () => {
     if (typeof VideoEncoder === 'undefined') return false

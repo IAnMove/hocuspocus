@@ -160,6 +160,7 @@ test('3D templates, playback speed and object transforms work in the editor', as
 })
 
 test('speed is baked into a decodable MP4 and its scene metadata', async ({ page }) => {
+  test.skip(process.platform !== 'win32', 'Native MP4 is the Windows Edge job')
   const session = await gotoApp(page)
   await page.getByRole('tab', { name: 'Video 3D', exact: true }).click()
   await page.getByRole('button', { name: 'Close Ask to the Wizard' }).click()
