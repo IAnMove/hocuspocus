@@ -100,7 +100,7 @@ test('a seek without seeked still settles so export cannot stall on every frame'
   try {
     const started = Date.now()
     await runtime.seek(1, screen)
-    assert.ok(Date.now() - started < 4_000)
+    assert.ok(Date.now() - started < 1_000)
     assert.equal(h.video.currentTime, 1)
     assert.equal(h.frames.at(-1), 1)
   } finally { runtime.dispose(); h.restore() }

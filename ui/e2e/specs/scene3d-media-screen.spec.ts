@@ -107,7 +107,7 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
     try {
       const loaded = wait('loadeddata', 8_000); video.src = url; await loaded
       const sample = async (seconds: number) => {
-        const sought = wait('seeked', 2_000); video.currentTime = seconds; await sought
+        const sought = wait('seeked', 500); video.currentTime = seconds; await sought
         ctx.drawImage(video, 0, 0, 32, 32); return ctx.getImageData(0, 0, 32, 32).data
       }
       const first = await sample(.05), last = await sample(.8)

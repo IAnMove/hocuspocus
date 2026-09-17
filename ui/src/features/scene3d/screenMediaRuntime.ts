@@ -26,9 +26,12 @@ function waitMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', sign
     const onTime = () => {
       if (event === 'seeked' && target !== undefined && Number.isFinite(video.currentTime) && Math.abs(video.currentTime - target) <= .05) done()
     }
-    // Seeked can fail to fire for short mocked WebM clips. A long wait here
-    // stalls every export frame and trips the Linux UI E2E budget.
-    const timer = setTimeout(() => finish(new Error('screen-media-timeout')), event === 'seeked' ? 2_000 : 15_000)
+    // Seeked can fail to fire for short mocked WebM clips. Resolving quickly
+    // keeps export moving; Range-capable responses still paint new frames.
+    const timer = setTimeout(
+      () => event === 'seeked' ? finish() : finish(new Error('screen-media-timeout')),
+      event === 'seeked' ? 120 : 15_000,
+    )
     video.addEventListener(event, done, { once: true })
     if (event === 'seeked') video.addEventListener('timeupdate', onTime)
     video.addEventListener('error', failed, { once: true })
