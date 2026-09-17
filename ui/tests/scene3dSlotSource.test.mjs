@@ -39,11 +39,12 @@ test('workspace assignment clears or applies a catalog choice without the editor
   const scene = applyScene3DTemplate('two-shot')
   const slot = scene.slots[0]
   const patches = []
-  applyAssignedSlotSource(slot, capture, catalog, false, () => {}, updater => { patches.push(updater(scene)) }, current => current)
+  applyAssignedSlotSource(slot, { ...capture, exporting: false }, capture, catalog, () => {}, updater => { patches.push(updater(scene)) }, current => current)
   assert.equal(patches[0].slots[0].sourceUrl, catalog.url)
-  applyAssignedSlotSource(slot, capture, null, false, () => {}, updater => { patches.push(updater(scene)) }, current => current)
+  applyAssignedSlotSource(slot, { ...capture, exporting: false }, capture, null, () => {}, updater => { patches.push(updater(scene)) }, current => current)
   assert.equal(patches[1].slots[0].sourceUrl, '')
-  applyAssignedSlotSource(slot, capture, catalog, true, () => {}, updater => { patches.push(updater(scene)) }, current => current)
+  applyAssignedSlotSource(slot, { ...capture, exporting: true }, capture, catalog, () => {}, updater => { patches.push(updater(scene)) }, current => current)
+  applyAssignedSlotSource(slot, { ...capture, generation: 9, exporting: false }, capture, catalog, () => {}, updater => { patches.push(updater(scene)) }, current => current)
   assert.equal(patches.length, 2)
 })
 

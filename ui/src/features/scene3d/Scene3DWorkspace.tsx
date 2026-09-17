@@ -23,6 +23,7 @@ import { defaultMediaScreen } from './mediaScreen'
 import { Scene3DFramingControls } from './Scene3DFramingControls'
 import { KineticTextControls } from '../../components/common/KineticTextControls'
 import { KineticTextOverlay } from '../../components/common/KineticTextOverlay'
+import type { TFunction } from 'i18next'
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import { fetchOutputs, type ApiOutput } from '../../api/client'
 import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
@@ -42,7 +43,7 @@ import type { TransformMode } from './transformGizmo'
 import { clipBindingError, resolveScene3DClip, retainSlotClipCatalogs } from './clips.ts'
 import { scene3dFrameCount, scene3dFrameTime, scene3dPlaybackSpeed } from './clock.ts'
 import { parseScene3DDocument } from './document.ts'
-import { applyScene3DGizmoPatch, createDocumentId, useScene3DHistory, type Scene3DHistory } from './documentHistory.ts'
+import { applyScene3DGizmoPatch, createDocumentId, useScene3DHistory, type Scene3DHistorySession } from './documentHistory.ts'
 import { SceneObjectInspector } from './SceneObjectInspector.tsx'
 import { canMutateWorld3DScene } from './exportLock.ts'
 import { applyAssignedSlotSource, exportWorkspaceDocument } from './workspaceMutations.ts'
@@ -50,7 +51,7 @@ import { Scene3DStage, type Scene3DStageHandle } from './Scene3DStage.tsx'
 import { applyScene3DTemplate, patchScene3DSlot, remountScene3DTemplate, type Scene3DTemplateId } from './templates.ts'
 import { Scene3DImageLookControls } from './Scene3DImageLookControls'
 import { Scene3DWindowControls } from './Scene3DWindowControls'
-import { commitSlotSourceChoice, pickerOutputFromSlot, type SlotSourceCapture } from './slotSource.ts'
+import { commitSlotSourceChoice, pickerOutputFromSlot, type SlotSourceCapture, type SlotSourceLive } from './slotSource.ts'
 import type { Scene3DCameraFamily, Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLoop, Scene3DSlot } from './types.ts'
 import { documentFromWorld3DRequest, listenForWorld3DWorkflow } from './world3dAgent.ts'
 
@@ -249,9 +250,10 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         slotId: slot.id,
         templateId: sceneDocRef.current.templateId,
         workspaceId: workspaceRef.current || workspace,
+        exporting: exportingRef.current,
       },
+      capture,
       item,
-      exportingRef.current,
       revokeIfBlob,
       updater => applyScene(updater),
       setCatalogs,
@@ -390,7 +392,6 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         selectedId={selectedId}
         selectedWorldSfxId={selectedWorldSfxId}
         pickTarget={pickTarget}
-        generation={generationRef.current}
         transformMode={transformMode}
         seconds={seconds}
         speed={speed}
@@ -453,9 +454,6 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
             duration={sceneDoc.duration}
             templateId={sceneDoc.templateId}
             workspace={workspace}
-            generation={generationRef.current}
-            liveTemplateId={sceneDocRef.current.templateId}
-            liveWorkspace={workspaceRef.current || workspace}
             exporting={exporting}
             editingLocked={editingLocked}
             imageItems={imageItems}
@@ -473,7 +471,13 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
             onAssign={assignChoice}
             onApplyScene={applyScene}
             onBumpGeneration={() => { generationRef.current += 1 }}
-            exportingNow={() => exportingRef.current}
+            liveSource={() => ({
+              generation: generationRef.current,
+              slotId: slot.id,
+              templateId: sceneDocRef.current.templateId,
+              workspaceId: workspaceRef.current || workspace,
+              exporting: exportingRef.current,
+            })}
           />
         ))}
       </div>
@@ -486,7 +490,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
 }
 
 function WorkspaceStageColumn({
-  speechVisible, sceneDoc, playing, exporting, selected, selectedId, selectedWorldSfxId, pickTarget, generation,
+  speechVisible, sceneDoc, playing, exporting, selected, selectedId, selectedWorldSfxId, pickTarget,
   transformMode, seconds, speed, editingLocked, workspace, session, stageRef, t, editorT,
   setTransformMode, setPickTarget, setSelectedWorldSfxId, setSelectedId, setCatalogs, setScreenTargets, setPlaying,
   selectSlot, applyScene,
@@ -499,16 +503,15 @@ function WorkspaceStageColumn({
   selectedId: string
   selectedWorldSfxId?: string
   pickTarget?: string
-  generation: number
   transformMode: TransformMode
   seconds: number
   speed: number
   editingLocked: boolean
   workspace: string
-  session: Scene3DHistory
+  session: Scene3DHistorySession
   stageRef: MutableRefObject<Scene3DStageHandle | null>
-  t: (key: string, values?: Record<string, string | number>) => string
-  editorT: (key: string, values?: Record<string, string | number>) => string
+  t: TFunction<'scene3d'>
+  editorT: TFunction<'scene3dEditor'>
   setTransformMode: Dispatch<SetStateAction<TransformMode>>
   setPickTarget: Dispatch<SetStateAction<string | undefined>>
   setSelectedWorldSfxId: Dispatch<SetStateAction<string | undefined>>
@@ -519,7 +522,7 @@ function WorkspaceStageColumn({
   selectSlot: (id: string) => void
   applyScene: (updater: Scene3DDocument | ((current: Scene3DDocument) => Scene3DDocument), group?: string) => void
 }) {
-  const pickKey = selected ? `${generation}/${selected.id}/${selected.sourceUrl}` : ''
+  const pickKey = selected ? `${selected.id}/${selected.sourceUrl}` : ''
   return (
     <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
       <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -589,9 +592,9 @@ function WorkspaceStageColumn({
       />
       {speechVisible && selected && <div id="world3d-speech-inspector" className="min-w-0 xl:max-h-[38rem] xl:overflow-y-auto">
         <Scene3DSpeakerControls
-          key={`${workspace}/${generation}/${selected.id}/${selected.sourceUrl}`}
+          key={`${workspace}/${selected.id}/${selected.sourceUrl}`}
           slot={selected} workspace={workspace} disabled={editingLocked}
-          onPick={() => { setPlaying(false); setPickTarget(`${generation}/${selected.id}/${selected.sourceUrl}`) }}
+          onPick={() => { setPlaying(false); setPickTarget(`${selected.id}/${selected.sourceUrl}`) }}
           calibrate={profile => stageRef.current?.facePlacement?.(selected.id, profile)}
           onChange={speech => applyScene(current => current.slots.find(item => item.id === selected.id)?.sourceUrl === selected.sourceUrl
             ? patchScene3DSlot(current, selected.id, { speech }) : current)}
@@ -605,9 +608,9 @@ function WorkspaceStageColumn({
 }
 
 function Scene3DSlotCard({
-  slot, selected, catalogs, duration, templateId, workspace, generation, liveTemplateId, liveWorkspace,
+  slot, selected, catalogs, duration, templateId, workspace,
   exporting, editingLocked, imageItems, modelItems, videoItems, meshes, nodes, t, editorT,
-  onSelect, onSpeech, onAssign, onApplyScene, onBumpGeneration, exportingNow,
+  onSelect, onSpeech, onAssign, onApplyScene, onBumpGeneration, liveSource,
 }: {
   slot: Scene3DSlot
   selected: boolean
@@ -615,9 +618,6 @@ function Scene3DSlotCard({
   duration: number
   templateId: string
   workspace: string
-  generation: number
-  liveTemplateId: string
-  liveWorkspace: string
   exporting: boolean
   editingLocked: boolean
   imageItems: ApiOutput[]
@@ -625,16 +625,19 @@ function Scene3DSlotCard({
   videoItems: ApiOutput[]
   meshes: string[]
   nodes: string[]
-  t: (key: string, values?: Record<string, string | number>) => string
-  editorT: (key: string, values?: Record<string, string | number>) => string
+  t: TFunction<'scene3d'>
+  editorT: TFunction<'scene3dEditor'>
   onSelect: (id: string) => void
   onSpeech: () => void
   onAssign: (slot: Scene3DSlot, capture: SlotSourceCapture, item: ApiOutput | null) => void
   onApplyScene: (updater: Scene3DDocument | ((current: Scene3DDocument) => Scene3DDocument), group?: string) => void
   onBumpGeneration: () => void
-  exportingNow: () => boolean
+  liveSource: () => SlotSourceLive
 }) {
-  const capture: SlotSourceCapture = { generation, slotId: slot.id, templateId, workspaceId: workspace }
+  const captureFromLive = (): SlotSourceCapture => {
+    const live = liveSource()
+    return { generation: live.generation, slotId: slot.id, templateId, workspaceId: workspace }
+  }
   return (
     <div className={`rounded-xl border p-3 text-xs text-text-secondary ${selected ? 'border-cyan-300 bg-cyan-400/5' : 'border-border bg-bg-primary'}`}>
       <button type="button" className="block min-h-10 font-semibold text-text-primary" onClick={() => onSelect(slot.id)}>{t(`stage.slot.${slot.slot}`)}</button>
@@ -649,14 +652,14 @@ function Scene3DSlotCard({
           optional
           disabled={exporting}
           constraints={{ kinds: slot.media === 'image' ? ['image'] : ['model3d'], maxCount: 1, optional: true }}
-          onChoose={item => onAssign(slot, capture, item)}
+          onChoose={item => onAssign(slot, captureFromLive(), item)}
         />
       </div>}
       <Scene3DScreenControls slot={slot} meshes={meshes} nodes={nodes} items={[...imageItems, ...videoItems]} disabled={editingLocked} workspace={workspace}
         onChange={screen => onApplyScene(current => patchScene3DSlot(current, slot.id, { screen }))}
         onChoose={item => {
           if (item && item.type !== 'image' && item.type !== 'video') return
-          const commit = commitSlotSourceChoice({ generation, slotId: slot.id, templateId: liveTemplateId, workspaceId: liveWorkspace, exporting: exportingNow() }, capture, item)
+          const commit = commitSlotSourceChoice(liveSource(), captureFromLive(), item)
           if (commit.action === 'ignore') return
           onApplyScene(current => {
             const live = current.slots.find(value => value.id === slot.id)

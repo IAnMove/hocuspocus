@@ -413,6 +413,8 @@ export function useScene3DHistory(initialDocument: Scene3DDocument, workspace: s
   }
 }
 
+export type Scene3DHistorySession = ReturnType<typeof useScene3DHistory>
+
 function isDraftStorageKey(key: string | null): key is string {
   return Boolean(key && key.startsWith(SCENE3D_DRAFT_PREFIX) && !key.endsWith(':bak') && !key.endsWith(':tmp'))
 }

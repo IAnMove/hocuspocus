@@ -1,22 +1,23 @@
+import type { TFunction } from 'i18next'
 import type { ApiOutput } from '../../api/outputs'
 import { canMutateWorld3DScene } from './exportLock.ts'
 import { exportWorld3DDocument } from './exportFlow.ts'
-import { commitSlotSourceChoice, type SlotSourceCapture } from './slotSource.ts'
+import { commitSlotSourceChoice, type SlotSourceCapture, type SlotSourceLive } from './slotSource.ts'
 import { patchScene3DSlot } from './templates.ts'
 import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DSlot } from './types.ts'
 import type { Scene3DStageHandle } from './Scene3DStage.tsx'
 
 export function applyAssignedSlotSource(
   slot: Scene3DSlot,
+  live: SlotSourceLive,
   capture: SlotSourceCapture,
   item: ApiOutput | null,
-  exporting: boolean,
   revoke: (url: string) => void,
   applyScene: (updater: (current: Scene3DDocument) => Scene3DDocument) => void,
   setCatalogs: (update: (current: Record<string, Scene3DClipCatalogEntry[]>) => Record<string, Scene3DClipCatalogEntry[]>) => void,
 ) {
-  const commit = commitSlotSourceChoice({ ...capture, exporting }, capture, item)
-  if (commit.action === 'ignore' || !canMutateWorld3DScene(exporting)) return
+  const commit = commitSlotSourceChoice(live, capture, item)
+  if (commit.action === 'ignore' || !canMutateWorld3DScene(live.exporting)) return
   revoke(slot.sourceUrl)
   if (commit.action === 'clear') {
     applyScene(current => patchScene3DSlot(current, slot.id, { sourceUrl: '', sourceRef: undefined, clip: null, speech: undefined }))
@@ -42,7 +43,7 @@ export async function exportWorkspaceDocument(
   workspace: string,
   playing: boolean,
   exporting: boolean,
-  copy: (key: string, values?: Record<string, string | number>) => string,
+  copy: TFunction<'scene3d'>,
   onNote: (note: string) => void,
   onExporting: (value: boolean) => void,
   setAbort: (abort: AbortController | null) => void,
