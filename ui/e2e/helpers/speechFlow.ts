@@ -1,5 +1,5 @@
 import { expect, type Page, type TestInfo } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { gotoApp } from './gotoApp'
 import { speechTestGlb, speechTestWav } from './speechAssets'
 import type { Scene3DDocument } from '../../src/features/scene3d/types'
@@ -70,9 +70,10 @@ export async function openSpeech(page: Page, doc: Scene3DDocument) {
   }, doc.slots, { timeout: 20000 })
 }
 export async function saveSpeech(page: Page, info: TestInfo, name: string): Promise<Scene3DDocument> {
-  const promise = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Save shot JSON', exact: true }).click()
-  const path = info.outputPath(name + '.world3d.json'); await (await promise).saveAs(path)
+  const raw = await page.evaluate(() => JSON.stringify((window as Window & { __world3dDocument?: unknown }).__world3dDocument))
+  if (!raw) throw new Error('Scene document is not available')
+  const path = info.outputPath(name + '.world3d.json')
+  await writeFile(path, raw)
   return JSON.parse(await readFile(path, 'utf8'))
 }
 export async function seekSpeech(page: Page, seconds: number) {

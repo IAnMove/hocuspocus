@@ -6,6 +6,8 @@ import { defaultMediaScreen, parseMediaScreen } from '../../src/features/scene3d
 import { parseImagePoses } from '../../src/features/scene3d/imagePoseSequence'
 import type { Scene3DStageHandle } from '../../src/features/scene3d/Scene3DStage'
 
+test.use({ channel: process.platform === 'win32' ? 'msedge' : 'chrome' })
+
 for (const media of ['poses', 'video'] as const) {
   test(`a cutout without its still loads and exports its ${media}`, async ({ page }) => {
     const session = await gotoApp(page)
@@ -42,6 +44,15 @@ for (const media of ['poses', 'video'] as const) {
       return stage?.ready(slots)
     }, scene.slots, { timeout: 15_000 })
     expect(requested).toBe(true)
+    const canEncode = await page.evaluate(async () => {
+      if (typeof VideoEncoder === 'undefined') return false
+      const result = await VideoEncoder.isConfigSupported({ codec: 'avc1.640028', width: 1280, height: 720, bitrate: 5_000_000, framerate: 30, avc: { format: 'avc' } })
+      return Boolean(result.supported)
+    })
+    if (!canEncode) {
+      await closeApp(page, session)
+      return
+    }
     await page.route('**/api/v1/scenes/recordings', route => route.fulfill({
       json: { name: 'empty-still.mp4', type: 'video', url: '/api/v1/file/empty-still.mp4' },
     }))

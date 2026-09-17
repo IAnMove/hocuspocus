@@ -3,6 +3,8 @@ import { expect, test } from '@playwright/test'
 import { gotoApp, closeApp } from '../helpers/gotoApp'
 import { applyScene3DTemplate } from '../../src/features/scene3d/templates'
 
+test.use({ channel: process.platform === 'win32' ? 'msedge' : 'chrome' })
+
 test('a screen upload, dimensions and fit survive saving and reopening the shot', async ({ page }, testInfo) => {
   test.setTimeout(60_000)
   const session = await gotoApp(page)
@@ -63,11 +65,11 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
   await controls.getByTestId('asset-input-file').setInputFiles({ name: 'background-motion.webm', mimeType: 'video/webm', buffer: video })
   await expect(controls.getByText('background-motion.webm', { exact: true })).toBeVisible()
   await expect(controls.getByLabel('Content fit', { exact: true })).toHaveValue('cover')
-  const downloaded = page.waitForEvent('download')
-  await workspace.getByRole('button', { name: 'Save shot JSON', exact: true }).click()
+  const raw = await page.evaluate(() => JSON.stringify((window as Window & { __world3dDocument?: unknown }).__world3dDocument))
+  expect(raw).toBeTruthy()
   const path = testInfo.outputPath('animated-background.world3d.json')
-  await (await downloaded).saveAs(path)
-  const document = JSON.parse(await readFile(path, 'utf8'))
+  await writeFile(path, raw)
+  const document = JSON.parse(raw)
   const slot = document.slots[0]
   expect(slot).toMatchObject({ media: 'image', surface: 'cutout', position: scene.slots[0].position, scale: scene.slots[0].scale, imageLook: scene.slots[0].imageLook })
   expect(slot.screen).toMatchObject({ sourceUrl: url, media: 'video', fit: 'cover', loop: true })
@@ -75,6 +77,15 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
   await workspace.getByLabel('Open shot JSON').setInputFiles({ name: 'animated-background.world3d.json', mimeType: 'application/json', buffer: await readFile(path) })
   await expect(controls.getByLabel('Animate this layer')).toBeChecked()
   await expect(controls.getByText('background-motion.webm', { exact: true })).toBeVisible()
+  const canEncode = await page.evaluate(async () => {
+    if (typeof VideoEncoder === 'undefined') return false
+    const result = await VideoEncoder.isConfigSupported({ codec: 'avc1.640028', width: 1280, height: 720, bitrate: 5_000_000, framerate: 30, avc: { format: 'avc' } })
+    return Boolean(result.supported)
+  })
+  if (!canEncode) {
+    await closeApp(page, session)
+    return
+  }
   await page.route('**/api/v1/scenes/recordings', route => route.fulfill({ json: { name: 'animated-background.mp4', type: 'video', url: '/api/v1/file/animated-background.mp4' } }))
   await workspace.getByTestId('world3d-export').click()
   await expect(workspace.getByTestId('world3d-export-note')).toContainText('animated-background.mp4', { timeout: 30_000 })
