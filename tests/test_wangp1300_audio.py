@@ -142,6 +142,15 @@ def test_auk_tiny_transformer_reference_and_cfg_cpu():
             assert torch.isfinite(result).all()
 
 
+def test_yue2_and_auk_lora_dir_accepts_the_wgp_call_contract():
+    """generate_video always saves sidecar metadata via prepare_inputs_dict,
+    which calls handler.get_lora_dir(base, args, lora_root). A one-arg
+    signature TypeError's after the wav is written and marks the job failed."""
+    args = type("Args", (), {})()
+    assert YuE2.get_lora_dir("yue2", args, "/loras") == "/loras/yue2"
+    assert AuK.get_lora_dir("auk", args, "/loras") == "/loras/auk"
+
+
 def test_yue2_and_auk_keep_separate_engine_classes_from_existing_models():
     from shared.wangp1300.llm_engines.nanovllm.models.qwen3 import Qwen3ForCausalLM as New
     from shared.llm_engines.nanovllm.models.qwen3 import Qwen3ForCausalLM as Existing
