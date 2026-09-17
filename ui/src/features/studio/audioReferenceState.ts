@@ -40,7 +40,7 @@ export function captureAudioReferences(state: AppState): AudioReferenceSnapshot 
       // Native YuE2/AuK sampling is not a reference, but the same tab stash is
       // the only place a Speech ↔ Music return can recover it after
       // loadModelOptions resets leftovers.
-      ...restoreWan1300AudioRecipe(state.params.model_type, state.params as Record<string, unknown>),
+      ...restoreWan1300AudioRecipe(state.params.model_type, state.params),
     },
     audioGuideFilename: state.audioGuideFilename,
     audioGuide2Filename: state.audioGuide2Filename,

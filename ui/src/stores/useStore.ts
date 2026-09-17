@@ -2836,10 +2836,7 @@ export const useStore = create<AppState>((set, get) => {
       loraWeights: sameModel ? restoredLora.loraWeights : {},
       availableLoras: sameModel ? restoredLora.availableLoras : [],
     }))
-    const restoredNativeRecipe = restoreWan1300AudioRecipe(
-      newModelType,
-      get().params as unknown as Record<string, unknown>,
-    )
+    const restoredNativeRecipe = restoreWan1300AudioRecipe(newModelType, get().params)
     if (newModelType && mode !== 'model3d') get().loadModelOptions(newModelType, restoredNativeRecipe)
     if (newModelType && !sfxModelTypes.has(newModelType) && mode !== 'model3d') {
       if (!sameModel) {
