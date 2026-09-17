@@ -34,6 +34,19 @@ const catalog = {
   workspace_id: 'film',
 }
 
+test('workspace assignment clears or applies a catalog choice without the editor inlining the commit', async () => {
+  const { applyAssignedSlotSource } = await import('../src/features/scene3d/workspaceMutations.ts')
+  const scene = applyScene3DTemplate('two-shot')
+  const slot = scene.slots[0]
+  const patches = []
+  applyAssignedSlotSource(slot, capture, catalog, false, () => {}, updater => { patches.push(updater(scene)) }, current => current)
+  assert.equal(patches[0].slots[0].sourceUrl, catalog.url)
+  applyAssignedSlotSource(slot, capture, null, false, () => {}, updater => { patches.push(updater(scene)) }, current => current)
+  assert.equal(patches[1].slots[0].sourceUrl, '')
+  applyAssignedSlotSource(slot, capture, catalog, true, () => {}, updater => { patches.push(updater(scene)) }, current => current)
+  assert.equal(patches.length, 2)
+})
+
 test('catalog choice stores a durable url and workspace filename, not a blob', () => {
   const result = commitSlotSourceChoice(live, capture, catalog)
   assert.equal(result.action, 'apply')
