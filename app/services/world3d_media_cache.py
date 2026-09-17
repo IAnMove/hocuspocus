@@ -74,41 +74,56 @@ def _encode(source, target, cancelled):
         temporary.with_suffix(".log").unlink(missing_ok=True)
 
 
+def _video_entries(document):
+    screens = [slot["screen"] for slot in document.get("slots", []) if isinstance(slot.get("screen"), dict) and slot["screen"].get("media") == "video"]
+    return screens + [fx for fx in document.get("worldSfx", []) if fx.get("kind") == "media_portal"]
+
+
+def _cache_target(cache, source):
+    stat = source.stat()
+    identity = f"v1:{source}:{stat.st_mtime_ns}:{stat.st_size}"
+    return cache / (hashlib.sha256(identity.encode()).hexdigest()[:32] + source.suffix.lower())
+
+
+def _rewrite_entry(entry, workspace, workspace_root, app_root, cache, cancelled, used):
+    source = local_video(entry.get("sourceUrl"), workspace, workspace_root, app_root)
+    if source is None:
+        return
+    target = _cache_target(cache, source)
+    try:
+        cache.mkdir(exist_ok=True)
+        if not target.is_file() and not _encode(source, target, cancelled):
+            return
+        target.touch()
+        used.add(target)
+        entry["sourceUrl"] = f"/api/v1/file/.world3d-media-cache/{target.name}?workspace={quote(workspace, safe='')}"
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        # Optimization failure retains the original native decode path.
+        return
+
+
+def _evict_cache(cache, used):
+    if not cache.is_dir():
+        return
+    files = sorted((p for p in cache.iterdir() if p.suffix in {".mp4", ".webm"}), key=lambda p: p.stat().st_mtime)
+    size = sum(p.stat().st_size for p in files)
+    for path in files:
+        if size <= LIMIT:
+            break
+        if path not in used:
+            size -= path.stat().st_size
+            path.unlink(missing_ok=True)
+
+
 def prepare_media_snapshot(snapshot, *, app_root, workspace_root, cancelled):
     """Called while holding the export GPU lease, which also serializes cache writes."""
     result = deepcopy(snapshot)
     workspace = result["workspace"]
     cache = workspace_root / ".world3d-media-cache"
     used = set()
-    document = result["document"]
-    entries = [slot["screen"] for slot in document.get("slots", []) if isinstance(slot.get("screen"), dict) and slot["screen"].get("media") == "video"]
-    entries += [fx for fx in document.get("worldSfx", []) if fx.get("kind") == "media_portal"]
-    for entry in entries:
+    for entry in _video_entries(result["document"]):
         if cancelled():
             break
-        source = local_video(entry.get("sourceUrl"), workspace, workspace_root, app_root)
-        if source is None:
-            continue
-        stat = source.stat()
-        identity = f"v1:{source}:{stat.st_mtime_ns}:{stat.st_size}"
-        target = cache / (hashlib.sha256(identity.encode()).hexdigest()[:32] + source.suffix.lower())
-        try:
-            cache.mkdir(exist_ok=True)
-            if not target.is_file() and not _encode(source, target, cancelled):
-                continue
-            target.touch()
-            used.add(target)
-            entry["sourceUrl"] = f"/api/v1/file/.world3d-media-cache/{target.name}?workspace={quote(workspace, safe='')}"
-        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-            # Optimization failure retains the original native decode path.
-            continue
-    if cache.is_dir():
-        files = sorted((p for p in cache.iterdir() if p.suffix in {".mp4", ".webm"}), key=lambda p: p.stat().st_mtime)
-        size = sum(p.stat().st_size for p in files)
-        for path in files:
-            if size <= LIMIT:
-                break
-            if path not in used:
-                size -= path.stat().st_size
-                path.unlink(missing_ok=True)
+        _rewrite_entry(entry, workspace, workspace_root, app_root, cache, cancelled, used)
+    _evict_cache(cache, used)
     return result

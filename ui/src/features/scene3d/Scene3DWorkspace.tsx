@@ -155,6 +155,9 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
 
   useEffect(() => {
     sceneDocRef.current = sceneDoc
+    const host = window as Window & { __world3dDocument?: Scene3DDocument }
+    host.__world3dDocument = sceneDoc
+    return () => { if (host.__world3dDocument === sceneDoc) delete host.__world3dDocument }
   }, [sceneDoc])
 
   const setExportingFlag = (value: boolean) => {

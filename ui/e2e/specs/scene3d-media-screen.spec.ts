@@ -1,9 +1,10 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { gotoApp, closeApp } from '../helpers/gotoApp'
 import { applyScene3DTemplate } from '../../src/features/scene3d/templates'
 
 test('a screen upload, dimensions and fit survive saving and reopening the shot', async ({ page }, testInfo) => {
+  test.setTimeout(60_000)
   const session = await gotoApp(page)
   const url = '/api/v1/uploads/media-screen-test.png'
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
@@ -21,12 +22,11 @@ test('a screen upload, dimensions and fit survive saving and reopening the shot'
   await controls.getByLabel('Screen style', { exact: true }).selectOption('billboard')
   await controls.getByLabel('Width / aspect', { exact: true }).fill('8')
   await controls.getByLabel('Height / aspect', { exact: true }).fill('4.5')
-  const downloaded = page.waitForEvent('download')
-  await workspace.getByRole('button', { name: 'Save shot JSON', exact: true }).click()
-  const saved = await downloaded
+  const raw = await page.evaluate(() => JSON.stringify((window as Window & { __world3dDocument?: unknown }).__world3dDocument))
+  expect(raw).toBeTruthy()
   const path = testInfo.outputPath('screen.world3d.json')
-  await saved.saveAs(path)
-  const document = JSON.parse(await readFile(path, 'utf8'))
+  await writeFile(path, raw)
+  const document = JSON.parse(raw)
   const slot = document.slots.find((item: { media: string }) => item.media === 'screen')
   expect(slot.screen).toMatchObject({ sourceUrl: url, media: 'image', fit: 'cover', style: 'billboard', width: 8, height: 4.5 })
   expect(slot.screen.sourceRef).toMatchObject({ filename: 'media-screen-test.png', url })

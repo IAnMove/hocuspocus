@@ -2,6 +2,14 @@ import { useUiTranslation } from '../../i18n'
 import type { Scene3DDocument, Scene3DSlot } from './types'
 
 const inputClass = 'min-h-9 w-20 rounded border border-border bg-bg-tertiary px-2'
+type FloorStyle = NonNullable<NonNullable<Scene3DDocument['environment']>['floorStyle']>
+
+function withFloorStyle(environment: NonNullable<Scene3DDocument['environment']>, value: string) {
+  const floorStyle = value as FloorStyle
+  const reflectiveFloor = floorStyle === 'backdrop' || floorStyle === 'road' ? false : floorStyle === 'mirror' || environment.reflectiveFloor
+  return { ...environment, floorStyle, reflectiveFloor }
+}
+
 export function CinematicControls({ environment, disabled, onChange }: {
   environment: Scene3DDocument['environment']; disabled: boolean; onChange: (value: Scene3DDocument['environment']) => void
 }) {
@@ -9,8 +17,8 @@ export function CinematicControls({ environment, disabled, onChange }: {
   return <fieldset disabled={disabled} className="rounded-lg border border-border p-3 text-xs">
     <label className="flex min-h-9 items-center gap-2 font-semibold"><input type="checkbox" checked={Boolean(environment)} onChange={e => onChange(e.target.checked ? { reflectiveFloor: true, platform: false, bloom: .48 } : undefined)} />{t('cinematic.title')}</label>
     {environment && <div className="flex flex-wrap items-center gap-4">
-      <label><input type="checkbox" checked={environment.reflectiveFloor} onChange={e => onChange({ ...environment, reflectiveFloor: e.target.checked })} /> {t('cinematic.floor')}</label>
-      <label>{t('cinematic.floorStyle')} <select className="min-h-9 rounded border border-border bg-bg-tertiary px-2" value={environment.floorStyle ?? 'tiles'} onChange={e => onChange({ ...environment, floorStyle: e.target.value as NonNullable<Scene3DDocument['environment']>['floorStyle'], reflectiveFloor: ['backdrop', 'road'].includes(e.target.value) ? false : e.target.value === 'mirror' || environment.reflectiveFloor })}>
+      <label><input type="checkbox" aria-label={t('cinematic.floor')} checked={environment.reflectiveFloor} onChange={e => onChange({ ...environment, reflectiveFloor: e.target.checked })} /> {t('cinematic.floor')}</label>
+      <label>{t('cinematic.floorStyle')} <select aria-label={t('cinematic.floorStyle')} className="min-h-9 rounded border border-border bg-bg-tertiary px-2" value={environment.floorStyle ?? 'tiles'} onChange={e => onChange(withFloorStyle(environment, e.target.value))}>
         <option value="road">{t('cinematic.road')}</option><option value="backdrop">{t('cinematic.backdropFloor')}</option><option value="tiles">{t('cinematic.tiles')}</option><option value="mirror">{t('cinematic.mirror')}</option><option value="none">{t('cinematic.noFloor')}</option>
       </select></label>
       {environment.floorStyle === 'road' && <EndlessRoadControls environment={environment} onChange={onChange} />}

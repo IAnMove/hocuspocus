@@ -45,6 +45,17 @@ function screenSurfaceAspect(target: Mesh, screen: MediaScreen, imagePlate: bool
     ? geometry.parameters.width / geometry.parameters.height : screen.width / screen.height
 }
 
+function applyScreenLook(material: MeshBasicMaterial, texture: CanvasTexture, screen: MediaScreen, imagePlate?: { look?: ImageLook }) {
+  material.map = texture
+  if (screen.transparent || screen.poseSequence) {
+    material.transparent = true
+    material.alphaTest = .05
+    material.depthWrite = true
+  }
+  if (imagePlate?.look?.psx) applyPsxImageMaterial(material, texture, imagePlate.look.psx)
+  if (imagePlate?.look?.colorKey) applyImageColorKey(material, imagePlate.look.colorKey)
+}
+
 function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: boolean, imagePlate?: { look?: ImageLook }) {
   const { target, attachedPlane, plane } = resolveScreenTarget(root, screen, standalone, Boolean(imagePlate))
   const canvas = document.createElement('canvas')
@@ -55,10 +66,7 @@ function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: b
   const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace; texture.flipY = imagePlate || standalone || plane ? !screen.flipY : screen.flipY
   const material = imagePlate && !Array.isArray(previous) && 'map' in previous ? previous.clone() as MeshBasicMaterial
     : new MeshBasicMaterial({ toneMapped: false, side: DoubleSide })
-  material.map = texture
-  if (screen.transparent || screen.poseSequence) { material.transparent = true; material.alphaTest = .05; material.depthWrite = true }
-  if (imagePlate?.look?.psx) applyPsxImageMaterial(material, texture, imagePlate.look.psx)
-  if (imagePlate?.look?.colorKey) applyImageColorKey(material, imagePlate.look.colorKey)
+  applyScreenLook(material, texture, screen, imagePlate)
   return { attachedPlane, target, previous, canvas, context, texture, material }
 }
 

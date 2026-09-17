@@ -5,16 +5,24 @@ import { imageWindowGeometry } from './imageWindows'
 import { imageContactShadow, textureFootprint } from './imageGrounding'
 import type { Scene3DSlot } from './types'
 
-/** A bottom-anchored image plane with real alpha occlusion and scene lighting. */
-export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
+function cutoutAspect(texture: Texture | null) {
   const image = texture?.image as { width?: number; height?: number } | undefined
-  const aspect = image?.width && image.height ? image.width / image.height : 1
+  return image?.width && image.height ? image.width / image.height : 1
+}
+
+function cutoutMaterial(slot: Scene3DSlot, texture: Texture | null) {
   const options = { map: texture, color: slot.imageLook?.tint ?? (texture ? 0xffffff : 0x243044), side: DoubleSide,
     transparent: true, alphaTest: .05, depthWrite: true }
   const material = slot.imageLook?.unlit ? new MeshBasicMaterial(options) : new MeshStandardMaterial({ ...options, roughness: .9 })
   if (texture && slot.imageLook?.psx) applyPsxImageMaterial(material, texture, slot.imageLook.psx)
   if (texture && slot.imageLook?.colorKey) applyImageColorKey(material, slot.imageLook.colorKey)
-  const mesh = new Mesh(imageWindowGeometry(aspect, slot.imageLook?.windows), material)
+  return material
+}
+
+/** A bottom-anchored image plane with real alpha occlusion and scene lighting. */
+export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
+  const aspect = cutoutAspect(texture)
+  const mesh = new Mesh(imageWindowGeometry(aspect, slot.imageLook?.windows), cutoutMaterial(slot, texture))
   groundImageCutout(mesh, slot, texture, aspect)
   poseImageCutout(mesh, slot)
   return mesh

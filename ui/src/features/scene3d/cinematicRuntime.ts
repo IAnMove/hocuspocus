@@ -8,6 +8,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { ENERGY_NOISE } from '../sceneFx/energyShaders'
 import type { GpuWorld } from './gpu'
 import type { Scene3DDocument } from './types'
+import { cinematicReflectorVisible } from './cinematicSettings'
 import { BackdropFloor } from './backdropFloor'
 
 /** Shared preview/export pipeline. No frame delta, random state or private assets. */
@@ -89,34 +90,41 @@ export class CinematicRuntime {
     }
   }
   private syncStage(doc: Scene3DDocument) {
-    if (doc.environment?.reflectiveFloor && !this.mirror) this.createMirror()
+    const useMirror = cinematicReflectorVisible(doc.environment)
+    if (useMirror && !this.mirror) this.createMirror()
     if (this.mirror) {
-      this.mirror.visible = doc.environment?.reflectiveFloor === true && doc.environment.floorStyle !== 'none' && doc.environment.floorStyle !== 'road'
+      this.mirror.visible = useMirror
       ;(this.mirror.material as ShaderMaterial).uniforms.tileStrength.value = doc.environment?.floorStyle === 'mirror' ? 0 : 1
     }
     this.backdropFloor.sync(doc)
     if (doc.environment?.platform && !this.platform) this.createPlatform()
     if (this.platform) this.platform.visible = doc.environment?.platform === true
   }
+  private ensureComposer() {
+    if (this.composer) return
+    const { world } = this
+    this.composer = new EffectComposer(world.renderer)
+    this.composer.addPass(new RenderPass(world.scene, world.camera))
+    this.bloom = new UnrealBloomPass(new Vector2(1280, 720), .48, .55, 1.15)
+    this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass())
+    // Fixed pool: many overlapping cues cannot create unbounded shader/light work.
+    for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
+  }
+  private syncRoad(doc: Scene3DDocument, seconds: number) {
+    const road = doc.environment?.floorStyle === 'road'
+    if (road && !this.road) this.road = new EndlessRoad(this.world.scene)
+    this.road?.sync(road, doc.environment?.road, seconds)
+    if (road) this.world.floor.visible = false
+  }
   sync(doc: Scene3DDocument, seconds: number) {
     this.document = doc
     this.syncBackground(doc); this.syncStage(doc)
-    const { world } = this
     const active = Boolean(doc?.environment || doc?.worldSfx?.length)
-    world.renderer.toneMapping = active ? ACESFilmicToneMapping : NoToneMapping
+    this.world.renderer.toneMapping = active ? ACESFilmicToneMapping : NoToneMapping
     if (!active) { this.road?.sync(false, undefined, seconds); return }
-    if (!this.composer) {
-      this.composer = new EffectComposer(world.renderer)
-      this.composer.addPass(new RenderPass(world.scene, world.camera))
-      this.bloom = new UnrealBloomPass(new Vector2(1280, 720), .48, .55, 1.15)
-      this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass())
-      // Fixed pool: many overlapping cues cannot create unbounded shader/light work.
-      for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
-    }
+    this.ensureComposer()
     this.bloom!.strength = doc.environment?.bloom ?? .48
-    if (doc.environment?.floorStyle === 'road' && !this.road) this.road = new EndlessRoad(world.scene)
-    this.road?.sync(doc.environment?.floorStyle === 'road', doc.environment?.road, seconds)
-    if (doc.environment?.floorStyle === 'road') world.floor.visible = false
+    this.syncRoad(doc, seconds)
     this.syncLights(doc, seconds)
   }
   private syncLights(doc: Scene3DDocument, seconds: number) {

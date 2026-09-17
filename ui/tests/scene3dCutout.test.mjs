@@ -4,7 +4,7 @@ import { Box3, Texture, Vector3 } from 'three'
 import { imageBackdropMesh, poseLoadedSlot } from '../src/features/scene3d/gpu.ts'
 import { isCylinderBackdrop, slotMountKey } from '../src/features/scene3d/backdrop.ts'
 import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document.ts'
-import { parseEnvironment } from '../src/features/scene3d/cinematicSettings.ts'
+import { cinematicReflectorVisible, parseEnvironment } from '../src/features/scene3d/cinematicSettings.ts'
 import fs from 'node:fs'
 import { DARK_FANTASY_IDS } from '../src/features/scene3d/darkFantasyIds.ts'
 import { applyScene3DTemplate, SCENE3D_TEMPLATES } from '../src/features/scene3d/templates.ts'
@@ -51,6 +51,10 @@ test('optional floor finishes survive save/reopen and preserve old defaults', ()
     assert.deepEqual(parseScene3DDocument(JSON.parse(JSON.stringify(doc))).environment, doc.environment)
   }
   assert.deepEqual(parseEnvironment({ ...base, floorStyle: 'invalid' }), base)
+  assert.equal(cinematicReflectorVisible({ ...base, floorStyle: 'mirror' }), true)
+  assert.equal(cinematicReflectorVisible({ ...base, reflectiveFloor: false, floorStyle: 'mirror' }), false)
+  assert.equal(cinematicReflectorVisible({ ...base, floorStyle: 'none' }), false)
+  assert.equal(cinematicReflectorVisible({ ...base, floorStyle: 'road' }), false)
 })
 
 test('all fantasy presets reopen with bundled resources and independent camera/effect documents', () => {
