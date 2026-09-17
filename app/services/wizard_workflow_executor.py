@@ -399,18 +399,31 @@ class WizardWorkflowExecutor:
     def _read(self, workspace: str) -> dict[str, Any]:
         return read_workflows(self._dir(workspace))
 
-    def _commit(self, workspace: str, collection: dict[str, Any], workflow: dict[str, Any]) -> dict[str, Any]:
+    def _commit(
+        self,
+        workspace: str,
+        collection: dict[str, Any],
+        workflow: dict[str, Any],
+        *,
+        retries: int = 5,
+    ) -> dict[str, Any]:
         """Persist one workflow without dropping siblings written during await.
 
         Admission can yield inside ``_submit``. A Wizard UI persist of another
         row increments the shared revision in that window; retrying against the
         latest collection keeps the receipt instead of leaving a running
         checkpoint with no task id.
+
+        Compare-and-swap callers (answer) must pass ``retries=1``. Retrying the
+        same row past ``expectedRevision`` would let a losing client overwrite
+        the winner and emit a second step effect.
         """
         workflow["updatedAt"] = _now()
         candidate = collection
         last_error: Exception | None = None
-        for _ in range(5):
+        remaining = max(1, retries)
+        while remaining:
+            remaining -= 1
             try:
                 _replace(candidate, workflow)
                 saved = write_workflows(
@@ -424,6 +437,8 @@ class WizardWorkflowExecutor:
                 return {"revision": saved["revision"], "workflow": workflow}
             except WizardWorkflowRevisionConflict as error:
                 last_error = error
+                if remaining == 0:
+                    raise
                 candidate = self._read(workspace)
         assert last_error is not None
         raise last_error
@@ -675,7 +690,7 @@ class WizardWorkflowExecutor:
         workflow["recoverableError"] = ""
         workflow["attempts"] = int(workflow.get("attempts") or 0) + 1
         try:
-            self._commit(workspace, collection, workflow)
+            self._commit(workspace, collection, workflow, retries=1)
         except WizardWorkflowRevisionConflict as error:
             raise _revision_conflict(error.expected, error.current) from error
 
@@ -707,7 +722,8 @@ class WizardWorkflowExecutor:
             if step and step["state"] != "completed":
                 task = self._get_task(workspace, step.get("taskId") or "")
                 if task and task.get("status") in FAILED_TASK_STATES:
-                    step["executionKey"] = _step_intent(workflow_id, f"{step['stepId']}:retry:{uuid.uuid4().hex}")
+                    retry_id = int(workflow.get("attempts") or 0)
+                    step["executionKey"] = _step_intent(workflow_id, f"{step['stepId']}:retry:{retry_id}")
                     step["taskId"] = ""
                     step["output"] = {}
                     step["startedAt"] = 0
