@@ -168,7 +168,10 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   useEffect(() => {
     const host = window as Window & { __world3dStage?: Scene3DStageHandle | null }
     host.__world3dStage = stageRef.current
-    return () => { host.__world3dStage = null }
+  })
+  useEffect(() => () => {
+    const host = window as Window & { __world3dStage?: Scene3DStageHandle | null }
+    host.__world3dStage = null
   }, [])
 
   useEffect(() => () => {

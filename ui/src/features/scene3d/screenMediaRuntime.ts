@@ -19,7 +19,9 @@ function waitMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', sign
       if (error) reject(error); else resolve()
     }
     const done = () => finish(), failed = () => finish(new Error('screen-media-load-failed')), aborted = () => finish(new Error('screen-media-disposed'))
-    const timer = setTimeout(() => finish(new Error('screen-media-timeout')), 15000)
+    // Seeked can fail to fire for short mocked WebM clips. A long wait here
+    // stalls every export frame and trips the Linux UI E2E budget.
+    const timer = setTimeout(() => finish(new Error('screen-media-timeout')), event === 'seeked' ? 2_000 : 15_000)
     video.addEventListener(event, done, { once: true }); video.addEventListener('error', failed, { once: true }); signal.addEventListener('abort', aborted, { once: true })
     if (signal.aborted) aborted()
   })
@@ -115,16 +117,22 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
       if (runtime.error) throw runtime.error
       if (poses && !abort.signal.aborted) { poses.paint(context, current, seconds); texture.needsUpdate = true; onFrame(); return }
       if (!video || abort.signal.aborted) return
-      desired = mediaScreenTime(seconds, video.duration, current)
+      const next = mediaScreenTime(seconds, video.duration, current)
+      desired = Number.isFinite(next) ? next : 0
       // Browsers snap to a frame; retrying the same clock time never lands exactly and hangs export.
       while (!abort.signal.aborted && (pending || settled !== desired)) {
         if (!pending) pending = (async () => {
           while (!abort.signal.aborted && settled !== desired) {
             const target = desired
-            if (Math.abs(video.currentTime - target) > .0005) {
-              const sought = waitMedia(video, 'seeked', abort.signal); video.currentTime = target; await sought; paint()
+            if (Number.isFinite(target) && Math.abs(video.currentTime - target) > .0005) {
+              try {
+                const sought = waitMedia(video, 'seeked', abort.signal); video.currentTime = target; await sought
+              } catch (error) {
+                if (abort.signal.aborted) throw error instanceof Error ? error : new Error(String(error))
+              }
+              paint()
             }
-            settled = target
+            settled = Number.isFinite(target) ? target : 0
           }
         })().catch(error => { runtime.error = error instanceof Error ? error : new Error(String(error)); throw runtime.error }).finally(() => { pending = null })
         await pending

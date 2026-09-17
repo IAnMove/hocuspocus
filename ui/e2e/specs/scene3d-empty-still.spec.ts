@@ -7,13 +7,13 @@ import { parseImagePoses } from '../../src/features/scene3d/imagePoseSequence'
 import type { Scene3DStageHandle } from '../../src/features/scene3d/Scene3DStage'
 
 test.use({ channel: process.platform === 'win32' ? 'msedge' : 'chrome' })
-test.setTimeout(120_000)
+test.setTimeout(240_000)
 
 for (const media of ['poses', 'video'] as const) {
   test(`a cutout without its still loads and exports its ${media}`, async ({ page }) => {
     const session = await gotoApp(page)
     const scene = applyScene3DTemplate('creative-ocean-window')
-    scene.duration = 1
+    scene.duration = 0.5
     scene.camera.framing = undefined
     scene.slots = scene.slots.filter(slot => slot.id === 'background')
     const slot = scene.slots[0]

@@ -80,6 +80,18 @@ test('no-op and same-target requests await decoded content and repaint on backwa
   } finally { runtime.dispose(); h.restore() }
 })
 
+test('a seek without seeked still settles so export cannot stall on every frame', async () => {
+  const h = mediaHarness(), screen = { ...defaultMediaScreen(), media: 'video', sourceUrl: '/test.mp4' }
+  const runtime = await bindScreenMedia(h.root, screen, true, new AbortController().signal)
+  try {
+    const started = Date.now()
+    await runtime.seek(1, screen)
+    assert.ok(Date.now() - started < 4_000)
+    assert.equal(h.video.currentTime, 1)
+    assert.equal(h.frames.at(-1), 1)
+  } finally { runtime.dispose(); h.restore() }
+})
+
 test('a snapped decoded frame settles once so export does not reseek the same clock time', async () => {
   const h = mediaHarness(), screen = { ...defaultMediaScreen(), media: 'video', sourceUrl: '/test.mp4' }
   let time = 0, assignments = 0

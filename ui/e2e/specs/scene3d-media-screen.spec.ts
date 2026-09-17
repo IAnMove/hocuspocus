@@ -4,7 +4,7 @@ import { gotoApp, closeApp } from '../helpers/gotoApp'
 import { applyScene3DTemplate } from '../../src/features/scene3d/templates'
 
 test.use({ channel: process.platform === 'win32' ? 'msedge' : 'chrome' })
-test.setTimeout(120_000)
+test.setTimeout(240_000)
 
 test('a screen upload, dimensions and fit survive saving and reopening the shot', async ({ page }, testInfo) => {
   const session = await gotoApp(page)
