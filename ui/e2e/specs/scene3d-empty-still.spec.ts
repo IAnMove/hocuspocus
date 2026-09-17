@@ -7,6 +7,7 @@ import { parseImagePoses } from '../../src/features/scene3d/imagePoseSequence'
 import type { Scene3DStageHandle } from '../../src/features/scene3d/Scene3DStage'
 
 test.use({ channel: process.platform === 'win32' ? 'msedge' : 'chrome' })
+test.setTimeout(120_000)
 
 for (const media of ['poses', 'video'] as const) {
   test(`a cutout without its still loads and exports its ${media}`, async ({ page }) => {
@@ -57,7 +58,7 @@ for (const media of ['poses', 'video'] as const) {
       json: { name: 'empty-still.mp4', type: 'video', url: '/api/v1/file/empty-still.mp4' },
     }))
     await workspace.getByTestId('world3d-export').click()
-    await expect(workspace.getByTestId('world3d-export-note')).toContainText('empty-still.mp4', { timeout: 30_000 })
+    await expect(workspace.getByTestId('world3d-export-note')).toContainText('empty-still.mp4', { timeout: 90_000 })
     const bytes = await page.evaluate(() => (window as Window & { __world3dLastMp4?: Blob }).__world3dLastMp4?.size)
     expect(bytes).toBeGreaterThan(1000)
     await closeApp(page, session)

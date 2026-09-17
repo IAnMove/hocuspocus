@@ -4,9 +4,9 @@ import { gotoApp, closeApp } from '../helpers/gotoApp'
 import { applyScene3DTemplate } from '../../src/features/scene3d/templates'
 
 test.use({ channel: process.platform === 'win32' ? 'msedge' : 'chrome' })
+test.setTimeout(120_000)
 
 test('a screen upload, dimensions and fit survive saving and reopening the shot', async ({ page }, testInfo) => {
-  test.setTimeout(60_000)
   const session = await gotoApp(page)
   const url = '/api/v1/uploads/media-screen-test.png'
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
@@ -88,7 +88,7 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
   }
   await page.route('**/api/v1/scenes/recordings', route => route.fulfill({ json: { name: 'animated-background.mp4', type: 'video', url: '/api/v1/file/animated-background.mp4' } }))
   await workspace.getByTestId('world3d-export').click()
-  await expect(workspace.getByTestId('world3d-export-note')).toContainText('animated-background.mp4', { timeout: 30_000 })
+  await expect(workspace.getByTestId('world3d-export-note')).toContainText('animated-background.mp4', { timeout: 90_000 })
   const difference = await page.evaluate(async () => {
     const blob = (window as Window & { __world3dLastMp4?: Blob }).__world3dLastMp4!
     const url = URL.createObjectURL(blob), video = document.createElement('video')

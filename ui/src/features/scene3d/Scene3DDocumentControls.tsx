@@ -29,7 +29,7 @@ export function Scene3DDocumentControls({ document, disabled, workspace, preview
     link.href = url
     link.download = `clip-${String(document.clipNumber ?? 0).padStart(2, '0')}-${document.templateId}.world3d.json`
     link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
   return <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
     <Scene3DLibraryControls document={document} workspace={workspace} disabled={disabled} preview={preview} identity={identity} onLoad={onLoad} onSaved={onSaved} />
