@@ -83,8 +83,11 @@ export async function exportSpeech(page: Page, info: TestInfo) {
   const aac = await page.evaluate(async () => typeof AudioEncoder !== 'undefined' && (await AudioEncoder.isConfigSupported({
     codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 1, bitrate: 128000,
   })).supported)
-  // Keep Windows testing native AAC; Linux now validates server PCM finalization.
-  if (process.env.HOCUSPOCUS_REQUIRE_SPEECH_AAC === '1' || process.platform === 'win32') expect(aac, 'The real-export runner must provide AAC encoding').toBe(true)
+  const requireNative = process.env.HOCUSPOCUS_REQUIRE_SPEECH_AAC === '1' || process.platform === 'win32'
+  if (requireNative) expect(aac, 'The real-export runner must provide AAC encoding').toBe(true)
+  // Playwright Chromium advertises H.264, but Linux UI E2E must not encode
+  // native films. The required Windows Edge job already covers real MP4s.
+  if (!requireNative) return { encoded: false as const }
   const response = page.waitForResponse(r => r.url().endsWith('/scenes/recordings') && r.request().method() === 'POST', { timeout: 90000 })
   await page.getByTestId('world3d-export').click()
   expect((await response).ok()).toBeTruthy()
