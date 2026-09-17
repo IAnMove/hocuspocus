@@ -1,3 +1,4 @@
+import { withCharacterPoseDimensions } from '../../lib/characterPoseDimensions'
 import { sceneAudioWav, supportsSceneAac } from '../../features/sceneFx/audioExport'
 import { paintSceneFx } from '../../features/sceneFx/paint'
 import { waitForSceneImages } from '../../lib/sceneMediaReady'
@@ -53,7 +54,7 @@ import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { applySceneRhythmToLayer, buildSceneRhythmMap, type SceneRhythmCueSource, type SceneRhythmProfile } from '../../lib/sceneRhythm'
 import { applyCutoutDialogue, bindCutoutFaceToPose, ensureCutoutFacePlayback, findCutoutMouthLayers, isCutoutFaceLayer, normalizeAlignedCutoutUnits, normalizeFaceBinding, planAlignedCutoutDialogue, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
-import { captureCharacterFaceAnchor, characterKitAssetFromLayer, claimUnusedCharacterKitId, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, syncMountedCharacterKitLayers, syncSceneCharacterKits, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
+import { captureCharacterKitFaceAnchor, characterKitAssetFromLayer, claimUnusedCharacterKitId, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, syncMountedCharacterKitLayers, syncSceneCharacterKits, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
 import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } from '../../lib/characterKitHandoff'
 import { rememberCharacterKitLibrary, rememberVideo3dScene } from '../../features/agent/wizardLabSession'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
@@ -2366,8 +2367,8 @@ export function SceneAnimatorPanel() {
     const poseLayerId = selected.faceBinding?.poseLayerId ?? (selected.relationship?.type === 'parent' ? selected.relationship.targetLayerId : '')
     const pose = scene.layers.find(layer => layer.id === poseLayerId)
     if (!pose) { setCharacterKitError(t('animator.bindBeforeAnchor')); return }
-    const anchor = captureCharacterFaceAnchor(pose, selected)
     const poseId = characterKitPoseId.trim() || 'base'
+    const anchor = captureCharacterKitFaceAnchor(characterKitDraft, poseId, pose, selected, scene)
     const role = selected.faceBinding?.role ?? (/eye|blink/i.test(selected.name) ? 'blink' : 'mouth')
     setCharacterKitDraft(current => current ? {
       ...current,
@@ -2413,12 +2414,18 @@ export function SceneAnimatorPanel() {
       await persistCharacterKitDraft(characterKitDraft, true)
     } finally { setCharacterKitBusy(false) }
   }
-  const mountCharacterKit = () => {
+  const mountCharacterKit = async () => {
     if (!characterKitDraft) return
+    const mountedScene = sceneRef.current
+    setCharacterKitBusy(true)
     try {
       const poseId = characterKitPoseId.trim() || 'base'
+      const fittedKit = await withCharacterPoseDimensions(characterKitDraft, workspace, poseId)
+      if (useStore.getState().activeWorkspace !== workspace || sceneRef.current !== mountedScene) return
+      setCharacterKitDraft(fittedKit)
+      setCharacterKitLibrary(current => ({ ...current, kits: { ...current.kits, [fittedKit.id]: fittedKit } }))
       const mounted = ensureCutoutFacePlayback(
-        mountCharacterKitLayers(characterKitDraft, poseId, undefined, scene.duration, scene),
+        mountCharacterKitLayers(fittedKit, poseId, undefined, scene.duration, scene),
         scene.duration,
         fps,
         [],
@@ -2427,7 +2434,7 @@ export function SceneAnimatorPanel() {
       const mountedIds = new Set(mounted.map(layer => layer.id))
       if (scene.layers.some(layer => mountedIds.has(layer.id))) {
         updateScene(current => {
-          const synced = syncMountedCharacterKitLayers(current.layers, characterKitDraft, poseId, current) as AnimatorLayer[]
+          const synced = syncMountedCharacterKitLayers(current.layers, fittedKit, poseId, current) as AnimatorLayer[]
           const layers = ensureCutoutFacePlayback(synced, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
           return { ...current, layers }
         })
@@ -2437,6 +2444,7 @@ export function SceneAnimatorPanel() {
       updateScene(current => ({ ...current, layers: normalizeZ([...current.layers, ...mounted]) }))
       setSelectedId(mounted[0].id); setMessage(t('animator.kitMountedPreview', { name: characterKitDraft.name }))
     } catch (error) { setCharacterKitError(error instanceof Error ? error.message : t('animator.kitMountFailed')) }
+    finally { setCharacterKitBusy(false) }
   }
   const removeCharacterKit = async () => {
     if (!characterKitDraft || !window.confirm(t('animator.deleteKitConfirm', { name: characterKitDraft.name }))) return

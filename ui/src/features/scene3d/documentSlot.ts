@@ -1,4 +1,5 @@
 import { parseAppearance } from './cinematicSettings'
+import { parseImageLook } from './imageLook'
 import { parseClipPlayback, parseMotion } from './performance.ts'
 import { parseSpeech } from './speech/track'
 import { parseCharacterKitRef, parseCharacterVoice } from '../../lib/characterVoice'
@@ -12,6 +13,18 @@ export const parseDressing = (value?: Scene3DDressing) => DRESSINGS.has(value!) 
 
 function textureRepeat(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(16, Math.max(1, value)) : undefined
+}
+
+function parseSlotMedia(media: Scene3DSlot['media']): Scene3DSlot['media'] {
+  return media === 'image' || media === 'screen' ? media : 'model3d'
+}
+
+function parseSurface(surface: Scene3DSlot['surface']) {
+  return surface === 'environment' || surface === 'floor' || surface === 'wall' || surface === 'cutout' ? surface : undefined
+}
+
+function parsePerformance(performance: Scene3DSlot['performance']) {
+  return performance === 'typing' || performance === 'idle' ? performance : undefined
 }
 
 function validCharacterIdentity(value: NonNullable<Scene3DSlot['character']>) {
@@ -33,12 +46,13 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
   return {
     ...slot, sourceUrl, sourceRef: sourceUrl && sourceRef ? sourceRef : undefined,
     character: normalizeCharacter(slot.character),
-    speech: slot.media === 'image' || slot.media === 'screen' ? undefined : parseSpeech(slot.speech),
-    media: slot.media === 'image' ? 'image' : slot.media === 'screen' ? 'screen' : 'model3d', screen: parseMediaScreen(slot.screen),
+    speech: parseSlotMedia(slot.media) === 'model3d' ? parseSpeech(slot.speech) : undefined,
+    media: parseSlotMedia(slot.media), screen: parseMediaScreen(slot.screen),
     loop: parseScene3DLoop(slot.loop), clipPlayback: parseClipPlayback(slot.clipPlayback), motion: parseMotion(slot.motion),
     appearance: parseAppearance(slot.appearance),
-    surface: slot.surface === 'environment' || slot.surface === 'floor' || slot.surface === 'wall' ? slot.surface : undefined,
+    imageLook: slot.media === 'image' && slot.surface === 'cutout' ? parseImageLook(slot.imageLook) : undefined,
+    surface: parseSurface(slot.surface),
     grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat),
-    performance: slot.performance === 'typing' || slot.performance === 'idle' ? slot.performance : undefined,
+    performance: parsePerformance(slot.performance),
   }
 }

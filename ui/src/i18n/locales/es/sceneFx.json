@@ -90,5 +90,25 @@
   "anchor": "Seguir id del hueco",
   "anchorNone": "Ninguno — se queda en el mundo",
   "worldTarget": "Apuntar al id del hueco",
-  "worldTargetPosition": "Apuntar (m)"
+  "worldTargetPosition": "Apuntar (m)",
+  "motion": {
+    "title": "Trayectoria animada",
+    "help": "Posición, giro y tamaño en momentos concretos de la escena. Los puntos sustituyen la posición fija. Usa tamaño 0 para aparecer desde la nada y giros de 360° para una vuelta completa.",
+    "detach": "Desvincula el anclaje para animar la posición en el escenario.",
+    "time": "Tiempo de escena (s)",
+    "scale": "Tamaño",
+    "easing": "Movimiento hacia el siguiente punto",
+    "smooth": "Suave",
+    "linear": "Uniforme",
+    "add": "Añadir punto",
+    "clear": "Quitar trayectoria"
+  },
+  "portalPlayback": {
+    "title": "Paisaje dentro del portal",
+    "screen": "Ventana al siguiente mundo",
+    "help": "Mantiene el paisaje alineado con el encuadre mientras crece el portal. Usa la misma cámara y el mismo instante del vídeo al continuar en el siguiente escenario.",
+    "start": "Inicio del vídeo (s)",
+    "speed": "Velocidad",
+    "loop": "Repetir vídeo"
+  }
 }

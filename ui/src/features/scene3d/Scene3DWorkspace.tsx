@@ -35,6 +35,8 @@ import { Scene3DAnimationControls } from './Scene3DAnimationControls'
 import { Scene3DDocumentControls } from './Scene3DDocumentControls'
 import { Scene3DTransport } from './Scene3DTransport'
 import { Scene3DTransformPanel } from './Scene3DTransformPanel'
+import { Scene3DPreview } from './Scene3DPreview'
+import { Scene3DObjectList } from './Scene3DObjectList'
 import { Scene3DInteraction } from './Scene3DInteraction'
 import type { TransformMode } from './transformGizmo'
 import { clipBindingError, resolveScene3DClip, retainSlotClipCatalogs } from './clips.ts'
@@ -46,11 +48,13 @@ import { canMutateWorld3DScene } from './exportLock.ts'
 import { exportWorld3DDocument } from './exportFlow.ts'
 import { Scene3DStage, type Scene3DStageHandle } from './Scene3DStage.tsx'
 import { applyScene3DTemplate, patchScene3DSlot, remountScene3DTemplate, type Scene3DTemplateId } from './templates.ts'
+import { Scene3DImageLookControls } from './Scene3DImageLookControls'
+import { Scene3DWindowControls } from './Scene3DWindowControls'
 import { commitSlotSourceChoice, pickerOutputFromSlot, type SlotSourceCapture } from './slotSource.ts'
 import type { Scene3DCameraFamily, Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLoop, Scene3DSlot } from './types.ts'
 import { documentFromWorld3DRequest, listenForWorld3DWorkflow } from './world3dAgent.ts'
 
-const FAMILIES = ['establishment', 'orbit', 'follow', 'pursuit', 'side', 'front', 'chase', 'hood', 'wing', 'product', 'reveal', 'encounter', 'musical'] as const satisfies readonly Scene3DCameraFamily[]
+const FAMILIES = ['fixed', 'establishment', 'orbit', 'follow', 'pursuit', 'side', 'front', 'chase', 'hood', 'wing', 'product', 'reveal', 'encounter', 'musical'] as const satisfies readonly Scene3DCameraFamily[]
 
 type Props = {
   width: number
@@ -64,7 +68,7 @@ function revokeIfBlob(url: string) {
 
 function numberField(label: string, value: number, onChange: (value: number) => void, step = 0.05, disabled = false) {
   return (
-    <label className="flex items-center gap-1 text-[8px] text-text-muted">
+    <label className="flex items-center gap-1 text-sm text-text-muted">
       {label}
       <input
         type="number"
@@ -75,7 +79,7 @@ function numberField(label: string, value: number, onChange: (value: number) => 
           const next = Number(event.target.value)
           if (Number.isFinite(next)) onChange(next)
         }}
-        className="w-16 rounded border border-border bg-bg-tertiary px-1 py-0.5 text-[9px] text-text-primary disabled:opacity-40"
+        className="w-16 rounded border border-border bg-bg-tertiary px-1 py-0.5 text-sm text-text-primary disabled:opacity-40"
       />
     </label>
   )
@@ -151,6 +155,9 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
 
   useEffect(() => {
     sceneDocRef.current = sceneDoc
+    const host = window as Window & { __world3dDocument?: Scene3DDocument }
+    host.__world3dDocument = sceneDoc
+    return () => { if (host.__world3dDocument === sceneDoc) delete host.__world3dDocument }
   }, [sceneDoc])
 
   const setExportingFlag = (value: boolean) => {
@@ -161,8 +168,11 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   useEffect(() => {
     const host = window as Window & { __world3dStage?: Scene3DStageHandle | null }
     host.__world3dStage = stageRef.current
-    return () => { host.__world3dStage = null }
   })
+  useEffect(() => () => {
+    const host = window as Window & { __world3dStage?: Scene3DStageHandle | null }
+    host.__world3dStage = null
+  }, [])
 
   useEffect(() => () => {
     for (const slot of sceneDocRef.current.slots) revokeIfBlob(slot.sourceUrl)
@@ -398,8 +408,10 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         onToggle={() => { if (canMutateWorld3DScene(exportingRef.current)) { setPickTarget(undefined); setPlaying(current => !current) } }}
         onSeek={time => { if (exportingRef.current) return; setPlaying(false); setFrame(Math.min(count - 1, Math.max(0, Math.round(time * fps)))) }}
         onSpeed={playbackSpeed => applyScene(current => ({ ...current, playbackSpeed }))} />
-      <div className={`grid items-start gap-3 ${speechVisible ? 'xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
-      <Scene3DInteraction enabled={!playing && !exporting && (Boolean(selectedWorldSfxId) || (Boolean(selected) && selected.media !== 'image'))}
+      <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
+      <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <Scene3DPreview width={sceneDoc.width} height={sceneDoc.height}>
+      <Scene3DInteraction enabled={!playing && !exporting && (Boolean(selectedWorldSfxId) || Boolean(selected))}
         width={sceneDoc.width} height={sceneDoc.height} onMode={setTransformMode}>
         <Scene3DStage
           ref={stageRef}
@@ -436,6 +448,17 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
           <span className="mt-1 block text-[10px] text-amber-100/90">{t('stage.previewQuality')}</span>
         </div>
       </Scene3DInteraction>
+      </Scene3DPreview>
+      <div className="min-w-0 space-y-3">
+        <Scene3DObjectList slots={sceneDoc.slots} selectedId={selectedWorldSfxId ? undefined : selectedId} onSelect={selectSlot} />
+      {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
+        onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
+        onReset={() => {
+          const pose = applyScene3DTemplate(sceneDoc.templateId).slots.find(slot => slot.id === selected.id)
+          if (pose) applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
+        }} />}
+      </div>
+      </div>
       <SceneObjectInspector
         document={sceneDoc}
         selectedId={selectedId}
@@ -466,7 +489,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       </div>}
       </div>
       {sceneDoc.dressing === 'workshop' && <label className="flex items-center gap-2 text-xs">{editorT('travel.screen')}<select disabled={exporting} value={sceneDoc.workshopScreen ?? 'code'} onChange={event => applyScene(current => ({ ...current, workshopScreen: event.target.value as 'code' | 'error' | 'success' }))} className="min-h-10 rounded border border-border bg-bg-tertiary px-2">{(['code', 'error', 'success'] as const).map(state => <option key={state} value={state}>{editorT(`travel.${state}`)}</option>)}</select></label>}
-      <Scene3DFramingControls framing={sceneDoc.camera.framing} slots={sceneDoc.slots} disabled={editingLocked} onChange={framing => applyScene(current => ({ ...current, camera: { ...current.camera, framing } }))} />
+      <Scene3DFramingControls framing={sceneDoc.camera.framing} slots={sceneDoc.slots} disabled={editingLocked || sceneDoc.camera.family === 'fixed'} onChange={framing => applyScene(current => ({ ...current, camera: { ...current.camera, framing } }))} />
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-text-primary">{editorT('camera')}
           <select disabled={exporting} value={sceneDoc.camera.family} onChange={event => applyScene(current => ({ ...current, camera: { ...current.camera, family: event.target.value as Scene3DCameraFamily, framing: undefined } }))}
@@ -491,13 +514,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         >{t('stage.exportCancel')}</button>}
       </div>
       <p className="text-xs text-text-muted">{t('stage.exportQualityHint')}</p>
-      {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
-        onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
-        onReset={() => {
-          const pose = applyScene3DTemplate(sceneDoc.templateId).slots.find(slot => slot.id === selected.id)
-          if (pose) applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
-        }} />}
-      {selected && selected.media !== 'image' && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))} />}
+      {selected && (selected.media !== 'image' || selected.surface === 'cutout') && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))} />}
       <button type="button" disabled={editingLocked || sceneDoc.slots.length >= 64} className="min-h-11 self-start rounded-lg border border-cyan-400/50 px-4 text-sm text-text-primary" onClick={() => {
         if (!canMutateWorld3DScene(exportingRef.current)) return
         const id = `screen_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -524,20 +541,20 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
                 <AssetInput
                   label={t(`stage.slot.${slot.slot}`)}
                   placeholder={t('stage.fromApp')}
-                  items={slot.slot === 'background' ? imageItems : modelItems}
+                  items={slot.media === 'image' ? imageItems : modelItems}
                   value={pickerOutputFromSlot(slot.sourceUrl, slot.media, slot.sourceRef)}
-                  accept={slot.slot === 'background' ? 'image/*' : '.glb,model/gltf-binary'}
+                  accept={slot.media === 'image' ? 'image/*' : '.glb,model/gltf-binary'}
                   optional
                   disabled={exporting}
                   constraints={{
-                    kinds: slot.slot === 'background' ? ['image'] : ['model3d'],
+                    kinds: slot.media === 'image' ? ['image'] : ['model3d'],
                     maxCount: 1,
                     optional: true,
                   }}
                   onChoose={item => assignChoice(slot, capture, item)}
                 />
               </div>}
-              <Scene3DScreenControls slot={slot} meshes={screenTargets[slot.id]?.meshes ?? []} nodes={screenTargets[slot.id]?.nodes ?? []} items={[...imageItems, ...videoItems]} disabled={editingLocked}
+              <Scene3DScreenControls slot={slot} meshes={screenTargets[slot.id]?.meshes ?? []} nodes={screenTargets[slot.id]?.nodes ?? []} items={[...imageItems, ...videoItems]} disabled={editingLocked} workspace={workspace}
                 onChange={screen => applyScene(current => patchScene3DSlot(current, slot.id, { screen }))}
                 onChoose={item => {
                   if (item && item.type !== 'image' && item.type !== 'video') return
@@ -547,15 +564,17 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
                     const live = current.slots.find(value => value.id === slot.id)
                     if (!live?.screen) return current
                     return patchScene3DSlot(current, slot.id, { screen: { ...live.screen, sourceUrl: commit.action === 'clear' ? '' : commit.sourceUrl,
-                      sourceRef: commit.action === 'clear' ? undefined : commit.sourceRef, media: item?.type === 'video' ? 'video' : 'image' } })
+                      sourceRef: commit.action === 'clear' ? undefined : commit.sourceRef, poseSequence: undefined, media: item?.type === 'video' ? 'video' : 'image' } })
                   })
                 }}
                 onRemove={() => { generationRef.current += 1; applyScene(current => ({ ...current, slots: current.slots.filter(value => value.id !== slot.id), camera: current.camera.framing?.targetSlot === slot.id ? { ...current.camera, framing: undefined } : current.camera })) }} />
               <AppearanceControls slot={slot} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, slot.id, patch))} />
               <Scene3DAnimationControls slot={slot} clips={catalogs[slot.id]} duration={sceneDoc.duration} disabled={editingLocked}
                 onChange={patch => applyScene(current => patchScene3DSlot(current, slot.id, patch))} />
-              {slot.slot === 'background' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => applyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as 'floor' | 'wall' | 'environment', loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}
-              {slot.slot === 'background' && slot.surface && slot.surface !== 'environment' && numberField(editorT('travel.repeat'), slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2), value => applyScene(current => patchScene3DSlot(current, slot.id, { textureRepeat: Math.max(1, Math.min(16, value)) })), 1, exporting)}
+              {slot.media === 'image' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => applyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}
+              {slot.media === 'image' && slot.surface === 'cutout' && <Scene3DImageLookControls value={slot.imageLook} disabled={exporting} onChange={imageLook => applyScene(current => patchScene3DSlot(current, slot.id, { imageLook }))} />}
+              {slot.media === 'image' && slot.surface === 'cutout' && slot.sourceUrl && <Scene3DWindowControls key={`${slot.id}:${slot.sourceUrl}`} sourceUrl={slot.sourceUrl} windows={slot.imageLook?.windows} disabled={exporting} onChange={windows => applyScene(current => patchScene3DSlot(current, slot.id, { imageLook: { ...slot.imageLook, windows } }))} />}
+              {slot.media === 'image' && (slot.surface === 'floor' || slot.surface === 'wall') && numberField(editorT('travel.repeat'), slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2), value => applyScene(current => patchScene3DSlot(current, slot.id, { textureRepeat: Math.max(1, Math.min(16, value)) })), 1, exporting)}
               {slot.slot === 'background' && !slot.surface && (
                 <InfiniteBackdropControls
                   loop={slot.loop}
@@ -597,7 +616,7 @@ function InfiniteBackdropControls({
   const speed = loop?.speed ?? 0.18
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1">
-      <label className="flex items-center gap-1 text-[8px] text-text-muted">
+      <label className="flex items-center gap-1 text-sm text-text-muted">
         <input
           type="checkbox"
           data-testid="scene3d-infinite"

@@ -993,7 +993,8 @@
       "chase": "Chase cam",
       "hood": "Hood cam",
       "wing": "Wing cam",
-      "musical": "Musical orbit"
+      "musical": "Musical orbit",
+      "fixed": "Fixed camera"
     },
     "template": {
       "two-shot": "Two-shot",

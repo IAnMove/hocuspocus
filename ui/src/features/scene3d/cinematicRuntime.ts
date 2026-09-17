@@ -1,3 +1,4 @@
+import { EndlessRoad } from './endlessRoad'
 import { ACESFilmicToneMapping, Color, CylinderGeometry, Group, Mesh, MeshStandardMaterial, NoToneMapping, PlaneGeometry, PointLight, ShaderMaterial, TorusGeometry, UniformsUtils, Vector2, type IUniform, type Texture } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
@@ -7,9 +8,12 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { ENERGY_NOISE } from '../sceneFx/energyShaders'
 import type { GpuWorld } from './gpu'
 import type { Scene3DDocument } from './types'
+import { cinematicReflectorVisible } from './cinematicSettings'
+import { BackdropFloor } from './backdropFloor'
 
 /** Shared preview/export pipeline. No frame delta, random state or private assets. */
 export class CinematicRuntime {
+  private road?: EndlessRoad
   private mirror?: Reflector
   private platform?: Group
   private composer?: EffectComposer
@@ -20,20 +24,21 @@ export class CinematicRuntime {
   private size = new Vector2()
   private document?: Scene3DDocument
   private world: GpuWorld
-  constructor(world: GpuWorld) { this.world = world }
+  private backdropFloor: BackdropFloor
+  constructor(world: GpuWorld) { this.world = world; this.backdropFloor = new BackdropFloor(world) }
 
   private createMirror() {
     const reflectorShader = (Reflector as unknown as { ReflectorShader: { uniforms: Record<string, IUniform>; vertexShader: string } }).ReflectorShader
     const shader = {
-      uniforms: UniformsUtils.clone(reflectorShader.uniforms),
+      uniforms: { ...UniformsUtils.clone(reflectorShader.uniforms), tileStrength: { value: 1 } },
       vertexShader: reflectorShader.vertexShader.replace('varying vec4 vUv;', 'varying vec4 vUv; varying vec3 groundPos;')
         .replace('vUv = textureMatrix', 'groundPos=(modelMatrix*vec4(position,1.)).xyz; vUv = textureMatrix'),
-      fragmentShader: `uniform vec3 color; uniform sampler2D tDiffuse; varying vec4 vUv; varying vec3 groundPos; ${ENERGY_NOISE}
+      fragmentShader: `uniform vec3 color; uniform float tileStrength; uniform sampler2D tDiffuse; varying vec4 vUv; varying vec3 groundPos; ${ENERGY_NOISE}
       void main(){vec2 p=groundPos.xz;vec2 uv=vUv.xy/vUv.w;float grain=noise2(p*145.);
         vec3 refl=texture2D(tDiffuse,uv+vec2((grain-.5)*.0007,0.)).rgb;
         vec2 seam=abs(fract(p*vec2(.52,.35))-.5);float joint=smoothstep(.476,.495,max(seam.x,seam.y));
         float brushed=noise2(vec2(p.x*320.,p.y*4.));vec3 steel=vec3(.035,.043,.075)+brushed*.018;
-        vec3 c=mix(steel,refl,.58)*(1.-joint*.63);float fade=1.-smoothstep(4.,11.,length(p));
+        vec3 c=mix(steel,refl,.58)*(1.-joint*.63*tileStrength);float fade=1.-smoothstep(4.,11.,length(p));
         gl_FragColor=vec4(c,fade*.95);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -70,40 +75,56 @@ export class CinematicRuntime {
       if (this.background) this.background.needsUpdate = true
     }
     world.scene.background = this.background ?? new Color(0x10141c)
+    this.fitBackground()
+    for (const s of doc.slots) if (s.surface === 'environment') {
+      const gpu = world.slots.get(s.id); if (gpu) gpu.root.visible = false
+    }
+  }
+  private fitBackground() {
+    const { world } = this
     if (this.background) {
       const image = this.background.image as { width?: number; height?: number }
       const aspect = (image.width ?? 16) / (image.height ?? 9), cameraAspect = world.camera.aspect
       this.background.repeat.set(Math.min(1, cameraAspect / aspect), Math.min(1, aspect / cameraAspect))
       this.background.offset.set((1 - this.background.repeat.x) / 2, (1 - this.background.repeat.y) / 2)
     }
-    for (const s of doc.slots) if (s.surface === 'environment') {
-      const gpu = world.slots.get(s.id); if (gpu) gpu.root.visible = false
-    }
   }
   private syncStage(doc: Scene3DDocument) {
-    const { world } = this
-    if (doc.environment?.reflectiveFloor && !this.mirror) this.createMirror()
-    if (this.mirror) this.mirror.visible = doc.environment?.reflectiveFloor === true
-    world.floor.visible = !doc.environment?.reflectiveFloor
+    const useMirror = cinematicReflectorVisible(doc.environment)
+    if (useMirror && !this.mirror) this.createMirror()
+    if (this.mirror) {
+      this.mirror.visible = useMirror
+      ;(this.mirror.material as ShaderMaterial).uniforms.tileStrength.value = doc.environment?.floorStyle === 'mirror' ? 0 : 1
+    }
+    this.backdropFloor.sync(doc)
     if (doc.environment?.platform && !this.platform) this.createPlatform()
     if (this.platform) this.platform.visible = doc.environment?.platform === true
+  }
+  private ensureComposer() {
+    if (this.composer) return
+    const { world } = this
+    this.composer = new EffectComposer(world.renderer)
+    this.composer.addPass(new RenderPass(world.scene, world.camera))
+    this.bloom = new UnrealBloomPass(new Vector2(1280, 720), .48, .55, 1.15)
+    this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass())
+    // Fixed pool: many overlapping cues cannot create unbounded shader/light work.
+    for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
+  }
+  private syncRoad(doc: Scene3DDocument, seconds: number) {
+    const road = doc.environment?.floorStyle === 'road'
+    if (road && !this.road) this.road = new EndlessRoad(this.world.scene)
+    this.road?.sync(road, doc.environment?.road, seconds)
+    if (road) this.world.floor.visible = false
   }
   sync(doc: Scene3DDocument, seconds: number) {
     this.document = doc
     this.syncBackground(doc); this.syncStage(doc)
-    const { world } = this
     const active = Boolean(doc?.environment || doc?.worldSfx?.length)
-    world.renderer.toneMapping = active ? ACESFilmicToneMapping : NoToneMapping
-    if (!active) return
-    if (!this.composer) {
-      this.composer = new EffectComposer(world.renderer)
-      this.composer.addPass(new RenderPass(world.scene, world.camera))
-      this.bloom = new UnrealBloomPass(new Vector2(1280, 720), .48, .55, 1.15)
-      this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass())
-      // Fixed pool: many overlapping cues cannot create unbounded shader/light work.
-      for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
-    }
+    this.world.renderer.toneMapping = active ? ACESFilmicToneMapping : NoToneMapping
+    if (!active) { this.road?.sync(false, undefined, seconds); return }
+    this.ensureComposer()
     this.bloom!.strength = doc.environment?.bloom ?? .48
+    this.syncRoad(doc, seconds)
     this.syncLights(doc, seconds)
   }
   private syncLights(doc: Scene3DDocument, seconds: number) {
@@ -127,6 +148,8 @@ export class CinematicRuntime {
     } else { this.lights.forEach(light => { light.intensity = 0 }); renderer.render(scene, camera) }
   }
   dispose() {
+    this.road?.dispose()
+    this.backdropFloor.dispose()
     this.background?.dispose()
     this.composer?.passes.forEach(pass => pass.dispose()); this.composer?.dispose()
     this.mirror?.removeFromParent(); this.mirror?.geometry.dispose(); this.mirror?.dispose()

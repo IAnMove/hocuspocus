@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "title": "Ventanas a mundos vivos",
+  "items": [
+    {
+      "id": "creative-scarlet-tide-motion",
+      "number": 1,
+      "title": "Marea tras el muro",
+      "titleEn": "Tide Behind the Wall",
+      "description": "Mar animado tras una ventana escarlata. Pared y marco estáticos, personaje y objetos en otras profundidades.",
+      "psx": "atrezzo",
+      "colors": [
+        "#572d36",
+        "#3ce7d1"
+      ],
+      "duration": 6,
+      "video": "creative-scarlet-tide-motion.mp4",
+      "poster": "../creative/creative-scarlet-tide-motion.png",
+      "template": "../creative/creative-scarlet-tide-motion.world3d-template.json",
+      "scene": "../creative/creative-scarlet-tide-motion.world3d.json",
+      "backgroundVideo": "../creative/scarlet-tide-exterior.mp4",
+      "staticLayer": "../creative/scarlet-window-frame.jpg"
+    },
+    {
+      "id": "creative-rose-orbit-motion",
+      "number": 2,
+      "title": "Órbita de terciopelo",
+      "titleEn": "Velvet Orbit",
+      "description": "Espacio animado detrás de una abertura ovalada. La habitación rosa conserva cada detalle.",
+      "psx": "personaje",
+      "colors": [
+        "#9a5b70",
+        "#aaf2f1"
+      ],
+      "duration": 6,
+      "video": "creative-rose-orbit-motion.mp4",
+      "poster": "../creative/creative-rose-orbit-motion.png",
+      "template": "../creative/creative-rose-orbit-motion.world3d-template.json",
+      "scene": "../creative/creative-rose-orbit-motion.world3d.json",
+      "backgroundVideo": "../creative/rose-orbit-exterior.mp4",
+      "staticLayer": "../creative/rose-orbit.jpg"
+    },
+    {
+      "id": "creative-glass-orchard-motion",
+      "number": 3,
+      "title": "La casa del huerto",
+      "titleEn": "The Orchard House",
+      "description": "Hojas y pétalos tras los dos cristales de una casa. El marco central, la pared y el suelo permanecen estáticos.",
+      "psx": "atrezzo",
+      "colors": [
+        "#59656a",
+        "#ecaea4"
+      ],
+      "duration": 6,
+      "video": "creative-glass-orchard-motion.mp4",
+      "poster": "../creative/creative-glass-orchard-motion.png",
+      "template": "../creative/creative-glass-orchard-motion.world3d-template.json",
+      "scene": "../creative/creative-glass-orchard-motion.world3d.json",
+      "backgroundVideo": "../creative/glass-orchard-exterior.mp4",
+      "staticLayer": "../creative/orchard-window-frame.jpg"
+    },
+    {
+      "id": "creative-amber-ice-motion",
+      "number": 4,
+      "title": "Ventana al deshielo",
+      "titleEn": "Window on the Thaw",
+      "description": "Nieve y nubes tras un portal de ámbar. Arquitectura estática con profundidad independiente.",
+      "psx": "personaje",
+      "colors": [
+        "#073e61",
+        "#ffb444"
+      ],
+      "duration": 6,
+      "video": "creative-amber-ice-motion.mp4",
+      "poster": "../creative/creative-amber-ice-motion.png",
+      "template": "../creative/creative-amber-ice-motion.world3d-template.json",
+      "scene": "../creative/creative-amber-ice-motion.world3d.json",
+      "backgroundVideo": "../creative/amber-ice-exterior.mp4",
+      "staticLayer": "../creative/amber-ice.jpg"
+    },
+    {
+      "id": "creative-coral-radio-motion",
+      "number": 5,
+      "title": "Radio de las mareas",
+      "titleEn": "Tidal Radio",
+      "description": "Olas detrás de cinco cristales. Los marcos turquesa, el interior y los personajes son capas separadas.",
+      "psx": "atrezzo",
+      "colors": [
+        "#144852",
+        "#f99467"
+      ],
+      "duration": 6,
+      "video": "creative-coral-radio-motion.mp4",
+      "poster": "../creative/creative-coral-radio-motion.png",
+      "template": "../creative/creative-coral-radio-motion.world3d-template.json",
+      "scene": "../creative/creative-coral-radio-motion.world3d.json",
+      "backgroundVideo": "../creative/coral-radio-exterior.mp4",
+      "staticLayer": "../creative/coral-radio.jpg"
+    },
+    {
+      "id": "creative-cobalt-crater-motion",
+      "number": 6,
+      "title": "Observatorio del núcleo",
+      "titleEn": "Core Observatory",
+      "description": "Lava animada al otro lado de un observatorio. Ventanal, interior y personajes en capas independientes.",
+      "psx": "personaje",
+      "colors": [
+        "#16274b",
+        "#ff8142"
+      ],
+      "duration": 6,
+      "video": "creative-cobalt-crater-motion.mp4",
+      "poster": "../creative/creative-cobalt-crater-motion.png",
+      "template": "../creative/creative-cobalt-crater-motion.world3d-template.json",
+      "scene": "../creative/creative-cobalt-crater-motion.world3d.json",
+      "backgroundVideo": "../creative/cobalt-crater-exterior.mp4",
+      "staticLayer": "../creative/cobalt-moon.jpg"
+    }
+  ]
+}

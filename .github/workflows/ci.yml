@@ -242,10 +242,8 @@ jobs:
         run: npm ci
       - name: Install Playwright Chromium
         working-directory: ui
+        # Linux required E2E is stock Chromium. Native H.264+AAC films run on Windows Edge.
         run: npx playwright install --with-deps chromium
-      - name: Install Chrome for native H.264 and AAC speech export checks
-        working-directory: ui
-        run: npx playwright install chrome
       - name: Cache apt archives
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

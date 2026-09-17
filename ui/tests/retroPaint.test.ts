@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { test } from 'node:test'
 import { applyRetroPixels, isRetroLook, RETRO_LOOK_IDS } from '../src/features/sceneFx/retroPaint'
 import { FX_CATALOG, parseSceneFx } from '../src/features/sceneFx/types'
@@ -65,6 +66,32 @@ test('retro showcase is 30 seconds and keeps authored slots', () => {
   assert.equal(next.slots, source.slots)
   const cue = parseSceneFx([{ kind: 'psx', start: 0, end: 1, sound: true }])[0]
   assert.equal(cue.kind, 'psx')
+})
+
+test('PSX dither keeps a flat dark region within two palette steps and retains alpha', () => {
+  const pixels = new Uint8ClampedArray(320 * 180 * 4)
+  for (let i = 0; i < pixels.length; i += 4) pixels.set([100, 100, 100, 137], i)
+  applyRetroPixels(pixels, 320, 180, 'psx', 2, 11, .4)
+  const green = new Set<number>()
+  for (let i = 0; i < pixels.length; i += 4) {
+    green.add(pixels[i + 1])
+    assert.equal(pixels[i + 3], 137)
+  }
+  assert.ok(Math.max(...green) - Math.min(...green) <= 17)
+})
+
+test('cell caching preserves the pre-optimization pixels at thumbnail and portrait output sizes', () => {
+  const cases = [
+    [73, 119, 'psx', 'be2ee849133af31731e3b8d1a5852d4ffe13dfba831ee0db89b34488ebb98b33'],
+    [720, 1280, 'psx', 'da76487efd1ee48664bafe9abbb0ff13526561f1905683bdaeab494b3a188a6d'],
+    [720, 1280, 'nes', 'f26f37cac7f67ac6bfe3b572dbae9c1dcfcbcdd8f6677d0b38ba2a1b31614a5f'],
+  ] as const
+  for (const [width, height, kind, expected] of cases) {
+    const pixels = new Uint8ClampedArray(width * height * 4)
+    for (let i = 0; i < pixels.length; i++) pixels[i] = (i * 71 + Math.floor(i / 19) * 13) % 256
+    applyRetroPixels(pixels, width, height, kind, 1.5, 11, .4)
+    assert.equal(createHash('sha256').update(pixels).digest('hex'), expected, `${kind} ${width}x${height}`)
+  }
 })
 
 test('paintSceneFx applies a look without the particle path', () => {

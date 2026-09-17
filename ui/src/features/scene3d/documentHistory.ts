@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { applyWorldSfxTranslate, parseWorldSfx, type WorldSfx } from '../sceneFx/world'
+import { setWorldMotionPose, worldSfxAtTime } from '../sceneFx/worldMotion'
 import { slotPoseAtTime } from './performance.ts'
 import { cloneScene3DDocument, parseScene3DDocument } from './document.ts'
 import { patchScene3DSlot } from './templates.ts'
@@ -588,7 +589,7 @@ function patchWorldCue(
   deg: number,
 ): WorldSfx {
   if (cue.id !== cueId) return cue
-  let next: WorldSfx = { ...cue }
+  let next: WorldSfx = { ...worldSfxAtTime(cue, seconds) }
   if (patch.position) {
     const slot = cue.anchor?.slotId ? document.slots.find(item => item.id === cue.anchor!.slotId) : undefined
     next = applyWorldSfxTranslate(
@@ -602,5 +603,5 @@ function patchWorldCue(
     next = { ...next, rotation: { x: patch.worldRotation[0] * deg, y: patch.worldRotation[1] * deg, z: patch.worldRotation[2] * deg } }
   }
   if (patch.scale !== undefined) next = { ...next, scale: patch.scale }
-  return next
+  return setWorldMotionPose(cue, seconds, next)
 }

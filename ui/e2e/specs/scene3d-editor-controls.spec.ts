@@ -4,6 +4,27 @@ import { applyScene3DTemplate } from '../../src/features/scene3d/templates'
 import { gotoApp, closeApp } from '../helpers/gotoApp'
 
 // The real Three.js scene runs against a closed, simulated API. No model provider.
+test('selecting a seamless floor enables reflection after hiding or disabling the floor', async ({ page }) => {
+  const session = await gotoApp(page)
+  await page.getByRole('tab', { name: 'Video 3D', exact: true }).click()
+  await page.getByRole('button', { name: 'Close Ask to the Wizard' }).click()
+  const workspace = page.getByTestId('scene3d-workspace')
+  await workspace.getByRole('checkbox', { name: 'Cinematic environment', exact: true }).check()
+  const reflection = workspace.getByRole('checkbox', { name: 'Reflective metal floor', exact: true })
+  const finish = workspace.getByRole('combobox', { name: 'Floor finish', exact: true })
+  await reflection.uncheck()
+  await finish.selectOption('mirror')
+  await expect(reflection).toBeChecked()
+  await finish.selectOption('none')
+  await reflection.uncheck()
+  await finish.selectOption('mirror')
+  await expect(reflection).toBeChecked()
+  // The separate reflection control remains an explicit override.
+  await reflection.uncheck()
+  await expect(reflection).not.toBeChecked()
+  await closeApp(page, session)
+})
+
 test('3D templates, playback speed and object transforms work in the editor', async ({ page }, testInfo) => {
   const session = await gotoApp(page)
   await page.getByRole('tab', { name: 'Video 3D', exact: true }).click()
@@ -138,7 +159,9 @@ test('3D templates, playback speed and object transforms work in the editor', as
   await closeApp(page, session)
 })
 
-test('speed is baked into a decodable MP4 and its scene metadata', async ({ page }) => {
+test.describe('native speed export', () => {
+  test.skip(process.platform !== 'win32', 'Native MP4 is the Windows Edge job')
+  test('speed is baked into a decodable MP4 and its scene metadata', async ({ page }) => {
   const session = await gotoApp(page)
   await page.getByRole('tab', { name: 'Video 3D', exact: true }).click()
   await page.getByRole('button', { name: 'Close Ask to the Wizard' }).click()
@@ -178,4 +201,5 @@ test('speed is baked into a decodable MP4 and its scene metadata', async ({ page
   expect(decoded.width).toBe(1280)
   expect(decoded.height).toBe(720)
   await closeApp(page, session)
+})
 })

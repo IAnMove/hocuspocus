@@ -17,6 +17,7 @@ import { nativeGenerationPlan, type NativeGenerationMode } from './nativeGenerat
 import { seriesAssetUrl } from './referenceImages'
 import { releaseStoredSceneCopy } from '../../lib/sceneRecovery'
 import i18n from '../../i18n'
+import { withCharacterPoseDimensions } from '../../lib/characterPoseDimensions'
 
 export { nativeDraftCandidates } from './nativeGenerationPlan'
 
@@ -49,6 +50,35 @@ async function cleanShotCharacters(workspace: string, seriesId: string, episodeI
   return bodySources
 }
 
+async function applyVisiblePoseDimensions(workspace: string, series: SeriesProject, shot: SeriesEpisode['shots'][number], kits: CharacterKitLibrary) {
+  for (const id of shot.visibleCharacterIds) {
+    const ref = series.characters.find(character => character.id === id)?.voiceProfile?.characterKitRef
+    if (ref?.workspace === workspace && kits.kits[ref.id]) {
+      kits.kits[ref.id] = await withCharacterPoseDimensions(kits.kits[ref.id], workspace)
+    }
+  }
+}
+
+async function persistNativeShot(
+  workspace: string, seriesId: string, episodeId: string, shotId: string, mode: NativeGenerationMode,
+  series: SeriesProject, shot: SeriesEpisode['shots'][number], kits: CharacterKitLibrary,
+  policy: CharacterKitReviewPolicy, prepared: { scene: { name?: string }; shot: SeriesEpisode['shots'][number] },
+  sceneFilename: string | undefined, filename: string | undefined, recoveryKey: string, recoveryCopy: string,
+) {
+  if (!filename) throw new Error('The editor did not return a finished video')
+  source(workspace, seriesId, episodeId)
+  const response = await fetch(api.getFileUrl(filename, workspace))
+  if (!response.ok) throw new Error('The generated video is unavailable')
+  const upload = await api.uploadImage(new File([await response.blob()], filename, { type: 'video/mp4' }))
+  const result = await api.importSeriesAsset(workspace, seriesId, { uploadPath: upload.path, name: filename,
+    ownerType: 'shot', ownerId: shotId, kind: 'video', asTake: true,
+    metadata: { productionMethod: 'animation_2d', sceneFilename, automaticDraft: true,
+      nativeRegeneration: mode !== 'missing', lipSyncUpdate: mode !== 'missing' && shot.dialogueBeats.length > 0, characterReviewPolicy: policy,
+      lipSyncFingerprint: seriesLipSyncFingerprint(workspace, series, prepared.shot, kits) } })
+  useSeriesStore.getState().acceptAssetImport(workspace, result)
+  if (sceneFilename) releaseStoredSceneCopy(sessionStorage, recoveryKey, recoveryCopy)
+}
+
 async function renderNativeShot(workspace: string, seriesId: string, episodeId: string, shotId: string, mode: NativeGenerationMode) {
   const policy = mode === 'missing' ? 'approved' : 'saved-draft'
   const kits = await api.fetchCharacterKitLibrary(workspace)
@@ -57,6 +87,7 @@ async function renderNativeShot(workspace: string, seriesId: string, episodeId: 
   const bodySources = await cleanShotCharacters(workspace, seriesId, episodeId, shotId, kits, policy)
   const { series, episode } = source(workspace, seriesId, episodeId)
   const shot = episode.shots.find(item => item.id === shotId)!
+  await applyVisiblePoseDimensions(workspace, series, shot, kits)
   useSeriesNativeBatch.setState({ phase: 'voices' })
   const prepared = mode !== 'missing' && latestNativeTake(series, shot)
     ? await updateSavedLipSync(workspace, series, episode, shot, kits, bodySources)
@@ -73,24 +104,10 @@ async function renderNativeShot(workspace: string, seriesId: string, episodeId: 
   useSeriesNativeBatch.setState({ phase: 'rendering' })
   useStore.getState().setMediaFilter('scene3d')
   await presentSceneDocument('2d', prepared.scene, () => useStore.getState().activeWorkspace === workspace)
-  // The same editor performs both persistence and rendering; no second compositor.
   const scene = await requestAgentSceneWorkflow({ type: 'save_3d_scene', sceneName: prepared.scene.name || '' })
   const video = await requestAgentSceneWorkflow({ type: 'export_3d_scene', sceneName: prepared.scene.name || '' })
-  const filename = video.outputNames?.[0]
-  if (!filename) throw new Error('The editor did not return a finished video')
-  source(workspace, seriesId, episodeId)
-  const response = await fetch(api.getFileUrl(filename, workspace))
-  if (!response.ok) throw new Error('The generated video is unavailable')
-  const upload = await api.uploadImage(new File([await response.blob()], filename, { type: 'video/mp4' }))
-  const result = await api.importSeriesAsset(workspace, seriesId, { uploadPath: upload.path, name: filename,
-    ownerType: 'shot', ownerId: shotId, kind: 'video', asTake: true,
-    metadata: { productionMethod: 'animation_2d', sceneFilename: scene.outputNames?.[0], automaticDraft: true,
-      nativeRegeneration: mode !== 'missing', lipSyncUpdate: mode !== 'missing' && shot.dialogueBeats.length > 0, characterReviewPolicy: policy,
-      lipSyncFingerprint: seriesLipSyncFingerprint(workspace, series, prepared.shot, kits) } })
-  useSeriesStore.getState().acceptAssetImport(workspace, result)
-  // Release only our unchanged temporary copy, after both editable scene and
-  // video are persisted. Failed renders retain their recovery document.
-  if (scene.outputNames?.[0]) releaseStoredSceneCopy(sessionStorage, recoveryKey, recoveryCopy)
+  await persistNativeShot(workspace, seriesId, episodeId, shotId, mode, series, shot, kits, policy, prepared,
+    scene.outputNames?.[0], video.outputNames?.[0], recoveryKey, recoveryCopy)
 }
 
 function assertLipSyncReady(workspace: string, series: SeriesProject, shots: SeriesEpisode['shots'], kits: CharacterKitLibrary,

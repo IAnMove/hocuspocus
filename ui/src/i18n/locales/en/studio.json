@@ -350,16 +350,18 @@
     "upscaleClip": "Upscale Clip",
     "upscaleImage": "Upscale Image",
     "replaceVoiceAction": "Replace Voice",
-    "removeBackgroundInstruction": "Optional instruction",
-    "removeBackgroundInstructionPlaceholder": "For example: preserve fine hair and transparent edges",
-    "removeBackgroundHint": "Creates a transparent PNG copy and keeps the original image unchanged.",
-    "removeBackgroundNeedsSource": "Choose an image from the library or upload one before running this tool.",
+    "removeBackgroundInstruction": "Notes (saved with the result)",
+    "removeBackgroundInstructionPlaceholder": "Optional notes about this cutout; these do not control the segmentation model.",
+    "removeBackgroundHint": "Creates a transparent PNG from an image or a transparent WebM from a video. Keeps the original and retains video audio. The result can be layered over other scenes.",
+    "removeBackgroundNeedsSource": "Choose an image or video from the library, or upload one, before running this tool.",
     "removeBackgroundAction": "Remove Background",
     "submittingRemoveBackground": "Submitting background removal…",
     "queuedRemoveBackground": "Background removal queued…",
     "removeBackgroundFailed": "Background removal failed",
     "imageAssetsFailed": "Could not load the image library.",
-    "sourceUploadFailed": "Choose a supported image or video file."
+    "sourceUploadFailed": "Choose a supported image or video file.",
+    "removeBackgroundVideoHint": "Video: each frame is processed, with gentle stabilization of small matte changes. Up to 60 seconds / 1800 frames; maximum output edge 1920 px. Review hair, fabric and small objects against a contrasting background.",
+    "selectLibraryMedia": "Choose an image or video"
   },
   "post": {
     "title": "Post Processing",

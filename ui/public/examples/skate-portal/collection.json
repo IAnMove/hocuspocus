@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "title": "Salto entre mundos",
+  "items": [
+    {
+      "id": "skate-portal-01",
+      "number": 1,
+      "title": "La puerta junto al mar",
+      "description": "Acercamiento suave: el destino ya se mueve dentro del portal.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 2.4,
+      "video": "plano-01.mp4",
+      "poster": "plano-01.png",
+      "scene": "plano-01.world3d.json",
+      "template": "plano-01.world3d-template.json",
+      "actorVideo": "skate-jump.webm",
+      "tag": "Vídeo 3D · capas independientes"
+    },
+    {
+      "id": "skate-portal-02",
+      "number": 2,
+      "title": "Despegar",
+      "description": "El cuerpo y la tabla ascienden con una trayectoria editable.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 1.2,
+      "video": "plano-02.mp4",
+      "poster": "plano-02.png",
+      "scene": "plano-02.world3d.json",
+      "template": "plano-02.world3d-template.json",
+      "actorVideo": "skate-jump.webm",
+      "tag": "Vídeo 3D · capas independientes"
+    },
+    {
+      "id": "skate-portal-03",
+      "number": 3,
+      "title": "Caer en otro cielo",
+      "description": "El mismo fotograma del salto abre el nuevo mundo; el mar queda dentro del portal.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 1.8,
+      "video": "plano-03.mp4",
+      "poster": "plano-03.png",
+      "scene": "plano-03.world3d.json",
+      "template": "plano-03.world3d-template.json",
+      "actorVideo": "skate-jump.webm",
+      "tag": "Vídeo 3D · capas independientes"
+    },
+    {
+      "id": "skate-portal-04",
+      "number": 4,
+      "title": "Seguir rodando",
+      "description": "Un plano más amplio muestra la carretera entre nubes.",
+      "colors": [
+        "#1c96a0",
+        "#ffd290"
+      ],
+      "psx": "sin filtro",
+      "duration": 2.2,
+      "video": "plano-04.mp4",
+      "poster": "plano-04.png",
+      "scene": "plano-04.world3d.json",
+      "template": "plano-04.world3d-template.json",
+      "actorVideo": "skate-jump.webm",
+      "tag": "Vídeo 3D · capas independientes"
+    }
+  ]
+}

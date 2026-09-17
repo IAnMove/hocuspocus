@@ -20,6 +20,7 @@ from routers.wangp_mcp import create_wangp_mcp_router
 from routers.world3d_export import create_world3d_export_router
 from services.scene_recording import probe_scene_recording_output
 from services.task_manager import TaskRegistry, forget_task_registry
+from services import resource_scheduler
 from services.world3d_export import (
     OPERATION,
     World3DExportCancelled,
@@ -198,6 +199,29 @@ def test_owned_browser_script_uses_scene_clock_and_waits_for_assets():
     assert "/src/" not in _OWNED_BROWSER_JS
 
 
+def test_bundled_template_refs_do_not_require_duplicate_workspace_uploads(tmp_path):
+    document = _document()
+    document["slots"][0].update(media="image", surface="cutout", sourceUrl="/examples/dark-fantasy/knight.png")
+    frozen = freeze_export_command(_command(document=document))
+    snapshot = frozen["effective"]["input"]["snapshot"]
+    assert snapshot["refs"] == [{"slotId": "subject_1", "url": "/examples/dark-fantasy/knight.png", "kind": "image"}]
+    _service(tmp_path)._assert_refs(snapshot["refs"], WORKSPACE)
+    document["slots"][0]["sourceUrl"] = "/api/v1/file/missing.png"
+    frozen = freeze_export_command(_command(document=document))
+    with pytest.raises(Exception) as error:
+        _service(tmp_path)._assert_refs(frozen["effective"]["input"]["snapshot"]["refs"], WORKSPACE)
+    assert error.value.detail["code"] == "missing_ref"
+
+
+@pytest.mark.parametrize("url", ["/examples/../private.png", "/examples/%2e%2e/private.png", "/examples/a%5cprivate.png"])
+def test_bundled_template_refs_reject_traversal(url):
+    document = _document()
+    document["slots"][0]["sourceUrl"] = url
+    with pytest.raises(Exception) as error:
+        freeze_export_command(_command(document=document))
+    assert error.value.detail["code"] == "missing_ref"
+
+
 def test_staging_dir_does_not_treat_dotdot_as_workspace_root(tmp_path):
     escaped = staging_dir(str(tmp_path), "..")
     assert escaped.resolve().parent == (tmp_path / ".world3d-export").resolve()
@@ -220,10 +244,27 @@ def test_admit_freezes_snapshot_as_one_canonical_task(tmp_path):
     assert snapshot["document"]["templateId"] == "two-shot"
     assert snapshot["plan"]["count"] == 2
     task = registry.get(receipt["taskIds"][0])
-    assert task["status"] in {"queued", "running"}
+    assert task["status"] in {"queued", "waiting_resource", "running"}
     assert task["cancelable"] is True
     gate.set()
     _wait(registry, task["id"], {"completed", "failed"})
+    forget_task_registry(registry.workspace_dir)
+
+
+def test_render_waits_for_music_gpu_and_cancellation_does_not_need_the_lease(tmp_path):
+    painted = []
+    service = _service(tmp_path, renderer=lambda *a, **kw: _paint(*a, calls=painted, **kw))
+    with resource_scheduler.coordinator.acquire(resource_scheduler.local_gpu_lane(0), task_id="music-in-progress"):
+        receipt = service.submit(_command("waiting-render"))["receipt"]
+        registry = service._registry(WORKSPACE)
+        task_id = receipt["taskIds"][0]
+        _wait(registry, task_id, {"waiting_resource"})
+        assert painted == []
+        service.cancel(WORKSPACE, "waiting-render")
+        service._workers["waiting-render"].join(timeout=2)
+        assert not service._workers["waiting-render"].is_alive()
+        assert painted == []
+        assert registry.get(task_id)["status"] == "cancelled"
     forget_task_registry(registry.workspace_dir)
 
 

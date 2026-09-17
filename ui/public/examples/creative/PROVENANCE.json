@@ -1,0 +1,2971 @@
+{
+  "generatedWith": "HocusPocus MiniMax Image-01 and native background removal",
+  "assets": [
+    {
+      "file": "astronaut.png",
+      "sha256": "cb880cf3d104dc0c0ab3968726d631593d43f25304fe1907ae316f0e7dc68b4e",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A friendly retro astronaut in ivory cream pressure suit with orange harness and deep cobalt round visor, compact backpack, chunky dark navy boots, balanced upright standing stance, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-51d8d207bfb2",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.6529908,
+          "updatedAt": 1789412474.6529908,
+          "taskId": "task-minimax-image-minimax-image-51d8d207bfb2",
+          "rootTaskId": "task-minimax-image-minimax-image-51d8d207bfb2"
+        },
+        "status": {
+          "jobId": "minimax-image-51d8d207bfb2",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h11m25s_minimax-comic_e67042a7.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-65b7810dcd67",
+              "name": "2026-09-14-21h11m25s_minimax-comic_e67042a7.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h11m25s_minimax-comic_e67042a7.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h11m25s_minimax-comic_e67042a7.jpg",
+              "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A friendly retro astronaut in ivory cream pressure suit with orange harness and deep cobalt round visor, compact backpack, chunky dark navy boots, balanced upright standing stance, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:11:25Z",
+              "metadata": {
+                "jobId": "minimax-image-51d8d207bfb2",
+                "taskId": "task-minimax-image-minimax-image-51d8d207bfb2",
+                "rootTaskId": "task-minimax-image-minimax-image-51d8d207bfb2",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.6529908,
+          "updatedAt": 1789413085.1944554,
+          "taskId": "task-minimax-image-minimax-image-51d8d207bfb2",
+          "rootTaskId": "task-minimax-image-minimax-image-51d8d207bfb2",
+          "startedAt": 1789413067.2373385,
+          "finishedAt": 1789413085.1944523
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "fd869fbc",
+        "status": "queued",
+        "task_id": "task-generation-fd869fbc",
+        "root_task_id": "task-generation-fd869fbc",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_7278c9a326b553d79347af195bc21d43",
+          "source_filename": "2026-09-14-21h11m25s_minimax-comic_e67042a7.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "fd869fbc",
+        "task_id": "task-generation-fd869fbc",
+        "root_task_id": "task-generation-fd869fbc",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h11m25s_minimax-comic_e67042a7.no-background-8b99c2d6.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413090.3786879,
+        "started_at": 1789413090.5742128,
+        "finished_at": 1789413091.6125357,
+        "processing_time_sec": 1.04,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_7278c9a326b553d79347af195bc21d43",
+          "source_filename": "2026-09-14-21h11m25s_minimax-comic_e67042a7.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "botanical-hangar.jpg",
+      "sha256": "a8f8100d240ca6a9979ddeefae1f940ef52c2b3f680b5b1f3aa9fdf48c5142c3",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A giant space-station greenhouse hangar, luminous lime vines and jade canopy far overhead, orange industrial doors, deep navy glass roof showing magenta nebula, broad charcoal near service deck. Solarpunk meets cassette science fiction.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-81fcc0009c9d",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.500074,
+          "updatedAt": 1789412474.500074,
+          "taskId": "task-minimax-image-minimax-image-81fcc0009c9d",
+          "rootTaskId": "task-minimax-image-minimax-image-81fcc0009c9d"
+        },
+        "status": {
+          "jobId": "minimax-image-81fcc0009c9d",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h08m06s_minimax-comic_e2980276.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-46ccb49a654d",
+              "name": "2026-09-14-21h08m06s_minimax-comic_e2980276.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h08m06s_minimax-comic_e2980276.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h08m06s_minimax-comic_e2980276.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A giant space-station greenhouse hangar, luminous lime vines and jade canopy far overhead, orange industrial doors, deep navy glass roof showing magenta nebula, broad charcoal near service deck. Solarpunk meets cassette science fiction.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:08:06Z",
+              "metadata": {
+                "jobId": "minimax-image-81fcc0009c9d",
+                "taskId": "task-minimax-image-minimax-image-81fcc0009c9d",
+                "rootTaskId": "task-minimax-image-minimax-image-81fcc0009c9d",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.500074,
+          "updatedAt": 1789412886.4154477,
+          "taskId": "task-minimax-image-minimax-image-81fcc0009c9d",
+          "rootTaskId": "task-minimax-image-minimax-image-81fcc0009c9d",
+          "startedAt": 1789412869.5800836,
+          "finishedAt": 1789412886.4154437
+        }
+      }
+    },
+    {
+      "file": "ceramic-room.jpg",
+      "sha256": "a8e5d6f831ff468b13c5f75d2e18de001b3ae54231262014084b70b90cfa7208",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Surreal white ceramic architecture, cobalt blue painted arches and gigantic porcelain vases in distant recesses, small lemon yellow window high up, broad midnight-blue glazed tile foreground. Tactile handcrafted glazed porcelain still life.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-f00a450e48f6",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.4711928,
+          "updatedAt": 1789412474.4711928,
+          "taskId": "task-minimax-image-minimax-image-f00a450e48f6",
+          "rootTaskId": "task-minimax-image-minimax-image-f00a450e48f6"
+        },
+        "status": {
+          "jobId": "minimax-image-f00a450e48f6",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h07m33s_minimax-comic_35e75b96.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-c992d921bf84",
+              "name": "2026-09-14-21h07m33s_minimax-comic_35e75b96.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h07m33s_minimax-comic_35e75b96.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h07m33s_minimax-comic_35e75b96.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Surreal white ceramic architecture, cobalt blue painted arches and gigantic porcelain vases in distant recesses, small lemon yellow window high up, broad midnight-blue glazed tile foreground. Tactile handcrafted glazed porcelain still life.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:07:33Z",
+              "metadata": {
+                "jobId": "minimax-image-f00a450e48f6",
+                "taskId": "task-minimax-image-minimax-image-f00a450e48f6",
+                "rootTaskId": "task-minimax-image-minimax-image-f00a450e48f6",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.4711928,
+          "updatedAt": 1789412853.091364,
+          "taskId": "task-minimax-image-minimax-image-f00a450e48f6",
+          "rootTaskId": "task-minimax-image-minimax-image-f00a450e48f6",
+          "startedAt": 1789412835.0405612,
+          "finishedAt": 1789412853.0913591
+        }
+      }
+    },
+    {
+      "file": "ceramic.png",
+      "sha256": "b75d828184fdec51019e9a7c3fc0eead53394c1539d2a535b029fcba1fa3d13a",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "Single isolated prop for a theatrical scene. Premium detailed gouache illustration. One large sculptural cobalt ceramic vase, angular asymmetrical white handle and a small yellow circular inlay, standing on a flat foot, no flowers, full object visible, three-quarter frontal view. Flat medium gray background, no scenery, no other objects, no floor shadow, no text. Object completely inside image with narrow margins.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-4213a2bd4192",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.7320254,
+          "updatedAt": 1789412474.7320254,
+          "taskId": "task-minimax-image-minimax-image-4213a2bd4192",
+          "rootTaskId": "task-minimax-image-minimax-image-4213a2bd4192"
+        },
+        "status": {
+          "jobId": "minimax-image-4213a2bd4192",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h13m02s_minimax-comic_d41d3f91.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-aad011e08244",
+              "name": "2026-09-14-21h13m02s_minimax-comic_d41d3f91.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h13m02s_minimax-comic_d41d3f91.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h13m02s_minimax-comic_d41d3f91.jpg",
+              "prompt": "Single isolated prop for a theatrical scene. Premium detailed gouache illustration. One large sculptural cobalt ceramic vase, angular asymmetrical white handle and a small yellow circular inlay, standing on a flat foot, no flowers, full object visible, three-quarter frontal view. Flat medium gray background, no scenery, no other objects, no floor shadow, no text. Object completely inside image with narrow margins.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:13:45Z",
+              "metadata": {
+                "jobId": "minimax-image-4213a2bd4192",
+                "taskId": "task-minimax-image-minimax-image-4213a2bd4192",
+                "rootTaskId": "task-minimax-image-minimax-image-4213a2bd4192",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.7320254,
+          "updatedAt": 1789413225.8460474,
+          "taskId": "task-minimax-image-minimax-image-4213a2bd4192",
+          "rootTaskId": "task-minimax-image-minimax-image-4213a2bd4192",
+          "startedAt": 1789413165.829817,
+          "finishedAt": 1789413225.846042
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "82eb2269",
+        "status": "queued",
+        "task_id": "task-generation-82eb2269",
+        "root_task_id": "task-generation-82eb2269",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_6787f43a1a4853e097389331d9495dde",
+          "source_filename": "2026-09-14-21h13m02s_minimax-comic_d41d3f91.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "82eb2269",
+        "task_id": "task-generation-82eb2269",
+        "root_task_id": "task-generation-82eb2269",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h13m02s_minimax-comic_d41d3f91.no-background-46dadb85.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413268.8234854,
+        "started_at": 1789413312.0961332,
+        "finished_at": 1789413356.872827,
+        "processing_time_sec": 44.78,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_6787f43a1a4853e097389331d9495dde",
+          "source_filename": "2026-09-14-21h13m02s_minimax-comic_d41d3f91.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "cobalt-moon.jpg",
+      "sha256": "9c929346b451fed090788d065b513741ca6e7277ecbcb5e6ac35f7114a0b9054",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Retro futurist lunar observatory interior with a giant cobalt circular window showing a cream moon and pale distant craters, amber analog consoles along side walls, charcoal ribbed metal deck foreground. Rich hand-painted science fiction.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-f5e2e3b12f38",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.3577254,
+          "updatedAt": 1789412474.3577254,
+          "taskId": "task-minimax-image-minimax-image-f5e2e3b12f38",
+          "rootTaskId": "task-minimax-image-minimax-image-f5e2e3b12f38"
+        },
+        "status": {
+          "jobId": "minimax-image-f5e2e3b12f38",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h03m56s_minimax-comic_062cef79.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-cbec9e609dd6",
+              "name": "2026-09-14-21h03m56s_minimax-comic_062cef79.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h03m56s_minimax-comic_062cef79.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h03m56s_minimax-comic_062cef79.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Retro futurist lunar observatory interior with a giant cobalt circular window showing a cream moon and pale distant craters, amber analog consoles along side walls, charcoal ribbed metal deck foreground. Rich hand-painted science fiction.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:03:56Z",
+              "metadata": {
+                "jobId": "minimax-image-f5e2e3b12f38",
+                "taskId": "task-minimax-image-minimax-image-f5e2e3b12f38",
+                "rootTaskId": "task-minimax-image-minimax-image-f5e2e3b12f38",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.3577254,
+          "updatedAt": 1789412636.0598161,
+          "taskId": "task-minimax-image-minimax-image-f5e2e3b12f38",
+          "rootTaskId": "task-minimax-image-minimax-image-f5e2e3b12f38",
+          "startedAt": 1789412618.9257247,
+          "finishedAt": 1789412636.059811
+        }
+      }
+    },
+    {
+      "file": "coral-caravan.jpg",
+      "sha256": "36860aa9d2112ad21a6452e4942843f9adeedfbea7cab662d024cdf81818bdec",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Layered paper-cut desert scenery, immense coral sun, indigo mountain silhouettes in distance, ochre dunes behind a terracotta flat foreground stage, graphic cream clouds with tactile paper fibers. Deliberately crafted paper theatre.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-dd7911bc89af",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.3712215,
+          "updatedAt": 1789412474.3712215,
+          "taskId": "task-minimax-image-minimax-image-dd7911bc89af",
+          "rootTaskId": "task-minimax-image-minimax-image-dd7911bc89af"
+        },
+        "status": {
+          "jobId": "minimax-image-dd7911bc89af",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h05m04s_minimax-comic_6ff58789.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-f22811480bbf",
+              "name": "2026-09-14-21h05m04s_minimax-comic_6ff58789.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h05m04s_minimax-comic_6ff58789.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h05m04s_minimax-comic_6ff58789.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Layered paper-cut desert scenery, immense coral sun, indigo mountain silhouettes in distance, ochre dunes behind a terracotta flat foreground stage, graphic cream clouds with tactile paper fibers. Deliberately crafted paper theatre.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:05:04Z",
+              "metadata": {
+                "jobId": "minimax-image-dd7911bc89af",
+                "taskId": "task-minimax-image-minimax-image-dd7911bc89af",
+                "rootTaskId": "task-minimax-image-minimax-image-dd7911bc89af",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.3712215,
+          "updatedAt": 1789412704.9318707,
+          "taskId": "task-minimax-image-minimax-image-dd7911bc89af",
+          "rootTaskId": "task-minimax-image-minimax-image-dd7911bc89af",
+          "startedAt": 1789412636.059109,
+          "finishedAt": 1789412704.9318674
+        }
+      }
+    },
+    {
+      "file": "courier.png",
+      "sha256": "273097acd8a811c06ddd15dd605831d9ab52d4e52e049b75c07cb7126c04385c",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A stylish young adult bicycle courier with cobalt blue bomber jacket, orange wide trousers, cream sneakers and small mustard shoulder bag, confident relaxed stance, short dark hair, clean readable full-body silhouette, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-782129da85b8",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.6103625,
+          "updatedAt": 1789412474.6103625,
+          "taskId": "task-minimax-image-minimax-image-782129da85b8",
+          "rootTaskId": "task-minimax-image-minimax-image-782129da85b8"
+        },
+        "status": {
+          "jobId": "minimax-image-782129da85b8",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h10m29s_minimax-comic_061598a8.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-49ab9d5c85ba",
+              "name": "2026-09-14-21h10m29s_minimax-comic_061598a8.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h10m29s_minimax-comic_061598a8.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h10m29s_minimax-comic_061598a8.jpg",
+              "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A stylish young adult bicycle courier with cobalt blue bomber jacket, orange wide trousers, cream sneakers and small mustard shoulder bag, confident relaxed stance, short dark hair, clean readable full-body silhouette, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:10:29Z",
+              "metadata": {
+                "jobId": "minimax-image-782129da85b8",
+                "taskId": "task-minimax-image-minimax-image-782129da85b8",
+                "rootTaskId": "task-minimax-image-minimax-image-782129da85b8",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.6103625,
+          "updatedAt": 1789413029.2184381,
+          "taskId": "task-minimax-image-minimax-image-782129da85b8",
+          "rootTaskId": "task-minimax-image-minimax-image-782129da85b8",
+          "startedAt": 1789413009.2885804,
+          "finishedAt": 1789413029.218434
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "60eb30c6",
+        "status": "running",
+        "task_id": "task-generation-60eb30c6",
+        "root_task_id": "task-generation-60eb30c6",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_fff7140bb8165c5cb1a35e37655f2338",
+          "source_filename": "2026-09-14-21h10m29s_minimax-comic_061598a8.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "60eb30c6",
+        "task_id": "task-generation-60eb30c6",
+        "root_task_id": "task-generation-60eb30c6",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h10m29s_minimax-comic_061598a8.no-background-962bbae4.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413032.657298,
+        "started_at": 1789413032.8553457,
+        "finished_at": 1789413033.861732,
+        "processing_time_sec": 1.01,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_fff7140bb8165c5cb1a35e37655f2338",
+          "source_filename": "2026-09-14-21h10m29s_minimax-comic_061598a8.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "emerald-hotel.jpg",
+      "sha256": "e063e52f43d57de9d908fc7f07c4fabe5402af6da69cd950cda653b6f99a60e4",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Opulent 1920s art deco hotel entrance, emerald columns framing a tall luminous gold frosted glass door, symmetrical geometric brass details, dark green marble forecourt, midnight blue ceiling. Rich cinematic gouache.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-f6459d4c3205",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.3842356,
+          "updatedAt": 1789412474.3842356,
+          "taskId": "task-minimax-image-minimax-image-f6459d4c3205",
+          "rootTaskId": "task-minimax-image-minimax-image-f6459d4c3205"
+        },
+        "status": {
+          "jobId": "minimax-image-f6459d4c3205",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h05m23s_minimax-comic_091f5609.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-d0e98339685b",
+              "name": "2026-09-14-21h05m23s_minimax-comic_091f5609.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h05m23s_minimax-comic_091f5609.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h05m23s_minimax-comic_091f5609.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Opulent 1920s art deco hotel entrance, emerald columns framing a tall luminous gold frosted glass door, symmetrical geometric brass details, dark green marble forecourt, midnight blue ceiling. Rich cinematic gouache.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:05:23Z",
+              "metadata": {
+                "jobId": "minimax-image-f6459d4c3205",
+                "taskId": "task-minimax-image-minimax-image-f6459d4c3205",
+                "rootTaskId": "task-minimax-image-minimax-image-f6459d4c3205",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.3842356,
+          "updatedAt": 1789412723.1210835,
+          "taskId": "task-minimax-image-minimax-image-f6459d4c3205",
+          "rootTaskId": "task-minimax-image-minimax-image-f6459d4c3205",
+          "startedAt": 1789412704.9321058,
+          "finishedAt": 1789412723.1210783
+        }
+      }
+    },
+    {
+      "file": "gardener.png",
+      "sha256": "3e62c3c0b01ee9dcd59ce2be5ef79db5549a55fbc4bc698ede22212cabace268",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A cheerful adult solarpunk botanist in a cream jumpsuit with jade apron, mustard boots, curly hair and a small canvas satchel, a single tiny potted plant held at the side, calm grounded stance with both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-e7cb50821b22",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.6200266,
+          "updatedAt": 1789412474.6200266,
+          "taskId": "task-minimax-image-minimax-image-e7cb50821b22",
+          "rootTaskId": "task-minimax-image-minimax-image-e7cb50821b22"
+        },
+        "status": {
+          "jobId": "minimax-image-e7cb50821b22",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h10m48s_minimax-comic_959bb62f.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-c56a653b1c29",
+              "name": "2026-09-14-21h10m48s_minimax-comic_959bb62f.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h10m48s_minimax-comic_959bb62f.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h10m48s_minimax-comic_959bb62f.jpg",
+              "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A cheerful adult solarpunk botanist in a cream jumpsuit with jade apron, mustard boots, curly hair and a small canvas satchel, a single tiny potted plant held at the side, calm grounded stance with both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:10:48Z",
+              "metadata": {
+                "jobId": "minimax-image-e7cb50821b22",
+                "taskId": "task-minimax-image-minimax-image-e7cb50821b22",
+                "rootTaskId": "task-minimax-image-minimax-image-e7cb50821b22",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.6200266,
+          "updatedAt": 1789413048.244947,
+          "taskId": "task-minimax-image-minimax-image-e7cb50821b22",
+          "rootTaskId": "task-minimax-image-minimax-image-e7cb50821b22",
+          "startedAt": 1789413029.218231,
+          "finishedAt": 1789413048.2449434
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "7f96fea3",
+        "status": "queued",
+        "task_id": "task-generation-7f96fea3",
+        "root_task_id": "task-generation-7f96fea3",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_7d9f71cca6c85de9912f20b7bc1c3a83",
+          "source_filename": "2026-09-14-21h10m48s_minimax-comic_959bb62f.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "7f96fea3",
+        "task_id": "task-generation-7f96fea3",
+        "root_task_id": "task-generation-7f96fea3",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h10m48s_minimax-comic_959bb62f.no-background-330b499e.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413051.8988986,
+        "started_at": 1789413052.1062071,
+        "finished_at": 1789413053.1532936,
+        "processing_time_sec": 1.05,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_7d9f71cca6c85de9912f20b7bc1c3a83",
+          "source_filename": "2026-09-14-21h10m48s_minimax-comic_959bb62f.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "indigo-shrine.jpg",
+      "sha256": "d8ad5042e60a923c198f5feee707f5f7d347cfc9dc54ef3b863885bd5cf7017d",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Minimal Japanese shrine courtyard at night, towering cinnabar torii in distance, indigo cedar trunks on the sides, small warm paper lamps low beside empty wet charcoal cobbles. Ink and watercolor with vivid orange accents.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-f2e1e7c6f44b",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.4161549,
+          "updatedAt": 1789412474.4161549,
+          "taskId": "task-minimax-image-minimax-image-f2e1e7c6f44b",
+          "rootTaskId": "task-minimax-image-minimax-image-f2e1e7c6f44b"
+        },
+        "status": {
+          "jobId": "minimax-image-f2e1e7c6f44b",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h05m54s_minimax-comic_f6d0c340.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-d6822144b7c6",
+              "name": "2026-09-14-21h05m54s_minimax-comic_f6d0c340.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h05m54s_minimax-comic_f6d0c340.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h05m54s_minimax-comic_f6d0c340.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Minimal Japanese shrine courtyard at night, towering cinnabar torii in distance, indigo cedar trunks on the sides, small warm paper lamps low beside empty wet charcoal cobbles. Ink and watercolor with vivid orange accents.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:05:54Z",
+              "metadata": {
+                "jobId": "minimax-image-f2e1e7c6f44b",
+                "taskId": "task-minimax-image-minimax-image-f2e1e7c6f44b",
+                "rootTaskId": "task-minimax-image-minimax-image-f2e1e7c6f44b",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.4161549,
+          "updatedAt": 1789412754.5786095,
+          "taskId": "task-minimax-image-minimax-image-f2e1e7c6f44b",
+          "rootTaskId": "task-minimax-image-minimax-image-f2e1e7c6f44b",
+          "startedAt": 1789412739.0800648,
+          "finishedAt": 1789412754.5786066
+        }
+      }
+    },
+    {
+      "file": "ink-mountain.jpg",
+      "sha256": "9f921552b15b5af25c22321e12c2d2cf52aa545e3ab1f99a5f4b427a8282352e",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Minimal mountain landscape in Japanese ink wash, white mist between indigo ink peaks, one gigantic flat vermilion sun high at center, black pine branches framing upper left, dark slate rocky landing in the empty foreground. Restrained sumi-e with one vivid color.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-6d76e6792bd7",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.5206025,
+          "updatedAt": 1789412474.5206025,
+          "taskId": "task-minimax-image-minimax-image-6d76e6792bd7",
+          "rootTaskId": "task-minimax-image-minimax-image-6d76e6792bd7"
+        },
+        "status": {
+          "jobId": "minimax-image-6d76e6792bd7",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h08m44s_minimax-comic_e9ff1a89.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-f91d0d8d1c74",
+              "name": "2026-09-14-21h08m44s_minimax-comic_e9ff1a89.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h08m44s_minimax-comic_e9ff1a89.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h08m44s_minimax-comic_e9ff1a89.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Minimal mountain landscape in Japanese ink wash, white mist between indigo ink peaks, one gigantic flat vermilion sun high at center, black pine branches framing upper left, dark slate rocky landing in the empty foreground. Restrained sumi-e with one vivid color.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:08:44Z",
+              "metadata": {
+                "jobId": "minimax-image-6d76e6792bd7",
+                "taskId": "task-minimax-image-minimax-image-6d76e6792bd7",
+                "rootTaskId": "task-minimax-image-minimax-image-6d76e6792bd7",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.5206025,
+          "updatedAt": 1789412924.639092,
+          "taskId": "task-minimax-image-minimax-image-6d76e6792bd7",
+          "rootTaskId": "task-minimax-image-minimax-image-6d76e6792bd7",
+          "startedAt": 1789412886.4162543,
+          "finishedAt": 1789412924.6390874
+        }
+      },
+      "originalSha256": "ab0627efb528c442eb2014bfcbe18ee1816faf0e868b03e0c7421a52f34bc8b2",
+      "revision": "See groundingEdits for the final floor artwork job."
+    },
+    {
+      "file": "kinetic-gold.jpg",
+      "sha256": "619126da868f17aba341b6e1f2a9d592d0303a300179820bbea414b4d73e89d4",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A monumental contemporary kinetic art gallery, huge hanging brushed gold rings in the distance, ultramarine wall beyond white stone arches, quiet dark blue polished floor foreground. Bauhaus-inspired editorial art, elegant asymmetrical composition.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-4862a53f0b57",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.5638263,
+          "updatedAt": 1789412474.5638263,
+          "taskId": "task-minimax-image-minimax-image-4862a53f0b57",
+          "rootTaskId": "task-minimax-image-minimax-image-4862a53f0b57"
+        },
+        "status": {
+          "jobId": "minimax-image-4862a53f0b57",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h09m35s_minimax-comic_af2fe214.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-d7c735d2977b",
+              "name": "2026-09-14-21h09m35s_minimax-comic_af2fe214.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h09m35s_minimax-comic_af2fe214.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h09m35s_minimax-comic_af2fe214.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A monumental contemporary kinetic art gallery, huge hanging brushed gold rings in the distance, ultramarine wall beyond white stone arches, quiet dark blue polished floor foreground. Bauhaus-inspired editorial art, elegant asymmetrical composition.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:09:35Z",
+              "metadata": {
+                "jobId": "minimax-image-4862a53f0b57",
+                "taskId": "task-minimax-image-minimax-image-4862a53f0b57",
+                "rootTaskId": "task-minimax-image-minimax-image-4862a53f0b57",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.5638263,
+          "updatedAt": 1789412975.482958,
+          "taskId": "task-minimax-image-minimax-image-4862a53f0b57",
+          "rootTaskId": "task-minimax-image-minimax-image-4862a53f0b57",
+          "startedAt": 1789412958.8801062,
+          "finishedAt": 1789412975.4829543
+        }
+      }
+    },
+    {
+      "file": "lamp.png",
+      "sha256": "619da1f21119656162122b4c5957f45fce5e235e4567271a5303995917354465",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "Single isolated prop for a theatrical scene. Premium detailed gouache illustration. One tall sculptural art deco standing lamp, deep burgundy narrow pedestal and a large luminous pale apricot spherical shade, small brass accents, full base visible, frontal view. Flat medium gray background, no scenery, no other objects, no floor shadow, no text. Object completely inside image with narrow margins.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-1d0deafc4433",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.7469523,
+          "updatedAt": 1789412474.7469523,
+          "taskId": "task-minimax-image-minimax-image-1d0deafc4433",
+          "rootTaskId": "task-minimax-image-minimax-image-1d0deafc4433"
+        },
+        "status": {
+          "jobId": "minimax-image-1d0deafc4433",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h14m58s_minimax-comic_7f0dc56e.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-9e2f0bb4db76",
+              "name": "2026-09-14-21h14m58s_minimax-comic_7f0dc56e.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h14m58s_minimax-comic_7f0dc56e.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h14m58s_minimax-comic_7f0dc56e.jpg",
+              "prompt": "Single isolated prop for a theatrical scene. Premium detailed gouache illustration. One tall sculptural art deco standing lamp, deep burgundy narrow pedestal and a large luminous pale apricot spherical shade, small brass accents, full base visible, frontal view. Flat medium gray background, no scenery, no other objects, no floor shadow, no text. Object completely inside image with narrow margins.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:15:12Z",
+              "metadata": {
+                "jobId": "minimax-image-1d0deafc4433",
+                "taskId": "task-minimax-image-minimax-image-1d0deafc4433",
+                "rootTaskId": "task-minimax-image-minimax-image-1d0deafc4433",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.7469523,
+          "updatedAt": 1789413312.0942724,
+          "taskId": "task-minimax-image-minimax-image-1d0deafc4433",
+          "rootTaskId": "task-minimax-image-minimax-image-1d0deafc4433",
+          "startedAt": 1789413225.8458176,
+          "finishedAt": 1789413312.0942662
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "dc39911a",
+        "status": "queued",
+        "task_id": "task-generation-dc39911a",
+        "root_task_id": "task-generation-dc39911a",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_1c77aec88c6552ccbeac4e9771dbe8af",
+          "source_filename": "2026-09-14-21h14m58s_minimax-comic_7f0dc56e.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "dc39911a",
+        "task_id": "task-generation-dc39911a",
+        "root_task_id": "task-generation-dc39911a",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h14m58s_minimax-comic_7f0dc56e.no-background-4481342c.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413359.0623116,
+        "started_at": 1789413365.3444636,
+        "finished_at": 1789413388.7573187,
+        "processing_time_sec": 23.41,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_1c77aec88c6552ccbeac4e9771dbe8af",
+          "source_filename": "2026-09-14-21h14m58s_minimax-comic_7f0dc56e.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "lunar-garden.jpg",
+      "sha256": "3a579541e7c1d6b4b2c321b5fab1b535417b787139709273aefba360becfbdf7",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A cozy lunar greenhouse with arched lavender glass, immense pale pink Saturn high outside, tiny teal plants in far racks, orange lamps, spacious dark violet metal foreground deck. Retro illustrated science fiction with soft luminous color.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-749dc05d33a9",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.5807638,
+          "updatedAt": 1789412474.5807638,
+          "taskId": "task-minimax-image-minimax-image-749dc05d33a9",
+          "rootTaskId": "task-minimax-image-minimax-image-749dc05d33a9"
+        },
+        "status": {
+          "jobId": "minimax-image-749dc05d33a9",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h09m52s_minimax-comic_97db8a4e.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-7f07e237ca99",
+              "name": "2026-09-14-21h09m52s_minimax-comic_97db8a4e.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h09m52s_minimax-comic_97db8a4e.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h09m52s_minimax-comic_97db8a4e.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A cozy lunar greenhouse with arched lavender glass, immense pale pink Saturn high outside, tiny teal plants in far racks, orange lamps, spacious dark violet metal foreground deck. Retro illustrated science fiction with soft luminous color.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:09:52Z",
+              "metadata": {
+                "jobId": "minimax-image-749dc05d33a9",
+                "taskId": "task-minimax-image-minimax-image-749dc05d33a9",
+                "rootTaskId": "task-minimax-image-minimax-image-749dc05d33a9",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.5807638,
+          "updatedAt": 1789412992.973497,
+          "taskId": "task-minimax-image-minimax-image-749dc05d33a9",
+          "rootTaskId": "task-minimax-image-minimax-image-749dc05d33a9",
+          "startedAt": 1789412975.4831524,
+          "finishedAt": 1789412992.9734933
+        }
+      }
+    },
+    {
+      "file": "mint-pool.jpg",
+      "sha256": "4601f69ce413290a9f447e5e0c97fe947ca7e76bdcdfcdd15c0c758b5fcb8328",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Surreal vaporwave rooftop pool at dawn, peach colonnade, immense lavender sphere beyond mint arches, pink sky, turquoise water far center and broad dry slate-teal near deck. Crisp architectural gouache without glitch effects.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-2627f0893de7",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.399509,
+          "updatedAt": 1789412474.399509,
+          "taskId": "task-minimax-image-minimax-image-2627f0893de7",
+          "rootTaskId": "task-minimax-image-minimax-image-2627f0893de7"
+        },
+        "status": {
+          "jobId": "minimax-image-2627f0893de7",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h05m39s_minimax-comic_af1aecae.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-1e591d9e961f",
+              "name": "2026-09-14-21h05m39s_minimax-comic_af1aecae.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h05m39s_minimax-comic_af1aecae.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h05m39s_minimax-comic_af1aecae.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Surreal vaporwave rooftop pool at dawn, peach colonnade, immense lavender sphere beyond mint arches, pink sky, turquoise water far center and broad dry slate-teal near deck. Crisp architectural gouache without glitch effects.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:05:39Z",
+              "metadata": {
+                "jobId": "minimax-image-2627f0893de7",
+                "taskId": "task-minimax-image-minimax-image-2627f0893de7",
+                "rootTaskId": "task-minimax-image-minimax-image-2627f0893de7",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.399509,
+          "updatedAt": 1789412739.0803342,
+          "taskId": "task-minimax-image-minimax-image-2627f0893de7",
+          "rootTaskId": "task-minimax-image-minimax-image-2627f0893de7",
+          "startedAt": 1789412723.121793,
+          "finishedAt": 1789412739.0803294
+        }
+      }
+    },
+    {
+      "file": "neon-diner.jpg",
+      "sha256": "bf98e27f4c9f1f3a2e4f2e72d4c687686e7de1212f1f9beee757f6b9f2818bf7",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A narrow rain-wet Tokyo diner alley at blue hour, giant red circular lantern far above, emerald tiled wall on the left, amber window light far right. Empty near asphalt in deep navy. Cinematic illustrated neon noir.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-2a8fa793359a",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.312868,
+          "updatedAt": 1789412474.312868,
+          "taskId": "task-minimax-image-minimax-image-2a8fa793359a",
+          "rootTaskId": "task-minimax-image-minimax-image-2a8fa793359a"
+        },
+        "status": {
+          "jobId": "minimax-image-2a8fa793359a",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h01m34s_minimax-comic_7a09b25c.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-f8bfe8266513",
+              "name": "2026-09-14-21h01m34s_minimax-comic_7a09b25c.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h01m34s_minimax-comic_7a09b25c.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h01m34s_minimax-comic_7a09b25c.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A narrow rain-wet Tokyo diner alley at blue hour, giant red circular lantern far above, emerald tiled wall on the left, amber window light far right. Empty near asphalt in deep navy. Cinematic illustrated neon noir.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:01:34Z",
+              "metadata": {
+                "jobId": "minimax-image-2a8fa793359a",
+                "taskId": "task-minimax-image-minimax-image-2a8fa793359a",
+                "rootTaskId": "task-minimax-image-minimax-image-2a8fa793359a",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.312868,
+          "updatedAt": 1789412494.2458732,
+          "taskId": "task-minimax-image-minimax-image-2a8fa793359a",
+          "rootTaskId": "task-minimax-image-minimax-image-2a8fa793359a",
+          "startedAt": 1789412474.327155,
+          "finishedAt": 1789412494.2458704
+        }
+      }
+    },
+    {
+      "file": "nomad.png",
+      "sha256": "5d16684a94f85d5ab278a51eafd0d45036938162227c2c59b7f6e5ce1391b9f6",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A solitary quiet adult traveler in an ochre poncho and long indigo trousers, red cloth scarf and flat brown boots, broad simple straw hat, face partly shaded, upright grounded stance, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-2fc7cadc55d3",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.6659145,
+          "updatedAt": 1789412474.6659145,
+          "taskId": "task-minimax-image-minimax-image-2fc7cadc55d3",
+          "rootTaskId": "task-minimax-image-minimax-image-2fc7cadc55d3"
+        },
+        "status": {
+          "jobId": "minimax-image-2fc7cadc55d3",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h11m42s_minimax-comic_d76b0bb2.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-b936a2eefd40",
+              "name": "2026-09-14-21h11m42s_minimax-comic_d76b0bb2.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h11m42s_minimax-comic_d76b0bb2.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h11m42s_minimax-comic_d76b0bb2.jpg",
+              "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A solitary quiet adult traveler in an ochre poncho and long indigo trousers, red cloth scarf and flat brown boots, broad simple straw hat, face partly shaded, upright grounded stance, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:11:42Z",
+              "metadata": {
+                "jobId": "minimax-image-2fc7cadc55d3",
+                "taskId": "task-minimax-image-minimax-image-2fc7cadc55d3",
+                "rootTaskId": "task-minimax-image-minimax-image-2fc7cadc55d3",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.6659145,
+          "updatedAt": 1789413102.8627942,
+          "taskId": "task-minimax-image-minimax-image-2fc7cadc55d3",
+          "rootTaskId": "task-minimax-image-minimax-image-2fc7cadc55d3",
+          "startedAt": 1789413085.19429,
+          "finishedAt": 1789413102.862791
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "6b9a6b74",
+        "status": "queued",
+        "task_id": "task-generation-6b9a6b74",
+        "root_task_id": "task-generation-6b9a6b74",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_486e36a232b25c178802d379a8772e9a",
+          "source_filename": "2026-09-14-21h11m42s_minimax-comic_d76b0bb2.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "6b9a6b74",
+        "task_id": "task-generation-6b9a6b74",
+        "root_task_id": "task-generation-6b9a6b74",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h11m42s_minimax-comic_d76b0bb2.no-background-a241cf6f.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413105.599844,
+        "started_at": 1789413105.799756,
+        "finished_at": 1789413106.6824758,
+        "processing_time_sec": 0.88,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_486e36a232b25c178802d379a8772e9a",
+          "source_filename": "2026-09-14-21h11m42s_minimax-comic_d76b0bb2.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "ocean-window.jpg",
+      "sha256": "27d51154bc589fc8f249991459c0e4350d7ba65058927c876b95439fd6fa7790",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. An underwater research gallery with giant aquamarine glass windows, enormous curving coral silhouettes outside, midnight blue metal arches and warm apricot instruments, broad dark navy near deck. No sea creatures. Illustrated retro-scientific adventure.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-7a1e654f4047",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.4305367,
+          "updatedAt": 1789412474.4305367,
+          "taskId": "task-minimax-image-minimax-image-7a1e654f4047",
+          "rootTaskId": "task-minimax-image-minimax-image-7a1e654f4047"
+        },
+        "status": {
+          "jobId": "minimax-image-7a1e654f4047",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h06m33s_minimax-comic_6dd6846e.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-498ff7fd65ad",
+              "name": "2026-09-14-21h06m33s_minimax-comic_6dd6846e.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h06m33s_minimax-comic_6dd6846e.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h06m33s_minimax-comic_6dd6846e.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. An underwater research gallery with giant aquamarine glass windows, enormous curving coral silhouettes outside, midnight blue metal arches and warm apricot instruments, broad dark navy near deck. No sea creatures. Illustrated retro-scientific adventure.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:06:33Z",
+              "metadata": {
+                "jobId": "minimax-image-7a1e654f4047",
+                "taskId": "task-minimax-image-minimax-image-7a1e654f4047",
+                "rootTaskId": "task-minimax-image-minimax-image-7a1e654f4047",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.4305367,
+          "updatedAt": 1789412793.5680602,
+          "taskId": "task-minimax-image-minimax-image-7a1e654f4047",
+          "rootTaskId": "task-minimax-image-minimax-image-7a1e654f4047",
+          "startedAt": 1789412754.5782547,
+          "finishedAt": 1789412793.568057
+        }
+      }
+    },
+    {
+      "file": "ochre-terminal.jpg",
+      "sha256": "fdf412b956a3e6b9ae4b7b77008a55d94dced94ec76907596c0eb1ef7490eb2c",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A desert railway terminal at sunset, monumental mustard canopy receding through coral dust, copper rails far right, abandoned teal bench on the far left, broad chocolate-brown near pavement. Graphic 1970s travel-poster illustration.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-ad877e29e672",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.461542,
+          "updatedAt": 1789412474.461542,
+          "taskId": "task-minimax-image-minimax-image-ad877e29e672",
+          "rootTaskId": "task-minimax-image-minimax-image-ad877e29e672"
+        },
+        "status": {
+          "jobId": "minimax-image-ad877e29e672",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h07m15s_minimax-comic_cb93a082.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-f80c4c560eeb",
+              "name": "2026-09-14-21h07m15s_minimax-comic_cb93a082.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h07m15s_minimax-comic_cb93a082.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h07m15s_minimax-comic_cb93a082.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A desert railway terminal at sunset, monumental mustard canopy receding through coral dust, copper rails far right, abandoned teal bench on the far left, broad chocolate-brown near pavement. Graphic 1970s travel-poster illustration.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:07:15Z",
+              "metadata": {
+                "jobId": "minimax-image-ad877e29e672",
+                "taskId": "task-minimax-image-minimax-image-ad877e29e672",
+                "rootTaskId": "task-minimax-image-minimax-image-ad877e29e672",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.461542,
+          "updatedAt": 1789412835.0409052,
+          "taskId": "task-minimax-image-minimax-image-ad877e29e672",
+          "rootTaskId": "task-minimax-image-minimax-image-ad877e29e672",
+          "startedAt": 1789412817.2414143,
+          "finishedAt": 1789412835.0409
+        }
+      }
+    },
+    {
+      "file": "peach-laundry.jpg",
+      "sha256": "99623a69af0d9775a1d3a433f8f06b0ffed005a43457bc05a8bbaf88ba596db7",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Dreamlike midnight laundromat, peach walls, cyan washing-machine circles stacked high on either side, lavender neon window far center without letters, deep petrol blue foreground terrazzo. Symmetrical whimsical cinematic illustration.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-05d58473bf27",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.5932682,
+          "updatedAt": 1789412474.5932682,
+          "taskId": "task-minimax-image-minimax-image-05d58473bf27",
+          "rootTaskId": "task-minimax-image-minimax-image-05d58473bf27"
+        },
+        "status": {
+          "jobId": "minimax-image-05d58473bf27",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h10m09s_minimax-comic_7d9a60e5.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-305768b8ac33",
+              "name": "2026-09-14-21h10m09s_minimax-comic_7d9a60e5.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h10m09s_minimax-comic_7d9a60e5.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h10m09s_minimax-comic_7d9a60e5.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Dreamlike midnight laundromat, peach walls, cyan washing-machine circles stacked high on either side, lavender neon window far center without letters, deep petrol blue foreground terrazzo. Symmetrical whimsical cinematic illustration.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:10:09Z",
+              "metadata": {
+                "jobId": "minimax-image-05d58473bf27",
+                "taskId": "task-minimax-image-minimax-image-05d58473bf27",
+                "rootTaskId": "task-minimax-image-minimax-image-05d58473bf27",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.5932682,
+          "updatedAt": 1789413009.2890775,
+          "taskId": "task-minimax-image-minimax-image-05d58473bf27",
+          "rootTaskId": "task-minimax-image-minimax-image-05d58473bf27",
+          "startedAt": 1789412992.973704,
+          "finishedAt": 1789413009.2890732
+        }
+      }
+    },
+    {
+      "file": "planter.png",
+      "sha256": "04ff9db1e64225d07d6dd67a98f434d48f9abbdc2ad311227f3108817bfdc7ee",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "Single isolated prop for a theatrical scene. Premium detailed gouache illustration. A single tall architectural terracotta planter with a lush jade monstera plant, elegant broad leaf silhouettes, whole pot and all leaves visible, flat base seen from a slightly elevated frontal viewpoint. Flat medium gray background, no scenery, no other objects, no floor shadow, no text. Object completely inside image with narrow margins.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-b8ceaa94b3bb",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.7153494,
+          "updatedAt": 1789412474.7153494,
+          "taskId": "task-minimax-image-minimax-image-b8ceaa94b3bb",
+          "rootTaskId": "task-minimax-image-minimax-image-b8ceaa94b3bb"
+        },
+        "status": {
+          "jobId": "minimax-image-b8ceaa94b3bb",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h12m45s_minimax-comic_495e24e0.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-4f310dc46b82",
+              "name": "2026-09-14-21h12m45s_minimax-comic_495e24e0.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h12m45s_minimax-comic_495e24e0.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h12m45s_minimax-comic_495e24e0.jpg",
+              "prompt": "Single isolated prop for a theatrical scene. Premium detailed gouache illustration. A single tall architectural terracotta planter with a lush jade monstera plant, elegant broad leaf silhouettes, whole pot and all leaves visible, flat base seen from a slightly elevated frontal viewpoint. Flat medium gray background, no scenery, no other objects, no floor shadow, no text. Object completely inside image with narrow margins.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:12:45Z",
+              "metadata": {
+                "jobId": "minimax-image-b8ceaa94b3bb",
+                "taskId": "task-minimax-image-minimax-image-b8ceaa94b3bb",
+                "rootTaskId": "task-minimax-image-minimax-image-b8ceaa94b3bb",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.7153494,
+          "updatedAt": 1789413165.8297014,
+          "taskId": "task-minimax-image-minimax-image-b8ceaa94b3bb",
+          "rootTaskId": "task-minimax-image-minimax-image-b8ceaa94b3bb",
+          "startedAt": 1789413148.168707,
+          "finishedAt": 1789413165.829698
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "40f057e0",
+        "status": "queued",
+        "task_id": "task-generation-40f057e0",
+        "root_task_id": "task-generation-40f057e0",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_45e1b1a0a2f259c0ae61b289bdb3df0c",
+          "source_filename": "2026-09-14-21h12m45s_minimax-comic_495e24e0.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "40f057e0",
+        "task_id": "task-generation-40f057e0",
+        "root_task_id": "task-generation-40f057e0",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h12m45s_minimax-comic_495e24e0.no-background-bd392d5b.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413171.340981,
+        "started_at": 1789413172.1304095,
+        "finished_at": 1789413268.6087444,
+        "processing_time_sec": 96.48,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_45e1b1a0a2f259c0ae61b289bdb3df0c",
+          "source_filename": "2026-09-14-21h12m45s_minimax-comic_495e24e0.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "robot.png",
+      "sha256": "8ed42db5905796d4082a83234f0a8742d844369227a8603f95bbd602e5b2a04d",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A small charming retro robot, chunky turquoise rectangular body, orange round head with two large dark eyes, ivory mechanical arms, two sturdy dark cobalt boot-like feet planted at the same height, standing balanced and upright, no antenna outside the frame. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-e42db4f95892",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.6952481,
+          "updatedAt": 1789412474.6952481,
+          "taskId": "task-minimax-image-minimax-image-e42db4f95892",
+          "rootTaskId": "task-minimax-image-minimax-image-e42db4f95892"
+        },
+        "status": {
+          "jobId": "minimax-image-e42db4f95892",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h12m28s_minimax-comic_eb8a693c.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-bababa6b5487",
+              "name": "2026-09-14-21h12m28s_minimax-comic_eb8a693c.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h12m28s_minimax-comic_eb8a693c.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h12m28s_minimax-comic_eb8a693c.jpg",
+              "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. A small charming retro robot, chunky turquoise rectangular body, orange round head with two large dark eyes, ivory mechanical arms, two sturdy dark cobalt boot-like feet planted at the same height, standing balanced and upright, no antenna outside the frame. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:12:28Z",
+              "metadata": {
+                "jobId": "minimax-image-e42db4f95892",
+                "taskId": "task-minimax-image-minimax-image-e42db4f95892",
+                "rootTaskId": "task-minimax-image-minimax-image-e42db4f95892",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.6952481,
+          "updatedAt": 1789413148.16891,
+          "taskId": "task-minimax-image-minimax-image-e42db4f95892",
+          "rootTaskId": "task-minimax-image-minimax-image-e42db4f95892",
+          "startedAt": 1789413120.2436454,
+          "finishedAt": 1789413148.1689053
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "8e95fcae",
+        "status": "queued",
+        "task_id": "task-generation-8e95fcae",
+        "root_task_id": "task-generation-8e95fcae",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_0394be3b591059cea4f2f3709e8dafa1",
+          "source_filename": "2026-09-14-21h12m28s_minimax-comic_eb8a693c.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "8e95fcae",
+        "task_id": "task-generation-8e95fcae",
+        "root_task_id": "task-generation-8e95fcae",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h12m28s_minimax-comic_eb8a693c.no-background-98c3c6d1.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413152.1158674,
+        "started_at": 1789413152.3157222,
+        "finished_at": 1789413153.7210484,
+        "processing_time_sec": 1.41,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_0394be3b591059cea4f2f3709e8dafa1",
+          "source_filename": "2026-09-14-21h12m28s_minimax-comic_eb8a693c.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "sculptor.png",
+      "sha256": "077ed42b45f1302ca0900fce86d2506c23d1641c5638b40ca53c16e169f22a33",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. An elegant androgynous adult sculptor with short black bob haircut, oversized cream shirt, cobalt wide-legged trousers and vermilion flat shoes, hands relaxed down, standing still, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-ea86b7b6bd77",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.6338272,
+          "updatedAt": 1789412474.6338272,
+          "taskId": "task-minimax-image-minimax-image-ea86b7b6bd77",
+          "rootTaskId": "task-minimax-image-minimax-image-ea86b7b6bd77"
+        },
+        "status": {
+          "jobId": "minimax-image-ea86b7b6bd77",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h11m07s_minimax-comic_226ea67c.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-0531cc76f6b3",
+              "name": "2026-09-14-21h11m07s_minimax-comic_226ea67c.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h11m07s_minimax-comic_226ea67c.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h11m07s_minimax-comic_226ea67c.jpg",
+              "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. An elegant androgynous adult sculptor with short black bob haircut, oversized cream shirt, cobalt wide-legged trousers and vermilion flat shoes, hands relaxed down, standing still, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:11:07Z",
+              "metadata": {
+                "jobId": "minimax-image-ea86b7b6bd77",
+                "taskId": "task-minimax-image-minimax-image-ea86b7b6bd77",
+                "rootTaskId": "task-minimax-image-minimax-image-ea86b7b6bd77",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.6338272,
+          "updatedAt": 1789413067.237129,
+          "taskId": "task-minimax-image-minimax-image-ea86b7b6bd77",
+          "rootTaskId": "task-minimax-image-minimax-image-ea86b7b6bd77",
+          "startedAt": 1789413048.2453494,
+          "finishedAt": 1789413067.2371252
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "6875708b",
+        "status": "queued",
+        "task_id": "task-generation-6875708b",
+        "root_task_id": "task-generation-6875708b",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_6b6c06afa28f51a4a3a8cd3e8cdda8b1",
+          "source_filename": "2026-09-14-21h11m07s_minimax-comic_226ea67c.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "6875708b",
+        "task_id": "task-generation-6875708b",
+        "root_task_id": "task-generation-6875708b",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h11m07s_minimax-comic_226ea67c.no-background-d70ed672.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413071.157991,
+        "started_at": 1789413071.3548145,
+        "finished_at": 1789413072.2923207,
+        "processing_time_sec": 0.94,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_6b6c06afa28f51a4a3a8cd3e8cdda8b1",
+          "source_filename": "2026-09-14-21h11m07s_minimax-comic_226ea67c.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "singer.png",
+      "sha256": "c8c262d3fa4ea429ae0da81eb4171516b1c25bd40eec87dc62d8bb19e2abde14",
+      "generation": {
+        "request": {
+          "aspect_ratio": "2:3",
+          "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. An elegant adult jazz singer in a flowing teal suit, cream turtleneck, gold shoes and burgundy beret, one hand on hip, striking graphic silhouette, face calmly looking forward, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-81bab5f6dfef",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.684939,
+          "updatedAt": 1789412474.684939,
+          "taskId": "task-minimax-image-minimax-image-81bab5f6dfef",
+          "rootTaskId": "task-minimax-image-minimax-image-81bab5f6dfef"
+        },
+        "status": {
+          "jobId": "minimax-image-81bab5f6dfef",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h12m00s_minimax-comic_0e807ffd.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-5337632ab130",
+              "name": "2026-09-14-21h12m00s_minimax-comic_0e807ffd.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h12m00s_minimax-comic_0e807ffd.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h12m00s_minimax-comic_0e807ffd.jpg",
+              "prompt": "One single isolated full-body character for compositing. Premium hand-painted gouache concept illustration with clean shapes and beautiful material detail, consistent eye-level nearly frontal perspective. An elegant adult jazz singer in a flowing teal suit, cream turtleneck, gold shoes and burgundy beret, one hand on hip, striking graphic silhouette, face calmly looking forward, both soles at the same height. Full body and both feet entirely visible, narrow blank border around silhouette. Flat medium neutral gray background, no environment, no floor, no cast shadow, no lettering, no logo. No extra objects or people.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:12:00Z",
+              "metadata": {
+                "jobId": "minimax-image-81bab5f6dfef",
+                "taskId": "task-minimax-image-minimax-image-81bab5f6dfef",
+                "rootTaskId": "task-minimax-image-minimax-image-81bab5f6dfef",
+                "subjectReference": false,
+                "aspectRatio": "2:3"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.684939,
+          "updatedAt": 1789413120.2438254,
+          "taskId": "task-minimax-image-minimax-image-81bab5f6dfef",
+          "rootTaskId": "task-minimax-image-minimax-image-81bab5f6dfef",
+          "startedAt": 1789413102.862935,
+          "finishedAt": 1789413120.2438219
+        }
+      },
+      "removeBackgroundJob": {
+        "job_id": "b6986ad1",
+        "status": "queued",
+        "task_id": "task-generation-b6986ad1",
+        "root_task_id": "task-generation-b6986ad1",
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "source_asset_id": "asset_unmanaged_200cdac16bc75833a1d88c89f99359a2",
+          "source_filename": "2026-09-14-21h12m00s_minimax-comic_0e807ffd.jpg"
+        }
+      },
+      "removeBackgroundStatus": {
+        "job_id": "b6986ad1",
+        "task_id": "task-generation-b6986ad1",
+        "root_task_id": "task-generation-b6986ad1",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done · background removed",
+        "output_files": [
+          "2026-09-14-21h12m00s_minimax-comic_0e807ffd.no-background-ca2127b1.png"
+        ],
+        "error": null,
+        "task_timings": [],
+        "created_at": 1789413120.8318384,
+        "started_at": 1789413121.0522587,
+        "finished_at": 1789413122.1051013,
+        "processing_time_sec": 1.05,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "rembg-u2net",
+          "model_name": "rembg U2Net",
+          "generation_mode": "image",
+          "execution_mode": "real",
+          "simulated": false,
+          "capability": "remove_background",
+          "source_asset_id": "asset_unmanaged_200cdac16bc75833a1d88c89f99359a2",
+          "source_filename": "2026-09-14-21h12m00s_minimax-comic_0e807ffd.jpg",
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      }
+    },
+    {
+      "file": "submerged-archive.jpg",
+      "sha256": "9f58abc90ade28a6910f0bed7acd580bc04a0af2c66e4561e1739a1844622615",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Surreal flooded archive with towering dark teal bookshelves far in the background, gold underwater light shafts, monumental oval window showing turquoise haze, raised dry dark wooden reading platform across foreground. Art nouveau adventure illustration, no figures or statues.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-d6faee4aa286",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.5353787,
+          "updatedAt": 1789412474.5353787,
+          "taskId": "task-minimax-image-minimax-image-d6faee4aa286",
+          "rootTaskId": "task-minimax-image-minimax-image-d6faee4aa286"
+        },
+        "status": {
+          "jobId": "minimax-image-d6faee4aa286",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h09m03s_minimax-comic_724bfdc4.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-40cfc841ec10",
+              "name": "2026-09-14-21h09m03s_minimax-comic_724bfdc4.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h09m03s_minimax-comic_724bfdc4.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h09m03s_minimax-comic_724bfdc4.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Surreal flooded archive with towering dark teal bookshelves far in the background, gold underwater light shafts, monumental oval window showing turquoise haze, raised dry dark wooden reading platform across foreground. Art nouveau adventure illustration, no figures or statues.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:09:03Z",
+              "metadata": {
+                "jobId": "minimax-image-d6faee4aa286",
+                "taskId": "task-minimax-image-minimax-image-d6faee4aa286",
+                "rootTaskId": "task-minimax-image-minimax-image-d6faee4aa286",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.5353787,
+          "updatedAt": 1789412943.4337304,
+          "taskId": "task-minimax-image-minimax-image-d6faee4aa286",
+          "rootTaskId": "task-minimax-image-minimax-image-d6faee4aa286",
+          "startedAt": 1789412924.6388273,
+          "finishedAt": 1789412943.433727
+        }
+      }
+    },
+    {
+      "file": "sun-orchard.jpg",
+      "sha256": "28ae21d195b393bfc193897e7cdf1b5589c050b7ff1a84015d4a3c26dd56af73",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Solarpunk botanical conservatory with gigantic circular orange sunshade, mint glass and white organic arches, dark jade foreground paving and luminous peach distance, verdant tree crowns high overhead. Optimistic elegant architecture.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-ce0f540c3cf3",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.325399,
+          "updatedAt": 1789412474.325399,
+          "taskId": "task-minimax-image-minimax-image-ce0f540c3cf3",
+          "rootTaskId": "task-minimax-image-minimax-image-ce0f540c3cf3"
+        },
+        "status": {
+          "jobId": "minimax-image-ce0f540c3cf3",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h02m36s_minimax-comic_e047adb8.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-6601bdc7ba8c",
+              "name": "2026-09-14-21h02m36s_minimax-comic_e047adb8.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h02m36s_minimax-comic_e047adb8.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h02m36s_minimax-comic_e047adb8.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Solarpunk botanical conservatory with gigantic circular orange sunshade, mint glass and white organic arches, dark jade foreground paving and luminous peach distance, verdant tree crowns high overhead. Optimistic elegant architecture.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:02:36Z",
+              "metadata": {
+                "jobId": "minimax-image-ce0f540c3cf3",
+                "taskId": "task-minimax-image-minimax-image-ce0f540c3cf3",
+                "rootTaskId": "task-minimax-image-minimax-image-ce0f540c3cf3",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.325399,
+          "updatedAt": 1789412556.7649689,
+          "taskId": "task-minimax-image-minimax-image-ce0f540c3cf3",
+          "rootTaskId": "task-minimax-image-minimax-image-ce0f540c3cf3",
+          "startedAt": 1789412494.2455058,
+          "finishedAt": 1789412556.7649648
+        }
+      }
+    },
+    {
+      "file": "sunset-court.jpg",
+      "sha256": "c7474b2dc0569ab1f4f88f9f26422af12c5f666413c050718aba6a7eb04ba4b2",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Graphic synthwave basketball court at dusk, gigantic orange sun behind purple palm silhouettes and angular blue apartment blocks, hot pink court lines on dark indigo foreground pavement, luminous peach sky. Stylish hand-painted urban sports poster.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-35caf26ce87a",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.5485435,
+          "updatedAt": 1789412474.5485435,
+          "taskId": "task-minimax-image-minimax-image-35caf26ce87a",
+          "rootTaskId": "task-minimax-image-minimax-image-35caf26ce87a"
+        },
+        "status": {
+          "jobId": "minimax-image-35caf26ce87a",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h09m18s_minimax-comic_2a1209f7.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-2967c8dc5067",
+              "name": "2026-09-14-21h09m18s_minimax-comic_2a1209f7.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h09m18s_minimax-comic_2a1209f7.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h09m18s_minimax-comic_2a1209f7.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Graphic synthwave basketball court at dusk, gigantic orange sun behind purple palm silhouettes and angular blue apartment blocks, hot pink court lines on dark indigo foreground pavement, luminous peach sky. Stylish hand-painted urban sports poster.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:09:18Z",
+              "metadata": {
+                "jobId": "minimax-image-35caf26ce87a",
+                "taskId": "task-minimax-image-minimax-image-35caf26ce87a",
+                "rootTaskId": "task-minimax-image-minimax-image-35caf26ce87a",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.5485435,
+          "updatedAt": 1789412958.8796391,
+          "taskId": "task-minimax-image-minimax-image-35caf26ce87a",
+          "rootTaskId": "task-minimax-image-minimax-image-35caf26ce87a",
+          "startedAt": 1789412943.433519,
+          "finishedAt": 1789412958.879636
+        }
+      }
+    },
+    {
+      "file": "tangerine-market.jpg",
+      "sha256": "e61a143c5585e1b0dfa89c5bc59afd3608ca8424900cb0024eaf6b590c10d69f",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Retro Mediterranean market at blue hour, violet striped awnings and tangerine orange fruit displays on side stalls, tall turquoise central doorway, empty broad dark plum near plaza. Modern bold gouache with delicious graphic color.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-7b97adb18144",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.4864302,
+          "updatedAt": 1789412474.4864302,
+          "taskId": "task-minimax-image-minimax-image-7b97adb18144",
+          "rootTaskId": "task-minimax-image-minimax-image-7b97adb18144"
+        },
+        "status": {
+          "jobId": "minimax-image-7b97adb18144",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h07m49s_minimax-comic_eb58bfa3.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-c6594cb5e992",
+              "name": "2026-09-14-21h07m49s_minimax-comic_eb58bfa3.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h07m49s_minimax-comic_eb58bfa3.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h07m49s_minimax-comic_eb58bfa3.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Retro Mediterranean market at blue hour, violet striped awnings and tangerine orange fruit displays on side stalls, tall turquoise central doorway, empty broad dark plum near plaza. Modern bold gouache with delicious graphic color.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:07:49Z",
+              "metadata": {
+                "jobId": "minimax-image-7b97adb18144",
+                "taskId": "task-minimax-image-minimax-image-7b97adb18144",
+                "rootTaskId": "task-minimax-image-minimax-image-7b97adb18144",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.4864302,
+          "updatedAt": 1789412869.5797553,
+          "taskId": "task-minimax-image-minimax-image-7b97adb18144",
+          "rootTaskId": "task-minimax-image-minimax-image-7b97adb18144",
+          "startedAt": 1789412853.091586,
+          "finishedAt": 1789412869.5797513
+        }
+      }
+    },
+    {
+      "file": "velvet-theatre.jpg",
+      "sha256": "aaf7103789434e060005533fd192d93d1c6bd778220a58f474508dfdda4c9604",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A crimson velvet theatre with golden central spotlight from high rafters, purple tiered curtains, distant giant stylized crescent stage decoration, dark burgundy floorboards across the near empty stage. Dreamlike theatrical concept art.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-721711da916b",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.4429688,
+          "updatedAt": 1789412474.4429688,
+          "taskId": "task-minimax-image-minimax-image-721711da916b",
+          "rootTaskId": "task-minimax-image-minimax-image-721711da916b"
+        },
+        "status": {
+          "jobId": "minimax-image-721711da916b",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h06m57s_minimax-comic_0fe173c2.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-1b7d38f70401",
+              "name": "2026-09-14-21h06m57s_minimax-comic_0fe173c2.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h06m57s_minimax-comic_0fe173c2.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h06m57s_minimax-comic_0fe173c2.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. A crimson velvet theatre with golden central spotlight from high rafters, purple tiered curtains, distant giant stylized crescent stage decoration, dark burgundy floorboards across the near empty stage. Dreamlike theatrical concept art.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:06:57Z",
+              "metadata": {
+                "jobId": "minimax-image-721711da916b",
+                "taskId": "task-minimax-image-minimax-image-721711da916b",
+                "rootTaskId": "task-minimax-image-minimax-image-721711da916b",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.4429688,
+          "updatedAt": 1789412817.2412221,
+          "taskId": "task-minimax-image-minimax-image-721711da916b",
+          "rootTaskId": "task-minimax-image-minimax-image-721711da916b",
+          "startedAt": 1789412793.567806,
+          "finishedAt": 1789412817.2412183
+        }
+      }
+    },
+    {
+      "file": "vermilion-museum.jpg",
+      "sha256": "c5738093c8bbcead38737d19d42b3f051e735eeb1c502e8e217ad1de99a1bc6e",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Brutalist sculpture museum, monolithic vermilion walls, ivory geometric stair in the far right, a deep blue square recess in distant center, broad charcoal terrazzo pavement foreground. Graphic architectural magazine photography.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-64f6568466da",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789412474.339644,
+          "updatedAt": 1789412474.339644,
+          "taskId": "task-minimax-image-minimax-image-64f6568466da",
+          "rootTaskId": "task-minimax-image-minimax-image-64f6568466da"
+        },
+        "status": {
+          "jobId": "minimax-image-64f6568466da",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h03m38s_minimax-comic_adc5a1e0.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-5e5bcaf66c96",
+              "name": "2026-09-14-21h03m38s_minimax-comic_adc5a1e0.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h03m38s_minimax-comic_adc5a1e0.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h03m38s_minimax-comic_adc5a1e0.jpg",
+              "prompt": "Vertical 9:16 environment illustration for a layered theatrical scene. Extraordinary clear composition, highly designed color contrast across near, middle and far planes, deep visual perspective, polished detailed materials, readable broad shapes. Empty architecture and landscape ONLY: ZERO people, ZERO human figures, ZERO animals, no silhouettes of people, no statues, no text, no signs, no lettering, no logos, no border. Broad open level foreground surface in the lower third. Keep the center below mid-height visually quiet. Brutalist sculpture museum, monolithic vermilion walls, ivory geometric stair in the far right, a deep blue square recess in distant center, broad charcoal terrazzo pavement foreground. Graphic architectural magazine photography.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:03:38Z",
+              "metadata": {
+                "jobId": "minimax-image-64f6568466da",
+                "taskId": "task-minimax-image-minimax-image-64f6568466da",
+                "rootTaskId": "task-minimax-image-minimax-image-64f6568466da",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789412474.339644,
+          "updatedAt": 1789412618.9253845,
+          "taskId": "task-minimax-image-minimax-image-64f6568466da",
+          "rootTaskId": "task-minimax-image-minimax-image-64f6568466da",
+          "startedAt": 1789412556.765177,
+          "finishedAt": 1789412618.9253812
+        }
+      }
+    },
+    {
+      "file": "ocean-window.mp4",
+      "sha256": "d9c16266ed97494c65ac0bd77d66737c2b5f72c09a2a3ebe76a80ee81afb21cd",
+      "generation": {
+        "job_id": "db4b2e54",
+        "task_id": "task-generation-db4b2e54",
+        "root_task_id": "task-generation-db4b2e54",
+        "status": "completed",
+        "progress": 100,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Done",
+        "output_files": [
+          "2026-09-15-09h37m09s_seed482915_Locked-off fixed camera. Keep this exact composition and architectural room completely unchanged. Be.mp4"
+        ],
+        "error": null,
+        "task_timings": [
+          {
+            "panel_no": 1,
+            "panel_total": 1,
+            "prompt_preview": "Locked-off fixed camera. Keep this exact composition and arc",
+            "status": "completed",
+            "phase_timings": [
+              {
+                "phase": "Loading model H3 First / Last — Pruned...",
+                "seconds": 19.131
+              },
+              {
+                "phase": "Model loaded",
+                "seconds": 0.203
+              },
+              {
+                "phase": "Encoding Prompt",
+                "seconds": 5.994
+              },
+              {
+                "phase": "Denoising",
+                "seconds": 981.124
+              },
+              {
+                "phase": "VAE Decoding",
+                "seconds": 15.932
+              }
+            ],
+            "total_seconds": 1022.818
+          }
+        ],
+        "created_at": 1789456807.2469082,
+        "started_at": 1789456807.4186993,
+        "finished_at": 1789457830.300196,
+        "processing_time_sec": 1022.88,
+        "queue_position": null,
+        "generation_details": {
+          "model_type": "minimax_h3",
+          "model_name": "H3 First / Last — Pruned",
+          "execution_mode": "real",
+          "simulated": false,
+          "resolution": "576x1024",
+          "seed": 482915,
+          "steps": 20,
+          "guidance": 1.0,
+          "frames": 145,
+          "repeat": 1,
+          "flow_shift": 5,
+          "prompt": "Locked-off fixed camera. Keep this exact composition and architectural room completely unchanged. Beyond the large window, powerful blue ocean waves roll and crash in slow, graceful continuous motion, white seafoam ripples and recedes, small sunlight glints on moving water. Only the ocean water outside the window moves. The window frame, room, floor and all objects remain perfectly still. No people appear. Serene cinematic seamless ocean background plate.",
+          "cache": false,
+          "lora_count": 0
+        },
+        "h3_window_plan": null,
+        "oom_info": null
+      },
+      "sourceImage": "ocean-window.jpg"
+    }
+  ],
+  "groundingEdits": [
+    {
+      "file": "creative/ink-mountain.jpg",
+      "sha256": "9f921552b15b5af25c22321e12c2d2cf52aa545e3ab1f99a5f4b427a8282352e",
+      "generation": {
+        "request": {
+          "aspect_ratio": "9:16",
+          "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 minimalist Japanese sumi-e watercolor. Almost WHITE sky and mist, indigo ink mountain peaks far behind, one huge flat VERMILION sun high in the sky. Black pine branches frame the upper left. The entire lower 45 percent is a wide continuous level dark SLATE terrace with expressive black ink brush grain and thin perspective seams, no stairs or buildings. The pale mist valley is beyond the far edge of this solid ink-gray terrace. Strict white, indigo, charcoal and red color palette. Absolutely NO calligraphy, signature or stamp.",
+          "workspace": "default"
+        },
+        "job": {
+          "jobId": "minimax-image-5bf75ae9a023",
+          "workspace": "default",
+          "status": "queued",
+          "phase": "queued",
+          "message": "MiniMax image request queued",
+          "current": 0,
+          "total": 1,
+          "progress": 0,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [],
+          "result": null,
+          "error": null,
+          "createdAt": 1789414503.8748014,
+          "updatedAt": 1789414503.8748014,
+          "taskId": "task-minimax-image-minimax-image-5bf75ae9a023",
+          "rootTaskId": "task-minimax-image-minimax-image-5bf75ae9a023"
+        },
+        "status": {
+          "jobId": "minimax-image-5bf75ae9a023",
+          "workspace": "default",
+          "status": "completed",
+          "phase": "completed",
+          "message": "MiniMax image generated",
+          "current": 1,
+          "total": 1,
+          "progress": 100,
+          "provider": "minimax",
+          "model": "image-01",
+          "server_origin": "https://api.minimax.io",
+          "resource_lane": "remote:https://api.minimax.io",
+          "acquired_resources": [],
+          "output_files": [
+            "2026-09-14-21h37m21s_minimax-comic_cac7d1c2.jpg"
+          ],
+          "result": {
+            "asset": {
+              "id": "asset-391d63be835c",
+              "name": "2026-09-14-21h37m21s_minimax-comic_cac7d1c2.jpg",
+              "kind": "minimax",
+              "source": "/api/v1/file/2026-09-14-21h37m21s_minimax-comic_cac7d1c2.jpg",
+              "thumbnail": "/api/v1/file/2026-09-14-21h37m21s_minimax-comic_cac7d1c2.jpg",
+              "prompt": "Exquisite highly artistic environment painting. EMPTY SET: zero humans, zero human silhouettes, zero animals, no statues, no text, no signature, no lettering, no watermark. Important composition: the bottom 45 percent is a broad solid level terrace or landing spanning the full picture width, entirely visible, clear readable near-surface perspective and material texture. No foreground void, no hole in this terrace, no objects on it. Vertical 9:16 minimalist Japanese sumi-e watercolor. Almost WHITE sky and mist, indigo ink mountain peaks far behind, one huge flat VERMILION sun high in the sky. Black pine branches frame the upper left. The entire lower 45 percent is a wide continuous level dark SLATE terrace with expressive black ink brush grain and thin perspective seams, no stairs or buildings. The pale mist valley is beyond the far edge of this solid ink-gray terrace. Strict white, indigo, charcoal and red color palette. Absolutely NO calligraphy, signature or stamp.",
+              "provider": "minimax",
+              "model": "image-01",
+              "createdAt": "2026-09-14T19:37:21Z",
+              "metadata": {
+                "jobId": "minimax-image-5bf75ae9a023",
+                "taskId": "task-minimax-image-minimax-image-5bf75ae9a023",
+                "rootTaskId": "task-minimax-image-minimax-image-5bf75ae9a023",
+                "subjectReference": false,
+                "aspectRatio": "9:16"
+              }
+            }
+          },
+          "error": null,
+          "createdAt": 1789414503.8748014,
+          "updatedAt": 1789414641.6621776,
+          "taskId": "task-minimax-image-minimax-image-5bf75ae9a023",
+          "rootTaskId": "task-minimax-image-minimax-image-5bf75ae9a023",
+          "startedAt": 1789414623.3621533,
+          "finishedAt": 1789414641.6621718
+        }
+      }
+    }
+  ]
+}

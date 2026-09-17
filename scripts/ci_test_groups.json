@@ -54,6 +54,7 @@
         "tests/test_h3_preplan_job_contract.py",
         "tests/test_h3_semantic_bridge.py",
         "tests/test_image_generation_commands.py",
+        "tests/test_independent_model_downloads.py",
         "tests/test_integration_audit_regressions.py",
         "tests/test_job_lifecycle.py",
         "tests/test_job_lifecycle_wiring.py",
@@ -234,6 +235,7 @@
         "tests/test_provenance_3d_director.py",
         "tests/test_recipes_router.py",
         "tests/test_remove_background_tool.py",
+        "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",
         "tests/test_safety_scan.py",
         "tests/test_scail2_workflows.py",
@@ -289,7 +291,8 @@
         "tests/test_wangp_submission.py",
         "tests/test_wizard_workflow_executor.py",
         "tests/test_workspace_command_failures.py",
-        "tests/test_world3d_export.py"
+        "tests/test_world3d_export.py",
+        "tests/test_world3d_media_cache.py"
       ]
     }
   ],

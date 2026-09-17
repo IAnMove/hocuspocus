@@ -1325,7 +1325,12 @@ def duplicate_series_project(series: dict) -> dict:
     for asset in duplicate_assets.values():
         if not isinstance(asset, dict):
             continue
-        if asset.get("ownerType") == "series" and asset.get("ownerId") == old_id:
+        # Episodes and their attempt graph are intentionally omitted. Keep the
+        # media reusable without leaving owners that no longer exist in the copy.
+        if asset.get("ownerType") in {"episode", "shot", "attempt"}:
+            asset["ownerType"] = "series"
+            asset["ownerId"] = new_id
+        elif asset.get("ownerType") == "series" and asset.get("ownerId") == old_id:
             asset["ownerId"] = new_id
     duplicate["assets"] = duplicate_assets
     duplicate["importSource"] = {

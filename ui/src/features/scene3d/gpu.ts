@@ -1,3 +1,4 @@
+import { imageCutoutMesh, poseImageCutout } from './imageCutout'
 import { CinematicRuntime } from './cinematicRuntime'
 import { MaterializationRuntime } from './materialization'
 import { framingPose } from './framing'
@@ -171,6 +172,7 @@ export function makeStripeTexture(): Texture {
 }
 
 export function imageBackdropMesh(slot: Scene3DSlot, texture: Texture | null): Mesh {
+  if (slot.surface === 'cutout') return imageCutoutMesh(slot, texture)
   if (texture && slot.surface && slot.surface !== 'environment') {
     texture.wrapT = RepeatWrapping
     const repeat = slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2)
@@ -410,7 +412,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds)
-  const framing = document.camera.framing
+  const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing
   const target = posedSlots.find(slot => slot.id === framing?.targetSlot)
   const root = target && world.slots.get(target.id)?.root
   const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor), target, sceneSeconds, document.duration) : null
@@ -429,7 +431,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
       rotationY: slot.rotationY,
       scale: slot.scale,
       root: world.slots.get(slot.id)?.root,
-    })))
+    })), { width: world.renderer.domElement?.width ?? document.width, height: world.renderer.domElement?.height ?? document.height })
   }
   if (world.cinema || document.environment || document.worldSfx?.length || document.slots.some(s => s.surface === 'environment')) {
     world.cinema ??= new CinematicRuntime(world)
@@ -572,6 +574,10 @@ export function poseLoadedSlot(current: SlotGpu, slot: Scene3DSlot) {
     current.root.position.set(0, CYLINDER_HEIGHT * 0.35 * scale, 0)
     current.root.rotation.y = slot.rotationY
     current.root.scale.setScalar(scale)
+    return
+  }
+  if (current.kind === 'image' && slot.surface === 'cutout') {
+    poseImageCutout(current.root, slot)
     return
   }
   if (current.kind === 'image') {
