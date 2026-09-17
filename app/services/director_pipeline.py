@@ -36,6 +36,15 @@ from services.job_lifecycle import (
     snapshot_job,
 )
 from services.operation_logging import log_operation, operation_scope
+from services.director.pipeline_locks import (
+    PipelineBusyError,
+    _claim_pipeline_delete,
+    _claim_pipeline_operation,
+    _claim_pipeline_operation_locked,
+    _exclusive_pipeline_operation,
+    _release_pipeline_delete,
+    _release_pipeline_operation,
+)
 from services.director_model_compat import (
     DIRECTOR_PIPELINE_TYPES,
     assess_director_model,
@@ -133,10 +142,6 @@ _CANCELLED_ARTIFACT_FIELDS = {
     "_clip_video_files",
     "_clip_timings",
 }
-
-class PipelineBusyError(RuntimeError):
-    """Raised when a Dashboard mutation conflicts with active pipeline work."""
-
 
 class DirectorModelCompatibilityError(ValueError):
     """Raised before Director submits work to an incompatible model."""
@@ -649,76 +654,6 @@ def _director_native_window_frames(
         ((max(1, int(candidate)) - 1) // latent_size) * latent_size + 1,
         min_frames,
     )
-
-
-def _claim_pipeline_operation_locked(pid: str) -> bool:
-    """Reserve a terminal pipeline while ``_pipeline_lock`` is held."""
-    if (
-        pid in _pipeline_threads
-        or bool(_pipeline_child_jobs.get(pid))
-        or pid in _pipeline_starting
-        or pid in _pipeline_operations
-        or pid in _pipeline_deleting
-        or _pipelines.get(pid, {}).get("status") in {
-            "queued", "planning", "running", "paused",
-        }
-    ):
-        return False
-    _pipeline_operations.add(pid)
-    return True
-
-
-def _claim_pipeline_operation(pid: str) -> bool:
-    """Reserve a terminal pipeline for one Dashboard mutation."""
-    with _pipeline_lock:
-        return _claim_pipeline_operation_locked(pid)
-
-
-def _release_pipeline_operation(pid: str) -> None:
-    with _pipeline_lock:
-        _pipeline_operations.discard(pid)
-
-
-def _claim_pipeline_delete(pid: str) -> bool:
-    """Reserve deletion before taking the state-file lock."""
-    with _pipeline_lock:
-        pipeline = _pipelines.get(pid)
-        if (
-            pid in _pipeline_threads
-            or bool(_pipeline_child_jobs.get(pid))
-            or pid in _pipeline_starting
-            or pid in _pipeline_operations
-            or pid in _pipeline_deleting
-            or (
-                pipeline
-                and pipeline.get("status") in {
-                    "queued", "planning", "running", "paused",
-                }
-            )
-        ):
-            return False
-        _pipeline_deleting.add(pid)
-        return True
-
-
-def _release_pipeline_delete(pid: str) -> None:
-    with _pipeline_lock:
-        _pipeline_deleting.discard(pid)
-
-
-def _exclusive_pipeline_operation(function):
-    """Keep delete/resume/live saves away from a Dashboard media mutation."""
-    @wraps(function)
-    def wrapped(out_dir: str, pid: str, *args, **kwargs):
-        if not _claim_pipeline_operation(pid):
-            raise PipelineBusyError(
-                "Pipeline is still active; try again shortly.",
-            )
-        try:
-            return function(out_dir, pid, *args, **kwargs)
-        finally:
-            _release_pipeline_operation(pid)
-    return wrapped
 
 
 # ── Reference art-style lock ────────────────────────────────────────────
