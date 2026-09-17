@@ -8,7 +8,6 @@ import { parseImagePoses } from '../../src/features/scene3d/imagePoseSequence'
 import type { Scene3DStageHandle } from '../../src/features/scene3d/Scene3DStage'
 
 if (process.platform === 'win32') test.use({ channel: 'msedge' })
-test.skip(process.platform !== 'win32', 'Empty-still cutout export is Windows Edge; Linux UI E2E stays on save/reopen')
 test.setTimeout(120_000)
 
 for (const media of ['poses', 'video'] as const) {

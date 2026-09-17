@@ -43,7 +43,7 @@ export function WorldSfxControls({ cues = [], duration, selectedId, disabled, on
       {(['depth', 'duel', 'mixed'] as const).map(id => <button key={id} type="button" data-testid={`world-sfx-demo-${id}`} disabled={disabled} onClick={() => onDemo(id)} className="min-h-10 rounded border border-cyan-400/40 px-3 text-xs disabled:opacity-50">{t(`worldDemo.${id}`)}</button>)}
     </div>
   <details>
-    <summary className="cursor-pointer text-sm font-semibold">{t('worldTitle')} ({cues.length})</summary>
+    <summary data-testid="world-sfx-title" className="cursor-pointer text-sm font-semibold">{t('worldTitle')} ({cues.length})</summary>
     <p className="my-2 text-xs text-text-muted">{t('worldHelp')}</p>
     <fieldset disabled={disabled} className="space-y-3 disabled:opacity-50">
       {cues.map(cue => <div key={cue.id} className={`space-y-2 rounded border p-2 ${selectedId === cue.id ? 'border-violet-300 bg-violet-400/5' : 'border-border'}`}>
