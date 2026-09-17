@@ -12,17 +12,27 @@ export type ScreenMediaRuntime = {
   dispose: () => void
 }
 
-function waitMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', signal: AbortSignal) {
+function waitMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', signal: AbortSignal, target?: number) {
   return new Promise<void>((resolve, reject) => {
     const finish = (error?: Error) => {
-      clearTimeout(timer); video.removeEventListener(event, done); video.removeEventListener('error', failed); signal.removeEventListener('abort', aborted)
+      clearTimeout(timer)
+      video.removeEventListener(event, done)
+      video.removeEventListener('timeupdate', onTime)
+      video.removeEventListener('error', failed)
+      signal.removeEventListener('abort', aborted)
       if (error) reject(error); else resolve()
     }
     const done = () => finish(), failed = () => finish(new Error('screen-media-load-failed')), aborted = () => finish(new Error('screen-media-disposed'))
+    const onTime = () => {
+      if (event === 'seeked' && target !== undefined && Number.isFinite(video.currentTime) && Math.abs(video.currentTime - target) <= .05) done()
+    }
     // Seeked can fail to fire for short mocked WebM clips. A long wait here
     // stalls every export frame and trips the Linux UI E2E budget.
     const timer = setTimeout(() => finish(new Error('screen-media-timeout')), event === 'seeked' ? 2_000 : 15_000)
-    video.addEventListener(event, done, { once: true }); video.addEventListener('error', failed, { once: true }); signal.addEventListener('abort', aborted, { once: true })
+    video.addEventListener(event, done, { once: true })
+    if (event === 'seeked') video.addEventListener('timeupdate', onTime)
+    video.addEventListener('error', failed, { once: true })
+    signal.addEventListener('abort', aborted, { once: true })
     if (signal.aborted) aborted()
   })
 }
@@ -126,7 +136,7 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
             const target = desired
             if (Number.isFinite(target) && Math.abs(video.currentTime - target) > .0005) {
               try {
-                const sought = waitMedia(video, 'seeked', abort.signal); video.currentTime = target; await sought
+                const sought = waitMedia(video, 'seeked', abort.signal, target); video.currentTime = target; await sought
               } catch (error) {
                 if (abort.signal.aborted) throw error instanceof Error ? error : new Error(String(error))
               }

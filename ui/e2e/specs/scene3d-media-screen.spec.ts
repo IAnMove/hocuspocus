@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { gotoApp, closeApp } from '../helpers/gotoApp'
+import { fulfillSeekable } from '../helpers/seekableMedia'
 import { applyScene3DTemplate } from '../../src/features/scene3d/templates'
 
 test.use({ channel: process.platform === 'win32' ? 'msedge' : 'chrome' })
@@ -61,7 +62,7 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
   const url = '/api/v1/uploads/background-motion.webm'
   const video = await readFile(new URL('../../public/rig-previews/animation-jump.webm', import.meta.url))
   await page.route('**/api/v1/upload', route => route.fulfill({ json: { filename: 'background-motion.webm', path: url, url, kind: 'video' } }))
-  await page.route(`**${url}*`, route => route.fulfill({ contentType: 'video/webm', body: video }))
+  await page.route(`**${url}*`, fulfillSeekable(video, 'video/webm'))
   await controls.getByTestId('asset-input-file').setInputFiles({ name: 'background-motion.webm', mimeType: 'video/webm', buffer: video })
   await expect(controls.getByText('background-motion.webm', { exact: true })).toBeVisible()
   await expect(controls.getByLabel('Content fit', { exact: true })).toHaveValue('cover')
@@ -94,10 +95,19 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
     const url = URL.createObjectURL(blob), video = document.createElement('video')
     const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 32
     const ctx = canvas.getContext('2d')!
+    const wait = (event: 'loadeddata' | 'seeked', ms: number) => new Promise<void>((resolve, reject) => {
+      const finish = (error?: Error) => {
+        clearTimeout(timer); video.removeEventListener(event, done); video.removeEventListener('error', failed)
+        if (error) reject(error); else resolve()
+      }
+      const done = () => finish(), failed = () => finish(new Error('Background export cannot be decoded'))
+      const timer = setTimeout(() => event === 'seeked' ? finish() : finish(new Error('Background export did not load')), ms)
+      video.addEventListener(event, done, { once: true }); video.addEventListener('error', failed, { once: true })
+    })
     try {
-      await new Promise<void>((resolve, reject) => { video.onloadeddata = () => resolve(); video.onerror = () => reject(new Error('Background export cannot be decoded')); video.src = url })
+      const loaded = wait('loadeddata', 8_000); video.src = url; await loaded
       const sample = async (seconds: number) => {
-        await new Promise<void>(resolve => { video.onseeked = () => resolve(); video.currentTime = seconds })
+        const sought = wait('seeked', 2_000); video.currentTime = seconds; await sought
         ctx.drawImage(video, 0, 0, 32, 32); return ctx.getImageData(0, 0, 32, 32).data
       }
       const first = await sample(.05), last = await sample(.8)

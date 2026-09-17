@@ -80,6 +80,20 @@ test('no-op and same-target requests await decoded content and repaint on backwa
   } finally { runtime.dispose(); h.restore() }
 })
 
+test('a seek can settle from timeupdate when the decoder is already near the target', async () => {
+  const h = mediaHarness(), screen = { ...defaultMediaScreen(), media: 'video', sourceUrl: '/test.mp4' }
+  const runtime = await bindScreenMedia(h.root, screen, true, new AbortController().signal)
+  try {
+    const started = Date.now()
+    const pending = runtime.seek(1, screen)
+    await Promise.resolve()
+    h.video.dispatchEvent(new Event('timeupdate'))
+    await pending
+    assert.ok(Date.now() - started < 500)
+    assert.equal(h.video.currentTime, 1)
+  } finally { runtime.dispose(); h.restore() }
+})
+
 test('a seek without seeked still settles so export cannot stall on every frame', async () => {
   const h = mediaHarness(), screen = { ...defaultMediaScreen(), media: 'video', sourceUrl: '/test.mp4' }
   const runtime = await bindScreenMedia(h.root, screen, true, new AbortController().signal)

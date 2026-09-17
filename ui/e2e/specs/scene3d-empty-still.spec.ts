@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { gotoApp, closeApp } from '../helpers/gotoApp'
+import { fulfillSeekable } from '../helpers/seekableMedia'
 import { applyScene3DTemplate } from '../../src/features/scene3d/templates'
 import { defaultMediaScreen, parseMediaScreen } from '../../src/features/scene3d/mediaScreen'
 import { parseImagePoses } from '../../src/features/scene3d/imagePoseSequence'
@@ -26,7 +27,7 @@ for (const media of ['poses', 'video'] as const) {
     let requested = false
     await page.route(`**${url}*`, route => {
       requested = true
-      return route.fulfill({ contentType: media === 'video' ? 'video/webm' : 'image/png', body })
+      return fulfillSeekable(body, media === 'video' ? 'video/webm' : 'image/png')(route)
     })
     slot.screen = parseMediaScreen({
       ...defaultMediaScreen(), sourceUrl: url, media: media === 'video' ? 'video' : 'image',
