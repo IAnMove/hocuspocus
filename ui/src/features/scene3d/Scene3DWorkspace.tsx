@@ -126,6 +126,11 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   const [screenTargets, setScreenTargets] = useState<Record<string, { meshes: string[]; nodes: string[] }>>({})
   const [exportNote, setExportNote] = useState<string | null>(null)
   const generationRef = useRef(0)
+  const [generation, setGeneration] = useState(0)
+  const bumpGeneration = useCallback(() => {
+    generationRef.current += 1
+    setGeneration(generationRef.current)
+  }, [])
   const workspaceRef = useRef('')
   const stageRef = useRef<Scene3DStageHandle>(null)
   const exportAbortRef = useRef<AbortController | null>(null)
@@ -145,7 +150,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       return
     }
     sessionStorage.setItem('hocuspocus:scene-before-command:' + Date.now(), JSON.stringify(sceneDocRef.current))
-    generationRef.current += 1; applyScene(adopted.document); setFrame(0)
+    bumpGeneration(); applyScene(adopted.document); setFrame(0)
     selectSlot(adopted.document.slots[0]?.id ?? 'subject_1'); setSpeechOpen(adopted.document.slots.some(slot => Boolean(slot.speech)))
   })
   const speechVisible = speechOpen && selected?.media === 'model3d'
@@ -185,11 +190,11 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     }
     const next = documentFromWorld3DRequest(request)
     setSpeechOpen(request.templateId.startsWith('speech-'))
-    generationRef.current += 1
+    bumpGeneration()
     applyScene(next)
     setFrame(0)
     return { message: next.templateId, templateId: request.templateId, slotIds: next.slots.map(slot => slot.id) }
-  }), [applyScene])
+  }), [applyScene, bumpGeneration])
 
   const clipIssue = useMemo(() => {
     for (const slot of sceneDoc.slots) {
@@ -218,9 +223,9 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   }, [playing, sceneDoc.duration, fps, count, speed])
 
   useEffect(() => {
-    if (workspaceRef.current && workspaceRef.current !== workspace) generationRef.current += 1
+    if (workspaceRef.current && workspaceRef.current !== workspace) bumpGeneration()
     workspaceRef.current = workspace
-  }, [workspace])
+  }, [workspace, bumpGeneration])
 
   useEffect(() => {
     let alive = true
@@ -267,7 +272,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       try {
         const next = takeSpeechProduction(workspace, sessionStorage, () => preserveSpeechDraft(workspace, sceneDocRef.current))
         if (!next) return
-        generationRef.current++
+        bumpGeneration()
         setPlaying(false); setFrame(0)
         setCatalogs(current => retainSlotClipCatalogs(sceneDocRef.current.slots, next.slots, current))
         setSpeechOpen(true)
@@ -276,11 +281,11 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     }
     window.addEventListener(SPEECH_HANDOFF_EVENT, receive); receive()
     return () => window.removeEventListener(SPEECH_HANDOFF_EVENT, receive)
-  }, [workspace, exporting, applyScene])
+  }, [workspace, exporting, applyScene, bumpGeneration])
 
   const adoptMountedScene = (next: Scene3DDocument, userTemplateId?: string) => {
     if (!canMutateWorld3DScene(exportingRef.current)) return
-    generationRef.current += 1
+    bumpGeneration()
     const keptUrls = new Set(next.slots.map(slot => slot.sourceUrl))
     for (const slot of sceneDoc.slots) if (!keptUrls.has(slot.sourceUrl)) revokeIfBlob(slot.sourceUrl)
     if (next.templateId.startsWith('speech-') || next.slots.some(slot => Boolean(slot.speech))) setSpeechOpen(true)
@@ -329,7 +334,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
             const previous = raw && parseScene3DDocument(JSON.parse(raw))
             if (!previous) return
             preserveSpeechDraft(workspace, sceneDoc)
-            generationRef.current++
+            bumpGeneration()
             setCatalogs(current => retainSlotClipCatalogs(sceneDoc.slots, previous.slots, current))
             setFrame(0); applyScene(previous)
           } catch (error) { setExportNote(error instanceof Error ? error.message : String(error)) }
@@ -350,7 +355,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         onSaved={(output, document, identity) => session.acknowledgeSave(document, identity, Math.max(identity.revision + 1, Math.trunc(output.created_at) || 0))}
         onLoad={(next, source) => {
           if (!canMutateWorld3DScene(exportingRef.current)) return
-          generationRef.current += 1
+          bumpGeneration()
           const keptUrls = new Set(next.slots.map(slot => slot.sourceUrl))
           for (const slot of sceneDoc.slots) if (!keptUrls.has(slot.sourceUrl)) revokeIfBlob(slot.sourceUrl)
           setCatalogs(current => retainSlotClipCatalogs(sceneDoc.slots, next.slots, current))
@@ -373,7 +378,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
           const keptUrls = new Set(demo.slots.map(slot => slot.sourceUrl))
           for (const slot of sceneDoc.slots) if (!keptUrls.has(slot.sourceUrl)) revokeIfBlob(slot.sourceUrl)
           setCatalogs(current => retainSlotClipCatalogs(sceneDoc.slots, demo.slots, current))
-          generationRef.current += 1
+          bumpGeneration()
           setPlaying(false); setFrame(0); applyScene(demo)
           setSelectedId(demo.slots[0]?.id ?? 'subject_1')
           setSelectedWorldSfxId(demo.worldSfx?.[0]?.id)
@@ -392,6 +397,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         selectedId={selectedId}
         selectedWorldSfxId={selectedWorldSfxId}
         pickTarget={pickTarget}
+        generation={generation}
         transformMode={transformMode}
         seconds={seconds}
         speed={speed}
@@ -470,7 +476,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
             }}
             onAssign={assignChoice}
             onApplyScene={applyScene}
-            onBumpGeneration={() => { generationRef.current += 1 }}
+            onBumpGeneration={bumpGeneration}
             liveSource={() => ({
               generation: generationRef.current,
               slotId: slot.id,
@@ -490,7 +496,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
 }
 
 function WorkspaceStageColumn({
-  speechVisible, sceneDoc, playing, exporting, selected, selectedId, selectedWorldSfxId, pickTarget,
+  speechVisible, sceneDoc, playing, exporting, selected, selectedId, selectedWorldSfxId, pickTarget, generation,
   transformMode, seconds, speed, editingLocked, workspace, session, stageRef, t, editorT,
   setTransformMode, setPickTarget, setSelectedWorldSfxId, setSelectedId, setCatalogs, setScreenTargets, setPlaying,
   selectSlot, applyScene,
@@ -503,6 +509,7 @@ function WorkspaceStageColumn({
   selectedId: string
   selectedWorldSfxId?: string
   pickTarget?: string
+  generation: number
   transformMode: TransformMode
   seconds: number
   speed: number
@@ -522,7 +529,7 @@ function WorkspaceStageColumn({
   selectSlot: (id: string) => void
   applyScene: (updater: Scene3DDocument | ((current: Scene3DDocument) => Scene3DDocument), group?: string) => void
 }) {
-  const pickKey = selected ? `${selected.id}/${selected.sourceUrl}` : ''
+  const pickKey = selected ? `${generation}/${selected.id}/${selected.sourceUrl}` : ''
   return (
     <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
       <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -592,9 +599,10 @@ function WorkspaceStageColumn({
       />
       {speechVisible && selected && <div id="world3d-speech-inspector" className="min-w-0 xl:max-h-[38rem] xl:overflow-y-auto">
         <Scene3DSpeakerControls
-          key={`${workspace}/${selected.id}/${selected.sourceUrl}`}
+          key={`${workspace}/${generation}/${selected.id}/${selected.sourceUrl}`} // remount when a shot load bumps generation so Advanced details reset
+
           slot={selected} workspace={workspace} disabled={editingLocked}
-          onPick={() => { setPlaying(false); setPickTarget(`${selected.id}/${selected.sourceUrl}`) }}
+          onPick={() => { setPlaying(false); setPickTarget(`${generation}/${selected.id}/${selected.sourceUrl}`) }}
           calibrate={profile => stageRef.current?.facePlacement?.(selected.id, profile)}
           onChange={speech => applyScene(current => current.slots.find(item => item.id === selected.id)?.sourceUrl === selected.sourceUrl
             ? patchScene3DSlot(current, selected.id, { speech }) : current)}
