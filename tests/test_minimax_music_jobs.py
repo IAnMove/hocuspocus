@@ -16,22 +16,27 @@ from services import minimax_music_service, resource_scheduler
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
-TREE = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+STORY_MUSIC = ROOT / "app" / "routers" / "story_music.py"
+LAUNCH_TREE = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+STORY_MUSIC_TREE = ast.parse(STORY_MUSIC.read_text(encoding="utf-8"), filename=str(STORY_MUSIC))
 
 
-def _function(name: str) -> ast.FunctionDef:
-    for node in TREE.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
-            clone = copy.deepcopy(node)
-            clone.decorator_list = []
-            return clone
+def _function(name: str) -> tuple[ast.FunctionDef, Path]:
+    for tree, source in ((STORY_MUSIC_TREE, STORY_MUSIC), (LAUNCH_TREE, LAUNCH)):
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+                clone = copy.deepcopy(node)
+                clone.decorator_list = []
+                return clone, source
     raise AssertionError(f"Function {name!r} not found")
 
 
 def _load(*names: str, namespace: dict) -> dict:
-    module = ast.Module(body=[_function(name) for name in names], type_ignores=[])
+    loaded = [_function(name) for name in names]
+    module = ast.Module(body=[node for node, _source in loaded], type_ignores=[])
     ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
+    source = loaded[0][1] if loaded else LAUNCH
+    exec(compile(module, str(source), "exec"), namespace)
     return namespace
 
 
