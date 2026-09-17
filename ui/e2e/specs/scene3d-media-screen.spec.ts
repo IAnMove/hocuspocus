@@ -78,7 +78,9 @@ test('a cutout background keeps its geometry and PSX look with seekable video th
   await workspace.getByLabel('Open shot JSON').setInputFiles({ name: 'animated-background.world3d.json', mimeType: 'application/json', buffer: await readFile(path) })
   await expect(controls.getByLabel('Animate this layer')).toBeChecked()
   await expect(controls.getByText('background-motion.webm', { exact: true })).toBeVisible()
-  const canEncode = await page.evaluate(async () => {
+  // Playwright Chromium (Chrome for Testing) supports H.264, so Linux would
+  // encode this WebM cutout and miss seeked. Native MP4 stays on Windows Edge.
+  const canEncode = process.platform === 'win32' && await page.evaluate(async () => {
     if (typeof VideoEncoder === 'undefined') return false
     const result = await VideoEncoder.isConfigSupported({ codec: 'avc1.640028', width: 1280, height: 720, bitrate: 5_000_000, framerate: 30, avc: { format: 'avc' } })
     return Boolean(result.supported)

@@ -11,6 +11,9 @@ export function fulfillSeekable(body: Buffer, contentType: string) {
     }
     const start = Math.min(Number(match[1]), total)
     const end = match[2] === '' ? Math.max(0, total - 1) : Math.min(Number(match[2]), Math.max(0, total - 1))
+    if (start === 0 && end === total - 1) {
+      return route.fulfill({ status: 200, contentType, headers: { ...headers, 'Content-Length': String(total) }, body })
+    }
     if (start >= total || start > end) {
       return route.fulfill({ status: 416, headers: { ...headers, 'Content-Range': `bytes */${total}` }, body: Buffer.alloc(0) })
     }

@@ -46,7 +46,9 @@ for (const media of ['poses', 'video'] as const) {
       return stage?.ready(slots)
     }, scene.slots, { timeout: 15_000 })
     expect(requested).toBe(true)
-    const canEncode = await page.evaluate(async () => {
+    // Playwright's Chromium is Chrome for Testing and advertises H.264, so
+    // Linux UI E2E would otherwise encode here. Cutout MP4s stay on Windows Edge.
+    const canEncode = process.platform === 'win32' && await page.evaluate(async () => {
       if (typeof VideoEncoder === 'undefined') return false
       const result = await VideoEncoder.isConfigSupported({ codec: 'avc1.640028', width: 1280, height: 720, bitrate: 5_000_000, framerate: 30, avc: { format: 'avc' } })
       return Boolean(result.supported)
