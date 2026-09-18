@@ -84,6 +84,7 @@
         "tests/test_output_move_security.py",
         "tests/test_pass2_descriptor_canonicalize.py",
         "tests/test_pass3_storyboard_skip.py",
+        "tests/test_pipeline_repair_plan.py",
         "tests/test_phase1_issue_fixes.py",
         "tests/test_prompt_polish_fixes.py",
         "tests/test_provider_profile.py",
