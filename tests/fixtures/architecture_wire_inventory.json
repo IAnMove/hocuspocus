@@ -374,6 +374,12 @@
       "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
+      "file": "tests/test_story_library_router.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
       "file": "tests/test_story_montage_clip_history_ui.py",
       "target": "ui/src/stores/useStore.ts",
       "classification": "fragile_source",

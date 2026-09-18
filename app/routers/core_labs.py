@@ -148,59 +148,17 @@ def _prepare_story_uploads_for_series_import(story: dict, workspace: str) -> dic
 def create_core_labs_router() -> APIRouter:
     router = APIRouter()
 
-    @router.get("/api/v1/stories/library")
-    def get_story_library(workspace: str | None = None):
-        try:
-            with _LOCK:
-                return read_story_library(_dir(workspace))
-        except (OSError, ValueError) as error:
-            raise HTTPException(status_code=500, detail=f"Could not read the Story Lab library: {error}") from error
+    from routers.story_library import (
+        _bind_story_library_runtime,
+        create_story_library_router,
+    )
 
-    @router.put("/api/v1/stories/library")
-    def put_story_library(body: dict):
-        try:
-            with _LOCK:
-                return write_story_library(
-                    _dir(body.get("workspace")),
-                    body.get("library"),
-                    base_revision=body.get("baseRevision"),
-                )
-        except StoryLibraryRevisionConflict as error:
-            raise _conflict("story_library_revision_conflict", error) from error
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-
-    @router.patch("/api/v1/stories/library/projects/{project_id}")
-    def patch_story(project_id: str, body: dict):
-        try:
-            with _LOCK:
-                return patch_story_project(
-                    _dir(body.get("workspace")),
-                    project_id,
-                    body.get("project"),
-                    base_revision=body.get("baseRevision"),
-                    make_active=body.get("makeActive") is True,
-                )
-        except StoryLibraryRevisionConflict as error:
-            raise _conflict("story_library_revision_conflict", error) from error
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-
-    @router.delete("/api/v1/stories/library/projects/{project_id}")
-    def delete_story(project_id: str, body: dict):
-        try:
-            with _LOCK:
-                return delete_story_project(
-                    _dir(body.get("workspace")),
-                    project_id,
-                    base_revision=body.get("baseRevision"),
-                )
-        except StoryLibraryRevisionConflict as error:
-            raise _conflict("story_library_revision_conflict", error) from error
-        except KeyError as error:
-            raise HTTPException(status_code=404, detail="Story project not found") from error
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
+    _bind_story_library_runtime(
+        workspace_dir=_dir,
+        library_lock=_LOCK,
+        conflict=lambda exc: _conflict("story_library_revision_conflict", exc),
+    )
+    router.include_router(create_story_library_router())
 
     from routers.character_kit_library import (
         _bind_character_kit_library_runtime,
