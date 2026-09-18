@@ -106,6 +106,7 @@
         "tests/test_series_episode_update_router.py",
         "tests/test_series_lab_ui.py",
         "tests/test_series_library.py",
+        "tests/test_series_library_router.py",
         "tests/test_series_lifecycle.py",
         "tests/test_series_reference_router.py",
         "tests/test_series_render.py",
