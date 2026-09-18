@@ -33,6 +33,7 @@
         "tests/test_comic_plan_resume_contract.py",
         "tests/test_comic_story_reference.py",
         "tests/test_comic_video_preflight_pipeline.py",
+        "tests/test_comic_shot_identity.py",
         "tests/test_comics_router.py",
         "tests/test_director_cancellation.py",
         "tests/test_director_minimax_llm_routing.py",
