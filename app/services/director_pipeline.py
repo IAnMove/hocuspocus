@@ -61,6 +61,11 @@ from services.director.comic_identity import (
     _comic_shot_seed,
     _stable_comic_shot_id,
 )
+from services.director.pipeline_repair_plan import (
+    _plan_pipeline_repair,
+    _repair_queue_message,
+    _repair_start_result,
+)
 from services.director.h3_story_contracts import (
     _h3_apply_identity_contract,
     _h3_apply_portrait_composition_contract,
@@ -4302,96 +4307,6 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
         raise RuntimeError(f"Rejoin failed: {e}")
 
 
-def _plan_pipeline_repair(out_dir: str, pid: str, state: dict) -> dict:
-    """Build a deterministic repair plan from recorded files on disk."""
-    pipeline_file = _find_pipeline_file(out_dir, pid)
-    if not pipeline_file:
-        raise ValueError(f"Pipeline {pid} not found")
-    clip_out_dir = os.path.dirname(pipeline_file)
-    clips = state.get("clips") or []
-
-    requires_shot_images = shot_images_required(
-        _saved_pipeline_shot_image_policy(state)
-    )
-    invalid_images = (
-        {
-            number - 1
-            for number in _invalid_saved_media_numbers(
-                [clip.get("start_image_filename") for clip in clips],
-                len(clips),
-                clip_out_dir,
-                "image",
-            )
-        }
-        if requires_shot_images
-        else set()
-    )
-    invalid_videos = {
-        number - 1
-        for number in _invalid_saved_media_numbers(
-            [clip.get("video_filename") for clip in clips],
-            len(clips),
-            clip_out_dir,
-            "video",
-        )
-    }
-    image_indices = sorted(invalid_images)
-    video_indices = sorted(
-        invalid_videos
-        | invalid_images
-        | {
-            index
-            for index, clip in enumerate(clips)
-            if clip.get("video_stale")
-        }
-    )
-
-    missing_image_prompts = [
-        index + 1 for index in image_indices
-        if not str(clips[index].get("image_prompt") or "").strip()
-    ]
-    if missing_image_prompts:
-        labels = ", ".join(str(index) for index in missing_image_prompts)
-        raise ValueError(
-            f"Missing image prompt for repair clip(s) {labels}."
-        )
-    missing_video_prompts = [
-        index + 1 for index in video_indices
-        if not str(clips[index].get("video_prompt") or "").strip()
-    ]
-    if missing_video_prompts:
-        labels = ", ".join(str(index) for index in missing_video_prompts)
-        raise ValueError(
-            f"Missing video prompt for repair clip(s) {labels}."
-        )
-
-    should_rejoin = len(clips) >= 2
-    return {
-        "image_indices": image_indices,
-        "video_indices": video_indices,
-        "should_rejoin": should_rejoin,
-        "clip_count": len(clips),
-        "total": (
-            len(image_indices)
-            + len(video_indices)
-            + (1 if should_rejoin else 0)
-        ),
-    }
-
-
-def _repair_queue_message(plan: dict) -> str:
-    parts = []
-    image_count = len(plan["image_indices"])
-    video_count = len(plan["video_indices"])
-    if image_count:
-        parts.append(f"{image_count} image{'s' if image_count != 1 else ''}")
-    if video_count:
-        parts.append(f"{video_count} video{'s' if video_count != 1 else ''}")
-    if plan["should_rejoin"]:
-        parts.append("final join")
-    return "Queued " + (", ".join(parts) if parts else "repair check")
-
-
 def _persist_repair_state_unlocked(
     out_dir: str,
     pid: str,
@@ -4662,20 +4577,6 @@ def _run_pipeline_repair_after_ready(
     if control.get("start_error") is not None:
         return
     _run_pipeline_repair(out_dir, pid, control, plan)
-
-
-def _repair_start_result(pid: str, control: dict) -> dict:
-    """Wait for an atomic start reservation to publish its first snapshot."""
-    ready_event = control.get("ready_event")
-    if ready_event is not None:
-        ready_event.wait()
-    start_error = control.get("start_error")
-    if start_error is not None:
-        raise start_error
-    return {
-        "pipeline_id": pid,
-        "repair": dict(control.get("snapshot") or {}),
-    }
 
 
 def start_pipeline_repair(out_dir: str, pid: str) -> dict:
