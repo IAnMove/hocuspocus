@@ -2926,6 +2926,26 @@ class TestDirectorCancellation(unittest.TestCase):
         )
         self.assertIs(pipeline.PipelineBusyError, pipeline_locks.PipelineBusyError)
 
+    def test_reconcile_and_observer_helpers_are_reexported(self):
+        from services.director import pipeline_observer, pipeline_reconcile
+
+        self.assertIs(
+            pipeline._reconcile_pipeline_state_file,
+            pipeline_reconcile._reconcile_pipeline_state_file,
+        )
+        self.assertIs(
+            pipeline._normalize_interrupted_repair,
+            pipeline_reconcile._normalize_interrupted_repair,
+        )
+        self.assertIs(
+            pipeline._notify_pipeline_snapshot,
+            pipeline_observer._notify_pipeline_snapshot,
+        )
+        self.assertIs(
+            pipeline._observer_task_ids,
+            pipeline_observer._observer_task_ids,
+        )
+
     def test_worker_start_failure_marks_pipeline_failed_and_untracks_it(self):
         pid = "pipe-start-failure"
         record = self._add_pipeline(pid)

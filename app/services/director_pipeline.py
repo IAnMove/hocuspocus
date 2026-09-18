@@ -45,6 +45,16 @@ from services.director.pipeline_locks import (
     _release_pipeline_delete,
     _release_pipeline_operation,
 )
+from services.director.pipeline_observer import (
+    _notify_pipeline_snapshot,
+    _observer_task_ids,
+    _pipeline_observer_snapshot,
+)
+from services.director.pipeline_reconcile import (
+    _normalize_interrupted_repair,
+    _reconcile_pipeline_state_file,
+    mark_stale_running_pipeline,
+)
 from services.director_model_compat import (
     DIRECTOR_PIPELINE_TYPES,
     assess_director_model,
@@ -1521,40 +1531,7 @@ def _save_pipeline_state_locked(pid: str) -> bool:
         return False
 
 
-def _normalize_interrupted_repair(state: dict, pid: str) -> bool:
-    """Mark a persisted active repair interrupted when its worker is gone.
 
-    Browser reloads leave the non-daemon worker registered, so they continue
-    normally.  A Maestro process restart removes the registry; changing the
-    saved status makes that distinction visible and leaves Repair available as
-    an idempotent resume-from-disk operation.
-    """
-    repair = state.get("repair")
-    if not isinstance(repair, dict):
-        return False
-    if repair.get("status") not in _REPAIR_ACTIVE_STATUSES:
-        return False
-    operation_id = repair.get("operation_id")
-    with _pipeline_lock:
-        control = _pipeline_repairs.get(pid)
-        worker_present = bool(
-            control
-            and control.get("operation_id") == operation_id
-        )
-    if worker_present:
-        return False
-
-    now = time.time()
-    repair.update({
-        "status": "interrupted",
-        "phase": "interrupted",
-        "clip_index": None,
-        "message": "Repair was interrupted when HocusPocus Lab stopped. Start Repair again to continue.",
-        "error": "HocusPocus Lab stopped before the repair finished.",
-        "updated_at": now,
-        "completed_at": now,
-    })
-    return True
 
 
 def _pipeline_media_for_job(pid: str, out_dir: str, expected_clips: int) -> Optional[dict]:
@@ -1741,58 +1718,7 @@ def _h3_checkpoint_is_complete(data: dict, out_dir: str) -> bool:
     return True
 
 
-def _reconcile_pipeline_state_file(filepath: str, data: dict) -> dict:
-    """Promote a timed-out checkpoint when its generation actually finished."""
-    data = _ensure_h3_segment_state(data, os.path.dirname(filepath))
-    pid = str(data.get("pipeline_id") or "")
-    clips = data.get("clips") if isinstance(data.get("clips"), list) else []
-    if not pid or not clips:
-        return data
-    recovered = _pipeline_media_for_job(pid, os.path.dirname(filepath), len(clips))
-    if not recovered:
-        return data
 
-    already_reconciled = (
-        data.get("status") == "completed"
-        and recovered["final"] in (data.get("output_files") or [])
-        and all(
-            clip.get("video_filename") == recovered["clips"][index]
-            for index, clip in enumerate(clips)
-        )
-    )
-    if already_reconciled:
-        return data
-
-    for index, clip in enumerate(clips):
-        clip["video_filename"] = recovered["clips"][index]
-    data["status"] = "completed"
-    data["output_files"] = [recovered["final"]]
-    data["completed_at"] = max(
-        float(data.get("completed_at") or 0),
-        float(recovered["created_at"] or 0),
-    )
-    data["recovered_at"] = time.time()
-    data["recovery_note"] = (
-        "Recovered completed generation outputs after the Director supervisor "
-        "timed out."
-    )
-
-    temp_path = f"{filepath}.{uuid.uuid4().hex[:8]}.tmp"
-    try:
-        with open(temp_path, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2, ensure_ascii=False, default=str)
-        os.replace(temp_path, filepath)
-        print(
-            f"[Pipeline {pid}] Recovered {len(clips)} clip videos and final "
-            f"movie {recovered['final']} from job {recovered['job_id']}"
-        )
-    finally:
-        try:
-            if os.path.isfile(temp_path):
-                os.remove(temp_path)
-        except OSError:
-            pass
-    return data
 
 
 def _summarize_pipeline_state_file(filepath: str, workspace_name: str) -> Optional[dict]:
@@ -1808,16 +1734,9 @@ def _summarize_pipeline_state_file(filepath: str, workspace_name: str) -> Option
             # that this stale list snapshot then overwrote.
             pid = data.get("pipeline_id", "")
             changed = _normalize_interrupted_repair(data, pid)
-
-            # Detect stale "running" pipelines while retaining the
-            # same serialization boundary as repair normalization.
-            status = data.get("status", "unknown")
-            with _pipeline_lock:
-                pipeline_present = pid in _pipelines
-            if status == "running" and not pipeline_present:
-                data["status"] = "crashed"
-                status = "crashed"
+            if mark_stale_running_pipeline(data, pid):
                 changed = True
+            status = data.get("status", "unknown")
             if changed:
                 _write_pipeline_json_unlocked(filepath, data)
         clip_count = (
@@ -4978,85 +4897,6 @@ def cancel_pipeline_repair(out_dir: str, pid: str) -> Optional[dict]:
             cancel_requested=True,
         )
     return snapshot
-
-
-def _pipeline_observer_snapshot(pipeline: dict) -> dict:
-    """Build one immutable, non-sensitive snapshot for task publication."""
-    snapshot = copy.deepcopy(pipeline)
-    params = snapshot.pop("params", None)
-    snapshot.pop("_llm_passes", None)
-    snapshot["pipeline_type"] = snapshot.get("pipeline_type") or (
-        params or {}
-    ).get("pipeline_type", "")
-    # ``params`` is intentionally omitted from observer snapshots because it
-    # may contain prompts and provider details. Provenance is the portable,
-    # non-sensitive identity contract needed by the task adapter, so project
-    # and song-to-video references must survive that projection.
-    if isinstance(params, dict) and isinstance(params.get("provenance"), dict):
-        snapshot["provenance"] = copy.deepcopy(params["provenance"])
-    details = _public_pipeline_generation_details(
-        params,
-        len(snapshot.get("clip_plans") or []),
-    )
-    if details:
-        snapshot["generation_details"] = details
-    return snapshot
-
-
-def _observer_task_ids(result) -> tuple[Optional[str], Optional[str]]:
-    """Accept both TaskRegistry records and explicit observer ID payloads."""
-    if not isinstance(result, dict):
-        return None, None
-    task_id = str(
-        result.get("task_id") or result.get("id") or ""
-    ).strip()
-    root_task_id = str(
-        result.get("root_task_id")
-        or result.get("root_id")
-        or task_id
-        or ""
-    ).strip()
-    return task_id or None, root_task_id or None
-
-
-def _notify_pipeline_snapshot(
-    pid: str,
-    snapshot: Optional[dict] = None,
-) -> Optional[dict]:
-    """Publish a pipeline snapshot without holding Director's registry lock.
-
-    The callback is deliberately best-effort: task observability must never
-    stop a render.  A callback may return either the canonical TaskRegistry
-    record (``id``/``root_id``) or explicit ``task_id``/``root_task_id``
-    fields.  Retaining those IDs on the pipeline lets nested LLM calls attach
-    themselves to the Director root from inside the background worker.
-    """
-    with _pipeline_lock:
-        observer = _pipeline_state_observer
-        if snapshot is None:
-            pipeline = _pipelines.get(pid)
-            snapshot = copy.deepcopy(pipeline) if pipeline else None
-    if observer is None or snapshot is None:
-        return None
-
-    public_snapshot = _pipeline_observer_snapshot(snapshot)
-    workspace = str(public_snapshot.get("workspace") or "default")
-    try:
-        result = observer(public_snapshot, workspace)
-    except Exception as exc:
-        print(f"[Pipeline {pid}] State observer warning (non-fatal): {exc}")
-        return None
-
-    task_id, root_task_id = _observer_task_ids(result)
-    if task_id or root_task_id:
-        with _pipeline_lock:
-            pipeline = _pipelines.get(pid)
-            if pipeline is not None:
-                if task_id:
-                    pipeline["task_id"] = task_id
-                if root_task_id:
-                    pipeline["root_task_id"] = root_task_id
-    return result if isinstance(result, dict) else None
 
 
 def init(
