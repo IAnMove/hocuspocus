@@ -62,6 +62,8 @@ from services.director.comic_identity import (
     _stable_comic_shot_id,
 )
 from services.director.pipeline_repair_plan import (
+    _persist_repair_state,
+    _persist_repair_state_unlocked,
     _plan_pipeline_repair,
     _repair_queue_message,
     _repair_start_result,
@@ -4305,58 +4307,6 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
         }
     except Exception as e:
         raise RuntimeError(f"Rejoin failed: {e}")
-
-
-def _persist_repair_state_unlocked(
-    out_dir: str,
-    pid: str,
-    control: dict,
-    *,
-    replace: bool = False,
-    **updates,
-) -> Optional[dict]:
-    """Persist repair status while the caller holds control['state_lock']."""
-    operation_id = control["operation_id"]
-    now = time.time()
-
-    def _update(state):
-        existing = state.get("repair")
-        if (
-            not replace
-            and isinstance(existing, dict)
-            and existing.get("operation_id") != operation_id
-        ):
-            return
-        repair = {} if replace else dict(existing or {})
-        repair.update(updates)
-        repair["operation_id"] = operation_id
-        repair["updated_at"] = now
-        state["repair"] = repair
-
-    saved = _update_saved_pipeline(out_dir, pid, _update)
-    repair = (saved or {}).get("repair")
-    if not isinstance(repair, dict) or repair.get("operation_id") != operation_id:
-        return None
-    snapshot = dict(repair)
-    with _pipeline_lock:
-        current = _pipeline_repairs.get(pid)
-        if current is control:
-            current["snapshot"] = snapshot
-    return snapshot
-
-
-def _persist_repair_state(
-    out_dir: str,
-    pid: str,
-    control: dict,
-    *,
-    replace: bool = False,
-    **updates,
-) -> Optional[dict]:
-    with control["state_lock"]:
-        return _persist_repair_state_unlocked(
-            out_dir, pid, control, replace=replace, **updates,
-        )
 
 
 def _raise_if_repair_cancelled(control: dict) -> None:
