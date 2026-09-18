@@ -6,6 +6,8 @@ only decides which clips need images, videos and a final join.
 from __future__ import annotations
 
 import os
+import time
+from typing import Optional
 
 from services.director.pipeline_locks import _pipeline_host
 from services.director_video_strategy import shot_images_required
@@ -114,3 +116,56 @@ def _repair_start_result(pid: str, control: dict) -> dict:
         "pipeline_id": pid,
         "repair": dict(control.get("snapshot") or {}),
     }
+
+
+def _persist_repair_state_unlocked(
+    out_dir: str,
+    pid: str,
+    control: dict,
+    *,
+    replace: bool = False,
+    **updates,
+) -> Optional[dict]:
+    """Persist repair status while the caller holds control['state_lock']."""
+    host = _pipeline_host()
+    operation_id = control["operation_id"]
+    now = time.time()
+
+    def _update(state):
+        existing = state.get("repair")
+        if (
+            not replace
+            and isinstance(existing, dict)
+            and existing.get("operation_id") != operation_id
+        ):
+            return
+        repair = {} if replace else dict(existing or {})
+        repair.update(updates)
+        repair["operation_id"] = operation_id
+        repair["updated_at"] = now
+        state["repair"] = repair
+
+    saved = host._update_saved_pipeline(out_dir, pid, _update)
+    repair = (saved or {}).get("repair")
+    if not isinstance(repair, dict) or repair.get("operation_id") != operation_id:
+        return None
+    snapshot = dict(repair)
+    with host._pipeline_lock:
+        current = host._pipeline_repairs.get(pid)
+        if current is control:
+            current["snapshot"] = snapshot
+    return snapshot
+
+
+def _persist_repair_state(
+    out_dir: str,
+    pid: str,
+    control: dict,
+    *,
+    replace: bool = False,
+    **updates,
+) -> Optional[dict]:
+    with control["state_lock"]:
+        return _persist_repair_state_unlocked(
+            out_dir, pid, control, replace=replace, **updates,
+        )

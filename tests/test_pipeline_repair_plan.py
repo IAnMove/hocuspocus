@@ -1,6 +1,7 @@
 """Director repair plans are deterministic from files on disk."""
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from services import director_pipeline
@@ -11,6 +12,8 @@ def test_repair_plan_helpers_are_reexported():
     assert director_pipeline._plan_pipeline_repair is pipeline_repair_plan._plan_pipeline_repair
     assert director_pipeline._repair_queue_message is pipeline_repair_plan._repair_queue_message
     assert director_pipeline._repair_start_result is pipeline_repair_plan._repair_start_result
+    assert director_pipeline._persist_repair_state is pipeline_repair_plan._persist_repair_state
+    assert director_pipeline._persist_repair_state_unlocked is pipeline_repair_plan._persist_repair_state_unlocked
 
 
 def test_repair_plan_queues_stale_video_and_join(tmp_path: Path, monkeypatch):
@@ -62,3 +65,33 @@ def test_repair_start_result_waits_and_raises_start_error():
         raise AssertionError("expected start_error")
     except ValueError as exc:
         assert "boom" in str(exc)
+
+
+def test_persist_repair_state_writes_snapshot_for_the_same_operation(monkeypatch):
+    stored = {"repair": {"operation_id": "op-1", "status": "queued"}}
+
+    def update(_out_dir, _pid, updater):
+        updater(stored)
+        return stored
+
+    monkeypatch.setattr(director_pipeline, "_update_saved_pipeline", update)
+    control = {
+        "operation_id": "op-1",
+        "state_lock": threading.Lock(),
+        "snapshot": {},
+    }
+    director_pipeline._pipeline_repairs["p1"] = control
+    try:
+        snapshot = director_pipeline._persist_repair_state(
+            "/tmp", "p1", control, status="running", phase="images",
+        )
+        assert snapshot["status"] == "running"
+        assert snapshot["phase"] == "images"
+        assert control["snapshot"]["status"] == "running"
+        ignored = director_pipeline._persist_repair_state_unlocked(
+            "/tmp", "p1", {"operation_id": "other", "snapshot": {}}, status="failed",
+        )
+        assert ignored is None
+        assert stored["repair"]["status"] == "running"
+    finally:
+        director_pipeline._pipeline_repairs.pop("p1", None)
