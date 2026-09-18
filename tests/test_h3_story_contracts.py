@@ -11,6 +11,8 @@ def test_h3_story_contract_helpers_are_reexported():
     assert director_pipeline._h3_apply_portrait_composition_contract is h3_story_contracts._h3_apply_portrait_composition_contract
     assert director_pipeline._h3_preserve_audio_contract is h3_story_contracts._h3_preserve_audio_contract
     assert director_pipeline._h3_format_audio_policy is h3_story_contracts._h3_format_audio_policy
+    assert director_pipeline._h3_validated_candidate is h3_story_contracts._h3_validated_candidate
+    assert director_pipeline._h3_parse_optimized_prompts is h3_story_contracts._h3_parse_optimized_prompts
 
 
 def test_reference_contract_switches_first_frame_to_reference_set():
@@ -61,3 +63,32 @@ def test_preserve_audio_keeps_draft_soundscape_and_quoted_speech_is_untouched():
     assert director_pipeline._h3_format_audio_policy(
         {"minimax_h3_audio_policy": "legacy"},
     ) == "legacy"
+
+
+def test_validated_candidate_keeps_quoted_speech_and_rejects_first_frame_drift():
+    draft = 'Use the supplied image as the exact first frame. Alice says "stay".\nAudio: wind.'
+    good = director_pipeline._h3_validated_candidate(
+        'Use the supplied image as the exact first frame. Alice says "stay".\nAudio: rain.',
+        draft,
+        "first_frame",
+    )
+    assert 'stay' in good
+    assert "Audio: wind." in good
+    drifted = director_pipeline._h3_validated_candidate(
+        'Use the supplied image as the exact first frame. Alice runs.\nAudio: wind.',
+        draft,
+        "first_frame",
+    )
+    assert drifted == ""
+
+
+def test_parse_optimized_prompts_accepts_fenced_json_and_segments_object():
+    fenced = director_pipeline._h3_parse_optimized_prompts(
+        '```json\n[{"shot_index": 0, "segment_index": 0, "prompt": "A"}]\n```'
+    )
+    assert fenced[0]["prompt"] == "A"
+    wrapped = director_pipeline._h3_parse_optimized_prompts(
+        '{"segments": [{"shot_index": 1, "prompt": "B"}]}'
+    )
+    assert wrapped[0]["prompt"] == "B"
+    assert director_pipeline._h3_parse_optimized_prompts("not json") == []

@@ -66,7 +66,9 @@ from services.director.h3_story_contracts import (
     _h3_apply_portrait_composition_contract,
     _h3_apply_reference_contract,
     _h3_format_audio_policy,
+    _h3_parse_optimized_prompts,
     _h3_preserve_audio_contract,
+    _h3_validated_candidate,
 )
 from services.director_model_compat import (
     DIRECTOR_PIPELINE_TYPES,
@@ -12438,64 +12440,6 @@ def _minimax_h3_segment_prompt(
             plan,
         ),
     )
-
-
-def _h3_parse_optimized_prompts(response: str) -> list[dict]:
-    """Parse the grammar-constrained H3 validator response defensively."""
-    text = re.sub(r"```(?:json)?\s*|```", "", str(response or ""), flags=re.I).strip()
-    try:
-        parsed = json.loads(text)
-    except (TypeError, json.JSONDecodeError):
-        match = re.search(r"\[[\s\S]*\]", text)
-        if not match:
-            return []
-        try:
-            parsed = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return []
-    if isinstance(parsed, dict):
-        parsed = parsed.get("segments") or []
-    return [item for item in parsed if isinstance(item, dict)] if isinstance(parsed, list) else []
-
-
-
-
-
-def _h3_validated_candidate(candidate: str, draft: str, reference_mode: str) -> str:
-    """Reject optimizer drift and reapply contracts the LLM is not allowed to alter."""
-    candidate = _h3_preserve_audio_contract(str(candidate or ""), draft)
-    if "overall_soundscape:" not in draft:
-        candidate = _h3_apply_reference_contract(candidate, reference_mode)
-        if len(candidate) < max(40, len(draft) // 3) or len(candidate) > max(6000, len(draft) * 2):
-            return ""
-        if "audio:" not in candidate.casefold():
-            return ""
-        for quoted in re.findall(r'"([^"\n]+)"', draft):
-            if quoted not in candidate:
-                return ""
-        if reference_mode == "references" and "exact first frame" in candidate.casefold():
-            return ""
-        if reference_mode == "first_frame" and "exact first frame" not in candidate.casefold():
-            return ""
-        return candidate
-    if len(candidate) < max(40, len(draft) // 3) or len(candidate) > max(6000, len(draft) * 2):
-        return ""
-    try:
-        from services.director.minimax_h3_prompting import is_structured_h3_prompt
-    except ImportError:
-        from app.services.director.minimax_h3_prompting import is_structured_h3_prompt
-    if not is_structured_h3_prompt(candidate, reference_mode):
-        return ""
-    if "visual style lock:" in draft.casefold() and "visual style lock:" not in candidate.casefold():
-        return ""
-    for spoken in re.findall(r"<d>\[[^\]]+\]\s*([^<]+)</d>", draft):
-        if spoken not in candidate:
-            return ""
-    if reference_mode == "references" and "fully referenced" in candidate.casefold():
-        return ""
-    if reference_mode == "first_frame" and "at 0.00 seconds" not in candidate.casefold():
-        return ""
-    return candidate
 
 
 def _optimize_minimax_h3_story_prompts(
