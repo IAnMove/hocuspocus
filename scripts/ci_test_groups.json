@@ -110,6 +110,7 @@
         "tests/test_spoken_language_contract.py",
         "tests/test_story_lab_id_repair.py",
         "tests/test_story_lab_music_plan.py",
+        "tests/test_story_music_generation_record.py",
         "tests/test_studio_image_asset_ids.py",
         "tests/test_studio_image_commands.py",
         "tests/test_studio_image_native_boundary.py",
