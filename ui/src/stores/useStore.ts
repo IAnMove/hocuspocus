@@ -1,5 +1,5 @@
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
-import { isInstructionSpeechModel, applyInstructionSpeechParams } from '../lib/instructionSpeech'
+import { isInstructionSpeechModel } from '../lib/instructionSpeech'
 import { h3ModelSwitchSettings, projectStudioH3RequestParams, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
 import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
@@ -29,11 +29,11 @@ import { createGallerySlice } from './gallerySlice'
 import { createLlmSlice, UNLOADED_LLM_STATUS, type LlmSlice } from './llmSlice'
 import { createStudioConfigurationSlice, type StudioConfigurationSlice } from './studioConfigurationSlice'
 import {
-  applyStudioMusicSubmitParams,
   createStudioMusicSlice,
   restoredStudioMusicForm,
   type StudioMusicSlice,
 } from './studioMusicSlice'
+import { applyStudioAudioSubmitParams } from './studioAudioSubmit'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 import {
   extractSingleClipStudioParams,
@@ -5077,81 +5077,7 @@ export const useStore = create<AppState>((set, get) => {
       // Music / SFX, not just the Audio tab. Underscore keys ride
       // through generation untouched, same as _tts_*. Music also saves
       // its song-writer inputs (UI-only, not consumed by generation).
-      params._audio_sub_mode = state.audioSubMode
-      applyStudioMusicSubmitParams(params, state)
-      if (state.audioSubMode === 'sfx') {
-        // The SFX command keeps the real MMAudio selector; no video carrier
-        // is generated. These are the controls consumed by the native worker.
-        const sfxModel = params.model_type as string
-        params.MMAudio_setting = 1
-        params._mmaudio_variant = sfxModel === 'mmaudio_nsfw' ? 'nsfw' : 'v2'
-        // SFX owns MMAudio_prompt. Do not admit leftover Speech/Music lyrics
-        // from the shared `prompt` field when the SFX box was never filled.
-        params.prompt = typeof params.MMAudio_prompt === 'string' ? params.MMAudio_prompt : ''
-        params.sfx_mode = true
-        params.duration_seconds = state.durationSeconds
-        params.video_length = 0
-        params.num_inference_steps = 25
-        params.image_mode = 0
-      } else if (state.audioSubMode === 'speech') {
-        // Speech voice controls do not rename lyrics or replace music references.
-        params.video_length = 0
-        params.image_mode = 0
-        params.multi_prompts_gen_type = 2  // Preserve full text as one prompt (don't split by newlines)
-        // Save original prompt + speaker names before swap (for load settings)
-        params._tts_original_prompt = params.prompt
-        if (isInstructionSpeechModel(params.model_type)) {
-          applyInstructionSpeechParams(params)
-        } else {
-          params._tts_speaker_name1 = state.ttsSpeakerName1 || ''
-          params._tts_speaker_name2 = state.ttsSpeakerName2 || ''
-          // Save all voice names for metadata
-          for (let i = 0; i < state.ttsVoices.length; i++) {
-            (params as Record<string, unknown>)[`_tts_speaker_name${i + 1}`] = state.ttsVoices[i]?.name || ''
-          }
-          params._tts_voice_count = state.ttsVoiceCount
-          // Swap character names → Speaker N: for TTS multi-voice mode
-          const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          let text = params.prompt as string
-          for (let i = 0; i < state.ttsVoices.length; i++) {
-            const name = state.ttsVoices[i]?.name
-            if (name) {
-              text = text.replace(new RegExp(escapeRegex(name) + '\\s*:', 'gi'), `Speaker ${i + 1}:`)
-            }
-          }
-          params.prompt = text
-          // Set audio_guide paths for each voice (audio_guide, audio_guide2, audio_guide3, etc.)
-          for (let i = 0; i < state.ttsVoices.length; i++) {
-            const voice = state.ttsVoices[i]
-            if (voice?.path) {
-              const key = i === 0 ? 'audio_guide' : `audio_guide${i + 1}`
-              params[key as keyof typeof params] = voice.path as never
-            }
-          }
-        }
-        // TTS duration (max duration for the model to generate)
-        if (state.modelOptions?.audio_only) {
-          // Prefer the slider's `default` (some TTS models — e.g. DramaBox —
-          // set default=0 to mean "auto-derive duration from prompt"); fall
-          // back to `max` then 600.
-          const ds = state.modelOptions.duration_slider
-          const sliderDefault = ds?.default ?? ds?.max ?? 600
-          // A zero duration is the model's declared "auto" sentinel (for
-          // example DramaBox). Any positive slider value is an explicit user
-          // choice and must reach the backend unchanged; replacing short
-          // choices with the model default made a requested 20 s ACE-Step
-          // track run for 120 s.
-          params.duration_seconds = state.durationSeconds === 0 ? sliderDefault : state.durationSeconds
-        }
-        // Let the TTS model use its own defaults for steps/guidance if ours are video defaults
-        if ((params.num_inference_steps as number) > 0 && state.modelOptions?.default_num_inference_steps == null) {
-          params.num_inference_steps = 0
-        }
-        // Clear video-specific params
-        delete params.sliding_window_size
-        delete params.sliding_window_overlap
-        delete params.sliding_window_discard_last_frames
-      }
+      applyStudioAudioSubmitParams(params, state)
     }
 
     // Defensive cleanup: strip stale "V" (Source Video / extend) flag from
