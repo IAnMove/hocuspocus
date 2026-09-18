@@ -1,6 +1,6 @@
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
 import { isInstructionSpeechModel, applyInstructionSpeechParams } from '../lib/instructionSpeech'
-import { h3ModelSwitchSettings, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
+import { h3ModelSwitchSettings, projectStudioH3RequestParams, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
 import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
 import { beginWangpRestore, editingInputsChanged, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
@@ -4787,7 +4787,9 @@ export const useStore = create<AppState>((set, get) => {
       return  // Don't fall through to normal generation
     }
 
-    const params: Record<string, unknown> = { ...state.params, ...viggleEditingParameters(state), generation_mode: state.generationMode, workspace: state.activeWorkspace }
+    const params: Record<string, unknown> = projectStudioH3RequestParams({
+      ...state.params, ...viggleEditingParameters(state), generation_mode: state.generationMode, workspace: state.activeWorkspace,
+    })
     const referenceUploadErrors: string[] = []
     const provenance = generationProvenancePayload(submissionContext)
     if (provenance) params.provenance = provenance
