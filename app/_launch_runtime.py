@@ -30746,94 +30746,17 @@ def put_wizard_workflows(body: dict):
         ) from exc
 
 
-@api.get("/api/v1/stories/library")
-def get_story_library(workspace: str | None = None):
-    """Load the durable Story Lab library for one workspace."""
-    from services.story_library import read_story_library
+from routers.story_library import (
+    _bind_story_library_runtime,
+    create_story_library_router,
+)
 
-    target_workspace = _story_library_workspace(workspace)
-    try:
-        with _story_library_lock:
-            return read_story_library(_workspace_dir(target_workspace))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not read the Story Lab library: {exc}",
-        ) from exc
-
-
-@api.put("/api/v1/stories/library")
-def put_story_library(body: dict):
-    """Atomically replace a workspace Story Lab library."""
-    from services.story_library import StoryLibraryRevisionConflict, write_story_library
-
-    target_workspace = _story_library_workspace(body.get("workspace"))
-    library = body.get("library")
-    base_revision = body.get("baseRevision")
-    try:
-        with _story_library_lock:
-            return write_story_library(
-                _workspace_dir(target_workspace),
-                library,
-                base_revision=base_revision,
-            )
-    except StoryLibraryRevisionConflict as exc:
-        raise _story_library_revision_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not save the Story Lab library: {exc}",
-        ) from exc
-
-
-@api.patch("/api/v1/stories/library/projects/{project_id}")
-def patch_story_library_project(project_id: str, body: dict):
-    """Atomically update one Story while preserving unrelated projects."""
-    from services.story_library import (
-        StoryLibraryRevisionConflict,
-        patch_story_project,
-    )
-
-    workspace = _story_library_workspace(body.get("workspace"))
-    try:
-        with _story_library_lock:
-            return patch_story_project(
-                _workspace_dir(workspace),
-                project_id,
-                body.get("project"),
-                base_revision=body.get("baseRevision"),
-                make_active=body.get("makeActive") is True,
-            )
-    except StoryLibraryRevisionConflict as exc:
-        raise _story_library_revision_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@api.delete("/api/v1/stories/library/projects/{project_id}")
-def delete_story_library_project(project_id: str, body: dict):
-    """Atomically delete one Story while preserving unrelated projects."""
-    from services.story_library import (
-        StoryLibraryRevisionConflict,
-        delete_story_project,
-    )
-
-    workspace = _story_library_workspace(body.get("workspace"))
-    try:
-        with _story_library_lock:
-            return delete_story_project(
-                _workspace_dir(workspace),
-                project_id,
-                base_revision=body.get("baseRevision"),
-            )
-    except StoryLibraryRevisionConflict as exc:
-        raise _story_library_revision_conflict(exc) from exc
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Story project not found") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+_bind_story_library_runtime(
+    workspace_dir=lambda workspace: _workspace_dir(_story_library_workspace(workspace)),
+    library_lock=_story_library_lock,
+    conflict=_story_library_revision_conflict,
+)
+api.include_router(create_story_library_router())
 
 
 def _story_import_upload_path(value: str) -> str:

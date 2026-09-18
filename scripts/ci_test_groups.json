@@ -261,6 +261,7 @@
         "tests/test_story_lab_resume_provider.py",
         "tests/test_story_lab_trailer_ui.py",
         "tests/test_story_library.py",
+        "tests/test_story_library_router.py",
         "tests/test_story_montage_clip_history_ui.py",
         "tests/test_storyboard_camera_name_strip.py",
         "tests/test_studio_image_preparation.py",
