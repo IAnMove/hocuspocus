@@ -314,6 +314,12 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
+      "file": "tests/test_series_library_router.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
+    },
+    {
       "file": "tests/test_series_lifecycle.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",

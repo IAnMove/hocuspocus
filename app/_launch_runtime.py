@@ -28277,71 +28277,19 @@ def _require_series_deletion_ready(
         raise HTTPException(status_code=409, detail=exc.detail()) from exc
 
 
-@api.get("/api/v1/series/library")
-def get_series_library(workspace: str | None = None):
-    """Load the authoritative Series Lab library for one workspace."""
-    target_workspace = _series_library_workspace(workspace)
-    try:
-        with _series_library_lock:
-            return _read_series_workspace(target_workspace)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail=f"Could not read the Series Lab library: {exc}") from exc
+from routers.series_library import (
+    _bind_series_library_runtime,
+    create_series_library_router,
+)
 
-
-@api.put("/api/v1/series/library")
-def put_series_library(body: dict):
-    """Atomically replace a Series library; resource endpoints are preferred."""
-    target_workspace = _series_library_workspace(body.get("workspace"))
-    try:
-        with _series_library_lock:
-            return _write_series_workspace(target_workspace, body.get("library"))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Could not save the Series Lab library: {exc}") from exc
-
-
-@api.get("/api/v1/series")
-def list_series_projects(workspace: str | None = None):
-    target_workspace = _series_library_workspace(workspace)
-    with _series_library_lock:
-        library = _read_series_workspace(target_workspace)
-    return {
-        "workspaceId": target_workspace,
-        "seriesOrder": library["seriesOrder"],
-        "series": [library["seriesById"][item] for item in library["seriesOrder"]],
-    }
-
-
-@api.post("/api/v1/series")
-def create_series_project_endpoint(body: dict):
-    from services.series_library import create_series_project, normalize_series_project
-
-    workspace = _series_library_workspace(body.get("workspace"))
-    try:
-        with _series_library_lock:
-            library = _read_series_workspace(workspace)
-            raw_series = body.get("series")
-            series = (
-                normalize_series_project(raw_series, str(raw_series.get("id") or ""), workspace)
-                if isinstance(raw_series, dict)
-                else create_series_project(workspace, title=str(body.get("title") or "Untitled series"))
-            )
-            if series["id"] in library["seriesById"]:
-                raise HTTPException(status_code=409, detail="A Series Lab project with this id already exists")
-            library["seriesById"][series["id"]] = series
-            library["seriesOrder"].append(series["id"])
-            stored = _write_series_workspace(workspace, library)
-            return stored["seriesById"][series["id"]]
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@api.get("/api/v1/series/{series_id}")
-def get_series_project_endpoint(series_id: str, workspace: str | None = None):
-    target_workspace = _series_library_workspace(workspace)
-    with _series_library_lock:
-        return _series_project_or_404(_read_series_workspace(target_workspace), series_id)
+_bind_series_library_runtime(
+    resolve_workspace=_series_library_workspace,
+    library_lock=_series_library_lock,
+    read_library=_read_series_workspace,
+    write_library=_write_series_workspace,
+    project_or_404=_series_project_or_404,
+)
+api.include_router(create_series_library_router())
 
 
 @api.put("/api/v1/series/{series_id}")

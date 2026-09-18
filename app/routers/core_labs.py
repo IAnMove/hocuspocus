@@ -239,52 +239,19 @@ def create_core_labs_router() -> APIRouter:
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 
-    @router.get("/api/v1/series/library")
-    def get_series_library(workspace: str | None = None):
-        target = _series_workspace(workspace)
-        with _LOCK:
-            return _read_series(target)
+    from routers.series_library import (
+        _bind_series_library_runtime,
+        create_series_library_router,
+    )
 
-    @router.put("/api/v1/series/library")
-    def put_series_library(body: dict):
-        target = _series_workspace(body.get("workspace"))
-        try:
-            with _LOCK:
-                return _write_series(target, body.get("library"))
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-
-    @router.get("/api/v1/series")
-    def list_series(workspace: str | None = None):
-        target = _series_workspace(workspace)
-        with _LOCK:
-            library = _read_series(target)
-        return {
-            "workspaceId": target,
-            "seriesOrder": library["seriesOrder"],
-            "series": [library["seriesById"][item] for item in library["seriesOrder"]],
-        }
-
-    @router.post("/api/v1/series")
-    def create_series(body: dict):
-        workspace = _series_workspace(body.get("workspace"))
-        try:
-            with _LOCK:
-                library = _read_series(workspace)
-                raw = body.get("series")
-                series = (
-                    normalize_series_project(raw, str(raw.get("id") or ""), workspace)
-                    if isinstance(raw, dict)
-                    else create_series_project(workspace, title=str(body.get("title") or "Untitled series"))
-                )
-                if series["id"] in library["seriesById"]:
-                    raise HTTPException(status_code=409, detail="A Series Lab project with this id already exists")
-                library["seriesById"][series["id"]] = series
-                library["seriesOrder"].append(series["id"])
-                stored = _write_series(workspace, library)
-                return stored["seriesById"][series["id"]]
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
+    _bind_series_library_runtime(
+        resolve_workspace=_series_workspace,
+        library_lock=_LOCK,
+        read_library=_read_series,
+        write_library=_write_series,
+        project_or_404=_series_or_404,
+    )
+    router.include_router(create_series_library_router())
 
     @router.post("/api/v1/series/import-story")
     def import_story(body: dict):
