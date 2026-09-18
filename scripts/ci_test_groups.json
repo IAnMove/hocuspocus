@@ -167,6 +167,7 @@
         "tests/test_assets_router.py",
         "tests/test_cancellable_model_downloads.py",
         "tests/test_character_kit_library.py",
+        "tests/test_character_kit_library_router.py",
         "tests/test_character_sheet.py",
         "tests/test_character_speech_definition.py",
         "tests/test_ci_shards.py",

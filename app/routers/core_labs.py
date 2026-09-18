@@ -202,42 +202,16 @@ def create_core_labs_router() -> APIRouter:
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 
-    @router.get("/api/v1/character-kits/library")
-    def get_kits(workspace: str | None = None):
-        try:
-            return read_character_kit_library(_dir(workspace))
-        except (OSError, ValueError) as error:
-            raise HTTPException(status_code=500, detail=f"Could not read Character Kits: {error}") from error
+    from routers.character_kit_library import (
+        _bind_character_kit_library_runtime,
+        create_character_kit_library_router,
+    )
 
-    @router.patch("/api/v1/character-kits/library/kits/{kit_id}")
-    def patch_kit(kit_id: str, body: dict):
-        try:
-            return patch_character_kit(
-                _dir(body.get("workspace")),
-                kit_id,
-                body.get("kit"),
-                base_revision=body.get("baseRevision"),
-                make_active=body.get("makeActive") is not False,
-            )
-        except CharacterKitRevisionConflict as error:
-            raise _conflict("character_kit_revision_conflict", error) from error
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-
-    @router.delete("/api/v1/character-kits/library/kits/{kit_id}")
-    def delete_kit(kit_id: str, body: dict):
-        try:
-            return delete_character_kit(
-                _dir(body.get("workspace")),
-                kit_id,
-                base_revision=body.get("baseRevision"),
-            )
-        except CharacterKitRevisionConflict as error:
-            raise _conflict("character_kit_revision_conflict", error) from error
-        except KeyError as error:
-            raise HTTPException(status_code=404, detail="Character Kit not found") from error
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
+    _bind_character_kit_library_runtime(
+        workspace_dir=_dir,
+        conflict=lambda exc: _conflict("character_kit_revision_conflict", exc),
+    )
+    router.include_router(create_character_kit_library_router())
 
     from routers.series_library import (
         _bind_series_library_runtime,
