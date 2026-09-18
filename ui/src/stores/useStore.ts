@@ -28,6 +28,12 @@ import { createThemeSlice } from './themeSlice'
 import { createGallerySlice } from './gallerySlice'
 import { createLlmSlice, UNLOADED_LLM_STATUS, type LlmSlice } from './llmSlice'
 import { createStudioConfigurationSlice, type StudioConfigurationSlice } from './studioConfigurationSlice'
+import {
+  applyStudioMusicSubmitParams,
+  createStudioMusicSlice,
+  restoredStudioMusicForm,
+  type StudioMusicSlice,
+} from './studioMusicSlice'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 import {
   extractSingleClipStudioParams,
@@ -1136,7 +1142,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice {
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice {
   wangpRestoreError: string
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1371,11 +1377,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice {
   audioSubMode: import('../types').AudioSubMode
   setAudioSubMode: (mode: import('../types').AudioSubMode) => void
   audioReferenceStash: AudioReferenceStash
-  // Music mode (ACE-Step): describe + LLM writes, or type Style/Lyrics directly.
-  musicDescription: string
-  setMusicDescription: (s: string) => void
-  musicInstrumental: boolean
-  setMusicInstrumental: (b: boolean) => void
   selectedModelPerAudioSubMode: Partial<Record<import('../types').AudioSubMode, string>>
   selectedModelPerMode: Partial<Record<GenerationMode, string>>
   savedLoraPerMode: Partial<Record<GenerationMode, { activated_loras: string[]; loras_multipliers: string; loraWeights: Record<string, number[]>; availableLoras: string[] }>>
@@ -2226,6 +2227,7 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createGallerySlice),
   ...bindSlice(set, get, createLlmSlice),
   ...bindSlice(set, get, createStudioConfigurationSlice({ alignFrameCount, resolveResolution })),
+  ...bindSlice(set, get, createStudioMusicSlice),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -2667,10 +2669,6 @@ export const useStore = create<AppState>((set, get) => {
       editRepaintFrameFile: null, editRepaintFramePath: '', editRepaintFrameUrl: '',
     }
   }),
-  musicDescription: '',
-  setMusicDescription: (s) => set({ musicDescription: s }),
-  musicInstrumental: false,
-  setMusicInstrumental: (b) => set({ musicInstrumental: b }),
   audioSubMode: 'speech' as import('../types').AudioSubMode,
   audioReferenceStash: {},
   selectedModelPerAudioSubMode: {} as Partial<Record<import('../types').AudioSubMode, string>>,
@@ -5078,14 +5076,7 @@ export const useStore = create<AppState>((set, get) => {
       // through generation untouched, same as _tts_*. Music also saves
       // its song-writer inputs (UI-only, not consumed by generation).
       params._audio_sub_mode = state.audioSubMode
-      if (state.audioSubMode === 'music') {
-        params._music_description = state.musicDescription || ''
-        params._music_instrumental = !!state.musicInstrumental
-        params.video_length = 0
-        params.image_mode = 0
-        params.multi_prompts_gen_type = 2
-        params.duration_seconds = state.durationSeconds
-      }
+      applyStudioMusicSubmitParams(params, state)
       if (state.audioSubMode === 'sfx') {
         // The SFX command keeps the real MMAudio selector; no video carrier
         // is generated. These are the controls consumed by the native worker.
@@ -8790,15 +8781,7 @@ export const useStore = create<AppState>((set, get) => {
         set(s => ({
           audioSubMode: subMode,
           selectedModelPerAudioSubMode: { ...s.selectedModelPerAudioSubMode, [subMode]: modelType },
-          // Music: restore the song-writer inputs alongside the fields.
-          // Older sidecars lack _music_description — clear rather than
-          // leave a stale description that didn't produce this song
-          // (instrumental still infers from the lyrics sentinel).
-          ...(subMode === 'music' ? {
-            musicDescription: (p._music_description as string) || '',
-            musicInstrumental: !!p._music_instrumental
-              || restoredLyrics.trim().toLowerCase() === '[instrumental]',
-          } : {}),
+          ...(subMode === 'music' ? restoredStudioMusicForm(p, restoredLyrics) : {}),
         }))
       }
     }
