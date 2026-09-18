@@ -1,0 +1,174 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "skate-portal-01",
+  "title": "01 · La puerta junto al mar",
+  "description": "Salto entre mundos · movimiento y fondos independientes",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T20:30:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 2.4,
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.02,
+      "floorStyle": "none",
+      "floorColor": "#222233"
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-coast-0.png",
+        "position": [
+          0,
+          -6,
+          -8
+        ],
+        "scale": 9,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-coast.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 0.6,
+          "loop": false,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0.8,
+          0,
+          0
+        ],
+        "scale": 1.52,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.35,
+          "tint": "#ffffff"
+        },
+        "screen": {
+          "sourceUrl": "/examples/skate-portal/skate-jump.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        },
+        "motion": {
+          "to": [
+            0.3,
+            0,
+            0
+          ],
+          "faceTravel": false,
+          "easing": "linear"
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        3,
+        10
+      ],
+      "look": [
+        0,
+        3,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "world-window",
+        "kind": "media_portal",
+        "label": "Ventana al otro mundo",
+        "position": {
+          "x": -0.45,
+          "y": 2.45,
+          "z": -1.2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffe48c",
+        "scale": 2.8,
+        "intensity": 0.85,
+        "seed": 414,
+        "start": 0,
+        "end": 2.4,
+        "sound": false,
+        "volume": 0,
+        "sourceUrl": "/examples/moving-cutouts/skate-clouds.mp4"
+      }
+    ],
+    "effects": []
+  }
+}

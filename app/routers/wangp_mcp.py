@@ -281,7 +281,8 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
                 }}
             return {'jsonrpc': '2.0', 'id': request_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': str(detail)}]}}
 
-    @router.post('/api/v1/wangp/mcp')
+    @router.post('/api/v1/wangp/mcp', include_in_schema=False)
+    @router.post('/api/v1/mcp')
     async def mcp(request: Request):
         token = token_getter()
         if not token:
@@ -303,7 +304,8 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
             return Response(status_code=202)
         return JSONResponse(results if isinstance(payload, list) else results[0])
 
-    @router.get('/api/v1/wangp/mcp')
+    @router.get('/api/v1/wangp/mcp', include_in_schema=False)
+    @router.get('/api/v1/mcp')
     async def no_stream():
         return Response(status_code=405, headers={'Allow': 'POST'})
 

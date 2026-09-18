@@ -3,6 +3,7 @@ import type { Scene3DDocument, Scene3DSourceRef } from '../types'
 import { parseScene3DDocument } from '../document'
 import { defaultSpeech, type SpeechClip } from './types'
 import { safeMediaUrl } from './track'
+import { randomUuid } from '../../../lib/uuid'
 
 export type SpeechProductionInput = {
   kind: NonNullable<Scene3DDocument['production']>['kind']
@@ -66,6 +67,6 @@ export function takeSpeechProduction(workspace: string, storage: Pick<Storage, '
 }
 export function preserveSpeechDraft(workspace: string, document: Scene3DDocument) {
   const raw = JSON.stringify(document)
-  sessionStorage.setItem('hocuspocus:world3d-speech-history:' + workspace + ':' + crypto.randomUUID(), raw)
+  sessionStorage.setItem('hocuspocus:world3d-speech-history:' + workspace + ':' + randomUuid(), raw)
   sessionStorage.setItem('hocuspocus:world3d-before-speech:' + workspace, raw)
 }

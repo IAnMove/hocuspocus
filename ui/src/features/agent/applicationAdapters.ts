@@ -1,4 +1,5 @@
 import { useStore } from '../../stores/useStore'
+import { DIRECT_GENERATION_MEDIA, revealDirectorWorkspace, visibleWorkspaceSurface } from '../../lib/navigationCategories'
 import i18n from '../../i18n'
 import type { CommandResult } from '../../lib/commandContract'
 import { rememberedCharacterKitLibrary } from '../characters/session'
@@ -209,11 +210,11 @@ function isTabOpen(tab: AgentTab): boolean {
   if (tab === 'settings') return state.settingsOpen && !state.dashboardOpen
   if (tab === 'productions') return state.dashboardOpen && !state.settingsOpen
   if (tab === 'director') {
-    return state.sidebarMode === 'director' && state.sidebarOpen
+    return visibleWorkspaceSurface(state) === 'director'
       && !state.settingsOpen && !state.dashboardOpen
   }
   if (tab === 'studio') {
-    return state.sidebarMode === 'studio' && state.sidebarOpen
+    return visibleWorkspaceSurface(state) === 'generate'
       && !state.settingsOpen && !state.dashboardOpen
   }
   const mediaFilter = TAB_TARGETS[tab]
@@ -235,13 +236,13 @@ async function navigate(tab: AgentTab): Promise<AdapterOutcome> {
   } else if (tab === 'director') {
     state.setSettingsOpen(false)
     state.setDashboardOpen(false)
-    state.setSidebarMode('director')
-    state.setSidebarOpen(true)
+    revealDirectorWorkspace(state)
     window.dispatchEvent(new Event('maestro:director-open'))
   } else if (tab === 'studio') {
     state.setSettingsOpen(false)
     state.setDashboardOpen(false)
     state.setSidebarMode('studio')
+    state.setMediaFilter(DIRECT_GENERATION_MEDIA[state.generationMode] || 'videos')
     state.setSidebarOpen(true)
   } else {
     const mediaFilter = TAB_TARGETS[tab]

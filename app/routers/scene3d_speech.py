@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from services.scene3d_speech import MAX_BYTES, SpeechAnalysisError, SpeechAnalysisUnavailable, analyze_voice
+from services.speech_analysis_request import MAX_REQUEST_BYTES, speech_request
 
 
 class SpeechMouthCue(BaseModel):
@@ -30,15 +31,18 @@ def create_scene3d_speech_router() -> APIRouter:
 
     @router.post("/speech/analyze", response_model=SpeechAnalysisResponse)
     async def analyze(request: Request, isolate_vocals: bool = False):
-        if request.headers.get("content-type", "").split(";")[0] != "audio/wav":
-            raise HTTPException(415, "Expected audio/wav.")
+        content_type = request.headers.get("content-type", "").split(";")[0]
+        if content_type not in {"audio/wav", "application/json"}:
+            raise HTTPException(415, "Expected audio/wav or application/json.")
+        maximum = MAX_BYTES if content_type == "audio/wav" else MAX_REQUEST_BYTES
         data = bytearray()
         async for chunk in request.stream():
-            if len(data) + len(chunk) > MAX_BYTES:
+            if len(data) + len(chunk) > maximum:
                 raise HTTPException(413, "Voice clip exceeds the 90-second limit.")
             data.extend(chunk)
         try:
-            return await run_in_threadpool(analyze_voice, bytes(data), isolate_vocals=isolate_vocals)
+            audio, options = speech_request(bytes(data), content_type)
+            return await run_in_threadpool(analyze_voice, audio, isolate_vocals=isolate_vocals, **options)
         except SpeechAnalysisError as exc:
             raise HTTPException(400, str(exc)) from exc
         except SpeechAnalysisUnavailable as exc:

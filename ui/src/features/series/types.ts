@@ -5,6 +5,7 @@ export type SeriesApproval = 'draft' | 'approved'
 export type SeriesFormat = 'serial' | 'episodic' | 'hybrid'
 export type SeriesSourceMode = 'original' | 'known_universe_experimental' | 'hybrid'
 export type SeriesRenderStrategy = 'auto' | 'direct' | 'first_frame' | 'references' | 'first_last'
+export type SeriesProductionMethod = 'generated_video' | 'animation_2d' | 'animation_3d' | 'imported_video'
 export type SeriesEpisodeStatus = 'draft' | 'outline' | 'script' | 'shot_plan' | 'rendering' | 'completed' | 'archived'
 export type SeriesAttemptStatus = 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
 
@@ -232,6 +233,7 @@ export interface SeriesShot {
   emotionalStateByCharacterId: Record<string, string>
   continuityFromShotId?: string
   renderStrategy: SeriesRenderStrategy
+  productionMethod?: SeriesProductionMethod
   referencePolicy: {
     mode: 'automatic' | 'manual'
     manualIncludeAssetIds: string[]
@@ -255,6 +257,8 @@ export interface SeriesCanonDeltaItem extends CanonFact {
 }
 
 export interface SeriesEpisode {
+  latestAssemblyAssetId?: string
+  assemblyAssetIds?: string[]
   id: string
   seasonId: string
   number: number
@@ -302,6 +306,7 @@ export interface SeriesProviderSettings {
 }
 
 export interface SeriesProject {
+  allowedProductionMethods?: SeriesProductionMethod[]
   version: 1
   id: string
   revision: number

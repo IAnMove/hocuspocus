@@ -71,3 +71,12 @@ regenerar una demo ni afirmar que las variantes nuevas han sido aprobadas.
 Pendiente: preparación y generación explícita de assets, encuadre por anclas,
 promoción versionada de variantes aprobadas, P01 identidad de escena/shot/run,
 recetas AN y posterior motor 3D. No declarar P00D completo sólo por este corte.
+
+### Reflective floor and electrical arrival
+
+The Cinema category includes `reflective-stage` and `character-materialization`.
+They are native templates with editable background image, GLB, portrait screens,
+spatial effects and camera. Both have an animated bundled model so a fresh example
+never relies on a T-pose. Replacement models use their own selected clip; choose
+its start offset for a relaxed held pose. See [cinematic spatial effects](SCENE_EFFECTS_AND_MCP.md#cinematic-spatial-effects)
+for coordinates, appearance timing, lighting, reflection limits and save/export.

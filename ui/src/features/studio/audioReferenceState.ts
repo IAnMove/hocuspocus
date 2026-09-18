@@ -1,5 +1,6 @@
 import type { AppState } from '../../stores/useStore'
 import type { AudioSubMode } from '../../types'
+import { restoreWan1300AudioRecipe } from '../../lib/wan1300Audio'
 
 const referenceKeys = [
   'audio_prompt_type', 'audio_source',
@@ -34,7 +35,13 @@ export function audioReferenceParams(
 /** Capture references at their owning tab, before a switch or sidecar restore. */
 export function captureAudioReferences(state: AppState): AudioReferenceSnapshot {
   return {
-    params: audioReferenceParams(state.params),
+    params: {
+      ...audioReferenceParams(state.params),
+      // Native YuE2/AuK sampling is not a reference, but the same tab stash is
+      // the only place a Speech ↔ Music return can recover it after
+      // loadModelOptions resets leftovers.
+      ...restoreWan1300AudioRecipe(state.params.model_type, state.params),
+    },
     audioGuideFilename: state.audioGuideFilename,
     audioGuide2Filename: state.audioGuide2Filename,
     ...(state.audioSubMode === 'speech' ? { speech: {

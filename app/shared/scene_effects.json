@@ -178,5 +178,101 @@
     "color": "#ffec77",
     "sound": "impact",
     "collection": "anime"
+  },
+  {
+    "id": "fire",
+    "color": "#ff6a22",
+    "sound": "crackle",
+    "collection": "classic"
+  },
+  {
+    "id": "shield",
+    "color": "#66ddff",
+    "sound": "power",
+    "collection": "classic"
+  },
+  {
+    "id": "tornado",
+    "color": "#c5d4e0",
+    "sound": "wind",
+    "collection": "classic"
+  },
+  {
+    "id": "splash",
+    "color": "#7ad4ff",
+    "sound": "impact",
+    "collection": "classic"
+  },
+  {
+    "id": "dust",
+    "color": "#c4a574",
+    "sound": "wind",
+    "collection": "classic"
+  },
+  {
+    "id": "media_portal",
+    "color": "#3da5ff",
+    "sound": "rise",
+    "collection": "classic"
+  },
+  {
+    "id": "psx",
+    "color": "#c4c4a8",
+    "sound": "scan",
+    "collection": "retro"
+  },
+  {
+    "id": "n64",
+    "color": "#7aa3c4",
+    "sound": "wind",
+    "collection": "retro"
+  },
+  {
+    "id": "nes",
+    "color": "#e84c3d",
+    "sound": "pop",
+    "collection": "retro"
+  },
+  {
+    "id": "snes",
+    "color": "#7b68c4",
+    "sound": "chime",
+    "collection": "retro"
+  },
+  {
+    "id": "gameboy",
+    "color": "#8bac0f",
+    "sound": "scan",
+    "collection": "retro"
+  },
+  {
+    "id": "gameboy_color",
+    "color": "#ff9ec8",
+    "sound": "chime",
+    "collection": "retro"
+  },
+  {
+    "id": "genesis",
+    "color": "#3d5cff",
+    "sound": "crackle",
+    "collection": "retro"
+  },
+  {
+    "id": "vhs",
+    "color": "#c9a227",
+    "sound": "crackle",
+    "collection": "retro"
+  },
+  {
+    "id": "crt",
+    "color": "#88ff88",
+    "sound": "scan",
+    "collection": "retro"
+  },
+  {
+    "id": "c64",
+    "color": "#887ecb",
+    "sound": "pop",
+    "collection": "retro"
   }
 ]

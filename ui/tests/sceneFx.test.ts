@@ -6,6 +6,7 @@ import { worldSfxDepthDocument, worldSfxDuelDocument, worldSfxMixedDocument } fr
 import { fxSamples } from '../src/features/sceneFx/audio'
 import { adoptPreparedSceneDocument, isFxShowcaseDocument, sceneHasAuthoredContent, withFxShowcase } from '../src/features/sceneFx/showcase'
 import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document'
+import { applyScene3DTemplate } from '../src/features/scene3d/templates'
 import { parseSceneFile, serializeSceneFile } from '../src/lib/sceneFile'
 import { getSceneLayerTiming } from '../src/lib/sceneTimeline'
 
@@ -14,7 +15,7 @@ test('2D and 3D preserve all effects and audio settings through save/reopen', ()
   assert.deepEqual(parseScene3DDocument(JSON.parse(JSON.stringify(world)))?.sfx, world.sfx)
   const scene = withFxShowcase({ version: 1 as const, name: 'FX', layers: [], width: 640, height: 360, duration: 3 })
   assert.deepEqual(parseSceneFile(serializeSceneFile(scene)).sfx, scene.sfx)
-  assert.equal(scene.duration, 90)
+  assert.equal(scene.duration, FX_CATALOG.length * 3)
   assert.deepEqual(scene.sfx.map(cue => cue.kind), FX_CATALOG.map(cue => cue.id))
 })
 
@@ -60,7 +61,7 @@ test('world SFX stay in meters and do not rewrite screen overlays', () => {
   assert.equal(reopened?.worldSfx?.[0].kind, 'portal')
   assert.equal(reopened?.worldSfx?.[0].position.z, -1.55)
   assert.equal(reopened?.sfx?.[0].kind, 'speedlines')
-  assert.equal(parseWorldSfx([{ kind: 'sparks', start: 0, end: 1 }]).length, 0)
+  assert.equal(parseWorldSfx([{ kind: 'confetti', start: 0, end: 1 }]).length, 0)
   assert.equal(parseWorldSfx([{ id: 'a', kind: 'portal', start: 3, end: 2 }]).length, 0)
   const audio = worldSfxAudioCues(demo.worldSfx)
   assert.equal(audio.every(cue => (WORLD_SFX_KINDS as readonly string[]).includes(cue.kind)), true)
@@ -73,7 +74,7 @@ test('world SFX stay in meters and do not rewrite screen overlays', () => {
 })
 
 test('2D showcase background matches the requested collection after reopening', () => {
-  for (const [collection, seconds] of [['anime', 36], ['all', 90]] as const) {
+  for (const [collection, seconds] of [['anime', 36], ['retro', 30], ['all', FX_CATALOG.length * 3]] as const) {
     const next = withFxShowcase({ version: 1 as const, name: 'FX', layers: [], width: 640, height: 360, duration: 3 }, collection)
     const reopened = parseSceneFile(serializeSceneFile(next))
     assert.equal(reopened.duration, seconds)
@@ -134,6 +135,22 @@ test('Wizard showcase without a document keeps authored world SFX on an empty Vi
   assert.equal(adopted.document.worldSfx, current.worldSfx)
   assert.equal(adopted.document.worldSfx?.[0].id, 'portal-1')
   assert.equal(adopted.document.sfx.length, 12)
+})
+
+test('Wizard showcase without a document keeps authored screen media on a monitor-only stage', () => {
+  const current = applyScene3DTemplate('monitor-detail')
+  const screen = current.slots[0]
+  assert.equal(screen.media, 'screen')
+  assert.equal(screen.sourceUrl, '')
+  screen.screen = { ...screen.screen!, sourceUrl: '/api/v1/uploads/show.mp4', media: 'video' }
+  const incoming = withFxShowcase(createDefaultScene3DDocument(), 'all')
+  assert.equal(sceneHasAuthoredContent(current), true)
+  const adopted = adoptPreparedSceneDocument(current, incoming)
+  assert.equal(adopted.mode, 'retain')
+  assert.equal(adopted.document.slots, current.slots)
+  assert.equal(adopted.document.slots[0].screen?.sourceUrl, '/api/v1/uploads/show.mp4')
+  assert.equal(adopted.document.templateId, 'monitor-detail')
+  assert.ok(adopted.document.sfx.length >= 12)
 })
 
 test('an empty editor still opens the stock showcase, and apply/speech documents still replace', () => {

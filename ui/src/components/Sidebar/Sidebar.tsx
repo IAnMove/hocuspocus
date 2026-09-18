@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+import { Globe, BookMarked } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { InputsPanel } from './InputsPanel'
@@ -33,30 +33,22 @@ import { HardwareStatusBar } from './HardwareStatusBar'
 import { H3PromptControls } from './H3PromptControls'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
 import { PanoramaLoopPanel } from './PanoramaLoopPanel'
-import { BrandIdentity } from '../BrandIdentity'
-import { DirectorChat } from './DirectorChat'
+
 import { useUiTranslation } from '../../i18n'
 import { StudioCommandPanels } from '../../features/studio/StudioCommandPanels'
 
 const ViggleControls = lazy(() => import('./ViggleControls').then(module => ({ default: module.ViggleControls })))
 const ToolsPanel = lazy(() => import('./ToolsPanel').then(module => ({ default: module.ToolsPanel })))
 
-export function Sidebar() {
+export function DirectGenerationWorkspace() {
   const { t } = useUiTranslation('navigation')
   const { t: tCommon } = useUiTranslation('common')
-  const [toolsCollapsed, setToolsCollapsed] = useState(() =>
-    window.localStorage.getItem('hocuspocus-tools-sidebar-collapsed') === 'true')
+  const { t: tStudio } = useUiTranslation('studio')
   const generationMode = useStore(s => s.generationMode)
   const imageMode = useStore(s => s.params.image_mode)
   const modelOptions = useStore(s => s.modelOptions)
   const sidebarOpen = useStore(s => s.sidebarOpen)
-  const mediaFilter = useStore(s => s.mediaFilter)
-  const appVersion = useStore(s => s.systemConfig?.app_version)
-  const setSidebarOpen = useStore(s => s.setSidebarOpen)
-  const setSidebarMode = useStore(s => s.setSidebarMode)
   const sidebarMode = useStore(s => s.sidebarMode)
-  const setSettingsOpen = useStore(s => s.setSettingsOpen)
-  const setDashboardOpen = useStore(s => s.setDashboardOpen)
   const editSubMode = useStore(s => s.editSubMode)
   const modelType = useStore(s => s.params.model_type)
   const workspace = useStore(s => s.activeWorkspace)
@@ -95,56 +87,8 @@ export function Sidebar() {
   const panelTitle = isDirector ? t('panel.director') : `${t('panel.directGeneration')} · ${directModeLabel}`
   const previousToolContext = useRef(`${generationMode}:${editSubMode}`)
   const setToolsSidebarCollapsed = (collapsed: boolean) => {
-    setToolsCollapsed(collapsed)
     window.localStorage.setItem('hocuspocus-tools-sidebar-collapsed', String(collapsed))
   }
-
-  useEffect(() => {
-    const openImageSubmission = () => {
-      setToolsCollapsed(false)
-      window.localStorage.setItem('hocuspocus-tools-sidebar-collapsed', 'false')
-      setSidebarOpen(true)
-    }
-    const openSpeechSubmission = () => {
-      setToolsCollapsed(false)
-      window.localStorage.setItem('hocuspocus-tools-sidebar-collapsed', 'false')
-      setSidebarOpen(true)
-    }
-    window.addEventListener('hocuspocus:studio-image-open', openImageSubmission)
-    window.addEventListener('hocuspocus:studio-speech-open', openSpeechSubmission)
-    return () => {
-      window.removeEventListener('hocuspocus:studio-image-open', openImageSubmission)
-      window.removeEventListener('hocuspocus:studio-speech-open', openSpeechSubmission)
-    }
-  }, [setSidebarOpen])
-
-  useEffect(() => {
-    const openStudio = () => {
-      setSidebarMode('studio')
-      setToolsSidebarCollapsed(false)
-      setSidebarOpen(true)
-    }
-    const openSettings = () => {
-      setDashboardOpen(false)
-      setSidebarOpen(false)
-      setSettingsOpen(true)
-    }
-    const openDirector = () => {
-      setSidebarMode('director')
-      setToolsSidebarCollapsed(false)
-      setSidebarOpen(true)
-    }
-    window.addEventListener('hocuspocus:studio-open', openStudio)
-    window.addEventListener('hocuspocus:settings-open', openSettings)
-    window.addEventListener('maestro:director-open', openDirector)
-    return () => {
-      window.removeEventListener('hocuspocus:studio-open', openStudio)
-      window.removeEventListener('hocuspocus:settings-open', openSettings)
-      window.removeEventListener('maestro:director-open', openDirector)
-    }
-  // The event bridge deliberately tracks stable Zustand actions only.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     const context = `${generationMode}:${editSubMode}`
@@ -206,12 +150,14 @@ export function Sidebar() {
           added + hardware bar expanded), instead of letting flex-shrink
           crush sections into each other. */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 min-h-0 [&>*]:shrink-0">
+        <p className="text-xs text-text-secondary">{tStudio('groups.help')}</p>
         {/* Tools mode: standalone post-processing (upscale / revoice) on any
             existing clip. Renders in place of the generation controls. */}
         {isTools ? <Suspense fallback={<div role="status">{tCommon('status.loading')}</div>}>
           <ToolsPanel />
         </Suspense> : isModel3d ? <Hunyuan3DPanel /> : (
         <>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.input')}</h3>
         {/* Edit mode: sub-mode toggle + sub-controls */}
         {isEdit && <EditSubModeToggle />}
         {isEdit && editControls}
@@ -258,6 +204,7 @@ export function Sidebar() {
         {isAudio && audioSubMode === 'mixer' && <MixerControls />}
         {isAudio && audioSubMode === 'music' && <MusicControls />}
 
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.instructions')}</h3>
         {/* Prompt area (non-edit modes, skip for SFX/Mixer/Music which have their own UI) */}
         {!isEdit && !(isAudio && (audioSubMode === 'sfx' || audioSubMode === 'mixer' || audioSubMode === 'music')) && (isMultiClip ? <MultiClipEditor /> : <PromptInput />)}
         <StudioCommandPanels mode={generationMode} audioSubMode={audioSubMode}
@@ -284,6 +231,7 @@ export function Sidebar() {
           owns no model. */}
       {!isTools && !isModel3d && (
       <div className="px-3 py-2.5 border-t border-border">
+        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.model')} · {tStudio('groups.run')}</h3>
         <div className="flex items-center gap-2">
           <AdvancedSettings />
           <button
@@ -316,79 +264,17 @@ export function Sidebar() {
     </>
   )
 
-  // This workspace owns its controls in the central area, including on mobile.
-  if (mediaFilter === 'character-replacement') return null
-
-  // Mobile: overlay drawer
-  if (isMobile) {
-    return (
-      <>
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/40 z-40"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-        <aside className={`fixed top-0 left-0 h-full w-[380px] max-w-[85vw] bg-bg-secondary border-r border-border z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}>
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <BrandIdentity appVersion={appVersion} />
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          </div>
-          {isDirector ? <DirectorChat /> : studioControls}
-          <HardwareStatusBar />
-        </aside>
-      </>
-    )
-  }
-
-  if (toolsCollapsed) {
-    return (
-      <aside className="w-11 h-full bg-bg-secondary border-r border-border flex flex-col items-center shrink-0">
-        <button
-          onClick={() => setToolsSidebarCollapsed(false)}
-          className="m-1.5 p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          title="Expand Studio tools"
-          aria-label="Expand Studio tools"
-        >
-          <PanelLeftOpen size={17} />
-        </button>
-        <span className="mt-2 text-[10px] uppercase tracking-[0.2em] text-text-muted [writing-mode:vertical-rl]">
-          {panelTitle}
-        </span>
-      </aside>
-    )
-  }
-
-  // Desktop: static sidebar
   return (
-    <aside className="w-[420px] h-full bg-bg-secondary border-r border-border flex flex-col shrink-0">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <BrandIdentity appVersion={appVersion} />
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-text-secondary">{panelTitle}</span>
-          <button
-            onClick={() => setToolsSidebarCollapsed(true)}
-            className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-            title="Collapse Studio tools"
-            aria-label="Collapse Studio tools"
-          >
-            <PanelLeftClose size={16} />
-          </button>
-        </div>
-      </div>
-      {isDirector ? <DirectorChat /> : studioControls}
+    <section data-testid="direct-generation-workspace" className="flex h-full min-h-0 flex-col bg-bg-secondary" aria-label={panelTitle}>
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold text-text-primary">{panelTitle}</h2>
+      </header>
+      {studioControls}
       <HardwareStatusBar />
-    </aside>
+    </section>
   )
+}
+
+export function Sidebar() {
+  return <DirectGenerationWorkspace />
 }

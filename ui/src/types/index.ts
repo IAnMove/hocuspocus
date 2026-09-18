@@ -158,6 +158,7 @@ export interface GenerateParams {
   pause_seconds?: number
   temperature?: number
   custom_settings?: Record<string, unknown>
+  model_mode?: number | string
   // Loose params: backend accepts additional optional fields. Declared
   // explicitly here so TypeScript narrows JSX children correctly (an
   // index signature widens explicit fields to `unknown` in some contexts).
@@ -390,7 +391,7 @@ export interface OutputFile {
 
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'
 export type SceneFaceBindingRole = 'mouth' | 'blink' | 'eyes'
-export type SceneFaceBindingState = 'closed' | 'small' | 'wide' | 'round' | 'blink' | 'open'
+export type SceneFaceBindingState = import('../lib/characterMouthStates').CharacterMouthState | 'blink' | 'open'
 /** Optional semantic metadata for a cutout facial overlay. */
 export interface SceneFaceBinding {
   poseLayerId: string
@@ -413,7 +414,7 @@ export type SceneAtmosphereKind =
   | 'speedlines'
   | 'leaves'
 export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce' | 'hold'
-export type SceneFrameRate = 30 | 60
+export type SceneFrameRate = 24 | 30 | 60
 export type SceneBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken'
 export type SceneMask = 'none' | 'rounded' | 'ellipse'
 
@@ -619,6 +620,7 @@ export interface Scene {
     /** How the timing was obtained: authored bounds, speech alignment, or an
      * approximate voice-activity envelope when no transcript is available. */
     confidence: 'known-text' | 'aligned-audio' | 'energy-fallback'
+    lipSync?: import('../lib/cutoutPhonetic').CutoutLipSync
   }>
   composition?: {
     showGrid: boolean
@@ -1366,6 +1368,19 @@ export interface LyricSegment {
   speaker?: string | null
   /** Word-level alignment when the transcription engine supplies it. */
   words?: Array<{ start: number; end: number; text: string }> | null
+  source?: 'transcription' | 'aligned_lyrics' | 'interpolated' | string
+  confidence?: number | null
+  section?: string | null
+}
+
+export interface LyricVisualEvent {
+  time: number
+  end: number
+  kind: 'entrance' | 'transformation' | 'impact' | string
+  cue_index: number
+  lyric: string
+  trigger: string
+  rule: string
 }
 
 export interface SongStructureEntry {
@@ -1386,6 +1401,18 @@ export interface AudioAnalysisResult {
   vocals_path: string | null
   warnings?: string[] | null
   song_structure?: SongStructureEntry[] | null
+  /** Raw ASR evidence; `lyrics`/`lyric_timeline` preserve supplied lyrics. */
+  transcript?: LyricSegment[] | null
+  lyric_timeline?: LyricSegment[] | null
+  lyrics_srt?: string | null
+  lyric_timing?: {
+    method: string
+    coverage: number
+    matched_words: number
+    total_words: number
+    approximate_lines?: number
+  } | null
+  visual_events?: LyricVisualEvent[] | null
 }
 
 export interface SuggestedClip {
@@ -1400,6 +1427,8 @@ export interface PlannedClip extends SuggestedClip {
   beat_count: number
   duration_frames: number
   dominant_speaker?: string | null
+  lyric_cues?: Array<LyricSegment & { offset: number }>
+  visual_events?: Array<LyricVisualEvent & { offset: number }>
 }
 
 export interface SpeakerMapping {

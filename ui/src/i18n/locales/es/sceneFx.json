@@ -1,6 +1,6 @@
 {
   "title": "Efectos SFX",
-  "help": "Efectos visuales sobre el encuadre 2D y 3D, con sonido local opcional. Las demos sustituyen los SFX y amplían la duración: colección completa 90 s; magia y anime 36 s. Conservan los actores, la cámara y el audio.",
+  "help": "Efectos visuales sobre el encuadre 2D y 3D, con sonido local opcional. Las demos sustituyen los SFX y amplían la duración: 3 s por efecto; magia/anime 36 s; consolas retro 30 s. Conservan los actores, la cámara y el audio.",
   "effect": "Efecto",
   "color": "Color",
   "sound": "Sonido",
@@ -46,10 +46,35 @@
     "energy_orb": "Esfera de energía",
     "energy_beam": "Rayo de energía",
     "sword_slash": "Corte de espada",
-    "manga_impact": "Impacto manga"
+    "manga_impact": "Impacto manga",
+    "fire": "Fuego",
+    "shield": "Escudo de energía",
+    "tornado": "Tornado",
+    "splash": "Salpicadura",
+    "dust": "Nube de polvo",
+    "media_portal": "Portal con imagen",
+    "psx": "PlayStation 1",
+    "n64": "Nintendo 64",
+    "nes": "NES",
+    "snes": "Super NES",
+    "gameboy": "Game Boy",
+    "gameboy_color": "Game Boy Color",
+    "genesis": "Mega Drive / Genesis",
+    "vhs": "Cinta VHS",
+    "crt": "CRT de recreativa",
+    "c64": "Commodore 64"
   },
+  "collections": {
+    "classic": "Overlays clásicos",
+    "anime": "Magia y anime",
+    "retro": "Consolas retro y cinta"
+  },
+  "worldMedia": "Al otro lado (foto o vídeo)",
+  "worldMediaHelp": "URL o archivo — se ve a través del portal",
+  "worldMediaFailed": "No se pudo subir la foto o el vídeo del portal.",
   "rotation": "Rotación (°)",
   "animeShowcase": "Aplicar demo magia y anime",
+  "retroShowcase": "Aplicar demo consolas retro y VHS",
   "worldTitle": "SFX en el mundo 3D",
   "worldHelp": "Estos efectos ocupan una posición en metros. La cámara puede orbitarlos y un objeto opaco puede taparlos. Los overlays de pantalla siguen en 2D.",
   "worldScale": "Tamaño (m)",
@@ -65,5 +90,25 @@
   "anchor": "Seguir id del hueco",
   "anchorNone": "Ninguno — se queda en el mundo",
   "worldTarget": "Apuntar al id del hueco",
-  "worldTargetPosition": "Apuntar (m)"
+  "worldTargetPosition": "Apuntar (m)",
+  "motion": {
+    "title": "Trayectoria animada",
+    "help": "Posición, giro y tamaño en momentos concretos de la escena. Los puntos sustituyen la posición fija. Usa tamaño 0 para aparecer desde la nada y giros de 360° para una vuelta completa.",
+    "detach": "Desvincula el anclaje para animar la posición en el escenario.",
+    "time": "Tiempo de escena (s)",
+    "scale": "Tamaño",
+    "easing": "Movimiento hacia el siguiente punto",
+    "smooth": "Suave",
+    "linear": "Uniforme",
+    "add": "Añadir punto",
+    "clear": "Quitar trayectoria"
+  },
+  "portalPlayback": {
+    "title": "Paisaje dentro del portal",
+    "screen": "Ventana al siguiente mundo",
+    "help": "Mantiene el paisaje alineado con el encuadre mientras crece el portal. Usa la misma cámara y el mismo instante del vídeo al continuar en el siguiente escenario.",
+    "start": "Inicio del vídeo (s)",
+    "speed": "Velocidad",
+    "loop": "Repetir vídeo"
+  }
 }

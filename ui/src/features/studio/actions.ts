@@ -14,6 +14,7 @@ import type {
   QueueSfxPackCommand,
 } from './commands'
 import { sfxPackContexts, sfxPackResult } from './sfxPackResult'
+import { hidesDirectGenerationSidebar } from '../../lib/navigationCategories'
 import {
   generationProvenancePayload,
   type GenerationSubmissionContext,
@@ -97,6 +98,9 @@ export function openStudioAudio(subMode: PrepareAudioCommand['subMode']): void {
   state.setSidebarMode('studio')
   state.setSidebarOpen(true)
   state.setGenerationMode('audio')
+  if (hidesDirectGenerationSidebar(state.mediaFilter, 'studio')) {
+    state.setMediaFilter('audio')
+  }
   state.setAudioSubMode(subMode)
 }
 

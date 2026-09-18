@@ -1,0 +1,671 @@
+{
+  "version": 1,
+  "id": "wizard-mcp-corpus-20260911",
+  "base": "origin/development",
+  "expect_actions_not_prose": true,
+  "notes": {
+    "en": "Expect action types, receipts, rejection codes and task identity. Do not assert exact LLM prose.",
+    "es": "Espera tipos de acción, recibos, códigos de rechazo e identidad de tarea. No exijas la prosa exacta del LLM."
+  },
+  "published_operations": [
+    "generation.image",
+    "generation.speech",
+    "generation.music",
+    "generation.sfx",
+    "tools.upscale",
+    "generation.receipt"
+  ],
+  "published_collection_operations": [
+    "collections.create",
+    "collections.update",
+    "collections.get",
+    "collections.list",
+    "commands.receipt"
+  ],
+  "unpublished_operations": [
+    "generation.model3d"
+  ],
+  "legacy_mcp_tools": [
+    "models",
+    "processors",
+    "status",
+    "assets",
+    "collections",
+    "organize",
+    "analyze",
+    "generate",
+    "recast",
+    "upscale"
+  ],
+  "cases": [
+    {
+      "id": "en-image-generate",
+      "lang": "en",
+      "kind": "intent",
+      "surface": "both",
+      "request": "Prepare a Flux image of a red boat on calm water and generate it now.",
+      "proposal": {
+        "reply": "I created invented-boat.png successfully.",
+        "actions": [
+          {"type": "prepare_image", "prompt": "a red boat on calm water", "model_type": "flux2_klein_4b"},
+          {"type": "start_generation", "confirm": true}
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Prepare a Flux image of a red boat on calm water and generate it now.",
+          "question": "",
+          "execution": "run"
+        }
+      },
+      "expect": {
+        "operation": "generation.image",
+        "action_types": ["prepare_image", "start_generation"],
+        "creates_task": true,
+        "promise_success": false,
+        "receipt_status": "queued",
+        "reply_must_not_match": ["invented-boat.png", "successfully"]
+      }
+    },
+    {
+      "id": "es-image-generate",
+      "lang": "es",
+      "kind": "intent",
+      "surface": "both",
+      "request": "Prepara una imagen Flux de un barco rojo en agua en calma y genérala ahora.",
+      "proposal": {
+        "reply": "He creado invented-barco.png con éxito.",
+        "actions": [
+          {"type": "prepare_image", "prompt": "un barco rojo en agua en calma", "model_type": "flux2_klein_4b"},
+          {"type": "start_generation", "confirm": true}
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Prepara una imagen Flux de un barco rojo en agua en calma y genérala ahora.",
+          "question": "",
+          "execution": "run"
+        }
+      },
+      "expect": {
+        "operation": "generation.image",
+        "action_types": ["prepare_image", "start_generation"],
+        "creates_task": true,
+        "promise_success": false,
+        "receipt_status": "queued",
+        "reply_must_not_match": ["invented-barco.png"]
+      }
+    },
+    {
+      "id": "en-negation-do-not-generate",
+      "lang": "en",
+      "kind": "negation",
+      "surface": "wizard",
+      "request": "Prepare a Flux image of a red boat, but do not generate it.",
+      "proposal": {
+        "reply": "Queued invented-boat.png.",
+        "actions": [
+          {"type": "prepare_image", "prompt": "a red boat"},
+          {"type": "start_generation", "confirm": true}
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Prepare a Flux image of a red boat, but do not generate it.",
+          "question": "",
+          "execution": "prepare"
+        }
+      },
+      "expect": {
+        "action_types": ["prepare_image"],
+        "forbidden_action_types": ["start_generation"],
+        "creates_task": false,
+        "promise_success": false,
+        "reply_must_not_match": ["invented-boat.png"]
+      }
+    },
+    {
+      "id": "es-negation-no-generes",
+      "lang": "es",
+      "kind": "negation",
+      "surface": "wizard",
+      "request": "Prepara una imagen de un barco rojo, no la generes.",
+      "proposal": {
+        "reply": "Generación en cola.",
+        "actions": [
+          {"type": "prepare_image", "prompt": "un barco rojo"},
+          {"type": "start_generation", "confirm": true}
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Prepara una imagen de un barco rojo, no la generes.",
+          "question": "",
+          "execution": "prepare"
+        }
+      },
+      "expect": {
+        "action_types": ["prepare_image"],
+        "forbidden_action_types": ["start_generation"],
+        "creates_task": false,
+        "promise_success": false
+      }
+    },
+    {
+      "id": "en-how-to-image",
+      "lang": "en",
+      "kind": "negation",
+      "surface": "wizard",
+      "request": "How do I generate an image in Studio?",
+      "proposal": {
+        "reply": "I generated invented.png.",
+        "actions": [
+          {"type": "prepare_image", "prompt": "an invented image"},
+          {"type": "start_generation", "confirm": true}
+        ],
+        "intent": {
+          "kind": "conversation",
+          "goal": "How do I generate an image in Studio?",
+          "question": "",
+          "execution": "none"
+        }
+      },
+      "expect": {
+        "action_types": [],
+        "forbidden_action_types": ["start_generation", "prepare_image"],
+        "creates_task": false,
+        "promise_success": false,
+        "reply_must_not_match": ["invented.png"]
+      }
+    },
+    {
+      "id": "es-how-to-image",
+      "lang": "es",
+      "kind": "negation",
+      "surface": "wizard",
+      "request": "¿Cómo genero una imagen en Studio?",
+      "proposal": {
+        "reply": "He generado invented.png.",
+        "actions": [
+          {"type": "prepare_image", "prompt": "una imagen inventada"},
+          {"type": "start_generation", "confirm": true}
+        ],
+        "intent": {
+          "kind": "conversation",
+          "goal": "¿Cómo genero una imagen en Studio?",
+          "question": "",
+          "execution": "none"
+        }
+      },
+      "expect": {
+        "action_types": [],
+        "forbidden_action_types": ["start_generation", "prepare_image"],
+        "creates_task": false,
+        "promise_success": false
+      }
+    },
+    {
+      "id": "en-ambiguous-that",
+      "lang": "en",
+      "kind": "ambiguous",
+      "surface": "wizard",
+      "request": "Generate that again.",
+      "proposal": {
+        "reply": "I launched invented-999.",
+        "actions": [{"type": "start_generation", "confirm": true}],
+        "intent": {
+          "kind": "clarification",
+          "goal": "Generate that again.",
+          "question": "Which exact item should I regenerate?",
+          "execution": "none"
+        }
+      },
+      "expect": {
+        "action_types": [],
+        "forbidden_action_types": ["start_generation"],
+        "creates_task": false,
+        "promise_success": false,
+        "rejection_codes": ["preparation_required"],
+        "reply_must_not_match": ["invented-999"]
+      }
+    },
+    {
+      "id": "es-ambiguous-eso",
+      "lang": "es",
+      "kind": "ambiguous",
+      "surface": "wizard",
+      "request": "Genera eso otra vez.",
+      "proposal": {
+        "reply": "He lanzado invented-999.",
+        "actions": [{"type": "start_generation", "confirm": true}],
+        "intent": {
+          "kind": "clarification",
+          "goal": "Genera eso otra vez.",
+          "question": "¿Qué recurso exacto quieres que regenere?",
+          "execution": "none"
+        }
+      },
+      "expect": {
+        "action_types": [],
+        "forbidden_action_types": ["start_generation"],
+        "creates_task": false,
+        "promise_success": false,
+        "rejection_codes": ["preparation_required"]
+      }
+    },
+    {
+      "id": "en-workspace-change",
+      "lang": "en",
+      "kind": "workspace_change",
+      "surface": "both",
+      "request": "Switch to workspace corpus-b, then prepare a Flux image of a lantern. Do not generate yet.",
+      "proposal": {
+        "reply": "I generated in the previous folder.",
+        "actions": [
+          {"type": "select_workspace", "workspace_name": "corpus-b"},
+          {"type": "prepare_image", "prompt": "a lantern"},
+          {"type": "start_generation", "confirm": true}
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Switch to workspace corpus-b, then prepare a Flux image of a lantern. Do not generate yet.",
+          "question": "",
+          "execution": "prepare"
+        }
+      },
+      "expect": {
+        "action_types": ["select_workspace", "prepare_image"],
+        "forbidden_action_types": ["start_generation"],
+        "creates_task": false,
+        "promise_success": false,
+        "receipt_workspace": "workspace-a",
+        "other_workspace": "corpus-b"
+      }
+    },
+    {
+      "id": "es-workspace-change",
+      "lang": "es",
+      "kind": "workspace_change",
+      "surface": "wizard",
+      "request": "Cambia al workspace corpus-b y prepara una imagen de un farol. Todavía no la generes.",
+      "proposal": {
+        "reply": "Generado en la carpeta anterior.",
+        "actions": [
+          {"type": "select_workspace", "workspace_name": "corpus-b"},
+          {"type": "prepare_image", "prompt": "un farol"},
+          {"type": "start_generation", "confirm": true}
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Cambia al workspace corpus-b y prepara una imagen de un farol. Todavía no la generes.",
+          "question": "",
+          "execution": "prepare"
+        }
+      },
+      "expect": {
+        "action_types": ["select_workspace", "prepare_image"],
+        "forbidden_action_types": ["start_generation"],
+        "creates_task": false,
+        "promise_success": false
+      }
+    },
+    {
+      "id": "en-retry-same-intent",
+      "lang": "en",
+      "kind": "retry",
+      "surface": "mcp",
+      "request": "The HTTP response timed out. Repeat the exact generation.image command with the same intent_id; do not start a second job.",
+      "expect": {
+        "operation": "generation.image",
+        "creates_task": true,
+        "replay_same_id": true,
+        "two_clients_same_id": true,
+        "promise_success": false,
+        "receipt_status": "queued"
+      }
+    },
+    {
+      "id": "es-retry-task",
+      "lang": "es",
+      "kind": "retry",
+      "surface": "wizard",
+      "request": "Reintenta exactamente una vez la tarea task-generation-corpus-1. No lances otra generación distinta.",
+      "proposal": {
+        "reply": "Creé un trabajo nuevo invented-2.",
+        "actions": [{"type": "retry_task", "task_id": "task-generation-corpus-1", "confirm": true}],
+        "intent": {
+          "kind": "action",
+          "goal": "Reintenta exactamente una vez la tarea task-generation-corpus-1. No lances otra generación distinta.",
+          "question": "",
+          "execution": "run"
+        }
+      },
+      "expect": {
+        "action_types": ["retry_task"],
+        "forbidden_action_types": ["start_generation"],
+        "creates_task": false,
+        "promise_success": false,
+        "reply_must_not_match": ["invented-2"]
+      }
+    },
+    {
+      "id": "en-compound-image",
+      "lang": "en",
+      "kind": "compound",
+      "surface": "wizard",
+      "request": "Open Studio, prepare a Flux image of a lantern, and generate it.",
+      "proposal": {
+        "reply": "Done, invented.png is finished.",
+        "actions": [
+          {"type": "start_generation", "confirm": true},
+          {"type": "open_tab", "tab": "studio"},
+          {"type": "prepare_image", "prompt": "a lantern"}
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Open Studio, prepare a Flux image of a lantern, and generate it.",
+          "question": "",
+          "execution": "run"
+        }
+      },
+      "expect": {
+        "action_types": ["open_tab", "prepare_image"],
+        "forbidden_action_types": ["start_generation"],
+        "creates_task": false,
+        "promise_success": false,
+        "parser_drops_unprepared_start": true,
+        "reply_must_not_match": ["invented.png", "finished"]
+      }
+    },
+    {
+      "id": "es-compound-story-song",
+      "lang": "es",
+      "kind": "compound",
+      "surface": "wizard",
+      "request": "Crea una historia titulada Faro y configura su canción. No inicies el videoclip.",
+      "proposal": {
+        "reply": "Canción y videoclip terminados.",
+        "actions": [
+          {"type": "generate_story_song", "confirm": true, "target_story_title": "Faro", "cue_title": "Faro"},
+          {"type": "create_story", "title": "Faro", "premise": "Un faro encierra un aviso.", "project_type": "music_video"},
+          {"type": "configure_story_song", "target_story_title": "Faro", "song_title": "Faro", "song_brief": "aviso del faro", "music_style": "faro nocturno, cuerdas graves", "write_lyrics": true, "instrumental": false}
+        ],
+        "intent": {
+          "kind": "action",
+          "goal": "Crea una historia titulada Faro y configura su canción. No inicies el videoclip.",
+          "question": "",
+          "execution": "prepare"
+        }
+      },
+      "expect": {
+        "ordered_predecessors": ["create_story", "configure_story_song", "generate_story_song"],
+        "creates_task": false,
+        "promise_success": false
+      }
+    },
+    {
+      "id": "en-unpublished-model3d-mcp",
+      "lang": "en",
+      "kind": "unpublished",
+      "surface": "mcp",
+      "request": "Call MCP tool generation.model3d for a native mesh.",
+      "expect": {
+        "operation": "generation.model3d",
+        "unpublished": true,
+        "creates_task": false,
+        "promise_success": false,
+        "mcp_is_error": true
+      }
+    },
+    {
+      "id": "es-unpublished-unknown-action",
+      "lang": "es",
+      "kind": "unpublished",
+      "surface": "wizard",
+      "request": "Usa la herramienta generation.video y dime que ya está el MP4.",
+      "proposal": {
+        "reply": "El MP4 invented.mp4 ya está listo.",
+        "actions": [{"type": "generation_video", "confirm": true, "prompt": "un clip"}],
+        "intent": {
+          "kind": "action",
+          "goal": "Usa la herramienta generation.video y dime que ya está el MP4.",
+          "question": "",
+          "execution": "run"
+        }
+      },
+      "expect": {
+        "action_types": [],
+        "creates_task": false,
+        "promise_success": false,
+        "rejection_codes": ["invalid_action"],
+        "reply_must_not_match": ["invented.mp4", "listo"]
+      }
+    },
+    {
+      "id": "en-speech-generate",
+      "lang": "en",
+      "kind": "intent",
+      "surface": "mcp",
+      "request": "Admit one Studio speech job with the literal line The system is watching.",
+      "expect": {
+        "operation": "generation.speech",
+        "creates_task": true,
+        "promise_success": false,
+        "receipt_status": "queued",
+        "replay_same_id": true
+      }
+    },
+    {
+      "id": "es-music-generate",
+      "lang": "es",
+      "kind": "intent",
+      "surface": "mcp",
+      "request": "Admite una canción local con letra literal. No afirmes que el audio ya existe.",
+      "expect": {
+        "operation": "generation.music",
+        "creates_task": true,
+        "promise_success": false,
+        "receipt_status": "queued",
+        "replay_same_id": true
+      }
+    },
+    {
+      "id": "en-sfx-generate",
+      "lang": "en",
+      "kind": "intent",
+      "surface": "mcp",
+      "request": "Admit MMAudio rain against glass in the output workspace.",
+      "expect": {
+        "operation": "generation.sfx",
+        "creates_task": true,
+        "promise_success": false,
+        "receipt_status": "queued"
+      }
+    },
+    {
+      "id": "en-upscale",
+      "lang": "en",
+      "kind": "intent",
+      "surface": "mcp",
+      "request": "Admit tools.upscale lanczos2 for the exact source image.",
+      "expect": {
+        "operation": "tools.upscale",
+        "creates_task": true,
+        "promise_success": false,
+        "receipt_status": "queued",
+        "two_clients_same_id": true
+      }
+    },
+    {
+      "id": "en-invalid-extra-field",
+      "lang": "en",
+      "kind": "error_recovery",
+      "surface": "mcp",
+      "request": "Submit generation.image with an authority actor field.",
+      "expect": {
+        "operation": "generation.image",
+        "invalid_extra_field": "actor",
+        "creates_task": false,
+        "http_status": 422,
+        "promise_success": false
+      }
+    },
+    {
+      "id": "en-receipt-wrong-workspace",
+      "lang": "en",
+      "kind": "error_recovery",
+      "surface": "mcp",
+      "request": "Ask generation.receipt in a different workspace after a successful admission.",
+      "expect": {
+        "operation": "generation.receipt",
+        "creates_task": false,
+        "http_status": 404,
+        "promise_success": false
+      }
+    }
+  ],
+  "tours": [
+    {
+      "id": "wizard-visible",
+      "surface": "wizard",
+      "steps": [
+        "open-wizard",
+        "refusal-no-task",
+        "unpublished-rejection",
+        "queued-receipt-is-not-finished",
+        "workspace-change-prepare-only"
+      ]
+    },
+    {
+      "id": "mcp-client",
+      "surface": "mcp",
+      "steps": [
+        "discover-catalog",
+        "tools-list-published-only",
+        "admit-image",
+        "timeout-replay-same-id",
+        "second-client-same-id",
+        "unpublished-video-error",
+        "receipt-recovery"
+      ]
+    }
+  ],
+  "matrix": [
+    {
+      "id": "catalog-http",
+      "item": "GET /api/v1/generation/commands",
+      "designed": true,
+      "implemented": true,
+      "simulated": true,
+      "real_executed": "probe",
+      "pending": "Does not enumerate every installed model; only published operations."
+    },
+    {
+      "id": "catalog-mcp",
+      "item": "MCP tools/list vs HTTP catalog",
+      "designed": true,
+      "implemented": true,
+      "simulated": true,
+      "real_executed": false,
+      "pending": "Live MCP tools/list needs the Bearer token; this cut does not read it from the shared runtime."
+    },
+    {
+      "id": "image-admission",
+      "item": "generation.image HTTP+MCP replay",
+      "designed": true,
+      "implemented": true,
+      "simulated": true,
+      "real_executed": false,
+      "pending": "flux2_klein_4b is installed on the shared runtime; no GPU job was enqueued there."
+    },
+    {
+      "id": "speech-admission",
+      "item": "generation.speech",
+      "designed": true,
+      "implemented": true,
+      "simulated": true,
+      "real_executed": false,
+      "pending": "kugelaudio_0_open is installed; real speech inference not run in H17."
+    },
+    {
+      "id": "music-admission",
+      "item": "generation.music",
+      "designed": true,
+      "implemented": true,
+      "simulated": true,
+      "real_executed": false,
+      "pending": "ace_step_v1_5_xl_sft_lm_4b is installed; real music inference not run in H17."
+    },
+    {
+      "id": "sfx-admission",
+      "item": "generation.sfx",
+      "designed": true,
+      "implemented": true,
+      "simulated": true,
+      "real_executed": false,
+      "pending": "Real MMAudio inference not run in H17."
+    },
+    {
+      "id": "upscale-admission",
+      "item": "tools.upscale",
+      "designed": true,
+      "implemented": true,
+      "simulated": true,
+      "real_executed": false,
+      "pending": "Lanczos does not need neural weights; still not dispatched on the shared GPU runtime."
+    },
+    {
+      "id": "video-native",
+      "item": "generation.video",
+      "designed": true,
+      "implemented": false,
+      "simulated": true,
+      "real_executed": false,
+      "pending": "Unpublished on this base. Owned by H01. Corpus proves it cannot promise success."
+    },
+    {
+      "id": "wizard-negation",
+      "item": "Refusal / how-to / do-not-generate",
+      "designed": true,
+      "implemented": true,
+      "simulated": true,
+      "real_executed": false,
+      "pending": "No live LLM tokens spent. Parser+reconcile contract only."
+    },
+    {
+      "id": "idempotent-retry",
+      "item": "Timeout replay and two clients, same ID",
+      "designed": true,
+      "implemented": true,
+      "simulated": true,
+      "real_executed": false,
+      "pending": "Proven with FakeNative TestClient, not against Pinokio."
+    }
+  ],
+  "failures": [
+    {
+      "id": "generation-video-unpublished",
+      "owner": "H01",
+      "severity": "expected-gap",
+      "repro": "GET /api/v1/generation/commands on development 780d3915 lists image/speech/music/sfx/upscale/receipt only. MCP tools/call name=generation.video returns isError and creates zero tasks.",
+      "status": "recorded_not_fixed"
+    },
+    {
+      "id": "video-editor-frame-off-by-one",
+      "owner": "H09",
+      "severity": "prior-finding",
+      "repro": "Earlier V6 evidence: Video Editor job video-edit-3fb2aa82bd8e returned 589/590 frames. Not retested in H17.",
+      "status": "recorded_not_fixed"
+    },
+    {
+      "id": "compound-prepare-and-generate-it",
+      "owner": "agentActions.reconcile",
+      "severity": "limitation",
+      "repro": "Ask 'Open Studio, prepare a Flux image of a lantern, and generate it.' Parser drops the leading start_generation (preparation_required). isExplicitImageGenerationRequest is false because 'generate' is not followed by 'image' in that clause, so start_generation is not restored. Result: form fill only, no task. Contrast 'Prepare a Flux image … and generate it now.' which does launch when the proposal already contains prepare+start in order.",
+      "status": "recorded_not_fixed"
+    },
+    {
+      "id": "howto-empty-turn-keeps-model-prose",
+      "owner": "wizardTurnReport",
+      "severity": "limitation",
+      "repro": "Ask 'How do I generate an image in Studio?' while the model replies 'I generated invented.png.' Reconcile strips start_generation (no task). formatWizardTurnReply still keeps the invented sentence because the turn has no actions and the question is classified as explanation.",
+      "status": "recorded_not_fixed"
+    }
+  ]
+}

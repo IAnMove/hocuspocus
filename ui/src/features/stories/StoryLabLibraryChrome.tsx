@@ -102,7 +102,7 @@ export function StoryLabLibraryChrome({
   resolveStoryLibraryConflict, busy, imageBusy, projectOperationBusy, referenceBatchBusy,
   jobProgress, showCancel, showResume, recoveryJobId, smartAssetBusy,
   onOpenProject, onProjectTypeChange, onWorkflowModeChange, onPrepareText, onPrepareImages,
-  onCancel, onResume, onExportStorypack, onImport, onSmartAssets, onNewProject, onDuplicate, onDelete,
+  onCancel, onResume, onExportStorypack, onImport, onSmartAssets, onNewProject, onDuplicate, onDelete, onLoadTijeralExample,
 }: {
   project: StoryProject
   projects: Record<string, StoryProject>
@@ -137,6 +137,7 @@ export function StoryLabLibraryChrome({
   onNewProject: (type: StoryProjectType) => void
   onDuplicate: () => void
   onDelete: () => void
+  onLoadTijeralExample: () => void
 }) {
   const { t } = useUiTranslation('storyLab')
   const importRef = useRef<HTMLInputElement>(null)
@@ -226,6 +227,10 @@ export function StoryLabLibraryChrome({
       <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> {t('library.import')}</button>
       <button className={button} disabled={smartAssetBusy} onClick={onSmartAssets} title={t('library.smartAssetsTitle')}>
         {smartAssetBusy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} {t('library.smartAssets')}
+      </button>
+      <button type="button" className={`${button} border-amber-400/40 text-amber-100`} disabled={libraryLocked}
+        data-testid="load-tijeral-example" onClick={onLoadTijeralExample} title={t('library.tijeralTitle')}>
+        {t('library.tijeral')}
       </button>
       <StoryLabNewProjectMenu types={types} disabled={libraryLocked} onNewProject={onNewProject} />
       <button className={button} disabled={libraryLocked} onClick={onDuplicate} title={t('library.duplicateTitle')}>{t('library.duplicate')}</button>

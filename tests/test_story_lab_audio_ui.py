@@ -74,9 +74,13 @@ def test_chained_music_and_director_workflows_expose_cancel_controls():
     assert "cancelMusicQueue" in story
     assert "music.cancellingRequest" in music
     assert "cancelStoryMusicCandidatesJob(jobId)" in story
-    assert "api.cancelCanonicalTask(taskId, workspace)" in activity
-    assert "active && task.cancelable" in activity
-    assert "Cancelling…" in activity
+    activity_ui = activity + "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "ui" / "src" / "features" / "activity").glob("*.ts*"))
+    ) + (ROOT / "ui" / "src" / "i18n" / "locales" / "en" / "activity.json").read_text(encoding="utf-8")
+    assert "api.cancelCanonicalTask(taskId, workspace)" in activity_ui
+    assert "active && task.cancelable" in activity_ui
+    assert "Cancelling…" in activity_ui
 
 
 def test_story_lab_frontend_wrappers_reach_terminal_state_before_dismissal():
@@ -112,13 +116,14 @@ def test_story_lab_hands_backend_jobs_to_the_durable_registry():
 
 
 def test_story_lab_refresh_recovers_the_backend_job_without_opening_a_client_root():
-    source = STORY.read_text(encoding="utf-8")
-    refresh = source.split("const savedJobId = window.localStorage.getItem", 1)[1].split(
-        "const openStorySection", 1,
-    )[0]
+    panel = STORY.read_text(encoding="utf-8")
+    session = (STORIES / "storyLabSession.ts").read_text(encoding="utf-8")
+    refresh = session.split("export function useStoryLabSession", 1)[1]
 
-    assert "api.getStoryGenerationStatus(savedJobId)" in refresh
-    assert "setPendingDraft" in refresh
+    assert "getStoryGenerationStatus: api.getStoryGenerationStatus" in panel
+    assert "const savedJobId = readStoryLabJobId(workspace, projectId)" in refresh
+    assert "getStatusRef.current(savedJobId)" in refresh
+    assert "setPendingDraft(recovered)" in refresh
     assert "beginStoryActivity" not in refresh
 
 

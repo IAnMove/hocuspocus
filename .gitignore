@@ -16,6 +16,12 @@ ui/blob-report/
 # Private planning notes and local-only development artefacts.
 /internal/
 /comunicaciones/
+# Temporary agent handoffs and unapplied integration instructions.
+/H[0-9][0-9]_HANDOFF.md
+/INTEGRATION*.patch
+/PR_BODY.md
+/ui/src/features/diagnostics/INTEGRATION.patch
+/code-health-integration.json
 
 # Pinokio runtime
 logs/

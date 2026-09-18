@@ -1,10 +1,13 @@
 import { ChevronDown, Check, Plus } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
+import type { TFunction } from 'i18next'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
+import { h3CatalogEntry } from '../../lib/h3Catalog'
+import { catalogVramGb, resolveModelCatalog } from '../../lib/modelCatalog'
+import type { ModelDef } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
 import { H3ModelName } from './H3ModelInfo'
-import { modelRequirementsText } from '../../lib/minimaxMusicCatalog'
 
 export function ModelSelector() {
   const { t } = useUiTranslation('studio')
@@ -74,7 +77,7 @@ export function ModelSelector() {
       {/* Trigger button */}
       <button
         onClick={() => setOpen(!open)}
-        title={currentModel?.selector_help || currentModel?.description}
+        title={currentModel ? selectorModelHelp(currentModel, t) : undefined}
         className="w-full flex items-center gap-1.5 bg-bg-tertiary border border-border rounded-lg px-2.5 py-2 text-left hover:border-border-light transition-colors"
       >
         <span className="flex-1 min-w-0 truncate text-xs text-text-primary">
@@ -108,8 +111,8 @@ export function ModelSelector() {
                 {/* Models in family */}
                 {famModels.map(model => {
                   const isSelected = model.model_type === currentModelType
-                  const requirements = modelRequirementsText(model.resource_requirements)
-                  const help = [model.selector_help, requirements].filter(Boolean).join('\n\n')
+                  const help = selectorModelHelp(model, t)
+                  const vramGb = catalogVramGb(model)
                   return (
                     <div
                       key={model.model_type}
@@ -127,12 +130,12 @@ export function ModelSelector() {
                         className="min-w-0 flex-1 px-3 py-1.5 flex items-center gap-2 text-left"
                       >
                         <span className="flex-1 min-w-0 text-xs truncate"><H3ModelName modelType={model.model_type} fallback={model.name} /></span>
-                        {model.resource_requirements?.vram_gb != null && (
-                          <span className="shrink-0 text-[9px] text-text-muted tabular-nums">
-                            ~{model.resource_requirements.vram_gb} GB VRAM
+                        {vramGb != null && (
+                          <span aria-hidden="true" className="shrink-0 text-[9px] text-text-muted tabular-nums">
+                            {t('modelCatalog.vramBadge', { vram: vramGb })}
                           </span>
                         )}
-                        <ModelBadges model={model} />
+                        <span aria-hidden="true"><ModelBadges model={model} /></span>
                         {isSelected && <Check size={12} className="shrink-0 text-accent-blue" />}
                       </button>
                       {help && (
@@ -153,6 +156,24 @@ export function ModelSelector() {
       )}
     </div>
   )
+}
+
+function selectorModelHelp(model: ModelDef, t: TFunction<'studio'>): string {
+  const h3 = h3CatalogEntry(model.model_type)
+  if (h3) {
+    return [t(`h3Catalog.${h3.variant}Hint`), t('h3Catalog.memory')].join('\n\n')
+  }
+  const catalog = resolveModelCatalog(model)
+  return [
+    t(`modelCatalog.${catalog.variant}Hint`),
+    t(`modelCatalog.capability.${catalog.capability}`),
+    catalog.requirements.vram_gb != null ? t('modelCatalog.vram', { vram: catalog.requirements.vram_gb }) : '',
+    catalog.requirements.ram_gb != null ? t('modelCatalog.ram', { ram: catalog.requirements.ram_gb }) : '',
+    catalog.requirements.storage_gb != null
+      ? t('modelCatalog.storage', { storage: catalog.requirements.storage_gb })
+      : '',
+    t('modelCatalog.limit'),
+  ].filter(Boolean).join('\n\n')
 }
 
 function ModelBadges({ model }: {

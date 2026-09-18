@@ -4,8 +4,8 @@ import { speechApp, openSpeech, saveSpeech, seekSpeech, exportSpeech } from '../
 import { speechFixture, speechTestWav } from '../helpers/speechAssets'
 
 // Closed API simulation, real application/editor/WebGL. No generation providers.
-// Branded Chromium supplies H.264 + AAC for the real export assertion.
-test.use({ channel: process.platform === 'win32' ? 'msedge' : 'chrome' })
+// Native H.264 + AAC is the Windows Edge job. Linux uses stock Chromium.
+if (process.platform === 'win32') test.use({ channel: 'msedge' })
 test.setTimeout(120000)
 test('new talking shots are reachable in the existing 3D video editor', async ({ page }) => {
   const session = await gotoApp(page)

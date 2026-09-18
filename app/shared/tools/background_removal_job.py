@@ -15,6 +15,7 @@ from contextlib import AbstractContextManager
 from typing import Any
 
 from .background_removal import remove_background_file
+from .video_background_removal import remove_video_background_file
 
 
 class BackgroundRemovalJobHooks:
@@ -63,6 +64,8 @@ def build_background_removal_job(
     source_root: str,
     provenance: dict[str, Any],
     instruction: str,
+    media_kind: str = "image",
+    temporal_smoothing: bool = True,
 ) -> dict[str, Any]:
     """Build the shared queue record consumed by the Tools worker."""
     return {
@@ -85,7 +88,8 @@ def build_background_removal_job(
             "model": "u2net",
             "model_type": "rembg-u2net",
             "provider": "local",
-            "generation_mode": "image",
+            "generation_mode": media_kind,
+            "temporal_smoothing": temporal_smoothing,
             "capability": "remove_background",
             "_non_durable_tool": "remove_background",
             "_source_path": source_path,
@@ -184,13 +188,14 @@ def run_remove_background_job(
                 params.get("_destination_workspace_root") or output_dir
             )
             model = str(params.get("model") or "u2net")
+            media_kind = "video" if params.get("generation_mode") == "video" else "image"
 
             if not source_path:
                 hooks.finish_job(
                     job,
                     "failed",
-                    error="Image source is required",
-                    message="Error: image source is required",
+                    error="Media source is required",
+                    message="Error: media source is required",
                 )
                 return False
             if not output_dir:
@@ -218,7 +223,7 @@ def run_remove_background_job(
                 params.get("_execution_mode") or "real"
             ) == "simulate":
                 output_path = hooks.simulated_artifact(
-                    {**params, "generation_mode": "image"},
+                    {**params, "generation_mode": media_kind},
                     output_dir,
                     job_id,
                     progress=progress,
@@ -237,18 +242,22 @@ def run_remove_background_job(
             else:
                 if not hooks.update_job(
                     job,
-                    message="Removing image background (U2Net)…",
+                    message=f"Removing {media_kind} background (U2Net)…",
                     phase="Background removal",
                     progress=10,
                 ):
                     return False
-                result = remove_background_file(
+                operation = remove_video_background_file if media_kind == "video" else remove_background_file
+                extra = {"temporal_smoothing": params.get("temporal_smoothing", True),
+                         "cancelled": lambda: hooks.is_cancel_requested(job), "progress": progress} if media_kind == "video" else {}
+                result = operation(
                     source_path,
                     uploads_root=uploads_root,
                     workspace_root=workspace_root,
                     output_dir=output_dir,
                     destination_workspace_root=destination_workspace_root,
                     model=model,
+                    **extra,
                 )
                 output_path = str(result.get("path") or "")
 
@@ -264,14 +273,14 @@ def run_remove_background_job(
             public_params.update({
                 "model_type": "rembg-u2net",
                 "provider": "local",
-                "generation_mode": "image",
+                "generation_mode": media_kind,
                 "source_asset_id": params.get("source_asset_id"),
                 "source_filename": params.get("source_filename") or result.get("original"),
             })
             simulated = str(params.get("_execution_mode") or "real") == "simulate"
             sidecar = {
                 "params": public_params,
-                "generation_mode": "image",
+                "generation_mode": media_kind,
                 "tool": "remove_background",
                 "capability": params.get("capability") or "remove_background",
                 "tool_source": params.get("source_filename") or result.get("original"),
@@ -289,13 +298,13 @@ def run_remove_background_job(
                 "execution_mode": "simulate" if simulated else "real",
                 "inputs": [{
                     "id": params.get("source_asset_id"),
-                    "kind": "image",
+                    "kind": media_kind,
                     "uri": params.get("source_filename") or result.get("original"),
                     "role": "source",
                 }],
                 "parents": [{
                     "id": params.get("source_asset_id"),
-                    "kind": "image",
+                    "kind": media_kind,
                     "uri": params.get("source_filename") or result.get("original"),
                     "role": "source",
                 }],
@@ -309,7 +318,8 @@ def run_remove_background_job(
                     "width": result.get("width"),
                     "height": result.get("height"),
                     "alpha": result.get("alpha"),
-                    "output": "transparent_png",
+                    "output": "transparent_webm" if media_kind == "video" else "transparent_png",
+                    **({key: result.get(key) for key in ("fps", "duration", "frames", "has_audio", "temporal_smoothing")} if media_kind == "video" else {}),
                 },
             }
             # A missing source ID is only possible for an unmanaged upload;

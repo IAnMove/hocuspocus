@@ -23,6 +23,31 @@ test('twenty cinematic shots are registered, saveable and available to the Wizar
   }
 })
 
+test('wizard screen bindings land on screen.sourceUrl and keep media=screen', () => {
+  const monitor = documentFromWorld3DRequest({
+    type: 'mount_world3d_template',
+    templateId: 'monitor-detail',
+    bindings: { prop: { url: '/api/v1/uploads/show.mp4', media: 'image' } },
+  })
+  assert.equal(monitor.slots[0].media, 'screen')
+  assert.equal(monitor.slots[0].sourceUrl, '')
+  assert.equal(monitor.slots[0].screen.sourceUrl, '/api/v1/uploads/show.mp4')
+  assert.equal(parseScene3DDocument(JSON.parse(JSON.stringify(monitor)))?.slots[0].media, 'screen')
+
+  const room = documentFromWorld3DRequest({
+    type: 'mount_world3d_template',
+    templateId: 'control-room',
+    bindings: { prop: { url: '/api/v1/uploads/wall.mp4' } },
+  })
+  const walls = room.slots.filter(slot => slot.media === 'screen')
+  assert.equal(walls.length, 6)
+  for (const slot of walls) {
+    assert.equal(slot.sourceUrl, '')
+    assert.equal(slot.screen.sourceUrl, '/api/v1/uploads/wall.mp4')
+    assert.equal(slot.media, 'screen')
+  }
+})
+
 test('explicit camera family replaces cinematic framing; malformed and orphaned anchors are rejected', () => {
   const doc = applyScene3DTemplate('face-closeup')
   for (const patch of [{ anchor: 'nose' }, { from: [0, 1, null] }, { targetSlot: 'missing' }, { orbitTurns: '1' }, { relativeToFacing: 1 }]) {

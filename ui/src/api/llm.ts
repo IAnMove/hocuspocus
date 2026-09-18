@@ -68,6 +68,9 @@ export async function writeSong(params: {
 // --- LLM Service ---
 
 export async function generateLlmText(params: {
+  writingProvider?: string
+  writingModel?: string
+  writingBaseUrl?: string
   onMediaEvidence?: (evidence: VisualEvidence[]) => void
   media?: { source: string; kind: 'image' | 'video' }[]
   workspace?: string
@@ -94,6 +97,9 @@ export async function generateLlmText(params: {
       json_schema: params.json_schema,
       media: params.media,
       workspace: params.workspace,
+      writingProvider: params.writingProvider,
+      writingModel: params.writingModel,
+      writingBaseUrl: params.writingBaseUrl,
     }),
   })
   if (!res.ok) {
@@ -131,8 +137,11 @@ export async function unloadLlm(): Promise<void> {
   if (!res.ok) throw new Error('Failed to unload LLM')
 }
 
-export async function fetchLlmModels(provider?: string): Promise<{ models: import('../types').LlmModelOption[] }> {
-  const query = provider ? `?provider=${encodeURIComponent(provider)}` : ''
+export async function fetchLlmModels(provider?: string, url?: string): Promise<{ models: import('../types').LlmModelOption[] }> {
+  const params = new URLSearchParams()
+  if (provider) params.set('provider', provider)
+  if (url) params.set('url', url)
+  const query = params.toString() ? `?${params}` : ''
   const res = await fetch(`${BASE}/api/v1/llm/models${query}`)
   if (!res.ok) throw new Error('Failed to fetch LLM models')
   return res.json()

@@ -1,0 +1,308 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "portal-rides-downhill",
+  "title": "Downhill · La carretera continúa",
+  "description": "Un salto a velocidad natural. El asfalto sigue bajando mientras el mar se transforma en un cielo de nubes pintadas.",
+  "includeAssets": true,
+  "createdAt": "2026-09-15T23:01:46.229169+00:00",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6.533333333333333,
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0,
+      "floorStyle": "road",
+      "floorColor": "#222233",
+      "road": {
+        "speed": 5,
+        "slope": 12,
+        "offset": 0
+      }
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-coast-0.png",
+        "position": [
+          0,
+          -6.103072599586524,
+          -8
+        ],
+        "scale": 8.203072599586523,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        },
+        "screen": {
+          "sourceUrl": "/examples/moving-cutouts/skate-coast.mp4",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 32,
+          "height": 18,
+          "style": "frameless",
+          "fit": "cover",
+          "start": 0,
+          "speed": 1,
+          "loop": true,
+          "flipY": false
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/moving-cutouts/skate-illustration-motion.png",
+        "position": [
+          0.35,
+          0.07439479658450773,
+          0
+        ],
+        "scale": 1.35,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.18,
+          "tint": "#ffffff",
+          "roll": 12
+        },
+        "screen": {
+          "sourceUrl": "/examples/portal-rides/skater-48fps.webm",
+          "media": "video",
+          "mode": "mesh",
+          "targetMesh": "SCREEN_CONTENT",
+          "anchor": "",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "pitch": 0,
+          "yaw": 0,
+          "roll": 0,
+          "width": 2,
+          "height": 3,
+          "style": "frameless",
+          "fit": "contain",
+          "start": 0,
+          "speed": 1,
+          "loop": false,
+          "flipY": false,
+          "transparent": true
+        },
+        "motion": {
+          "to": [
+            -0.6,
+            -0.12753393700201326,
+            0
+          ],
+          "faceTravel": false,
+          "easing": "linear"
+        }
+      }
+    ],
+    "camera": {
+      "family": "fixed",
+      "frameFormat": "portrait",
+      "eye": [
+        0,
+        2.1,
+        10
+      ],
+      "look": [
+        0,
+        2.1,
+        0
+      ],
+      "fov": 49
+    },
+    "worldSfx": [
+      {
+        "id": "world-window",
+        "kind": "media_portal",
+        "label": "Portal · del mar al cielo",
+        "position": {
+          "x": 1.5,
+          "y": 4.8999999999999995,
+          "z": -1.2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ffe39a",
+        "scale": 0.01,
+        "intensity": 0.65,
+        "seed": 414,
+        "start": 0,
+        "end": 6.533333333333333,
+        "sound": false,
+        "volume": 0,
+        "sourceUrl": "/examples/moving-cutouts/skate-clouds.mp4",
+        "motion": [
+          {
+            "time": 0,
+            "position": {
+              "x": 1.5,
+              "y": 4.8999999999999995,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": 0,
+            "easing": "smooth"
+          },
+          {
+            "time": 0.55,
+            "position": {
+              "x": 1.5,
+              "y": 4.8999999999999995,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": 0.12,
+            "easing": "smooth"
+          },
+          {
+            "time": 1.25,
+            "position": {
+              "x": -0.9,
+              "y": 3.4,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 230
+            },
+            "scale": 0.55,
+            "easing": "smooth"
+          },
+          {
+            "time": 2.2,
+            "position": {
+              "x": -1.6,
+              "y": 0.7499999999999999,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 470
+            },
+            "scale": 1.55,
+            "easing": "smooth"
+          },
+          {
+            "time": 2.65,
+            "position": {
+              "x": -1.25,
+              "y": 0.7000000000000001,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 540
+            },
+            "scale": 1.85,
+            "easing": "smooth"
+          },
+          {
+            "time": 3.0,
+            "position": {
+              "x": -0.6,
+              "y": 1.4,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 560
+            },
+            "scale": 5,
+            "easing": "smooth"
+          },
+          {
+            "time": 3.45,
+            "position": {
+              "x": 0,
+              "y": 2.1,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 570
+            },
+            "scale": 24,
+            "easing": "smooth"
+          },
+          {
+            "time": 6.533333333333333,
+            "position": {
+              "x": 0,
+              "y": 2.1,
+              "z": -1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 570
+            },
+            "scale": 24,
+            "easing": "smooth"
+          }
+        ],
+        "mediaProjection": "screen",
+        "mediaPlayback": {
+          "start": 0,
+          "speed": 1,
+          "loop": true
+        }
+      }
+    ],
+    "effects": []
+  }
+}

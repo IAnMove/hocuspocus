@@ -1,0 +1,86 @@
+{
+  "button": "Ayuda",
+  "title": "Cómo usar HocusPocus",
+  "close": "Cerrar ayuda",
+  "openAria": "Abrir el tutorial de HocusPocus",
+  "languageLabel": "Idioma del tutorial",
+  "draft": "Guía dentro de la app. Sigue el layout actual: se trabaja en el área grande.",
+  "nav": {
+    "start": "Layout",
+    "wizard": "Mago",
+    "direct": "Generación directa",
+    "queue": "Cola",
+    "studios": "Estudios",
+    "faces": "Caras que hablan",
+    "tijeral": "Recortable",
+    "video3d": "Video 3D",
+    "production": "Producción",
+    "media": "Biblioteca",
+    "settings": "Ajustes",
+    "examples": "Ejemplos reales"
+  },
+  "start": {
+    "title": "Dónde está cada cosa",
+    "body": "El rail izquierdo es Preguntar al mago. Arriba: Generación directa, Estudios, Producción y Media. El área grande es donde se trabaja: formularios, estudios y galería comparten ese hueco.\n\nGeneración directa ya no abre una segunda columna. Al pulsarla, el formulario aparece en el área grande, con los resultados al lado si hay sitio.\n\nEl nombre de carpeta arriba a la derecha es la carpeta de salida (dónde se escriben los archivos). Workspaces en la navegación son colecciones de referencias, no esa carpeta."
+  },
+  "wizard": {
+    "title": "Preguntar al mago",
+    "body": "Abre el rail de la izquierda. Describe lo que quieres en tu idioma. El mago rellena el formulario visible y puede lanzar la generación si se lo pides.\n\nNo sustituye a Estudios: Story Lab, Series, Cómics y Video 3D tienen controles grandes propios. Usa el mago para pasar de lenguaje a acción; usa el estudio cuando quieras todos los campos delante."
+  },
+  "direct": {
+    "title": "Generación directa",
+    "body": "Imagen, Vídeo, Audio, 3D, Edición y Herramientas. Los submodos (Locución/Música/SFX, Frames/Multi-Shot, Ampliar…) cuelgan de esas pestañas.\n\nElige modelo, escribe el prompt, pulsa Go. El trabajo sale en Activity. No arranques MiniMax H3 si otro modelo pesado sigue cargado y la RAM ya va justa."
+  },
+  "queue": {
+    "title": "Activity y la cola",
+    "body": "Activity (abajo a la izquierda y la pestaña de arriba) lista lo que corre, espera o ya acabó. Puedes cancelar, reintentar o inspeccionar sin salir de la pantalla.\n\nSi la máquina se interrumpió, un diálogo puede ofrecer recuperar la cola. Eso es global: en un install compartido no recuperes trabajos ajenos."
+  },
+  "studios": {
+    "title": "Estudios",
+    "body": "Story Lab, Series Lab, Cómics, Character Creator, Video 2.5D, Video 3D, Reemplazar personaje y Animate. Cada estudio ocupa el área grande.\n\nSi solo quieres una imagen o un clip suelto, vuelve a Generación directa."
+  },
+  "faces": {
+    "title": "Caras que hablan (pack 9×6)",
+    "body": "En Character Creator abre Lipsync face (cube plane). Genera una textura cuadrada del frente del cubo (ojos, nariz, boca en reposo; sin cabeza redonda). Luego stills de visemas y expresiones.\n\nHablar no debe cambiar la expresión: el pack es una matriz, rest/M/A/E/I/O/U/F/L × neutral/happy/angry/worried/surprised/sleepy. El color de piel se bloquea al reposo para que la cara no parpadee. Build 9×6 pack monta la hoja. Prepare 2D speech es otro camino de marioneta y no necesita un vídeo 360."
+  },
+  "tijeral": {
+    "title": "Ejemplo recortable (Tijeral)",
+    "body": "Story Lab tiene Load Tijeral cut-paper example. Es animación limitada original, no un clon de otra serie. Carga historia, marionetas y planos editables. No es una pestaña de primer nivel."
+  },
+  "video3d": {
+    "title": "Video 3D, cine y SFX",
+    "body": "Video 3D es el editor de mundo real (metros, cámaras, objetos). Video 2.5D son placas y capas.\n\nDentro de Video 3D: biblioteca de planos, voz y lipsync, entorno cinematográfico (fondo ilustrado, no una ciudad 3D completa), Scene SFX y World SFX. Las plantillas de cine viven aquí, no como destino propio de la navegación."
+  },
+  "production": {
+    "title": "Director y el editor",
+    "body": "Director convierte una canción o historia en un pipeline de videoclip. Video Editor corta, recorta y exporta. Productions guarda flujos de vídeo: está vacío hasta que lances Director una vez."
+  },
+  "media": {
+    "title": "Biblioteca",
+    "body": "Media es la galería: Imágenes, Vídeos, Audio, Escenas, Favoritos y el resto. Los filtros solo cambian lo que lista el área grande. Abrir Generación directa no tira esos archivos; siguen en la carpeta."
+  },
+  "settings": {
+    "title": "Ajustes, idioma y modelos",
+    "body": "ES/EN arriba a la derecha cambia solo las etiquetas. Prompts y nombres de archivo se quedan como los escribiste.\n\nAjustes → Rendimiento es VRAM y perfiles. Integraciones es claves LLM y proveedores. Activa los modelos que tengas instalados. El modo desarrollador enseña herramientas internas; déjalo apagado en uso normal."
+  },
+  "examples": {
+    "title": "Salidas reales de esta máquina",
+    "body": "Un still real de Flux 2 Klein 9B, un Lanczos ×2, un instrumental ACE-Step de 20 s y un clip MiniMax H3 de 5 s del mismo mago de juguete. Demuestran que el camino funciona; no son una biblia de estilo."
+  },
+  "images": {
+    "directImage": "Generación directa · Imagen en el área grande",
+    "directVideo": "Generación directa · Vídeo",
+    "directMusic": "Generación directa · Música",
+    "wizard": "Rail Preguntar al mago abierto",
+    "storyLab": "Story Lab, con el botón del ejemplo Tijeral",
+    "characterCreator": "Character Creator con el pack de cara 9×6",
+    "video3d": "Estudio Video 3D",
+    "director": "Director",
+    "media": "Media · Imágenes",
+    "activity": "Activity",
+    "settings": "Ajustes",
+    "mobile": "Layout estrecho",
+    "exampleImage": "Still de ejemplo Flux 2 Klein 9B",
+    "exampleVideo": "Fotograma del clip MiniMax H3 de ejemplo"
+  }
+}

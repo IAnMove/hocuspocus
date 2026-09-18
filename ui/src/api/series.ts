@@ -136,6 +136,7 @@ export async function importSeriesAsset(
     kind?: import('../features/series/types').SeriesAsset['kind']
     referenceRole?: string
     metadata?: Record<string, unknown>
+    asTake?: boolean
   },
 ): Promise<{
   asset: import('../features/series/types').SeriesAsset
@@ -148,6 +149,12 @@ export async function importSeriesAsset(
       body: JSON.stringify({ workspace, ...input }),
     },
   ), 'Could not import Series reference')
+}
+
+export async function refreshSeriesEpisodeReferences(workspace: string, seriesId: string, episodeId: string, baseRevision: number): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/references/refresh`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, baseRevision }),
+  }), 'Could not update episode references')
 }
 
 export async function saveSeriesEpisode(

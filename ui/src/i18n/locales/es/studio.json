@@ -1,4 +1,11 @@
 {
+  "groups": {
+    "help": "Completa entrada e instrucciones y ejecuta. Los resultados quedan al lado de este formulario cuando hay espacio.",
+    "input": "Entrada y referencias",
+    "instructions": "Instrucciones",
+    "model": "Modelo y opciones",
+    "run": "Ejecución"
+  },
   "chrome": {
     "uploading": "Subiendo…",
     "optional": "Opcional",
@@ -48,7 +55,9 @@
     "referenceHint": "Añade al menos una referencia de imagen o vídeo. El audio no puede ser la única referencia.",
     "queuedCount": "{{count}} en cola",
     "queueCount": "Encolar {{count}}",
-    "goCount": "Ir ({{count}})"
+    "goCount": "Ir ({{count}})",
+    "localUnavailable": "La generación local necesita NVIDIA",
+    "localUnavailableHint": "Este Mac sirve para editar y usar proveedores remotos. Abre el proyecto en un host NVIDIA Windows/Linux para generar en local."
   },
   "prompt": {
     "placeholderImage": "Describe tu imagen...",
@@ -341,16 +350,18 @@
     "upscaleClip": "Escalar clip",
     "upscaleImage": "Escalar imagen",
     "replaceVoiceAction": "Sustituir voz",
-    "removeBackgroundInstruction": "Instrucción opcional",
-    "removeBackgroundInstructionPlaceholder": "Por ejemplo: conserva el pelo fino y los bordes transparentes",
-    "removeBackgroundHint": "Crea una copia PNG transparente y mantiene intacta la imagen original.",
-    "removeBackgroundNeedsSource": "Elige una imagen de la biblioteca o sube una antes de ejecutar esta herramienta.",
+    "removeBackgroundInstruction": "Notas (se guardan con el resultado)",
+    "removeBackgroundInstructionPlaceholder": "Notas opcionales sobre este recorte; no controlan el modelo de segmentación.",
+    "removeBackgroundHint": "Crea un PNG transparente de una imagen o un WebM transparente de un vídeo. Conserva el original y el audio del vídeo. Puedes colocar el resultado sobre otras escenas.",
+    "removeBackgroundNeedsSource": "Elige una imagen o un vídeo de la biblioteca, o súbelo, antes de ejecutar la herramienta.",
     "removeBackgroundAction": "Quitar fondo",
     "submittingRemoveBackground": "Enviando la eliminación de fondo…",
     "queuedRemoveBackground": "Eliminación de fondo en cola…",
     "removeBackgroundFailed": "Falló la eliminación de fondo",
     "imageAssetsFailed": "No se pudo cargar la biblioteca de imágenes.",
-    "sourceUploadFailed": "Elige un archivo de imagen o vídeo compatible."
+    "sourceUploadFailed": "Elige un archivo de imagen o vídeo compatible.",
+    "removeBackgroundVideoHint": "Vídeo: se procesa cada fotograma y se estabilizan suavemente pequeños cambios del recorte. Hasta 60 segundos / 1800 fotogramas; lado máximo de salida: 1920 px. Revisa pelo, telas y objetos pequeños sobre un fondo de contraste.",
+    "selectLibraryMedia": "Elige una imagen o un vídeo"
   },
   "post": {
     "title": "Posprocesado",
@@ -821,6 +832,49 @@
     "unmeasured": "No se midió esta variante en la comparativa actual.",
     "audioLimit": "En estas pruebas hubo habla inventada al final. El modo rápido no garantiza un diálogo limpio."
   },
+  "modelCatalog": {
+    "prunedHint": "Pruned · Modelo recortado. Menor tamaño de pesos que Full; el consumo depende de la configuración.",
+    "fullHint": "Full · Modelo completo. Opción avanzada: puede aumentar la presión de RAM sin mejorar necesariamente el resultado.",
+    "fastHint": "Fast · Receta de velocidad. Genera en menos pasos; puede perder algo de calidad.",
+    "legacyHint": "Legacy · Implementación anterior para compatibilidad.",
+    "distilledHint": "Distilled · Variante acelerada. Menos pasos que el modelo completo; puede perder algo de calidad.",
+    "quantizedHint": "Quantized · Pesos más pequeños (INT8/FP8/INT4). Menos VRAM; ligero compromiso de calidad.",
+    "ggufHint": "GGUF · Pesos cuantizados de la comunidad. Menos VRAM que el checkpoint completo.",
+    "nvfp4Hint": "NVFP4 · Formato NVIDIA de 4 bits. Más rápido en RTX 50; en otras GPU puede ir más lento.",
+    "smallHint": "Compacto · Menos parámetros. Menos VRAM; menos detalle que la variante grande.",
+    "editHint": "Edit · Modifica una imagen o un vídeo existente en lugar de generar desde cero.",
+    "standardHint": "Standard · Pesos por defecto de esta familia. El consumo depende de la configuración.",
+    "toolHint": "Herramienta · Pesos auxiliares, no un modelo de generación. Se usa para tareas como el rigging.",
+    "requirements": "Requisitos mínimos",
+    "vramBadge": "VRAM ~{{vram}} GB",
+    "vram": "VRAM ~{{vram}} GB con un perfil de offload de memoria.",
+    "vramComfort": "Unos {{vram}} GB de VRAM resultan más cómodos y rápidos.",
+    "ram": "RAM del sistema ~{{ram}} GB.",
+    "storage": "Disco ~{{storage}} GB para la primera descarga de pesos.",
+    "limit": "Mínimos típicos con cuantización y offload, no un pico medido. El consumo cambia con la resolución, la duración, el codificador y el perfil. Hace falta una GPU NVIDIA con CUDA.",
+    "capability": {
+      "videoT2v": "Texto a vídeo. Crea un clip solo con el prompt.",
+      "videoI2v": "Imagen a vídeo. Anima un fotograma inicial.",
+      "videoBoth": "Vídeo desde texto o desde un fotograma inicial.",
+      "videoFirstLast": "Vídeo a partir de un fotograma inicial, uno final, o ambos.",
+      "videoAudio": "Vídeo con banda sonora nativa a partir del prompt.",
+      "videoAudioI2v": "Vídeo y audio nativo a partir de un fotograma inicial y el prompt.",
+      "videoAudioFirstLast": "Vídeo y audio nativo a partir de un fotograma inicial, uno final, o ambos.",
+      "videoTalking": "Vídeo de personaje que habla. Sincroniza labios con voz o con un vídeo guía.",
+      "videoEdit": "Edición de vídeo. Cambia un personaje, estilo o zona conservando el movimiento original.",
+      "videoControl": "Vídeo controlado. Sigue un vídeo guía, una pose o una composición.",
+      "image": "Texto a imagen. Crea un fotograma a partir del prompt.",
+      "imageEdit": "Edición de imagen. Cambia una foto existente con una instrucción o un mapa de control.",
+      "imageRefs": "Generación de imagen con referencias para identidad o estilo.",
+      "music": "Generación de música. Crea una canción a partir de letra y una descripción de estilo.",
+      "speech": "Síntesis de voz. Convierte texto en voz hablada.",
+      "sfx": "Efectos de sonido. Crea audio que encaja con un vídeo o una descripción.",
+      "model3d": "Malla 3D a partir de texto o de una imagen. Exporta GLB para Vídeo 3D y animación.",
+      "model3dImage": "Malla 3D a partir de una sola imagen. No usa prompts de texto.",
+      "model3dMultiview": "Malla 3D a partir de las vistas frontal, izquierda, derecha y trasera.",
+      "tool": "Modelo auxiliar. No genera un clip; prepara otro recurso (por ejemplo un esqueleto)."
+    }
+  },
   "characterReplacement": {
     "title": "Sustituir personaje",
     "intro": "Elige un fotograma claro del vídeo, crea la imagen con el personaje sustituto y úsala para transformar el vídeo con Viggle.",
@@ -995,5 +1049,29 @@
     "panelUnavailable": "El panel de efectos de sonido no está disponible. Abre Audio → SFX y vuelve a intentarlo.",
     "duration": "Duración: {{seconds}} s",
     "videoDuration": "El vídeo de salida conserva la duración del vídeo fuente y sustituye su audio."
+  },
+  "yue2": {
+    "planning": "Planificación musical",
+    "chords": "Melodía y acordes",
+    "melody": "Solo melodía",
+    "direct": "Generación directa",
+    "durationHint": "La duración es un límite máximo: la canción puede terminar antes. Escribe la letra y describe el sonido en Estilo musical.",
+    "license": "Pesos CC BY-NC 4.0: uso no comercial."
+  },
+  "auk": {
+    "mode": "Modo AuK",
+    "textMode": "Crear voz desde instrucciones",
+    "sourceMode": "Clonar, editar o limpiar una grabación",
+    "source": "Audio de referencia o grabación original",
+    "hint": "Escribe la tarea completa en el prompt. Empieza con 5 segundos; con audio se usa el inicio del clip y la salida no supera su duración. AuK crea una grabación nueva: revisa las palabras y la voz.",
+    "examples": "Ejemplos de instrucciones",
+    "create": "Say \"Welcome back.\" in a warm, calm female voice.",
+    "clone": "Say the following with the same voice: \"Welcome back.\"",
+    "edit": "Replace \"tomorrow\" with \"next week\", keeping the same speaker and tone.",
+    "clean": "Remove background noise and reverberation while preserving all spoken words and speakers.",
+    "separate": "Keep only the second speaker in order of appearance and remove the other speakers.",
+    "language": "El proveedor documenta inglés y chino; el español no está validado. El componente Qwen tiene condiciones de investigación/evaluación; consulta su licencia para uso comercial.",
+    "steps": "Pasos de síntesis",
+    "guidance": "Intensidad de seguimiento de instrucciones"
   }
 }

@@ -194,7 +194,8 @@ def test_audio_trim_and_analysis_endpoints_use_the_shared_resolver():
 
 
 def test_story_cover_jobs_use_the_shared_cover_resolver():
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+    story_music = ROOT / "app" / "routers" / "story_music.py"
+    tree = ast.parse(story_music.read_text(encoding="utf-8"), filename=str(story_music))
     functions = {
         node.name: node
         for node in tree.body

@@ -41,6 +41,7 @@ test('Series Shots controls have programmatic names and selection state', async 
   }
   const episode = { id: 'episode-1', title: 'Episode 1', shots: [shot] }
   const series = {
+    canon: { approval: 'approved', revision: 1 },
     id: 'series-1', title: 'Series', bestEffortLipSyncAcknowledged: true,
     characters: [], locations: [], assets: {
       'asset-1': { id: 'asset-1', kind: 'image' },
@@ -50,6 +51,7 @@ test('Series Shots controls have programmatic names and selection state', async 
     workspace="default"
     series={series}
     episode={episode}
+    updateSeries={() => {}}
     updateEpisode={() => {}}
     replaceSeries={() => {}}
     saveNow={async () => ({})}

@@ -1,0 +1,386 @@
+{
+  "version": 1,
+  "title": "Umbrales de gigantes",
+  "items": [
+    {
+      "id": "dark-living-sleeping-titan",
+      "number": 1,
+      "title": "El titán dormido",
+      "titleEn": "The Sleeping Titan",
+      "description": "Marfil contra musgo; un caballero ante una criatura del tamaño de una montaña.",
+      "colors": [
+        "#393e37",
+        "#b6db9b"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-sleeping-titan.mp4",
+      "poster": "../dark-fantasy/dark-living-sleeping-titan.png",
+      "template": "../dark-fantasy/dark-living-sleeping-titan.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-sleeping-titan.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-sleeping-titan-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-sleeping-titan-frame.jpg"
+    },
+    {
+      "id": "dark-living-bell-of-ash",
+      "number": 2,
+      "title": "La campana de ceniza",
+      "titleEn": "The Ash Bell",
+      "description": "Un campanario carbonizado se abre sobre un desierto de ceniza y oro.",
+      "colors": [
+        "#272529",
+        "#eda642"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-bell-of-ash.mp4",
+      "poster": "../dark-fantasy/dark-living-bell-of-ash.png",
+      "template": "../dark-fantasy/dark-living-bell-of-ash.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-bell-of-ash.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-bell-of-ash-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-bell-of-ash-frame.jpg"
+    },
+    {
+      "id": "dark-living-antler-moon",
+      "number": 3,
+      "title": "La luna entre astas",
+      "titleEn": "Moon Among Antlers",
+      "description": "Raíces negras, luna azul y un ciervo imposible emergiendo de la niebla.",
+      "colors": [
+        "#252e46",
+        "#81d9e8"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-antler-moon.mp4",
+      "poster": "../dark-fantasy/dark-living-antler-moon.png",
+      "template": "../dark-fantasy/dark-living-antler-moon.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-antler-moon.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-antler-moon-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-antler-moon-frame.jpg"
+    },
+    {
+      "id": "dark-living-drowned-king",
+      "number": 4,
+      "title": "El rey sumergido",
+      "titleEn": "The Drowned King",
+      "description": "Oleaje turquesa detrás de un palacio hundido, con una corona gigantesca.",
+      "colors": [
+        "#263e40",
+        "#4be6c8"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-drowned-king.mp4",
+      "poster": "../dark-fantasy/dark-living-drowned-king.png",
+      "template": "../dark-fantasy/dark-living-drowned-king.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-drowned-king.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-drowned-king-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-drowned-king-frame.jpg"
+    },
+    {
+      "id": "dark-living-red-pilgrim",
+      "number": 5,
+      "title": "El peregrino rojo",
+      "titleEn": "The Red Pilgrim",
+      "description": "Un portal de arenisca encuadra la marcha lenta de un gigante remoto.",
+      "colors": [
+        "#482a28",
+        "#e79366"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-red-pilgrim.mp4",
+      "poster": "../dark-fantasy/dark-living-red-pilgrim.png",
+      "template": "../dark-fantasy/dark-living-red-pilgrim.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-red-pilgrim.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-red-pilgrim-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-red-pilgrim-frame.jpg"
+    },
+    {
+      "id": "dark-living-last-aqueduct",
+      "number": 6,
+      "title": "El último acueducto",
+      "titleEn": "The Last Aqueduct",
+      "description": "Ruinas blancas y agua azul suspendidas sobre un abismo.",
+      "colors": [
+        "#384555",
+        "#7abfe9"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-last-aqueduct.mp4",
+      "poster": "../dark-fantasy/dark-living-last-aqueduct.png",
+      "template": "../dark-fantasy/dark-living-last-aqueduct.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-last-aqueduct.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-last-aqueduct-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-last-aqueduct-frame.jpg"
+    },
+    {
+      "id": "dark-living-ember-heart",
+      "number": 7,
+      "title": "Corazón de brasa",
+      "titleEn": "Heart of Embers",
+      "description": "Un santuario negro protege el corazón vivo de una montaña.",
+      "colors": [
+        "#302425",
+        "#ff783b"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-ember-heart.mp4",
+      "poster": "../dark-fantasy/dark-living-ember-heart.png",
+      "template": "../dark-fantasy/dark-living-ember-heart.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-ember-heart.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-ember-heart-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-ember-heart-frame.jpg"
+    },
+    {
+      "id": "dark-living-violet-oracle",
+      "number": 8,
+      "title": "El oráculo violeta",
+      "titleEn": "The Violet Oracle",
+      "description": "Amatista y hueso frente a un cielo donde flotan medusas colosales.",
+      "colors": [
+        "#382b50",
+        "#c2a0fc"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-violet-oracle.mp4",
+      "poster": "../dark-fantasy/dark-living-violet-oracle.png",
+      "template": "../dark-fantasy/dark-living-violet-oracle.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-violet-oracle.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-violet-oracle-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-violet-oracle-frame.jpg"
+    },
+    {
+      "id": "dark-living-winter-shoulder",
+      "number": 9,
+      "title": "Sobre el hombro del invierno",
+      "titleEn": "On Winter’s Shoulder",
+      "description": "Una fortaleza parece diminuta junto a un guardián helado.",
+      "colors": [
+        "#364552",
+        "#a4eaff"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-winter-shoulder.mp4",
+      "poster": "../dark-fantasy/dark-living-winter-shoulder.png",
+      "template": "../dark-fantasy/dark-living-winter-shoulder.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-winter-shoulder.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-winter-shoulder-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-winter-shoulder-frame.jpg"
+    },
+    {
+      "id": "dark-living-thorn-crown",
+      "number": 10,
+      "title": "La corona de espinas",
+      "titleEn": "The Thorn Crown",
+      "description": "Espinas oscuras contra un jardín rojo que todavía respira.",
+      "colors": [
+        "#422536",
+        "#fd7498"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-thorn-crown.mp4",
+      "poster": "../dark-fantasy/dark-living-thorn-crown.png",
+      "template": "../dark-fantasy/dark-living-thorn-crown.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-thorn-crown.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-thorn-crown-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-thorn-crown-frame.jpg"
+    },
+    {
+      "id": "dark-living-black-tide",
+      "number": 11,
+      "title": "La marea negra",
+      "titleEn": "The Black Tide",
+      "description": "Ventanas de hueso y un leviatán bajo el agua luminosa.",
+      "colors": [
+        "#283b42",
+        "#81dfc9"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-black-tide.mp4",
+      "poster": "../dark-fantasy/dark-living-black-tide.png",
+      "template": "../dark-fantasy/dark-living-black-tide.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-black-tide.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-black-tide-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-black-tide-frame.jpg"
+    },
+    {
+      "id": "dark-living-golden-ruin",
+      "number": 12,
+      "title": "La ruina dorada",
+      "titleEn": "The Golden Ruin",
+      "description": "Un observatorio de azufre contempla un sol atrapado en anillos de piedra.",
+      "colors": [
+        "#49402c",
+        "#ffdc70"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-golden-ruin.mp4",
+      "poster": "../dark-fantasy/dark-living-golden-ruin.png",
+      "template": "../dark-fantasy/dark-living-golden-ruin.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-golden-ruin.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-golden-ruin-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-golden-ruin-frame.jpg"
+    },
+    {
+      "id": "dark-living-hollow-saint",
+      "number": 13,
+      "title": "El santo hueco",
+      "titleEn": "The Hollow Saint",
+      "description": "Una figura vacía custodia montañas cubiertas de nubes.",
+      "colors": [
+        "#3c4147",
+        "#d4dcbd"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-hollow-saint.mp4",
+      "poster": "../dark-fantasy/dark-living-hollow-saint.png",
+      "template": "../dark-fantasy/dark-living-hollow-saint.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-hollow-saint.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-hollow-saint-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-hollow-saint-frame.jpg"
+    },
+    {
+      "id": "dark-living-fungal-throne",
+      "number": 14,
+      "title": "El trono del micelio",
+      "titleEn": "The Mycelium Throne",
+      "description": "Un reino subterráneo mezcla hongos luminosos y piedra funeraria.",
+      "colors": [
+        "#293c38",
+        "#9aed88"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-fungal-throne.mp4",
+      "poster": "../dark-fantasy/dark-living-fungal-throne.png",
+      "template": "../dark-fantasy/dark-living-fungal-throne.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-fungal-throne.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-fungal-throne-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-fungal-throne-frame.jpg"
+    },
+    {
+      "id": "dark-living-storm-bridge",
+      "number": 15,
+      "title": "El puente de la tormenta",
+      "titleEn": "The Storm Bridge",
+      "description": "Una pasarela firme frente a nubes enormes y rayos lejanos.",
+      "colors": [
+        "#30334e",
+        "#baa7fa"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-storm-bridge.mp4",
+      "poster": "../dark-fantasy/dark-living-storm-bridge.png",
+      "template": "../dark-fantasy/dark-living-storm-bridge.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-storm-bridge.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-storm-bridge-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-storm-bridge-frame.jpg"
+    },
+    {
+      "id": "dark-living-sand-library",
+      "number": 16,
+      "title": "Los nombres bajo la arena",
+      "titleEn": "Names Beneath the Sand",
+      "description": "Una cámara sellada mira hacia libros de piedra de escala imposible.",
+      "colors": [
+        "#514330",
+        "#e9c883"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-sand-library.mp4",
+      "poster": "../dark-fantasy/dark-living-sand-library.png",
+      "template": "../dark-fantasy/dark-living-sand-library.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-sand-library.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-sand-library-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-sand-library-frame.jpg"
+    },
+    {
+      "id": "dark-living-jade-dragon",
+      "number": 17,
+      "title": "El dragón de jade",
+      "titleEn": "The Jade Dragon",
+      "description": "Un pabellón oscuro ante montañas verdes y un dragón petrificado.",
+      "colors": [
+        "#293f38",
+        "#8de3b5"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-jade-dragon.mp4",
+      "poster": "../dark-fantasy/dark-living-jade-dragon.png",
+      "template": "../dark-fantasy/dark-living-jade-dragon.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-jade-dragon.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-jade-dragon-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-jade-dragon-frame.jpg"
+    },
+    {
+      "id": "dark-living-moon-grave",
+      "number": 18,
+      "title": "La tumba de la luna",
+      "titleEn": "The Moon’s Tomb",
+      "description": "Piedra oscura y una luna caída que ilumina la nieve.",
+      "colors": [
+        "#303448",
+        "#abbfea"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-moon-grave.mp4",
+      "poster": "../dark-fantasy/dark-living-moon-grave.png",
+      "template": "../dark-fantasy/dark-living-moon-grave.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-moon-grave.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-moon-grave-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-moon-grave-frame.jpg"
+    },
+    {
+      "id": "dark-living-copper-trees",
+      "number": 19,
+      "title": "El bosque de cobre",
+      "titleEn": "The Copper Forest",
+      "description": "Troncos negros, hojas metálicas y un centinela oculto entre la niebla.",
+      "colors": [
+        "#44352c",
+        "#f3a768"
+      ],
+      "psx": "atrezzo",
+      "duration": 6,
+      "video": "dark-living-copper-trees.mp4",
+      "poster": "../dark-fantasy/dark-living-copper-trees.png",
+      "template": "../dark-fantasy/dark-living-copper-trees.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-copper-trees.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-copper-trees-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-copper-trees-frame.jpg"
+    },
+    {
+      "id": "dark-living-final-gate",
+      "number": 20,
+      "title": "La puerta del último gigante",
+      "titleEn": "The Last Giant’s Gate",
+      "description": "Un último caballero frente al coloso que sostiene el horizonte.",
+      "colors": [
+        "#3e3d46",
+        "#efca92"
+      ],
+      "psx": "personaje",
+      "duration": 6,
+      "video": "dark-living-final-gate.mp4",
+      "poster": "../dark-fantasy/dark-living-final-gate.png",
+      "template": "../dark-fantasy/dark-living-final-gate.world3d-template.json",
+      "scene": "../dark-fantasy/dark-living-final-gate.world3d.json",
+      "backgroundVideo": "../dark-fantasy/dark-living-final-gate-exterior.mp4",
+      "staticLayer": "../dark-fantasy/dark-living-final-gate-frame.jpg"
+    }
+  ]
+}

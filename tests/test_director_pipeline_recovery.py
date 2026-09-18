@@ -307,3 +307,36 @@ def test_pipeline_list_paginates_newest_first_without_opening_the_rest(tmp_path)
     assert [item["id"] for item in page] == ["newer"]
     rest = director_pipeline.list_pipeline_states(str(tmp_path), "default", limit=1, offset=1)
     assert [item["id"] for item in rest] == ["older"]
+
+
+def test_reconcile_helpers_come_from_pipeline_reconcile():
+    from services.director import pipeline_reconcile
+
+    assert (
+        director_pipeline._reconcile_pipeline_state_file
+        is pipeline_reconcile._reconcile_pipeline_state_file
+    )
+    assert (
+        director_pipeline._normalize_interrupted_repair
+        is pipeline_reconcile._normalize_interrupted_repair
+    )
+    assert (
+        director_pipeline.mark_stale_running_pipeline
+        is pipeline_reconcile.mark_stale_running_pipeline
+    )
+
+
+def test_running_checkpoint_without_registry_is_crashed(tmp_path):
+    pid = "stale-run"
+    state_path = tmp_path / f"_director_pipeline_{pid}.json"
+    state_path.write_text(json.dumps({
+        "pipeline_id": pid,
+        "status": "running",
+        "pipeline_type": "music_video",
+        "clips": [{"index": 0}],
+    }), encoding="utf-8")
+    director_pipeline._pipelines.pop(pid, None)
+    items = director_pipeline.list_pipeline_states(str(tmp_path), "default")
+    assert items[0]["status"] == "crashed"
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert persisted["status"] == "crashed"

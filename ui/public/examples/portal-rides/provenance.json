@@ -1,0 +1,96 @@
+{
+  "pipeline": [
+    "HocusPocus MiniMax image jobs",
+    "HocusPocus H3 Fused Turbo",
+    "HocusPocus RIFE 2x",
+    "HocusPocus video background removal",
+    "HocusPocus World3D native export"
+  ],
+  "jobs": {
+    "skater-rife2": {
+      "job_id": "82233583",
+      "status": "completed",
+      "output_files": [
+        "2026-09-15-22h10m02s_seed916214_Locked-off wide camera, no zoom. The exact same painted illustrated skateboarder stays small enough_upscaled.mp4"
+      ],
+      "processing_time_sec": 12.02
+    },
+    "skater-48fps-cutout": {
+      "job_id": "6ef6a400",
+      "status": "completed",
+      "output_files": [
+        "2026-09-15-22h10m02s_seed916214_Locked-off wide camera, no zoom. The exact same painted illustrated skateboarder stays small enough_upscaled.no-background-d36eefe6.webm"
+      ],
+      "processing_time_sec": 234.38
+    },
+    "ashen-dragon-flight-wide": {
+      "job_id": "350577b1",
+      "status": "completed",
+      "output_files": [
+        "2026-09-16-00h47m50s_seed916342_Fixed very wide shot, static camera, no zoom. This exact SMALL handpainted dragon and its mounted ar.mp4"
+      ],
+      "processing_time_sec": 150.04
+    },
+    "dragon-wide-smooth": {
+      "job_id": "e88138aa",
+      "status": "completed",
+      "output_files": [
+        "2026-09-16-00h47m50s_seed916342_Fixed very wide shot, static camera, no zoom. This exact SMALL handpainted dragon and its mounted ar_upscaled.mp4",
+        "Portal-Rides-Calzada-descendente-01-Downhill-La-misma-carretera-otro-cielo-20b8e20d0b254b10af2b002e7689b7cf.world3d.scene.json",
+        "Portal-Rides-Calzada-descendente-01-Downhill-La-misma-carretera-otro-cielo-20b8e20d0b254b10af2b002e7689b7cf.world3d.scene.preview.png"
+      ],
+      "processing_time_sec": 15.53
+    },
+    "dragon-wide-cutout": {
+      "job_id": "d516eddb",
+      "status": "completed",
+      "output_files": [
+        "2026-09-16-00h47m50s_seed916342_Fixed very wide shot, static camera, no zoom. This exact SMALL handpainted dragon and its mounted ar_upscaled.no-background-3c25cd5d.webm"
+      ],
+      "processing_time_sec": 266.74
+    }
+  },
+  "publications": [
+    {
+      "clip": 1,
+      "title": "Downhill · La misma carretera, otro cielo",
+      "saved": {
+        "name": "2026-09-16-00h52m48s_world3d-scene_e10f12.mp4",
+        "url": "/api/v1/file/2026-09-16-00h52m48s_world3d-scene_e10f12.mp4",
+        "workspace": "default"
+      },
+      "bytes": 4285869,
+      "elapsedSeconds": 224.55,
+      "scene": {
+        "name": "Portal-Rides-Calzada-descendente-01-Downhill-La-misma-carretera-otro-cielo-20b8e20d0b254b10af2b002e7689b7cf.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Portal-Rides-Calzada-descendente-01-Downhill-La-misma-carretera-otro-cielo-20b8e20d0b254b10af2b002e7689b7cf.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Portal-Rides-Calzada-descendente-01-Downhill-La-misma-carretera-otro-cielo-20b8e20d0b254b10af2b002e7689b7cf.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "clip": 1,
+      "title": "Ash Rider · Vuelo revisado",
+      "saved": {
+        "name": "2026-09-16-01h01m29s_world3d-scene_0e8754.mp4",
+        "url": "/api/v1/file/2026-09-16-01h01m29s_world3d-scene_0e8754.mp4",
+        "workspace": "default"
+      },
+      "bytes": 2390339,
+      "elapsedSeconds": 96.65,
+      "scene": {
+        "name": "Portal-Rides-El-jinete-de-ceniza-01-Ash-Rider-Vuelo-revisado-e3df0c1d39354d5cb60a55bfe959079c.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Portal-Rides-El-jinete-de-ceniza-01-Ash-Rider-Vuelo-revisado-e3df0c1d39354d5cb60a55bfe959079c.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Portal-Rides-El-jinete-de-ceniza-01-Ash-Rider-Vuelo-revisado-e3df0c1d39354d5cb60a55bfe959079c.world3d.scene.preview.png?workspace=default"
+      }
+    }
+  ],
+  "notes": [
+    "Skater uses 48 fps source at speed 1; original .6 speed was removed.",
+    "Dragon uses source 2.4–6.48 seconds at speed .8, avoiding an early matte failure. The source download retains the full take.",
+    "First narrow dragon generation and first full-length composition were rejected during review."
+  ]
+}

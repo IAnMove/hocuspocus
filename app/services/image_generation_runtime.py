@@ -49,8 +49,9 @@ def create_image_generation_commands(runtime):
         from services.studio_image_resources import StudioImageResources
         from services.studio_speech_resources import StudioSpeechResources
         from services.studio_sfx_resources import StudioSfxResources
+        from services.studio_video_resources import StudioVideoResources
         resource_type = {"image": StudioImageResources, "audio": StudioSpeechResources,
-                         "video": StudioSfxResources}[media_kind]
+                         "video": StudioSfxResources, "studio_video": StudioVideoResources}[media_kind]
         return resource_type(
             workspace_dir=runtime["_workspace_dir"], uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
             list_workspaces=runtime["_list_workspaces"], lora_search_dirs=runtime["wgp"].get_lora_search_dirs,
@@ -88,10 +89,14 @@ def create_image_generation_commands(runtime):
     from services.studio_music_spec import freeze_studio_music_spec
     from services.studio_music_preparation import prepare_studio_music
     from routers.studio_music_commands import music_command_catalog
+    from services.video_generation_commands import create_video_operation
 
     operations = {
         "generation.speech": audio_operation(freeze_studio_speech_spec, prepare_studio_speech, speech_command_catalog),
         "generation.music": audio_operation(freeze_studio_music_spec, prepare_studio_music, music_command_catalog),
+        "generation.video": create_video_operation(
+            runtime, resources=lambda: resources("studio_video"), execution_policy=execution_policy,
+        ),
     }
 
     if callable(runtime.get("_run_generation")):

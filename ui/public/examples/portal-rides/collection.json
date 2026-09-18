@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "title": "Portal Rides · Dos viajes",
+  "items": [
+    {
+      "id": "portal-rides-downhill",
+      "number": 1,
+      "title": "Downhill · La carretera continúa",
+      "description": "Un salto a velocidad natural. El asfalto sigue bajando mientras el mar se transforma en un cielo de nubes pintadas.",
+      "colors": [
+        "#277c85",
+        "#efba66"
+      ],
+      "psx": "sin filtro",
+      "duration": 6.53,
+      "video": "downhill.mp4",
+      "poster": "downhill.png",
+      "scene": "downhill.world3d.json",
+      "template": "downhill.world3d-template.json",
+      "actorVideo": "skater-48fps.webm",
+      "tag": "Vídeo 3D · viaje entre capas"
+    },
+    {
+      "id": "portal-rides-ash-rider",
+      "number": 2,
+      "title": "Ash Rider · Del hielo al fuego",
+      "description": "Un caballero cruza una puerta de ceniza sobre su dragón. Nieve, abismos, niebla y una ciudad de lava en capas independientes.",
+      "colors": [
+        "#879aa3",
+        "#ee713b"
+      ],
+      "psx": "sin filtro",
+      "duration": 5.1,
+      "video": "ash-rider.mp4",
+      "poster": "ash-rider.png",
+      "scene": "ash-rider.world3d.json",
+      "template": "ash-rider.world3d-template.json",
+      "actorVideo": "dragon-48fps.webm",
+      "tag": "Vídeo 3D · viaje entre capas"
+    }
+  ]
+}

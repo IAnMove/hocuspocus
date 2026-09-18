@@ -23,7 +23,7 @@ def test_series_lab_is_top_level_immediately_after_story_lab():
 
 def test_client_created_series_entities_use_browser_uuid():
     model = source("model.ts")
-    assert "crypto.randomUUID()" in model
+    assert "randomUuid()" in model
     assert "Math.random()" not in model
 
 

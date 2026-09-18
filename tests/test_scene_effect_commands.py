@@ -23,8 +23,8 @@ def showcase(service, dimension='3d'):
 def test_both_templates_use_all_catalog_effects_and_are_replayable(service):
     for dimension in ('2d', '3d'):
         doc = showcase(service, dimension)
-        assert doc['duration'] == 90
-        assert len(doc['sfx']) == 30
+        assert doc['duration'] == 138
+        assert len(doc['sfx']) == 46
         assert all(cue['sound'] and cue['label'] for cue in doc['sfx'])
         assert doc == showcase(service, dimension)
         assert ('slots' in doc) == (dimension == '3d')
@@ -39,7 +39,7 @@ def test_apply_replaces_exact_cue_preserving_scene_and_caller(service):
     assert original == before
     assert first == service.execute(command)
     actual = first['result']['document']
-    assert len(actual['sfx']) == 30
+    assert len(actual['sfx']) == 46
     assert actual['sfx'][3] == cue
     assert actual['slots'] == original['slots']
     assert not first['result']['saved'] and not first['result']['exported']
@@ -114,9 +114,14 @@ def test_catalog_lists_all_world_kinds(service):
     ops = {item['name']: item for item in command_catalog()}
     assert 'worldKinds' in ops['scenes.effects.catalog']['description']
     assert 'energy_beam' in ops['scenes.effects.catalog']['description']
+    assert 'explosion' in ops['scenes.effects.catalog']['description']
+    assert 'media_portal' in ops['scenes.effects.catalog']['description']
     kinds = service.execute({'version': 1, 'operation': 'scenes.effects.catalog', 'input': {}})['result']['worldKinds']
     assert 'energy_beam' in kinds
     assert 'anime_aura' in kinds
+    assert 'explosion' in kinds
+    assert 'media_portal' in kinds
+    assert 'fire' in kinds
 
 
 def test_speech_rejects_paths_and_unknown_character_before_analysis(service):
@@ -133,7 +138,7 @@ def test_speech_rejects_paths_and_unknown_character_before_analysis(service):
 
 def test_shared_catalog_remains_a_packaged_resource():
     path = Path(__file__).parents[1] / 'app/shared/scene_effects.json'
-    assert len(json.loads(path.read_text())) == 30
+    assert len(json.loads(path.read_text())) == 46
 
 
 def test_speech_append_preserves_previous_voice_and_rejects_overlap():
@@ -148,6 +153,17 @@ def test_speech_append_preserves_previous_voice_and_rejects_overlap():
     assert 'clips' not in original
 
 
+def test_retro_showcase_is_screen_only_and_thirty_seconds(service):
+    scene = service.execute({'version': 1, 'operation': 'scenes.effects.showcase',
+                             'input': {'collection': 'retro', 'dimension': '2d'}})['result']['document']
+    assert scene['duration'] == 30 and len(scene['sfx']) == 10
+    assert [cue['kind'] for cue in scene['sfx']] == [
+        'psx', 'n64', 'nes', 'snes', 'gameboy', 'gameboy_color', 'genesis', 'vhs', 'crt', 'c64']
+    catalog = service.execute({'version': 1, 'operation': 'scenes.effects.catalog', 'input': {}})['result']
+    assert 'psx' not in catalog['worldKinds']
+    assert any(item['id'] == 'psx' for item in catalog['effects'])
+
+
 def test_anime_showcase_uses_36_seconds_and_preserves_longer_authored_scenes(service):
     command = {'version': 1, 'operation': 'scenes.effects.showcase', 'input': {'collection': 'anime'}}
     scene = service.execute(command)['result']['document']
@@ -157,7 +173,7 @@ def test_anime_showcase_uses_36_seconds_and_preserves_longer_authored_scenes(ser
     assert service.execute(command)['result']['document']['duration'] == 72
 
 
-@pytest.mark.parametrize('collection,seconds', [('anime', 36), ('all', 90)])
+@pytest.mark.parametrize('collection,seconds', [('anime', 36), ('retro', 30), ('all', 138)])
 def test_default_2d_showcase_has_no_longer_background_tail(service, collection, seconds):
     scene = service.execute({'version': 1, 'operation': 'scenes.effects.showcase',
                              'input': {'dimension': '2d', 'collection': collection}})['result']['document']
@@ -167,3 +183,60 @@ def test_default_2d_showcase_has_no_longer_background_tail(service, collection, 
     preserved = service.execute({'version': 1, 'operation': 'scenes.effects.showcase',
                                  'input': {'document': scene, 'collection': collection}})['result']['document']
     assert preserved['layers'] == scene['layers']
+
+
+@pytest.mark.parametrize('kind', ['smoke', 'sparks'])
+def test_soft_spatial_effects_roundtrip_through_commands(service, kind):
+    doc = showcase(service)
+    doc['environment'] = {'reflectiveFloor': True, 'platform': True, 'bloom': .48}
+    doc['slots'][0]['appearance'] = {'start': 1, 'duration': .8, 'color': '#83e8ff'}
+    cue = {'id': kind, 'kind': kind, 'start': 0, 'end': 3}
+    result = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                              'input': {'document': doc, 'worldCues': [cue]}})['result']['document']
+    assert result['environment'] == doc['environment']
+    assert result['slots'][0]['appearance'] == doc['slots'][0]['appearance']
+    assert result['worldSfx'][0]['kind'] == kind
+
+
+def test_additive_world_apply_keeps_explosion_and_portal_media(service):
+    doc = showcase(service)
+    blast = {'id': 'blast', 'kind': 'explosion', 'start': 1.05, 'end': 3.4,
+             'position': {'x': 0, 'y': .42, 'z': -.15}, 'scale': 1.8, 'color': '#ff6a32',
+             'intensity': 1.35, 'sound': True, 'volume': .4}
+    with_blast = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                                  'input': {'document': doc, 'worldCues': [blast]}})['result']['document']
+    assert with_blast['worldSfx'][0]['kind'] == 'explosion'
+    portal = {'id': 'tv', 'kind': 'media_portal', 'start': 0, 'end': 3,
+              'sourceUrl': '/examples/tv-head-face.png'}
+    both = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                            'input': {'document': with_blast, 'worldCues': [portal]}})['result']['document']
+    kinds = {cue['kind'] for cue in both['worldSfx']}
+    assert kinds == {'explosion', 'media_portal'}
+    media = next(cue for cue in both['worldSfx'] if cue['kind'] == 'media_portal')
+    assert media['sourceUrl'] == '/examples/tv-head-face.png'
+    again = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                             'input': {'document': both, 'worldCues': [
+                                 {'id': 'ring', 'kind': 'shockwave', 'start': 1, 'end': 2}]}})
+    assert again == service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                                    'input': {'document': both, 'worldCues': [
+                                        {'id': 'ring', 'kind': 'shockwave', 'start': 1, 'end': 2}]}})
+    assert {cue['kind'] for cue in again['result']['document']['worldSfx']} == {
+        'explosion', 'media_portal', 'shockwave'}
+    assert next(cue for cue in again['result']['document']['worldSfx']
+                if cue['kind'] == 'media_portal')['sourceUrl'] == '/examples/tv-head-face.png'
+
+
+@pytest.mark.parametrize('url', [
+    'JavaScript:alert(1)',
+    'blob:http://localhost/abc',
+    'file:///tmp/portal.png',
+    'filesystem:http://localhost/tmp',
+])
+def test_world_portal_media_strips_transient_urls(service, url):
+    doc = showcase(service)
+    cue = {'id': 'tv', 'kind': 'media_portal', 'start': 0, 'end': 2,
+           'sourceUrl': url}
+    result = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                              'input': {'document': doc, 'worldCues': [cue]}})['result']['document']
+    assert result['worldSfx'][0]['kind'] == 'media_portal'
+    assert not result['worldSfx'][0].get('sourceUrl')

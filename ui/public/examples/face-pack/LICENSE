@@ -1,0 +1,15 @@
+CC0 1.0 Universal
+
+The bundled mascot face examples in this folder are dedicated to the public
+domain under CC0 1.0. You may copy, modify, redistribute and use them,
+including commercially, without asking permission and without attribution.
+
+Covered files:
+- `*-pack.png` and `*-visemes.png` (talking-face atlases)
+- `*-talk.mp4` (example lipsync clips)
+- `neutral-vowels.wav` (synthetic vowels)
+
+Not covered:
+- `/examples/tv-head-humanoid.glb` (separate bundled rig)
+
+https://creativecommons.org/publicdomain/zero/1.0/

@@ -1,11 +1,14 @@
 import type { SceneFaceBindingState, SceneLayer } from '../types'
 import type { SceneRecipeInventoryItem } from './sceneRecipe'
+import { usableCharacterAsset, type CharacterKitReviewPolicy } from './characterKitReview'
 import { assertFacePatchPose, facePatchSceneTransform, isFacePatchCompatible, type FacePatchMetadata } from './characterFacePatch'
+import { CHARACTER_MOUTH_STATES, type CharacterMouthState } from './characterMouthStates'
+import { characterRestPoseSource } from './characterRestPose'
+export type { CharacterMouthState } from './characterMouthStates'
 
 export type CharacterKitStyle = 'cutout' | 'children-illustration' | 'anime-2d'
 export type CharacterKitReviewState = 'pending' | 'approved' | 'rejected'
 export type CharacterKitAlphaStatus = 'unknown' | 'transparent' | 'opaque'
-export type CharacterMouthState = 'closed' | 'small' | 'wide' | 'round'
 
 export interface CharacterKitAsset {
   id: string
@@ -17,6 +20,9 @@ export interface CharacterKitAsset {
   prompt?: string
   model?: string
   workspace?: string
+  /** Intrinsic raster dimensions, resolved when mounting the pose. */
+  width?: number
+  height?: number
   facePatch?: FacePatchMetadata
 }
 
@@ -41,6 +47,7 @@ export interface CharacterKit {
   style: CharacterKitStyle
   identityReference?: CharacterKitAsset
   base?: CharacterKitAsset
+  restPose?: { asset: CharacterKitAsset; fingerprint: string }
   poses: Record<string, CharacterKitAsset>
   mouth: Partial<Record<CharacterMouthState, CharacterKitAsset>>
   eyes: Partial<Record<'open' | 'blink', CharacterKitAsset>>
@@ -71,6 +78,50 @@ export interface CharacterKitLibrary {
 }
 
 export const emptyCharacterKitLibrary = (): CharacterKitLibrary => ({ version: 1, revision: 0, activeId: '', kits: {} })
+
+/** Story/Series cast lists every kit. Video 3D talkers may require a saved GLB. */
+export function listCharacterKitsFrom(
+  kits: CharacterKit[],
+  options: { requireSpeech3d?: boolean } = {},
+): CharacterKit[] {
+  const listed = options.requireSpeech3d ? kits.filter(kit => Boolean(kit.speech3d)) : [...kits]
+  return listed.sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
+}
+
+export function listCharacterKits(
+  library: CharacterKitLibrary,
+  options: { requireSpeech3d?: boolean } = {},
+): CharacterKit[] {
+  return listCharacterKitsFrom(Object.values(library.kits), options)
+}
+
+/** Canonical still for MiniMax / Story identity: identity photo, else the base pose. */
+export function characterKitStillSource(kit: CharacterKit): string | undefined {
+  const rest = characterRestPoseSource(kit)
+  if (rest) return rest
+  const asset = kit.identityReference ?? kit.base
+  return asset?.source || undefined
+}
+
+/** TTS lives on the kit. Series provider/voiceId are fallbacks when nothing is linked. */
+export function resolvedCharacterTts(
+  kit?: CharacterKit,
+  fallback?: { provider?: string; voiceId?: string },
+): { source: 'kit' | 'profile' | 'none'; voiceId?: string; voiceName?: string; provider?: string; instructions?: string } {
+  if (kit?.voice) {
+    return {
+      source: 'kit',
+      voiceId: kit.voice.voiceId,
+      ...(kit.voice.model === 'qwen3_tts_base' ? { voiceName: kit.voice.name } : {}),
+      provider: kit.voice.provider,
+      instructions: kit.voice.model === 'qwen3_tts_customvoice' ? kit.voice.instructions : undefined,
+    }
+  }
+  if (fallback?.voiceId) {
+    return { source: 'profile', voiceId: fallback.voiceId, provider: fallback.provider }
+  }
+  return { source: 'none' }
+}
 
 const cleanId = (value: string) => value.trim().toLocaleLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120)
 
@@ -207,7 +258,26 @@ export function characterKitAssetFromLayer(
   }
 }
 
-export function captureCharacterFaceAnchor(pose: SceneLayer, face: SceneLayer): CharacterFaceAnchor {
+export function captureCharacterKitFaceAnchor(kit: CharacterKit, poseId: string, pose: SceneLayer,
+  face: SceneLayer, viewport: { width: number; height: number }): CharacterFaceAnchor {
+  const asset = poseId === 'base' ? kit.base : kit.poses[poseId]
+  const dimensions = asset?.width && asset.height ? { width: asset.width, height: asset.height } : undefined
+  return captureCharacterFaceAnchor(pose, face, dimensions, viewport)
+}
+
+export function captureCharacterFaceAnchor(pose: SceneLayer, face: SceneLayer,
+  source?: { width: number; height: number }, viewport?: { width: number; height: number }): CharacterFaceAnchor {
+  if (source && viewport) {
+    const fit = Math.min(viewport.width / source.width, viewport.height / source.height) * Math.max(.001, pose.transform.scale)
+    const edge = Math.max(source.width, source.height) * fit
+    const dx = (face.transform.x - pose.transform.x) * viewport.width / 100
+    const dy = (face.transform.y - pose.transform.y) * viewport.height / 100
+    const angle = (pose.transform.rotation ?? 0) * Math.PI / 180
+    return { offsetX: (dx * Math.cos(angle) + dy * Math.sin(angle)) * 100 / edge,
+      offsetY: (-dx * Math.sin(angle) + dy * Math.cos(angle)) * 100 / edge,
+      scale: face.transform.scale * Math.min(viewport.width, viewport.height) / edge,
+      rotation: (face.transform.rotation ?? 0) - (pose.transform.rotation ?? 0) }
+  }
   const poseScale = Math.max(.001, pose.transform.scale)
   return {
     offsetX: (face.transform.x - pose.transform.x) / poseScale,
@@ -232,6 +302,19 @@ export function appliedCharacterFaceTransform(
   }
 }
 
+/** Character Creator anchors use a square around the source, not scene percentages. */
+export function fittedCharacterFaceTransform(pose: SceneLayer['transform'], anchor: CharacterFaceAnchor,
+  source: { width: number; height: number }, viewport: { width: number; height: number }): SceneLayer['transform'] {
+  const fit = Math.min(viewport.width / source.width, viewport.height / source.height) * pose.scale
+  const edge = Math.max(source.width, source.height) * fit
+  const angle = (pose.rotation ?? 0) * Math.PI / 180
+  const dx = anchor.offsetX * edge / 100, dy = anchor.offsetY * edge / 100
+  return { x: pose.x + (dx * Math.cos(angle) - dy * Math.sin(angle)) * 100 / viewport.width,
+    y: pose.y + (dx * Math.sin(angle) + dy * Math.cos(angle)) * 100 / viewport.height,
+    scale: anchor.scale * edge / Math.min(viewport.width, viewport.height), opacity: 1,
+    rotation: (pose.rotation ?? 0) + anchor.rotation }
+}
+
 const stateForBinding = (state: CharacterMouthState): SceneFaceBindingState => state
 
 export function mountCharacterKitLayers(
@@ -240,10 +323,11 @@ export function mountCharacterKitLayers(
   transform: SceneLayer['transform'] = { x: 50, y: 55, scale: .72, opacity: 1, rotation: 0 },
   duration = 10,
   viewport = { width: 1280, height: 720 },
+  reviewPolicy: CharacterKitReviewPolicy = 'approved',
 ): SceneLayer[] {
   const poseAsset = poseId === 'base' ? kit.base : kit.poses[poseId]
   if (!poseAsset) throw new Error(`Character Kit “${kit.name}” has no ${poseId} pose.`)
-  if (poseAsset.reviewState !== 'approved') throw new Error(`Review and approve ${poseAsset.name} before mounting it.`)
+  if (!usableCharacterAsset(poseAsset, reviewPolicy)) throw new Error(`Review and approve ${poseAsset.name} before mounting it.`)
   const poseLayerId = `kit-${kit.id}-pose-${cleanId(poseId) || 'base'}`
   const animation = { start: { ...transform }, end: { ...transform }, duration, curve: 'hold' as const }
   const pose: SceneLayer = {
@@ -252,12 +336,14 @@ export function mountCharacterKitLayers(
   }
   const anchors = kit.anchors[poseId] ?? kit.anchors.base
   const mouthAnchor = anchors?.mouth ?? DEFAULT_CHARACTER_MOUTH_ANCHOR
-  const faceTransform = (anchor: CharacterFaceAnchor) => appliedCharacterFaceTransform(transform, anchor)
+  const faceTransform = (anchor: CharacterFaceAnchor) => poseAsset.width && poseAsset.height
+    ? fittedCharacterFaceTransform(transform, anchor, { width: poseAsset.width, height: poseAsset.height }, viewport)
+    : appliedCharacterFaceTransform(transform, anchor)
   const layers: SceneLayer[] = [pose]
   let z = 21
-  for (const state of ['closed', 'small', 'wide', 'round'] as const) {
+  for (const state of CHARACTER_MOUTH_STATES) {
     const asset = kit.mouth[state]
-    if (!asset || asset.reviewState !== 'approved') continue
+    if (!asset || !usableCharacterAsset(asset, reviewPolicy)) continue
     assertFacePatchPose(asset, poseId, poseAsset.source)
     const anchor = anchors?.mouthStates?.[state] ?? mouthAnchor
     const placed = asset.facePatch ? facePatchSceneTransform(transform, anchor, asset.facePatch, viewport) : faceTransform(anchor)

@@ -323,7 +323,8 @@ def test_external_provenance_survives_normalization_and_preserves_context(tmp_pa
     assert normalize_submission_provenance({'tool': 'external_agent'})['tool'] == 'studio'
 
 
-def test_mcp_is_reachable_before_spa_mount(tmp_path):
+@pytest.mark.parametrize('path', ('/api/v1/mcp', '/api/v1/wangp/mcp'))
+def test_mcp_is_reachable_before_spa_mount(tmp_path, path):
     from fastapi import FastAPI
     from fastapi.staticfiles import StaticFiles
     from fastapi.testclient import TestClient
@@ -331,6 +332,43 @@ def test_mcp_is_reachable_before_spa_mount(tmp_path):
     app.include_router(create_wangp_mcp_router(handlers={}, journal_path=tmp_path / 'requests.db', token_getter=lambda: 'test-token'))
     app.mount('/', StaticFiles(directory=tmp_path), name='spa')
     with TestClient(app) as client:
-        response = client.post('/api/v1/wangp/mcp', headers={'Authorization': 'Bearer test-token'}, json={'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'})
+        response = client.post(path, headers={'Authorization': 'Bearer test-token'}, json={'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'})
         assert response.status_code == 200
         assert response.json()['result']['protocolVersion'] == '2025-03-26'
+        assert response.json()['result']['serverInfo']['name'] == 'hocuspocus'
+        stream = client.get(path)
+        assert stream.status_code == 405
+        assert stream.headers['allow'] == 'POST'
+
+
+def test_canonical_and_legacy_urls_share_tools_and_request_journal(tmp_path):
+    from fastapi.testclient import TestClient
+
+    calls = []
+
+    async def submit(request):
+        calls.append(await request.json())
+        return {'job_id': 'task-a'}
+
+    headers = {'Authorization': 'Bearer test-token'}
+    message = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
+        'name': 'generate', 'arguments': {'request_id': 'same-intent', 'params': {
+            'model_type': 'fake', 'prompt': 'literal', 'generation_mode': 'image',
+        }},
+    }}
+    with TestClient(http_app(tmp_path / 'journal.db', submit)) as client:
+        replies, catalogs = [], []
+        for path in ('/api/v1/wangp/mcp', '/api/v1/mcp'):
+            listed = client.post(path, headers=headers, json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'})
+            assert listed.status_code == 200
+            catalogs.append(listed.json()['result'])
+            reply = client.post(path, headers=headers, json=message)
+            assert reply.status_code == 200
+            replies.append(reply.json()['result'])
+            denied = client.post(path, headers={**headers, 'Origin': 'https://foreign.invalid'}, json=message)
+            assert denied.status_code == 403
+        assert catalogs[0] == catalogs[1]
+        assert replies[0] == replies[1]
+        assert not replies[0]['isError']
+        assert json.loads(replies[0]['content'][0]['text']) == {'job_id': 'task-a'}
+        assert len(calls) == 1
