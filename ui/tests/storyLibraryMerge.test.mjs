@@ -29,6 +29,35 @@ const library = (projects, activeId = Object.keys(projects)[0], revision = 0) =>
   activeId,
   projects,
 })
+const pendingSong = {
+  id: 'song-1',
+  name: '',
+  source: '',
+  prompt: 'cinematic dream pop',
+  lyrics: '[Verse]\nLa noche canta',
+  provider: 'minimax',
+  model: 'music-3.0',
+  durationSeconds: 30,
+  createdAt: '2026-09-19T10:00:00Z',
+  status: 'pending',
+}
+const readySong = {
+  ...pendingSong,
+  name: 'opening.wav',
+  source: '/api/v1/file/opening.wav',
+  status: 'ready',
+}
+const storyWithSong = (title, updatedAt, candidate, extra = {}) => ({
+  id: 'story',
+  title,
+  updatedAt,
+  music: {
+    cues: [{ id: 'cue-1', title: 'Opening', candidates: [candidate] }],
+    candidates: [],
+    ...extra.music,
+  },
+  ...extra,
+})
 
 test('keeps the newer local Story and schedules remote sync', async () => {
   const { mergeStoryLibraries } = await import('../src/features/stories/library.ts')
@@ -71,6 +100,58 @@ test('shows an equal-timestamp divergent Story as a conflict without remote sync
   )
   assert.equal(result.library.projects.story.title, 'Local copy')
   assert.deepEqual(result.conflicts.map(conflict => conflict.id), ['story'])
+  assert.equal(result.needsRemoteSync, false)
+})
+
+test('newer local title edit keeps a remotely published song instead of the pending reservation', async () => {
+  const { mergeStoryLibraries } = await import('../src/features/stories/library.ts')
+  const result = mergeStoryLibraries(
+    library({
+      story: storyWithSong('Edited while generating', '2026-09-19T11:05:00Z', pendingSong),
+    }, 'story', 6),
+    library({
+      story: storyWithSong('Night Choir', '2026-09-19T10:00:00Z', readySong),
+    }, 'story', 7),
+  )
+  const cue = result.library.projects.story.music.cues[0]
+  assert.equal(result.library.projects.story.title, 'Edited while generating')
+  assert.equal(cue.candidates[0].status, 'ready')
+  assert.equal(cue.candidates[0].source, '/api/v1/file/opening.wav')
+  assert.equal(cue.candidates[0].name, 'opening.wav')
+  assert.equal(result.conflicts.length, 0)
+  assert.equal(result.needsRemoteSync, true)
+})
+
+test('a published local song is not replaced by a newer remote pending reservation', async () => {
+  const { mergeStoryLibraries } = await import('../src/features/stories/library.ts')
+  const result = mergeStoryLibraries(
+    library({
+      story: storyWithSong('Night Choir', '2026-09-19T10:00:00Z', readySong),
+    }, 'story', 6),
+    library({
+      story: storyWithSong('Retitled remotely', '2026-09-19T11:05:00Z', pendingSong),
+    }, 'story', 7),
+  )
+  const cue = result.library.projects.story.music.cues[0]
+  assert.equal(result.library.projects.story.title, 'Retitled remotely')
+  assert.equal(cue.candidates[0].status, 'ready')
+  assert.equal(cue.candidates[0].source, '/api/v1/file/opening.wav')
+  assert.equal(result.conflicts.length, 0)
+})
+
+test('pending vs ready on an otherwise equal Story is not a conflict', async () => {
+  const { mergeStoryLibraries } = await import('../src/features/stories/library.ts')
+  const result = mergeStoryLibraries(
+    library({
+      story: storyWithSong('Night Choir', '2026-09-19T10:00:00Z', pendingSong),
+    }, 'story', 6),
+    library({
+      story: storyWithSong('Night Choir', '2026-09-19T10:00:00Z', readySong),
+    }, 'story', 7),
+  )
+  const cue = result.library.projects.story.music.cues[0]
+  assert.equal(cue.candidates[0].status, 'ready')
+  assert.equal(result.conflicts.length, 0)
   assert.equal(result.needsRemoteSync, false)
 })
 
