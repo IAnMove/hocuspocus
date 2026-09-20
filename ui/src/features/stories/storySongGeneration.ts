@@ -140,6 +140,11 @@ async function persistCueCandidate(
   const savedCandidate = cueCandidate(saved, cueId, candidateId)
   const latest = useStoryStore.getState()
   if (latest.workspace !== workspace) return saved
+  // A 409 rebase PUTs remote-only siblings. Dropping them here leaves the
+  // next persist (ready/job) and autosave to rewrite the library without them.
+  const remoteOnly = Object.fromEntries(
+    Object.entries(library.projects).filter(([id]) => !latest.projects[id]),
+  )
   const live = latest.projects[projectId] || before.projects[projectId] || saved
   const merged = savedCandidate
     ? overlayCueMusicCandidate(live, cueId, savedCandidate)
@@ -152,6 +157,7 @@ async function persistCueCandidate(
     project: visible,
     projects: {
       ...latest.projects,
+      ...remoteOnly,
       [projectId]: merged,
       [visibleId]: visible,
     },

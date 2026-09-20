@@ -187,6 +187,51 @@ test('song generation saves a pending candidate before generate-music HTTP', { c
   assert.equal(mock.generationRequest.provenance.workspace_id, undefined)
 })
 
+test('409 song persist keeps a remote-only sibling through pending and ready saves', { concurrency: false }, async t => {
+  const workspace = 'wizard-song-keep-remote-sibling'
+  const { createStoryProject, normalizeStoryProject, useStoryStore } = await import('../src/features/stories/store.ts')
+  const base = createStoryProject('music_video')
+  const cue = cueFixture(base)
+  const project = normalizeStoryProject({
+    ...base,
+    title: 'Videoclip con hermano remoto',
+    music: { ...base.music, model: 'ace_step_v1_5_xl_sft_lm_4b', cues: [cue] },
+  })
+  const sibling = normalizeStoryProject({
+    ...createStoryProject(),
+    title: 'Borrador de otra pestaña',
+  })
+  const savedLibrary = {
+    value: {
+      version: 2,
+      revision: 2,
+      activeId: project.id,
+      projects: { [project.id]: project, [sibling.id]: sibling },
+    },
+  }
+  const mock = mockStoryFetch(t, workspace, savedLibrary, { conflictFirst: true })
+  await installStory(workspace, project, 1)
+
+  const { generateStoryCueSong } = await import('../src/features/stories/storySongGeneration.ts')
+  await generateStoryCueSong({
+    workspace,
+    projectId: project.id,
+    cueId: cue.id,
+    actor: 'user',
+    capability: 'generate_story_song',
+  })
+
+  const successfulPuts = mock.putBodies.slice(1)
+  assert.ok(successfulPuts.length >= 2, 'pending retry and ready persist must both PUT')
+  for (const body of successfulPuts) {
+    assert.ok(body.projects[sibling.id], 'every successful PUT must keep the remote sibling')
+    assert.equal(body.projects[sibling.id].title, 'Borrador de otra pestaña')
+  }
+  assert.ok(savedLibrary.value.projects[sibling.id], 'server library must still have the sibling')
+  assert.equal(savedLibrary.value.projects[sibling.id].title, 'Borrador de otra pestaña')
+  assert.ok(useStoryStore.getState().projects[sibling.id], 'store must keep the sibling after persistCueCandidate')
+})
+
 test('song generation rebases its candidate when Story autosave wins the CAS race', { concurrency: false }, async t => {
   const workspace = 'wizard-song-cas-retry'
   const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/store.ts')
