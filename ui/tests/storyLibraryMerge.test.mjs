@@ -81,6 +81,40 @@ test('keeps the newer remote Story without a conflict', async () => {
   assert.equal(result.needsRemoteSync, false)
 })
 
+test('409 mutation rebase keeps local-only siblings and mutates the remote story', async () => {
+  const { rebaseStoryMutationBaseline } = await import('../src/features/stories/library.ts')
+  const result = rebaseStoryMutationBaseline(
+    'shared',
+    library({
+      shared: project('shared', 'Local pending song', '2026-08-16T13:00:00Z'),
+      draft: project('draft', 'Unsaved sibling', '2026-08-16T13:05:00Z'),
+    }, 'shared', 1),
+    library({
+      shared: project('shared', 'Remote ready song', '2026-08-16T12:00:00Z'),
+    }, 'shared', 2),
+  )
+  assert.equal(result.revision, 2)
+  assert.equal(result.projects.shared.title, 'Remote ready song')
+  assert.equal(result.projects.draft.title, 'Unsaved sibling')
+})
+
+test('409 mutation rebase keeps newer local sibling edits', async () => {
+  const { rebaseStoryMutationBaseline } = await import('../src/features/stories/library.ts')
+  const result = rebaseStoryMutationBaseline(
+    'shared',
+    library({
+      shared: project('shared', 'Local shared', '2026-08-16T11:00:00Z'),
+      sibling: project('sibling', 'Local sibling edit', '2026-08-16T13:00:00Z'),
+    }, 'shared', 1),
+    library({
+      shared: project('shared', 'Remote shared', '2026-08-16T12:00:00Z'),
+      sibling: project('sibling', 'Stale sibling', '2026-08-16T12:00:00Z'),
+    }, 'shared', 2),
+  )
+  assert.equal(result.projects.shared.title, 'Remote shared')
+  assert.equal(result.projects.sibling.title, 'Local sibling edit')
+})
+
 test('preserves Stories exclusive to either local or remote library', async () => {
   const { mergeStoryLibraries } = await import('../src/features/stories/library.ts')
   const result = mergeStoryLibraries(
