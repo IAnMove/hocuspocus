@@ -100,3 +100,28 @@ export function mergeStoryLibraries(
     needsRemoteSync: conflicts.length === 0 && !sameLibrary(library, remote),
   }
 }
+
+/**
+ * Rebuild a single-project mutation CAS baseline after a 409.
+ *
+ * The retry PUT replaces the whole library. Taking `remote.projects` alone
+ * drops local-only siblings and unsaved sibling edits. Keep the merge for
+ * those stories, but mutate the server copy of `projectId` so a newer local
+ * pending reservation cannot replace a song the worker already attached.
+ */
+export function rebaseStoryMutationBaseline(
+  projectId: string,
+  local: StoryLibraryData,
+  remote: StoryLibraryData,
+): StoryLibraryData {
+  const merged = mergeStoryLibraries(local, remote)
+  const source = remote.projects[projectId] || merged.library.projects[projectId]
+  return {
+    version: 2,
+    revision: merged.library.revision,
+    activeId: merged.library.activeId,
+    projects: source
+      ? { ...merged.library.projects, [projectId]: source }
+      : merged.library.projects,
+  }
+}
