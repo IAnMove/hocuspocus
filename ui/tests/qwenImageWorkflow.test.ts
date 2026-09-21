@@ -7,6 +7,7 @@ import { estimatedRemainingSeconds, phaseCatalogKey } from '../src/features/acti
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage })
 const { useStore } = await import('../src/stores/useStore.ts')
+const { emptyImageStudioDraft } = await import('../src/features/studio/imageStudioIntent.ts')
 const { snapshotStudioImageIntent, normalizeStudioImageParams, resolveStudioImageMedia } = await import('../src/features/studio/prepareGeneration.ts')
 
 test('prepareImage leaves Edit/Character so a create request cannot reuse the leftover canvas', async () => {
@@ -143,6 +144,43 @@ test('footer identifies native phases and estimates sampling without loading tim
     assert.equal(estimatedRemainingSeconds({ ...task, phase }, 260_000), undefined)
   }
   assert.equal(estimatedRemainingSeconds({ ...task, current: 1 }, 260_000), undefined)
+})
+
+test('Edit Anything keeps the extracted frame on Character after Image draft isolation', async () => {
+  const initial = useStore.getState()
+  const originalFetch = globalThis.fetch
+  const old = new File(['old'], 'old-character.png', { type: 'image/png' })
+  const model = {
+    model_type: 'qwen_image_21', name: 'Qwen', family: 'qwen', architecture: 'qwen_image_21',
+    is_i2v: false, is_t2v: false, is_downloaded: true,
+  }
+  globalThis.fetch = async input => String(input).includes('extract-frames')
+    ? Response.json({ start_path: 'source-frame.png', start_url: '/api/v1/uploads/source-frame.png', session_started_at: 1 })
+    : new Response('FRAME', { headers: { 'content-type': 'image/png' } })
+  try {
+    useStore.setState({
+      generationMode: 'avatar', editSubMode: 'recast', activeWorkspace: 'audit',
+      editVideoPath: 'source.mp4', editVideoDuration: 3, editStartTime: 0, editEndTime: 3,
+      params: { ...initial.params, model_type: 'viggle_animate' },
+      selectedModelPerMode: { ...initial.selectedModelPerMode, image: 'qwen_image_21' },
+      families: [{ id: 'qwen', label: 'Qwen', order: 1 }], models: [model],
+      imageStudioIntent: 'chooser', imageRefs: [],
+      imageStudioDrafts: { character: { ...emptyImageStudioDraft(), imageRefs: [old], imageRefType: 'I' } },
+      loadModelOptions: async () => {}, loadLoras: async () => {},
+    })
+    await useStore.getState().sendFrameToImageMode('recast')
+    const state = useStore.getState()
+    assert.equal(state.generationMode, 'image')
+    assert.equal(state.imageStudioIntent, 'character')
+    assert.equal(state.imageRefs[0]?.name, 'recast_frame.png')
+    assert.equal(snapshotStudioImageIntent(state).imageRefs[0]?.name, 'recast_frame.png')
+    state.setImageStudioIntent('new')
+    state.setImageStudioIntent('character')
+    assert.equal(useStore.getState().imageRefs[0]?.name, 'recast_frame.png')
+  } finally {
+    globalThis.fetch = originalFetch
+    useStore.setState(initial, true)
+  }
 })
 
 test('background model catalog refresh preserves edits made while the request is pending', async () => {
