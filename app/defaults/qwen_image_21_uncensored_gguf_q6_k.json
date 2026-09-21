@@ -2,13 +2,12 @@
     "model": {
         "name": "Qwen Image 2.1 Uncensored GGUF Q6_K 7B",
         "architecture": "qwen_image_21",
-        "description": "Uncensored DiT GGUF Q6_K (5.9 GB) from abenzerps. Highest shipped uncensored quant (Q8_0 omitted: upstream shape mismatch). Same 2.1 VAE and Qwen3-VL-8B encoder. Mature Mode only. License follows Qwen Research License.",
-        "selector_help": "Highest uncensored GGUF we ship. Needs Mature Mode. Still slower than INT8 ConvRot on a 4090.",
+        "description": "Uncensored DiT GGUF Q6_K (5.9 GB) from abenzerps. Highest shipped uncensored quant (Q8_0 omitted: upstream shape mismatch). Same 2.1 VAE and Qwen3-VL-8B encoder. License follows Qwen Research License.",
+        "selector_help": "Highest uncensored GGUF we ship. No Mature Mode gate. Still slower than INT8 ConvRot on a 4090.",
         "URLs": [
             "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF/resolve/main/qwen-image-2.1-Q6_K.gguf"
         ],
         "preload_URLs": "qwen_image_21",
-        "nsfw_only": true,
         "license_name": "Qwen Research License",
         "license_url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
         "resource_requirements": {

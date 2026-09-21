@@ -101,7 +101,7 @@ class TestQwenImage21Definitions(unittest.TestCase):
                 self.assertEqual(item["model"]["architecture"], "qwen_image_21")
                 self.assertIn(weight, item["model"]["URLs"][0])
                 if "uncensored" in filename:
-                    self.assertTrue(item["model"]["nsfw_only"])
+                    self.assertFalse(item["model"].get("nsfw_only", False))
                     self.assertIn("abenzerps/Qwen-Image-2.1-Uncensored-GGUF", item["model"]["URLs"][0])
                 self.assertEqual(item["model"]["preload_URLs"], "qwen_image_21")
                 self.assertTrue(item["model"]["selector_help"])

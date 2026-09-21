@@ -2,13 +2,12 @@
     "model": {
         "name": "Qwen Image 2.1 Uncensored GGUF Q5_K_M 7B",
         "architecture": "qwen_image_21",
-        "description": "Uncensored DiT GGUF Q5_K_M (5.2 GB) from abenzerps. Same 2.1 VAE and Qwen3-VL-8B encoder. A step up from Q4_K_M if you have VRAM. Mature Mode only. License follows Qwen Research License.",
-        "selector_help": "Use when Q4_K_M looks too soft. Same edit tools as the rest of 2.1. Needs Mature Mode.",
+        "description": "Uncensored DiT GGUF Q5_K_M (5.2 GB) from abenzerps. Same 2.1 VAE and Qwen3-VL-8B encoder. A step up from Q4_K_M if you have VRAM. License follows Qwen Research License.",
+        "selector_help": "Use when Q4_K_M looks too soft. Same edit tools as the rest of 2.1. No Mature Mode gate.",
         "URLs": [
             "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF/resolve/main/qwen-image-2.1-Q5_K_M.gguf"
         ],
         "preload_URLs": "qwen_image_21",
-        "nsfw_only": true,
         "license_name": "Qwen Research License",
         "license_url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
         "resource_requirements": {
