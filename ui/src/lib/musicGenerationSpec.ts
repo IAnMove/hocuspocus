@@ -105,6 +105,14 @@ function parseCount(raw: unknown, defaultValue: number, max: number): number {
 export function catalogEntry(model: string | undefined): MusicModelProfile | null {
   const token = text(model)
   if (!token) return null
+  if (token === 'yue2') {
+    return {
+      id: token, family: 'yue2', route: 'local', downloadable: true, community: false,
+      promptLimit: LOCAL_PROMPT_LIMIT, lyricsLimit: LOCAL_LYRICS_LIMIT,
+      durationMin: DURATION_MIN, durationMax: 600, countMax: 1,
+      backend: 'generateMusic', cover: false,
+    }
+  }
   if (token === MUSIC3_LOCAL_MODEL) {
     return {
       id: token, family: 'minimax_music3', route: 'local', downloadable: true, community: false,

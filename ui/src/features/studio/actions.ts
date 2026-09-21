@@ -14,6 +14,8 @@ import type {
   QueueSfxPackCommand,
 } from './commands'
 import { sfxPackContexts, sfxPackResult } from './sfxPackResult'
+import { hidesDirectGenerationSidebar } from '../../lib/navigationCategories'
+import { mergeVideoPromptLetters } from '../../lib/studioImageEdit'
 import {
   generationProvenancePayload,
   type GenerationSubmissionContext,
@@ -97,6 +99,9 @@ export function openStudioAudio(subMode: PrepareAudioCommand['subMode']): void {
   state.setSidebarMode('studio')
   state.setSidebarOpen(true)
   state.setGenerationMode('audio')
+  if (hidesDirectGenerationSidebar(state.mediaFilter, 'studio')) {
+    state.setMediaFilter('audio')
+  }
   state.setAudioSubMode(subMode)
 }
 
@@ -287,6 +292,7 @@ export async function prepareImage(action: PrepareImageCommand): Promise<Command
   if (action.seed !== undefined) params.seed = action.seed
   if (action.inferenceSteps !== undefined) params.num_inference_steps = action.inferenceSteps
   if (action.guidanceScale !== undefined) params.guidance_scale = action.guidanceScale
+  if (action.outpaintMargins) params.video_guide_outpainting = action.outpaintMargins
   state.setParams(params)
 
   const resolution = useStore.getState().params.resolution || useStore.getState().resolutionPreset
@@ -462,22 +468,60 @@ export async function startPreparedGeneration(context?: GenerationSubmissionCont
 
 const normalized = (value: string): string => value.trim().toLocaleLowerCase()
 
-async function imageOutputFiles(names: string[]): Promise<File[]> {
+async function namedImageOutputs(names: string[]): Promise<Array<{ name: string; url: string }>> {
   const workspace = useStore.getState().activeWorkspace || 'default'
   const { outputs } = await api.fetchOutputs(0, 0, { workspace, mediaType: 'image' })
   const byName = new Map(outputs.map(output => [normalized(output.name), output]))
-  const files: File[] = []
-  for (const requestedName of names) {
+  return names.map(requestedName => {
     const output = byName.get(normalized(requestedName))
     if (!output) {
       throw new Error(`No existe la imagen “${requestedName}” en el workspace activo; no he inventado ni sustituido la referencia.`)
     }
-    const response = await fetch(api.getFileUrl(output.name, workspace))
-    if (!response.ok) throw new Error(`No pude leer la imagen “${output.name}” para usarla como referencia.`)
+    return { name: output.name, url: api.getFileUrl(output.name, workspace) }
+  })
+}
+
+async function imageOutputFiles(names: string[]): Promise<File[]> {
+  const files: File[] = []
+  for (const item of await namedImageOutputs(names)) {
+    const response = await fetch(item.url)
+    if (!response.ok) throw new Error(`No pude leer la imagen “${item.name}” para usarla como referencia.`)
     const blob = await response.blob()
-    files.push(new File([blob], output.name, { type: blob.type || 'image/png' }))
+    files.push(new File([blob], item.name, { type: blob.type || 'image/png' }))
   }
   return files
+}
+
+async function attachImageEditCanvas(
+  action: AttachStudioReferencesCommand,
+  selectedName: string,
+): Promise<CommandResult> {
+  const state = useStore.getState()
+  if (state.generationMode !== 'image') {
+    throw new Error('La edición local de imagen sólo está disponible en Studio → Image.')
+  }
+  if (!state.modelOptions?.inpaint_support) {
+    throw new Error(`${selectedName} no admite una imagen origen o una máscara de edición.`)
+  }
+  const [item] = await namedImageOutputs(action.outputNames.slice(0, 1))
+  const flags = String(state.params.video_prompt_type || '')
+  if (action.role === 'edit_source') {
+    const keepMask = action.replaceExisting ? undefined : state.params.image_mask
+    state.setParams({
+      image_guide: item.url,
+      image_mask: keepMask,
+      video_prompt_type: mergeVideoPromptLetters(flags, keepMask ? 'VAG' : 'V', action.replaceExisting ? 'AG' : ''),
+    })
+    return studioResult('image', 'Image', `He adjuntado “${item.name}” como imagen a editar en Studio → Image.`)
+  }
+  if (!state.params.image_guide) {
+    throw new Error('Adjunta primero la imagen origen (edit_source) y después la máscara.')
+  }
+  state.setParams({
+    image_mask: item.url,
+    video_prompt_type: mergeVideoPromptLetters(flags, 'VAG', ''),
+  })
+  return studioResult('image', 'Image', `He adjuntado “${item.name}” como máscara de edición (blanco = cambiar).`)
 }
 
 function clearImageReferences(): void {
@@ -494,6 +538,9 @@ export async function attachStudioReferences(action: AttachStudioReferencesComma
   }
   const selectedModel = state.models.find(model => model.model_type === state.params.model_type)
   if (!selectedModel) throw new Error('Studio no tiene un modelo de imagen/vídeo válido seleccionado.')
+  if (action.role === 'edit_source' || action.role === 'edit_mask') {
+    return attachImageEditCanvas(action, selectedModel.name)
+  }
   const files = await imageOutputFiles(action.outputNames)
 
   if (action.role === 'start_frame') {

@@ -4,6 +4,7 @@ import type { ApiOutput } from '../../api/outputs'
 import { useUiTranslation } from '../../i18n'
 import { AssetPickTrigger } from '../../components/common/AssetPickTrigger.tsx'
 import type { AssetConstraints } from './types.ts'
+import { rememberLocalImage } from '../../lib/localEditImages'
 import { createUploadSession, fileMatchesConstraints } from './upload.ts'
 
 const AssetExplorerDialog = lazy(() =>
@@ -20,6 +21,7 @@ export function AssetInput({
   constraints,
   disabled,
   workspaceId,
+  keepLocal,
   onChoose,
 }: {
   label: string
@@ -31,6 +33,7 @@ export function AssetInput({
   constraints?: AssetConstraints
   disabled?: boolean
   workspaceId?: string
+  keepLocal?: boolean
   onChoose: (item: ApiOutput | null) => void
 }) {
   const { t } = useUiTranslation('common')
@@ -51,6 +54,21 @@ export function AssetInput({
     const generation = ++chooseGen.current
     const scope = workspaceId
     setError('')
+    if (keepLocal) {
+      const url = rememberLocalImage(file)
+      onChoose({
+        name: file.name,
+        type: 'image',
+        mode: null,
+        size: file.size,
+        created_at: Date.now() / 1000,
+        url,
+        thumbnail_url: url,
+        workspace_id: scope,
+      })
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    }
     setBusy(true)
     try {
       const uploaded = await upload.current.run(file)

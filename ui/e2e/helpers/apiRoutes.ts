@@ -354,6 +354,7 @@ function exactCatalog(): Record<string, ReturnType<typeof json> | { sse: true }>
     'GET /api/v1/character-kits/speech/capabilities': json({ rhubarb: true,
       vocalIsolation: { available: false, model: 'BS-RoFormer', device: 'cpu', downloads: false, maxSeconds: 90, reason: 'optional_model_missing' },
     }),
+    'GET /api/v1/character-kits/speech/digest': json({ digest: '0'.repeat(64), bytes: 12 }),
     'GET /api/v1/system-config': json(SYSTEM_CONFIG),
     'GET /api/v1/services-config': json(SERVICES_CONFIG),
     'GET /api/v1/llm/status': json({
@@ -369,6 +370,14 @@ function exactCatalog(): Record<string, ReturnType<typeof json> | { sse: true }>
     'GET /api/v1/director/pipelines': json({ pipelines: [], total: 0 }),
     'GET /api/v1/director/pipelines/active': json({ pipelines: [] }),
     'GET /api/v1/system/preflight': json({ ok: true, checks: [] }),
+    'GET /api/v1/system/capabilities': json({
+      platform: 'linux',
+      arch: 'x86_64',
+      profile: 'linux-nvidia-local',
+      accelerators: { cuda: true, mps: false, metal: false },
+      ui: { mode: 'nvidiaLocal', show_cuda_controls: true },
+      capabilities: {},
+    }),
     'GET /api/v1/system-stats': json(SYSTEM_STATS),
     'GET /api/v1/downloads/active': json({ downloads: [] }),
     'GET /api/v1/loras/installed': json({ loras: [], manifest_last_check_at: null }),

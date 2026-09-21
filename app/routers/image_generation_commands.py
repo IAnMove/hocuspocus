@@ -12,7 +12,7 @@ from services.image_generation_commands import command_error
 class ReferenceResolutionInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     references: list[StrictStr] = Field(min_length=1, max_length=64)
-    media_kind: Literal["image", "audio", "video"] = "image"
+    media_kind: Literal["image", "audio", "video", "studio_video"] = "image"
 
 
 class UISubmissionContext(BaseModel):
@@ -59,7 +59,7 @@ def image_command_catalog(additional_operations=()):
                      "properties": {"workspace": spec["input"]["properties"]["workspace"],
                                     "intent_id": spec["intent_id"]}, "required": ["workspace", "intent_id"]}
     return [{"name": "generation.image", "version": 2, "supportedVersions": [1, 2], "domain": "studio", "mutation": True,
-             "description": "Admit an image job with an installed model and explicit output workspace. Version 1 is a single text-to-image request; version 2 accepts the complete typed Studio image parameters, canonical references, LoRAs and image processors. Preserve literal prompts and reuse intent_id only for retries. The receipt proves admission; inspect its task for completion.",
+             "description": "Admit an image job with an installed model and explicit output workspace. Version 1 is a single text-to-image request; version 2 accepts typed Studio params including image_refs (I/KI), image_guide plus image_mask (VAG local edit), video_guide_outpainting margins, LoRAs and processors. qwen_image_21* is the unified Qwen Image 2.1 generator/editor (native 2K, up to 10 refs, RGBA). Preserve literal prompts and reuse intent_id only for retries. The receipt proves admission; inspect its task for completion.",
              "inputSchema": envelope},
             {"name": "generation.receipt", "version": 1, "domain": "studio", "mutation": False,
              "description": "Read an immutable generation admission and its current canonical task in the exact original output workspace.",

@@ -32,6 +32,26 @@ function cueFixture(base) {
   }
 }
 
+function remoteSiblingCandidate() {
+  return {
+    id: 'song-remote-tab',
+    displayName: 'Himno remoto · Español · v1',
+    title: 'Himno visible',
+    language: 'Español',
+    version: 1,
+    name: 'hermano.wav',
+    source: '/api/v1/file/hermano.wav',
+    prompt: 'Heavy metal ochentero con voz ronca y coro grave.',
+    lyrics: '[Verse]\nLa red sigue viva.\n[Chorus]\nReinicia.',
+    provider: 'local',
+    model: 'ace_step_v1_5_xl_sft_lm_4b',
+    durationSeconds: 30,
+    createdAt: '2026-09-21T00:00:00.000Z',
+    status: 'ready',
+    executionPhase: 'terminal',
+  }
+}
+
 async function installStory(workspace, project, revision = 1) {
   const { useStore } = await import('../src/stores/useStore.ts')
   const { useStoryStore } = await import('../src/features/stories/store.ts')
@@ -185,6 +205,164 @@ test('song generation saves a pending candidate before generate-music HTTP', { c
   assert.equal(mock.generationRequest.provenance.project_id, project.id)
   assert.equal(mock.generationRequest.provenance.cue_id, cue.id)
   assert.equal(mock.generationRequest.provenance.workspace_id, undefined)
+})
+
+test('409 song persist keeps a remote-only sibling through pending and ready saves', { concurrency: false }, async t => {
+  const workspace = 'wizard-song-keep-remote-sibling'
+  const { createStoryProject, normalizeStoryProject, useStoryStore } = await import('../src/features/stories/store.ts')
+  const base = createStoryProject('music_video')
+  const cue = cueFixture(base)
+  const project = normalizeStoryProject({
+    ...base,
+    title: 'Videoclip con hermano remoto',
+    music: { ...base.music, model: 'ace_step_v1_5_xl_sft_lm_4b', cues: [cue] },
+  })
+  const sibling = normalizeStoryProject({
+    ...createStoryProject(),
+    title: 'Borrador de otra pestaña',
+  })
+  const savedLibrary = {
+    value: {
+      version: 2,
+      revision: 2,
+      activeId: project.id,
+      projects: { [project.id]: project, [sibling.id]: sibling },
+    },
+  }
+  const mock = mockStoryFetch(t, workspace, savedLibrary, { conflictFirst: true })
+  await installStory(workspace, project, 1)
+
+  const { generateStoryCueSong } = await import('../src/features/stories/storySongGeneration.ts')
+  await generateStoryCueSong({
+    workspace,
+    projectId: project.id,
+    cueId: cue.id,
+    actor: 'user',
+    capability: 'generate_story_song',
+  })
+
+  const successfulPuts = mock.putBodies.slice(1)
+  assert.ok(successfulPuts.length >= 2, 'pending retry and ready persist must both PUT')
+  for (const body of successfulPuts) {
+    assert.ok(body.projects[sibling.id], 'every successful PUT must keep the remote sibling')
+    assert.equal(body.projects[sibling.id].title, 'Borrador de otra pestaña')
+  }
+  assert.ok(savedLibrary.value.projects[sibling.id], 'server library must still have the sibling')
+  assert.equal(savedLibrary.value.projects[sibling.id].title, 'Borrador de otra pestaña')
+  assert.ok(useStoryStore.getState().projects[sibling.id], 'store must keep the sibling after persistCueCandidate')
+})
+
+test('409 song persist keeps a remote-only sibling candidate through pending and ready saves', { concurrency: false }, async t => {
+  const workspace = 'wizard-song-keep-remote-candidate'
+  const { createStoryProject, normalizeStoryProject, useStoryStore } = await import('../src/features/stories/store.ts')
+  const base = createStoryProject('music_video')
+  const cue = cueFixture(base)
+  const sibling = remoteSiblingCandidate()
+  const project = normalizeStoryProject({
+    ...base,
+    title: 'Videoclip con candidato remoto',
+    music: { ...base.music, model: 'ace_step_v1_5_xl_sft_lm_4b', cues: [cue] },
+  })
+  const remoteProject = normalizeStoryProject({
+    ...project,
+    music: {
+      ...project.music,
+      cues: [{ ...project.music.cues[0], candidates: [sibling], selectedCandidateId: sibling.id }],
+    },
+  })
+  const savedLibrary = {
+    value: {
+      version: 2,
+      revision: 2,
+      activeId: remoteProject.id,
+      projects: { [remoteProject.id]: remoteProject },
+    },
+  }
+  const mock = mockStoryFetch(t, workspace, savedLibrary, { conflictFirst: true })
+  await installStory(workspace, project, 1)
+
+  const { generateStoryCueSong } = await import('../src/features/stories/storySongGeneration.ts')
+  await generateStoryCueSong({
+    workspace,
+    projectId: project.id,
+    cueId: cue.id,
+    actor: 'user',
+    capability: 'generate_story_song',
+  })
+
+  const successfulPuts = mock.putBodies.slice(1)
+  assert.ok(successfulPuts.length >= 2, 'pending retry and ready persist must both PUT')
+  for (const body of successfulPuts) {
+    const ids = body.projects[project.id].music.cues[0].candidates.map(item => item.id)
+    assert.ok(ids.includes(sibling.id), 'every successful PUT must keep the remote sibling candidate')
+  }
+  const serverIds = savedLibrary.value.projects[project.id].music.cues[0].candidates.map(item => item.id)
+  assert.ok(serverIds.includes(sibling.id), 'server library must still have the sibling candidate')
+  const storeIds = useStoryStore.getState().projects[project.id].music.cues[0].candidates.map(item => item.id)
+  assert.ok(storeIds.includes(sibling.id), 'store must keep the sibling candidate after persistCueCandidate')
+  assert.ok(storeIds.some(id => id !== sibling.id), 'store must also keep the newly generated candidate')
+})
+
+test('409 song persist keeps a remote-only sibling cue through pending and ready saves', { concurrency: false }, async t => {
+  const workspace = 'wizard-song-keep-remote-cue'
+  const { createStoryProject, normalizeStoryProject, useStoryStore } = await import('../src/features/stories/store.ts')
+  const base = createStoryProject('music_video')
+  const cue = cueFixture(base)
+  const creditsSong = remoteSiblingCandidate()
+  const project = normalizeStoryProject({
+    ...base,
+    title: 'Videoclip con cue remoto',
+    music: { ...base.music, model: 'ace_step_v1_5_xl_sft_lm_4b', cues: [cue] },
+  })
+  const remoteCue = {
+    ...cueFixture(base),
+    id: 'cue-credits-remote',
+    title: 'Créditos',
+    targetId: `${base.id}-credits`,
+    candidates: [creditsSong],
+    selectedCandidateId: creditsSong.id,
+  }
+  const remoteProject = normalizeStoryProject({
+    ...project,
+    music: {
+      ...project.music,
+      cues: [project.music.cues[0], remoteCue],
+    },
+  })
+  const savedLibrary = {
+    value: {
+      version: 2,
+      revision: 2,
+      activeId: remoteProject.id,
+      projects: { [remoteProject.id]: remoteProject },
+    },
+  }
+  const mock = mockStoryFetch(t, workspace, savedLibrary, { conflictFirst: true })
+  await installStory(workspace, project, 1)
+
+  const { generateStoryCueSong } = await import('../src/features/stories/storySongGeneration.ts')
+  await generateStoryCueSong({
+    workspace,
+    projectId: project.id,
+    cueId: cue.id,
+    actor: 'user',
+    capability: 'generate_story_song',
+  })
+
+  const successfulPuts = mock.putBodies.slice(1)
+  assert.ok(successfulPuts.length >= 2, 'pending retry and ready persist must both PUT')
+  for (const body of successfulPuts) {
+    const ids = body.projects[project.id].music.cues.map(item => item.id)
+    assert.ok(ids.includes(remoteCue.id), 'every successful PUT must keep the remote sibling cue')
+    const credits = body.projects[project.id].music.cues.find(item => item.id === remoteCue.id)
+    assert.equal(credits.candidates[0].id, creditsSong.id)
+    assert.equal(credits.candidates[0].source, creditsSong.source)
+  }
+  const serverIds = savedLibrary.value.projects[project.id].music.cues.map(item => item.id)
+  assert.ok(serverIds.includes(remoteCue.id), 'server library must still have the sibling cue')
+  const storeIds = useStoryStore.getState().projects[project.id].music.cues.map(item => item.id)
+  assert.ok(storeIds.includes(remoteCue.id), 'store must keep the sibling cue after persistCueCandidate')
+  assert.ok(storeIds.includes(cue.id), 'store must also keep the cue that generated audio')
 })
 
 test('song generation rebases its candidate when Story autosave wins the CAS race', { concurrency: false }, async t => {

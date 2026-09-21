@@ -1,4 +1,30 @@
 {
+  "sheet": {
+    "stillAlt": "Library identity of {{name}}",
+    "ttsVoice": "TTS · Qwen3 {{voiceId}}",
+    "ttsNone": "No TTS voice on this character yet",
+    "linkedHint": "Look and TTS come from the library character. Acting notes stay on this story or series."
+  },
+  "facePackMaker": {
+    "title": "Lipsync face (cube plane)",
+    "intro": "For a talking character: generate a square face texture (skin fills the cube front — eyes, nose, rest mouth). Then edit only the mouth (visemes) or only the eyes (expressions). Drop the stills here to build the 9×6 pack. Skin color is locked to rest so talking does not flash.",
+    "skin": "Skin / material",
+    "restPrompt": "Rest plane prompt (1:1, any image generator)",
+    "copyRest": "Copy rest prompt",
+    "editPrompts": "Viseme and expression prompts",
+    "copyNamed": "Copy {{name}}",
+    "stills": "Stills (rest, A, happy…)",
+    "naming": "Files: rest.png, A.png, M.png, happy.png, angry.png. Missing visemes alias I=E, U=O, F=M, L=A.",
+    "empty": "empty",
+    "build": "Build 9×6 pack",
+    "download": "Download pack.png",
+    "previewAlt": "Assembled 9 visemes by 6 expressions",
+    "needRest": "Add rest.png first.",
+    "loaded": "Loaded {{name}}",
+    "unknownFile": "Unrecognized name: {{name}}",
+    "ready": "9×6 ready. Color locked to rest.",
+    "buildFailed": "Could not assemble the pack."
+  },
   "speechWorkshop": {
     "alternatives": "Methods and limitations",
     "title": "Prepare 2D speech",
@@ -17,7 +43,7 @@
         "detail": "Rhubarb creates mouth timings, not artwork. MuseTalk changes the face using a model. Neither is connected here yet."
       }
     },
-    "manualOnly": "Manual workshop: no image generation, neural background removal or voice generation here. Those buttons are disabled. Prepare variants externally and import them; the existing scene Face Rig retains its assisted tools.",
+    "manualOnly": "Use existing mouth packs or click the AI generation buttons to create new ones. Nothing is generated until you request it. Review the base and each mouth, then save the speech character.",
     "character": "Saved character",
     "choose": "Choose a character",
     "newCharacter": "New character from an image",
@@ -48,7 +74,8 @@
     "invalidUpload": "The upload did not return a persistent image URL.",
     "invalidSave": "The server did not return the saved character.",
     "imported": "Base uploaded. Review it in the preview, then save the character explicitly.",
-    "saved": "Character saved to this workspace. Visual and audio validation remain separate."
+    "saved": "Character saved to this workspace. Visual and audio validation remain separate.",
+    "completeSet": "{{count}}/9 mouths approved. Preparing new speaking shots requires all nine positions; you can save unfinished work and complete it later."
   },
   "library": {
     "title": "Cutout characters",
@@ -102,7 +129,12 @@
     "closed": "Closed",
     "small": "Small",
     "wide": "Open",
-    "round": "Round"
+    "round": "Round",
+    "pressed": "M/B/P · pressed lips",
+    "medium": "E · medium opening",
+    "pucker": "U/W · puckered",
+    "bite": "F/V · teeth on lip",
+    "tongue": "L · raised tongue"
   },
   "alpha": {
     "transparent": "Transparent",
@@ -134,7 +166,7 @@
     },
     "makeMouths": {
       "title": "Make or approve the mouths",
-      "detail": "You need at least a closed mouth and one open mouth. Generate the missing ones, place them on the lips, and approve the transparent ones."
+      "detail": "Complete all nine positions, review their placement and try a line with the character’s voice before generating shots."
     },
     "putOnScene": {
       "title": "Put it on the scene",
@@ -146,12 +178,12 @@
     "steps": {
       "box": "Drag the yellow box until it covers the lips. It saves when you release.",
       "wipe": "If the drawing still has a painted mouth, press Wipe mouth area.",
-      "eyes": "Open eyes stay on; Close eyes only blinks on top. If the body already has eyes, generate only Close eyes.",
+      "eyes": "Eyes and blinking are optional. Keep the existing drawing unless you need separate animated eyelids.",
       "scene": "Put on the scene and Preview. The mouth and blink animate on their own."
     },
     "createNew": {
       "summary": "Create a new body or mouths",
-      "hint": "Style and traits are only for generation. Luma and Brin already exist: you do not need this to place their mouth."
+      "hint": "Choose the style and traits for new generated variants. Existing mouth packs are shown below the pose."
     },
     "styles": {
       "paper-cut": "Paper cut",
@@ -185,17 +217,22 @@
     "usePack": "Use pack",
     "poseAlt": "{{name}} pose",
     "overlayAlt": "{{name}} {{state}} overlay",
-    "dragBoxHint": "Drag the box. The corner changes the size.",
+    "dragBoxHint": "Drag the rectangle over the original mouth. Drag its corner horizontally and vertically to change width and height independently. Wiping affects this rectangle; the new mouth keeps its own proportions.",
     "wiping": "Wiping…",
     "wipeMouth": "Wipe mouth area",
-    "lockMouths": "Lock mouths",
+    "lockMouths": "Apply placement to all mouths",
     "states": {
       "closed": "Closed",
       "small": "Small",
       "wide": "Open",
       "round": "Round",
       "open-eyes": "Eyes",
-      "blink": "Close eyes"
+      "blink": "Close eyes",
+      "pressed": "M/B/P · pressed lips",
+      "medium": "E · medium opening",
+      "pucker": "U/W · puckered",
+      "bite": "F/V · teeth on lip",
+      "tongue": "L · raised tongue"
     },
     "promptUsed": "Prompt used for {{name}}",
     "cleaningCutout": "Cleaning cutout…",
@@ -228,12 +265,12 @@
     "generatingNamed": "Generating {{name}}…",
     "generateNamed": "Generate / replace {{name}}",
     "generatingPack": "Generating pack…",
-    "generateMissing": "Generate the missing ones",
+    "generateMissing": "Generate missing mouths with AI",
     "tryLine": {
       "sample": "The square is frozen and the bell is too loud.",
-      "summary": "Try a line (not saved)",
-      "planMouths": "See mouth rhythm",
-      "speak": "Speak 3 s",
+      "summary": "Try the character’s voice (not saved)",
+      "planMouths": "Quick text preview (approximate)",
+      "speak": "Try with their voice",
       "generatingVoice": "Generating voice…",
       "beats": "{{count}} beats · {{duration}}s · available {{available}}",
       "none": "none",
@@ -288,7 +325,28 @@
       "eyeTooLarge": "This eye overlay is larger than a typical eye mask. Scale it down until it only covers the eyes.",
       "mouthTooLarge": "This mouth overlay is larger than a typical viseme. Scale it down until it sits on the lips.",
       "mouthTooLow": "Mouths on a full-body cutout usually sit above the chest. Nudge Down/Up until the overlay covers the lips, then lock all mouths."
-    }
+    },
+    "existingMouths": "Existing mouths",
+    "packHint": "Choose a style, preview its mouth positions, then apply the pack to this character. Applied mouths stay pending until you review them.",
+    "packsUnavailable": "No mouth packs are available. Reload the workshop to retry loading the catalog.",
+    "stepPlace": "1. Cover and erase the original mouth",
+    "stepChoose": "2. Choose existing mouths or generate new ones",
+    "stepTry": "3. Try the mouths with a phrase",
+    "wipeArea": "Mouth erasure area",
+    "resizeArea": "Resize mouth erasure rectangle",
+    "optionalEyes": "Eyes and blinking (optional)",
+    "eyesOriginal": "Use the original drawing",
+    "optionalEyesHint": "The eyes already drawn on the character are enough. Lip sync only needs mouths. Add separate eye overlays here only if you want to change the eyes or animate eyelids; those pieces need their own placement and review.",
+    "playSample": "Play included voice sample",
+    "stopSample": "Stop sample",
+    "sampleHint": "A recorded English phrase with mouth timings, included with the app. Uses your mouth shapes without generating audio or changing the saved character voice.",
+    "sampleUnavailable": "The included sample could not be loaded.",
+    "downloadPack": "Download this style",
+    "downloadCollection": "Download the 20 new styles",
+    "downloading": "Preparing download…",
+    "phoneticPositions": "Additional phonetic positions",
+    "restHint": "Saving includes the resting mouth in the reusable character image. It is also used while listening or in silent shots.",
+    "packOption": "{{name}} · {{count}}/9 mouths"
   },
   "facePatch": {
     "title": "Raster mouth replacement patch",
@@ -305,7 +363,7 @@
     "wipedPending": "A new mouth-cleaned image is ready. Review and approve the pose before mounting it.",
     "disabled": {
       "external": "Face patch editing is disabled.",
-      "eyes": "Raster replacement patches apply only to closed, small, wide, or round mouth states. Eyes are handled separately.",
+      "eyes": "Raster replacement patches apply only to mouth states. Eyes are handled separately.",
       "pose": "Approve this base pose before preparing a facial patch.",
       "rotation": "Rotate the mouth box back to 0° before preparing a facial patch."
     },
@@ -389,5 +447,13 @@
       "hunyuanFailed": "Hunyuan3D failed",
       "hunyuanCancelled": "Hunyuan3D cancelled"
     }
+  },
+  "editorSession": {
+    "title": "Configure {{name}}",
+    "hint": "Configure the voice, mouths for 2D animation and model for 3D lip sync here. Saving links this configuration to the series character.",
+    "return": "Return to the character in Series Lab",
+    "saveFirst": "Use Save everything and return to save all pending settings.",
+    "saveAllReturn": "Save everything and return to Series Lab",
+    "saveAllHint": "Saves voice, mouth images and placement together. Existing approvals are preserved."
   }
 }

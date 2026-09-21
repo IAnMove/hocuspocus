@@ -1,0 +1,30 @@
+{
+    "model": {
+        "name": "Qwen Image 2.1 Uncensored GGUF Q4_K_M 7B",
+        "architecture": "qwen_image_21",
+        "description": "Uncensored DiT GGUF Q4_K_M (4.6 GB) from abenzerps, converted from Qwen/Qwen-Image-2.1 with no safety checker. Same 2.1 VAE and Qwen3-VL-8B encoder as the official stack (preload_URLs). Author's recommended quant. License follows Qwen Research License.",
+        "selector_help": "Try this first among the uncensored GGUFs. Same t2i+edit tools as the other 2.1 models. No Mature Mode gate — it is a local image weight, not the Wizard LLM.",
+        "URLs": [
+            "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF/resolve/main/qwen-image-2.1-Q4_K_M.gguf"
+        ],
+        "preload_URLs": "qwen_image_21",
+        "license_name": "Qwen Research License",
+        "license_url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
+        "resource_requirements": {
+            "vram_gb": 12,
+            "ram_gb": 24,
+            "storage_gb": 16,
+            "platform": "NVIDIA / AMD",
+            "backend": "GGUF Q4_K_M",
+            "tier": "experimental",
+            "note": "Recommended uncensored quant. Q8_0 from this pack has a known shape mismatch; not shipped."
+        },
+        "attention": {"<89": "sdpa"},
+        "image_outputs": true
+    },
+    "prompt": "A neon shop sign that reads QWEN IMAGE 2.1, rainy night, reflections on wet pavement",
+    "resolution": "1024x1024",
+    "num_inference_steps": 40,
+    "guidance_scale": 1,
+    "batch_size": 1
+}

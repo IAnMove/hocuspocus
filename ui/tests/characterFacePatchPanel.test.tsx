@@ -176,7 +176,7 @@ test('shows preparation errors and never uploads after a failed prepare', { conc
 test('disables eyes, unapproved poses, and rotated anchors with explanations', { concurrency: false }, async () => {
   const eyes = await viewFor({ state: 'blink' })
   try {
-    assert.match(eyes.screen.getByRole('alert').textContent || '', /only to closed, small, wide, or round/i)
+    assert.match(eyes.screen.getByRole('alert').textContent || '', /only to mouth states.*eyes are handled separately/i)
     assert.equal((eyes.screen.getByLabelText(/Aligned full-image variant/) as HTMLInputElement).disabled, true)
   } finally { eyes.cleanup() }
   const pending = await viewFor({ kit: makeKit({ base: base({ reviewState: 'pending' }) }) })

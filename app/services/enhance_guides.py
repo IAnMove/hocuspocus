@@ -16,6 +16,7 @@ _ARCHITECTURE_MAP = {
     # Qwen image models — edit guide when reference image exists, gen guide otherwise
     "qwen_image_edit": ("qwen_image_edit.md", "qwen_image_gen.md"),
     "qwen_image_layered": ("qwen_image_edit.md", "qwen_image_gen.md"),
+    "qwen_image_21": ("qwen_image_edit.md", "qwen_image_gen.md"),
     "qwen_image": "qwen_image_gen.md",
 
     # Flux image models — edit guide when reference image exists, gen guide otherwise

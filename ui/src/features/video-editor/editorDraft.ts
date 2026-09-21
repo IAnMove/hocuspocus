@@ -15,9 +15,9 @@ export const RESOLUTIONS: ResolutionOption[] = [
   { label: 'Landscape 480p', width: 864, height: 480 },
   { label: 'Landscape 720p', width: 1280, height: 720 },
   { label: 'Landscape 1080p', width: 1920, height: 1080 },
-  { label: 'Portrait 480p', width: 480, height: 864 },
-  { label: 'Portrait 720p', width: 720, height: 1280 },
-  { label: 'Portrait 1080p', width: 1080, height: 1920 },
+  { label: 'Portrait 480p · 9:16', width: 480, height: 864 },
+  { label: 'Portrait 720p · 9:16', width: 720, height: 1280 },
+  { label: 'Portrait 1080p · 9:16', width: 1080, height: 1920 },
   { label: 'Square 1080p', width: 1080, height: 1080 },
   { label: 'Classic 4:3', width: 1440, height: 1080 },
 ]

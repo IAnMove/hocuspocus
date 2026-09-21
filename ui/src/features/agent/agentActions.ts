@@ -49,6 +49,7 @@ import type {
   AgentMountVideoclipAlternativeSongAction,
 } from './alternativeSongActions'
 import type { ExampleConversation } from './agentExamples'
+import { parseWizardIntent, WIZARD_INTENT_SCHEMA, type WizardIntent } from './wizardIntent'
 import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
 import {
@@ -123,6 +124,7 @@ export interface AgentPrepareImageAction extends AgentLanguageAwareAction {
   inferenceSteps?: number
   guidanceScale?: number
   outputCount?: number
+  outpaintMargins?: string
 }
 
 export interface AgentPrepareAudioAction extends AgentLanguageAwareAction {
@@ -478,8 +480,8 @@ export interface AgentCreateRhythmic3dVideoAction extends AgentLanguageAwareActi
 }
 
 export type AgentSceneWorkflowAction =
-  | { type: 'create_3d_scene'; sceneName: string; durationSeconds: number; width: number; height: number; fps: 30 | 60; confirm: true }
-  | { type: 'set_3d_scene_properties'; sceneName: string; durationSeconds?: number; width?: number; height?: number; fps?: 30 | 60; confirm: true }
+  | { type: 'create_3d_scene'; sceneName: string; durationSeconds: number; width: number; height: number; fps: 24 | 30 | 60; confirm: true }
+  | { type: 'set_3d_scene_properties'; sceneName: string; durationSeconds?: number; width?: number; height?: number; fps?: 24 | 30 | 60; confirm: true }
   | { type: 'add_3d_scene_layer'; sceneName: string; layerName: string; layerType: 'model3d' | 'image' | 'video' | 'overlay' | 'camera'; outputName: string; confirm: true }
   | { type: 'update_3d_scene_layer'; sceneName: string; layerName: string; visible?: boolean; locked?: boolean; confirm: true }
   | { type: 'remove_3d_scene_layer'; sceneName: string; layerName: string; confirm: true }
@@ -549,7 +551,7 @@ export interface AgentGenerateComicPanelAction {
 export interface AgentAttachStudioReferencesAction {
   type: 'attach_studio_references'
   outputNames: string[]
-  role: 'start_frame' | 'subject' | 'style'
+  role: 'start_frame' | 'subject' | 'style' | 'edit_source' | 'edit_mask'
   replaceExisting: boolean
   removeBackground: boolean
 }
@@ -695,6 +697,8 @@ export type AgentAction = AgentOpenTabAction
 export interface AgentTurn {
   reply: string
   actions: AgentAction[]
+  /** Semantic interpretation proposed by the planner, never proof of execution. */
+  intent?: WizardIntent
   /** Locally derived validation/policy diagnostics, never trusted from the model. */
   rejections?: WizardActionRejection[]
   /** Original proposal positions when parser exclusions shifted action indices. */
@@ -742,6 +746,9 @@ export interface AgentAppSnapshot {
     family: string
     installed: boolean
     enabled: boolean
+    unified_edit?: boolean
+    max_image_refs?: number
+    native_2k?: boolean
   }>
   available_audio_models: Array<{
     model_type: string
@@ -1043,6 +1050,7 @@ const CANONICAL_FIELD_NAMES = [
   'kit_name', 'look_notes', 'preset_id',
   'clip_names', 'clip_name', 'trim_start', 'trim_end', 'project_name',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
+  'outpaint_margins',
   'asset_id', 'source', 'source_workspace',
   'loras', 'weight',
   'workspace_name', 'workspace_id', 'expected_revision', 'description',
@@ -1209,6 +1217,9 @@ function parseAction(value: unknown): AgentAction | null {
         ? optionalNumber(raw.guidance_scale, 0, 30)
         : undefined,
       outputCount: optionalPositiveNumber(raw.output_count, 1, 8, true),
+      outpaintMargins: /^\d{1,3}(?:\s+\d{1,3}){3}$/.test(cleanString(raw.outpaint_margins, 32))
+        ? cleanString(raw.outpaint_margins, 32)
+        : undefined,
     }
   }
   if (type === 'prepare_3d') {
@@ -1566,7 +1577,11 @@ function parseAction(value: unknown): AgentAction | null {
       ? 'start_frame'
       : requestedRole === 'style'
         ? 'style'
-        : 'subject'
+        : requestedRole === 'edit_source'
+          ? 'edit_source'
+          : requestedRole === 'edit_mask'
+            ? 'edit_mask'
+            : 'subject'
     return {
       type: 'attach_studio_references',
       outputNames,
@@ -1764,9 +1779,11 @@ export function parseAgentTurn(raw: string): AgentTurn {
     proposalIndices.push(index)
   }
   const conversationLanguage = normalizeConversationLanguageTag(object.conversation_language)
+  const intent = parseWizardIntent(object.intent)
   return {
     reply: reply || (actions.length ? 'El hechizo está trazado; voy a mover HocusPocus.' : humanReply(raw.trim())),
     actions,
+    ...(intent ? { intent } : {}),
     ...(proposalIndices.some((index, position) => index !== position) ? { proposalIndices } : {}),
     ...(rejections.length ? { rejections } : {}),
     ...(conversationLanguage ? { conversationLanguage } : {}),
@@ -2662,6 +2679,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = mergeRe
   additionalProperties: false,
   properties: {
     reply: { type: 'string', maxLength: 8_000 },
+    intent: WIZARD_INTENT_SCHEMA,
     conversation_language: { type: 'string', maxLength: 120 },
     actions: {
       type: 'array',
@@ -2755,14 +2773,15 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = mergeRe
           output_name: { type: 'string', maxLength: 300 },
           width: { type: 'integer', minimum: 320, maximum: 7680 },
           height: { type: 'integer', minimum: 240, maximum: 4320 },
-          fps: { type: 'integer', enum: [30, 60] },
+          fps: { type: 'integer', enum: [24, 30, 60] },
           visible: { type: 'boolean' },
           locked: { type: 'boolean' },
           confirm: { type: 'boolean' },
           page_number: { type: 'integer', minimum: 0, maximum: 100 },
           panel_number: { type: 'integer', minimum: 0, maximum: 100 },
           reference_output_names: { type: 'array', maxItems: 12, items: { type: 'string', maxLength: 300 } },
-          reference_role: { type: 'string', enum: ['', 'start_frame', 'subject', 'style'] },
+          reference_role: { type: 'string', enum: ['', 'start_frame', 'subject', 'style', 'edit_source', 'edit_mask'] },
+          outpaint_margins: { type: 'string', maxLength: 32 },
           replace_existing: { type: 'boolean' },
           remove_background: { type: 'boolean' },
           asset_id: { type: 'string', maxLength: 180 },
@@ -2881,7 +2900,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = mergeRe
       },
     },
   },
-  required: ['reply', 'actions'],
+  required: ['reply', 'intent', 'actions'],
 })
 
 export function wizardLlmRequestSchema(): Record<string, unknown> {
@@ -2919,13 +2938,19 @@ export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions 
       .flatMap(family => getModelsForFamily(family.id, state.models, 'image'))
       .filter(model => !model.tool_only)
       .slice(0, 80)
-      .map(model => ({
-        model_type: model.model_type,
-        name: model.name,
-        family: model.family,
-        installed: model.is_downloaded === true,
-        enabled: state.enabledModels.has(model.model_type),
-      })),
+      .map(model => {
+        const qwen21 = model.model_type.startsWith('qwen_image_21')
+          || (model.architecture || '').startsWith('qwen_image_21')
+        return {
+          model_type: model.model_type,
+          name: model.name,
+          family: model.family,
+          installed: model.is_downloaded === true,
+          enabled: state.enabledModels.has(model.model_type),
+          unified_edit: qwen21 || /edit/i.test(model.model_type),
+          ...(qwen21 ? { max_image_refs: 10, native_2k: true } : {}),
+        }
+      }),
     available_audio_models: state.models
       .filter(model => model.family === 'tts' && !model.tool_only)
       .slice(0, 80)

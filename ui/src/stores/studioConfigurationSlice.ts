@@ -8,6 +8,11 @@ import type {
   ResolutionPreset,
 } from '../types'
 import type { SliceCreator } from './storeApi'
+import {
+  H3_EXPERIMENTAL_MAX_FRAMES,
+  h3AlignmentOptions,
+  supportsH3ExtendedDuration,
+} from '../lib/h3ExtendedDuration'
 
 type VoiceReference = { filename: string; path: string }
 type TtsVoice = { name: string; filename: string | null; path: string | null }
@@ -25,6 +30,7 @@ export interface StudioConfigurationSlice {
   setSlidingWindowOverlap: (frames: number) => void
   slidingWindowLocked: boolean
   setSlidingWindowLocked: (locked: boolean) => void
+  setH3ExtendedDuration: (enabled: boolean) => void
   guideVideoFps: number | null
   setGuideVideoFps: (fps: number | null) => void
   outputCount: number
@@ -145,7 +151,9 @@ export function createStudioConfigurationSlice(
       const minimum = autoDurationAllowed
         ? 0
         : Math.max(1, (options?.frames_minimum || fps) / fps)
-      const nativeMaximum = options?.frames_maximum ? options.frames_maximum / fps : null
+      const nativeMaximum = get().params.minimax_h3_extended_duration && supportsH3ExtendedDuration(options)
+        ? H3_EXPERIMENTAL_MAX_FRAMES / fps
+        : options?.frames_maximum ? options.frames_maximum / fps : null
       const maximum = options?.sliding_window || nativeMaximum == null
         ? Number.POSITIVE_INFINITY
         : nativeMaximum
@@ -153,7 +161,10 @@ export function createStudioConfigurationSlice(
       if (options?.sliding_window && nativeMaximum && seconds <= Math.round(nativeMaximum * 10) / 10) {
         seconds = Math.min(seconds, nativeMaximum)
       }
-      const frames = dependencies.alignFrameCount(Math.round(seconds * fps), options)
+      const frames = dependencies.alignFrameCount(
+        Math.round(seconds * fps),
+        h3AlignmentOptions(options, get().params.minimax_h3_extended_duration) ?? options,
+      )
       set(state => ({
         durationSeconds: seconds,
         params: { ...state.params, video_length: frames },
@@ -171,7 +182,9 @@ export function createStudioConfigurationSlice(
       let frames = Math.round(requestedSeconds * fps)
       if (defaults) {
         const minimum = defaults.window_min ?? 1
-        const maximum = defaults.window_max ?? frames
+        const maximum = get().params.minimax_h3_extended_duration && supportsH3ExtendedDuration(options)
+          ? H3_EXPERIMENTAL_MAX_FRAMES
+          : defaults.window_max ?? frames
         const step = Math.max(1, defaults.window_step ?? 1)
         frames = minimum + Math.round((frames - minimum) / step) * step
         frames = Math.max(minimum, Math.min(maximum, frames))
@@ -191,6 +204,21 @@ export function createStudioConfigurationSlice(
     })),
     slidingWindowLocked: false,
     setSlidingWindowLocked: locked => set({ slidingWindowLocked: locked, h3WindowPlan: null }),
+    setH3ExtendedDuration: enabled => {
+      const options = get().modelOptions
+      const next = enabled && supportsH3ExtendedDuration(options)
+      set(state => ({
+        slidingWindowLocked: next || (!state.params.minimax_h3_extended_duration && state.slidingWindowLocked),
+        params: {
+          ...state.params,
+          minimax_h3_extended_duration: next,
+          sliding_window_memory_override: next || undefined,
+        },
+        h3WindowPlan: null,
+      }))
+      if (next) get().setSlidingWindowSeconds(H3_EXPERIMENTAL_MAX_FRAMES / (options?.fps ?? 24))
+      get().setDurationSeconds(get().durationSeconds)
+    },
     outputCount: 1,
     setOutputCount: count => set(state => ({
       outputCount: count,

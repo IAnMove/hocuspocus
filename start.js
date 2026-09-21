@@ -16,7 +16,7 @@ module.exports = async (kernel) => {
     run: [
       // A ready backend is not proof of a usable React UI. Repair before loading AI.
       ...runtime.call('ui_build.js'),
-      runtime.startGuard(),
+      ...runtime.startGuards(),
       // SAM service starts on demand (launched by the backend when inpaint is used)
       // — not started here to avoid holding a CUDA context that wastes VRAM
       {

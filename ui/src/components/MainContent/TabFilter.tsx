@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Activity, BookOpen, Boxes, Clapperboard, FolderKanban, Languages,
+  Activity, BookOpen, Boxes, CircleHelp, Clapperboard, FolderKanban, Languages,
   Library, MonitorPlay, Search, Settings, Sparkles, Video, WandSparkles, X,
 } from 'lucide-react'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
 import {
-  categoryForMediaFilter, type NavigationCategory, WIZARD_NAVIGATION_EVENT,
+  categoryForMediaFilter, DIRECT_GENERATION_MEDIA,
+  revealDirectorWorkspace, type NavigationCategory, WIZARD_NAVIGATION_EVENT,
 } from '../../lib/navigationCategories'
 import { useStore } from '../../stores/useStore'
 import type { GenerationMode, MediaFilter } from '../../types'
@@ -25,15 +26,6 @@ interface MenuItem {
 const PRIMARY_DESTINATIONS = {
   workspaces: { value: 'workspaces' as const },
   activity: { value: 'runs' as const },
-}
-
-const DIRECT_GENERATION_MEDIA: Record<GenerationMode, MediaFilter> = {
-  image: 'images',
-  video: 'videos',
-  audio: 'audio',
-  model3d: 'model3d',
-  avatar: 'avatars',
-  tools: 'all',
 }
 
 function PrimaryButton({ active, expanded, icon, label, onClick, ariaLabel, category, buttonRef }: {
@@ -93,6 +85,7 @@ function NavigationBar({ category, title, items, activeValue, barRef }: { catego
 export function TabFilter() {
   const { t, i18n } = useUiTranslation('navigation')
   const { t: tSettings } = useUiTranslation('settings')
+  const { t: tHelp } = useUiTranslation('help')
   const mediaFilter = useStore(s => s.mediaFilter)
   const developerMode = useStore(s => s.developerMode)
   const generationMode = useStore(s => s.generationMode)
@@ -214,7 +207,7 @@ export function TabFilter() {
     const state = useStore.getState()
     state.setSettingsOpen(false)
     state.setDashboardOpen(false)
-    if (filter === 'character-replacement') state.setSidebarOpen(false)
+    state.setSidebarOpen(false)
     state.setMediaFilter(filter)
     setActiveCategory(category)
     setExpandedCategory(category)
@@ -228,6 +221,7 @@ export function TabFilter() {
     locallySelectedFilterRef.current = filter
     state.setMediaFilter(filter)
     state.setSidebarMode('studio')
+    state.setSidebarOpen(true)
     window.dispatchEvent(new Event('hocuspocus:studio-open'))
     setActiveCategory('direct-generation')
     setExpandedCategory('direct-generation')
@@ -255,7 +249,7 @@ export function TabFilter() {
       const state = useStore.getState()
       state.setSettingsOpen(false)
       state.setDashboardOpen(false)
-      state.setSidebarMode('director')
+      revealDirectorWorkspace(state)
       window.dispatchEvent(new Event('maestro:director-open'))
       setActiveCategory('production')
       setExpandedCategory('production')
@@ -348,6 +342,9 @@ export function TabFilter() {
               <option value="en">EN</option>
             </select>
           </label>
+          <button type="button" onClick={() => window.dispatchEvent(new Event('hocuspocus:help-open'))} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-bg-hover hover:text-text-primary" aria-label={tHelp('openAria')}>
+            <CircleHelp size={14} /><span>{tHelp('button')}</span>
+          </button>
           <button type="button" onClick={() => window.dispatchEvent(new Event('hocuspocus:settings-open'))} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-bg-hover hover:text-text-primary" aria-label={tSettings('title')}>
             <Settings size={14} /><span>{tSettings('title')}</span>
           </button>

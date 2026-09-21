@@ -271,6 +271,7 @@ test('world3d export paints and publishes the snapshot after the live scene chan
     },
     endExport() { calls.push('endExport') },
     setExportSize() { calls.push('setExportSize') },
+    setExportQuality(enabled) { calls.push(enabled ? 'exportQualityOn' : 'exportQualityOff') },
     restoreSize() { calls.push('restoreSize') },
   }
   const frozen = startWorld3DExport(handle, snapshot, { width: 1280, height: 720 })
@@ -285,7 +286,7 @@ test('world3d export paints and publishes the snapshot after the live scene chan
   assert.equal(frame.tagName, 'CANVAS')
   assert.deepEqual(painted, ['drive-chase'])
   finishWorld3DExport(handle)
-  assert.deepEqual(calls, ['beginExport', 'setExportSize', 'endExport', 'restoreSize'])
+  assert.deepEqual(calls, ['beginExport', 'setExportSize', 'exportQualityOn', 'exportQualityOff', 'endExport', 'restoreSize'])
 })
 
 test('world3d export paint fails closed when the stage is gone', () => {

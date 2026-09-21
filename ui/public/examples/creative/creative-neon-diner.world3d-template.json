@@ -1,0 +1,164 @@
+{
+  "kind": "hocuspocus.world3d.template",
+  "version": 1,
+  "id": "creative-neon-diner",
+  "title": "Último ramen",
+  "description": "Composición vertical con apoyo, cámara suave y PSX selectivo en characters.",
+  "includeAssets": true,
+  "createdAt": "2026-09-14T19:00:00Z",
+  "document": {
+    "version": 1,
+    "units": "meters",
+    "up": "y",
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "templateId": "creative-neon-diner",
+    "light": {
+      "kind": "directional",
+      "direction": [
+        -0.5,
+        -0.6,
+        -0.8
+      ],
+      "intensity": 2,
+      "color": "#fff2e4"
+    },
+    "environment": {
+      "reflectiveFloor": false,
+      "platform": false,
+      "bloom": 0.08,
+      "floorStyle": "backdrop",
+      "floorColor": "#17262d",
+      "floorSourceHeight": 0.42
+    },
+    "slots": [
+      {
+        "id": "background",
+        "slot": "background",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/neon-diner.jpg",
+        "position": [
+          0,
+          -9.553457523830275,
+          -11
+        ],
+        "scale": 13.653457523830275,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true
+        }
+      },
+      {
+        "id": "hero",
+        "slot": "subject_1",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/courier.png",
+        "position": [
+          -0.35,
+          0,
+          0
+        ],
+        "scale": 1.65,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82,
+          "psx": 1.1
+        }
+      },
+      {
+        "id": "near-prop",
+        "slot": "prop",
+        "media": "image",
+        "surface": "cutout",
+        "sourceUrl": "/examples/creative/lamp.png",
+        "position": [
+          1.75,
+          0,
+          2.2
+        ],
+        "scale": 1.8,
+        "rotationY": 0,
+        "clip": null,
+        "imageLook": {
+          "unlit": true,
+          "grounded": true,
+          "shadow": 0.82
+        }
+      }
+    ],
+    "camera": {
+      "family": "establishment",
+      "frameFormat": "portrait",
+      "eye": [
+        -0.57,
+        3.45,
+        9.8
+      ],
+      "look": [
+        -0.13999999999999999,
+        2.2,
+        -0.5
+      ],
+      "fov": 47,
+      "framing": {
+        "targetSlot": "hero",
+        "anchor": "center",
+        "from": [
+          -0.13333333333333333,
+          1.090909090909091,
+          5.93939393939394
+        ],
+        "to": [
+          0.1090909090909091,
+          1.090909090909091,
+          5.636363636363637
+        ],
+        "lookFrom": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "lookTo": [
+          0.1272727272727273,
+          0.33333333333333354,
+          -0.30303030303030304
+        ],
+        "rollFrom": 0,
+        "rollTo": 0,
+        "relativeToFacing": false
+      }
+    },
+    "worldSfx": [
+      {
+        "id": "ambient-motes",
+        "kind": "dust",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": -1.5
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#ff583d",
+        "scale": 2,
+        "intensity": 0.17,
+        "seed": 31,
+        "start": 0,
+        "end": 6,
+        "sound": false,
+        "volume": 0
+      }
+    ]
+  }
+}

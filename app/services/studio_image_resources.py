@@ -10,6 +10,8 @@ import hashlib
 import math
 from pathlib import Path
 import re
+import shutil
+import uuid
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from services.wangp_submission import resolve_wangp_media, wangp_media_url
@@ -106,22 +108,111 @@ class StudioImageResources:
 
     def canonicalize_legacy(self, value):
         """Convert an exact legacy path, without matching basenames elsewhere."""
-        if value.startswith(("/api/v1/", "asset_", "asset:", "asset-")):
-            self._media(value)
-            return value
-        source = Path(value)
-        if not source.is_absolute() or not source.is_file():
+        text = str(value).strip()
+        if text.startswith(("blob:", "data:", "local-edit:")):
+            raise ValueError("Upload the image in this tab before generating")
+        if text.startswith(("http://", "https://")):
+            parsed = urlsplit(text)
+            text = parsed.path + (("?" + parsed.query) if parsed.query else "")
+        text = self._coerce_gallery_url(text)
+        if text.startswith(("/api/v1/", "asset_", "asset:", "asset-")):
+            self._media(text)
+            return text
+        source = Path(text)
+        relative = not source.is_absolute()
+        if relative:
+            source = self._resolve_relative_media(text)
+        if not source.is_file():
             raise ValueError("A legacy reference must be an exact existing local path")
         resolved = source.resolve()
         uploads = Path(self.uploads_dir()).resolve()
         if resolved.is_relative_to(uploads):
             return wangp_media_url(resolved, "default", uploads_dir=uploads,
                                    workspace_dir=self.workspace_dir("default"))
-        source = self._source_workspace(resolved)
-        if source:
-            workspace, root = source
+        located = self._source_workspace(resolved)
+        if located:
+            workspace, root = located
             return wangp_media_url(resolved, workspace, uploads_dir=uploads, workspace_dir=root)
+        if relative:
+            return self._adopt_into_uploads(resolved, uploads)
         raise ValueError("The legacy reference is outside known media locations")
+
+    def _local_media_roots(self, uploads: Path | None = None) -> list[Path]:
+        """Roots that may supply a leftover relative file such as .pinokio-temp/*.
+
+        cwd.parent is included only when it is not the filesystem root. A process
+        started from /workspace or /app would otherwise treat / as a media root
+        and copy any readable file into uploads.
+        """
+        cwd = Path.cwd().resolve()
+        roots = []
+        if uploads is not None:
+            roots.append(Path(uploads).resolve())
+        roots.append(cwd)
+        parent = cwd.parent.resolve()
+        if parent != cwd and len(parent.parts) > 1:
+            roots.append(parent)
+        return roots
+
+    def _coerce_gallery_url(self, text: str) -> str:
+        """Map gallery/output URLs onto the canonical file/upload forms `_media` accepts."""
+        parsed = urlsplit(text)
+        path = unquote(parsed.path)
+        if path.startswith("/api/v1/outputs/thumbnail/"):
+            name = path[len("/api/v1/outputs/thumbnail/"):].lstrip("/")
+            path = "/api/v1/file/" + name
+        elif path.startswith("/api/v1/outputs/"):
+            rest = path[len("/api/v1/outputs/"):].lstrip("/")
+            if rest and "/" not in rest.split("?")[0]:
+                path = "/api/v1/file/" + rest
+        if path.startswith("/api/v1/file/"):
+            name = path[len("/api/v1/file/"):]
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            workspace = (query.get("workspace") or ["default"])[0] or "default"
+            if workspace not in self._workspace_names():
+                workspace = "default"
+            return f"/api/v1/file/{quote(name, safe='')}?workspace={quote(workspace, safe='')}"
+        if path.startswith("/api/v1/uploads/"):
+            name = path[len("/api/v1/uploads/"):]
+            return f"/api/v1/uploads/{quote(name, safe='/')}"
+        return text
+
+    def _resolve_relative_media(self, value: str) -> Path:
+        normalized = value.replace("\\", "/")
+        if normalized.startswith("../") or "/../" in f"/{normalized}/" or normalized in {".", ".."}:
+            raise ValueError("A legacy reference must be an exact existing local path")
+        if "/" not in normalized:
+            matches = []
+            uploads = Path(self.uploads_dir()).resolve()
+            candidate = uploads / normalized
+            if candidate.is_file():
+                matches.append(candidate)
+            for name in self._workspace_names():
+                candidate = Path(self.workspace_dir(name)).resolve() / normalized
+                if candidate.is_file():
+                    matches.append(candidate)
+            if len(matches) == 1:
+                return matches[0]
+            raise ValueError("A legacy reference must be an exact existing local path")
+        for root in self._local_media_roots():
+            candidate = (root / value).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                continue
+            if candidate.is_file():
+                return candidate
+        raise ValueError("A legacy reference must be an exact existing local path")
+
+    def _adopt_into_uploads(self, resolved: Path, uploads: Path) -> str:
+        allowed = self._local_media_roots(uploads)
+        if not any(resolved == root or resolved.is_relative_to(root) for root in allowed):
+            raise ValueError("The legacy reference is outside known media locations")
+        dest = uploads / f"{uuid.uuid4().hex}{resolved.suffix.lower() or '.png'}"
+        shutil.copy2(resolved, dest)
+        return wangp_media_url(
+            dest, "default", uploads_dir=uploads, workspace_dir=self.workspace_dir("default"),
+        )
 
     def prepare_media(self, params):
         working = deepcopy(params)

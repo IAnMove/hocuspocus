@@ -2,13 +2,13 @@
   "speech": {
     "resting": "silent",
     "speaking": "speaking",
-    "characterDefinition": "Reusable character · 3D model, face and voice",
-    "definitionHint": "The character stores its model and face. Each scene keeps an independent snapshot; dialogue and audio belong to the scene, not the character.",
+    "characterDefinition": "Reusable character · voice and lip sync",
+    "definitionHint": "Choose a voice and, when needed, configure a 2D mouth or 3D model. Lines and audio belong to each scene. Save changes before preparing lip sync.",
     "savedCharacter": "Library character",
     "newCharacter": "Create new character",
     "useCharacter": "Use character in this shot",
     "definitionName": "Character name",
-    "saveCharacter": "Save character with face and voice",
+    "saveCharacter": "Save all character settings",
     "characterSaved": "Character saved. Model, mouth, eyes and voice are available in other shots.",
     "characterApplied": "Character applied. Shot interventions are preserved.",
     "reloadLibrary": "Reload library",
@@ -17,13 +17,15 @@
     "libraryVoice": "Preferred voice (optional)",
     "noPreferredVoice": "No preferred voice · use existing audio",
     "voiceDirection": "Voice direction (optional)",
-    "voiceHint": "Local Qwen3 CustomVoice. Language is detected from the text. Requires the model installed; no credentials or automatic audio generation.",
+    "voiceHint": "Qwen3 CustomVoice supports several languages, but none of these nine original voices is native Spanish. Pronunciation and accent vary across languages: listen to a sample before choosing. Voice direction can influence delivery; it does not guarantee a different accent.",
     "generateVoice": "Generate this line's voice",
     "attachGeneratedVoice": "Apply already generated audio",
     "existingAudioWins": "This line already has audio: reuse it without generating another voice.",
     "explicitGeneration": "Only this button generates audio. It uses the literal text, then local Rhubarb calculates lip-sync.",
     "voiceTooLong": "Audio lasts {{seconds}} s and does not fit this turn. Extend its end, then apply the already generated audio. Preserved file: {{file}}",
-    "noLinkedCharacter": "Not linked · choose a GLB manually",
+    "noLinkedCharacter": "Not linked",
+    "kitKind2d": "2D",
+    "kitKind3d": "3D",
     "missingCharacter": "Character unavailable in this library",
     "otherWorkspace": "Reference stored in {{workspace}}.",
     "textOnlyProduction": "Without audio, editable interventions will open. Add audio or generate each line with the character voice inside Video 3D.",
@@ -88,6 +90,34 @@
     "offset": "Trim audio start (s)",
     "gain": "Volume",
     "needsPlacement": "Add lips to this subject before previewing its voice on the model.",
+    "facePack": "Mascot face",
+    "facePackHint": "Bundled faces for a TV-head screen: visemes and expressions. Experimental.",
+    "expressionHold": "Expression while talking",
+    "expressionHoldHint": "Vowels only change the mouth. This expression stays on the whole line unless you add expression cues.",
+    "facePackMaker": "Make a pack from stills",
+    "facePackMakerHint": "Cube-front faces and lips are built in Character Creator: prompts, stills, then a 9×6 pack with locked skin color.",
+    "pack": {
+      "tv": "CRT",
+      "skull": "Skull",
+      "voxel": "Cube",
+      "anime": "Anime",
+      "cubeskull": "Voxel skull",
+      "felt": "Felt",
+      "clay": "Clay",
+      "pixel": "Pixel",
+      "porcelain": "Porcelain",
+      "cat": "Cat",
+      "oni": "Oni",
+      "stencil": "Stencil",
+      "alien": "Alien",
+      "pumpkin": "Pumpkin",
+      "ice": "Ice",
+      "mushroom": "Mushroom",
+      "vector": "Vector",
+      "halftone": "Halftone",
+      "steampunk": "Steampunk",
+      "gummy": "Gummy"
+    },
     "busy": "Preparing voice or kit…",
     "adjust": "Adjust mouth and expressions",
     "adjustHint": "X: left/right; Y: up/down; Z: depth. Face the model forward (+Z), adjust width/height, then Play. The GLB stays intact.",
@@ -143,6 +173,27 @@
     "pickHint": "Click the mouth on the selected subject. Escape cancels.",
     "pickMissed": "Click the selected model’s face, not the background.",
     "cancelPlacement": "Cancel placement",
+    "timeline": {
+      "title": "Gesture timeline",
+      "clocks": "Source time is the audio file. Offset skips its start. Scene time is start + source − offset.",
+      "sourceTime": "Source {{seconds}} s",
+      "sceneTime": "Scene {{seconds}} s",
+      "offsetTime": "Voice offset {{seconds}} s",
+      "zoom": "Zoom",
+      "loop": "Loop selection",
+      "reanalyze": "Recalculate selection",
+      "addSilence": "Add silence",
+      "viseme": "Viseme",
+      "cueStart": "Cue start (source s)",
+      "cueEnd": "Cue end (source s)",
+      "selectStart": "Selection start (source s)",
+      "selectEnd": "Selection end (source s)",
+      "selection": "Selection {{start}}–{{end}} s",
+      "manual": "Manual",
+      "waveform": "Waveform",
+      "playback": "Gesture timeline playback",
+      "noAudio": "Add a voice to see the waveform. Imported cues can still be edited."
+    },
     "isolation": {
       "label": "Isolate vocals before calculating lips",
       "loading": "Checking the optional local model…",
@@ -150,6 +201,81 @@
       "missing": "Optional model unavailable. Requires installed audio-separator and the BS-RoFormer checkpoint plus YAML in app/ckpts/roformer. Nothing is downloaded automatically.",
       "error": "Could not check the optional model.",
       "retry": "Check again"
+    },
+    "optionalModel": "3D model (optional; not required for voice or 2D characters)",
+    "configure2d": "Configure 2D mouth and lip sync",
+    "need2dImage": "For 2D lip sync, add an image and save the character. You can do this in Characters or from its reference in Series Lab.",
+    "configureLibraryCharacter": "Configure voice and lip sync for {{name}}",
+    "voiceOrigin": "Original language/profile: {{language}}",
+    "voiceOrigins": {
+      "chinese": "Chinese",
+      "beijing": "Chinese · Beijing",
+      "sichuan": "Chinese · Sichuan",
+      "english": "English",
+      "americanEnglish": "American English",
+      "japanese": "Japanese",
+      "korean": "Korean"
+    },
+    "voiceProfiles": {
+      "vivian": "Young female voice, bright with a slight edge.",
+      "serena": "Young female voice, warm and gentle.",
+      "uncle_fu": "Mature male voice, low and mellow.",
+      "dylan": "Young male voice, clear and natural.",
+      "eric": "Lively male voice, bright and slightly husky.",
+      "ryan": "Dynamic male voice with pronounced rhythm.",
+      "aiden": "Bright male voice with a clear midrange.",
+      "ono_anna": "Playful female voice, light and agile.",
+      "sohee": "Warm, expressive female voice."
+    },
+    "voiceAudition": {
+      "language": "Sample sentence language",
+      "sample": {
+        "es": "Hola, esta es mi voz. Así sueno al contar una historia en español.",
+        "en": "Hello, this is my voice. This is how I sound when telling a story in English."
+      },
+      "generate": "Generate voice sample",
+      "generating": "Generating sample…",
+      "cancel": "Cancel sample",
+      "audio": "Selected voice sample",
+      "hint": "Uses this voice and its current direction. Choosing a voice does not generate audio. This button creates a short recording in HocusPocus; no character save or mouth setup is needed."
+    },
+    "customVoice": {
+      "add": "Add your own voice: import or record",
+      "selected": "Custom voice",
+      "saved": "Custom voices saved with characters",
+      "name": "Voice name",
+      "hint": "Use a clean sample of one speaker, without music or other voices. Import or record 3–30 seconds, then enter exactly what it says. The model will use that voice to read new dialogue.",
+      "import": "Import audio sample",
+      "record": "Record with microphone",
+      "recordHint": "Up to 30 seconds are saved. You can read a 5–15 second sentence and copy it into the transcript.",
+      "referencePreview": "Original voice sample",
+      "transcript": "Exact sample transcript",
+      "transcriptPlaceholder": "Enter the same words heard in the audio. This is not the dialogue to generate.",
+      "language": "Language for new dialogue",
+      "saveHint": "Save the whole character to keep this voice. You can select it for other characters; new or regenerated shots will use that configuration.",
+      "incomplete": "To preview or save this voice, add its name, an audio sample, and its exact transcript.",
+      "voiceFileSize": "Choose a nonempty audio file up to 20 MB.",
+      "voiceFileDecode": "The browser could not decode this audio. Try WAV or MP3.",
+      "voiceFileDuration": "The sample must last 3–30 seconds. Trim the audio and keep the exact transcript of that segment.",
+      "microphoneUnavailable": "Browsers only allow the microphone on HTTPS or localhost. Open HocusPocus at one of those addresses, or import an audio file here.",
+      "states": {
+        "permission": "Allow microphone access in your browser…",
+        "recording": "Recording · 30 seconds maximum",
+        "uploading": "Saving audio sample…"
+      },
+      "languages": {
+        "auto": "Automatic from text",
+        "spanish": "Spanish",
+        "english": "English",
+        "chinese": "Chinese",
+        "japanese": "Japanese",
+        "korean": "Korean",
+        "german": "German",
+        "french": "French",
+        "russian": "Russian",
+        "portuguese": "Portuguese",
+        "italian": "Italian"
+      }
     }
   },
   "title": "3D scene studio",
@@ -157,6 +283,10 @@
   "templates": "Shot library",
   "search": "Search templates",
   "all": "All",
+  "allSettings": "Any set",
+  "filterCategory": "Shot type",
+  "filterSetting": "Set",
+  "filterCount": "{{shown}} / {{total}}",
   "noResults": "No templates match your search.",
   "play": "Play",
   "pause": "Pause",
@@ -166,7 +296,13 @@
   "speedHelp": "Applies to playback and MP4 export.",
   "outputDuration": "Output: {{seconds}} s",
   "camera": "Camera",
-  "objects": "Objects",
+  "objects": {
+    "title": "Scene objects",
+    "hint": "Select any object, even when another is in front.",
+    "image": "Image",
+    "model3d": "3D model",
+    "screen": "Image / video"
+  },
   "translate": "Move",
   "rotate": "Rotate Y",
   "scale": "Scale",
@@ -181,15 +317,98 @@
   "position": "Position (m)",
   "yaw": "Rotation Y (°)",
   "keepAssets": "Keep my objects when changing shots",
+  "userTemplates": {
+    "title": "My scenarios",
+    "help": "Export a scenario type (camera, set, layout, motion) as a shareable JSON file. Import it here to reuse it. This is not a shot JSON and it does not bundle GLB files.",
+    "name": "Scenario name",
+    "description": "Description (optional)",
+    "includeAssets": "Include durable gallery URLs (never blob: files)",
+    "export": "Export scenario template",
+    "import": "Import scenario template",
+    "chooseFile": "Scenario template JSON file",
+    "exported": "Scenario saved in this browser and downloaded as a .world3d.template.json file.",
+    "imported": "Scenario added to My scenarios. Click it to apply it to this shot.",
+    "removed": "Scenario removed from this browser.",
+    "empty": "No imported scenarios yet. Export the current shot or import a .world3d.template.json file.",
+    "noDescription": "Camera, set and object layout from a shared scenario.",
+    "remove": "Remove",
+    "needTitle": "Give the scenario a name before exporting it.",
+    "invalid": "Could not import: this is not a Video 3D scenario template.",
+    "tooLarge": "The template file is larger than 1.5 MB.",
+    "saveFailed": "Could not save the scenario in this browser (storage is full or blocked).",
+    "openAsShot": "This file is a scenario template. Import it from My scenarios, not as a shot JSON."
+  },
   "cameraHelp": "Camera changes are editable; your objects keep their identity.",
   "category": {
     "cinema": "Cinema",
+    "action": "Action",
     "product": "Product",
     "music": "Music video",
     "space": "Space",
-    "drive": "Driving"
+    "drive": "Driving",
+    "dark-fantasy": "Dark Fantasy",
+    "psx": "PSX",
+    "creative": "Creative",
+    "perspective": "Perspectives",
+    "animated": "Living backgrounds"
+  },
+  "setting": {
+    "sea": "Sea",
+    "city": "City",
+    "rooftop": "Rooftop",
+    "hangar": "Hangar",
+    "desert": "Desert",
+    "train": "Train",
+    "moon": "Moon",
+    "space": "Space",
+    "jungle": "Jungle",
+    "snow": "Snow",
+    "casino": "Casino",
+    "studio": "Studio",
+    "street": "Street",
+    "stage": "Stage"
   },
   "template": {
+    "dark-cathedral": {
+      "title": "Dark Fantasy · Eclipse cathedral",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-forest": {
+      "title": "Dark Fantasy · Breathing forest",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-stairway": {
+      "title": "Dark Fantasy · Impossible stairway",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-moonlake": {
+      "title": "Dark Fantasy · Moonlit lake",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-portal": {
+      "title": "Dark Fantasy · Door to another world",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-throne": {
+      "title": "Dark Fantasy · Throne of ash",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-library": {
+      "title": "Dark Fantasy · Library of the void",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-ice": {
+      "title": "Dark Fantasy · Ice oracle",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-abyss": {
+      "title": "Dark Fantasy · Guardians of the abyss",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-eclipse": {
+      "title": "Dark Fantasy · The last sun",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
     "speech-portrait": {
       "title": "Talking portrait",
       "description": "Close-up with voice, an integrated mouth and expressions."
@@ -481,6 +700,590 @@
     "tv-head-walk": {
       "title": "CRT-head walk",
       "description": "A tiny generated humanoid (legs, body, arms) with an old CRT television for a head. The face plane sits on the headfront bone."
+    },
+    "reflective-stage": {
+      "title": "Reflective stage",
+      "description": "Metal floor, energy gate and soft mist."
+    },
+    "character-materialization": {
+      "title": "Character materialization",
+      "description": "Photos behind, lightning and a centered animated character on a platform."
+    },
+    "blast-stage": {
+      "title": "Ground blast",
+      "description": "A cinematic explosion on the metal floor: flash, fireball, shock ring, debris and smoke."
+    },
+    "server-inspection": {
+      "title": "Server inspection",
+      "description": "A crane drops onto a rack while an inspector walks in from the aisle."
+    },
+    "coding-desk": {
+      "title": "Coding desk",
+      "description": "The coder sits at a workshop desk; the monitor is a replaceable screen."
+    },
+    "tracking-chase": {
+      "title": "Tracking chase",
+      "description": "A side-on track follows two runners along a street; they enter left and exit right."
+    },
+    "character-presentation": {
+      "title": "Character presentation",
+      "description": "An orbit around a materializing hero on a reflective pedestal."
+    },
+    "screen-alert": {
+      "title": "Screen alert",
+      "description": "An operator rushes a giant alert board as lightning hits the glass."
+    },
+    "product-comparison": {
+      "title": "Product comparison",
+      "description": "Two products slide in from opposite sides while the camera orbits the pair."
+    },
+    "topic-travelling": {
+      "title": "Topic travelling",
+      "description": "A guide walks a plaza corridor past replaceable topic screens."
+    },
+    "heroic-close": {
+      "title": "Heroic close",
+      "description": "A low pursuit push lands on the face as the hero steps into a close-up."
+    },
+    "sea-deck": {
+      "title": "Sea deck",
+      "description": "Two leads walk the deck of a boat on open water while spray hits the bow."
+    },
+    "lunar-outpost": {
+      "title": "Lunar outpost",
+      "description": "An astronaut crosses cratered ground toward a habitat with Earth hanging in the sky."
+    },
+    "car-chase": {
+      "title": "Car chase",
+      "description": "A side track sticks to two cars screaming down a city street."
+    },
+    "ship-chase": {
+      "title": "Ship chase",
+      "description": "Two craft tear through an asteroid lane while lasers stitch the dark."
+    },
+    "rooftop-run": {
+      "title": "Rooftop run",
+      "description": "A pursuit camera chases two runners across a city roof toward the helipad."
+    },
+    "alley-motorcycle": {
+      "title": "Alley motorcycle",
+      "description": "A hood-mounted rush down a tight street with the target dead ahead."
+    },
+    "hangar-standoff": {
+      "title": "Hangar standoff",
+      "description": "Two figures close the gap inside a hangar until they freeze a few metres apart."
+    },
+    "train-roof": {
+      "title": "Train roof",
+      "description": "Two fighters close on a moving train roof while the landscape screams past."
+    },
+    "desert-convoy": {
+      "title": "Desert convoy",
+      "description": "A follow cam rides three vehicles through a canyon cut in the dunes."
+    },
+    "night-rain-pursuit": {
+      "title": "Night rain pursuit",
+      "description": "Head-on pursuit through a flooded street as lightning hits the block."
+    },
+    "dock-ambush": {
+      "title": "Dock ambush",
+      "description": "A walk along the pier turns into an explosion as the second figure steps out."
+    },
+    "bridge-standoff": {
+      "title": "Bridge standoff",
+      "description": "Two figures walk a skybridge from opposite ends and stop in the middle."
+    },
+    "cockpit-pursuit": {
+      "title": "Cockpit pursuit",
+      "description": "A hood view from the cockpit as the enemy ship fills the glass."
+    },
+    "helicopter-extract": {
+      "title": "Helicopter extract",
+      "description": "A crane drops onto the helipad as the lead sprints in for pickup."
+    },
+    "warehouse-breach": {
+      "title": "Warehouse breach",
+      "description": "The door blows and the lead charges the bay while a guard dives for cover."
+    },
+    "canyon-run": {
+      "title": "Canyon run",
+      "description": "Two vehicles thread a desert canyon with sand exploding off the walls."
+    },
+    "jungle-ambush": {
+      "title": "Jungle ambush",
+      "description": "Two figures close in a ruined clearing while the canopy swallows the light."
+    },
+    "snow-compound": {
+      "title": "Snow compound",
+      "description": "An agent crosses the drift toward a lodge while snow eats the horizon."
+    },
+    "casino-heist": {
+      "title": "Casino heist",
+      "description": "Two players close on a felt table under gold light."
+    },
+    "bank-vault": {
+      "title": "Bank vault",
+      "description": "A crane drops onto the vault as the cracksman steps in with a torch."
+    },
+    "skyscraper-ledge": {
+      "title": "Skyscraper ledge",
+      "description": "A pursuit along the parapet with the city falling away."
+    },
+    "oil-rig": {
+      "title": "Oil rig",
+      "description": "A crane over open water as fire licks the derrick."
+    },
+    "subway-brawl": {
+      "title": "Subway brawl",
+      "description": "Two fighters close in a rocking carriage as the rails spit sparks."
+    },
+    "freeway-overpass": {
+      "title": "Freeway overpass",
+      "description": "A high side track of two vehicles under sodium lamps."
+    },
+    "prison-break": {
+      "title": "Prison break",
+      "description": "The lead sprints the yard while a guard turns too late."
+    },
+    "arctic-chase": {
+      "title": "Arctic chase",
+      "description": "Two vehicles cut a white waste while snow blinds the tail."
+    },
+    "clock-tower": {
+      "title": "Clock tower",
+      "description": "An orbit around a climber on the tower as the city turns below."
+    },
+    "mansion-infil": {
+      "title": "Mansion infil",
+      "description": "The infiltrator crosses a marble hall toward the inner door."
+    },
+    "cargo-hold": {
+      "title": "Cargo hold",
+      "description": "A head-on rush down the bay as the ramp yawns behind."
+    },
+    "jungle-river": {
+      "title": "Jungle river",
+      "description": "A side track of two craft sliding a misty river under the canopy."
+    },
+    "red-carpet": {
+      "title": "Red carpet",
+      "description": "A slow orbit as the star walks the gold floor into a close-up."
+    },
+    "volcano-ridge": {
+      "title": "Volcano ridge",
+      "description": "A crane over two figures on the ridge as the caldera breathes fire."
+    },
+    "hangar-talk": {
+      "title": "Hangar talk",
+      "description": "CRT-head and a basic skull face take turns on synthetic vowels, with visemes and expressions."
+    },
+    "sea-talk": {
+      "title": "Sea talk",
+      "description": "The same CRT-head and skull mascots lipsync on the boat deck with a closer two-shot."
+    },
+    "voxel-talk": {
+      "title": "Voxel talk",
+      "description": "A cube-head and a voxel skull take turns on the roof, anime eyes on blocky faces."
+    },
+    "dark-vertical-ivory-gate": {
+      "title": "Dark Fantasy · Ivory gate",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-vertical-saffron-well": {
+      "title": "Dark Fantasy · The sun well",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-vertical-crimson-tide": {
+      "title": "Dark Fantasy · Crimson tide",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-vertical-frozen-bell": {
+      "title": "Dark Fantasy · Frozen bell",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-vertical-bone-stair": {
+      "title": "Dark Fantasy · Bone stair",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-vertical-jade-rift": {
+      "title": "Dark Fantasy · Jade rift",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-vertical-ashen-rose": {
+      "title": "Dark Fantasy · Ashen rose",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-vertical-violet-gravity": {
+      "title": "Dark Fantasy · Violet gravity",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-vertical-ember-totem": {
+      "title": "Dark Fantasy · Ember totem",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-vertical-white-abyss": {
+      "title": "Dark Fantasy · The white abyss",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows."
+    },
+    "dark-psx-ivory-gate": {
+      "title": "PSX · Ivory gate · full scene",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "dark-psx-saffron-well": {
+      "title": "PSX · The sun well · characters only",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "dark-psx-crimson-tide": {
+      "title": "PSX · Crimson tide · full scene",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "dark-psx-frozen-bell": {
+      "title": "PSX · Frozen bell · characters only",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "dark-psx-bone-stair": {
+      "title": "PSX · Bone stair · full scene",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "dark-psx-jade-rift": {
+      "title": "PSX · Jade rift · characters only",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "dark-psx-ashen-rose": {
+      "title": "PSX · Ashen rose · full scene",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "dark-psx-violet-gravity": {
+      "title": "PSX · Violet gravity · characters only",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "dark-psx-ember-totem": {
+      "title": "PSX · Ember totem · full scene",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "dark-psx-white-abyss": {
+      "title": "PSX · The white abyss · characters only",
+      "description": "Layered perspective, gentle level camera, grounded figures and contact shadows. Selective PSX."
+    },
+    "creative-neon-diner": {
+      "title": "Last ramen",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-sun-orchard": {
+      "title": "Tomorrow orchard",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-vermilion-museum": {
+      "title": "Vermilion museum",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on background."
+    },
+    "creative-cobalt-moon": {
+      "title": "Moon shift",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-coral-caravan": {
+      "title": "Paper caravan",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-emerald-hotel": {
+      "title": "Emerald hotel",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-mint-pool": {
+      "title": "Six oclock pool",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-indigo-shrine": {
+      "title": "Indigo rain",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-ocean-window": {
+      "title": "Abyssal station",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on background."
+    },
+    "creative-velvet-theatre": {
+      "title": "Silent theatre",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-ochre-terminal": {
+      "title": "Sun terminal",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-ceramic-room": {
+      "title": "Cobalt room",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-tangerine-market": {
+      "title": "Tangerine market",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on background."
+    },
+    "creative-botanical-hangar": {
+      "title": "Botanical hangar",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-ink-mountain": {
+      "title": "Ink valley",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-submerged-archive": {
+      "title": "Blue archive",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-sunset-court": {
+      "title": "Last game",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-kinetic-gold": {
+      "title": "Golden balance",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on background."
+    },
+    "creative-lunar-garden": {
+      "title": "Orbital greenhouse",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on characters."
+    },
+    "creative-peach-laundry": {
+      "title": "Midnight laundry",
+      "description": "9:16 · Level horizon, grounded silhouettes and contact shadows. PSX on props."
+    },
+    "creative-amber-ice": {
+      "title": "Thaw Station",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-scarlet-tide": {
+      "title": "Scarlet Tide",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-pearl-spores": {
+      "title": "Pearl Nursery",
+      "description": "PSX setting, clean character. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-ultramarine-forge": {
+      "title": "Blue Foundry",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-rose-orbit": {
+      "title": "Orbital Chapel",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-brass-mirage": {
+      "title": "Brass Mirage",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-jade-cinema": {
+      "title": "Last Green Screening",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-apricot-cable": {
+      "title": "Last Cable Car",
+      "description": "PSX setting, clean character. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-violet-baths": {
+      "title": "Ultraviolet Baths",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-clockwork-glass": {
+      "title": "Clockwork Garden",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-paper-monsoon": {
+      "title": "Paper Monsoon",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-cobalt-crater": {
+      "title": "Cobalt Crater",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-saffron-lens": {
+      "title": "Desert Eye",
+      "description": "PSX setting, clean character. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-glass-orchard": {
+      "title": "Glass Harvest",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-terracotta-radio": {
+      "title": "The Listening Room",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-chrome-bloom": {
+      "title": "Chrome Blossom",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-arctic-spin": {
+      "title": "Polar Spin",
+      "description": "PSX setting, clean character. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-domino-garden": {
+      "title": "Domino Garden",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-midnight-bakery": {
+      "title": "Midnight Bread",
+      "description": "PSX character, painted setting. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-coral-radio": {
+      "title": "Reef Radio",
+      "description": "PSX props, clean characters. Three depths, contact shadows and a gentle lateral camera."
+    },
+    "creative-scarlet-tide-motion": {
+      "title": "Tide Behind the Wall",
+      "description": "Moving sea behind a scarlet window. Static wall and frame, with character and props at separate depths."
+    },
+    "creative-rose-orbit-motion": {
+      "title": "Velvet Orbit",
+      "description": "Animated outer space behind an oval opening. Every detail of the pink room stays still."
+    },
+    "creative-glass-orchard-motion": {
+      "title": "The Orchard House",
+      "description": "Leaves and petals behind two window panes. The central frame, wall and floor remain static."
+    },
+    "creative-amber-ice-motion": {
+      "title": "Window on the Thaw",
+      "description": "Snow and clouds beyond an amber portal. Static architecture with independent depth."
+    },
+    "creative-coral-radio-motion": {
+      "title": "Tidal Radio",
+      "description": "Waves behind five window panes. Turquoise frames, interior and characters remain separate layers."
+    },
+    "creative-cobalt-crater-motion": {
+      "title": "Core Observatory",
+      "description": "Animated lava beyond an observatory window. Frame, interior and characters stay on independent layers."
+    },
+    "dark-living-sleeping-titan": {
+      "title": "The Sleeping Titan",
+      "description": "Ivory and moss: a lone knight faces a mountain-sized guardian beyond an ancient arch."
+    },
+    "dark-living-bell-of-ash": {
+      "title": "The Ash Bell",
+      "description": "A charred bell tower opens onto black ash dunes and slow gold embers."
+    },
+    "dark-living-antler-moon": {
+      "title": "Moon Among Antlers",
+      "description": "Black roots frame a moonlit stag, rippling water and drifting silver mist."
+    },
+    "dark-living-drowned-king": {
+      "title": "The Drowned King",
+      "description": "Waves roll around an enormous crowned head beyond a green sea palace."
+    },
+    "dark-living-red-pilgrim": {
+      "title": "The Red Pilgrim",
+      "description": "A red sandstone portal frames a distant giant in windblown terracotta dunes."
+    },
+    "dark-living-last-aqueduct": {
+      "title": "The Last Aqueduct",
+      "description": "White ruins, silver waterfalls and a guardian carved into a blue mountain chasm."
+    },
+    "dark-living-ember-heart": {
+      "title": "Heart of Embers",
+      "description": "An obsidian sanctuary opens onto the glowing heart of a volcanic mountain."
+    },
+    "dark-living-violet-oracle": {
+      "title": "The Violet Oracle",
+      "description": "Amethyst and bone frame giant luminous spirits above a violet valley."
+    },
+    "dark-living-winter-shoulder": {
+      "title": "On Winter’s Shoulder",
+      "description": "A frozen fortress looks tiny on the shoulder of an ancient ice guardian."
+    },
+    "dark-living-thorn-crown": {
+      "title": "The Thorn Crown",
+      "description": "Dark thorns frame crimson flowers and an immense crown on a distant hill."
+    },
+    "dark-living-black-tide": {
+      "title": "The Black Tide",
+      "description": "Ivory stone frames slow turquoise waves above a hidden leviathan."
+    },
+    "dark-living-golden-ruin": {
+      "title": "The Golden Ruin",
+      "description": "A bronze observatory looks onto a golden sun inside a monumental stone ring."
+    },
+    "dark-living-hollow-saint": {
+      "title": "The Hollow Saint",
+      "description": "Clouds pass through a hollow giant between distant grey mountain peaks."
+    },
+    "dark-living-fungal-throne": {
+      "title": "The Mycelium Throne",
+      "description": "Roots and burial stone frame a throne of glowing mushrooms and drifting spores."
+    },
+    "dark-living-storm-bridge": {
+      "title": "The Storm Bridge",
+      "description": "A gothic gatehouse frames a broken bridge and distant violet storm clouds."
+    },
+    "dark-living-sand-library": {
+      "title": "Names Beneath the Sand",
+      "description": "An ochre archive opens onto giant stone tablets and dunes of moving sand."
+    },
+    "dark-living-jade-dragon": {
+      "title": "The Jade Dragon",
+      "description": "A jade pavilion overlooks a petrified dragon, waterfalls and drifting mountain mist."
+    },
+    "dark-living-moon-grave": {
+      "title": "The Moon’s Tomb",
+      "description": "A basalt burial chamber frames a fallen moon and slow luminous snow."
+    },
+    "dark-living-copper-trees": {
+      "title": "The Copper Forest",
+      "description": "Black roots frame copper leaves and a stone sentinel hidden in teal forest mist."
+    },
+    "dark-living-final-gate": {
+      "title": "The Last Giant’s Gate",
+      "description": "A final knight stands before the giant that holds a broken gate above the horizon."
+    },
+    "dark-still-salt-sea": {
+      "title": "Salt Above the Sea",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-still-flame": {
+      "title": "The Motionless Flame",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-winter-vigil": {
+      "title": "The White Vigil",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-moth-moon": {
+      "title": "The Moth and the Moon",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-ivory-fire": {
+      "title": "Ivory Against Fire",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-two-distances": {
+      "title": "Two Distances",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-copper-night": {
+      "title": "Copper Over Violet",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-still-time-wounds": {
+      "title": "Time Has Weight",
+      "description": "Fixed camera, animated atmosphere and independently editable foreground layers."
+    },
+    "dark-motion-knight-passage": {
+      "title": "The Ash Walker",
+      "description": "An independently animated walking knight over a moving misty passage."
+    },
+    "dark-motion-knight-embers": {
+      "title": "Toward the Embers",
+      "description": "The same walking performance in front of molten lava and static architecture."
+    },
+    "creative-motion-skate-coast": {
+      "title": "Salt and Speed",
+      "description": "An illustrated skater above a moving turquoise coast and coral cliffs."
+    },
+    "creative-motion-skate-neon": {
+      "title": "The City Passes",
+      "description": "A moving jacket and board over an independently sliding violet city."
+    },
+    "creative-motion-skate-clouds": {
+      "title": "Cloud Road",
+      "description": "A longboard over impossible blue stone and slower peach clouds."
+    },
+    "creative-motion-skate-portal": {
+      "title": "The Sea Beyond",
+      "description": "A PSX actor, static stonework and a moving sea horizon behind the arch."
     }
   },
   "gallerySearch": "Search the catalog",
@@ -499,6 +1302,10 @@
   "animationFitHint": "Play the remaining animation once over the current shot duration (0.1–4× speed). Apply again if you change the duration or start time.",
   "clipNumber": "Clip number",
   "duration": "Duration (s)",
+  "frameFormat": "Frame format",
+  "frameFormatLandscape": "Landscape 16:9 (1280×720)",
+  "frameFormatPortrait": "Mobile 9:16 (720×1280)",
+  "frameRate": "Frame rate (fps)",
   "saveDocument": "Save shot JSON",
   "loadDocument": "Open shot JSON",
   "invalidDocument": "Could not open: this is not a valid 3D shot file.",
@@ -512,6 +1319,7 @@
     "ease": "Ease in and out",
     "distance": "Straight distance: {{distance}} m · {{speed}} m/s",
     "floor": "Use image as a floor texture",
+    "cutout": "Character / transparent cutout",
     "surface": "Image use",
     "backdrop": "Backdrop",
     "wall": "Wall texture",
@@ -571,11 +1379,21 @@
     "height": "Height / aspect",
     "flipY": "Flip vertically",
     "start": "Video start (s)",
-    "speed": "Video speed",
+    "speed": "Playback speed",
     "loop": "Loop video",
     "clockHelp": "Video follows the scene clock. Its audio is muted.",
     "remove": "Remove screen",
-    "failed": "The screen could not load. Check the mesh and media file."
+    "failed": "The screen could not load. Check the mesh and media file.",
+    "animateImage": "Animate this layer",
+    "transparent": "Preserve transparency",
+    "transparentHelp": "Use an image or video with an alpha channel, such as transparent WebM. This keeps existing transparency; it does not remove an opaque video background.",
+    "loopDetails": "Continuity between shots",
+    "pingPong": "Loop forwards and backwards",
+    "loopRange": "Loop only a source interval",
+    "loopStart": "Interval start (s)",
+    "loopEnd": "Interval end (s)",
+    "timeOffset": "Elapsed time across shots (s)",
+    "loopDetailsHelp": "Back-and-forth playback avoids a reset jump and reverses the motion. Use elapsed time to continue the same animation in the next shot."
   },
   "library": {
     "name": "Scene name",
@@ -587,5 +1405,84 @@
     "previewUnavailable": "Wait for the 3D preview to load before saving.",
     "saveFailed": "Could not save the scene.",
     "cancelLoad": "Cancel loading"
-  }
+  },
+  "cinematic": {
+    "title": "Cinematic environment",
+    "floorStyle": "Floor finish",
+    "tiles": "Tiles",
+    "mirror": "Seamless surface",
+    "noFloor": "No floor",
+    "floor": "Reflective metal floor",
+    "platform": "Materialization platform",
+    "bloom": "Bloom",
+    "help": "Choose a background image and select Full scene background in its Surface control. The image fills the frame; it is an illustrated backdrop, not 3D architecture.",
+    "appearance": "Materialize character",
+    "start": "Start (s)",
+    "duration": "Reveal (s)",
+    "color": "Energy color",
+    "idle": "Hold a living pose",
+    "idleHelp": "Uses the selected animation at its start offset with subtle body movement. Choose a relaxed frame of an idle or walking clip; no animation is transferred between rigs.",
+    "background": "Full scene background",
+    "floorColor": "Floor color",
+    "backdropFloor": "Floor from backdrop",
+    "floorSourceHeight": "Lower backdrop portion used as floor",
+    "road": "Endless road",
+    "road_speed": "Speed (m/s)",
+    "road_slope": "Slope (°)",
+    "road_offset": "Continuity (s)"
+  },
+  "imageLook": {
+    "title": "Image appearance",
+    "tint": "Tint",
+    "unlit": "Keep original lighting",
+    "psx": "PSX on this layer only",
+    "intensity": "PSX intensity",
+    "grounded": "Align ground to visible feet",
+    "shadow": "Contact shadow",
+    "roll": "Tilt (°)",
+    "cleanTransparency": "Clean transparency",
+    "colorKeyHelp": "Select the leftover background color to clear enclosed gaps and edges. Start with low tolerance to preserve details. Applies to this image or moving layer; you can turn it off at any time.",
+    "backgroundColor": "Background color to remove",
+    "keyTolerance": "Tolerance",
+    "keySoftness": "Soft edge"
+  },
+  "preview": {
+    "title": "Preview",
+    "expand": "Expand video",
+    "exit": "Exit fullscreen"
+  },
+  "perspectiveReview": "Watch and rate the new 20",
+  "livingReview": "Watch the 6 living backgrounds",
+  "windows": {
+    "title": "Transparent windows ({{count}})",
+    "help": "Click around the opening and choose Save window. Drag points to refine the outline. Place a video layer behind it: the frame, wall and props keep their original image. The source image is unchanged.",
+    "image": "Static layer image",
+    "draw": "Draw the window outline",
+    "save": "Save window",
+    "undo": "Remove last point",
+    "cancel": "Discard outline",
+    "item": "Window {{number}}",
+    "edit": "Edit outline",
+    "remove": "Close opening"
+  },
+  "darkLivingReview": "Explore 20 living dark fantasy worlds",
+  "poses": {
+    "enable": "Held poses",
+    "help": "Each pose holds for its interval while the environment keeps moving. Use transparent PNG cutouts; adjust height and position to keep the character size and ground contact consistent.",
+    "number": "Pose {{count}}",
+    "image": "Pose image",
+    "choose": "Choose a transparent image",
+    "duration": "Duration (s)",
+    "height": "Relative height",
+    "x": "Horizontal offset",
+    "lift": "Lift from ground",
+    "earlier": "Move earlier",
+    "later": "Move later",
+    "remove": "Remove pose",
+    "add": "Add pose"
+  },
+  "stillnessReview": "Review fixed cameras and poses",
+  "movingCutoutsReview": "Moving characters · 6 clips ↗",
+  "portalRidesReview": "Review downhill and dragon",
+  "kingdomRoadReview": "Journeys and music film"
 }

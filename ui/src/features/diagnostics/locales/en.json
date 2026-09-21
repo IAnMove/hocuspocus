@@ -1,0 +1,17 @@
+{
+  "title": "Install and generation diagnostics",
+  "export": "Export report",
+  "loading": "Collecting facts…",
+  "failed": "Diagnostics are unavailable.",
+  "available": "Available",
+  "unavailable": "Unavailable",
+  "engines": "Engines",
+  "operations": "Operations",
+  "models": "Models",
+  "error": "Correlated error",
+  "noError": "No task or receipt was attached.",
+  "build": "Build",
+  "platform": "Platform",
+  "repair": "Repair",
+  "tab": "Diagnostics"
+}

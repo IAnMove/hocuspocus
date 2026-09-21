@@ -51,6 +51,10 @@
     "profileHint": "Credential-free defaults for Studio, Story Lab, Series Lab, Comics and Director. Projects can inherit these values or keep an explicit override.",
     "textProvider": "Text provider",
     "textModel": "Text model",
+    "textServerUrl": "Ollama / server URL",
+    "loadRemoteModels": "Load models",
+    "loadingRemoteModels": "Loading…",
+    "noRemoteModels": "No models listed. Check the URL and Load again.",
     "imageProviderModel": "Image provider / model",
     "musicProviderModel": "Music provider / model",
     "minimaxMusicWarn": "MiniMax Music is closed for most accounts and will error if you select it. Prefer a local ACE-Step model.",
@@ -371,9 +375,9 @@
     "modelSizeTitle": "{{primary}} deletable here; the rest lives in linked installs or belongs to a base model"
   },
   "mcp": {
-    "title": "MCP · External assistants",
+    "title": "Hocuspocus MCP · External assistants",
     "info": "How MCP works",
-    "summary": "Connect an external assistant to this installation. Wizard remains available inside the app.",
+    "summary": "Connect an external assistant to Hocuspocus to use the generation, asset, collection and scene tools available in this installation. Wizard remains available inside the app.",
     "enable": "Enable MCP access",
     "endpoint": "Connection URL",
     "token": "New token — copy before closing Settings",

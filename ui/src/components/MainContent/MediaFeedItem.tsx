@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties } from 'react'
-import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, BookOpen, Box, Film, BadgeInfo, Clock3 } from 'lucide-react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent, type SyntheticEvent } from 'react'
+import { Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo, Clock3 } from 'lucide-react'
+import { FeedMediaBody } from './FeedMediaBody'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { useUiTranslation } from '../../i18n'
@@ -23,6 +24,7 @@ import {
   readDirectorClipReplacementTarget,
   writeDirectorClipReplacementResult,
 } from '../../features/stories/directorClipHandoff'
+import { isCollapsedMediaFeedMeasurement, mediaFeedStillAspectRatio } from './mediaFeedSizing'
 
 interface Props {
   file: OutputFile
@@ -46,40 +48,56 @@ interface Props {
  *      check the user sees a half-image and feels they need to refresh
  *      the page (which loses Studio prompts/settings/reference images).
  */
-function RetryImage({ url, alt }: { url: string; alt: string }) {
-  const [src, setSrc] = useState(url)
-  const retries = useRef(0)
+function RetryImage({ url, alt, maxHeight, onIntrinsicSize }: {
+  url: string
+  alt: string
+  maxHeight?: number
+  onIntrinsicSize?: (width: number, height: number) => void
+}) {
+  const [request, setRequest] = useState({ url, tries: 0, bust: 0 })
   const maxRetries = 5
 
+  if (request.url !== url) {
+    setRequest({ url, tries: 0, bust: 0 })
+  }
+
+  const src = request.bust
+    ? `${url}${url.includes('?') ? '&' : '?'}t=${request.bust}`
+    : url
+
   const scheduleRetry = useCallback(() => {
-    if (retries.current < maxRetries) {
-      retries.current++
+    setRequest(current => {
+      if (current.url !== url || current.tries >= maxRetries) return current
+      const tries = current.tries + 1
       setTimeout(() => {
-        setSrc(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`)
-      }, 800 * retries.current)
-    }
+        setRequest(latest => latest.url !== url ? latest : { ...latest, bust: Date.now() })
+      }, 800 * tries)
+      return { ...current, tries }
+    })
   }, [url])
 
   const handleError = useCallback(() => {
     scheduleRetry()
   }, [scheduleRetry])
 
-  const handleLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleLoad = useCallback((e: SyntheticEvent<HTMLImageElement>) => {
     // Truncated body that decoded to nothing — browser fired onLoad
     // (Content-Length matched) but produced a 0×0 image. Treat as
     // failure and retry with a cache-busted URL.
     const img = e.currentTarget
     if (img.naturalWidth === 0 || img.naturalHeight === 0) {
       scheduleRetry()
+      return
     }
-  }, [scheduleRetry])
+    onIntrinsicSize?.(img.naturalWidth, img.naturalHeight)
+  }, [onIntrinsicSize, scheduleRetry])
 
   return (
     <img
-      key={src}
       src={src}
       alt={alt}
-      className="w-full h-full object-contain"
+      className="mx-auto block h-auto w-auto max-w-full object-contain"
+      style={maxHeight == null ? undefined : { maxHeight }}
       onError={handleError}
       onLoad={handleLoad}
     />
@@ -159,6 +177,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
     if (!el) return
     const ro = new ResizeObserver((entries) => {
       const height = entries[0].borderBoxSize?.[0]?.blockSize ?? entries[0].contentRect.height
+      if (isCollapsedMediaFeedMeasurement(height)) return
       onMeasured(index, height)
     })
     ro.observe(el)
@@ -238,6 +257,18 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const isModel3d = file.type === 'model3d'
   const isScene = file.type === 'scene'
   const isComic = file.type === 'comic'
+  const naturalFrame = file.type === 'image' || file.type === 'video' || isScene || isComic
+  const [stillNaturalSize, setStillNaturalSize] = useState<{ name: string; width: number; height: number } | null>(null)
+  const stillAspect = stillNaturalSize?.name === file.name
+    ? mediaFeedStillAspectRatio(stillNaturalSize.width, stillNaturalSize.height)
+    : mediaFeedStillAspectRatio()
+  const handleStillIntrinsicSize = useCallback((width: number, height: number) => {
+    if (width > 0 && height > 0) setStillNaturalSize({ name: file.name, width, height })
+  }, [file.name])
+  const handleStillImageLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
+    const img = event.currentTarget
+    handleStillIntrinsicSize(img.naturalWidth, img.naturalHeight)
+  }, [handleStillIntrinsicSize])
   const canPreviewModel3d = isModel3d && /\.(glb|gltf)$/i.test(file.name)
   // Rigged outputs carry their baked glTF clip names in the sidecar; the
   // viewer autoplays one and offers a selector to switch.
@@ -398,7 +429,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
     }
   }
 
-  const handleCopyReference = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleCopyReference = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
     const markCopied = () => {
       setReferenceCopied(true)
@@ -569,6 +600,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   }
 
   return (
+    <React.Fragment>
     <div
       ref={itemRef}
       data-feed-index={index}
@@ -600,8 +632,11 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       {/* Media player */}
       <div
         data-testid="media-feed-viewport"
-        className="w-full aspect-video flex items-center justify-center bg-media-canvas relative"
-        style={maxMediaHeight == null ? undefined : { maxHeight: `${maxMediaHeight}px` }}
+        className={`relative flex w-full items-center justify-center bg-media-canvas ${naturalFrame ? '' : 'aspect-video'}`}
+        style={{
+          ...(maxMediaHeight == null ? {} : { maxHeight: `${maxMediaHeight}px` }),
+          ...(naturalFrame ? { aspectRatio: stillAspect } : {}),
+        }}
       >
         <button
           type="button"
@@ -613,99 +648,27 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           {referenceCopied ? <Check size={11} className="text-accent-green" /> : <Copy size={11} />}
           {outputReference}
         </button>
-        {file.type === 'video' && videoReady ? (
-          <video
-            ref={videoRef}
-            key={file.url}
-            src={file.url}
-            controls
-            loop
-            autoPlay
-            preload="metadata"
-            poster={file.thumbnail_url || undefined}
-            className="w-full h-full object-contain"
-            muted={!isActive}
-          />
-        ) : file.type === 'video' ? (
-          <div className="relative h-full w-full bg-black">
-            {file.thumbnail_url ? (
-              <img
-                src={file.thumbnail_url}
-                alt={file.name}
-                className="h-full w-full object-contain"
-                loading="lazy"
-                decoding="async"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-text-muted"><Film size={32} /></div>
-            )}
-            <button
-              type="button"
-              onClick={event => {
-                event.stopPropagation()
-                setSelectedOutput(index)
-                setVideoReady(true)
-              }}
-              className="absolute left-1/2 top-1/2 z-10 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-xl transition-transform hover:scale-105 hover:bg-black/85"
-              aria-label={`Play ${file.name}`}
-              title="Load and play video"
-            >
-              <Play size={24} className="ml-1" />
-            </button>
-          </div>
-        ) : file.type === 'audio' ? (
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-bg-active flex items-center justify-center">
-              <Play size={24} className="text-text-muted" />
-            </div>
-            <p className="text-xs text-text-muted mb-2">{file.name}</p>
-            <audio key={file.url} src={file.url} controls className="w-64" />
-          </div>
-        ) : isScene ? (
-          file.thumbnail_url
-            ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" />
-            : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
-        ) : isComic ? (
-          file.thumbnail_url
-            ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" />
-            : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
-        ) : isModel3d ? (
-          <div className="w-full h-full relative">
-            {canPreviewModel3d && isActive ? (
-              <model-viewer key={file.url} src={getFileUrl(file.name)} alt={file.name} camera-controls auto-rotate={isRigged ? undefined : true} autoplay={isRigged ? true : undefined} animation-name={isRigged && activeClip ? activeClip : undefined} shadow-intensity="1" exposure="1" loading="lazy" className="w-full h-full" />
-            ) : canPreviewModel3d && file.thumbnail_url ? (
-              <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" loading="lazy" />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center px-4">
-                <div className="w-16 h-16 rounded-2xl bg-bg-active flex items-center justify-center"><Box size={26} className="text-accent-blue" /></div>
-                <div><p className="text-sm text-text-secondary">3D model asset</p><p className="text-[11px] text-text-muted mt-1">{canPreviewModel3d ? 'Select this card to open the interactive GLB preview.' : 'Interactive preview is available for GLB exports.'}</p></div>
-              </div>
-            )}
-            <a
-              href={getFileUrl(file.name)}
-              download={file.name}
-              className="absolute top-2 right-2 px-2.5 py-1.5 text-[10px] bg-black/60 border border-white/20 rounded-lg text-white hover:bg-black/80 transition-colors"
-            >
-              Download
-            </a>
-            {isRigged && riggedClips.length > 0 && (
-              <select
-                value={activeClip ?? riggedClips[0]}
-                onChange={event => setActiveClip(event.target.value)}
-                className="absolute bottom-2 left-2 px-2 py-1 text-[10px] bg-black/60 border border-white/20 rounded-lg text-white"
-                title="Animation clip"
-              >
-                {riggedClips.map((clip: string) => <option key={clip} value={clip}>{clip}</option>)}
-              </select>
-            )}
-          </div>
-        ) : (
-          <RetryImage
-            key={isActive ? file.url : (file.thumbnail_url || file.url)}
-            url={isActive ? file.url : (file.thumbnail_url || file.url)}
-            alt={file.name}
-          />
-        )}
+        <FeedMediaBody
+          file={file}
+          isActive={isActive}
+          maxMediaHeight={maxMediaHeight}
+          videoReady={videoReady}
+          videoRef={videoRef}
+          onPlay={() => { setSelectedOutput(index); setVideoReady(true) }}
+          onIntrinsicSize={handleStillIntrinsicSize}
+          onImageLoad={handleStillImageLoad}
+          isScene={isScene}
+          isComic={isComic}
+          isModel3d={isModel3d}
+          canPreviewModel3d={canPreviewModel3d}
+          isRigged={isRigged}
+          riggedClips={riggedClips}
+          activeClip={activeClip}
+          setActiveClip={setActiveClip}
+          retryImage={url => (
+            <RetryImage url={url} alt={file.name} maxHeight={maxMediaHeight} onIntrinsicSize={handleStillIntrinsicSize} />
+          )}
+        />
       </div>
 
       {comicOpenError && (
@@ -1007,5 +970,6 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
         />
       )}
     </div>
+    </React.Fragment>
   )
 }

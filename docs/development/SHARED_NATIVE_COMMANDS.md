@@ -54,7 +54,7 @@ Direct command envelopes still reject incompatible active Speech metadata.
 
 Set `HOCUS_MCP_TOKEN` in the server's environment before starting the
 application. Configure the external client's HTTP endpoint as
-`http://SERVER:PORT/api/v1/wangp/mcp` and its Authorization header as
+`http://SERVER:PORT/api/v1/mcp` and its Authorization header as
 `Bearer YOUR_TOKEN`. Keep the actual token out of saved requests and reports.
 The endpoint is disabled when no token is configured.
 

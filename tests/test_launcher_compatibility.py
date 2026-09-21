@@ -16,6 +16,12 @@ class TestPinokioGpuCompatibility(unittest.TestCase):
         self.assertNotIn("if (kernel.gpu", launcher)
         self.assertIn('text: "Start"', launcher)
         self.assertIn('href: "start.js"', launcher)
+        self.assertNotIn("Start (Classic UI)", launcher)
+        self.assertNotIn("Open Classic UI", launcher)
+        self.assertNotIn("Classic Compiled", launcher)
+        self.assertNotIn("start_classic.js", launcher)
+        self.assertIn('=== "darwin"', launcher)
+        self.assertIn("sam_install.js", launcher)
 
     def test_fresh_install_still_uses_pinokios_documented_gpu_variable(self):
         installer = (_ROOT / "install.js").read_text(encoding="utf-8")
@@ -25,6 +31,10 @@ class TestPinokioGpuCompatibility(unittest.TestCase):
         rejected = select_profiles("win32", "x64", "amd")
         self.assertFalse(rejected["supported"])
         self.assertIn("NVIDIA", rejected["engines"]["wangp"]["reason"])
+        apple = select_profiles("darwin", "arm64", "apple")
+        self.assertTrue(apple["supported"])
+        self.assertTrue(apple["engines"]["core"]["supported"])
+        self.assertFalse(apple["engines"]["wangp"]["supported"])
 
     def test_start_url_uses_the_required_capture_object(self):
         start = (_ROOT / "start.js").read_text(encoding="utf-8")

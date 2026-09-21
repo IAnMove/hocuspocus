@@ -106,9 +106,12 @@ for (const settleWithFailure of [false, true]) {
       guidance_max_phases: 1, default_guidance_scale: 7 }
     const requests = []
     globalThis.fetch = async url => {
-      if (String(url).endsWith('/model-selections')) return new Response('{}', { headers: { 'content-type': 'application/json' } })
-      requests.push(String(url))
-      assert.match(String(url), /model-options.*minimax_h3/)
+      const href = String(url)
+      if (href.endsWith('/model-selections') || href.includes('/outputs')) {
+        return new Response(JSON.stringify({ outputs: [], total: 0 }), { headers: { 'content-type': 'application/json' } })
+      }
+      requests.push(href)
+      assert.match(href, /model-options.*minimax_h3/)
       return new Promise((resolve, reject) => {
         finish = () => settleWithFailure ? reject(new Error('late request failed'))
           : resolve(new Response(JSON.stringify(options), { headers: { 'content-type': 'application/json' } }))

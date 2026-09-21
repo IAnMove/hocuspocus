@@ -23,7 +23,7 @@ export type LlmSlice = {
   llmLoading: boolean
   llmModels: LlmModelOption[]
   loadLlmStatus: () => Promise<void>
-  loadLlmModels: () => Promise<void>
+  loadLlmModels: (opts?: { provider?: string; url?: string }) => Promise<void>
   loadLlm: () => Promise<void>
   unloadLlm: () => Promise<void>
   isEnhancing: boolean
@@ -241,10 +241,16 @@ export const createLlmSlice: SliceCreator<LlmSlice, LlmSliceHost> = (set, get) =
       console.error('Failed to load LLM status:', e)
     }
   },
-  loadLlmModels: async () => {
+  loadLlmModels: async (opts) => {
     try {
-      const provider = get().servicesConfig?.llm_provider || get().productionProfile.text.provider
-      const data = await api.fetchLlmModels(provider)
+      const provider = opts?.provider
+        || get().servicesConfig?.llm_provider
+        || get().productionProfile.text.provider
+      const url = opts?.url
+        || (provider === (get().servicesConfig?.llm_provider || '')
+          ? get().servicesConfig?.llm_remote_url
+          : get().productionProfile.text.base_url)
+      const data = await api.fetchLlmModels(provider, url)
       set({ llmModels: data.models })
     } catch (e) {
       console.error('Failed to load LLM models:', e)

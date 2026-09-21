@@ -6,7 +6,7 @@ test('AAC uses dequeue backpressure, pads its tail and flushes once at end', asy
   const originalEncoder = Object.getOwnPropertyDescriptor(globalThis, 'AudioEncoder')
   const originalData = Object.getOwnPropertyDescriptor(globalThis, 'AudioData')
   let flushes = 0, closes = 0, frames = 0
-  const blocks: { numberOfFrames: number; timestamp: number; data: Float32Array }[] = []
+  const blocks: { numberOfFrames: number; timestamp: number; data: Float32Array; numberOfChannels?: number }[] = []
   class FakeData {
     constructor(value: typeof blocks[number]) { blocks.push(value) }
     close() { closes++ }
@@ -29,6 +29,19 @@ test('AAC uses dequeue backpressure, pads its tail and flushes once at end', asy
     assert.ok(blocks.every(block => block.numberOfFrames === 1024))
     assert.equal(blocks.at(-1)!.data[1023], 0)
     assert.equal(blocks.at(-1)!.timestamp, Math.round(413 * 1024 / 48000 * 1e6))
+    const left = new Float32Array(2048).fill(0.25)
+    const right = new Float32Array(2048).fill(-0.125)
+    frames = 0
+    blocks.length = 0
+    await encodeSpeechAudio({} as Parameters<typeof encodeSpeechAudio>[0], {
+      sampleRate: 48000,
+      numberOfChannels: 2,
+      getChannelData: (index: number) => (index === 1 ? right : left),
+    } as unknown as AudioBuffer)
+    assert.equal(blocks[0]!.numberOfChannels, 2)
+    assert.equal(blocks[0]!.data.length, 2048)
+    assert.equal(blocks[0]!.data[0], 0.25)
+    assert.equal(blocks[0]!.data[1024], -0.125)
   } finally {
     if (originalEncoder) Object.defineProperty(globalThis, 'AudioEncoder', originalEncoder)
     else Reflect.deleteProperty(globalThis, 'AudioEncoder')

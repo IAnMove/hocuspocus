@@ -719,6 +719,12 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
             {"id": "MiniMax-M2.7-highspeed", "label": "MiniMax M2.7 Highspeed", "size_hint": "MiniMax API", "provider": "minimax"},
         ])
 
+    if provider == "deepseek":
+        remote_models.extend([
+            {"id": "deepseek-v4-pro", "label": "DeepSeek V4 Pro", "size_hint": "deepseek", "provider": "deepseek"},
+            {"id": "deepseek-v4-flash", "label": "DeepSeek V4 Flash", "size_hint": "deepseek", "provider": "deepseek"},
+        ])
+
     if provider == "grok" and not remote_models:
         remote_models.extend([
             {"id": model_id, "label": f"{model_id} (Grok)", "size_hint": "grok", "provider": "grok"}

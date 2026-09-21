@@ -36,6 +36,11 @@ def verify(engine: str, *, cuda: bool = True) -> dict:
     if not sources_current(spec.get("vendors", [])):
         raise RuntimeError(f"{engine}: pinned source checkout is incomplete or has a different revision")
     installed = inspect_environment(engine)
+    if not spec.get("cuda"):
+        return {"engine": engine, "profile": spec["id"], "python": spec["python"],
+                "prefix": str((ROOT / spec["env"]).resolve()), "packages": installed, "cuda": None,
+                "cudaCalculation": False, "modelsExecuted": False,
+                "fingerprint": dependency_fingerprint(engine, sys.platform)}
     torch = importlib.import_module("torch")
     if torch.version.cuda != spec["cuda"]:
         raise RuntimeError(f"{engine}: expected CUDA {spec['cuda']} wheel; got {torch.version.cuda}")

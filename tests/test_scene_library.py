@@ -43,10 +43,47 @@ def test_reject_transient_assets_and_wrong_document_kind(tmp_path):
     body['document']['slots'][0]['sourceUrl'] = 'blob:temporary-browser-model'
     with pytest.raises(ValueError, match='Upload'):
         save_world3d(body, lambda workspace: tmp_path / workspace)
+    body['document']['slots'][0]['sourceUrl'] = ''
+    body['document']['worldSfx'] = [{
+        'id': 'tv', 'kind': 'media_portal', 'start': 0, 'end': 2,
+        'sourceUrl': 'blob:http://localhost/portal',
+    }]
+    with pytest.raises(ValueError, match='Upload'):
+        save_world3d(body, lambda workspace: tmp_path / workspace)
     body['document'].pop('slots')
     body['document']['layers'] = []
     with pytest.raises(ValueError, match='Video3D'):
         save_world3d(body, lambda workspace: tmp_path / workspace)
+
+
+def test_portal_media_with_uploaded_url_can_be_saved(tmp_path):
+    body = payload()
+    body['document']['worldSfx'] = [{
+        'id': 'tv', 'kind': 'media_portal', 'start': 0, 'end': 2,
+        'position': {'x': 0, 'y': 1.15, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0},
+        'scale': 1.7, 'intensity': 1, 'color': '#3da5ff', 'seed': 1, 'sound': False, 'volume': 0.25,
+        'sourceUrl': '/api/v1/uploads/portal.png',
+    }]
+    saved = save_world3d(body, lambda workspace: tmp_path / workspace)
+    stored = json.loads((tmp_path / 'my-film' / saved['name']).read_text())
+    assert stored['worldSfx'][0]['sourceUrl'] == '/api/v1/uploads/portal.png'
+
+
+def test_apply_strips_blob_portal_so_the_scene_can_be_saved(tmp_path):
+    service = SceneCommands(lambda workspace: tmp_path / workspace)
+    doc = document()
+    prepared = service.execute({
+        'version': 1, 'operation': 'scenes.effects.apply',
+        'input': {'document': doc, 'worldCues': [{
+            'id': 'tv', 'kind': 'media_portal', 'start': 0, 'end': 2,
+            'sourceUrl': 'blob:http://localhost/portal',
+        }]},
+    })['result']['document']
+    assert not prepared['worldSfx'][0].get('sourceUrl')
+    saved = save_world3d({**payload(), 'document': prepared}, lambda workspace: tmp_path / workspace)
+    stored = json.loads((tmp_path / 'my-film' / saved['name']).read_text())
+    assert stored['worldSfx'][0]['kind'] == 'media_portal'
+    assert 'blob:' not in json.dumps(stored)
 
 
 def test_native_route_does_not_require_or_overwrite_legacy_layers(tmp_path):

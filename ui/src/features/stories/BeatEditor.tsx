@@ -1,7 +1,9 @@
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Clapperboard, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { button, panel, Field } from './storyLabChrome'
 import { moveItem } from './storyLabEditors'
+import { openStoryBeatScene } from './openBeatScene'
 import type { StoryBeat, StoryProject } from './types'
 
 export function BeatEditor({ beat, index, total, update }: {
@@ -11,6 +13,7 @@ export function BeatEditor({ beat, index, total, update }: {
   update: (updater: (project: StoryProject) => StoryProject) => void
 }) {
   const { t } = useUiTranslation('storyLab')
+  const [sceneError, setSceneError] = useState('')
   const set = (patch: Partial<StoryBeat>) => update(current => {
     current.beats = current.beats.map(item => item.id === beat.id ? { ...item, ...patch } : item)
     return current
@@ -39,6 +42,21 @@ export function BeatEditor({ beat, index, total, update }: {
         <Field label={t('structure.fields.goal')} value={beat.goal} onChange={goal => set({ goal })} rows={2} />
         <Field label={t('structure.fields.conflict')} value={beat.conflict} onChange={conflict => set({ conflict })} rows={2} />
         <Field label={t('structure.fields.turn')} value={beat.turn} onChange={turn => set({ turn })} rows={3} />
+        {beat.sceneLink && (
+          <div className="space-y-1">
+            <button type="button" className={`${button} w-full border-cyan-400/50 text-cyan-100`}
+              data-testid={`open-beat-scene-${beat.id}`}
+              onClick={() => {
+                setSceneError('')
+                void openStoryBeatScene(beat.sceneLink!).catch(error => {
+                  setSceneError(error instanceof Error ? error.message : t('structure.sceneOpenFailed'))
+                })
+              }}>
+              <Clapperboard size={12} /> {beat.sceneLink.label || (beat.sceneLink.editor === 'video3d' ? t('structure.openVideo3d') : t('structure.openVideo2d'))}
+            </button>
+            {sceneError && <p className="text-[10px] text-red-300">{sceneError}</p>}
+          </div>
+        )}
         <button className="text-red-400 text-xs flex items-center gap-1" onClick={() => update(current => {
           current.beats = current.beats.filter(item => item.id !== beat.id)
           return current

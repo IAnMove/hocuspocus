@@ -1,0 +1,244 @@
+{
+  "version": 1,
+  "generation": {
+    "request": {
+      "settings_version": 2.57,
+      "prompt": "Locked-off wide camera, no zoom. The exact same painted illustrated skateboarder stays small enough that his complete head, hands and board ALWAYS remain inside the frame. He keeps a LOW CROUCHED posture throughout. He rolls in LEFT-facing side profile, compresses his knees, then does one SMALL low ollie: the skateboard lifts briefly just 20 centimeters off the ground with his knees tucked into his chest, body still leaning forward and arms low, then wheels land and he absorbs the landing with bent knees. Continue rolling LEFT in the same profile after the landing. The board always stays underneath both feet. Minimal vertical movement of his head, no standing upright, no spinning or kickflip, no facing the camera, no lifting arms above head. Preserve this exact premium painted illustration, same blue jacket and red shirt, orange sneakers and red headphones. Flat blank pale beige studio background throughout. No landscape, no text, no extra objects. A single continuous modest realistic ollie jump, fully visible.",
+      "resolution": "768x512",
+      "flow_shift": 7.0,
+      "num_inference_steps": 4,
+      "video_length": 145,
+      "guidance_scale": 1.0,
+      "image_prompt_type": "S",
+      "video_prompt_type": "",
+      "audio_prompt_type": "",
+      "sliding_window_size": 243,
+      "sliding_window_overlap": 18,
+      "sliding_window_discard_last_frames": 0,
+      "skip_steps_cache_type": "",
+      "skip_steps_multiplier": 0.08,
+      "skip_steps_start_step_perc": 25,
+      "denoising_strength": 1.0,
+      "masking_strength": 1.0,
+      "override_attention": "sla",
+      "model_type": "minimax_h3_fused_turbo",
+      "workspace": "default",
+      "minimax_h3_text_encoder": "gguf_q2_k",
+      "override_profile": 3.5,
+      "seed": 916214,
+      "repeat_generation": 1
+    },
+    "reference": "../moving-cutouts/skate-illustration.jpg",
+    "job": {
+      "job_id": "2d8f549e",
+      "task_id": "task-generation-2d8f549e",
+      "root_task_id": "task-generation-2d8f549e",
+      "status": "queued"
+    },
+    "outputs": [
+      "2026-09-15-22h10m02s_seed916214_Locked-off wide camera, no zoom. The exact same painted illustrated skateboarder stays small enough.mp4"
+    ]
+  },
+  "matting": {
+    "id": "skate-low-ollie",
+    "endpoint": "/api/v1/tools/remove-background",
+    "request": {
+      "source": "2026-09-15-22h10m02s_seed916214_Locked-off wide camera, no zoom. The exact same painted illustrated skateboarder stays small enough.mp4",
+      "source_workspace": "default",
+      "workspace": "default",
+      "temporal_smoothing": true
+    },
+    "job": {
+      "job_id": "045060a3",
+      "status": "running",
+      "task_id": "task-generation-045060a3",
+      "root_task_id": "task-generation-045060a3",
+      "generation_details": {
+        "model_type": "rembg-u2net",
+        "model_name": "rembg U2Net",
+        "generation_mode": "video",
+        "source_asset_id": "asset_unmanaged_add21a243a2752af9adee288485b1c78",
+        "source_filename": "2026-09-15-22h10m02s_seed916214_Locked-off wide camera, no zoom. The exact same painted illustrated skateboarder stays small enough.mp4"
+      }
+    },
+    "status": {
+      "job_id": "045060a3",
+      "task_id": "task-generation-045060a3",
+      "root_task_id": "task-generation-045060a3",
+      "status": "completed",
+      "progress": 100,
+      "step": 158,
+      "total_steps": 158,
+      "phase": "",
+      "message": "Done · background removed",
+      "output_files": [
+        "2026-09-15-22h10m02s_seed916214_Locked-off wide camera, no zoom. The exact same painted illustrated skateboarder stays small enough.no-background-d1f69b7b.webm"
+      ],
+      "error": null,
+      "task_timings": [],
+      "created_at": 1789503106.1985786,
+      "started_at": 1789503106.3869581,
+      "finished_at": 1789503246.260062,
+      "processing_time_sec": 139.87,
+      "queue_position": null,
+      "generation_details": {
+        "model_type": "rembg-u2net",
+        "model_name": "rembg U2Net",
+        "generation_mode": "video",
+        "execution_mode": "real",
+        "simulated": false,
+        "capability": "remove_background",
+        "source_asset_id": "asset_unmanaged_add21a243a2752af9adee288485b1c78",
+        "source_filename": "2026-09-15-22h10m02s_seed916214_Locked-off wide camera, no zoom. The exact same painted illustrated skateboarder stays small enough.mp4",
+        "lora_count": 0
+      },
+      "h3_window_plan": null,
+      "oom_info": null
+    },
+    "complete": true
+  },
+  "shots": [
+    {
+      "clip": 1,
+      "title": "01 · La puerta junto al mar",
+      "saved": {
+        "name": "2026-09-15-22h34m06s_world3d-scene_4f2523.mp4",
+        "url": "/api/v1/file/2026-09-15-22h34m06s_world3d-scene_4f2523.mp4",
+        "workspace": "default"
+      },
+      "bytes": 978898,
+      "elapsedSeconds": 331.37,
+      "scene": {
+        "name": "Salto-entre-mundos-01-01-La-puerta-junto-al-mar-b06708cd50cc4c528c93bfe0597445dd.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Salto-entre-mundos-01-01-La-puerta-junto-al-mar-b06708cd50cc4c528c93bfe0597445dd.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Salto-entre-mundos-01-01-La-puerta-junto-al-mar-b06708cd50cc4c528c93bfe0597445dd.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "clip": 2,
+      "title": "02 · Despegar",
+      "saved": {
+        "name": "2026-09-15-22h35m00s_world3d-scene_204fe9.mp4",
+        "url": "/api/v1/file/2026-09-15-22h35m00s_world3d-scene_204fe9.mp4",
+        "workspace": "default"
+      },
+      "bytes": 500243,
+      "elapsedSeconds": 46.06,
+      "scene": {
+        "name": "Salto-entre-mundos-02-02-Despegar-266d8c5c0b30418ea0fc9a3b3c5664ba.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Salto-entre-mundos-02-02-Despegar-266d8c5c0b30418ea0fc9a3b3c5664ba.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Salto-entre-mundos-02-02-Despegar-266d8c5c0b30418ea0fc9a3b3c5664ba.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "clip": 3,
+      "title": "03 · Caer en otro cielo",
+      "saved": {
+        "name": "2026-09-15-22h39m20s_world3d-scene_58b0f5.mp4",
+        "url": "/api/v1/file/2026-09-15-22h39m20s_world3d-scene_58b0f5.mp4",
+        "workspace": "default"
+      },
+      "bytes": 984948,
+      "elapsedSeconds": 224.75,
+      "scene": {
+        "name": "Salto-entre-mundos-03-03-Caer-en-otro-cielo-7ef801c4f51f42a4ab378c3fe2ba4f6c.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Salto-entre-mundos-03-03-Caer-en-otro-cielo-7ef801c4f51f42a4ab378c3fe2ba4f6c.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Salto-entre-mundos-03-03-Caer-en-otro-cielo-7ef801c4f51f42a4ab378c3fe2ba4f6c.world3d.scene.preview.png?workspace=default"
+      }
+    },
+    {
+      "clip": 4,
+      "title": "04 · Seguir rodando",
+      "saved": {
+        "name": "2026-09-15-22h44m59s_world3d-scene_b2b200.mp4",
+        "url": "/api/v1/file/2026-09-15-22h44m59s_world3d-scene_b2b200.mp4",
+        "workspace": "default"
+      },
+      "bytes": 1239178,
+      "elapsedSeconds": 320.77,
+      "scene": {
+        "name": "Salto-entre-mundos-04-04-Seguir-rodando-f63c95aea50447fba1d2a04d527967da.world3d.scene.json",
+        "type": "scene",
+        "workspace_id": "default",
+        "url": "/api/v1/file/Salto-entre-mundos-04-04-Seguir-rodando-f63c95aea50447fba1d2a04d527967da.world3d.scene.json?workspace=default",
+        "thumbnail_url": "/api/v1/file/Salto-entre-mundos-04-04-Seguir-rodando-f63c95aea50447fba1d2a04d527967da.world3d.scene.preview.png?workspace=default"
+      }
+    }
+  ],
+  "assembly": {
+    "job_id": "video-edit-17016a1ec367",
+    "task_id": "task-video-editor-video-edit-17016a1ec367",
+    "root_task_id": "task-video-editor-video-edit-17016a1ec367",
+    "parent_task_id": null,
+    "workspace": "default",
+    "status": "completed",
+    "phase": "completed",
+    "progress": 100,
+    "current": 100,
+    "total": 100,
+    "message": "Video export complete",
+    "filename": "2026-09-15-22h45m22s_Salto_entre_mundos_vertical.mp4",
+    "url": "/api/v1/file/2026-09-15-22h45m22s_Salto_entre_mundos_vertical.mp4",
+    "output_files": [
+      "2026-09-15-22h45m22s_Salto_entre_mundos_vertical.mp4"
+    ],
+    "result": {
+      "duration": 7.6,
+      "frames": 228,
+      "fps": 30,
+      "clip_count": 4,
+      "transitions": [
+        {
+          "type": "none",
+          "duration": 0.0,
+          "text": "Momentos después…",
+          "text_size": 100.0
+        },
+        {
+          "type": "none",
+          "duration": 0.0,
+          "text": "Momentos después…",
+          "text_size": 100.0
+        },
+        {
+          "type": "none",
+          "duration": 0.0,
+          "text": "Momentos después…",
+          "text_size": 100.0
+        }
+      ],
+      "audio_seconds": 7.6
+    },
+    "error": null,
+    "provider": "local",
+    "model": "FFmpeg",
+    "server_origin": "local",
+    "resource_lane": "local_cpu:ffmpeg",
+    "resource_requirements": [
+      "local_cpu:ffmpeg"
+    ],
+    "acquired_resources": [],
+    "created_at": 1789505122.0122666,
+    "queued_at": 1789505122.0122666,
+    "updated_at": 1789505124.176241,
+    "started_at": 1789505122.0380251,
+    "finished_at": 1789505124.1762338
+  },
+  "verified": {
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "frames": 228,
+    "duration": 7.6
+  },
+  "sourceBackgrounds": [
+    "/examples/moving-cutouts/skate-coast.mp4",
+    "/examples/moving-cutouts/skate-clouds.mp4"
+  ]
+}
