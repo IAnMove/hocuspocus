@@ -10,6 +10,7 @@ import type {
 import type { SliceCreator } from './storeApi'
 import {
   H3_EXPERIMENTAL_MAX_FRAMES,
+  h3AlignmentOptions,
   supportsH3ExtendedDuration,
 } from '../lib/h3ExtendedDuration'
 
@@ -160,7 +161,10 @@ export function createStudioConfigurationSlice(
       if (options?.sliding_window && nativeMaximum && seconds <= Math.round(nativeMaximum * 10) / 10) {
         seconds = Math.min(seconds, nativeMaximum)
       }
-      const frames = dependencies.alignFrameCount(Math.round(seconds * fps), options)
+      const frames = dependencies.alignFrameCount(
+        Math.round(seconds * fps),
+        h3AlignmentOptions(options, get().params.minimax_h3_extended_duration) ?? options,
+      )
       set(state => ({
         durationSeconds: seconds,
         params: { ...state.params, video_length: frames },
@@ -213,6 +217,7 @@ export function createStudioConfigurationSlice(
         h3WindowPlan: null,
       }))
       if (next) get().setSlidingWindowSeconds(H3_EXPERIMENTAL_MAX_FRAMES / (options?.fps ?? 24))
+      get().setDurationSeconds(get().durationSeconds)
     },
     outputCount: 1,
     setOutputCount: count => set(state => ({

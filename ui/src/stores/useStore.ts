@@ -1,5 +1,12 @@
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
-import { h3MaximumFrames, h3WindowMaximumFrames } from '../lib/h3ExtendedDuration'
+import {
+  H3_EXPERIMENTAL_MAX_FRAMES,
+  h3AlignmentOptions,
+  h3MaximumFrames,
+  h3WindowMaximumFrames,
+  requestedVideoFrames,
+  supportsH3ExtendedDuration,
+} from '../lib/h3ExtendedDuration'
 import { isInstructionSpeechModel } from '../lib/instructionSpeech'
 import { h3ModelSwitchSettings, projectStudioH3RequestParams, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
 import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
@@ -650,7 +657,7 @@ function _applyModelDefaults(
 export function alignFrameCount(
   frames: number,
   o: { frame_alignment_modulus?: number; frame_alignment_remainder?: number;
-       frame_alignment_mode?: string; frames_minimum?: number; frames_maximum?: number | null } | null | undefined,
+       frame_alignment_mode?: string; frames_minimum?: number | null; frames_maximum?: number | null } | null | undefined,
 ): number {
   const modulus = o?.frame_alignment_modulus ?? 0
   if (!modulus || modulus <= 0) return frames
@@ -4812,23 +4819,12 @@ export const useStore = create<AppState>((set, get) => {
     if (state.generationMode === 'video') {
       const fps = state.modelOptions?.fps ?? 16
       const supportsSlidingWindows = state.modelOptions?.sliding_window === true
-      const minimumFrames = state.modelOptions?.frames_minimum ?? 1
-      const maximumFrames = h3MaximumFrames(state.modelOptions, state.params.minimax_h3_extended_duration)
-      let requestedFrames = Math.max(
-        minimumFrames,
-        Math.round(state.durationSeconds * fps),
+      params.video_length = requestedVideoFrames(
+        state.durationSeconds,
+        state.modelOptions,
+        state.params.minimax_h3_extended_duration,
+        alignFrameCount,
       )
-      requestedFrames = alignFrameCount(requestedFrames, state.modelOptions)
-      if (!supportsSlidingWindows && maximumFrames != null) {
-        requestedFrames = Math.min(maximumFrames, requestedFrames)
-      } else if (
-        supportsSlidingWindows
-        && maximumFrames != null
-        && requestedFrames <= maximumFrames + 1
-      ) {
-        requestedFrames = Math.min(maximumFrames, requestedFrames)
-      }
-      params.video_length = requestedFrames
       if (state.modelOptions?.wangp_1272) params.video_length = Math.max(1, Math.round(state.durationSeconds * fps))
 
       if (supportsSlidingWindows) {
@@ -6177,8 +6173,10 @@ export const useStore = create<AppState>((set, get) => {
       const overlapDefault = swDefaults?.overlap_default ?? 5
       const discardDefault = swDefaults?.discard_last_frames ?? 0
       const minimumDuration = Math.max(1, (options.frames_minimum || fps) / fps)
-      const nativeMaximumDuration = options.frames_maximum
-        ? options.frames_maximum / fps
+      const extendedDuration = activeState.params.minimax_h3_extended_duration === true
+      const maximumFrames = h3MaximumFrames(options, extendedDuration)
+      const nativeMaximumDuration = maximumFrames != null
+        ? maximumFrames / fps
         : null
       const maximumDuration = !options.sliding_window && nativeMaximumDuration
         ? nativeMaximumDuration
@@ -6201,13 +6199,17 @@ export const useStore = create<AppState>((set, get) => {
         )
       }
       let nextWindowFrames = Math.round(slidingWindowSeconds * fps)
-      if (options.sliding_window && swDefaults?.window_default != null) {
+      if (extendedDuration && supportsH3ExtendedDuration(options)) {
+        nextWindowFrames = H3_EXPERIMENTAL_MAX_FRAMES
+      } else if (options.sliding_window && swDefaults?.window_default != null) {
         nextWindowFrames = swDefaults.window_default
       }
       if (options.sliding_window && swDefaults) {
+        const windowMaximum = h3WindowMaximumFrames(options, extendedDuration)
+          ?? nextWindowFrames
         nextWindowFrames = Math.max(
           swDefaults.window_min ?? 1,
-          Math.min(swDefaults.window_max ?? nextWindowFrames, nextWindowFrames),
+          Math.min(windowMaximum, nextWindowFrames),
         )
       } else if (!options.sliding_window) {
         nextWindowFrames = Math.round(nextDurationSeconds * fps)
@@ -6215,7 +6217,10 @@ export const useStore = create<AppState>((set, get) => {
       const nextWindowSeconds = nextWindowFrames / fps
       const paramUpdates: Record<string, unknown> = {
         guidance_phases: options.guidance_max_phases,
-        video_length: alignFrameCount(Math.round(nextDurationSeconds * fps), options),
+        video_length: alignFrameCount(
+          Math.round(nextDurationSeconds * fps),
+          h3AlignmentOptions(options, extendedDuration) ?? options,
+        ),
         sliding_window_size: nextWindowFrames,
         sliding_window_overlap: overlapDefault,
         sliding_window_discard_last_frames: discardDefault,
