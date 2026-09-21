@@ -191,7 +191,7 @@ async function runStudioImageGeneration(
   const intentId = context?.commandId || ports.newIntentId()
   try {
     const prepared = await prepareStudioImageCommand(
-      normalized.params, intentId, ports.resolveReferences, errors,
+      normalized.params, intentId, ports.resolveReferences, errors, intent.localImageFiles,
     )
     return await sendPreparedImageCommand(prepared, intent, ports, scheduledPrompt, context)
   } catch (error) {

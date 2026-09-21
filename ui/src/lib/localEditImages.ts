@@ -20,6 +20,20 @@ export function localEditFile(value: string | undefined): File | undefined {
   return value ? files.get(value) : undefined
 }
 
+/** Hold the selected bytes while the user replaces inputs or releases previews. */
+export function snapshotLocalEditFiles(params: Record<string, unknown>, fields: readonly string[]): ReadonlyMap<string, File> {
+  const snapshot = new Map<string, File>()
+  for (const field of fields) {
+    const values = Array.isArray(params[field]) ? params[field] : [params[field]]
+    for (const value of values as unknown[]) {
+      if (typeof value !== 'string') continue
+      const file = files.get(value.trim())
+      if (file) snapshot.set(value.trim(), file)
+    }
+  }
+  return snapshot
+}
+
 export function forgetLocalImage(value: string | undefined): void {
   if (!value) return
   const preview = previews.get(value)
@@ -46,10 +60,10 @@ export function studioMediaUrl(value: string): string {
   return trimmed
 }
 
-export async function materializeLocalEditImage(value: unknown): Promise<unknown> {
+export async function materializeLocalEditImage(value: unknown, snapshot?: ReadonlyMap<string, File>): Promise<unknown> {
   if (typeof value !== 'string' || !value) return value
   const token = value.trim()
-  const file = files.get(token)
+  const file = snapshot ? snapshot.get(token) : files.get(token)
   if (token.startsWith('local-edit:') || token.startsWith('blob:')) {
     if (!file) throw new Error('The local edit image is no longer in this tab. Choose it again.')
     const uploaded = await uploadImage(file)
@@ -65,12 +79,13 @@ export async function materializeLocalEditImage(value: unknown): Promise<unknown
 export async function materializeLocalEditFields(
   params: Record<string, unknown>,
   fields: readonly string[],
+  snapshot = snapshotLocalEditFiles(params, fields),
 ): Promise<void> {
   for (const field of fields) {
     const original = params[field]
     if (!original) continue
     params[field] = Array.isArray(original)
-      ? await Promise.all(original.map(item => materializeLocalEditImage(item)))
-      : await materializeLocalEditImage(original)
+      ? await Promise.all(original.map(item => materializeLocalEditImage(item, snapshot)))
+      : await materializeLocalEditImage(original, snapshot)
   }
 }

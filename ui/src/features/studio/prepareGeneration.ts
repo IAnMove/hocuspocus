@@ -11,6 +11,7 @@ import { generationProvenancePayload, type GenerationSubmissionContext } from '.
 import { translateLegacyImageGuides } from './imageCommandSubmission'
 import { supportsImageIntent } from './imageStudioIntent'
 import { storedImageFileUrl } from '../../lib/storedImageFiles'
+import { materializeLocalEditFields, snapshotLocalEditFiles } from '../../lib/localEditImages'
 
 const MEDIA_FIELDS = ['image_refs', 'image_start', 'image_end', 'image_guide', 'image_mask'] as const
 
@@ -45,6 +46,7 @@ export type StudioImageIntent = {
   generationMode: 'image'
   activeWorkspace: string
   params: Record<string, unknown>
+  localImageFiles?: ReadonlyMap<string, File>
   model: StudioImageModelFlags
   models: Array<{ model_type: string; name: string }>
   llmLoaded: boolean
@@ -267,6 +269,7 @@ export function snapshotStudioImageIntent(source: StudioImageIntentSource): Stud
     generationMode: 'image',
     activeWorkspace: source.activeWorkspace || 'default',
     params: detachParams({ ...(source.params as Record<string, unknown> | undefined || {}) }),
+    localImageFiles: snapshotLocalEditFiles(source.params!, [...MEDIA_FIELDS, 'video_guide', 'video_mask']),
     model: snapshotModelFlags(source.modelOptions),
     models: [...(source.models || [])],
     llmLoaded: source.llmStatus?.loaded === true,
@@ -710,12 +713,12 @@ export async function prepareStudioImageCommand(
   intentId: string,
   resolveReferences: (references: unknown[]) => Promise<string[]>,
   referenceErrors: string[] = [],
+  localImageFiles?: ReadonlyMap<string, File>,
 ): Promise<{ command: StudioImageGenerationCommand; params: Record<string, unknown> }> {
   if (referenceErrors.length) throw new Error(i18n.t('studio:commands.referenceFailed'))
   const snapshot = JSON.parse(stableSerialize(params)) as Record<string, unknown>
   translateLegacyImageGuides(snapshot)
-  const { materializeLocalEditFields } = await import('../../lib/localEditImages')
-  await materializeLocalEditFields(snapshot, MEDIA_FIELDS)
+  await materializeLocalEditFields(snapshot, MEDIA_FIELDS, localImageFiles)
   await applyCanonicalImageReferences(snapshot, resolveReferences)
   const command = createStudioImageGenerationCommand(snapshot, intentId)
   return {
