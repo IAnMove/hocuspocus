@@ -255,7 +255,7 @@ export function DirectGenerationWorkspace() {
           </div>
           {!imageChooser && !(isAudio && audioSubMode === 'mixer') && (
             <div className="shrink-0">
-              <GenerateButton />
+              {!(isImage && imageStudioIntent === 'loop') && <GenerateButton />}
             </div>
           )}
         </div>

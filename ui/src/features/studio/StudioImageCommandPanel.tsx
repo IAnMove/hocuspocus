@@ -56,9 +56,10 @@ export function StudioImageCommandPanel({ workspace, model, visible, onRecovered
     const element = root.current
     const receive = (event: Event) => {
       const request = (event as CustomEvent<ImagePresentation>).detail
+      if (request.target && request.target !== root.current) return
       const view = current.current
       if (!view.visible || request.command.input.workspace !== view.workspace
-          || parameters(request.command).model_type !== view.model || waiting.current?.active) {
+          || waiting.current?.active) {
         request.respond(i18n.t('studio:commands.contextChanged'))
         return
       }
@@ -106,7 +107,7 @@ export function StudioImageCommandPanel({ workspace, model, visible, onRecovered
       second = requestAnimationFrame(() => {
         const view = current.current
         const valid = root.current?.isConnected && view.visible && view.workspace === request.command.input.workspace
-          && view.model === parameters(request.command).model_type
+
         request.respond(valid ? undefined : i18n.t('studio:commands.contextChanged'))
         waiting.current = null
       })

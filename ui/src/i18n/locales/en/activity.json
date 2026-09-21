@@ -3,13 +3,16 @@
   "title": "Activity",
   "openHistory": "Show canonical task history",
   "panelTitle": "HocusPocus tasks",
+  "loadingHistory": "Loading activity… The server has not responded yet.",
+  "loadFailed": "Activity could not be loaded. Retrying automatically; existing tasks are kept.",
+  "emptyHistory": "No activity in this workspace yet.",
   "activeDurable": "{{count}} active · durable per workspace",
   "clearHistory": "Clear history",
   "clearHistoryAria": "Clear activity history",
   "clearHistoryTitle": "Hide completed task history from this UI. Videos and task data are kept.",
   "ready": "Ready — no active jobs",
   "eta": "ETA {{value}}",
-  "etaTitle": "Estimated remaining time for the complete task",
+  "etaTitle": "Estimate based on completed steps. Decoding and saving may add time.",
   "subtask": "Subtask {{phase}}",
   "activeSubtask": "Active subtask: {{phase}}",
   "startedBy": "Started by {{name}}",
@@ -54,7 +57,13 @@
     "failed": "Failed",
     "cancelled": "Cancelled",
     "interrupted": "Interrupted",
-    "fallback": "{{phase}}"
+    "fallback": "{{phase}}",
+    "loadingModel": "Loading model",
+    "encodingText": "Encoding text",
+    "encodingImages": "Encoding images",
+    "inference": "Sampling",
+    "decoding": "Decoding image",
+    "saving": "Saving output"
   },
   "lineage": {
     "reading": {

@@ -33,6 +33,8 @@ export function useActivityTasks(activeWorkspace: string) {
   const workspaceRef = useRef(activeWorkspace)
   workspaceRef.current = activeWorkspace
   const [tasks, setTasks] = useState<CanonicalTask[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
   const tasksRef = useRef<CanonicalTask[]>([])
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
   const [controlFailures, setControlFailures] = useState<Record<string, TaskControlFailure>>({})
@@ -54,9 +56,11 @@ export function useActivityTasks(activeWorkspace: string) {
     const refresh = async (): Promise<number | null> => {
       if (refreshPending) return null
       refreshPending = true
+      if (mounted) setLoading(true)
       try {
         const result = await api.fetchCanonicalTasks(activeWorkspace, 'all')
         if (mounted) {
+          setLoadFailed(false)
           unknownTaskBaseline = Math.max(
             unknownTaskBaseline,
             ...result.tasks.map(task => Number(task.updated_at || 0)),
@@ -65,9 +69,11 @@ export function useActivityTasks(activeWorkspace: string) {
         }
         return Number(result.latest_event_id || 0)
       } catch {
+        if (mounted) setLoadFailed(true)
         return null
       } finally {
         refreshPending = false
+        if (mounted) setLoading(false)
       }
     }
 
@@ -114,6 +120,8 @@ export function useActivityTasks(activeWorkspace: string) {
 
     tasksRef.current = []
     setTasks([])
+    setLoading(true)
+    setLoadFailed(false)
     publishCanonicalTasks([])
     setControlFailures({})
     void connectAfterSnapshot()
@@ -152,7 +160,7 @@ export function useActivityTasks(activeWorkspace: string) {
     })
   }
 
-  return { tasks, tasksRef, busyIds, controlFailures, runControl }
+  return { tasks, tasksRef, busyIds, controlFailures, runControl, loading, loadFailed }
 }
 
 export function hideTerminalHistory(tasks: CanonicalTask[], hidden: Set<string>): Set<string> {

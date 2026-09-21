@@ -1,3 +1,5 @@
+import { concreteImageResolution, referenceImageResolution } from '../lib/imageResolution'
+import { IMAGE_INTENT_PARAMS, imageStudioDraft } from '../features/studio/imageStudioIntent'
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
 import {
   H3_EXPERIMENTAL_MAX_FRAMES,
@@ -1165,6 +1167,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
   setGenerationMode: (mode: GenerationMode) => void
+  imageStudioDrafts: Partial<Record<import('../features/studio/imageStudioIntent').ImageStudioIntent, import('../features/studio/imageStudioIntent').ImageStudioDraft>>
   imageStudioIntent: import('../features/studio/imageStudioIntent').ImageStudioIntent
   setImageStudioIntent: (intent: import('../features/studio/imageStudioIntent').ImageStudioIntent) => void
   resetImageStudio: () => void
@@ -2259,25 +2262,40 @@ export const useStore = create<AppState>((set, get) => {
   // Generation mode
   generationMode: 'video',
   imageStudioIntent: 'chooser' as import('../features/studio/imageStudioIntent').ImageStudioIntent,
-  setImageStudioIntent: intent => set({ imageStudioIntent: intent }),
-  resetImageStudio: () => {
+  imageStudioDrafts: {},
+  setImageStudioIntent: intent => {
     const state = get()
-    void import('../lib/localEditImages').then(({ forgetLocalImage }) => {
-      forgetLocalImage(String(state.params.image_guide || ''))
-      forgetLocalImage(String(state.params.image_mask || ''))
-    })
-    const flags = String(state.params.video_prompt_type || '').replace(/[VAG]/g, '')
+    if (state.imageStudioIntent === intent) return
+    const drafts = { ...state.imageStudioDrafts }
+    if (state.imageStudioIntent !== 'chooser') drafts[state.imageStudioIntent] = imageStudioDraft(state)
+    const draft = drafts[intent]
+    const cleared = Object.fromEntries(IMAGE_INTENT_PARAMS.map(key => [key, undefined]))
     set({
-      imageStudioIntent: 'chooser',
-      imageRefs: [],
-      params: {
-        ...state.params,
-        image_guide: undefined,
-        image_mask: undefined,
-        video_guide_outpainting: undefined,
-        video_prompt_type: flags,
+      imageStudioIntent: intent, imageStudioDrafts: drafts,
+      imageRefs: draft?.imageRefs || [], imageRefType: draft?.imageRefType || '',
+      removeBackgroundRefs: draft?.removeBackgroundRefs || false,
+      startImage: draft?.startImage || null, endImage: draft?.endImage || null,
+      imageSourceSize: draft?.imageSourceSize || null,
+      resolutionPreset: draft?.resolutionPreset || 'auto', aspectRatio: draft?.aspectRatio || 'auto',
+      params: { ...state.params, ...cleared,
+        prompt: '', negative_prompt: '',
+        video_prompt_type: '', image_prompt_type: 'T', denoising_strength: 1, masking_strength: 1,
+        ...draft?.params,
+        resolution: concreteImageResolution(draft?.params.resolution || resolveResolution(state.modelOptions, 'auto', 'auto'), state.params.model_type),
       },
     })
+  },
+  resetImageStudio: () => {
+    const state = get()
+    const drafts = [imageStudioDraft(state), ...Object.values(state.imageStudioDrafts)]
+    void import('../lib/localEditImages').then(({ forgetLocalImage }) => {
+      for (const draft of drafts) {
+        forgetLocalImage(String(draft.params.image_guide || ''))
+        forgetLocalImage(String(draft.params.image_mask || ''))
+      }
+    })
+    state.setImageStudioIntent('chooser')
+    set({ imageStudioDrafts: {} })
   },
   editSubMode: 'retake' as import('../types').EditSubMode,
   setEditSubMode: (mode: import('../types').EditSubMode, recastEngine?: 'scail' | 'viggle') => {
@@ -2747,6 +2765,11 @@ export const useStore = create<AppState>((set, get) => {
   savedPromptPerMode: {} as Partial<Record<string, string>>,
 
   setGenerationMode: (mode) => {
+    const imageState = get()
+    if (imageState.generationMode === 'image' && mode !== 'image' && imageState.imageStudioIntent !== 'chooser') {
+      set({ imageStudioDrafts: { ...imageState.imageStudioDrafts, [imageState.imageStudioIntent]: imageStudioDraft(imageState) } })
+    }
+
     // Tools is a non-generative post-processing area — it owns no model, so
     // skip the per-mode model/LoRA/params RESTORE machinery entirely. We still
     // SAVE the leaving mode's state (prompt / model / LoRAs / params snapshot)
@@ -6283,6 +6306,11 @@ export const useStore = create<AppState>((set, get) => {
           nextResolutionPreset,
           nextAspectRatio,
         )
+        const sourceSize = activeState.imageSourceSize
+        if (modelType.startsWith('qwen_image_21') && nextAspectRatio === 'auto'
+          && sourceSize && sourceSize.source === activeState.params.image_guide) {
+          paramUpdates.resolution = referenceImageResolution(sourceSize.width, sourceSize.height, nextResolutionPreset, modelType)
+        }
       } else if (
         nextAspectRatio === 'auto'
         && activeState.generationMode !== 'image'
@@ -9029,6 +9057,11 @@ export const useStore = create<AppState>((set, get) => {
 
     set(s => ({
       params: { ...s.params, ...newParams },
+      ...(s.generationMode === 'image' ? {
+        imageStudioIntent: newParams.image_guide ? 'edit' as const
+          : newParams.image_refs?.length ? 'character' as const : 'new' as const,
+        imageSourceSize: null,
+      } : {}),
       h3WindowPlan: restoredH3WindowPlan,
       loraWeights,
       startImage: null,

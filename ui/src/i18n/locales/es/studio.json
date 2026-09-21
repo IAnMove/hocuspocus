@@ -56,9 +56,10 @@
     "referenceHint": "Añade al menos una referencia de imagen o vídeo. El audio no puede ser la única referencia.",
     "queuedCount": "{{count}} en cola",
     "queueCount": "Encolar {{count}}",
-    "goCount": "Ir ({{count}})",
+    "goCount": "Generar",
     "localUnavailable": "La generación local necesita NVIDIA",
-    "localUnavailableHint": "Este Mac sirve para editar y usar proveedores remotos. Abre el proyecto en un host NVIDIA Windows/Linux para generar en local."
+    "localUnavailableHint": "Este Mac sirve para editar y usar proveedores remotos. Abre el proyecto en un host NVIDIA Windows/Linux para generar en local.",
+    "activeCount": "{{count}} trabajos activos"
   },
   "prompt": {
     "placeholderImage": "Describe tu imagen...",
@@ -522,7 +523,8 @@
     "stretch": "Estirar",
     "apply": "Usar este recorte",
     "cancel": "Cancelar",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "failed": "No se pudo ajustar la imagen o la máscara. Vuelve a intentarlo."
   },
   "imageEdit": {
     "title": "Herramientas de edición",
@@ -1020,7 +1022,7 @@
       "title": "Paso 2 de 3 · Genera el fotograma sustituto",
       "references": "Conserva el fotograma original como referencia 1. Si quieres copiar la apariencia de otro personaje, añade su imagen como referencia 2.",
       "prompt": "Describe en el campo de texto qué personaje sustituir y cómo debe quedar. Usa un modelo de edición de imágenes que admita referencias.",
-      "generate": "Pulsa «Generar» o «Ir» en el botón azul inferior y espera a que termine la imagen. Añadir referencias todavía no realiza la sustitución.",
+      "generate": "Pulsa «Generar» en el botón azul inferior y espera a que termine la imagen. Añadir referencias todavía no realiza la sustitución.",
       "apply": "Revisa la última imagen generada y pulsa «Aplicar y volver». Volverás a Viggle para generar el vídeo.",
       "keepFrame": "Mantén la pose, el fondo y el encuadre del fotograma original. Deja la resolución y la proporción en Auto para conservar el lienzo del vídeo.",
       "exampleTitle": "Ejemplo de instrucción",
@@ -1119,5 +1121,11 @@
     "language": "El proveedor documenta inglés y chino; el español no está validado. El componente Qwen tiene condiciones de investigación/evaluación; consulta su licencia para uso comercial.",
     "steps": "Pasos de síntesis",
     "guidance": "Intensidad de seguimiento de instrucciones"
+  },
+  "imageResolution": {
+    "label": "Resolución",
+    "auto": "1K recomendado. Formato Auto sigue la imagen de edición; sin imagen, usa un lienzo cuadrado.",
+    "balanced": "1K recomendado: equilibrio entre velocidad, detalle y memoria en todos los formatos.",
+    "quality": "2K: aproximadamente 4× los píxeles de 1K. Tarda más y necesita más memoria. Consulta pasos y tiempo estimado en Actividad."
   }
 }

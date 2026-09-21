@@ -89,6 +89,7 @@ export interface GenerateParams {
   image_guide?: string
   image_mask?: string
   denoising_strength?: number
+  masking_strength?: number
   video_guide_outpainting?: string
   temporal_upsampling?: string
   wangp_processor_settings?: Record<string, unknown>

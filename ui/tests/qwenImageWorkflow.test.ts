@@ -1,0 +1,107 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { JSDOM } from 'jsdom'
+import { concreteImageResolution, referenceImageResolution } from '../src/lib/imageResolution.ts'
+import { fitRectangle, paintFit, fitFile } from '../src/lib/imageFit.ts'
+import { estimatedRemainingSeconds, phaseCatalogKey } from '../src/features/activity/taskPresentation.ts'
+const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
+Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage })
+const { useStore } = await import('../src/stores/useStore.ts')
+const { snapshotStudioImageIntent, normalizeStudioImageParams, resolveStudioImageMedia } = await import('../src/features/studio/prepareGeneration.ts')
+
+test('edit, create and character restore separate drafts and submit only active resources', async () => {
+  const initial = useStore.getState()
+  try {
+    useStore.setState({ generationMode: 'image', imageStudioIntent: 'chooser', imageStudioDrafts: {} })
+    useStore.getState().setImageStudioIntent('edit')
+    useStore.getState().setParams({ image_guide: 'local-edit:source', image_mask: 'local-edit:mask', video_prompt_type: 'VAG', prompt: 'Edit this' })
+    useStore.getState().setImageStudioIntent('new')
+    assert.equal(useStore.getState().params.image_guide, undefined)
+    assert.equal(useStore.getState().params.image_mask, undefined)
+    useStore.getState().setParam('prompt', 'Create this')
+    useStore.getState().setImageStudioIntent('character')
+    const file = new File(['ref'], 'ref.png', { type: 'image/png' })
+    useStore.setState({ imageRefs: [file], imageRefType: 'KI' })
+    useStore.getState().setImageStudioIntent('edit')
+    assert.equal(useStore.getState().params.prompt, 'Edit this')
+    assert.equal(useStore.getState().params.image_mask, 'local-edit:mask')
+    assert.deepEqual(useStore.getState().imageRefs, [])
+    useStore.getState().setImageStudioIntent('new')
+    assert.equal(useStore.getState().params.prompt, 'Create this')
+    const intent = snapshotStudioImageIntent({ ...useStore.getState(), imageRefs: [file], imageRefType: 'KI',
+      params: { ...useStore.getState().params, image_guide: 'hidden', image_mask: 'hidden', image_refs: ['hidden'], video_prompt_type: 'VAGKI' },
+    })
+    const { params } = normalizeStudioImageParams(intent)
+    let uploads = 0
+    await resolveStudioImageMedia(intent, params, {
+      uploadImage: async () => { uploads++; throw new Error('hidden upload') },
+      uploadAudio: async () => { throw new Error('hidden upload') }, resolveReferences: async () => [],
+    })
+    assert.equal(uploads, 0)
+    for (const key of ['image_guide', 'image_mask', 'image_refs']) assert.equal(params[key], undefined)
+    assert.equal(params.video_prompt_type, '')
+    useStore.getState().setImageStudioIntent('character')
+    assert.deepEqual(useStore.getState().imageRefs, [file])
+    assert.equal(useStore.getState().params.image_guide, undefined)
+    useStore.getState().resetImageStudio()
+    assert.deepEqual(useStore.getState().imageStudioDrafts, {})
+    assert.deepEqual(useStore.getState().imageRefs, [])
+    assert.equal(useStore.getState().params.image_refs, undefined)
+  } finally { useStore.setState(initial, true) }
+})
+
+test('Qwen sizes align to 32 and auto aspect retains source at both pixel budgets', () => {
+  const model = 'qwen_image_21_uncensored_gguf_q4_k_m'
+  assert.equal(concreteImageResolution('1280x720', model), '1280x736')
+  assert.equal(concreteImageResolution('auto', model), '1024x1024')
+  for (const preset of ['auto', '720p', '1080p']) {
+    for (const [w, h] of [[1920, 1080], [800, 1600], [1301, 997]]) {
+      const [width, height] = referenceImageResolution(w, h, preset, model).split('x').map(Number)
+      assert.equal(width % 32, 0)
+      assert.equal(height % 32, 0)
+      assert.ok(Math.abs(width / height - w / h) < .06)
+    }
+  }
+  const initial = useStore.getState()
+  try {
+    useStore.setState({ generationMode: 'image', aspectRatio: 'auto', params: { ...initial.params, model_type: model, image_guide: 'photo' }, imageSourceSize: { source: 'photo', width: 1920, height: 1080 } })
+    useStore.getState().setResolutionPreset('1080p')
+    assert.equal(useStore.getState().params.resolution, referenceImageResolution(1920, 1080, '1080p', model))
+    useStore.getState().setResolutionPreset('720p')
+    assert.equal(useStore.getState().params.resolution, referenceImageResolution(1920, 1080, '720p', model))
+  } finally { useStore.setState(initial, true) }
+})
+
+test('fit aligns a differently sized mask with source geometry and exports PNG', async () => {
+  const calls: unknown[][] = []
+  const original = dom.window.HTMLCanvasElement.prototype.getContext
+  dom.window.HTMLCanvasElement.prototype.getContext = (() => ({ fillRect: (...args: unknown[]) => calls.push(['fill', ...args]), drawImage: (...args: unknown[]) => calls.push(['draw', ...args]) })) as never
+  try {
+    for (const mode of ['contain', 'cover', 'stretch'] as const) {
+      calls.length = 0
+      const source = { width: 200, height: 100 } as HTMLImageElement
+      const mask = { width: 20, height: 10 } as HTMLImageElement
+      const canvas = paintFit(source, 100, 100, mode)
+      paintFit(mask, 100, 100, mode, source, true)
+      assert.equal(calls[0][0], 'draw', 'source must not fill an opaque background')
+      assert.equal(calls[1][0], 'fill', 'mask padding preserves pixels')
+      assert.deepEqual(calls[0].slice(2), calls[2].slice(2))
+      canvas.toBlob = (cb, mime) => { assert.equal(mime, 'image/png'); cb(new Blob(['png'], { type: mime })) }
+      assert.equal((await fitFile(canvas, 'fitted.png')).type, 'image/png')
+    }
+    assert.deepEqual(fitRectangle(200, 100, 100, 100, 'contain'), { x: 0, y: 25, width: 100, height: 50 })
+    assert.deepEqual(fitRectangle(200, 100, 100, 100, 'cover'), { x: -50, y: 0, width: 200, height: 100 })
+  } finally { dom.window.HTMLCanvasElement.prototype.getContext = original }
+})
+
+test('footer identifies native phases and estimates sampling without loading time', () => {
+  const task = { id: 'qwen', status: 'running', phase: 'Denoising | 3m', created_at: 100, started_at: 100,
+    updated_at: 260, current: 10, total: 40, provider: 'local', metadata: { adapter: 'generation', inference_started_at: 240, inference_start_step: 0 } }
+  assert.equal(phaseCatalogKey(task), 'inference')
+  assert.equal(estimatedRemainingSeconds(task, 260_000), 60)
+  for (const [phase, key] of [['Encoding Prompt | 1m', 'encodingText'], ['Encoding Reference Images | 1m', 'encodingImages'], ['VAE Decoding | 3m', 'decoding']]) {
+    assert.equal(phaseCatalogKey({ ...task, phase }), key)
+    assert.equal(estimatedRemainingSeconds({ ...task, phase }, 260_000), undefined)
+  }
+  assert.equal(estimatedRemainingSeconds({ ...task, current: 1 }, 260_000), undefined)
+})

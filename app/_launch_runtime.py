@@ -1254,6 +1254,22 @@ def _model_weight_groups(model_type: str, owned_only: bool = False) -> list:
     return groups
 
 
+def _missing_image_model_files(model_type: str) -> list[str]:
+    """Explain readiness using the same checkpoint roots and variant groups."""
+    missing = [" or ".join(_variant_group_filenames(group))
+               for group in _model_weight_groups(model_type) if not _variant_group_downloaded(group)]
+    definition = wgp.get_model_def(model_type) or {}
+    required = list(definition.get("required_model_assets", []))
+    if definition.get("vision_encoder_filename"):
+        required.append(definition["vision_encoder_filename"])
+    missing.extend(path for path in required if wgp.fl.locate_file(path, error_if_none=False) is None)
+    for url in wgp.get_model_recursive_prop(model_type, "loras", return_list=True):
+        filename = url.split("/")[-1]
+        if not os.path.isfile(wgp.resolve_lora_path(model_type, filename)):
+            missing.append(filename)
+    return list(dict.fromkeys(name for name in missing if name))
+
+
 def _check_model_downloaded(model_type: str) -> bool:
     """Check if a model's checkpoint files are downloaded.
 
@@ -24649,6 +24665,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                                 msg = data[1] if len(data) > 1 else str(data[0])
                                 total = 0
                                 progress_updates.update(step=0, total_steps=0)
+                            from shared.utils.generation_timing import inference_progress_clock
+                            progress_updates.update(inference_progress_clock(job, msg, step, time.time()))
                             progress_updates.update(message=msg, phase=msg, last_progress_at=time.time())
                             if not update_job(job, **progress_updates):
                                 continue
@@ -33322,6 +33340,10 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             # 3D preview sidecars are served as card thumbnails, not gallery items.
             if name.endswith(".preview.png"):
                 continue
+            # Atomic image writes keep a media extension for PIL. They are
+            # incomplete until renamed and must never become gallery tiles.
+            if re.search(r"\.tmp_[0-9a-f]{8}\.[^.]+$", name):
+                continue
             filepath = os.path.join(out_dir, name)
             if not os.path.isfile(filepath):
                 continue
@@ -35903,6 +35925,9 @@ def _generation_task_fields(job: dict) -> dict:
     )
     task_metadata = {
         "adapter": "generation", "generation_details": details,
+        "display_prompt": details.get("prompt", ""),
+        "inference_started_at": job.get("inference_started_at"),
+        "inference_start_step": job.get("inference_start_step"),
         "owner_pipeline_id": owner_id,
         "actor": provenance.get("actor") or "unknown",
         "tool": provenance.get("tool") or "studio",

@@ -481,3 +481,18 @@ def test_prune_terminal_count_keeps_newest_snapshots(tmp_path):
     assert registry.get(tasks[0]["id"]) is None
     assert registry.get(tasks[1]["id"])["status"] == "completed"
     assert registry.get(tasks[2]["id"])["status"] == "completed"
+
+
+def test_activity_display_prompt_survives_without_exposing_unrelated_raw_prompts(tmp_path):
+    from services.task_manager import TaskRegistry
+    registry = TaskRegistry(str(tmp_path))
+    prompt = 'A literal image prompt\n' + ('detail ' * 1400)
+    task = registry.create(id='prompt-display', kind='image', metadata={
+        'display_prompt': prompt, 'prompt': 'internal LLM instruction',
+        'generation_details': {'prompt': 'legacy raw field', 'resolution': '1024x1024'},
+    })
+    assert task['metadata']['display_prompt'] == prompt
+    assert 'prompt' not in task['metadata']
+    stored = registry.get('prompt-display')
+    assert stored['metadata']['display_prompt'] == prompt
+    assert 'prompt' not in stored['metadata']['generation_details']

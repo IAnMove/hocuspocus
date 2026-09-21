@@ -31,7 +31,7 @@
         "image_outputs": true
     },
     "prompt": "A neon shop sign that reads QWEN IMAGE 2.1, rainy night, reflections on wet pavement",
-    "resolution": "2048x2048",
+    "resolution": "1024x1024",
     "num_inference_steps": 40,
     "guidance_scale": 1,
     "batch_size": 1

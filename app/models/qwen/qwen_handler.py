@@ -14,28 +14,24 @@ _QWEN21_NATIVE_VALUES = {
     "4:3": "2400x1792",
     "3:4": "1792x2400",
 }
+_QWEN21_BALANCED_VALUES = {
+    "auto": "1024x1024", "21:9": "1536x672", "16:9": "1376x768",
+    "9:16": "768x1376", "1:1": "1024x1024", "4:3": "1184x896", "3:4": "896x1184",
+}
 _QWEN21_RESOLUTION_PRESETS = {
     "auto": {
         "label": "Auto",
-        "hint": "Native 2K (2048×2048). If you attach an image to edit, Auto can follow that photo.",
-        "values": dict(_QWEN21_NATIVE_VALUES),
+        "hint": "Recommended 1K canvas; Auto aspect follows the edit source. 40 steps, CFG 1.",
+        "values": dict(_QWEN21_BALANCED_VALUES),
     },
     "720p": {
         "label": "1K",
-        "hint": "1024-class canvas. Faster on 16 GB and when many references are attached.",
-        "values": {
-            "auto": "1024x1024",
-            "21:9": "1536x672",
-            "16:9": "1376x768",
-            "9:16": "768x1376",
-            "1:1": "1024x1024",
-            "4:3": "1184x896",
-            "3:4": "896x1184",
-        },
+        "hint": "Recommended balance of speed and memory for every aspect ratio, including 16–24 GB GPUs.",
+        "values": dict(_QWEN21_BALANCED_VALUES),
     },
     "1080p": {
         "label": "2K",
-        "hint": "Native Qwen-Image 2.1 canvas (2048×2048 at 1:1). Official default; 40 steps, CFG 1.",
+        "hint": "Higher detail: about 4× the pixels of 1K. More time and memory; watch live steps and ETA in Activity.",
         "values": dict(_QWEN21_NATIVE_VALUES),
     },
 }
@@ -95,7 +91,7 @@ class family_handler():
                 "visible": True,
             }
             extra_model_def["video_guide_outpainting"] = [1, 2]
-            extra_model_def["outpainting_quantize_margins"] = 16
+            extra_model_def["outpainting_quantize_margins"] = 32
             extra_model_def["background_removal_label"] = (
                 "Remove backgrounds only behind people or objects except the main subject / landscape"
             )
@@ -352,6 +348,14 @@ class family_handler():
                 gr.Info("Denoising Strength will be ignored if Masked Denoising is not used")
 
         if base_model_type == "qwen_image_21":
+            resolution = inputs.get("resolution")
+            if resolution and "x" in str(resolution):
+                try:
+                    width, height = map(int, str(resolution).split("x"))
+                except ValueError:
+                    return "Qwen Image 2.1 requires a WIDTHxHEIGHT resolution."
+                if width < 64 or height < 64 or width % 32 or height % 32:
+                    return "Qwen Image 2.1 requires dimensions divisible by 32 (for example 1024x1024 or 1376x768)."
             refs = inputs.get("image_refs") or []
             if len(refs) > 10:
                 return "Qwen Image 2.1 accepts at most 10 reference images."

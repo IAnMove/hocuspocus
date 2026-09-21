@@ -1,6 +1,12 @@
 import { isLiveStatus, type ActivityTaskLike } from './lineage'
 
 export const PHASE_KEYS: Record<string, string> = {
+  loading_model: 'loadingModel',
+  encoding_text: 'encodingText',
+  encoding_images: 'encodingImages',
+  inference: 'inference',
+  decoding: 'decoding',
+  downloading_output: 'saving',
   planning: 'planning',
   known_series_research: 'knownSeriesResearch',
   canon: 'canon',
@@ -49,6 +55,19 @@ export function formatElapsed(task: ActivityTaskLike, now: number): string {
 
 export function estimatedRemainingSeconds(task: ActivityTaskLike, now: number): number | undefined {
   if (!isLiveStatus(task.status)) return undefined
+  const phase = phaseCatalogKey(task)
+  if (['loadingModel', 'encodingText', 'encodingImages', 'decoding', 'saving'].includes(phase)) return undefined
+  const inferenceStart = epochMs(Number(task.metadata?.inference_started_at))
+  if (phase === 'inference' && inferenceStart) {
+    const current = Number(task.current || 0)
+    const measured = current - Number(task.metadata?.inference_start_step || 0)
+    const remaining = Number(task.total || 0) - current
+    if (measured < 2 || remaining <= 0) return undefined
+    return Math.max(1, Math.round((now - inferenceStart) / 1000 / measured * remaining))
+  }
+  // Local inference should wait for measured steps instead of extrapolating
+  // loading/encoding time or a synthetic progress percentage.
+  if (task.provider === 'local' && task.metadata?.adapter === 'generation') return undefined
   const elapsed = elapsedSeconds(task, now)
   const total = Number(task.total || 0)
   const current = Number(task.current || 0)
@@ -75,7 +94,14 @@ export function fallbackPhaseLabel(task: ActivityTaskLike): string {
 }
 
 export function phaseCatalogKey(task: ActivityTaskLike): string {
-  return PHASE_KEYS[task.phase || ''] || 'fallback'
+  const phase = String(task.phase || '').toLowerCase()
+  if (PHASE_KEYS[phase]) return PHASE_KEYS[phase]
+  if (phase.includes('denoising') || phase.startsWith('inference_stage_')) return 'inference'
+  if (phase.includes('encoding reference') || phase.includes('encoding source')) return 'encodingImages'
+  if (phase.includes('encoding prompt') || phase.includes('enhancing prompt')) return 'encodingText'
+  if (phase.includes('vae decoding') || phase.includes('decoding')) return 'decoding'
+  if (phase.includes('loading')) return 'loadingModel'
+  return 'fallback'
 }
 
 export function translatedPhase(
@@ -200,7 +226,7 @@ export function generationRecipe(task: ActivityTaskLike): string {
 export function generationPrompt(task: ActivityTaskLike): string {
   const metadata = task.metadata || {}
   const details = recipeDetails(task)
-  const value = firstDefined(details.prompt, metadata.prompt, metadata.prompt_preview)
+  const value = firstDefined(metadata.display_prompt, details.prompt, metadata.prompt, metadata.prompt_preview)
   if (typeof value === 'string') return value.trim()
   return ''
 }
@@ -242,4 +268,10 @@ export function generationInitiator(task: ActivityTaskLike): string {
 export function truncatePrompt(prompt: string, limit = 180): string {
   const oneLine = prompt.replace(/\s+/g, ' ').trim()
   return oneLine.length > limit ? `${oneLine.slice(0, limit - 1)}…` : oneLine
+}
+
+
+export function generationResolution(task: ActivityTaskLike): string {
+  const resolution = recipeDetails(task).resolution
+  return typeof resolution === 'string' ? resolution.replace('x', '×') : ''
 }

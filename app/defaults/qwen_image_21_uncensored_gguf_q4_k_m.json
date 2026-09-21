@@ -1,11 +1,11 @@
 {
     "model": {
-        "name": "Qwen Image 2.1 Uncensored GGUF Q4_K_M 7B",
+        "name": "Qwen Image 2.1 GGUF (abenzerps) Q4_K_M 7B",
         "architecture": "qwen_image_21",
-        "description": "Uncensored DiT GGUF Q4_K_M (4.6 GB) from abenzerps, converted from Qwen/Qwen-Image-2.1 with no safety checker. Same 2.1 VAE and Qwen3-VL-8B encoder as the official stack (preload_URLs). Author's recommended quant. License follows Qwen Research License.",
-        "selector_help": "Try this first among the uncensored GGUFs. Same t2i+edit tools as the other 2.1 models. No Mature Mode gate — it is a local image weight, not the Wizard LLM.",
+        "description": "GGUF Q4_K_M quantization of the original Qwen Image 2.1 base weights by abenzerps. The publisher renamed the repository and says a separate uncensored variant is still in development. Uses the shared 2.1 VAE and Qwen3-VL encoder.",
+        "selector_help": "Third-party quantization of the original base model, formerly labelled Uncensored. No separate uncensoring modification is documented for these weights. Same creation and editing tools as Qwen Image 2.1.",
         "URLs": [
-            "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF/resolve/main/qwen-image-2.1-Q4_K_M.gguf"
+            "https://huggingface.co/abenzerps/Qwen-Image-2.1-GGUF/resolve/main/qwen-image-2.1-Q4_K_M.gguf"
         ],
         "preload_URLs": "qwen_image_21",
         "license_name": "Qwen Research License",
@@ -17,9 +17,11 @@
             "platform": "NVIDIA / AMD",
             "backend": "GGUF Q4_K_M",
             "tier": "experimental",
-            "note": "Recommended uncensored quant. Q8_0 from this pack has a known shape mismatch; not shipped."
+            "note": "Original base weights in GGUF. Legacy model ID retained for saved recipes; not a verified uncensored fine-tune."
         },
-        "attention": {"<89": "sdpa"},
+        "attention": {
+            "<89": "sdpa"
+        },
         "image_outputs": true
     },
     "prompt": "A neon shop sign that reads QWEN IMAGE 2.1, rainy night, reflections on wet pavement",

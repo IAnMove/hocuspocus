@@ -14,10 +14,13 @@ import {
   supportsH3ExtendedDuration,
 } from '../lib/h3ExtendedDuration'
 
+import { referenceImageResolution } from '../lib/imageResolution'
+
 type VoiceReference = { filename: string; path: string }
 type TtsVoice = { name: string; filename: string | null; path: string | null }
 
 export interface StudioConfigurationSlice {
+  imageSourceSize: { source: string; width: number; height: number } | null
   resolutionPreset: ResolutionPreset
   setResolutionPreset: (preset: ResolutionPreset) => void
   aspectRatio: AspectRatio
@@ -117,9 +120,12 @@ export function createStudioConfigurationSlice(
   dependencies: StudioConfigurationDependencies,
 ): SliceCreator<StudioConfigurationSlice, StudioConfigurationHost> {
   return (set, get) => ({
+    imageSourceSize: null,
     resolutionPreset: '720p',
     setResolutionPreset: preset => {
-      const resolution = dependencies.resolveResolution(get().modelOptions, preset, get().aspectRatio)
+      const state = get()
+      const resolution = resolveImageSourceResolution(state, preset, state.aspectRatio)
+        || dependencies.resolveResolution(state.modelOptions, preset, state.aspectRatio)
       set(state => ({
         resolutionPreset: preset,
         params: { ...state.params, resolution },
@@ -128,7 +134,9 @@ export function createStudioConfigurationSlice(
     },
     aspectRatio: '16:9',
     setAspectRatio: ratio => {
-      const resolution = dependencies.resolveResolution(get().modelOptions, get().resolutionPreset, ratio)
+      const state = get()
+      const resolution = resolveImageSourceResolution(state, state.resolutionPreset, ratio)
+        || dependencies.resolveResolution(state.modelOptions, state.resolutionPreset, ratio)
       set(state => ({
         aspectRatio: ratio,
         params: { ...state.params, resolution },
@@ -468,4 +476,12 @@ export function createStudioConfigurationSlice(
     promptSchedulerEnabled: false,
     setPromptSchedulerEnabled: promptSchedulerEnabled => set({ promptSchedulerEnabled }),
   })
+}
+
+
+function resolveImageSourceResolution(state: StudioConfigurationHost, preset: string, ratio: string): string | undefined {
+  const size = state.imageSourceSize
+  if (state.generationMode !== 'image' || ratio !== 'auto' || !size || size.source !== state.params.image_guide) return
+  if (!String(state.params.model_type).startsWith('qwen_image_21')) return
+  return referenceImageResolution(size.width, size.height, preset, state.params.model_type)
 }

@@ -69,6 +69,7 @@ export type StudioImageIntent = {
 
 export type StudioImageIntentSource = {
   generationMode: string
+  imageStudioIntent?: import('./imageStudioIntent').ImageStudioIntent
   activeWorkspace?: string
   params?: Record<string, unknown>
   modelOptions?: {
@@ -215,6 +216,36 @@ function snapshotFinish(source: StudioImageIntentSource): Pick<
 export function snapshotStudioImageIntent(source: StudioImageIntentSource): StudioImageIntent {
   if (source.generationMode !== 'image') {
     throw new Error('Studio image generation requires generationMode image')
+  }
+  source = { ...source, params: detachParams(source.params || {}) }
+  if (source.imageStudioIntent && source.imageStudioIntent !== 'chooser') {
+    const params = source.params!
+    const edit = source.imageStudioIntent === 'edit'
+    const refs = source.imageStudioIntent === 'character'
+    if (edit && !params.image_guide) throw new Error(i18n.t('studio:generate.needSource'))
+    if (refs && !source.imageRefs?.length && !(Array.isArray(params.image_refs) && params.image_refs.length)) {
+      throw new Error(i18n.t('studio:generate.needReference'))
+    }
+    if (!edit) {
+      for (const key of ['image_guide', 'image_mask', 'video_guide', 'video_mask', 'video_guide_outpainting']) delete params[key]
+      params.denoising_strength = 1
+      params.masking_strength = 1
+    }
+    if (!refs) {
+      delete params.image_refs
+      delete params.remove_background_images_ref
+      source.imageRefs = []
+      source.imageRefType = ''
+      source.removeBackgroundRefs = false
+    }
+    delete params.image_start
+    delete params.image_end
+    source.startImage = null
+    source.endImage = null
+    source.clips = []
+    params.image_prompt_type = 'T'
+    params.video_prompt_type = String(params.video_prompt_type || '')
+      .replace(edit ? /[KI]/g : refs ? /[VAG]/g : /[VAGKI]/g, '')
   }
   return {
     generationMode: 'image',

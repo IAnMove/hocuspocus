@@ -43,7 +43,8 @@ def create_image_generation_commands(runtime):
     def preflight(params):
         execution_policy(params["workspace"])
         validate_image_model(params, model_definition=runtime["wgp"].get_model_def,
-                             model_downloaded=runtime["_check_model_downloaded"])
+                             model_downloaded=runtime["_check_model_downloaded"],
+                             missing_model_files=runtime.get("_missing_image_model_files"))
 
     def resources(media_kind="image"):
         from services.studio_image_resources import StudioImageResources
@@ -66,6 +67,7 @@ def create_image_generation_commands(runtime):
             model_downloaded=runtime["_check_model_downloaded"], resources=resources(),
             execution_policy=execution_policy, processor_capabilities=processors.capabilities,
             validate_processors=processors.validate_selection, processor_settings=processors.validated_settings,
+            missing_model_files=runtime.get("_missing_image_model_files"),
         )
 
     def audio_operation(freeze_spec, prepare_audio, catalog):

@@ -46,9 +46,9 @@ export function ImageStudioPanel() {
         </>
       )}
       {queueCount > 0 ? (
-        <p className="text-[10px] text-text-muted">{t('generate.queuedCount', { count: queueCount })}</p>
+        <p className="text-[10px] text-text-muted">{t('generate.activeCount', { count: queueCount })}</p>
       ) : null}
-      {fitOpen && source ? <ImageFitDialog source={source} onClose={() => setFitOpen(false)} /> : null}
+      {fitOpen && intent === 'edit' && source ? <ImageFitDialog key={source} source={source} onClose={() => setFitOpen(false)} /> : null}
     </div>
   )
 }

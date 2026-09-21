@@ -9,6 +9,8 @@ import { openActivityArtifact, openActivityProject } from './openTargets'
 
 interface ActivityDetailsPanelProps {
   open: boolean
+  loading?: boolean
+  loadFailed?: boolean
   groups: ActivityGroup[]
   liveCount: number
   historicalCount: number
@@ -31,6 +33,8 @@ interface ActivityDetailsPanelProps {
 
 export function ActivityDetailsPanel({
   open,
+  loading = false,
+  loadFailed = false,
   groups,
   liveCount,
   historicalCount,
@@ -53,7 +57,6 @@ export function ActivityDetailsPanel({
   const { t: tCommon } = useUiTranslation('common')
   const { t: tActivity } = useUiTranslation('activity')
   if (!open) return null
-  if (!groups.length) return null
   return createPortal(
     <div
       ref={panelNode}
@@ -84,6 +87,8 @@ export function ActivityDetailsPanel({
         </div>
       </div>
       <div className="space-y-1.5">
+        {loadFailed ? <p role="alert" className="px-2 py-3 text-amber-300">{tActivity('loadFailed')}</p> : null}
+        {!groups.length && !loadFailed ? <p role="status" className="px-2 py-3 text-text-secondary">{tActivity(loading ? 'loadingHistory' : 'emptyHistory')}</p> : null}
         {groups.map(group => (
           <ActivityExecutionDetail
             key={group.id}

@@ -58,11 +58,12 @@ def _validate_model_options(params, definition):
 
 def prepare_studio_image(params, *, model_definition, model_downloaded, resources,
                          execution_policy, processor_capabilities, validate_processors,
-                         processor_settings):
+                         processor_settings, missing_model_files=None):
     """Return detached native parameters and inspected identities before admission."""
     execution_policy(params["workspace"])
     definition = validate_image_model(params, model_definition=model_definition,
-                                      model_downloaded=model_downloaded, allow_references=True)
+                                      model_downloaded=model_downloaded, allow_references=True,
+                                      missing_model_files=missing_model_files)
     try:
         maximum_phases = _validate_conditioning(params, definition)
         validate_image_selectors(params, definition)

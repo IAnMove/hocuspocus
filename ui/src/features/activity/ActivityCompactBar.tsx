@@ -14,6 +14,7 @@ import {
   generationInitiator,
   generationPrompt,
   generationRecipe,
+  generationResolution,
   truncatePrompt,
 } from './taskPresentation'
 import { translatedPhase as phaseText } from './taskPresentation'
@@ -109,13 +110,14 @@ function CompactSummary({
   const initiator = generationInitiator(primary)
   return (
     <>
-      <span className="hidden sm:inline shrink-0 capitalize text-text-muted">{phaseText(t, primary)}</span>
-      <span className="shrink-0 tabular-nums text-text-muted">{formatElapsed(primary, clock)}</span>
+      <span className="min-w-0 max-w-48 truncate text-text-secondary">{phaseText(t, primary)}</span>
+      <span className="hidden sm:inline shrink-0 tabular-nums text-text-muted">{formatElapsed(primary, clock)}</span>
+      {generationResolution(primary) ? <span className="hidden md:inline shrink-0 tabular-nums text-text-muted">{generationResolution(primary)}</span> : null}
       {eta ? <span className="hidden sm:inline shrink-0 tabular-nums text-accent-blue" title={t('etaTitle')}>{t('eta', { value: eta })}</span> : null}
       {primary.model ? <span className="hidden md:inline max-w-64 shrink-0 truncate rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-amber-300" title={generationRecipe(primary)}>{primary.model}</span> : null}
       {initiator ? <span className="hidden lg:inline max-w-48 shrink-0 truncate text-violet-300" title={initiator}>{initiator}</span> : null}
       {prompt ? (
-        <button type="button" onClick={() => onCopyPrompt(primary)} className="hidden xl:block min-w-0 max-w-80 truncate text-left text-text-secondary hover:text-text-primary" title={t('copyPromptTitle', { prompt })} aria-label={t('copyBarPrompt', { title: primary.title })}>
+        <button type="button" onClick={() => onCopyPrompt(primary)} className="block min-w-16 flex-1 max-w-80 truncate text-left text-text-secondary hover:text-text-primary" title={t('copyPromptTitle', { prompt })} aria-label={t('copyBarPrompt', { title: primary.title })}>
           “{truncatePrompt(prompt, 100)}”
         </button>
       ) : null}
@@ -128,8 +130,8 @@ function CompactProgress({ primary }: { primary?: CanonicalTask }) {
   const percent = taskProgressPercent(primary)
   const label = primary.total > 0 ? `${primary.current}/${primary.total}` : `${Math.round(percent)}%`
   return (
-    <div className="hidden sm:flex items-center gap-2 w-52 shrink-0">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
+    <div className="flex items-center gap-2 sm:w-36 shrink-0">
+      <div className="hidden sm:block h-1.5 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
         <div className="h-full rounded-full bg-accent-blue transition-[width] duration-500" style={{ width: `${Math.max(percent, percent > 0 ? 2 : 0)}%` }} />
       </div>
       <span className="w-10 text-right tabular-nums text-text-secondary">{label}</span>

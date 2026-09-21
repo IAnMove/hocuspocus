@@ -1204,19 +1204,15 @@ class AutoencoderKLQwenImage21(ModelMixin, AutoencoderMixin, ConfigMixin, FromOr
         }
 
     @staticmethod
-    def get_VAE_tile_size(vae_config, device_mem_capacity, mixed_precision):
+    def get_VAE_tile_size(vae_config, device_mem_capacity, mixed_precision, output_height=None, output_width=None):
         if vae_config == 0:
-            if device_mem_capacity >= 24000:
-                use_vae_config = 1
-            elif device_mem_capacity >= 8000:
-                use_vae_config = 2
-            else:
-                use_vae_config = 3
-        else:
-            use_vae_config = vae_config
-        use_tiling = use_vae_config != 1
-        tile_sample_min_width = 256
-        return (use_tiling, tile_sample_min_width)
+            # Total VRAM is not free VRAM: the DiT, KV cache and text encoder
+            # also live here. Keep auto tiled, including reference encoding
+            # (whose size can exceed the output). Small inputs bypass tiling
+            # naturally inside encode/decode.
+            tile = 512 if device_mem_capacity >= 16000 and not mixed_precision else 256
+            return (True, tile)
+        return (vae_config != 1, 256)
 
 
     # Copied from diffusers.models.autoencoders.autoencoder_kl_wan.AutoencoderKLWan.enable_tiling

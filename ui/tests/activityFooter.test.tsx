@@ -67,6 +67,65 @@ function jsonTasks(tasks: unknown[], workspace = 'default') {
   })
 }
 
+test('compact activity truncates the visible prompt and exposes the complete text on hover', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { ActivityCompactBar } = await import('../src/features/activity/ActivityCompactBar.tsx')
+  const prompt = 'A red house in a meadow. '.repeat(20) + '\nKeep this final instruction too.'
+  try {
+    render(<ActivityCompactBar
+      detailsOpen={false} liveCount={1} clock={Date.now()}
+      primary={task({ status: 'running', metadata: { display_prompt: prompt } })}
+      primaryGroup={null} busyIds={new Set()} toggleRef={{ current: null }}
+      onToggle={() => undefined} onCopyPrompt={() => undefined} onControl={() => undefined}
+    />)
+    const preview = screen.getByRole('button', { name: 'Copy current generation prompt for Retryable render' })
+    assert.ok((preview.textContent?.length || 0) < prompt.length)
+    assert.ok(preview.textContent?.startsWith('“A red house'))
+    assert.ok(preview.title.startsWith(prompt))
+    assert.ok(!preview.className.includes('hidden'))
+  } finally {
+    cleanup()
+  }
+})
+
+test('activity opens while the server is slow, then explains an empty history', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup, act } = await import('@testing-library/react')
+  const { ActivityFooter } = await import('../src/components/ActivityFooter.tsx')
+  const originalFetch = globalThis.fetch
+  const originalEventSource = globalThis.EventSource
+  let finish: (value: Response) => void = () => undefined
+  globalThis.fetch = async () => new Promise(resolve => { finish = resolve })
+  Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: QuietEventSource })
+  try {
+    render(<ActivityFooter />)
+    fireEvent.click(screen.getByRole('button', { name: /Activity/ }))
+    assert.ok(screen.getByTestId('activity-details'))
+    assert.ok(screen.getByText(/Loading activity/))
+    await act(async () => { finish(jsonTasks([])) })
+    assert.ok(screen.getByText('No activity in this workspace yet.'))
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+    Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: originalEventSource })
+  }
+})
+
+test('activity shows a connection error instead of refusing to open', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ActivityFooter } = await import('../src/components/ActivityFooter.tsx')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => { throw new Error('Server unavailable') }
+  try {
+    render(<ActivityFooter />)
+    fireEvent.click(screen.getByRole('button', { name: /Activity/ }))
+    await screen.findByText(/Activity could not be loaded/)
+    assert.ok(screen.getByTestId('activity-details'))
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('SSE duplicates and a late poll keep a single group, selection and expansion', { concurrency: false }, async () => {
   const { render, screen, waitFor, fireEvent, cleanup, act } = await import('@testing-library/react')
   const { ActivityFooter } = await import('../src/components/ActivityFooter.tsx')

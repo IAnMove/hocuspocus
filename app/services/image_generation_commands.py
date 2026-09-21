@@ -21,14 +21,22 @@ def command_error(status: int, code: str, message: str):
     return HTTPException(status, {"code": code, "message": message, "retryable": status >= 500})
 
 
-def validate_image_model(params, *, model_definition, model_downloaded, allow_references=False):
+def validate_image_model(params, *, model_definition, model_downloaded, allow_references=False,
+                         missing_model_files=None):
     definition = model_definition(params["model_type"])
     if not definition or not definition.get("image_outputs") or definition.get("returns_audio"):
         raise command_error(422, "unsupported_model", "Choose an exact text-to-image model from the model catalog")
     if definition.get("at_least_one_image_ref_needed") and not (allow_references and params.get("image_refs")):
         raise command_error(422, "reference_required", "This model requires references; choose a text-to-image model")
     if not model_downloaded(params["model_type"]):
-        raise command_error(409, "model_unavailable", "Required model files are not installed; install them before submitting")
+        missing = missing_model_files(params["model_type"]) if missing_model_files else []
+        name = definition.get("name") or params["model_type"]
+        detail = f" Missing: {'; '.join(missing)}." if missing else ""
+        raise HTTPException(409, {
+            "code": "model_unavailable", "retryable": False,
+            "message": f"{name}: required model files are not installed.{detail} Install this model from the model manager before submitting.",
+            "model_type": params["model_type"], "missing_files": missing,
+        })
     match = re.fullmatch(r"([1-9][0-9]{1,4})x([1-9][0-9]{1,4})", params["resolution"])
     if not match or any(not 64 <= int(value) <= 4096 or int(value) % 8 for value in match.groups()):
         raise command_error(422, "invalid_resolution", "Resolution must be WIDTHxHEIGHT, each 64..4096 and a multiple of 8")

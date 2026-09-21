@@ -1,4 +1,5 @@
 import json
+import math
 import os
 
 import torch
@@ -147,6 +148,14 @@ class model_factory:
         self.transformer = transformer
         self.processor = processor
 
+    @property
+    def _interrupt(self):
+        return self.pipeline.interrupt
+
+    @_interrupt.setter
+    def _interrupt(self, value):
+        self.pipeline.interrupt = value
+
     def generate(
         self,
         seed: int | None = None,
@@ -215,7 +224,7 @@ class model_factory:
             masking_strength=masking_strength,
             output_type="pt",
             return_dict=False,
-            output_resolution=max(width, height),
+            output_resolution=math.sqrt(width * height),
             generator=torch.Generator(device="cuda").manual_seed(seed),
         )
         if image is None:

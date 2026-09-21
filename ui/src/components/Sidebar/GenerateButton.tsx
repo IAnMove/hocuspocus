@@ -31,9 +31,15 @@ export function GenerateButton() {
     ) === true,
   )
   const hasStartImage = useStore(s => !!(s.startImage || s.params.image_start))
-  const needsImage = generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage
-  const needsReference = generationMode === 'video' && isOmniReference
-    && !hasOmniVisualReference
+  const imageIntent = useStore(s => s.imageStudioIntent)
+  const editImage = useStore(s => s.params.image_guide)
+  const storedRefs = useStore(s => s.params.image_refs)
+  const imageRefs = useStore(s => s.imageRefs)
+  const needsImage = (generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage)
+    || (generationMode === 'image' && imageIntent === 'edit' && !editImage)
+  const needsReference = (generationMode === 'video' && isOmniReference
+    && !hasOmniVisualReference) || (generationMode === 'image' && imageIntent === 'character'
+    && !imageRefs.length && !storedRefs?.length)
   const editSubMode = useStore(s => s.editSubMode)
   const editVideoPath = useStore(s => s.editVideoPath)
   const outpaintVideoBox = useStore(s => s.outpaintVideoBox)
@@ -119,7 +125,8 @@ export function GenerateButton() {
           ? t('generate.submitting')
           : scheduledVideoCount > 1
             ? t('generate.queueCount', { count: scheduledVideoCount })
-            : queueCount > 0 ? t('generate.goCount', { count: queueCount }) : tCommon('actions.generate')}
+            : tCommon('actions.generate')}
     </button>
+    {queueCount > 0 ? <p className="mt-1 text-right text-[10px] text-text-muted">{t('generate.activeCount', { count: queueCount })}</p> : null}
   </div>
 }

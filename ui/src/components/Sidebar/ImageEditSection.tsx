@@ -1,5 +1,5 @@
 import { useUiTranslation } from '../../i18n'
-import { snapImageResolution } from '../../lib/imageResolution'
+import { referenceImageResolution, snapImageResolution } from '../../lib/imageResolution'
 import { forgetLocalImage, localEditPreview } from '../../lib/localEditImages'
 import { mergeVideoPromptLetters, studioImageEditCapabilities } from '../../lib/studioImageEdit'
 import { useStore } from '../../stores/useStore'
@@ -62,15 +62,25 @@ export function ImageEditSection() {
                 return
               }
               const next = item.url || item.name
+              forgetLocalImage(source)
+              forgetLocalImage(mask)
+              useStore.setState({ imageSourceSize: null })
               setParams({
-                image_guide: next,
-                video_prompt_type: mergeVideoPromptLetters(flags, mask ? 'VAG' : 'V', ''),
+                image_guide: next, image_mask: undefined, video_guide_outpainting: undefined,
+                video_prompt_type: mergeVideoPromptLetters(flags, 'V', 'AG'),
               })
               const previewUrl = localEditPreview(next)
               if (previewUrl.startsWith('blob:') || previewUrl.startsWith('/api/') || previewUrl.startsWith('http')) {
                 const preview = new Image()
                 preview.onload = () => {
-                  useStore.getState().setParam('resolution', snapImageResolution(preview.width, preview.height, 2048))
+                  const state = useStore.getState()
+                  if (state.params.image_guide !== next || state.imageStudioIntent !== 'edit') return
+                  useStore.setState({ imageSourceSize: { source: next, width: preview.width, height: preview.height } })
+                  if (state.aspectRatio !== 'auto') return
+                  const model = state.params.model_type
+                  state.setParam('resolution', String(model).startsWith('qwen_image_21')
+                    ? referenceImageResolution(preview.width, preview.height, state.resolutionPreset, model)
+                    : snapImageResolution(preview.width, preview.height, 2048, model))
                 }
                 preview.src = previewUrl
               }

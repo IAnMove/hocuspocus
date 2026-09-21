@@ -3,13 +3,16 @@
   "title": "Actividad",
   "openHistory": "Mostrar el historial canónico de tareas",
   "panelTitle": "Tareas de HocusPocus",
+  "loadingHistory": "Cargando actividad… El servidor aún no ha respondido.",
+  "loadFailed": "No se pudo cargar la actividad. Se reintentará automáticamente; las tareas existentes se conservan.",
+  "emptyHistory": "Todavía no hay actividad en este workspace.",
   "activeDurable": "{{count}} activas · duraderas por workspace",
   "clearHistory": "Borrar historial",
   "clearHistoryAria": "Borrar el historial de actividad",
   "clearHistoryTitle": "Oculta el historial de tareas terminadas en esta interfaz. Los vídeos y los datos de las tareas se conservan.",
   "ready": "Listo — no hay trabajos activos",
   "eta": "ETA {{value}}",
-  "etaTitle": "Tiempo restante estimado para la tarea completa",
+  "etaTitle": "Estimación basada en los pasos completados. La decodificación y el guardado pueden añadir tiempo.",
   "subtask": "Subtarea {{phase}}",
   "activeSubtask": "Subtarea activa: {{phase}}",
   "startedBy": "Iniciado por {{name}}",
@@ -54,7 +57,13 @@
     "failed": "Fallida",
     "cancelled": "Cancelada",
     "interrupted": "Interrumpida",
-    "fallback": "{{phase}}"
+    "fallback": "{{phase}}",
+    "loadingModel": "Cargando modelo",
+    "encodingText": "Codificando texto",
+    "encodingImages": "Codificando imágenes",
+    "inference": "Generando imagen",
+    "decoding": "Decodificando imagen",
+    "saving": "Guardando resultado"
   },
   "lineage": {
     "reading": {

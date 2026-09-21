@@ -273,6 +273,7 @@ export async function prepareImage(action: PrepareImageCommand): Promise<Command
   await useStore.getState().loadModelOptions(selected.model_type)
 
   state = useStore.getState()
+  if (state.imageStudioIntent === 'chooser') state.setImageStudioIntent(action.outpaintMargins ? 'edit' : 'new')
   state.setStartImage(null)
   state.setEndImage(null)
   state.setOutputCount(action.outputCount ?? 1)
@@ -504,9 +505,11 @@ async function attachImageEditCanvas(
     throw new Error(`${selectedName} no admite una imagen origen o una máscara de edición.`)
   }
   const [item] = await namedImageOutputs(action.outputNames.slice(0, 1))
-  const flags = String(state.params.video_prompt_type || '')
+  state.setImageStudioIntent('edit')
+  const active = useStore.getState()
+  const flags = String(active.params.video_prompt_type || '')
   if (action.role === 'edit_source') {
-    const keepMask = action.replaceExisting ? undefined : state.params.image_mask
+    const keepMask = action.replaceExisting ? undefined : active.params.image_mask
     state.setParams({
       image_guide: item.url,
       image_mask: keepMask,
@@ -514,7 +517,7 @@ async function attachImageEditCanvas(
     })
     return studioResult('image', 'Image', `He adjuntado “${item.name}” como imagen a editar en Studio → Image.`)
   }
-  if (!state.params.image_guide) {
+  if (!active.params.image_guide) {
     throw new Error('Adjunta primero la imagen origen (edit_source) y después la máscara.')
   }
   state.setParams({
@@ -560,6 +563,10 @@ export async function attachStudioReferences(action: AttachStudioReferencesComma
     : choices.some(value => value === 'I')
   if (!config || !supportsDesiredType) {
     throw new Error(`${selectedModel.name} no admite referencias de ${action.role === 'style' ? 'estilo/escenario' : 'sujeto'} en este formulario.`)
+  }
+  if (state.generationMode === 'image') {
+    state.setImageStudioIntent('character')
+    state = useStore.getState()
   }
   const configuredLimit = state.modelOptions?.max_image_refs
   const existingCount = action.replaceExisting ? 0 : state.imageRefs.length

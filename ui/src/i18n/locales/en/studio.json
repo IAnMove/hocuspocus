@@ -56,9 +56,10 @@
     "referenceHint": "Add at least one image or video reference. Audio cannot be the only reference.",
     "queuedCount": "{{count}} queued",
     "queueCount": "Queue {{count}}",
-    "goCount": "Go ({{count}})",
+    "goCount": "Generate",
     "localUnavailable": "Local generation needs NVIDIA",
-    "localUnavailableHint": "This Mac runs editing and remote providers. Open the project on a Windows/Linux NVIDIA host to generate locally."
+    "localUnavailableHint": "This Mac runs editing and remote providers. Open the project on a Windows/Linux NVIDIA host to generate locally.",
+    "activeCount": "{{count}} active jobs"
   },
   "prompt": {
     "placeholderImage": "Describe your image...",
@@ -522,7 +523,8 @@
     "stretch": "Stretch",
     "apply": "Use this fit",
     "cancel": "Cancel",
-    "close": "Close"
+    "close": "Close",
+    "failed": "Could not fit the image or mask. Please try again."
   },
   "imageEdit": {
     "title": "Image edit tools",
@@ -1020,7 +1022,7 @@
       "title": "Step 2 of 3 · Generate the replacement frame",
       "references": "Keep the original frame as reference 1. To copy another character’s appearance, add their image as reference 2.",
       "prompt": "Describe the character replacement in the prompt field. Use an image editing model that supports references.",
-      "generate": "Click “Generate” or “Go” in the blue button below and wait for the image to finish. Adding references does not perform the replacement yet.",
+      "generate": "Click “Generate” in the blue button below and wait for the image to finish. Adding references does not perform the replacement yet.",
       "apply": "Review the latest generated image and click “Apply & Return”. You will return to Viggle to generate the video.",
       "keepFrame": "Keep the original frame’s pose, background and framing. Leave resolution and aspect ratio on Auto to preserve the video canvas.",
       "exampleTitle": "Example prompt",
@@ -1119,5 +1121,11 @@
     "language": "The provider documents English and Chinese; Spanish is not validated. The Qwen component has research/evaluation terms; check its license for commercial use.",
     "steps": "Synthesis steps",
     "guidance": "Instruction guidance"
+  },
+  "imageResolution": {
+    "label": "Resolution",
+    "auto": "Recommended 1K. Auto aspect follows the edit image; without one, the canvas is square.",
+    "balanced": "Recommended 1K: balanced speed, detail and memory in every aspect ratio.",
+    "quality": "2K: about 4× the pixels of 1K. Takes longer and needs more memory. Watch steps and estimated time in Activity."
   }
 }
