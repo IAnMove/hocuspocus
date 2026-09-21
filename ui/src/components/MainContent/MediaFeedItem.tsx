@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties } from 'react'
-import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, BookOpen, Box, Film, BadgeInfo, Clock3 } from 'lucide-react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject, type SyntheticEvent } from 'react'
+import { Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo, Clock3, Play, BookOpen, Box } from 'lucide-react'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { useUiTranslation } from '../../i18n'
@@ -79,7 +79,7 @@ function RetryImage({ url, alt, maxHeight, onIntrinsicSize }: {
     scheduleRetry()
   }, [scheduleRetry])
 
-  const handleLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleLoad = useCallback((e: SyntheticEvent<HTMLImageElement>) => {
     // Truncated body that decoded to nothing — browser fired onLoad
     // (Content-Length matched) but produced a 0×0 image. Treat as
     // failure and retry with a cache-busted URL.
@@ -101,6 +101,131 @@ function RetryImage({ url, alt, maxHeight, onIntrinsicSize }: {
       onLoad={handleLoad}
     />
   )
+}
+
+const MEDIA_FIT = 'mx-auto block h-auto w-auto max-w-full object-contain'
+
+function FeedMediaBody({
+  file, isActive, maxMediaHeight, videoReady, videoRef, onPlay, onIntrinsicSize, onImageLoad,
+  isScene, isComic, isModel3d, canPreviewModel3d, isRigged, riggedClips, activeClip, setActiveClip,
+  retryImage,
+}: {
+  file: OutputFile
+  isActive: boolean
+  maxMediaHeight?: number
+  videoReady: boolean
+  videoRef: RefObject<HTMLVideoElement | null>
+  onPlay: () => void
+  onIntrinsicSize: (width: number, height: number) => void
+  onImageLoad: (event: SyntheticEvent<HTMLImageElement>) => void
+  isScene: boolean
+  isComic: boolean
+  isModel3d: boolean
+  canPreviewModel3d: boolean
+  isRigged: boolean
+  riggedClips: string[]
+  activeClip: string | null
+  setActiveClip: (clip: string) => void
+  retryImage: (url: string) => ReactNode
+}) {
+  const maxHeight = maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }
+  const play = useCallback((event: SyntheticEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    onPlay()
+  }, [onPlay])
+  if (file.type === 'video' && videoReady) {
+    return (
+      <video
+        ref={videoRef}
+        key={file.url}
+        src={file.url}
+        controls
+        loop
+        autoPlay
+        preload="metadata"
+        poster={file.thumbnail_url || undefined}
+        className={MEDIA_FIT}
+        style={maxHeight}
+        muted={!isActive}
+        onLoadedMetadata={event => {
+          const video = event.currentTarget
+          onIntrinsicSize(video.videoWidth, video.videoHeight)
+        }}
+      />
+    )
+  }
+  if (file.type === 'video') {
+    return (
+      <div className="relative mx-auto inline-block max-w-full">
+        {file.thumbnail_url ? (
+          <img
+            src={file.thumbnail_url}
+            alt={file.name}
+            className={MEDIA_FIT}
+            style={maxHeight}
+            loading="lazy"
+            decoding="async"
+            onLoad={onImageLoad}
+          />
+        ) : (
+          <div className="flex h-48 w-full items-center justify-center text-text-muted"><Film size={32} /></div>
+        )}
+        <button
+          type="button"
+          onClick={play}
+          className="absolute left-1/2 top-1/2 z-10 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-xl transition-transform hover:scale-105 hover:bg-black/85"
+          aria-label={`Play ${file.name}`}
+          title="Load and play video"
+        >
+          <Play size={24} className="ml-1" />
+        </button>
+      </div>
+    )
+  }
+  if (file.type === 'audio') {
+    return (
+      <div className="flex flex-col items-center gap-4">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-active">
+          <Play size={24} className="text-text-muted" />
+        </div>
+        <p className="mb-2 text-xs text-text-muted">{file.name}</p>
+        <audio key={file.url} src={file.url} controls className="w-64" />
+      </div>
+    )
+  }
+  if (isScene) {
+    return file.thumbnail_url
+      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} style={maxHeight} onLoad={onImageLoad} />
+      : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
+  }
+  if (isComic) {
+    return file.thumbnail_url
+      ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} style={maxHeight} onLoad={onImageLoad} />
+      : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
+  }
+  if (isModel3d) {
+    return (
+      <div className="relative h-full w-full">
+        {canPreviewModel3d && isActive ? (
+          <model-viewer key={file.url} src={getFileUrl(file.name)} alt={file.name} camera-controls auto-rotate={isRigged ? undefined : true} autoplay={isRigged ? true : undefined} animation-name={isRigged && activeClip ? activeClip : undefined} shadow-intensity="1" exposure="1" loading="lazy" className="h-full w-full" />
+        ) : canPreviewModel3d && file.thumbnail_url ? (
+          <img src={file.thumbnail_url} alt={file.name} className="h-full w-full object-contain" loading="lazy" />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-4 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-active"><Box size={26} className="text-accent-blue" /></div>
+            <div><p className="text-sm text-text-secondary">3D model asset</p><p className="mt-1 text-[11px] text-text-muted">{canPreviewModel3d ? 'Select this card to open the interactive GLB preview.' : 'Interactive preview is available for GLB exports.'}</p></div>
+          </div>
+        )}
+        <a href={getFileUrl(file.name)} download={file.name} className="absolute right-2 top-2 rounded-lg border border-white/20 bg-black/60 px-2.5 py-1.5 text-[10px] text-white transition-colors hover:bg-black/80">Download</a>
+        {isRigged && riggedClips.length > 0 && (
+          <select value={activeClip ?? riggedClips[0]} onChange={event => setActiveClip(event.target.value)} className="absolute bottom-2 left-2 rounded-lg border border-white/20 bg-black/60 px-2 py-1 text-[10px] text-white" title="Animation clip">
+            {riggedClips.map(clip => <option key={clip} value={clip}>{clip}</option>)}
+          </select>
+        )}
+      </div>
+    )
+  }
+  return retryImage(isActive ? file.url : (file.thumbnail_url || file.url))
 }
 
 export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, maxMediaHeight, style }: Props) {
@@ -264,7 +389,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const handleStillIntrinsicSize = useCallback((width: number, height: number) => {
     if (width > 0 && height > 0) setStillNaturalSize({ name: file.name, width, height })
   }, [file.name])
-  const handleStillImageLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleStillImageLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
     const img = event.currentTarget
     handleStillIntrinsicSize(img.naturalWidth, img.naturalHeight)
   }, [handleStillIntrinsicSize])
@@ -428,7 +553,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
     }
   }
 
-  const handleCopyReference = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleCopyReference = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
     const markCopied = () => {
       setReferenceCopied(true)
@@ -599,6 +724,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   }
 
   return (
+    <React.Fragment>
     <div
       ref={itemRef}
       data-feed-index={index}
@@ -646,107 +772,27 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           {referenceCopied ? <Check size={11} className="text-accent-green" /> : <Copy size={11} />}
           {outputReference}
         </button>
-        {file.type === 'video' && videoReady ? (
-          <video
-            ref={videoRef}
-            key={file.url}
-            src={file.url}
-            controls
-            loop
-            autoPlay
-            preload="metadata"
-            poster={file.thumbnail_url || undefined}
-            className="mx-auto block h-auto w-auto max-w-full object-contain"
-            style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }}
-            muted={!isActive}
-            onLoadedMetadata={event => {
-              const video = event.currentTarget
-              handleStillIntrinsicSize(video.videoWidth, video.videoHeight)
-            }}
-          />
-        ) : file.type === 'video' ? (
-          <div className="relative mx-auto inline-block max-w-full">
-            {file.thumbnail_url ? (
-              <img
-                src={file.thumbnail_url}
-                alt={file.name}
-                className="mx-auto block h-auto w-auto max-w-full object-contain"
-                style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }}
-                loading="lazy"
-                decoding="async"
-                onLoad={handleStillImageLoad}
-              />
-            ) : (
-              <div className="flex h-48 w-full items-center justify-center text-text-muted"><Film size={32} /></div>
-            )}
-            <button
-              type="button"
-              onClick={event => {
-                event.stopPropagation()
-                setSelectedOutput(index)
-                setVideoReady(true)
-              }}
-              className="absolute left-1/2 top-1/2 z-10 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-xl transition-transform hover:scale-105 hover:bg-black/85"
-              aria-label={`Play ${file.name}`}
-              title="Load and play video"
-            >
-              <Play size={24} className="ml-1" />
-            </button>
-          </div>
-        ) : file.type === 'audio' ? (
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-bg-active flex items-center justify-center">
-              <Play size={24} className="text-text-muted" />
-            </div>
-            <p className="text-xs text-text-muted mb-2">{file.name}</p>
-            <audio key={file.url} src={file.url} controls className="w-64" />
-          </div>
-        ) : isScene ? (
-          file.thumbnail_url
-            ? <img src={file.thumbnail_url} alt={file.name} className="mx-auto block h-auto w-auto max-w-full object-contain" style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }} onLoad={handleStillImageLoad} />
-            : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
-        ) : isComic ? (
-          file.thumbnail_url
-            ? <img src={file.thumbnail_url} alt={file.name} className="mx-auto block h-auto w-auto max-w-full object-contain" style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }} onLoad={handleStillImageLoad} />
-            : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
-        ) : isModel3d ? (
-          <div className="w-full h-full relative">
-            {canPreviewModel3d && isActive ? (
-              <model-viewer key={file.url} src={getFileUrl(file.name)} alt={file.name} camera-controls auto-rotate={isRigged ? undefined : true} autoplay={isRigged ? true : undefined} animation-name={isRigged && activeClip ? activeClip : undefined} shadow-intensity="1" exposure="1" loading="lazy" className="w-full h-full" />
-            ) : canPreviewModel3d && file.thumbnail_url ? (
-              <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" loading="lazy" />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center px-4">
-                <div className="w-16 h-16 rounded-2xl bg-bg-active flex items-center justify-center"><Box size={26} className="text-accent-blue" /></div>
-                <div><p className="text-sm text-text-secondary">3D model asset</p><p className="text-[11px] text-text-muted mt-1">{canPreviewModel3d ? 'Select this card to open the interactive GLB preview.' : 'Interactive preview is available for GLB exports.'}</p></div>
-              </div>
-            )}
-            <a
-              href={getFileUrl(file.name)}
-              download={file.name}
-              className="absolute top-2 right-2 px-2.5 py-1.5 text-[10px] bg-black/60 border border-white/20 rounded-lg text-white hover:bg-black/80 transition-colors"
-            >
-              Download
-            </a>
-            {isRigged && riggedClips.length > 0 && (
-              <select
-                value={activeClip ?? riggedClips[0]}
-                onChange={event => setActiveClip(event.target.value)}
-                className="absolute bottom-2 left-2 px-2 py-1 text-[10px] bg-black/60 border border-white/20 rounded-lg text-white"
-                title="Animation clip"
-              >
-                {riggedClips.map((clip: string) => <option key={clip} value={clip}>{clip}</option>)}
-              </select>
-            )}
-          </div>
-        ) : (
-          <RetryImage
-            url={isActive ? file.url : (file.thumbnail_url || file.url)}
-            alt={file.name}
-            maxHeight={maxMediaHeight}
-            onIntrinsicSize={handleStillIntrinsicSize}
-          />
-        )}
+        <FeedMediaBody
+          file={file}
+          isActive={isActive}
+          maxMediaHeight={maxMediaHeight}
+          videoReady={videoReady}
+          videoRef={videoRef}
+          onPlay={() => { setSelectedOutput(index); setVideoReady(true) }}
+          onIntrinsicSize={handleStillIntrinsicSize}
+          onImageLoad={handleStillImageLoad}
+          isScene={isScene}
+          isComic={isComic}
+          isModel3d={isModel3d}
+          canPreviewModel3d={canPreviewModel3d}
+          isRigged={isRigged}
+          riggedClips={riggedClips}
+          activeClip={activeClip}
+          setActiveClip={setActiveClip}
+          retryImage={url => (
+            <RetryImage url={url} alt={file.name} maxHeight={maxMediaHeight} onIntrinsicSize={handleStillIntrinsicSize} />
+          )}
+        />
       </div>
 
       {comicOpenError && (
@@ -1048,5 +1094,6 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
         />
       )}
     </div>
+    </React.Fragment>
   )
 }
