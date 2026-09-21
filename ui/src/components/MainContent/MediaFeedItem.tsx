@@ -46,7 +46,7 @@ interface Props {
  *      check the user sees a half-image and feels they need to refresh
  *      the page (which loses Studio prompts/settings/reference images).
  */
-function RetryImage({ url, alt }: { url: string; alt: string }) {
+function RetryImage({ url, alt, maxHeight }: { url: string; alt: string; maxHeight?: number }) {
   const [src, setSrc] = useState(url)
   const retries = useRef(0)
   const maxRetries = 5
@@ -79,7 +79,8 @@ function RetryImage({ url, alt }: { url: string; alt: string }) {
       key={src}
       src={src}
       alt={alt}
-      className="w-full h-full object-contain"
+      className="mx-auto block h-auto w-auto max-w-full object-contain"
+      style={maxHeight == null ? undefined : { maxHeight }}
       onError={handleError}
       onLoad={handleLoad}
     />
@@ -238,6 +239,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
   const isModel3d = file.type === 'model3d'
   const isScene = file.type === 'scene'
   const isComic = file.type === 'comic'
+  const stillFrame = file.type === 'image' || isScene || isComic
   const canPreviewModel3d = isModel3d && /\.(glb|gltf)$/i.test(file.name)
   // Rigged outputs carry their baked glTF clip names in the sidecar; the
   // viewer autoplays one and offers a selector to switch.
@@ -600,7 +602,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
       {/* Media player */}
       <div
         data-testid="media-feed-viewport"
-        className="w-full aspect-video flex items-center justify-center bg-media-canvas relative"
+        className={`relative flex w-full items-center justify-center bg-media-canvas ${stillFrame ? '' : 'aspect-video'}`}
         style={maxMediaHeight == null ? undefined : { maxHeight: `${maxMediaHeight}px` }}
       >
         <button
@@ -663,11 +665,11 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
           </div>
         ) : isScene ? (
           file.thumbnail_url
-            ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" />
+            ? <img src={file.thumbnail_url} alt={file.name} className="mx-auto block h-auto w-auto max-w-full object-contain" style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }} />
             : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
         ) : isComic ? (
           file.thumbnail_url
-            ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" />
+            ? <img src={file.thumbnail_url} alt={file.name} className="mx-auto block h-auto w-auto max-w-full object-contain" style={maxMediaHeight == null ? undefined : { maxHeight: maxMediaHeight }} />
             : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
         ) : isModel3d ? (
           <div className="w-full h-full relative">
@@ -704,6 +706,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, ma
             key={isActive ? file.url : (file.thumbnail_url || file.url)}
             url={isActive ? file.url : (file.thumbnail_url || file.url)}
             alt={file.name}
+            maxHeight={maxMediaHeight}
           />
         )}
       </div>
