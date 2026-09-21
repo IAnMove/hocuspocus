@@ -23,8 +23,8 @@ su presencia no equivale a haber ejecutado cada combinación de modelos.
 
 | Pantalla | Cómo usarla | Wizard: alcance y ejemplo |
 | --- | --- | --- |
-| Image | Elige un modelo de imagen, describe la composición y pulsa Generate. El resultado aparece en Media → Images. | `prepare_image`, `start_generation`: «Prepara una imagen de un taller de magos con Flux 2 Klein 4B y genérala». |
-| Video → Frames | Elige modelo y duración; añade fotograma o referencias si el modelo las requiere. Describe el movimiento y genera. | `prepare_video`, `start_generation`: «Prepara un plano de un mago programando, rellena el formulario sin generarlo». |
+| Image | Elige una intención (imagen nueva, editar, personaje o fondo en bucle), un modelo y pulsa Generate. Qwen Image 2.1 unifica texto→imagen y edición; un archivo del ordenador permanece en la pestaña hasta Generate. El resultado aparece en Media → Images. Contrato: [image-studio/HOWUSEIT](image-studio/HOWUSEIT.md). | `prepare_image`, `attach_studio_references` (`edit_source` / `edit_mask`), `start_generation`: «Prepara una imagen de un taller de magos con Flux 2 Klein 4B y genérala». |
+| Video → Frames | Elige modelo y duración; añade fotograma o referencias si el modelo las requiere. Describe el movimiento y genera. MiniMax H3 permanece en 15 s salvo que actives **Permitir clips de 30 s** ([H3_EXTENDED_DURATION](development/H3_EXTENDED_DURATION.md)). | `prepare_video`, `start_generation`: «Prepara un plano de un mago programando, rellena el formulario sin generarlo». |
 | Video → Multi-Shot | Divide el vídeo en planos y revisa las instrucciones, tiempos y referencias de cada uno antes de generar. | Preparación general de vídeo; comprueba los controles visibles. No se certifica el ajuste individual de cada control mediante una orden genérica. |
 | Video → Extend | Selecciona un vídeo de partida y el punto desde el que continuará; describe la continuación. | Preparación general; la selección exacta de fuente y extensión debe revisarse en el formulario. |
 | Video → Blend | Añade las referencias necesarias para el modelo y describe la transición. | Preparación general de vídeo; soporte específico depende del modelo. |
@@ -115,3 +115,7 @@ Comprueba por separado: navegación, generación, persistencia, exportación y
 ejecución desde el Wizard. Un caso fallido sigue siendo evidencia útil: no se
 elimina ni se transforma en éxito al repetirlo. La cobertura de una familia de
 funciones tampoco certifica todos sus modelos, proveedores o parámetros.
+
+La superposición **Help** (tutorial in-app, ES/EN) y el ejemplo **Tijeral**
+(Story Lab → Load Tijeral cut-paper example) tienen contratos de operador en
+[help/HOWUSEIT](help/HOWUSEIT.md) y [cut-paper/HOWUSEIT](cut-paper/HOWUSEIT.md).

@@ -78,6 +78,20 @@ white=change mask, `video_prompt_type` containing `VAG` (and `I`/`KI` when
 identity refs are also attached), and optional `video_guide_outpainting`
 as `"top bottom left right"` percents. Native 2K is `2048x2048`.
 
+Shipped 2.1 ids: `qwen_image_21` (INT8 ConvRot), `qwen_image_21_bf16`,
+`qwen_image_21_gguf_q8_0` / `_q5_0` / `_q4_k`, and uncensored
+`qwen_image_21_uncensored_gguf_q4_k_m` / `_q5_k_m` / `_q6_k`. Uncensored
+GGUFs are local image weights with **no Mature Mode gate** (that gate is
+the Wizard LLM). Q8_0 from the uncensored pack is not shipped (upstream
+shape mismatch). Operator intents, tab-local `local-edit:` tokens, and
+Auto→pixel mapping are [Image Studio HOWUSEIT](../image-studio/HOWUSEIT.md).
+
+`resolution` on this command must be explicit `WxH`. Studio maps `auto` /
+`auto_*` in `concreteImageResolution` before POST (`auto` → `2048x2048` on
+2.1, `1024x1024` otherwise). A browser file stays a `local-edit:<n>` token
+until Generate uploads it; `POST /api/v1/generation/commands/references`
+never accepts that token.
+
 The selected model must support the supplied conditioning. Version 2 accepts
 only the typed image fields declared in `studio_image_spec.py`. Optional native
 sentinels and explicit null values remain in the snapshot. Active video/audio

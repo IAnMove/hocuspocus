@@ -1,7 +1,8 @@
 # Lyrics language contract
 
-Status: library plus enqueue guard on `submit_music_generation` (phase 6).
-Local `generateMusic` in launch is still unwired.
+Status: library plus enqueue guard on `submit_music_generation` (Story
+Music) and `prepare_studio_music` (`generation.music`). The raw
+`generateMusic` helper in launch is still not a second admission path.
 
 This heuristic scores **written text**, not the audio a model later sings.
 UI locale, conversation language, content language, spoken language and the
@@ -42,6 +43,8 @@ Python and TypeScript.
 
 ## Follow-up
 
-`submit_music_generation` now runs this guard before enqueue. Invalid lyrics
-return the original text plus a proposal. Do not touch `_launch_runtime.py`
-or `StoryLabPanel` to extend that wiring.
+`submit_music_generation` and Studio `prepare_studio_music` both call
+`assert_enqueue_guard` before admission. Invalid lyrics return the original
+text plus a proposal. Do not touch `_launch_runtime.py` or `StoryLabPanel`
+to extend that wiring; Story Music HTTP lives in
+`app/routers/story_music.py`.

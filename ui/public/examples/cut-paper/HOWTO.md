@@ -17,7 +17,10 @@ so you can edit the shot. The assembled episode is **not** an MP4 baked outside 
 3. In **Video 2D** you can move layers, swap mouths, attach speech, export MP4.
    Each speaking puppet is **one transparent body** plus four small paper visemes
    (`closed` `small` `wide` `round`) parented to that body. Do not stack opaque
-   full-face copies. Talking must not change the brows.
+   full-face copies. Talking must not change the brows. Those four mouths are
+   enough for this compiled chapter. Series **Generate all** on a *new* speaking
+   shot still wants the nine approved Character Creator slots — see
+   [cut-paper HOWUSEIT](../../../../docs/cut-paper/HOWUSEIT.md).
 4. Optional: a later beat can use **Video 3D** (`sceneLink.editor = video3d`) if a shot needs depth. This gag stays 2D.
 5. Voices: each library character has a local Qwen3 CustomVoice preset.
    Example WAVs exist in **Spanish** (`vo-*-nilo-1.wav`) and **English**

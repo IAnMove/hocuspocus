@@ -23,9 +23,17 @@ mappers live in `ui/src/lib/generationRecord.ts`. The JSON schema is
 
 This module does not import FastAPI, WanGP or launch. It is not a second
 scheduler: TaskRegistry owns tasks/events, the Story library owns
-cues/candidates, and asset-manifest v1 owns published bytes. Wiring into
-`_launch_runtime.py`, Activity and the Library catalog is a later sequential PR
-(see `docs/development/EXECUTION_BASELINE.md`).
+cues/candidates, and asset-manifest v1 owns published bytes.
+
+**Story Music producer (PR #432):** reserved MiniMax / ACE-Step songs project
+onto this contract through `app/services/story_music_generation_record.py`.
+`submit_music_generation` calls `ensure_story_music_generation_record`;
+finalization calls `complete_…` / `cancel_…`. Records live under
+`{workspace}/generation-records/`. Replay of the same reservation loads the
+same `generation_id`. This is still a projection: TaskRegistry owns the task,
+the Story library owns the cue/candidate, and the sidecar owns published
+bytes. Studio generate, Activity tiles and the Library catalog are **not**
+universal GenerationRecord readers yet.
 
 ## Identity graph
 
@@ -174,6 +182,8 @@ tokens and API keys using the asset-manifest policy. `prompt_display` is at most
 
 ## Follow-up
 
-Launch, Activity and Library wiring is deferred (phase 3 must not connect
-producers or move files). `_launch_runtime.py` stays a later sequential PR.
-This contract is the portable layer those writers should adopt next.
+Story Music is the first producer wired through reservation → complete/cancel.
+Do not treat that as coverage of Studio image/video, Tools, or Activity.
+A later sequential PR may project other producers; it must not invent a
+second scheduler or move files. `_launch_runtime.py` is no longer the Story
+Music HTTP owner (`app/routers/story_music.py`).
