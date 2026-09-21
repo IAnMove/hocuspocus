@@ -91,12 +91,18 @@ class TestQwenImage21Definitions(unittest.TestCase):
             "qwen_image_21_gguf_q4_k.json": "qwen_image_2.1-Q4_K.gguf",
             "qwen_image_21_gguf_q5_0.json": "qwen_image_2.1-Q5_0.gguf",
             "qwen_image_21_gguf_q8_0.json": "qwen_image_2.1-Q8_0.gguf",
+            "qwen_image_21_uncensored_gguf_q4_k_m.json": "qwen-image-2.1-Q4_K_M.gguf",
+            "qwen_image_21_uncensored_gguf_q5_k_m.json": "qwen-image-2.1-Q5_K_M.gguf",
+            "qwen_image_21_uncensored_gguf_q6_k.json": "qwen-image-2.1-Q6_K.gguf",
         }
         for filename, weight in catalog.items():
             with self.subTest(filename=filename):
                 item = json.loads((_APP / "defaults" / filename).read_text(encoding="utf-8"))
                 self.assertEqual(item["model"]["architecture"], "qwen_image_21")
                 self.assertIn(weight, item["model"]["URLs"][0])
+                if "uncensored" in filename:
+                    self.assertTrue(item["model"]["nsfw_only"])
+                    self.assertIn("abenzerps/Qwen-Image-2.1-Uncensored-GGUF", item["model"]["URLs"][0])
                 self.assertEqual(item["model"]["preload_URLs"], "qwen_image_21")
                 self.assertTrue(item["model"]["selector_help"])
                 self.assertIn("vram_gb", item["model"]["resource_requirements"])

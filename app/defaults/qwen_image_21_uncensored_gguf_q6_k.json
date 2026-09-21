@@ -1,0 +1,31 @@
+{
+    "model": {
+        "name": "Qwen Image 2.1 Uncensored GGUF Q6_K 7B",
+        "architecture": "qwen_image_21",
+        "description": "Uncensored DiT GGUF Q6_K (5.9 GB) from abenzerps. Highest shipped uncensored quant (Q8_0 omitted: upstream shape mismatch). Same 2.1 VAE and Qwen3-VL-8B encoder. Mature Mode only. License follows Qwen Research License.",
+        "selector_help": "Highest uncensored GGUF we ship. Needs Mature Mode. Still slower than INT8 ConvRot on a 4090.",
+        "URLs": [
+            "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF/resolve/main/qwen-image-2.1-Q6_K.gguf"
+        ],
+        "preload_URLs": "qwen_image_21",
+        "nsfw_only": true,
+        "license_name": "Qwen Research License",
+        "license_url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
+        "resource_requirements": {
+            "vram_gb": 14,
+            "ram_gb": 32,
+            "storage_gb": 18,
+            "platform": "NVIDIA / AMD",
+            "backend": "GGUF Q6_K",
+            "tier": "experimental",
+            "note": "Q8_0 from this pack is not shipped (shape mismatch [136] vs [128])."
+        },
+        "attention": {"<89": "sdpa"},
+        "image_outputs": true
+    },
+    "prompt": "A neon shop sign that reads QWEN IMAGE 2.1, rainy night, reflections on wet pavement",
+    "resolution": "1024x1024",
+    "num_inference_steps": 40,
+    "guidance_scale": 1,
+    "batch_size": 1
+}
