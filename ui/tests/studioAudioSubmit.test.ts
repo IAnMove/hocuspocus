@@ -43,7 +43,15 @@ test('Speech submit maps character names to Speaker N and keeps guides', () => {
 test('audio dispatcher stamps sub-mode and leaves video untouched', () => {
   const video = applyStudioAudioSubmitParams(
     { prompt: 'shot' },
-    { generationMode: 'video', audioSubMode: 'speech', durationSeconds: 4, ttsVoiceCount: 0, ttsVoices: [] },
+    {
+      generationMode: 'video',
+      audioSubMode: 'speech',
+      durationSeconds: 4,
+      ttsVoiceCount: 0,
+      ttsVoices: [],
+      musicDescription: '',
+      musicInstrumental: false,
+    },
   )
   assert.equal(video._audio_sub_mode, undefined)
   const speech = applyStudioAudioSubmitParams(
@@ -59,4 +67,26 @@ test('audio dispatcher stamps sub-mode and leaves video untouched', () => {
     },
   )
   assert.equal(speech._audio_sub_mode, 'speech')
+})
+
+test('speech submit accepts AppState-shaped null voice paths and duration slider', () => {
+  const params = applyStudioSpeechSubmitParams(
+    { prompt: 'Alice: hello', model_type: 'multitalk', num_inference_steps: 30 },
+    {
+      generationMode: 'audio',
+      audioSubMode: 'speech',
+      durationSeconds: 0,
+      ttsVoiceCount: 1,
+      ttsVoices: [{ name: 'Alice', path: null }],
+      modelOptions: {
+        audio_only: true,
+        duration_slider: null,
+        default_num_inference_steps: null,
+      },
+    },
+  )
+  assert.equal(params.prompt, 'Speaker 1: hello')
+  assert.equal(params.audio_guide, undefined)
+  assert.equal(params.duration_seconds, 600)
+  assert.equal(params.num_inference_steps, 0)
 })
